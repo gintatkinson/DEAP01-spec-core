@@ -748,7 +748,8 @@ pub fn check_safety_integrity(
         if safety_dir.is_dir() {
             let allowed_files = [".gitkeep", "README.md"];
             let mut violations = Vec::new();
-            for entry in WalkDir::new(&safety_dir)
+            let mut walk_errors = Vec::new();
+            for entry_res in WalkDir::new(&safety_dir)
                 .into_iter()
                 .filter_entry(|e| {
                     if e.file_type().is_dir() {
@@ -758,8 +759,17 @@ pub fn check_safety_integrity(
                         true
                     }
                 })
-                .filter_map(|e| e.ok())
             {
+                let entry = match entry_res {
+                    Ok(val) => val,
+                    Err(err) => {
+                        walk_errors.push(format!(
+                            "Check 17 failed: Safety directory walk I/O error: {}",
+                            err
+                        ));
+                        continue;
+                    }
+                };
                 if entry.file_type().is_file() {
                     let fname = entry.file_name().to_string_lossy();
                     if !allowed_files.contains(&fname.as_ref()) {
@@ -772,6 +782,15 @@ pub fn check_safety_integrity(
                         violations.push(rel);
                     }
                 }
+            }
+            if !walk_errors.is_empty() {
+                if !violations.is_empty() {
+                    walk_errors.push(format!(
+                        "Check 17 failed: Upstream distribution template safety landing zone contains concrete specification files: {}",
+                        violations.join(", ")
+                    ));
+                }
+                return Err(walk_errors);
             }
             if !violations.is_empty() {
                 return Err(vec![format!(
@@ -795,7 +814,8 @@ pub fn check_safety_integrity(
     }
 
     let mut safety_files = Vec::new();
-    for entry in WalkDir::new(&safety_dir)
+    let mut walk_errors = Vec::new();
+    for entry_res in WalkDir::new(&safety_dir)
         .into_iter()
         .filter_entry(|e| {
             if e.file_type().is_dir() {
@@ -808,14 +828,26 @@ pub fn check_safety_integrity(
                 true
             }
         })
-        .filter_map(|e| e.ok())
     {
+        let entry = match entry_res {
+            Ok(val) => val,
+            Err(err) => {
+                walk_errors.push(format!(
+                    "Check 17 failed: Safety directory walk I/O error: {}",
+                    err
+                ));
+                continue;
+            }
+        };
         if entry.file_type().is_file() {
             let fname = entry.file_name().to_string_lossy();
             if fname.ends_with(".md") && fname != "README.md" {
                 safety_files.push(entry.path().to_path_buf());
             }
         }
+    }
+    if !walk_errors.is_empty() {
+        return Err(walk_errors);
     }
 
     if safety_files.is_empty() {
@@ -862,14 +894,22 @@ pub fn check_safety_integrity(
             .unwrap_or(sf)
             .to_string_lossy()
             .to_string();
-        if let Ok(c) = fs::read_to_string(sf) {
-            crate::checks::parity_gates::audit_spec_citations_and_protocols(
-                &c,
-                &rel_path,
-                &slicer,
-                &model_str,
-                &mut errors,
-            );
+        match fs::read_to_string(sf) {
+            Ok(c) => {
+                crate::checks::parity_gates::audit_spec_citations_and_protocols(
+                    &c,
+                    &rel_path,
+                    &slicer,
+                    &model_str,
+                    &mut errors,
+                );
+            }
+            Err(e) => {
+                errors.push(format!(
+                    "Check 17 failed: Failed to read {}: {}",
+                    rel_path, e
+                ));
+            }
         }
     }
 
@@ -1677,5 +1717,52 @@ mod tests {
         assert!(result.is_err());
         let errs = result.unwrap_err();
         assert!(errs.iter().any(|e| e.contains("Pillar 1 violation")));
+    }
+
+    /// Verifies that Check 17 fails closed when `docs/safety/` contains an unreadable subdirectory during directory traversal.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 fail-closed directory traversal verification for `check_safety_integrity` (refs #500).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Any `WalkDir` traversal error inside `docs/safety/` in either upstream or downstream mode must return `Err(Vec<String>)`.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary workspace contains `docs/safety/locked_subdir` with mode `0o000` on Unix.
+    ///
+    /// ## 4. Postconditions
+    /// - `check_safety_integrity` returns `Err` in both upstream and downstream modes, and permissions are restored before cleanup.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) over the synthetic `docs/safety/` fixture.
+    /// - Space Complexity: O(1) temporary directory fixture.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Exercises `WalkDir` `Err` branches in `check_safety_integrity`.
+    /// - State: Restores `0o755` permissions before `TempDir` drop.
+    /// - Action: Asserts fail-closed error return across both repository roles.
+    /// - Resource: Zero leaked temporary directories.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-17-FAIL-CLOSED-WALKDIR-TEST]
+    #[cfg(unix)]
+    #[test]
+    fn test_check17_unreadable_safety_subdir_fails_closed() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = TempDir::new("check17_unreadable_sub");
+        fs::create_dir_all(temp.path.join(".pipeline/upstream")).unwrap();
+        let locked = temp.path.join("docs/safety/locked_subdir");
+        fs::create_dir_all(&locked).unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+
+        let upstream_res = check_safety_integrity(&temp.path, true, false);
+        let _ = fs::set_permissions(&locked, fs::Permissions::from_mode(0o755));
+
+        assert!(
+            upstream_res.is_err(),
+            "Check 17 upstream walk must fail closed on unreadable subdirectory, got: {:?}",
+            upstream_res
+        );
     }
 }

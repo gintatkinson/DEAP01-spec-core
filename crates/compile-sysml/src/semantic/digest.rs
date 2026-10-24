@@ -620,16 +620,22 @@ pub fn write_atomic(path: &Path, content: &str) -> Result<(), io::Error> {
 
 /// Compute SHA-256 hash formatted as lowercase hexadecimal (FIPS 180-4).
 ///
+/// # Summary
+/// Delegates FIPS 180-4 lowercase hexadecimal SHA-256 computation to `deap_core::digest::compute_sha256`.
+///
 /// ## 1. Safety Intent & Regulatory Scope
+/// # Safety
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `compute_sha256` in `crates/compile-sysml/src/semantic/digest.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves deterministic state conservation and referential transparency for fn `compute_sha256` (declaration #16) within `SEMANTIC-DIGEST`.
 ///
 /// ## 3. Preconditions
+/// # Parameters
 /// - `bytes: &[u8]` must satisfy domain and type-safety constraints prior to invoking `compute_sha256`.
 ///
 /// ## 4. Postconditions
+/// # Returns
 /// - Returns `String` from `compute_sha256` with deterministic post-execution state.
 ///
 /// ## 5. Algorithmic Complexity Bounds
@@ -637,104 +643,20 @@ pub fn write_atomic(path: &Path, content: &str) -> Result<(), io::Error> {
 /// - Space Complexity: O(N(bytes)) bounded auxiliary memory for `compute_sha256`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
+/// # Errors
+/// - Infallible total computation; never returns an error.
+/// # Panics
+/// - Zero panics: delegates to non-panicking `deap_core::digest::compute_sha256`.
 /// - Interface: Validates boundary inputs and types for `compute_sha256` (`String`).
 /// - State: Maintains consistent state invariants across `compute_sha256` without partial mutation on error.
 /// - Action: Executes `compute_sha256` deterministically with zero unbounded recursion or blocking.
 /// - Resource: Bounds stack and heap allocations within `compute_sha256` (`SEMANTIC-DIGEST`).
 ///
 /// ## 7. Realization & Traceability
+/// # Realises
 /// Realises: [REQ-SEMANTIC-DIGEST-COMPUTE-SHA256] | SysML v2: ActionDef(compute_sha256)
 pub fn compute_sha256(bytes: &[u8]) -> String {
-    const K: [u32; 64] = [
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-    ];
-
-    let mut h0: u32 = 0x6a09e667;
-    let mut h1: u32 = 0xbb67ae85;
-    let mut h2: u32 = 0x3c6ef372;
-    let mut h3: u32 = 0xa54ff53a;
-    let mut h4: u32 = 0x510e527f;
-    let mut h5: u32 = 0x9b05688c;
-    let mut h6: u32 = 0x1f83d9ab;
-    let mut h7: u32 = 0x5be0cd19;
-
-    let bit_len = (bytes.len() as u64).wrapping_mul(8);
-    let mut msg = bytes.to_vec();
-    msg.push(0x80);
-    while (msg.len() % 64) != 56 {
-        msg.push(0x00);
-    }
-    msg.extend_from_slice(&bit_len.to_be_bytes());
-
-    for chunk in msg.as_chunks::<64>().0 {
-        let mut w = [0u32; 64];
-        for (slot, part) in w.iter_mut().zip(chunk.as_chunks::<4>().0) {
-            *slot = u32::from_be_bytes(*part);
-        }
-        for i in 16..64 {
-            let (w15, w2, w16, w7) = match (w.get(i - 15), w.get(i - 2), w.get(i - 16), w.get(i - 7)) {
-                (Some(&w15), Some(&w2), Some(&w16), Some(&w7)) => (w15, w2, w16, w7),
-                _ => continue,
-            };
-            let s0 = w15.rotate_right(7) ^ w15.rotate_right(18) ^ (w15 >> 3);
-            let s1 = w2.rotate_right(17) ^ w2.rotate_right(19) ^ (w2 >> 10);
-            if let Some(slot) = w.get_mut(i) {
-                *slot = w16.wrapping_add(s0).wrapping_add(w7).wrapping_add(s1);
-            }
-        }
-
-        let mut a = h0;
-        let mut b = h1;
-        let mut c = h2;
-        let mut d = h3;
-        let mut e = h4;
-        let mut f = h5;
-        let mut g = h6;
-        let mut h = h7;
-
-        for (&k, &wi) in K.iter().zip(w.iter()) {
-            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let ch = (e & f) ^ ((!e) & g);
-            let temp1 = h
-                .wrapping_add(s1)
-                .wrapping_add(ch)
-                .wrapping_add(k)
-                .wrapping_add(wi);
-            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
-            let maj = (a & b) ^ (a & c) ^ (b & c);
-            let temp2 = s0.wrapping_add(maj);
-
-            h = g;
-            g = f;
-            f = e;
-            e = d.wrapping_add(temp1);
-            d = c;
-            c = b;
-            b = a;
-            a = temp1.wrapping_add(temp2);
-        }
-
-        h0 = h0.wrapping_add(a);
-        h1 = h1.wrapping_add(b);
-        h2 = h2.wrapping_add(c);
-        h3 = h3.wrapping_add(d);
-        h4 = h4.wrapping_add(e);
-        h5 = h5.wrapping_add(f);
-        h6 = h6.wrapping_add(g);
-        h7 = h7.wrapping_add(h);
-    }
-
-    format!(
-        "{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}",
-        h0, h1, h2, h3, h4, h5, h6, h7
-    )
+    deap_core::digest::compute_sha256(bytes)
 }
 
 /// Executes deterministic fn `compute_node_counts` within `crates/compile-sysml/src/semantic/digest.rs`.
@@ -1327,6 +1249,43 @@ fn extract_operational_nodes(pkg: &PackageDef) -> Vec<OperationalNode> {
 mod tests {
     use super::*;
 
+    /// Verifies `SchemaDigest::compute` node counts, schema nodes, and SHA-256 hash generation.
+    ///
+    /// # Summary
+    /// Executes unit verification for `SchemaDigest::compute` on a synthetic `PackageDef`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// # Safety
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_compute_digest_counts_and_hash` in `crates/compile-sysml/src/semantic/digest.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_compute_digest_counts_and_hash` (declaration #27) within `SEMANTIC-DIGEST`.
+    ///
+    /// ## 3. Preconditions
+    /// # Parameters
+    /// - No runtime parameters; constructs a synthetic `DigestTest` package.
+    ///
+    /// ## 4. Postconditions
+    /// # Returns
+    /// - Returns `Result<(), Box<dyn std::error::Error>>` after validating digest counts and node inventory.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over constant-size synthetic AST in `test_compute_digest_counts_and_hash`.
+    /// - Space Complexity: O(1) bounded auxiliary memory for `test_compute_digest_counts_and_hash`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// # Errors
+    /// - Returns `Err` if any expected node count key is missing from `digest.node_counts`.
+    /// # Panics
+    /// - Panics only if an `assert_eq!` or `assert!` invariant fails.
+    /// - Interface: Validates boundary inputs and types for `test_compute_digest_counts_and_hash` (`Result<(), Box<dyn std::error::Error>>`).
+    /// - State: Maintains consistent state invariants across `test_compute_digest_counts_and_hash` without partial mutation on error.
+    /// - Action: Executes `test_compute_digest_counts_and_hash` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_compute_digest_counts_and_hash` (`SEMANTIC-DIGEST`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// # Realises
+    /// Realises: [REQ-SEMANTIC-DIGEST-TEST-COMPUTE-DIGEST] | SysML v2: TestCaseDef(test_compute_digest_counts_and_hash)
     #[test]
     fn test_compute_digest_counts_and_hash() -> Result<(), Box<dyn std::error::Error>> {
         let pkg = PackageDef {
@@ -1371,6 +1330,43 @@ mod tests {
         Ok(())
     }
 
+    /// Verifies `compute_file_manifest` and `SchemaDigest::with_file_manifest` across temporary SysML files.
+    ///
+    /// # Summary
+    /// Executes unit verification for multi-file manifest SHA-256, byte count, line count, and entity count extraction.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// # Safety
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_schema_digest_multi_file_manifest` in `crates/compile-sysml/src/semantic/digest.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_schema_digest_multi_file_manifest` (declaration #28) within `SEMANTIC-DIGEST`.
+    ///
+    /// ## 3. Preconditions
+    /// # Parameters
+    /// - No runtime parameters; creates an isolated temporary directory removed prior to return.
+    ///
+    /// ## 4. Postconditions
+    /// # Returns
+    /// - Returns `Result<(), Box<dyn std::error::Error>>` after verifying JSON round-trip and manifest entries.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over two small synthetic files in `test_schema_digest_multi_file_manifest`.
+    /// - Space Complexity: O(1) bounded auxiliary memory for `test_schema_digest_multi_file_manifest`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// # Errors
+    /// - Returns `Err` if temporary file I/O or JSON serialization fails.
+    /// # Panics
+    /// - Panics only if manifest assertions fail.
+    /// - Interface: Validates boundary inputs and types for `test_schema_digest_multi_file_manifest` (`Result<(), Box<dyn std::error::Error>>`).
+    /// - State: Maintains consistent state invariants across `test_schema_digest_multi_file_manifest` without partial mutation on error.
+    /// - Action: Executes `test_schema_digest_multi_file_manifest` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_schema_digest_multi_file_manifest` (`SEMANTIC-DIGEST`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// # Realises
+    /// Realises: [REQ-SEMANTIC-DIGEST-TEST-MULTI-FILE-MANIFEST] | SysML v2: TestCaseDef(test_schema_digest_multi_file_manifest)
     #[test]
     fn test_schema_digest_multi_file_manifest() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = std::env::temp_dir().join(format!(
@@ -1418,7 +1414,71 @@ mod tests {
             serde_json::from_str(&json)?;
         assert_eq!(deserialized.file_manifest, manifest);
 
-        let _ = fs::remove_dir_all(&temp_dir);
+        fs::remove_dir_all(&temp_dir)?;
         Ok(())
+    }
+
+    /// Verifies NIST FIPS 180-4 test vectors and `deap_core::digest` consolidation in `compile-sysml/src/semantic/digest.rs`.
+    ///
+    /// # Summary
+    /// Regression and NIST FIPS 180-4 conformance test for `DEFECT-03` (`#494`) verifying empty, `"abc"`, and multi-block (>64 bytes) SHA-256 vectors and confirming removal of duplicated SHA-256 round constants in `compile-sysml/src/semantic/digest.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// # Safety
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_defect_03_compile_sysml_sha256_nist_vectors_and_deap_core_delegation` in `crates/compile-sysml/src/semantic/digest.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_defect_03_compile_sysml_sha256_nist_vectors_and_deap_core_delegation` (declaration #29) within `SEMANTIC-DIGEST`.
+    ///
+    /// ## 3. Preconditions
+    /// # Parameters
+    /// - No runtime parameters; evaluates NIST FIPS 180-4 vectors and inspects `digest.rs` source.
+    ///
+    /// ## 4. Postconditions
+    /// # Returns
+    /// - Returns `()` when all NIST vectors match `deap_core::digest::compute_sha256` and duplicated `K` constants are absent.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over `digest.rs` source length in `test_defect_03_compile_sysml_sha256_nist_vectors_and_deap_core_delegation`.
+    /// - Space Complexity: O(1) bounded auxiliary memory for `test_defect_03_compile_sysml_sha256_nist_vectors_and_deap_core_delegation`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// # Errors
+    /// - Infallible test assertion harness.
+    /// # Panics
+    /// - Panics if `compute_sha256` diverges from NIST FIPS 180-4 vectors or duplicates the `K` round table.
+    /// - Interface: Validates boundary inputs and types for `test_defect_03_compile_sysml_sha256_nist_vectors_and_deap_core_delegation` (`()`).
+    /// - State: Maintains consistent state invariants across `test_defect_03_compile_sysml_sha256_nist_vectors_and_deap_core_delegation` without partial mutation on error.
+    /// - Action: Executes `test_defect_03_compile_sysml_sha256_nist_vectors_and_deap_core_delegation` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_defect_03_compile_sysml_sha256_nist_vectors_and_deap_core_delegation` (`SEMANTIC-DIGEST`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// # Realises
+    /// Realises: [REQ-DEFECT-03-COMPILE-SYSML-SHA256-NIST-DELEGATION] | SysML v2: TestCaseDef(test_defect_03_compile_sysml_sha256_nist_vectors_and_deap_core_delegation)
+    #[test]
+    fn test_defect_03_compile_sysml_sha256_nist_vectors_and_deap_core_delegation() {
+        assert_eq!(
+            compute_sha256(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            compute_sha256(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(
+            compute_sha256(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
+            "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+        );
+        assert_eq!(
+            compute_sha256(b"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"),
+            "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1"
+        );
+
+        let src = include_str!("digest.rs");
+        let k0_token = concat!("0x428a", "2f98");
+        assert!(
+            !src.contains(k0_token),
+            "compile-sysml/src/semantic/digest.rs must delegate SHA-256 compression to deap_core::digest without duplicating K constants"
+        );
     }
 }

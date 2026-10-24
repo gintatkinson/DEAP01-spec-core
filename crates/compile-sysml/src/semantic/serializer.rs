@@ -539,6 +539,22 @@ impl SysmlSerializable for StateDef {
         if let Some(exit) = &self.exit_action {
             lines.push(format!("{}    exit {};", pad, exit));
         }
+        for sub in &self.sub_states {
+            if sub.entry_action.is_none()
+                && sub.do_action.is_none()
+                && sub.exit_action.is_none()
+                && sub.transitions.is_empty()
+                && sub.sub_states.is_empty()
+            {
+                let sub_doc = format_doc_comment(&sub.doc, indent + 4);
+                if !sub_doc.is_empty() {
+                    lines.push(sub_doc.trim_end().to_string());
+                }
+                lines.push(format!("{}    state {};", pad, sub.name));
+            } else {
+                lines.push(sub.to_sysml(indent + 4));
+            }
+        }
         for t in &self.transitions {
             let t_name = t.name.as_deref().unwrap_or("transition");
             lines.push(format!("{}    transition {};", pad, t_name));
@@ -771,14 +787,33 @@ impl SysmlSerializable for UseCaseDef {
         if let Some(s) = &self.subject {
             lines.push(format!("{}    subject {};", pad, s));
         }
-        for a in &self.actors {
-            lines.push(format!("{}    actor {};", pad, a));
+        if self.actors.is_empty() {
+            if let Some(a) = &self.actor {
+                lines.push(format!("{}    actor {};", pad, a));
+            }
+        } else {
+            for a in &self.actors {
+                lines.push(format!("{}    actor {};", pad, a));
+            }
         }
         if let Some(obj) = &self.objective {
-            lines.push(format!("{}    objective \"{}\";", pad, obj));
+            let trimmed_obj = obj.trim().trim_matches('"');
+            lines.push(format!("{}    objective \"{}\";", pad, trimmed_obj));
+        }
+        for pre in &self.preconditions {
+            lines.push(format!("{}    precondition {};", pad, pre));
+        }
+        for inc in &self.includes {
+            lines.push(format!("{}    include {};", pad, inc));
+        }
+        for ext in &self.extends {
+            lines.push(format!("{}    extend {};", pad, ext));
         }
         for step in &self.steps {
             lines.push(format!("{}    step {};", pad, step));
+        }
+        for post in &self.postconditions {
+            lines.push(format!("{}    postcondition {};", pad, post));
         }
         lines.push(format!("{}}}", pad));
         lines.join("\n")
@@ -1565,6 +1600,142 @@ mod tests {
         assert!(pkg_sysml.contains("    satisfy requirement REQ-SYS-001;"));
         assert!(pkg_sysml.contains("        satisfy requirement REQ-UI-01;"));
         assert!(pkg_sysml.contains("        satisfy requirement REQ-UI-02;"));
+    }
+
+    /// Executes deterministic fn `test_serialize_state_def_sub_states_roundtrip` within `crates/compile-sysml/src/semantic/serializer.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_serialize_state_def_sub_states_roundtrip` in `crates/compile-sysml/src/semantic/serializer.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_serialize_state_def_sub_states_roundtrip` (declaration #25) within `SEMANTIC-SERIALIZER`.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked within a valid test execution context for `test_serialize_state_def_sub_states_roundtrip`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts lossless roundtrip serialization of nested leaf and composite `StateDef::sub_states`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over input AST dimension of `test_serialize_state_def_sub_states_roundtrip`.
+    /// - Space Complexity: O(N) bounded auxiliary memory for `test_serialize_state_def_sub_states_roundtrip`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `test_serialize_state_def_sub_states_roundtrip`.
+    /// - State: Maintains consistent state invariants across `test_serialize_state_def_sub_states_roundtrip` without partial mutation on error.
+    /// - Action: Executes `test_serialize_state_def_sub_states_roundtrip` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_serialize_state_def_sub_states_roundtrip` (`SEMANTIC-SERIALIZER`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SEMANTIC-SERIALIZER-STATEDEF-SUBSTATES-ROUNDTRIP] | SysML v2: TestCaseDef(test_serialize_state_def_sub_states_roundtrip)
+    #[test]
+    fn test_serialize_state_def_sub_states_roundtrip() {
+        let src = "\
+package FlightStateMachine {
+    state def FlightMode {
+        entry initFlight;
+        do monitorFlight;
+        exit shutdownFlight;
+        state GroundIdle;
+        state def Airborne {
+            entry engageAutopilot;
+            do trackWaypoints;
+            exit disengageAutopilot;
+            state Climb;
+            state Cruise;
+            transition Climb_to_Cruise;
+        }
+        transition GroundIdle_to_Airborne;
+    }
+}";
+        let parsed = match crate::parser::grammar::SysmlParser::parse_source(src, "FlightStateMachine") {
+            Ok(p) => p,
+            Err(e) => panic!("initial parse failed: {}", e),
+        };
+        assert_eq!(parsed.state_defs.len(), 1);
+        if let Some(root_state) = parsed.state_defs.first() {
+            assert_eq!(root_state.sub_states.len(), 2);
+        }
+
+        let serialized = parsed.to_sysml(0);
+        assert!(serialized.contains("state GroundIdle;"));
+        assert!(serialized.contains("state def Airborne {"));
+        assert!(serialized.contains("state Climb;"));
+        assert!(serialized.contains("state Cruise;"));
+
+        let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&serialized, "FlightStateMachine") {
+            Ok(p) => p,
+            Err(e) => panic!("reparse failed: {}", e),
+        };
+        assert_eq!(reparsed, parsed);
+    }
+
+    /// Executes deterministic fn `test_serialize_use_case_def_full_fields_roundtrip` within `crates/compile-sysml/src/semantic/serializer.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_serialize_use_case_def_full_fields_roundtrip` in `crates/compile-sysml/src/semantic/serializer.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_serialize_use_case_def_full_fields_roundtrip` (declaration #26) within `SEMANTIC-SERIALIZER`.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked within a valid test execution context for `test_serialize_use_case_def_full_fields_roundtrip`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts lossless roundtrip serialization of `UseCaseDef` fields (`includes`, `extends`, `preconditions`, `postconditions`, `subject`, `actors`, `objective`, `steps`).
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over input AST dimension of `test_serialize_use_case_def_full_fields_roundtrip`.
+    /// - Space Complexity: O(N) bounded auxiliary memory for `test_serialize_use_case_def_full_fields_roundtrip`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `test_serialize_use_case_def_full_fields_roundtrip`.
+    /// - State: Maintains consistent state invariants across `test_serialize_use_case_def_full_fields_roundtrip` without partial mutation on error.
+    /// - Action: Executes `test_serialize_use_case_def_full_fields_roundtrip` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_serialize_use_case_def_full_fields_roundtrip` (`SEMANTIC-SERIALIZER`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SEMANTIC-SERIALIZER-USECASEDEF-ROUNDTRIP] | SysML v2: TestCaseDef(test_serialize_use_case_def_full_fields_roundtrip)
+    #[test]
+    fn test_serialize_use_case_def_full_fields_roundtrip() {
+        let src = "\
+package MissionUseCases {
+    use case def ExecuteAutonomousSortie {
+        subject Vehicle : AutonomousPlatform;
+        actor MissionOperator;
+        actor SafetySupervisor;
+        objective \"Execute autonomous reconnaissance sortie safely\";
+        precondition VehiclePreFlightCheckComplete;
+        include ValidateFlightPlan;
+        extend EmergencyAbortSortie;
+        step \"Initialize navigation sensors\";
+        step \"Follow mission waypoints\";
+        postcondition TelemetryLogPersisted;
+    }
+}";
+        let parsed = match crate::parser::grammar::SysmlParser::parse_source(src, "MissionUseCases") {
+            Ok(p) => p,
+            Err(e) => panic!("initial parse failed: {}", e),
+        };
+        assert_eq!(parsed.use_case_defs.len(), 1);
+        if let Some(uc) = parsed.use_case_defs.first() {
+            assert_eq!(uc.preconditions, vec!["VehiclePreFlightCheckComplete".to_string()]);
+            assert_eq!(uc.includes, vec!["ValidateFlightPlan".to_string()]);
+            assert_eq!(uc.extends, vec!["EmergencyAbortSortie".to_string()]);
+            assert_eq!(uc.postconditions, vec!["TelemetryLogPersisted".to_string()]);
+        }
+
+        let serialized = parsed.to_sysml(0);
+        assert!(serialized.contains("precondition VehiclePreFlightCheckComplete;"));
+        assert!(serialized.contains("include ValidateFlightPlan;"));
+        assert!(serialized.contains("extend EmergencyAbortSortie;"));
+        assert!(serialized.contains("postcondition TelemetryLogPersisted;"));
+
+        let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&serialized, "MissionUseCases") {
+            Ok(p) => p,
+            Err(e) => panic!("reparse failed: {}", e),
+        };
+        assert_eq!(reparsed, parsed);
     }
 }
 

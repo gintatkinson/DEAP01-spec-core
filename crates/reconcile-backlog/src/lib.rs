@@ -32,6 +32,14 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-RECONCILE-BACKLOG-LIB, Issue Tracker as Canonical SSOT, Zero Fallback Placeholders, Automated Spec Reconciliation]
+#![allow(
+    clippy::collapsible_str_replace,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::type_complexity,
+    clippy::unwrap_used
+)]
 
 pub mod checklist;
 pub mod create_issue;

@@ -418,7 +418,7 @@ pub fn clean_unpopulated_placeholders_counted(content: &str) -> (String, usize) 
             cur_offset += " after phase".len();
             // Skip optional spaces/tabs between "after phase" and phase identifier
             let rem = &rest[pos + cur_offset..];
-            let rem_trimmed = rem.trim_start_matches(|c: char| c == ' ' || c == '\t');
+            let rem_trimmed = rem.trim_start_matches([' ', '\t']);
             cur_offset += rem.len() - rem_trimmed.len();
             // Consume optional alphanumeric phase identifier (e.g., "1", "2", "3", "IV")
             let id_len = rem_trimmed.chars().take_while(|c| c.is_ascii_alphanumeric()).count();
@@ -462,7 +462,7 @@ pub fn clean_unpopulated_placeholders_counted(content: &str) -> (String, usize) 
         let line_prefix = &rest[line_start..pos];
 
         // Measure leading indentation on this line
-        let indent_len = line_prefix.len() - line_prefix.trim_start_matches(|c: char| c == ' ' || c == '\t').len();
+        let indent_len = line_prefix.len() - line_prefix.trim_start_matches([' ', '\t']).len();
         let after_indent = &line_prefix[indent_len..];
 
         // Check if after_indent contains only markdown markers/envelope:
@@ -1212,7 +1212,7 @@ pub fn synthesize_and_reconcile_hierarchy(
     let mut updated = parent_spec.content.clone();
 
     if is_epic {
-        let total_epics = child_specs.iter().filter(|s| is_spec_epic(s)).count() + 1;
+        let total_epics = child_specs.iter().filter(|s| is_spec_epic(s)).count();
         let mut child_features: Vec<&crate::LoadedSpec> = Vec::new();
         let mut child_use_cases: Vec<&crate::LoadedSpec> = Vec::new();
         let mut child_user_stories: Vec<&crate::LoadedSpec> = Vec::new();
@@ -1319,7 +1319,7 @@ pub fn synthesize_and_reconcile_hierarchy(
             }
         }
     } else if is_feature {
-        let total_features = child_specs.iter().filter(|s| is_spec_feature(s)).count() + 1;
+        let total_features = child_specs.iter().filter(|s| is_spec_feature(s)).count();
         let mut child_use_cases: Vec<&crate::LoadedSpec> = Vec::new();
         let mut child_user_stories: Vec<&crate::LoadedSpec> = Vec::new();
 
@@ -1780,6 +1780,119 @@ Subsystem composition.
         assert!(reconciled.contains("- [x] [Feature 01: Human Engineer Interface](../features/FEAT-01.md)"));
         assert!(reconciled.contains("- [x] [Feature 02: CI Runner](../features/FEAT-02.md) (#20)"));
         assert!(reconciled.contains("- [ ] **Feature 03: Radar Tracking** (#30)"));
+    }
+
+    /// Verifies single-epic and single-feature hierarchy cardinality when `child_specs` contains `parent_spec`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_defect_08_single_epic_and_single_feature_hierarchy_cardinality` in `crates/reconcile-backlog/src/checklist.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_defect_08_single_epic_and_single_feature_hierarchy_cardinality` within `RECONCILE-BACKLOG-CHECKLIST`.
+    ///
+    /// ## 3. Preconditions
+    /// - Workspace snapshot slice `all_specs` includes `parent_spec` alongside child specifications.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts that single-Epic and single-Feature workspaces bind child specifications without off-by-one overcounting.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over specification slice length.
+    /// - Space Complexity: O(N) bounded auxiliary memory for test fixtures.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `synthesize_and_reconcile_hierarchy`.
+    /// - State: Maintains consistent state invariants across hierarchy synthesis without partial mutation.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `RECONCILE-BACKLOG-CHECKLIST`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-SINGLE-PARENT-CARDINALITY] | SysML v2: TestCaseDef(test_defect_08_single_epic_and_single_feature_hierarchy_cardinality)
+    #[test]
+    fn test_defect_08_single_epic_and_single_feature_hierarchy_cardinality() {
+        use crate::frontmatter::SpecFrontmatter;
+        use crate::LoadedSpec;
+        use std::path::PathBuf;
+
+        let epic = LoadedSpec {
+            path: PathBuf::from("docs/epics/EPIC-01-Core.md"),
+            rel_path: "docs/epics/EPIC-01-Core.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Epic 01: Core System".to_string(),
+                spec_type: "epic".to_string(),
+                issue_id: Some(1),
+                ..Default::default()
+            },
+            content: "# Epic 01: Core System\n\n## 2. Requirements & Checklist\n*To be populated after Phase 2*\n".to_string(),
+        };
+
+        let feat = LoadedSpec {
+            path: PathBuf::from("docs/features/FEAT-01-Engine.md"),
+            rel_path: "docs/features/FEAT-01-Engine.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Feature 01: Core Engine".to_string(),
+                spec_type: "feature".to_string(),
+                issue_id: Some(2),
+                ..Default::default()
+            },
+            content: "# Feature 01: Core Engine\n\n### Associated Use Cases & User Stories\n#### Associated Use Cases\n*To be populated after Phase 3*\n\n#### Associated User Stories\n*To be populated after Phase 3*\n".to_string(),
+        };
+
+        let uc = LoadedSpec {
+            path: PathBuf::from("docs/use-cases/UC-01-Execute.md"),
+            rel_path: "docs/use-cases/UC-01-Execute.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Use Case 01: Execute Task".to_string(),
+                spec_type: "use_case".to_string(),
+                issue_id: Some(3),
+                ..Default::default()
+            },
+            content: "# Use Case 01: Execute Task\n".to_string(),
+        };
+
+        let us = LoadedSpec {
+            path: PathBuf::from("docs/user-stories/US-01-OperatorRun.md"),
+            rel_path: "docs/user-stories/US-01-OperatorRun.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "User Story 01: Operator Run".to_string(),
+                spec_type: "user-story".to_string(),
+                issue_id: Some(4),
+                ..Default::default()
+            },
+            content: "# User Story 01: Operator Run\n".to_string(),
+        };
+
+        let issue_index = crate::tracker::IssueIndex::default();
+        let all_specs = vec![epic.clone(), feat.clone(), uc.clone(), us.clone()];
+
+        let reconciled_epic = synthesize_and_reconcile_hierarchy(&epic, &all_specs, "org/repo", "main", &issue_index);
+        assert!(
+            reconciled_epic.contains("Feature 01: Core Engine"),
+            "Single-epic workspace must bind child feature when child_specs includes parent_spec, got:\n{}",
+            reconciled_epic
+        );
+        assert!(
+            reconciled_epic.contains("Use Case 01: Execute Task"),
+            "Single-epic workspace must bind child use case when child_specs includes parent_spec, got:\n{}",
+            reconciled_epic
+        );
+        assert!(
+            reconciled_epic.contains("User Story 01: Operator Run"),
+            "Single-epic workspace must bind child user story when child_specs includes parent_spec, got:\n{}",
+            reconciled_epic
+        );
+
+        let reconciled_feat = synthesize_and_reconcile_hierarchy(&feat, &all_specs, "org/repo", "main", &issue_index);
+        assert!(
+            reconciled_feat.contains("Use Case 01: Execute Task"),
+            "Single-feature workspace must bind child use case when child_specs includes parent_spec, got:\n{}",
+            reconciled_feat
+        );
+        assert!(
+            reconciled_feat.contains("User Story 01: Operator Run"),
+            "Single-feature workspace must bind child user story when child_specs includes parent_spec, got:\n{}",
+            reconciled_feat
+        );
     }
 }
 

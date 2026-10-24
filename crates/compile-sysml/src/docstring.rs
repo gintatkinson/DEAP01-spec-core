@@ -577,8 +577,7 @@ pub fn inject_rust_file_docstrings(
     let mut first_attr_idx: Option<usize> = None;
     let mut seen_docblocks: BTreeSet<String> = BTreeSet::new();
 
-    let mut in_multiline_comment = false;
-    let mut in_raw_string = false;
+    let mut lex_state = RustStringScannerState::Normal;
     let mut in_mod_tests = false;
     let mut cfg_test_pending = false;
     let mut attr_bracket_depth: usize = 0;
@@ -590,53 +589,55 @@ pub fn inject_rust_file_docstrings(
 
     for (idx, &raw_line) in raw_lines.iter().enumerate() {
         let trimmed = raw_line.trim();
+        let started_in_normal = lex_state == RustStringScannerState::Normal;
 
-        if in_multiline_comment {
-            if trimmed.contains("*/") {
-                in_multiline_comment = false;
-            }
-            continue;
-        }
-        if !in_raw_string && trimmed.starts_with("/*") && !trimmed.contains("*/") {
-            in_multiline_comment = true;
-            continue;
-        }
-        if in_raw_string {
-            if trimmed.contains("\"#") {
-                in_raw_string = false;
-            }
-            continue;
-        }
-
-        if trimmed.starts_with("//!") {
-            if has_placeholder_doc_line(trimmed) {
-                if let Some(slot) = removed_line_flags.get_mut(idx) {
-                    *slot = true;
+        if started_in_normal {
+            if trimmed.starts_with("//!") {
+                if has_placeholder_doc_line(trimmed) {
+                    if let Some(slot) = removed_line_flags.get_mut(idx) {
+                        *slot = true;
+                    }
+                    enriched_count = enriched_count.saturating_add(1);
                 }
-                enriched_count = enriched_count.saturating_add(1);
+                continue;
             }
-            continue;
+
+            if trimmed.starts_with("///") {
+                if !in_mod_tests {
+                    current_doc.push(trimmed.to_string());
+                    pending_doc_indices.push(idx);
+                }
+                continue;
+            }
         }
 
-        if trimmed.starts_with("///") {
-            if !in_mod_tests {
-                current_doc.push(trimmed.to_string());
-                pending_doc_indices.push(idx);
-            }
-            continue;
-        }
-
-        let code = strip_line_comment_preserving_strings(trimmed);
+        let scanned_code = scan_rust_line_preserving_lex_state(trimmed, &mut lex_state);
+        let code = scanned_code.trim();
 
         if code.is_empty() {
             continue;
         }
 
-        if let Some(raw_pos) = code.find("r#\"") {
-            let after_open = code.get(raw_pos.saturating_add(3)..).unwrap_or("");
-            if !after_open.contains("\"#") {
-                in_raw_string = true;
+        if !started_in_normal {
+            if attr_bracket_depth > 0 {
+                for b in code.bytes() {
+                    if b == b'[' {
+                        attr_bracket_depth = attr_bracket_depth.saturating_add(1);
+                    } else if b == b']' {
+                        attr_bracket_depth = attr_bracket_depth.saturating_sub(1);
+                    }
+                }
+                continue;
             }
+            update_ast_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
+            while let Some(&(open_depth, _)) = impl_owner_stack.last() {
+                if brace_depth <= open_depth {
+                    impl_owner_stack.pop();
+                } else {
+                    break;
+                }
+            }
+            continue;
         }
 
         if code == "mod tests {"
@@ -1382,30 +1383,30 @@ fn synthesize_7_section_docstring(
 
     let mut lines = vec![
         format!("{} {}", pfx, summary),
-        format!("{}", pfx),
+        pfx.to_string(),
         format!("{} ## 1. Safety Intent & Regulatory Scope", pfx),
         format!("{} {}", pfx, sec1_body),
-        format!("{}", pfx),
+        pfx.to_string(),
         format!("{} ## 2. Invariants & Mathematical Properties", pfx),
         format!("{} {}", pfx, sec2_body),
-        format!("{}", pfx),
+        pfx.to_string(),
         format!("{} ## 3. Preconditions", pfx),
     ];
     lines.extend(sec3_lines);
-    lines.push(format!("{}", pfx));
+    lines.push(pfx.to_string());
     lines.push(format!("{} ## 4. Postconditions", pfx));
     lines.push(format!("{} {}", pfx, sec4_body));
-    lines.push(format!("{}", pfx));
+    lines.push(pfx.to_string());
     lines.push(format!("{} ## 5. Algorithmic Complexity Bounds", pfx));
     lines.push(time_line);
     lines.push(space_line);
-    lines.push(format!("{}", pfx));
+    lines.push(pfx.to_string());
     lines.push(format!("{} ## 6. Failure Modes & Fault Tolerance", pfx));
     lines.push(fail_interface);
     lines.push(fail_state);
     lines.push(fail_action);
     lines.push(fail_resource);
-    lines.push(format!("{}", pfx));
+    lines.push(pfx.to_string());
     lines.push(format!("{} ## 7. Realization & Traceability", pfx));
     lines.push(format!(
         "{} Realises: {} | SysML v2: {}",
@@ -1617,10 +1618,18 @@ fn resolve_schema_context(
 
     let mut matched_req: Option<String> = None;
     let mut matched_constraint: Option<String> = None;
+    let mut matched_entity_pkg: Option<&PackageDef> = None;
 
     if let Some(owner) = owner_name {
         for pkg in &all_pkgs {
-            if let Some(part) = pkg.part_defs.iter().find(|p| p.name == owner) {
+            if let Some(part) = pkg
+                .part_defs
+                .iter()
+                .find(|p| schema_identifiers_match(&p.name, owner))
+            {
+                if matched_entity_pkg.is_none() {
+                    matched_entity_pkg = Some(pkg);
+                }
                 if matched_req.is_none() {
                     if let Some(req) = part.satisfied_requirements.first() {
                         matched_req = Some(req.clone());
@@ -1636,7 +1645,14 @@ fn resolve_schema_context(
     }
 
     for pkg in &all_pkgs {
-        if let Some(part) = pkg.part_defs.iter().find(|p| p.name == item_name) {
+        if let Some(part) = pkg
+            .part_defs
+            .iter()
+            .find(|p| schema_identifiers_match(&p.name, item_name))
+        {
+            if matched_entity_pkg.is_none() {
+                matched_entity_pkg = Some(pkg);
+            }
             if matched_req.is_none() {
                 if let Some(req) = part.satisfied_requirements.first() {
                     matched_req = Some(req.clone());
@@ -1650,9 +1666,28 @@ fn resolve_schema_context(
         }
     }
 
+    if matched_entity_pkg.is_none() {
+        for pkg in &all_pkgs {
+            if pkg.action_defs.iter().any(|a| {
+                schema_identifiers_match(&a.name, item_name)
+                    || owner_name.is_some_and(|o| schema_identifiers_match(&a.name, o))
+            }) {
+                matched_entity_pkg = Some(pkg);
+                break;
+            }
+        }
+    }
+
     if matched_req.is_none() {
         for pkg in &all_pkgs {
-            if let Some(req_def) = pkg.requirement_defs.first() {
+            if let Some(req_def) = pkg.requirement_defs.iter().find(|r| {
+                schema_identifiers_match(&r.name, item_name)
+                    || schema_identifiers_match(&r.req_id, item_name)
+                    || owner_name.is_some_and(|o| {
+                        schema_identifiers_match(&r.name, o)
+                            || schema_identifiers_match(&r.req_id, o)
+                    })
+            }) {
                 let id = if !req_def.req_id.is_empty() {
                     req_def.req_id.clone()
                 } else {
@@ -1664,20 +1699,350 @@ fn resolve_schema_context(
                 }
             }
         }
+        if matched_req.is_none() {
+            if let Some(pkg) = matched_entity_pkg {
+                if let Some(req_def) = pkg.requirement_defs.first() {
+                    let id = if !req_def.req_id.is_empty() {
+                        req_def.req_id.clone()
+                    } else {
+                        req_def.name.clone()
+                    };
+                    if !id.is_empty() {
+                        matched_req = Some(id);
+                    }
+                }
+            }
+        }
     }
 
     if matched_constraint.is_none() {
         for pkg in &all_pkgs {
-            if let Some(c_def) = pkg.constraint_defs.first() {
+            if let Some(c_def) = pkg.constraint_defs.iter().find(|c| {
+                schema_identifiers_match(&c.name, item_name)
+                    || owner_name.is_some_and(|o| schema_identifiers_match(&c.name, o))
+            }) {
                 if let Some(formatted) = format_constraint(&c_def.name, &c_def.expression) {
                     matched_constraint = Some(formatted);
                     break;
                 }
             }
         }
+        if matched_constraint.is_none() {
+            if let Some(pkg) = matched_entity_pkg {
+                if let Some(c_def) = pkg.constraint_defs.first() {
+                    matched_constraint = format_constraint(&c_def.name, &c_def.expression);
+                }
+            }
+        }
     }
 
     (matched_req, matched_constraint)
+}
+
+/// Compares a schema element identifier (`schema_ident`) against a source AST identifier (`source_ident`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and FEAT-42 Section 3.2 deterministic symbol correspondence (`schema_identifiers_match`).
+/// Prevents false-positive requirement or constraint bindings on unrelated source symbols while matching
+/// exact or snake_case/PascalCase equivalent identifiers.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Symmetric equivalence relation over non-empty alphanumeric normalized tokens.
+/// - Returns `false` if either identifier has zero ASCII alphanumeric characters.
+///
+/// ## 3. Preconditions
+/// - `schema_ident: &str` and `source_ident: &str` are candidate symbol names.
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff `schema_ident` and `source_ident` match case-insensitively after stripping `_` and `-`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N + M) where N is `schema_ident.len()` and M is `source_ident.len()`.
+/// - Space Complexity: O(1) streaming iterator comparison with zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles empty strings and punctuation safely.
+/// - State: Pure stateless comparator.
+/// - Action: Never panics.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-SCHEMA-IDENTIFIERS-MATCH]
+fn schema_identifiers_match(schema_ident: &str, source_ident: &str) -> bool {
+    let mut a_iter = schema_ident
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase());
+    let mut b_iter = source_ident
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase());
+    let mut saw_any = false;
+    loop {
+        match (a_iter.next(), b_iter.next()) {
+            (Some(ca), Some(cb)) => {
+                if ca != cb {
+                    return false;
+                }
+                saw_any = true;
+            }
+            (None, None) => return saw_any,
+            _ => return false,
+        }
+    }
+}
+
+/// Lexical scanner state across lines for Rust docstring injection (`inject_rust_file_docstrings`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DO-330 TQL-4 lexical analysis soundness (`RustStringScannerState`).
+/// Tracks multiline block comments, multiline standard strings, and `r#*...#*` multi-hash raw strings
+/// across source lines so interior text is never misclassified as an AST item declaration.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `RawString(hash_count)` only terminates on `"` followed immediately by `hash_count` consecutive `#` bytes.
+/// - `StandardString` skips `\` escape pairs and only terminates on an unescaped `"`.
+/// - `BlockComment(depth)` tracks nested `/* ... */` depth until returning to `0`.
+///
+/// ## 3. Preconditions
+/// - Initialized to `RustStringScannerState::Normal` at the start of each Rust file scan.
+///
+/// ## 4. Postconditions
+/// - Transitions deterministically via `scan_rust_line_preserving_lex_state`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) state transitions per lexical token.
+/// - Space Complexity: O(1) stack value.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Closed typed enum compliant with Check 34.
+/// - State: Copy value with explicit depth/hash counters.
+/// - Action: Exhaustive pattern matching.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-RUST-STRING-SCANNER-STATE]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RustStringScannerState {
+    /// Normal Rust code outside multiline comments and string literals.
+    Normal,
+    /// Inside a `/* ... */` block comment with nesting depth `>= 1`.
+    BlockComment(usize),
+    /// Inside a standard `"..."` string literal (which may span multiple lines).
+    StandardString,
+    /// Inside a raw string literal `r#*"..."#*` opened with the given `#` count.
+    RawString(usize),
+}
+
+/// Scans a single Rust source line while updating `state` across multiline comments, standard strings, and `r#*` raw strings.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, Check 34, and DEFECT-09 lexical scanner purity (`scan_rust_line_preserving_lex_state`).
+/// Emits only the code tokens occurring in `RustStringScannerState::Normal` (replacing string literals with `""`
+/// and character literals with `''`), preventing fake `fn` or `struct` lines inside multiline literals from
+/// confusing the docstring synthesizer or delimiter depth counters.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Uses `.get(..)` exclusively with zero direct slice indexing (`s[a..b]`).
+/// - Preserves balanced `""` quotes on every returned line so downstream `update_ast_delimiter_depths`
+///   never misinterprets delimiters after a multiline string closes.
+///
+/// ## 3. Preconditions
+/// - `line: &str` is a valid UTF-8 source line.
+/// - `state: &mut RustStringScannerState` reflects the lexical state at the start of `line`.
+///
+/// ## 4. Postconditions
+/// - Updates `*state` to the lexical state at the end of `line` and returns the sanitized code string.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) where L is `line.len()`.
+/// - Space Complexity: O(L) for the returned sanitized code line.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking `.get(..)` bounds checks at every character boundary.
+/// - State: Monotonic index advancement guarantees termination.
+/// - Action: Handles escaped quotes, char literals (`'"'`, `'\"'`, `'\''`), and arbitrary `#` counts in raw strings.
+/// - Resource: Single `String` allocation bounded by `line.len()`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-SCAN-RUST-LINE-LEX-STATE]
+fn scan_rust_line_preserving_lex_state(
+    line: &str,
+    state: &mut RustStringScannerState,
+) -> String {
+    let len = line.len();
+    let mut i: usize = 0;
+    let mut out = String::with_capacity(len);
+
+    while i < len {
+        let Some(rest) = line.get(i..) else {
+            break;
+        };
+        let Some(ch) = rest.chars().next() else {
+            break;
+        };
+
+        match *state {
+            RustStringScannerState::BlockComment(depth) => {
+                if rest.starts_with("/*") {
+                    *state = RustStringScannerState::BlockComment(depth.saturating_add(1));
+                    i = i.saturating_add(2);
+                } else if rest.starts_with("*/") {
+                    let next_depth = depth.saturating_sub(1);
+                    if next_depth == 0 {
+                        *state = RustStringScannerState::Normal;
+                        out.push(' ');
+                    } else {
+                        *state = RustStringScannerState::BlockComment(next_depth);
+                    }
+                    i = i.saturating_add(2);
+                } else {
+                    i = i.saturating_add(ch.len_utf8());
+                }
+            }
+            RustStringScannerState::StandardString => {
+                if ch == '\\' {
+                    let after_slash = i.saturating_add(1);
+                    if let Some(after_rest) = line.get(after_slash..) {
+                        if let Some(escaped_ch) = after_rest.chars().next() {
+                            i = after_slash.saturating_add(escaped_ch.len_utf8());
+                        } else {
+                            i = after_slash;
+                        }
+                    } else {
+                        i = after_slash;
+                    }
+                } else if ch == '"' {
+                    *state = RustStringScannerState::Normal;
+                    i = i.saturating_add(1);
+                } else {
+                    i = i.saturating_add(ch.len_utf8());
+                }
+            }
+            RustStringScannerState::RawString(expected_hashes) => {
+                if ch == '"' {
+                    let after_quote = i.saturating_add(1);
+                    let after_quote_str = line.get(after_quote..).unwrap_or("");
+                    let mut found_hashes: usize = 0;
+                    for hc in after_quote_str.chars() {
+                        if hc == '#' && found_hashes < expected_hashes {
+                            found_hashes = found_hashes.saturating_add(1);
+                        } else {
+                            break;
+                        }
+                    }
+                    if found_hashes == expected_hashes {
+                        *state = RustStringScannerState::Normal;
+                        i = after_quote.saturating_add(expected_hashes);
+                    } else {
+                        i = after_quote;
+                    }
+                } else {
+                    i = i.saturating_add(ch.len_utf8());
+                }
+            }
+            RustStringScannerState::Normal => {
+                if rest.starts_with("//") {
+                    break;
+                }
+                if rest.starts_with("/*") {
+                    *state = RustStringScannerState::BlockComment(1);
+                    i = i.saturating_add(2);
+                    continue;
+                }
+
+                let prev_is_ident = if i > 0 {
+                    line.as_bytes()
+                        .get(i.saturating_sub(1))
+                        .copied()
+                        .is_some_and(|b| b.is_ascii_alphanumeric() || b == b'_')
+                } else {
+                    false
+                };
+
+                if !prev_is_ident {
+                    let raw_prefix_len = if rest.starts_with("br") || rest.starts_with("cr") {
+                        Some(2usize)
+                    } else if rest.starts_with('r') {
+                        Some(1usize)
+                    } else {
+                        None
+                    };
+                    if let Some(plen) = raw_prefix_len {
+                        let after_r = rest.get(plen..).unwrap_or("");
+                        let hash_count = after_r.chars().take_while(|&c| c == '#').count();
+                        let after_hashes = after_r.get(hash_count..).unwrap_or("");
+                        if after_hashes.starts_with('"') {
+                            out.push_str("\"\"");
+                            *state = RustStringScannerState::RawString(hash_count);
+                            i = i
+                                .saturating_add(plen)
+                                .saturating_add(hash_count)
+                                .saturating_add(1);
+                            continue;
+                        }
+                    }
+
+                    if rest.starts_with("b\"") || rest.starts_with("c\"") {
+                        out.push_str("\"\"");
+                        *state = RustStringScannerState::StandardString;
+                        i = i.saturating_add(2);
+                        continue;
+                    }
+                }
+
+                if ch == '"' {
+                    out.push_str("\"\"");
+                    *state = RustStringScannerState::StandardString;
+                    i = i.saturating_add(1);
+                    continue;
+                }
+
+                if ch == '\'' {
+                    if let Some(after_quote) = rest.get(1..) {
+                        if let Some(after_slash) = after_quote.strip_prefix('\\') {
+                            if let Some(escaped_ch) = after_slash.chars().next() {
+                                let after_esc_idx = 2usize.saturating_add(escaped_ch.len_utf8());
+                                let tail = rest.get(after_esc_idx..).unwrap_or("");
+                                if tail.starts_with('\'') {
+                                    out.push_str("''");
+                                    i = i.saturating_add(after_esc_idx).saturating_add(1);
+                                    continue;
+                                } else if let Some(close_pos) = tail.find('\'') {
+                                    if close_pos <= 10 {
+                                        out.push_str("''");
+                                        i = i
+                                            .saturating_add(after_esc_idx)
+                                            .saturating_add(close_pos)
+                                            .saturating_add(1);
+                                        continue;
+                                    }
+                                }
+                            }
+                        } else if let Some(first_c) = after_quote.chars().next() {
+                            if first_c != '\'' {
+                                let after_first =
+                                    after_quote.get(first_c.len_utf8()..).unwrap_or("");
+                                if after_first.starts_with('\'') {
+                                    out.push_str("''");
+                                    i = i
+                                        .saturating_add(1)
+                                        .saturating_add(first_c.len_utf8())
+                                        .saturating_add(1);
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                out.push(ch);
+                i = i.saturating_add(ch.len_utf8());
+            }
+        }
+    }
+
+    out
 }
 
 /// Extracts the target type identifier from a Rust `impl` header line.
@@ -1995,5 +2360,202 @@ fn sanitize_req_segment(raw: &str) -> String {
         sanitize_sysml_identifier(raw, "ITEM").to_ascii_uppercase()
     } else {
         trimmed.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use deap_core::sysml_ast::{ConstraintDef, PartDef, RequirementDef};
+
+    /// Verifies that unmatched AST items do not inherit unrelated `pkg.requirement_defs.first()` or `pkg.constraint_defs.first()` bindings (DEFECT-09, refs #498).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D bidirectional traceability
+    /// verification (`test_defect_09_unmatched_items_do_not_inherit_first_package_req_or_constraint`).
+    /// Prevents false-positive requirement and constraint attribution on unmapped helper symbols.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - A schema-mapped `PartDef` (`FlightDirector`) receives its satisfied requirement `REQ-FD-001`
+    ///   and constraint `AltitudeEnvelope (alt >= 0)`.
+    /// - An unmapped function (`unmapped_checksum_helper`) receives `(None, None)` from `resolve_schema_context`
+    ///   and synthesizes its deterministic module-scoped `[REQ-TELEMETRY-CODEC-UNMAPPED-CHECKSUM-HELPER]` tag.
+    ///
+    /// ## 3. Preconditions
+    /// - A populated `PackageDef` containing `FlightDirector`, `REQ-FD-001`, and `AltitudeEnvelope` is supplied.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when matched items bind schema metadata and unmatched items synthesize deterministic module tags.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) where N is the test fixture source byte length.
+    /// - Space Complexity: O(N) for the enriched output buffer.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates unexpected synthesis failures via `Result<(), String>`.
+    /// - State: Pure in-memory test fixture evaluation.
+    /// - Action: Asserts absence of `REQ-FD-001` and `AltitudeEnvelope` on the unmapped function.
+    /// - Resource: Zero filesystem side effects.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-DEFECT-09-UNMATCHED-SCHEMA-FALLBACK-TEST]
+    #[test]
+    fn test_defect_09_unmatched_items_do_not_inherit_first_package_req_or_constraint() -> Result<(), String> {
+        let mut pkg = ingest_source_directory(
+            Path::new("src/docstring.rs"),
+            SourceLanguage::Rust,
+            "AvionicsPkg",
+        )?;
+        pkg.packages.clear();
+        pkg.action_defs.clear();
+        pkg.part_defs.truncate(1);
+        if let Some(part) = pkg.part_defs.first_mut() {
+            part.name = "FlightDirector".to_string();
+            part.satisfied_requirements = vec!["REQ-FD-001".to_string()];
+            part.constraints = vec![ConstraintDef {
+                name: "AltitudeEnvelope".to_string(),
+                doc: None,
+                parameters: Vec::new(),
+                expression: "alt >= 0".to_string(),
+                is_assertion: false,
+                pre_conditions: Vec::new(),
+                post_conditions: Vec::new(),
+            }];
+        }
+        pkg.requirement_defs.truncate(1);
+        if let Some(req) = pkg.requirement_defs.first_mut() {
+            req.req_id = "REQ-FD-001".to_string();
+            req.name = "FlightDirectorStabilityReq".to_string();
+        }
+        pkg.constraint_defs = vec![ConstraintDef {
+            name: "AltitudeEnvelope".to_string(),
+            doc: None,
+            parameters: Vec::new(),
+            expression: "alt >= 0".to_string(),
+            is_assertion: false,
+            pre_conditions: Vec::new(),
+            post_conditions: Vec::new(),
+        }];
+        let _unused_types = std::mem::size_of::<PartDef>() + std::mem::size_of::<RequirementDef>();
+
+        let (unmatched_req, unmatched_constraint) =
+            resolve_schema_context(Some(&pkg), None, "unmapped_checksum_helper");
+        assert_eq!(
+            unmatched_req, None,
+            "Unmatched item must not inherit pkg.requirement_defs.first()"
+        );
+        assert_eq!(
+            unmatched_constraint, None,
+            "Unmatched item must not inherit pkg.constraint_defs.first()"
+        );
+
+        let src = "pub struct FlightDirector {\n    pub alt: i64,\n}\n\npub fn unmapped_checksum_helper(seed: u32) -> u32 {\n    seed.wrapping_add(1)\n}\n";
+        let (enriched, count) =
+            inject_rust_file_docstrings(src, "crates/telemetry/src/codec.rs", Some(&pkg), false)?;
+        assert_eq!(count, 2);
+        assert!(
+            enriched.contains("Realises: [REQ-FD-001] | SysML v2: PartDef(FlightDirector)"),
+            "Matched struct FlightDirector must bind schema requirement REQ-FD-001, got:\n{}",
+            enriched
+        );
+        assert!(
+            enriched.contains("Realises: [REQ-TELEMETRY-CODEC-UNMAPPED-CHECKSUM-HELPER] | SysML v2: ActionDef(unmapped_checksum_helper)"),
+            "Unmatched function must synthesize deterministic module-scoped REQ tag, got:\n{}",
+            enriched
+        );
+        if let Some((_, after_fn_doc)) = enriched.split_once("unmapped_checksum_helper") {
+            assert!(
+                !after_fn_doc.contains("REQ-FD-001") && !after_fn_doc.contains("AltitudeEnvelope"),
+                "Unmatched function docstring must not contain unrelated schema requirement or constraint:\n{}",
+                after_fn_doc
+            );
+        }
+        Ok(())
+    }
+
+    /// Verifies that multi-hash raw strings (`r##"..."##`) and multiline standard strings containing fake items do not confuse the scanner (DEFECT-09, refs #498).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 lexical state machine soundness
+    /// (`test_defect_09_multihash_raw_and_multiline_standard_strings_do_not_confuse_scanner`).
+    /// Ensures string literals spanning multiple lines cannot trigger spurious docstring injection inside literals.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Interior `"#` tokens inside `r##"..."##` do not prematurely terminate the raw string state.
+    /// - Lines inside `r##"..."##` and multiline `"..."` beginning with `fn fake_item() {}` or
+    ///   `struct Fake {}` are ignored by the item classifier and never mutated.
+    ///
+    /// ## 3. Preconditions
+    /// - Rust source buffer contains `r##"..."##` and multiline `"..."` literals with embedded fake declarations.
+    ///
+    /// ## 4. Postconditions
+    /// - Only the two real top-level functions (`first_real_fn` and `second_real_fn`) are enriched (`count == 2`),
+    ///   and both string literal bodies remain bit-for-bit intact.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) where N is the fixture source byte length.
+    /// - Space Complexity: O(N) for the enriched output string.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), String>` without panicking unwraps.
+    /// - State: Isolated in-memory test buffer.
+    /// - Action: Verifies exact enriched item count and unmodified literal interiors.
+    /// - Resource: Zero disk I/O.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-DEFECT-09-MULTILINE-STRING-SCANNER-TEST]
+    #[test]
+    fn test_defect_09_multihash_raw_and_multiline_standard_strings_do_not_confuse_scanner() -> Result<(), String> {
+        let mut src = String::new();
+        src.push_str("pub fn first_real_fn() -> &'static str {\n");
+        src.push_str("    let raw_multi = r##\"\n");
+        src.push_str("interior single close \"# does not end r##\n");
+        src.push_str("fn fake_item() {}\n");
+        src.push_str("struct Fake {}\n");
+        src.push_str("\"##;\n");
+        src.push_str("    let std_multi = \"line one\n");
+        src.push_str("fn fake_item() {}\n");
+        src.push_str("struct Fake {}\n");
+        src.push_str("end line\";\n");
+        src.push_str("    if std_multi.is_empty() {\n");
+        src.push_str("        return \"\";\n");
+        src.push_str("    }\n");
+        src.push_str("    raw_multi\n");
+        src.push_str("}\n\n");
+        src.push_str("pub fn second_real_fn(val: usize) -> usize {\n");
+        src.push_str("    val.saturating_add(1)\n");
+        src.push_str("}\n");
+
+        let (enriched, count) =
+            inject_rust_file_docstrings(&src, "crates/compile-sysml/src/sample.rs", None, false)?;
+        assert_eq!(
+            count, 2,
+            "Only the 2 real functions should be enriched, not fake items inside strings. Got count={} in:\n{}",
+            count, enriched
+        );
+        assert!(
+            enriched.contains("let raw_multi = r##\"\ninterior single close \"# does not end r##\nfn fake_item() {}\nstruct Fake {}\n\"##;"),
+            "Multi-hash raw string literal was corrupted by docstring injector:\n{}",
+            enriched
+        );
+        assert!(
+            enriched.contains("let std_multi = \"line one\nfn fake_item() {}\nstruct Fake {}\nend line\";"),
+            "Multiline standard string literal was corrupted by docstring injector:\n{}",
+            enriched
+        );
+
+        let self_src = fs::read_to_string(Path::new("src/docstring.rs"))
+            .map_err(|e| format!("Failed to read src/docstring.rs: {}", e))?;
+        let (_self_enriched, self_count) = inject_rust_file_docstrings(
+            &self_src,
+            "crates/compile-sysml/src/docstring.rs",
+            None,
+            false,
+        )?;
+        assert_eq!(
+            self_count, 0,
+            "src/docstring.rs must be 100% self-compliant with Check 36 7-section docstrings"
+        );
+        Ok(())
     }
 }

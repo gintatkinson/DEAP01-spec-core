@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic
+)]
+
 use compile_sysml::docstring::{
     inject_dart_file_docstrings, inject_rust_file_docstrings, run_docstring_injection,
     run_extract_source, DocstringExitCode, DocstringInjectionOptions,

@@ -1,5 +1,11 @@
 //! Integration tests for Check 36: Per-Item 7-Section Safety Docstring Completeness Gate
 //! across Rust (`crates/**/src/**/*.rs`) and Dart (`app_flutter/lib/**/*.dart`) sources.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic
+)]
 
 use std::fs;
 use std::path::{Path, PathBuf};

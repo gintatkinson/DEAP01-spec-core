@@ -542,6 +542,7 @@ pub fn validate_source_syntax_for_language(
     let mut col: usize = 1;
     let mut stack: Vec<(u8, usize, usize)> = Vec::new();
     let mut active_str: Option<(u8, bool, bool, usize, usize)> = None;
+    #[allow(clippy::type_complexity)]
     let mut interp_stack: Vec<((u8, bool, bool, usize, usize), usize)> = Vec::new();
     let is_dart = lang == SourceLanguage::Dart;
 
@@ -2637,8 +2638,6 @@ pub fn parse_dart_callable_signature(
         for ch in &mut rev_chars {
             if ch.is_ascii_alphanumeric() || ch == '_' {
                 pname_rev.push(ch);
-            } else if ch.is_whitespace() {
-                break;
             } else {
                 break;
             }
@@ -3495,20 +3494,20 @@ pub fn strip_line_comment_preserving_strings(line: &str) -> &str {
     let mut in_single_quote = false;
     let mut is_raw = false;
 
-    while idx < bytes.len() {
-        let b = bytes[idx];
-
+    while let Some(&b) = bytes.get(idx) {
         if !in_double_quote && !in_single_quote {
             if b == b'/' && bytes.get(idx.saturating_add(1)) == Some(&b'/') {
-                return &line[..idx];
+                return line.get(..idx).unwrap_or("");
             }
 
             if (b == b'r' || b == b'R')
                 && (bytes.get(idx.saturating_add(1)) == Some(&b'\'') || bytes.get(idx.saturating_add(1)) == Some(&b'"'))
             {
                 let prev_is_ident = if idx > 0 {
-                    let p = bytes[idx.saturating_sub(1)];
-                    p.is_ascii_alphanumeric() || p == b'_'
+                    bytes
+                        .get(idx.saturating_sub(1))
+                        .map(|&p| p.is_ascii_alphanumeric() || p == b'_')
+                        .unwrap_or(false)
                 } else {
                     false
                 };
@@ -3526,7 +3525,7 @@ pub fn strip_line_comment_preserving_strings(line: &str) -> &str {
             }
 
             if b == b'\'' {
-                if let Some(char_len) = single_char_literal_byte_len(&line[idx..]) {
+                if let Some(char_len) = line.get(idx..).and_then(single_char_literal_byte_len) {
                     idx = idx.saturating_add(char_len);
                     is_raw = false;
                     continue;
@@ -3617,8 +3616,12 @@ pub fn strip_leading_dart_annotations(mut code: &str) -> &str {
         };
         let mut idx = 0;
         let bytes = after_at.as_bytes();
-        while idx < bytes.len() && (bytes[idx].is_ascii_alphanumeric() || bytes[idx] == b'_' || bytes[idx] == b'.') {
-            idx = idx.saturating_add(1);
+        while let Some(&b) = bytes.get(idx) {
+            if b.is_ascii_alphanumeric() || b == b'_' || b == b'.' {
+                idx = idx.saturating_add(1);
+            } else {
+                break;
+            }
         }
         if idx == 0 {
             return trimmed;
@@ -3687,16 +3690,19 @@ pub fn extract_dart_getter_ident(code: &str) -> Option<String> {
         s.get(idx.saturating_add(5)..)?.trim_start()
     } else if let Some(idx) = s.find("\tget ") {
         s.get(idx.saturating_add(5)..)?.trim_start()
-    } else if let Some(idx) = s.find(" get\t") {
-        s.get(idx.saturating_add(5)..)?.trim_start()
     } else {
-        return None;
+        let idx = s.find(" get\t")?;
+        s.get(idx.saturating_add(5)..)?.trim_start()
     };
 
     let mut end: usize = 0;
     let bytes = after_get.as_bytes();
-    while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
-        end = end.saturating_add(1);
+    while let Some(&b) = bytes.get(end) {
+        if b.is_ascii_alphanumeric() || b == b'_' {
+            end = end.saturating_add(1);
+        } else {
+            break;
+        }
     }
     if end == 0 {
         return None;
@@ -3793,8 +3799,10 @@ pub fn update_ast_delimiter_depths(code: &str, brace_depth: &mut usize, paren_de
             && (bytes.get(idx.saturating_add(1)) == Some(&b'\'') || bytes.get(idx.saturating_add(1)) == Some(&b'"'))
         {
             let prev_is_ident = if idx > 0 {
-                let p = bytes[idx.saturating_sub(1)];
-                p.is_ascii_alphanumeric() || p == b'_'
+                bytes
+                    .get(idx.saturating_sub(1))
+                    .map(|&p| p.is_ascii_alphanumeric() || p == b'_')
+                    .unwrap_or(false)
             } else {
                 false
             };
@@ -3808,7 +3816,7 @@ pub fn update_ast_delimiter_depths(code: &str, brace_depth: &mut usize, paren_de
         if b == b'"' {
             active_quote = Some(b'"');
         } else if b == b'\'' {
-            if let Some(char_len) = single_char_literal_byte_len(&code[idx..]) {
+            if let Some(char_len) = code.get(idx..).and_then(single_char_literal_byte_len) {
                 idx = idx.saturating_add(char_len);
                 is_raw = false;
                 continue;
@@ -3837,7 +3845,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_dart_stateful_widget_and_lower_to_sysml() {
+    fn test_parse_dart_stateful_widget_and_lower_to_sysml() -> Result<(), String> {
         let dart_src = r#"import 'package:flutter/material.dart';
 
 /// Realises: [REQ-UI-01]
@@ -3868,14 +3876,13 @@ class _TelemetryPanelState extends State<TelemetryPanel> {
   }
 }
 "#;
-        let items = parse_dart_source_ast(dart_src, "lib/telemetry_panel.dart")
-            .expect("parse dart stateful widget");
+        let items = parse_dart_source_ast(dart_src, "lib/telemetry_panel.dart")?;
         let pkg = lower_source_ast_to_package(&items, "TelemetryUiPkg");
         let panel = pkg
             .part_defs
             .iter()
             .find(|p| p.name == "TelemetryPanel")
-            .expect("TelemetryPanel PartDef");
+            .ok_or_else(|| "TelemetryPanel PartDef".to_string())?;
         assert!(panel.attributes.iter().any(|a| a.name == "title"));
         assert!(panel.attributes.iter().any(|a| a.name == "refreshRateHz"));
         assert!(panel.ports.iter().any(|p| p.name == "onRefresh"));
@@ -3884,10 +3891,11 @@ class _TelemetryPanelState extends State<TelemetryPanel> {
             .satisfied_requirements
             .contains(&"REQ-UI-01".to_string()));
         assert!(!panel.states.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_parse_rust_struct_and_impl_and_lower_to_sysml() {
+    fn test_parse_rust_struct_and_impl_and_lower_to_sysml() -> Result<(), String> {
         let rust_src = r#"/// Realises: [REQ-BUF-01]
 pub struct ComponentBuffer {
     pub capacity: usize,
@@ -3901,14 +3909,13 @@ impl ComponentBuffer {
     }
 }
 "#;
-        let items =
-            parse_rust_source_ast(rust_src, "src/buffer.rs").expect("parse rust struct and impl");
+        let items = parse_rust_source_ast(rust_src, "src/buffer.rs")?;
         let pkg = lower_source_ast_to_package(&items, "BufferPkg");
         let buf = pkg
             .part_defs
             .iter()
             .find(|p| p.name == "ComponentBuffer")
-            .expect("ComponentBuffer PartDef");
+            .ok_or_else(|| "ComponentBuffer PartDef".to_string())?;
         assert_eq!(buf.attributes.len(), 2);
         assert!(buf.actions.iter().any(|a| a.name == "push_item"
             && a.in_params.len() == 1
@@ -3917,12 +3924,16 @@ impl ComponentBuffer {
         assert!(buf
             .satisfied_requirements
             .contains(&"REQ-BUF-01".to_string()));
+        Ok(())
     }
 
     #[test]
     fn test_syntax_error_unclosed_brace_fails_closed_with_line_and_col() {
         let bad_rust = "pub struct Broken {\n    pub x: u32,\n";
-        let err = parse_rust_source_ast(bad_rust, "src/broken.rs").unwrap_err();
+        let err = match parse_rust_source_ast(bad_rust, "src/broken.rs") {
+            Ok(_) => String::new(),
+            Err(e) => e,
+        };
         assert!(
             err.contains("src/broken.rs:1:19") && err.contains("unclosed delimiter '{'"),
             "Expected line/col diagnostic, got: {}",
@@ -3931,7 +3942,7 @@ impl ComponentBuffer {
     }
 
     #[test]
-    fn test_validate_dart_raw_strings_and_interpolated_nested_quotes() {
+    fn test_validate_dart_raw_strings_and_interpolated_nested_quotes() -> Result<(), String> {
         let dart_src = r#"
 class PathFormatter {
   String normalize(Map<String, String> map) {
@@ -3943,11 +3954,105 @@ class PathFormatter {
   }
 }
 "#;
-        validate_source_syntax_for_language(dart_src, "lib/path_formatter.dart", SourceLanguage::Dart)
-            .expect("Dart raw strings ending with backslash and nested interpolation quotes must validate");
+        validate_source_syntax_for_language(
+            dart_src,
+            "lib/path_formatter.dart",
+            SourceLanguage::Dart,
+        )?;
 
-        let rust_utf8_char = "pub fn is_up_arrow(ch: char) -> bool {\n    ch == '↑' || ch == '{'\n}\n";
-        validate_source_syntax_for_language(rust_utf8_char, "src/arrow.rs", SourceLanguage::Rust)
-            .expect("Rust multi-byte UTF-8 character literal must validate");
+        let rust_utf8_char =
+            "pub fn is_up_arrow(ch: char) -> bool {\n    ch == '↑' || ch == '{'\n}\n";
+        validate_source_syntax_for_language(rust_utf8_char, "src/arrow.rs", SourceLanguage::Rust)?;
+        Ok(())
+    }
+
+    /// Verifies comment stripping, delimiter depth tracking with char literals, and Check 34 range-slice absence.
+    ///
+    /// # Summary
+    /// Tests `strip_line_comment_preserving_strings` and `update_ast_delimiter_depths` on character literals and verifies zero raw range-slice indexing in production code.
+    ///
+    /// # Parameters
+    /// - None (unit test).
+    ///
+    /// # Returns
+    /// - `()` on assertion success.
+    ///
+    /// # Errors
+    /// - None.
+    ///
+    /// # Panics
+    /// - Panics if comment stripping, delimiter depth tracking, or range-slice purity assertions fail.
+    ///
+    /// # Safety
+    /// - Safe pure lexical unit test (`!#[forbid(unsafe_code)]` compliant).
+    ///
+    /// # Realises
+    /// - Realises: [REQ-SOURCE-AST-STRIP-LINE-COMMENT], [REQ-FEAT-42-UPDATE-AST-DELIMITER-DEPTHS]
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and Check 34 (`check_zero_regex`) non-panicking slice invariants (refs #492).
+    /// Ensures `strip_line_comment_preserving_strings` and `update_ast_delimiter_depths` preserve
+    /// character literals and execute without direct range-slice indexing.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `strip_line_comment_preserving_strings` preserves `'/'` and `"http://..."` while stripping trailing `//`.
+    /// - `update_ast_delimiter_depths` ignores `'{'` and `'('` inside character literals and updates unquoted depths.
+    /// - Production code prior to `#[cfg(test)]` contains zero raw range-slice indexing expressions.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked under `cargo test -p deap-core --lib`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts exact stripped slices, delimiter depth counters, and absence of raw range slices in production code.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) where N is byte length of `source_ast.rs`.
+    /// - Space Complexity: O(1) auxiliary heap allocations.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Fails test execution immediately if any raw range-slice token remains in production code.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SOURCE-AST-STRIP-LINE-COMMENT], [REQ-FEAT-42-UPDATE-AST-DELIMITER-DEPTHS]
+    #[test]
+    fn test_strip_comment_and_delimiter_depths_zero_range_slice_indexing() {
+        let stripped = strip_line_comment_preserving_strings(
+            "let ch = '/'; let url = \"http://example.com\"; // trailing comment",
+        );
+        assert_eq!(
+            stripped,
+            "let ch = '/'; let url = \"http://example.com\"; "
+        );
+
+        let mut brace_depth: usize = 0;
+        let mut paren_depth: usize = 0;
+        update_ast_delimiter_depths(
+            "if ch == '{' || ch == '(' || ch == '↑' {",
+            &mut brace_depth,
+            &mut paren_depth,
+        );
+        assert_eq!(brace_depth, 1);
+        assert_eq!(paren_depth, 0);
+
+        let self_source = include_str!("source_ast.rs");
+        let prod_source = match self_source.rsplit_once("#[cfg(test)]") {
+            Some((prod, _)) => prod,
+            None => self_source,
+        };
+        let forbidden_prefix_slice = format!("{}{}", "&line[..", "idx]");
+        let forbidden_line_tail_slice = format!("{}{}", "&line[idx", "..]");
+        let forbidden_code_tail_slice = format!("{}{}", "&code[idx", "..]");
+        assert!(
+            !prod_source.contains(&forbidden_prefix_slice),
+            "strip_line_comment_preserving_strings must not use direct prefix range indexing"
+        );
+        assert!(
+            !prod_source.contains(&forbidden_line_tail_slice),
+            "strip_line_comment_preserving_strings must not use direct tail range indexing"
+        );
+        assert!(
+            !prod_source.contains(&forbidden_code_tail_slice),
+            "update_ast_delimiter_depths must not use direct tail range indexing"
+        );
     }
 }

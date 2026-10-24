@@ -29,11 +29,22 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-COMPILER-SYSML-LIB], [DO-330-TQL-4-LIB]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::indexing_slicing,
+        clippy::panic,
+        clippy::field_reassign_with_default
+    )
+)]
 
 pub mod docstring;
 pub mod flutter_codegen;
 pub mod lexer;
 pub mod parser;
+#[allow(clippy::needless_lifetimes)]
 pub mod semantic;
 pub mod stpa;
 pub mod sync;
@@ -167,6 +178,47 @@ fn collect_model_parts_recursive(parts: &[PartDef], out: &mut Vec<PartDef>) {
     }
 }
 
+/// Escapes reserved XML characters (`&`, `<`, `>`, `"`, `'`) into predefined XML entities.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Ensures well-formed XML generation for MATLAB Requirements Toolbox (`.slreqx`) and
+/// Stateflow (`.sfx`) artifacts under DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Pure total function over UTF-8 strings: replaces `&` with `&amp;`, `<` with `&lt;`,
+///   `>` with `&gt;`, `"` with `&quot;`, and `'` with `&apos;` while preserving all other
+///   Unicode scalar values verbatim.
+///
+/// ## 3. Preconditions
+/// - `s` is any valid UTF-8 string slice.
+///
+/// ## 4. Postconditions
+/// - Returns an owned `String` containing zero unescaped `<`, `>`, `"`, `'`, or raw `&` characters.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time complexity: $O(N)$ single linear pass where $N$ is `s.len()`.
+/// - Space complexity: $O(N)$ bounded output buffer allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function: never panics or fails on any input string.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-ESCAPE-XML]
+pub fn escape_xml(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
 /// Synthesizes a grounded `MbdExportBundle` from an in-memory `SysmlModel` AST.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -198,6 +250,7 @@ fn collect_model_parts_recursive(parts: &[PartDef], out: &mut Vec<PartDef>) {
 /// Realises: [REQ-COMPILER-SYSML-SYNTHESIZE-MBD]
 pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExportBundle {
     let pkg_name = model.package_name.as_deref().unwrap_or("SysML_Model");
+    let pkg_name_xml = escape_xml(pkg_name);
     let mut all_parts = Vec::new();
     collect_model_parts_recursive(&model.parts, &mut all_parts);
 
@@ -212,7 +265,7 @@ pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExp
 
     let mut slreq_xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     slreq_xml.push_str(&format!(
-        "<slreq:RequirementSet xmlns:slreq=\"https://www.mathworks.com/slreq\" package=\"{pkg_name}\">\n"
+        "<slreq:RequirementSet xmlns:slreq=\"https://www.mathworks.com/slreq\" package=\"{pkg_name_xml}\">\n"
     ));
     for req in &all_reqs {
         let id_str = if req.req_id.is_empty() {
@@ -237,58 +290,61 @@ pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExp
                 satisfied_by.push(part.name.clone());
             }
         }
+        let id_xml = escape_xml(id_str);
+        let name_xml = escape_xml(&req.name);
+        let layer_xml = escape_xml(layer_str);
+        let summary_xml = escape_xml(summary_str);
+        let satisfied_by_xml = escape_xml(&satisfied_by.join(", "));
+        let safety_realises_xml = escape_xml(&req.safety_realises.join(", "));
+        let triggers_hazards_xml = escape_xml(&req.triggers_hazards.join(", "));
         slreq_xml.push_str(&format!(
-            "  <slreq:Requirement id=\"{id_str}\" name=\"{}\" layer=\"{layer_str}\">\n",
-            req.name
+            "  <slreq:Requirement id=\"{id_xml}\" name=\"{name_xml}\" layer=\"{layer_xml}\">\n"
         ));
-        slreq_xml.push_str(&format!("    <slreq:Summary>{summary_str}</slreq:Summary>\n"));
+        slreq_xml.push_str(&format!("    <slreq:Summary>{summary_xml}</slreq:Summary>\n"));
         slreq_xml.push_str(&format!(
-            "    <slreq:SatisfiedBy>{}</slreq:SatisfiedBy>\n",
-            satisfied_by.join(", ")
+            "    <slreq:SatisfiedBy>{satisfied_by_xml}</slreq:SatisfiedBy>\n"
         ));
         slreq_xml.push_str(&format!(
-            "    <slreq:SafetyRealises>{}</slreq:SafetyRealises>\n",
-            req.safety_realises.join(", ")
+            "    <slreq:SafetyRealises>{safety_realises_xml}</slreq:SafetyRealises>\n"
         ));
         slreq_xml.push_str(&format!(
-            "    <slreq:TriggersHazards>{}</slreq:TriggersHazards>\n",
-            req.triggers_hazards.join(", ")
+            "    <slreq:TriggersHazards>{triggers_hazards_xml}</slreq:TriggersHazards>\n"
         ));
         slreq_xml.push_str("  </slreq:Requirement>\n");
     }
     slreq_xml.push_str("</slreq:RequirementSet>\n");
 
     let mut stateflow_sfx = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-    stateflow_sfx.push_str(&format!("<StateflowChart package=\"{pkg_name}\">\n"));
+    stateflow_sfx.push_str(&format!("<StateflowChart package=\"{pkg_name_xml}\">\n"));
     for part in &all_parts {
+        let part_name_xml = escape_xml(&part.name);
         for state_def in &part.states {
+            let state_def_name_xml = escape_xml(&state_def.name);
             stateflow_sfx.push_str(&format!(
-                "  <Machine name=\"{}\" ownerPart=\"{}\">\n",
-                state_def.name, part.name
+                "  <Machine name=\"{state_def_name_xml}\" ownerPart=\"{part_name_xml}\">\n"
             ));
-            let root_entry = state_def.entry_action.as_deref().unwrap_or("");
-            let root_do = state_def.do_action.as_deref().unwrap_or("");
-            let root_exit = state_def.exit_action.as_deref().unwrap_or("");
+            let root_entry = escape_xml(state_def.entry_action.as_deref().unwrap_or(""));
+            let root_do = escape_xml(state_def.do_action.as_deref().unwrap_or(""));
+            let root_exit = escape_xml(state_def.exit_action.as_deref().unwrap_or(""));
             stateflow_sfx.push_str(&format!(
-                "    <State name=\"{}\" entry=\"{root_entry}\" do=\"{root_do}\" exit=\"{root_exit}\" />\n",
-                state_def.name
+                "    <State name=\"{state_def_name_xml}\" entry=\"{root_entry}\" do=\"{root_do}\" exit=\"{root_exit}\" />\n"
             ));
             for st in &state_def.sub_states {
-                let entry_act = st.entry_action.as_deref().unwrap_or("");
-                let do_act = st.do_action.as_deref().unwrap_or("");
-                let exit_act = st.exit_action.as_deref().unwrap_or("");
+                let st_name_xml = escape_xml(&st.name);
+                let entry_act = escape_xml(st.entry_action.as_deref().unwrap_or(""));
+                let do_act = escape_xml(st.do_action.as_deref().unwrap_or(""));
+                let exit_act = escape_xml(st.exit_action.as_deref().unwrap_or(""));
                 stateflow_sfx.push_str(&format!(
-                    "    <State name=\"{}\" entry=\"{entry_act}\" do=\"{do_act}\" exit=\"{exit_act}\" />\n",
-                    st.name
+                    "    <State name=\"{st_name_xml}\" entry=\"{entry_act}\" do=\"{do_act}\" exit=\"{exit_act}\" />\n"
                 ));
             }
             for tr in &state_def.transitions {
-                let tr_name = tr.name.as_deref().unwrap_or("");
-                let src = tr.source.as_deref().unwrap_or("");
-                let tgt = tr.target.as_deref().unwrap_or("");
-                let trig = tr.trigger.as_deref().unwrap_or("");
-                let guard = tr.guard.as_deref().unwrap_or("");
-                let effect = tr.effect.as_deref().unwrap_or("");
+                let tr_name = escape_xml(tr.name.as_deref().unwrap_or(""));
+                let src = escape_xml(tr.source.as_deref().unwrap_or(""));
+                let tgt = escape_xml(tr.target.as_deref().unwrap_or(""));
+                let trig = escape_xml(tr.trigger.as_deref().unwrap_or(""));
+                let guard = escape_xml(tr.guard.as_deref().unwrap_or(""));
+                let effect = escape_xml(tr.effect.as_deref().unwrap_or(""));
                 stateflow_sfx.push_str(&format!(
                     "    <Transition name=\"{tr_name}\" source=\"{src}\" target=\"{tgt}\" trigger=\"{trig}\" guard=\"{guard}\" effect=\"{effect}\" />\n"
                 ));
@@ -467,6 +523,7 @@ mod tests {
         assert!(src.contains("/// ## 6. Failure Modes & Fault Tolerance"));
         assert!(src.contains("/// ## 7. Realization & Traceability"));
         assert!(src.contains("/// Realises: [REQ-COMPILER-SYSML-PARSE]"));
+        assert!(src.contains("/// Realises: [REQ-COMPILER-SYSML-ESCAPE-XML]"));
 
         let parsed = parse_sysml("package Demo {}");
         assert!(parsed.is_ok());
@@ -567,6 +624,132 @@ mod tests {
         assert!(tmp_dir.join("simulink_bus.m").is_file());
         assert!(tmp_dir.join("layer_contracts.json").is_file());
         std::fs::remove_dir_all(&tmp_dir).unwrap_or(());
+    }
+
+    /// Verifies XML entity escaping and structured transition endpoints in `synthesize_mbd_bundle`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D verification mandates
+    /// for well-formed `.slreqx` and `.sfx` XML artifact synthesis in `crates/compile-sysml/src/lib.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - All five XML special characters (`&`, `<`, `>`, `"`, `'`) in requirement and statechart
+    ///   fields are deterministically escaped to `&amp;`, `&lt;`, `&gt;`, `&quot;`, and `&apos;`.
+    /// - Parsed state machine transitions populate `source` and `target` attributes in `.sfx` XML.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory `SysmlModel` contains requirements and state transitions with XML reserved characters.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `.slreqx` and `.sfx` payloads contain escaped entities and populated transition endpoints.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over model size and synthesized XML string length.
+    /// - Space Complexity: O(N) for synthesized `MbdExportBundle`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Deterministic assertions over in-memory strings.
+    /// - State: Side-effect free unit test.
+    /// - Action: Executes deterministically without filesystem mutation.
+    /// - Resource: Bounded memory allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-COMPILER-SYSML-TEST-DEFECT-06-MBD-XML-ESCAPING]
+    #[test]
+    fn test_defect_06_synthesize_mbd_bundle_transition_endpoints_and_xml_escaping() -> Result<(), Box<dyn std::error::Error>> {
+        let src = r#"
+            package AvionicsPkg {
+                part def FlightController {
+                    state def FlightMode {
+                        entry "Init < 'Safe' & Fast >";
+                        state Init;
+                        state SafeMode;
+                        transition t1 first Init accept FaultSignal if pitch_deg > 15.0 && roll_deg < -10.0 do EngageBackup then SafeMode;
+                        transition from SafeMode to Init;
+                    }
+                }
+            }
+        "#;
+        let pkg = parse_sysml(src)?;
+        let mut model = deap_core::sysml_ast::SysmlModel::from(pkg);
+        model.requirements.push(RequirementDef {
+            name: "Req<Pitch&Roll>".to_string(),
+            req_id: "REQ-\"01\"-'A'".to_string(),
+            text: "Pitch < 15.0 & Roll > -15.0 in \"Nominal\" 'Mode'".to_string(),
+            doc: None,
+            attributes: Vec::new(),
+            constraints: Vec::new(),
+            assumes: Vec::new(),
+            requires: Vec::new(),
+            verified_by: Vec::new(),
+            satisfied_by: vec!["FlightController<Primary&Backup>".to_string()],
+            derived_from: Vec::new(),
+            derives: Vec::new(),
+            triggers_hazards: vec!["H-01 <\"Critical\" & 'High'>".to_string()],
+            safety_realises: vec!["SC-01 <\"Bound\" & 'Safe'>".to_string()],
+            layer: Some("Safety & \"Control\" <'L1'>".to_string()),
+        });
+
+        let bundle = synthesize_mbd_bundle(&model);
+
+        assert!(
+            bundle.slreq_xml.contains("id=\"REQ-&quot;01&quot;-&apos;A&apos;\""),
+            "slreq_xml must escape quotes and apostrophes in id attribute:\n{}",
+            bundle.slreq_xml
+        );
+        assert!(
+            bundle.slreq_xml.contains("name=\"Req&lt;Pitch&amp;Roll&gt;\""),
+            "slreq_xml must escape <, &, > in name attribute:\n{}",
+            bundle.slreq_xml
+        );
+        assert!(
+            bundle.slreq_xml.contains("layer=\"Safety &amp; &quot;Control&quot; &lt;&apos;L1&apos;&gt;\""),
+            "slreq_xml must escape all 5 XML entities in layer attribute:\n{}",
+            bundle.slreq_xml
+        );
+        assert!(
+            bundle.slreq_xml.contains("<slreq:Summary>Pitch &lt; 15.0 &amp; Roll &gt; -15.0 in &quot;Nominal&quot; &apos;Mode&apos;</slreq:Summary>"),
+            "slreq_xml must escape all 5 XML entities in Summary element:\n{}",
+            bundle.slreq_xml
+        );
+        assert!(
+            bundle.slreq_xml.contains("<slreq:SatisfiedBy>FlightController&lt;Primary&amp;Backup&gt;</slreq:SatisfiedBy>"),
+            "slreq_xml must escape SatisfiedBy element:\n{}",
+            bundle.slreq_xml
+        );
+        assert!(
+            bundle.slreq_xml.contains("<slreq:SafetyRealises>SC-01 &lt;&quot;Bound&quot; &amp; &apos;Safe&apos;&gt;</slreq:SafetyRealises>"),
+            "slreq_xml must escape SafetyRealises element:\n{}",
+            bundle.slreq_xml
+        );
+        assert!(
+            bundle.slreq_xml.contains("<slreq:TriggersHazards>H-01 &lt;&quot;Critical&quot; &amp; &apos;High&apos;&gt;</slreq:TriggersHazards>"),
+            "slreq_xml must escape TriggersHazards element:\n{}",
+            bundle.slreq_xml
+        );
+
+        assert!(
+            bundle.stateflow_sfx.contains("source=\"Init\" target=\"SafeMode\""),
+            "stateflow_sfx must populate structured source and target for first..then transition:\n{}",
+            bundle.stateflow_sfx
+        );
+        assert!(
+            bundle.stateflow_sfx.contains("source=\"SafeMode\" target=\"Init\""),
+            "stateflow_sfx must populate structured source and target for from..to transition:\n{}",
+            bundle.stateflow_sfx
+        );
+        assert!(
+            bundle.stateflow_sfx.contains("trigger=\"FaultSignal\" guard=\"pitch_deg &gt; 15.0 &amp;&amp; roll_deg &lt; -10.0\" effect=\"EngageBackup\""),
+            "stateflow_sfx must escape relational and logical operators in guard attribute:\n{}",
+            bundle.stateflow_sfx
+        );
+        assert!(
+            bundle.stateflow_sfx.contains("entry=\"&quot;Init &lt; &apos;Safe&apos; &amp; Fast &gt;&quot;\""),
+            "stateflow_sfx must escape all 5 XML entities in state entry attribute:\n{}",
+            bundle.stateflow_sfx
+        );
+
+        Ok(())
     }
 }
 

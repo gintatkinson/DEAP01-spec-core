@@ -27,6 +27,12 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-SYSML-MULTI-FILE-NAMESPACE]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic
+)]
 
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};

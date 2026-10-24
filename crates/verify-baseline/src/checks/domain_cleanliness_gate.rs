@@ -298,8 +298,7 @@ fn is_m1_domain_dict_name(ident: &str) -> bool {
     let domain_nouns = ["uav", "aircraft", "vehicle", "device", "patient", "car", "robot"];
     let prefixes = ["sample_", "mock_", "concrete_"];
     for p in &prefixes {
-        if lower.starts_with(p) {
-            let after = &lower[p.len()..];
+        if let Some(after) = lower.strip_prefix(p) {
             for noun in &domain_nouns {
                 if after.starts_with(noun) {
                     return true;
@@ -430,10 +429,9 @@ fn check_line_for_metamodel_typing_violation(line: &str) -> Option<String> {
                                 || candidate_val.starts_with("meta_")
                                 || candidate_val.starts_with("Meta"))
                             && candidate_val.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                            && !is_allowed_m2_type(candidate_val)
                         {
-                            if !is_allowed_m2_type(candidate_val) {
-                                return Some(candidate_val.to_string());
-                            }
+                            return Some(candidate_val.to_string());
                         }
                     }
                 }
@@ -497,7 +495,7 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
         violations.push("Check 19 violation: Native Rust workspace crates/ directory missing in upstream compiler repository.".to_string());
     } else {
         // 3. Scan all native Rust source files in crates/ for hardcoded parameter dictionaries and metamodel violations
-        for entry in WalkDir::new(&crates_dir)
+        for entry_res in WalkDir::new(&crates_dir)
             .into_iter()
             .filter_entry(|e| {
                 if e.file_type().is_dir() {
@@ -507,44 +505,58 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
                     true
                 }
             })
-            .filter_map(|e| e.ok())
         {
+            let entry = match entry_res {
+                Ok(val) => val,
+                Err(err) => {
+                    violations.push(format!("Check 19 directory walk I/O error: {}", err));
+                    continue;
+                }
+            };
             if entry.file_type().is_file() {
                 let path = entry.path();
                 if path.extension().map(|ext| ext == "rs").unwrap_or(false) {
-                    if let Ok(content) = fs::read_to_string(path) {
-                        let rel = path
-                            .strip_prefix(repo_root)
-                            .unwrap_or(path)
-                            .display()
-                            .to_string();
+                    let rel = path
+                        .strip_prefix(repo_root)
+                        .unwrap_or(path)
+                        .display()
+                        .to_string();
 
-                        for (idx, line) in content.lines().enumerate() {
-                            if let Some(ident) = extract_rust_const_or_static_ident(line) {
-                                if is_m1_domain_dict_name(ident) {
+                    match fs::read_to_string(path) {
+                        Ok(content) => {
+                            for (idx, line) in content.lines().enumerate() {
+                                if let Some(ident) = extract_rust_const_or_static_ident(line) {
+                                    if is_m1_domain_dict_name(ident) {
+                                        violations.push(format!(
+                                            "Check 19 violation (domain-metamodel-typing-violation): Unvalidated M1 domain instance dictionary/constant \"{}\" declared in {}:{}. Upstream compiler ASTs must adhere strictly to the closed M2 metamodel allowlist.",
+                                            ident,
+                                            rel,
+                                            idx + 1
+                                        ));
+                                    } else if is_static_param_dict_name(ident) {
+                                        violations.push(format!(
+                                            "Check 19 violation: Static hardcoded parameter dictionary declared in {}:{}.",
+                                            rel,
+                                            idx + 1
+                                        ));
+                                    }
+                                }
+
+                                if let Some(bad_type) = check_line_for_metamodel_typing_violation(line) {
                                     violations.push(format!(
-                                        "Check 19 violation (domain-metamodel-typing-violation): Unvalidated M1 domain instance dictionary/constant \"{}\" declared in {}:{}. Upstream compiler ASTs must adhere strictly to the closed M2 metamodel allowlist.",
-                                        ident,
-                                        rel,
-                                        idx + 1
-                                    ));
-                                } else if is_static_param_dict_name(ident) {
-                                    violations.push(format!(
-                                        "Check 19 violation: Static hardcoded parameter dictionary declared in {}:{}.",
+                                        "Check 19 violation (domain-metamodel-typing-violation): Unvalidated M1 domain instance entity/type '{}' declared in {}:{}. Upstream compiler ASTs and dictionaries must adhere strictly to the closed M2 metamodel allowlist.",
+                                        bad_type,
                                         rel,
                                         idx + 1
                                     ));
                                 }
                             }
-
-                            if let Some(bad_type) = check_line_for_metamodel_typing_violation(line) {
-                                violations.push(format!(
-                                    "Check 19 violation (domain-metamodel-typing-violation): Unvalidated M1 domain instance entity/type '{}' declared in {}:{}. Upstream compiler ASTs and dictionaries must adhere strictly to the closed M2 metamodel allowlist.",
-                                    bad_type,
-                                    rel,
-                                    idx + 1
-                                ));
-                            }
+                        }
+                        Err(err) => {
+                            violations.push(format!(
+                                "Check 19 violation: Failed to read '{}': {}",
+                                rel, err
+                            ));
                         }
                     }
                 }
@@ -564,7 +576,7 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
             continue;
         }
 
-        for entry in WalkDir::new(t_dir)
+        for entry_res in WalkDir::new(t_dir)
             .into_iter()
             .filter_entry(|e| {
                 if e.file_type().is_dir() {
@@ -574,8 +586,14 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
                     true
                 }
             })
-            .filter_map(|e| e.ok())
         {
+            let entry = match entry_res {
+                Ok(val) => val,
+                Err(err) => {
+                    violations.push(format!("Check 19 template directory walk I/O error: {}", err));
+                    continue;
+                }
+            };
             if entry.file_type().is_file() {
                 let path = entry.path();
                 let rel = path
@@ -584,42 +602,50 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
                     .display()
                     .to_string();
 
-                if let Ok(content) = fs::read_to_string(path) {
-                    for (idx, line) in content.lines().enumerate() {
-                        if line.contains('\u{2014}') {
-                            violations.push(format!(
-                                "Check 19 violation: Upstream template '{}:{}' contains forbidden Unicode em dash. Use ASCII -- exclusively.",
-                                rel,
-                                idx + 1
-                            ));
-                        }
-
-                        // Check for hardcoded M1 domain instance dictionaries and customer empennage concepts
-                        for concept in &[
-                            "FLIGHT_ENVELOPE_MAP",
-                            "SENSOR_CALIBRATION_DATA",
-                            "PAYLOAD_CONFIG",
-                            "ruddervator",
-                            "empennage",
-                        ] {
-                            if line.to_lowercase().contains(&concept.to_lowercase()) {
+                match fs::read_to_string(path) {
+                    Ok(content) => {
+                        for (idx, line) in content.lines().enumerate() {
+                            if line.contains('\u{2014}') {
                                 violations.push(format!(
-                                    "Check 19 violation (domain-metamodel-typing-violation): Upstream rule or template '{}:{}' contains forbidden domain concept '{}'. Upstream templates and rules must derive strictly from schema AST nodes.",
+                                    "Check 19 violation: Upstream template '{}:{}' contains forbidden Unicode em dash. Use ASCII -- exclusively.",
+                                    rel,
+                                    idx + 1
+                                ));
+                            }
+
+                            // Check for hardcoded M1 domain instance dictionaries and customer empennage concepts
+                            for concept in &[
+                                "FLIGHT_ENVELOPE_MAP",
+                                "SENSOR_CALIBRATION_DATA",
+                                "PAYLOAD_CONFIG",
+                                "ruddervator",
+                                "empennage",
+                            ] {
+                                if line.to_lowercase().contains(&concept.to_lowercase()) {
+                                    violations.push(format!(
+                                        "Check 19 violation (domain-metamodel-typing-violation): Upstream rule or template '{}:{}' contains forbidden domain concept '{}'. Upstream templates and rules must derive strictly from schema AST nodes.",
+                                        rel,
+                                        idx + 1,
+                                        concept
+                                    ));
+                                }
+                            }
+
+                            if let Some(bad_type) = check_line_for_metamodel_typing_violation(line) {
+                                violations.push(format!(
+                                    "Check 19 violation (domain-metamodel-typing-violation): Upstream template '{}:{}' declares unvalidated M1 domain instance entity/type '{}'. Upstream templates must adhere strictly to the closed M2 metamodel allowlist.",
                                     rel,
                                     idx + 1,
-                                    concept
+                                    bad_type
                                 ));
                             }
                         }
-
-                        if let Some(bad_type) = check_line_for_metamodel_typing_violation(line) {
-                            violations.push(format!(
-                                "Check 19 violation (domain-metamodel-typing-violation): Upstream template '{}:{}' declares unvalidated M1 domain instance entity/type '{}'. Upstream templates must adhere strictly to the closed M2 metamodel allowlist.",
-                                rel,
-                                idx + 1,
-                                bad_type
-                            ));
-                        }
+                    }
+                    Err(err) => {
+                        violations.push(format!(
+                            "Check 19 violation: Failed to read '{}': {}",
+                            rel, err
+                        ));
                     }
                 }
             }
@@ -830,5 +856,61 @@ mod tests {
             .expect("repo root");
         let res = check_domain_agnostic_ast_cleanliness(repo_root);
         assert!(res.is_ok(), "Current repo failed Check 19: {:?}", res.err());
+    }
+
+    /// Verifies that Check 19 fails closed when a `.rs` file or template file cannot be read as UTF-8.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 fail-closed I/O verification for `check_domain_agnostic_ast_cleanliness` (refs #500).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Any unreadable or non-UTF-8 `.rs` file in `crates/` or file in `template_dirs` must produce a deterministic `Err` violation instead of silently passing.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary upstream workspace contains non-UTF-8 bytes in `crates/test-crate/src/lib.rs` and `rules/corrupt.md`.
+    ///
+    /// ## 4. Postconditions
+    /// - `check_domain_agnostic_ast_cleanliness` returns `Err(Vec<String>)` citing both unreadable files.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over two synthetic files.
+    /// - Space Complexity: O(1) temporary directory fixture.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Exercises `fs::read_to_string` error branches in `check_domain_agnostic_ast_cleanliness`.
+    /// - State: Isolated temporary directory cleaned up via `Drop`.
+    /// - Action: Asserts deterministic fail-closed error reporting.
+    /// - Resource: Minimal disk usage in system temp directory.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-19-FAIL-CLOSED-IO-TEST]
+    #[test]
+    fn test_check_19_fails_closed_on_unreadable_non_utf8_files() {
+        let tmp = TempDir::new("c19_fail_closed_io");
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+        let src_dir = tmp.path.join("crates/test-crate/src");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(src_dir.join("lib.rs"), [0xFF, 0xFE, 0x00, 0x80]).unwrap();
+
+        let rules_dir = tmp.path.join("rules");
+        fs::create_dir_all(&rules_dir).unwrap();
+        fs::write(rules_dir.join("corrupt.md"), [0xFF, 0xFE, 0xFD]).unwrap();
+
+        let res = check_domain_agnostic_ast_cleanliness(&tmp.path);
+        assert!(
+            res.is_err(),
+            "Check 19 must fail closed on non-UTF-8 Rust or rule files, but returned Ok(())"
+        );
+        let errs = res.unwrap_err();
+        assert!(
+            errs.iter().any(|e| e.contains("lib.rs")),
+            "Expected fail-closed diagnostic for lib.rs, got: {:?}",
+            errs
+        );
+        assert!(
+            errs.iter().any(|e| e.contains("corrupt.md")),
+            "Expected fail-closed diagnostic for corrupt.md, got: {:?}",
+            errs
+        );
     }
 }

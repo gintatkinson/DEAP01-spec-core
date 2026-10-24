@@ -75,16 +75,22 @@ pub fn scan_truncation(content: &str) -> Vec<String> {
 
 /// Computes a FIPS 180-4 compliant SHA-256 hexadecimal hash from an arbitrary byte slice.
 ///
+/// # Summary
+/// Delegates FIPS 180-4 lowercase hexadecimal SHA-256 computation to `deap_core::digest::compute_sha256`.
+///
 /// ## 1. Safety Intent & Regulatory Scope
+/// # Safety
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `compute_sha256` in `crates/ingest-sysml/src/digest.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves deterministic state conservation and referential transparency for fn `compute_sha256` (declaration #2) within `INGEST-SYSML-DIGEST`.
 ///
 /// ## 3. Preconditions
+/// # Parameters
 /// - `data: &[u8]` must satisfy domain and type-safety constraints prior to invoking `compute_sha256`.
 ///
 /// ## 4. Postconditions
+/// # Returns
 /// - Returns `String` from `compute_sha256` with deterministic post-execution state.
 ///
 /// ## 5. Algorithmic Complexity Bounds
@@ -92,35 +98,40 @@ pub fn scan_truncation(content: &str) -> Vec<String> {
 /// - Space Complexity: O(N(data)) bounded auxiliary memory for `compute_sha256`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
+/// # Errors
+/// - Infallible total computation; never returns an error.
+/// # Panics
+/// - Zero panics: delegates to non-panicking `deap_core::digest::compute_sha256`.
 /// - Interface: Validates boundary inputs and types for `compute_sha256` (`String`).
 /// - State: Maintains consistent state invariants across `compute_sha256` without partial mutation on error.
 /// - Action: Executes `compute_sha256` deterministically with zero unbounded recursion or blocking.
 /// - Resource: Bounds stack and heap allocations within `compute_sha256` (`INGEST-SYSML-DIGEST`).
 ///
 /// ## 7. Realization & Traceability
+/// # Realises
 /// Realises: [REQ-0001/compute_sha256] | SysML v2: ActionDef(compute_sha256)
 pub fn compute_sha256(data: &[u8]) -> String {
-    use std::fmt::Write;
-    let digest = compute_sha256_bytes(data);
-    let mut hex = String::with_capacity(64);
-    for b in digest {
-        let _ = write!(hex, "{:02x}", b);
-    }
-    hex
+    deap_core::digest::compute_sha256(data)
 }
 
 /// Internal software implementation of FIPS 180-4 SHA-256 compression function.
 ///
+/// # Summary
+/// Delegates FIPS 180-4 32-byte SHA-256 digest computation to `deap_core::digest::compute_sha256_bytes`.
+///
 /// ## 1. Safety Intent & Regulatory Scope
+/// # Safety
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `compute_sha256_bytes` in `crates/ingest-sysml/src/digest.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves deterministic state conservation and referential transparency for fn `compute_sha256_bytes` (declaration #3) within `INGEST-SYSML-DIGEST`.
 ///
 /// ## 3. Preconditions
+/// # Parameters
 /// - `data: &[u8]` must satisfy domain and type-safety constraints prior to invoking `compute_sha256_bytes`.
 ///
 /// ## 4. Postconditions
+/// # Returns
 /// - Returns `[u8; 32]` from `compute_sha256_bytes` with deterministic post-execution state.
 ///
 /// ## 5. Algorithmic Complexity Bounds
@@ -128,91 +139,20 @@ pub fn compute_sha256(data: &[u8]) -> String {
 /// - Space Complexity: O(N(data)) bounded auxiliary memory for `compute_sha256_bytes`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
+/// # Errors
+/// - Infallible total computation; never returns an error.
+/// # Panics
+/// - Zero panics: delegates to non-panicking `deap_core::digest::compute_sha256_bytes`.
 /// - Interface: Validates boundary inputs and types for `compute_sha256_bytes` (`[u8; 32]`).
 /// - State: Maintains consistent state invariants across `compute_sha256_bytes` without partial mutation on error.
 /// - Action: Executes `compute_sha256_bytes` deterministically with zero unbounded recursion or blocking.
 /// - Resource: Bounds stack and heap allocations within `compute_sha256_bytes` (`INGEST-SYSML-DIGEST`).
 ///
 /// ## 7. Realization & Traceability
+/// # Realises
 /// Realises: [REQ-INGEST-SYSML-DIGEST-COMPUTE-SHA256-BYTES] | SysML v2: ActionDef(compute_sha256_bytes)
-fn compute_sha256_bytes(data: &[u8]) -> [u8; 32] {
-    let mut h: [u32; 8] = [
-        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-        0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
-    ];
-
-    let k: [u32; 64] = [
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-    ];
-
-    let bit_len = (data.len() as u64) * 8;
-    let mut msg = data.to_vec();
-    msg.push(0x80);
-    while (msg.len() % 64) != 56 {
-        msg.push(0x00);
-    }
-    msg.extend_from_slice(&bit_len.to_be_bytes());
-
-    for chunk in msg.chunks_exact(64) {
-        let mut w = [0u32; 64];
-        for (i, b) in chunk.chunks_exact(4).enumerate() {
-            w[i] = u32::from_be_bytes(b.try_into().unwrap());
-        }
-        for i in 16..64 {
-            let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
-            let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
-            w[i] = w[i - 16].wrapping_add(s0).wrapping_add(w[i - 7]).wrapping_add(s1);
-        }
-
-        let mut a = h[0];
-        let mut b = h[1];
-        let mut c = h[2];
-        let mut d = h[3];
-        let mut e = h[4];
-        let mut f = h[5];
-        let mut g = h[6];
-        let mut hh = h[7];
-
-        for i in 0..64 {
-            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let ch = (e & f) ^ ((!e) & g);
-            let temp1 = hh.wrapping_add(s1).wrapping_add(ch).wrapping_add(k[i]).wrapping_add(w[i]);
-            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
-            let maj = (a & b) ^ (a & c) ^ (b & c);
-            let temp2 = s0.wrapping_add(maj);
-
-            hh = g;
-            g = f;
-            f = e;
-            e = d.wrapping_add(temp1);
-            d = c;
-            c = b;
-            b = a;
-            a = temp1.wrapping_add(temp2);
-        }
-
-        h[0] = h[0].wrapping_add(a);
-        h[1] = h[1].wrapping_add(b);
-        h[2] = h[2].wrapping_add(c);
-        h[3] = h[3].wrapping_add(d);
-        h[4] = h[4].wrapping_add(e);
-        h[5] = h[5].wrapping_add(f);
-        h[6] = h[6].wrapping_add(g);
-        h[7] = h[7].wrapping_add(hh);
-    }
-
-    let mut out = [0u8; 32];
-    for (i, word) in h.iter().enumerate() {
-        out[i * 4..(i + 1) * 4].copy_from_slice(&word.to_be_bytes());
-    }
-    out
+pub fn compute_sha256_bytes(data: &[u8]) -> [u8; 32] {
+    deap_core::digest::compute_sha256_bytes(data)
 }
 
 /// Structural descriptor for an individual file registered in `input-digest.json`.
@@ -414,18 +354,20 @@ pub fn generate_input_digest(input_path: &Path) -> Result<InputDigestData, Strin
     if input_path.is_file() {
         input_files.push(input_path.to_path_buf());
     } else if input_path.is_dir() {
-        for entry in walkdir::WalkDir::new(input_path).sort_by_file_name() {
-            if let Ok(e) = entry {
-                let p = e.path();
-                if p.is_file() {
-                    let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
-                    if !name.starts_with('.') {
-                        if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
-                            if ["md", "yang", "sysml", "proto", "json", "yaml", "yml", "txt"]
-                                .contains(&ext.to_ascii_lowercase().as_str())
-                            {
-                                input_files.push(p.to_path_buf());
-                            }
+        for e in walkdir::WalkDir::new(input_path)
+            .sort_by_file_name()
+            .into_iter()
+            .flatten()
+        {
+            let p = e.path();
+            if p.is_file() {
+                let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                if !name.starts_with('.') {
+                    if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
+                        if ["md", "yang", "sysml", "proto", "json", "yaml", "yml", "txt"]
+                            .contains(&ext.to_ascii_lowercase().as_str())
+                        {
+                            input_files.push(p.to_path_buf());
                         }
                     }
                 }
@@ -516,6 +458,43 @@ pub fn compute_multi_file_sha256(paths: &[PathBuf]) -> Result<(String, usize), S
 mod tests {
     use super::*;
 
+    /// Verifies basic empty and single-block SHA-256 hexadecimal digests.
+    ///
+    /// # Summary
+    /// Executes unit verification for `compute_sha256` on empty and short ASCII inputs.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// # Safety
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_compute_sha256` in `crates/ingest-sysml/src/digest.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_compute_sha256` (declaration #9) within `INGEST-SYSML-DIGEST`.
+    ///
+    /// ## 3. Preconditions
+    /// # Parameters
+    /// - No runtime parameters; uses deterministic static byte-slice test vectors.
+    ///
+    /// ## 4. Postconditions
+    /// # Returns
+    /// - Returns `()` after asserting exact 64-character lowercase hex equality.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over constant-length test inputs in `test_compute_sha256`.
+    /// - Space Complexity: O(1) bounded auxiliary memory for `test_compute_sha256`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// # Errors
+    /// - Infallible test assertion harness.
+    /// # Panics
+    /// - Panics only if `compute_sha256` diverges from FIPS 180-4 expected digests.
+    /// - Interface: Validates boundary inputs and types for `test_compute_sha256` (`()`).
+    /// - State: Maintains consistent state invariants across `test_compute_sha256` without partial mutation on error.
+    /// - Action: Executes `test_compute_sha256` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_compute_sha256` (`INGEST-SYSML-DIGEST`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// # Realises
+    /// Realises: [REQ-INGEST-SYSML-DIGEST-TEST-COMPUTE-SHA256] | SysML v2: TestCaseDef(test_compute_sha256)
     #[test]
     fn test_compute_sha256() {
         assert_eq!(
@@ -528,6 +507,121 @@ mod tests {
         );
     }
 
+    /// Verifies NIST FIPS 180-4 test vectors and enforces zero unwrap calls in `ingest-sysml/src/digest.rs`.
+    ///
+    /// # Summary
+    /// Regression and NIST FIPS 180-4 conformance test for `DEFECT-03` (`#494`) verifying empty, `"abc"`, and multi-block (>64 bytes) SHA-256 vectors and asserting zero unwrap calls in `ingest-sysml/src/digest.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// # Safety
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_defect_03_sha256_nist_vectors_and_zero_unwrap` in `crates/ingest-sysml/src/digest.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_defect_03_sha256_nist_vectors_and_zero_unwrap` (declaration #10) within `INGEST-SYSML-DIGEST`.
+    ///
+    /// ## 3. Preconditions
+    /// # Parameters
+    /// - No runtime parameters; inspects NIST FIPS 180-4 vectors and `digest.rs` source text.
+    ///
+    /// ## 4. Postconditions
+    /// # Returns
+    /// - Returns `()` when all NIST FIPS 180-4 vectors match and `digest.rs` is free of unwrap calls.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over `digest.rs` source bytes in `test_defect_03_sha256_nist_vectors_and_zero_unwrap`.
+    /// - Space Complexity: O(1) bounded auxiliary memory for `test_defect_03_sha256_nist_vectors_and_zero_unwrap`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// # Errors
+    /// - Infallible test assertion harness.
+    /// # Panics
+    /// - Fails test execution if any unwrap call or duplicated SHA-256 constant table remains in `ingest-sysml/src/digest.rs`.
+    /// - Interface: Validates boundary inputs and types for `test_defect_03_sha256_nist_vectors_and_zero_unwrap` (`()`).
+    /// - State: Maintains consistent state invariants across `test_defect_03_sha256_nist_vectors_and_zero_unwrap` without partial mutation on error.
+    /// - Action: Executes `test_defect_03_sha256_nist_vectors_and_zero_unwrap` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_defect_03_sha256_nist_vectors_and_zero_unwrap` (`INGEST-SYSML-DIGEST`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// # Realises
+    /// Realises: [REQ-DEFECT-03-INGEST-SYSML-SHA256-NIST-ZERO-UNWRAP] | SysML v2: TestCaseDef(test_defect_03_sha256_nist_vectors_and_zero_unwrap)
+    #[test]
+    fn test_defect_03_sha256_nist_vectors_and_zero_unwrap() {
+        assert_eq!(
+            compute_sha256(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            compute_sha256(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(
+            compute_sha256(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
+            "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+        );
+        assert_eq!(
+            compute_sha256(b"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"),
+            "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1"
+        );
+        assert_eq!(
+            compute_sha256_bytes(b"abc"),
+            deap_core::digest::compute_sha256_bytes(b"abc")
+        );
+
+        let src = include_str!("digest.rs");
+        let unwrap_token = concat!(".un", "wrap(");
+        let expect_token = concat!(".ex", "pect(");
+        let k0_token = concat!("0x428a", "2f98");
+        assert!(
+            !src.contains(unwrap_token),
+            "ingest-sysml/src/digest.rs must contain zero unwrap calls"
+        );
+        assert!(
+            !src.contains(expect_token),
+            "ingest-sysml/src/digest.rs must contain zero expect calls"
+        );
+        assert!(
+            !src.contains(k0_token),
+            "ingest-sysml/src/digest.rs must delegate SHA-256 compression to deap_core::digest without duplicating K constants"
+        );
+    }
+
+    /// Verifies truncation token detection on clean and truncated markdown inputs.
+    ///
+    /// # Summary
+    /// Executes unit verification for `scan_truncation` against clean and truncated strings.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// # Safety
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_scan_truncation` in `crates/ingest-sysml/src/digest.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_scan_truncation` (declaration #11) within `INGEST-SYSML-DIGEST`.
+    ///
+    /// ## 3. Preconditions
+    /// # Parameters
+    /// - No runtime parameters; uses synthetic clean and truncated specification text.
+    ///
+    /// ## 4. Postconditions
+    /// # Returns
+    /// - Returns `()` after verifying false-positive immunity and true-positive token capture.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over constant-length test inputs in `test_scan_truncation`.
+    /// - Space Complexity: O(1) bounded auxiliary memory for `test_scan_truncation`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// # Errors
+    /// - Infallible test assertion harness.
+    /// # Panics
+    /// - Panics only if `scan_truncation` fails to detect prohibited truncation markers.
+    /// - Interface: Validates boundary inputs and types for `test_scan_truncation` (`()`).
+    /// - State: Maintains consistent state invariants across `test_scan_truncation` without partial mutation on error.
+    /// - Action: Executes `test_scan_truncation` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_scan_truncation` (`INGEST-SYSML-DIGEST`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// # Realises
+    /// Realises: [REQ-INGEST-SYSML-DIGEST-TEST-SCAN-TRUNCATION] | SysML v2: TestCaseDef(test_scan_truncation)
     #[test]
     fn test_scan_truncation() {
         let clean = "# Package_0\n## Classifier_Alpha\nPure clean specification content with normal ellipsis... and 1..10 range.";
@@ -539,16 +633,54 @@ mod tests {
         assert!(detected.contains(&"truncated content".to_string()));
     }
 
+    /// Verifies `parse_input_file` against `schema/REQ-0001.md` when present on disk.
+    ///
+    /// # Summary
+    /// Executes unit verification for `parse_input_file` without unwrap calls.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// # Safety
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_parse_input_file_req1` in `crates/ingest-sysml/src/digest.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_parse_input_file_req1` (declaration #12) within `INGEST-SYSML-DIGEST`.
+    ///
+    /// ## 3. Preconditions
+    /// # Parameters
+    /// - No runtime parameters; conditionally inspects `schema/REQ-0001.md` if present.
+    ///
+    /// ## 4. Postconditions
+    /// # Returns
+    /// - Returns `()` after validating line counts, SHA-256 digest presence, and section markers.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over input file size in `test_parse_input_file_req1`.
+    /// - Space Complexity: O(N) bounded auxiliary memory for `test_parse_input_file_req1`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// # Errors
+    /// - Infallible test assertion harness.
+    /// # Panics
+    /// - Panics only if `parse_input_file` returns `Err` on an existing `schema/REQ-0001.md`.
+    /// - Interface: Validates boundary inputs and types for `test_parse_input_file_req1` (`()`).
+    /// - State: Maintains consistent state invariants across `test_parse_input_file_req1` without partial mutation on error.
+    /// - Action: Executes `test_parse_input_file_req1` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_parse_input_file_req1` (`INGEST-SYSML-DIGEST`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// # Realises
+    /// Realises: [REQ-INGEST-SYSML-DIGEST-TEST-PARSE-INPUT-FILE] | SysML v2: TestCaseDef(test_parse_input_file_req1)
     #[test]
     fn test_parse_input_file_req1() {
         let p = Path::new("schema/REQ-0001.md");
         if p.exists() {
             let res = parse_input_file(p);
             assert!(res.is_ok());
-            let (entry, _) = res.unwrap();
-            assert!(entry.total_lines > 0);
-            assert!(!entry.sha256.is_empty());
-            assert!(entry.structural_section_markers.iter().any(|m| m.contains("1. Normative Statement")));
+            if let Ok((entry, _)) = res {
+                assert!(entry.total_lines > 0);
+                assert!(!entry.sha256.is_empty());
+                assert!(entry.structural_section_markers.iter().any(|m| m.contains("1. Normative Statement")));
+            }
         }
     }
 }

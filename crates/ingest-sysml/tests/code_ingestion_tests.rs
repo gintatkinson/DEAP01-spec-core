@@ -1,4 +1,10 @@
 //! Integration tests for FEAT-42 Source-Code AST Ingestion (`ingest-sysml --source <DIR> --format code --language <auto|dart|rust>`).
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic
+)]
 
 use compile_sysml::{parse_sysml, to_sysml, SemanticValidator};
 use deap_core::source_ast::SourceLanguage;

@@ -35,7 +35,7 @@ use walkdir::WalkDir;
 pub fn check_latex_katex_syntax(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut all_errors = Vec::new();
 
-    for entry in WalkDir::new(repo_root)
+    for entry_res in WalkDir::new(repo_root)
         .into_iter()
         .filter_entry(|e| {
             if e.file_type().is_dir() {
@@ -45,8 +45,14 @@ pub fn check_latex_katex_syntax(repo_root: &Path) -> Result<(), Vec<String>> {
                 true
             }
         })
-        .filter_map(|e| e.ok())
     {
+        let entry = match entry_res {
+            Ok(val) => val,
+            Err(err) => {
+                all_errors.push(format!("Check 13 directory walk I/O error: {}", err));
+                continue;
+            }
+        };
         if entry.file_type().is_file() {
             let path = entry.path();
             if path.extension().map(|ext| ext == "md").unwrap_or(false) {
@@ -142,5 +148,50 @@ mod tests {
         let res = check_latex_katex_syntax(&tmp.path);
         assert!(res.is_err());
         assert!(res.unwrap_err()[0].contains("Bare alignment operator '&'"));
+    }
+
+    /// Verifies that Check 13 fails closed when a subdirectory cannot be traversed by `WalkDir`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 fail-closed directory traversal verification for `check_latex_katex_syntax` (refs #500).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Any `WalkDir` traversal error on an in-scope directory must append a diagnostic to `all_errors` and return `Err`.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary workspace contains an unreadable subdirectory (`mode 0o000` on Unix).
+    ///
+    /// ## 4. Postconditions
+    /// - `check_latex_katex_syntax` returns `Err(Vec<String>)` reporting the directory walk I/O error, and permissions are restored before cleanup.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) over a single unreadable directory.
+    /// - Space Complexity: O(1) temporary directory fixture.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Exercises `WalkDir` `Err` handling in `check_latex_katex_syntax`.
+    /// - State: Restores `0o755` permissions before `TempDir` drop.
+    /// - Action: Asserts fail-closed error return.
+    /// - Resource: Zero leaked temporary directories.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-13-FAIL-CLOSED-WALKDIR-TEST]
+    #[cfg(unix)]
+    #[test]
+    fn test_unreadable_subdir_fails_closed() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = TempDir::new("unreadable_dir");
+        let sub = tmp.path.join("locked_math_docs");
+        fs::create_dir_all(&sub).unwrap();
+        fs::set_permissions(&sub, fs::Permissions::from_mode(0o000)).unwrap();
+
+        let res = check_latex_katex_syntax(&tmp.path);
+        let _ = fs::set_permissions(&sub, fs::Permissions::from_mode(0o755));
+
+        assert!(
+            res.is_err(),
+            "Check 13 must fail closed on unreadable directory, but returned Ok(())"
+        );
     }
 }

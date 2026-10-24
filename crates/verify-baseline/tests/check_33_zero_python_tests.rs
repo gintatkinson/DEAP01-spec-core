@@ -1,5 +1,11 @@
 //! Integration tests for Check 33 (`check_zero_python_scripts`):
 //! Zero Python Scripts & Operational Python/Pytest Reference Invariant (refs #469).
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic
+)]
 
 use std::fs;
 use std::path::PathBuf;

@@ -595,7 +595,8 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
     let mut current_doc: Vec<String> = Vec::new();
     let mut seen_docblocks: BTreeSet<String> = BTreeSet::new();
     let mut in_multiline_comment = false;
-    let mut in_raw_string = false;
+    let mut in_raw_string_hashes: Option<usize> = None;
+    let mut in_multiline_string = false;
     let mut in_mod_tests = false;
     let mut cfg_test_pending = false;
     let mut attr_bracket_depth: usize = 0;
@@ -607,60 +608,46 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
         let line_no = idx.saturating_add(1);
         let trimmed = raw_line.trim();
 
-        if in_multiline_comment {
-            if trimmed.contains("*/") {
-                in_multiline_comment = false;
-            }
-            continue;
-        }
-        if !in_raw_string && trimmed.starts_with("/*") && !trimmed.contains("*/") {
-            in_multiline_comment = true;
-            continue;
-        }
+        let started_in_comment_or_string =
+            in_multiline_comment || in_raw_string_hashes.is_some() || in_multiline_string;
 
-        if in_raw_string {
-            if trimmed.contains("\"#") {
-                in_raw_string = false;
-            }
-            continue;
-        }
-
-        if trimmed.starts_with("//!") {
-            if contains_placeholder_docstring(trimmed) {
-                violations.push(format!(
-                    "{}:{}: placeholder module docstring '{}' detected",
-                    file_rel, line_no, trimmed
-                ));
-            }
-            // Zero Module-Level Exemption Invariant: `//!` is a module/crate inner docstring
-            // and MUST NEVER populate `current_doc` for subsequent structs, enums, traits, or fns.
-            continue;
-        }
-
-        if trimmed.starts_with("///") {
-            if !in_mod_tests {
+        if !started_in_comment_or_string {
+            if trimmed.starts_with("//!") {
                 if contains_placeholder_docstring(trimmed) {
                     violations.push(format!(
-                        "{}:{}: placeholder docstring '{}' detected",
+                        "{}:{}: placeholder module docstring '{}' detected",
                         file_rel, line_no, trimmed
                     ));
                 }
-                current_doc.push(trimmed.to_string());
+                // Zero Module-Level Exemption Invariant: `//!` is a module/crate inner docstring
+                // and MUST NEVER populate `current_doc` for subsequent structs, enums, traits, or fns.
+                continue;
             }
-            continue;
+
+            if trimmed.starts_with("///") {
+                if !in_mod_tests {
+                    if contains_placeholder_docstring(trimmed) {
+                        violations.push(format!(
+                            "{}:{}: placeholder docstring '{}' detected",
+                            file_rel, line_no, trimmed
+                        ));
+                    }
+                    current_doc.push(trimmed.to_string());
+                }
+                continue;
+            }
         }
 
-        let code = strip_line_comment_preserving_strings(trimmed).trim();
+        let scanned = scan_rust_line_preserving_lexical_state(
+            trimmed,
+            &mut in_multiline_comment,
+            &mut in_raw_string_hashes,
+            &mut in_multiline_string,
+        );
+        let code = scanned.trim();
 
         if code.is_empty() {
             continue;
-        }
-
-        if let Some(raw_pos) = code.find("r#\"") {
-            let after_open = code.get(raw_pos.saturating_add(3)..).unwrap_or("");
-            if !after_open.contains("\"#") {
-                in_raw_string = true;
-            }
         }
 
         if code == "mod tests {"
@@ -735,6 +722,463 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
     }
 }
 
+/// Advances Rust block comment, multi-hash raw string (`r"..."`, `r#"..."#`, `r##"..."##`),
+/// and standard multiline string state across a single source line while returning the
+/// non-string, non-comment code slice for item classification and delimiter tracking.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 34/36 lexical boundary soundness (refs #500).
+/// Prevents declaration keywords (`fn`, `struct`), doc comments (`///`), or unbalanced delimiters
+/// inside `r##"..."##` raw strings and multiline `"..."` strings from corrupting Check 36 verification.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - A raw string opened with `r` followed by $k \ge 0$ `#` bytes and `"` remains open in
+///   `*in_raw_string_hashes = Some(k)` until a closing `"` immediately followed by $k$ `#` bytes is reached.
+/// - A standard string opened with `"` remains open in `*in_multiline_string = true` across lines
+///   until an unescaped `"` is reached.
+/// - Character literals (`'c'` and `'\...'`) are consumed atomically so `'\"'` or `'{'` never
+///   perturbs string state or delimiter depth.
+///
+/// ## 3. Preconditions
+/// - `line: &str` is a valid UTF-8 source line slice.
+/// - `in_block_comment`, `in_raw_string_hashes`, and `in_multiline_string` hold the active lexical
+///   state carried over from the preceding line.
+///
+/// ## 4. Postconditions
+/// - Updates `*in_block_comment`, `*in_raw_string_hashes`, and `*in_multiline_string` to their
+///   exact end-of-line lexical states and returns a `String` containing only top-level code tokens.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) single-pass traversal where N is `line.len()`.
+/// - Space Complexity: O(N) bounded by the output `String` capacity.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Uses `.get(..)` exclusively with zero panicking slice or index operations.
+/// - State: Mutates only the three caller-supplied lexical state references.
+/// - Action: Preserves UTF-8 character boundaries at every step via `len_utf8()`.
+/// - Resource: Bounded single-line allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-36-SCAN-RUST-LEXICAL-STATE]
+fn scan_rust_line_preserving_lexical_state(
+    line: &str,
+    in_block_comment: &mut bool,
+    in_raw_string_hashes: &mut Option<usize>,
+    in_multiline_string: &mut bool,
+) -> String {
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let mut i: usize = 0;
+    let mut out = String::with_capacity(len);
+
+    while i < len {
+        let step_utf8 = line
+            .get(i..)
+            .and_then(|s| s.chars().next())
+            .map(|c| c.len_utf8())
+            .unwrap_or(1);
+
+        if *in_block_comment {
+            if bytes.get(i).copied() == Some(b'*')
+                && bytes.get(i.saturating_add(1)).copied() == Some(b'/')
+            {
+                *in_block_comment = false;
+                i = i.saturating_add(2);
+            } else {
+                i = i.saturating_add(step_utf8);
+            }
+            continue;
+        }
+
+        if let Some(req_hashes) = *in_raw_string_hashes {
+            if bytes.get(i).copied() == Some(b'"') {
+                let mut h: usize = 0;
+                while h < req_hashes
+                    && bytes
+                        .get(i.saturating_add(1).saturating_add(h))
+                        .copied()
+                        == Some(b'#')
+                {
+                    h = h.saturating_add(1);
+                }
+                if h == req_hashes {
+                    *in_raw_string_hashes = None;
+                    i = i.saturating_add(1).saturating_add(req_hashes);
+                    continue;
+                }
+            }
+            i = i.saturating_add(step_utf8);
+            continue;
+        }
+
+        if *in_multiline_string {
+            if bytes.get(i).copied() == Some(b'\\') {
+                let next_len = line
+                    .get(i.saturating_add(1)..)
+                    .and_then(|s| s.chars().next())
+                    .map(|c| c.len_utf8())
+                    .unwrap_or(0);
+                i = i.saturating_add(1).saturating_add(next_len);
+                continue;
+            }
+            if bytes.get(i).copied() == Some(b'"') {
+                *in_multiline_string = false;
+            }
+            i = i.saturating_add(step_utf8);
+            continue;
+        }
+
+        if bytes.get(i).copied() == Some(b'/')
+            && bytes.get(i.saturating_add(1)).copied() == Some(b'/')
+        {
+            break;
+        }
+        if bytes.get(i).copied() == Some(b'/')
+            && bytes.get(i.saturating_add(1)).copied() == Some(b'*')
+        {
+            *in_block_comment = true;
+            i = i.saturating_add(2);
+            continue;
+        }
+
+        if bytes.get(i).copied() == Some(b'\'') {
+            if bytes.get(i.saturating_add(1)).copied() == Some(b'\\') {
+                let escaped_len = line
+                    .get(i.saturating_add(2)..)
+                    .and_then(|s| s.chars().next())
+                    .map(|c| c.len_utf8())
+                    .unwrap_or(0);
+                let mut scan_close = i.saturating_add(2).saturating_add(escaped_len);
+                let limit = i.saturating_add(14).min(len);
+                let mut closed_at: Option<usize> = None;
+                while scan_close < limit {
+                    if bytes.get(scan_close).copied() == Some(b'\'') {
+                        closed_at = Some(scan_close);
+                        break;
+                    }
+                    let c_len = line
+                        .get(scan_close..)
+                        .and_then(|s| s.chars().next())
+                        .map(|c| c.len_utf8())
+                        .unwrap_or(1);
+                    scan_close = scan_close.saturating_add(c_len);
+                }
+                if let Some(close_idx) = closed_at {
+                    i = close_idx.saturating_add(1);
+                    continue;
+                }
+            } else if let Some(inner_ch) =
+                line.get(i.saturating_add(1)..).and_then(|s| s.chars().next())
+            {
+                if inner_ch != '\'' && inner_ch != '\\' {
+                    let close_pos = i.saturating_add(1).saturating_add(inner_ch.len_utf8());
+                    if bytes.get(close_pos).copied() == Some(b'\'') {
+                        i = close_pos.saturating_add(1);
+                        continue;
+                    }
+                }
+            }
+        }
+
+        if bytes.get(i).copied() == Some(b'r') {
+            let prev_is_ident = if i == 0 {
+                false
+            } else {
+                let prev = bytes.get(i.saturating_sub(1)).copied().unwrap_or(b' ');
+                if prev == b'b' || prev == b'c' {
+                    if i >= 2 {
+                        let prev2 = bytes.get(i.saturating_sub(2)).copied().unwrap_or(b' ');
+                        prev2.is_ascii_alphanumeric() || prev2 == b'_' || prev2 == b'\''
+                    } else {
+                        false
+                    }
+                } else {
+                    prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'\''
+                }
+            };
+            if !prev_is_ident {
+                let mut h: usize = 0;
+                while bytes
+                    .get(i.saturating_add(1).saturating_add(h))
+                    .copied()
+                    == Some(b'#')
+                {
+                    h = h.saturating_add(1);
+                }
+                if bytes
+                    .get(i.saturating_add(1).saturating_add(h))
+                    .copied()
+                    == Some(b'"')
+                {
+                    *in_raw_string_hashes = Some(h);
+                    i = i.saturating_add(2).saturating_add(h);
+                    continue;
+                }
+            }
+        }
+
+        if bytes.get(i).copied() == Some(b'"') {
+            *in_multiline_string = true;
+            i = i.saturating_add(1);
+            continue;
+        }
+
+        if let Some(ch) = line.get(i..).and_then(|s| s.chars().next()) {
+            out.push(ch);
+            i = i.saturating_add(ch.len_utf8());
+        } else {
+            break;
+        }
+    }
+
+    out
+}
+
+/// Discriminant tracking active Dart triple-quoted multiline string state across source lines.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D Dart lexical state tracking (`DartMultilineString`).
+/// Distinguishes single-quoted (`'''...'''`) and double-quoted (`"""..."""`) Dart multiline strings
+/// as well as raw (`r'''...'''` / `r"""..."""`) vs. escape-aware variants.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `TripleSingle { raw }` closes only on three consecutive `'` bytes (ignoring `\'` when `!raw`).
+/// - `TripleDouble { raw }` closes only on three consecutive `"` bytes (ignoring `\"` when `!raw`).
+///
+/// ## 3. Preconditions
+/// - Constructed when `scan_dart_line_preserving_lexical_state` encounters an unquoted `'''` or `"""` token.
+///
+/// ## 4. Postconditions
+/// - Preserves exact delimiter and escape semantics across newline boundaries until closing `'''` or `"""`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) state inspection.
+/// - Space Complexity: O(1) stack value.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Closed strongly typed enum with boolean `raw` flag.
+/// - State: Copy value with zero heap references.
+/// - Action: Exhaustive pattern matching in `scan_dart_line_preserving_lexical_state`.
+/// - Resource: Zero dynamic allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-36-DART-MULTILINE-STRING-ENUM]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DartMultilineString {
+    /// Dart `'''...'''` or `r'''...'''` multiline string literal.
+    TripleSingle {
+        /// Whether the literal was opened with an `r` raw prefix.
+        raw: bool,
+    },
+    /// Dart `"""..."""` or `r"""..."""` multiline string literal.
+    TripleDouble {
+        /// Whether the literal was opened with an `r` raw prefix.
+        raw: bool,
+    },
+}
+
+/// Advances Dart block comments and triple-quoted multiline strings (`'''...'''` / `"""..."""`)
+/// across a single source line while preserving single-line code and string tokens.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Tier 2 Flutter lexical boundary completeness (refs #500).
+/// Prevents interior lines of Dart triple-quoted strings from triggering false-positive Check 36
+/// item classifications, placeholder errors, or delimiter depth drift.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Characters inside `/* ... */` block comments and `'''...'''` / `"""..."""` multiline strings
+///   are stripped from the returned code line.
+/// - Single-line `'...'` and `"..."` literals are emitted intact so `update_line_delimiter_depths`
+///   can evaluate `${...}` string interpolations accurately.
+///
+/// ## 3. Preconditions
+/// - `line: &str` is a valid UTF-8 Dart source line.
+/// - `in_block_comment` and `in_triple_string` hold the active lexical state from the previous line.
+///
+/// ## 4. Postconditions
+/// - Updates `*in_block_comment` and `*in_triple_string` to their end-of-line states and returns
+///   the non-comment, non-triple-string Dart code slice.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) single-pass scan over `line.len()`.
+/// - Space Complexity: O(N) bounded by the output `String`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking `.get(..)` byte and char accessors throughout.
+/// - State: Mutates only `in_block_comment` and `in_triple_string`.
+/// - Action: Maintains valid UTF-8 boundaries at every iteration via `len_utf8()`.
+/// - Resource: Bounded single-line buffer allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-36-SCAN-DART-LEXICAL-STATE]
+fn scan_dart_line_preserving_lexical_state(
+    line: &str,
+    in_block_comment: &mut bool,
+    in_triple_string: &mut Option<DartMultilineString>,
+) -> String {
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let mut i: usize = 0;
+    let mut in_single_line_quote: Option<(u8, bool)> = None;
+    let mut out = String::with_capacity(len);
+
+    while i < len {
+        let step_utf8 = line
+            .get(i..)
+            .and_then(|s| s.chars().next())
+            .map(|c| c.len_utf8())
+            .unwrap_or(1);
+
+        if *in_block_comment {
+            if bytes.get(i).copied() == Some(b'*')
+                && bytes.get(i.saturating_add(1)).copied() == Some(b'/')
+            {
+                *in_block_comment = false;
+                i = i.saturating_add(2);
+            } else {
+                i = i.saturating_add(step_utf8);
+            }
+            continue;
+        }
+
+        if let Some(triple_kind) = *in_triple_string {
+            let (q_byte, is_raw) = match triple_kind {
+                DartMultilineString::TripleSingle { raw } => (b'\'', raw),
+                DartMultilineString::TripleDouble { raw } => (b'"', raw),
+            };
+            if !is_raw && bytes.get(i).copied() == Some(b'\\') {
+                let next_len = line
+                    .get(i.saturating_add(1)..)
+                    .and_then(|s| s.chars().next())
+                    .map(|c| c.len_utf8())
+                    .unwrap_or(0);
+                i = i.saturating_add(1).saturating_add(next_len);
+                continue;
+            }
+            if bytes.get(i).copied() == Some(q_byte)
+                && bytes.get(i.saturating_add(1)).copied() == Some(q_byte)
+                && bytes.get(i.saturating_add(2)).copied() == Some(q_byte)
+            {
+                *in_triple_string = None;
+                i = i.saturating_add(3);
+                continue;
+            }
+            i = i.saturating_add(step_utf8);
+            continue;
+        }
+
+        if let Some((q_byte, is_raw)) = in_single_line_quote {
+            if !is_raw && bytes.get(i).copied() == Some(b'\\') {
+                out.push('\\');
+                if let Some(next_ch) = line
+                    .get(i.saturating_add(1)..)
+                    .and_then(|s| s.chars().next())
+                {
+                    out.push(next_ch);
+                    i = i.saturating_add(1).saturating_add(next_ch.len_utf8());
+                } else {
+                    i = len;
+                }
+                continue;
+            }
+            if bytes.get(i).copied() == Some(q_byte) {
+                in_single_line_quote = None;
+            }
+            if let Some(ch) = line.get(i..).and_then(|s| s.chars().next()) {
+                out.push(ch);
+                i = i.saturating_add(ch.len_utf8());
+            } else {
+                break;
+            }
+            continue;
+        }
+
+        if bytes.get(i).copied() == Some(b'/')
+            && bytes.get(i.saturating_add(1)).copied() == Some(b'/')
+        {
+            break;
+        }
+        if bytes.get(i).copied() == Some(b'/')
+            && bytes.get(i.saturating_add(1)).copied() == Some(b'*')
+        {
+            *in_block_comment = true;
+            i = i.saturating_add(2);
+            continue;
+        }
+
+        if bytes.get(i).copied() == Some(b'r') {
+            let prev_is_ident = i > 0
+                && bytes
+                    .get(i.saturating_sub(1))
+                    .copied()
+                    .map(|b| b.is_ascii_alphanumeric() || b == b'_')
+                    .unwrap_or(false);
+            if !prev_is_ident {
+                if bytes.get(i.saturating_add(1)).copied() == Some(b'\'')
+                    && bytes.get(i.saturating_add(2)).copied() == Some(b'\'')
+                    && bytes.get(i.saturating_add(3)).copied() == Some(b'\'')
+                {
+                    *in_triple_string = Some(DartMultilineString::TripleSingle { raw: true });
+                    i = i.saturating_add(4);
+                    continue;
+                }
+                if bytes.get(i.saturating_add(1)).copied() == Some(b'"')
+                    && bytes.get(i.saturating_add(2)).copied() == Some(b'"')
+                    && bytes.get(i.saturating_add(3)).copied() == Some(b'"')
+                {
+                    *in_triple_string = Some(DartMultilineString::TripleDouble { raw: true });
+                    i = i.saturating_add(4);
+                    continue;
+                }
+                if let Some(q) = bytes.get(i.saturating_add(1)).copied() {
+                    if q == b'\'' || q == b'"' {
+                        in_single_line_quote = Some((q, true));
+                        out.push('r');
+                        out.push(char::from(q));
+                        i = i.saturating_add(2);
+                        continue;
+                    }
+                }
+            }
+        }
+
+        if bytes.get(i).copied() == Some(b'\'')
+            && bytes.get(i.saturating_add(1)).copied() == Some(b'\'')
+            && bytes.get(i.saturating_add(2)).copied() == Some(b'\'')
+        {
+            *in_triple_string = Some(DartMultilineString::TripleSingle { raw: false });
+            i = i.saturating_add(3);
+            continue;
+        }
+        if bytes.get(i).copied() == Some(b'"')
+            && bytes.get(i.saturating_add(1)).copied() == Some(b'"')
+            && bytes.get(i.saturating_add(2)).copied() == Some(b'"')
+        {
+            *in_triple_string = Some(DartMultilineString::TripleDouble { raw: false });
+            i = i.saturating_add(3);
+            continue;
+        }
+
+        if let Some(q) = bytes.get(i).copied() {
+            if q == b'\'' || q == b'"' {
+                in_single_line_quote = Some((q, false));
+                out.push(char::from(q));
+                i = i.saturating_add(1);
+                continue;
+            }
+        }
+
+        if let Some(ch) = line.get(i..).and_then(|s| s.chars().next()) {
+            out.push(ch);
+            i = i.saturating_add(ch.len_utf8());
+        } else {
+            break;
+        }
+    }
+
+    out
+}
+
 /// Audits a single Dart source string for 100% per-item 7-section docstring completeness and zero placeholders.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -775,6 +1219,7 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
     let mut current_doc: Vec<String> = Vec::new();
     let mut seen_docblocks: BTreeSet<String> = BTreeSet::new();
     let mut in_multiline_comment = false;
+    let mut in_triple_string: Option<DartMultilineString> = None;
     let mut brace_depth: usize = 0;
     let mut paren_depth: usize = 0;
     let mut active_class_name: Option<String> = None;
@@ -784,18 +1229,9 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
         let line_no = idx.saturating_add(1);
         let trimmed = raw_line.trim();
 
-        if in_multiline_comment {
-            if trimmed.contains("*/") {
-                in_multiline_comment = false;
-            }
-            continue;
-        }
-        if trimmed.starts_with("/*") && !trimmed.contains("*/") {
-            in_multiline_comment = true;
-            continue;
-        }
+        let started_in_comment_or_triple = in_multiline_comment || in_triple_string.is_some();
 
-        if trimmed.starts_with("///") {
+        if !started_in_comment_or_triple && trimmed.starts_with("///") {
             if contains_placeholder_docstring(trimmed) {
                 violations.push(format!(
                     "{}:{}: placeholder docstring '{}' detected",
@@ -806,7 +1242,12 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             continue;
         }
 
-        let code = strip_line_comment_preserving_strings(trimmed);
+        let scanned = scan_dart_line_preserving_lexical_state(
+            trimmed,
+            &mut in_multiline_comment,
+            &mut in_triple_string,
+        );
+        let code = strip_line_comment_preserving_strings(&scanned);
 
         if code.is_empty() {
             continue;
@@ -1526,6 +1967,32 @@ fn update_line_delimiter_depths(code: &str, brace_depth: &mut usize, paren_depth
 mod tests {
     use super::*;
 
+    /// Verifies delimiter depth tracking across Dart raw strings, interpolations, and UTF-8 char literals.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A delimiter tracking verification for `update_line_delimiter_depths`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Braces inside `'${map['{']}'` and `"${map["{"]}"` never corrupt outer `brace_depth`.
+    ///
+    /// ## 3. Preconditions
+    /// - `brace_depth` and `paren_depth` start at `0`.
+    ///
+    /// ## 4. Postconditions
+    /// - `brace_depth` increments to `1` and `paren_depth` returns to `0`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over the input line length.
+    /// - Space Complexity: O(1) stack state.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Direct invocation of `update_line_delimiter_depths`.
+    /// - State: Mutates local test counters only.
+    /// - Action: Asserts exact depth values.
+    /// - Resource: Zero heap allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-36-DELIMITER-DEPTH-TEST]
     #[test]
     fn test_update_line_delimiter_depths_dart_interpolation_raw_and_utf8_char() {
         let mut brace_depth: usize = 0;
@@ -1543,6 +2010,32 @@ mod tests {
         assert_eq!(paren_depth, 0);
     }
 
+    /// Verifies that double slashes inside string literals do not truncate lines during Check 36 scanning.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A lexical comment-stripping verification for `audit_rust_source_docstrings`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `//` inside `"https://example.com//path"` never strips closing quotes or braces on the same line.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory Rust source fixtures contain URL string literals with `//`.
+    ///
+    /// ## 4. Postconditions
+    /// - Undocumented follow-up functions are flagged with `Err`, and documented follow-up functions return `Ok(2)`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(L) over the fixture lines.
+    /// - Space Complexity: O(1) bounded fixture strings.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Direct `audit_rust_source_docstrings` evaluation.
+    /// - State: Isolated per-call state.
+    /// - Action: Verifies both negative and positive outcomes without `.unwrap()` or `.expect()`.
+    /// - Resource: Zero filesystem side effects.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-36-URL-DOUBLE-SLASH-TEST]
     #[test]
     fn test_audit_rust_source_docstrings_preserves_double_slash_in_string_literal() {
         let rust_with_missing_fn = r#"/// Documented function with URL string literal containing double slashes.
@@ -1569,8 +2062,8 @@ mod tests {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-TEST-URL-01]
 pub fn check_endpoint(endpoint: &str) -> bool {
-    let _ = format!("https://example.com//path");
-    if endpoint == "https://example.com//path" {
+    let formatted = format!("https://example.com//path");
+    if endpoint == formatted {
         return true;
     }
     false
@@ -1578,13 +2071,19 @@ pub fn check_endpoint(endpoint: &str) -> bool {
 
 pub fn missing_docs() {}
 "#;
-        let err = audit_rust_source_docstrings(rust_with_missing_fn, "crates/demo/src/lib.rs")
-            .expect_err("undocumented function after URL string literal must be flagged");
-        assert!(
-            err.iter().any(|v| v.contains("missing_docs")),
-            "Expected violation for missing_docs, got: {:?}",
-            err
-        );
+        match audit_rust_source_docstrings(rust_with_missing_fn, "crates/demo/src/lib.rs") {
+            Ok(count) => panic!(
+                "undocumented function after URL string literal must be flagged, got Ok({})",
+                count
+            ),
+            Err(err) => {
+                assert!(
+                    err.iter().any(|v| v.contains("missing_docs")),
+                    "Expected violation for missing_docs, got: {:?}",
+                    err
+                );
+            }
+        }
 
         let rust_all_documented = r#"/// Documented function with URL string literal containing double slashes.
 ///
@@ -1610,8 +2109,8 @@ pub fn missing_docs() {}
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-TEST-URL-01]
 pub fn check_endpoint(endpoint: &str) -> bool {
-    let _ = format!("https://example.com//path");
-    if endpoint == "https://example.com//path" {
+    let formatted = format!("https://example.com//path");
+    if endpoint == formatted {
         return true;
     }
     false
@@ -1642,8 +2141,221 @@ pub fn check_endpoint(endpoint: &str) -> bool {
 /// Realises: [REQ-TEST-URL-02]
 pub fn documented_followup() {}
 "#;
-        let count = audit_rust_source_docstrings(rust_all_documented, "crates/demo/src/lib.rs")
-            .expect("both documented functions must pass Check 36");
-        assert_eq!(count, 2);
+        assert_eq!(
+            audit_rust_source_docstrings(rust_all_documented, "crates/demo/src/lib.rs"),
+            Ok(2)
+        );
+    }
+
+    /// Verifies that Check 36 ignores `struct`, `fn`, `///`, and unbalanced delimiters inside `r##"..."##` and multiline strings.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 lexical boundary completeness for `audit_rust_source_docstrings` (refs #500).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Multi-hash raw strings (`r##"..."##`) containing single-hash `"#` substrings remain open until `"##` is reached.
+    /// - Standard multiline string literals (`"..."`) spanning lines never trigger item classification or delimiter depth drift.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory Rust source fixture contains `r##"..."##` and multiline `"..."` literals with embedded `pub fn` and `pub struct` tokens.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(2)` for the two real documented functions and returns `Err` when a subsequent real function is undocumented.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(L) over the fixture line count.
+    /// - Space Complexity: O(1) bounded test fixture state.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Invokes `audit_rust_source_docstrings` directly with deterministic UTF-8 input.
+    /// - State: Isolated per-invocation scanner state.
+    /// - Action: Asserts both positive pass and negative fail-closed detection after multiline strings.
+    /// - Resource: Zero filesystem side effects.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-36-MULTIHASH-RAW-STRING-TEST]
+    #[test]
+    fn test_audit_rust_source_docstrings_ignores_multihash_raw_and_multiline_strings() {
+        let rust_source = concat!(
+            "/// Primary host function containing multi-hash raw string and multiline standard string.\n",
+            "///\n",
+            "/// ## 1. Safety Intent & Regulatory Scope\n",
+            "/// Exercises multi-hash raw string lexical scanning.\n",
+            "///\n",
+            "/// ## 2. Invariants & Mathematical Properties\n",
+            "/// - Interior declarations inside string literals are inert.\n",
+            "///\n",
+            "/// ## 3. Preconditions\n",
+            "/// - None.\n",
+            "///\n",
+            "/// ## 4. Postconditions\n",
+            "/// - Returns static slice.\n",
+            "///\n",
+            "/// ## 5. Algorithmic Complexity Bounds\n",
+            "/// - Time Complexity: O(1).\n",
+            "/// - Space Complexity: O(1).\n",
+            "///\n",
+            "/// ## 6. Failure Modes & Fault Tolerance\n",
+            "/// - Infallible static literal return.\n",
+            "///\n",
+            "/// ## 7. Realization & Traceability\n",
+            "/// Realises: [REQ-TEST-RAW-01]\n",
+            "pub fn host_with_raw_and_multiline() -> &'static str {\n",
+            "    let raw_fixture = r##\"\n",
+            "/// Member documentation.\n",
+            "pub struct FakeRawStruct {\n",
+            "    let inner_quote_hash = \"#;\n",
+            "    pub fn fake_raw_fn(\n",
+            "\"##;\n",
+            "    let multiline_std = \"first line\n",
+            "/// Member documentation.\n",
+            "pub fn fake_std_multiline_fn(\n",
+            "last line\";\n",
+            "    if multiline_std.is_empty() {\n",
+            "        return raw_fixture;\n",
+            "    }\n",
+            "    raw_fixture\n",
+            "}\n\n",
+            "/// Follow-up documented function after multi-hash raw string and multiline string.\n",
+            "///\n",
+            "/// ## 1. Safety Intent & Regulatory Scope\n",
+            "/// Verifies delimiter depth recovery after multiline string literals.\n",
+            "///\n",
+            "/// ## 2. Invariants & Mathematical Properties\n",
+            "/// - Delimiter depths `brace_depth` and `paren_depth` are zero at declaration entry.\n",
+            "///\n",
+            "/// ## 3. Preconditions\n",
+            "/// - Prior function scope closed cleanly.\n",
+            "///\n",
+            "/// ## 4. Postconditions\n",
+            "/// - Returns true.\n",
+            "///\n",
+            "/// ## 5. Algorithmic Complexity Bounds\n",
+            "/// - Time Complexity: O(1).\n",
+            "/// - Space Complexity: O(1).\n",
+            "///\n",
+            "/// ## 6. Failure Modes & Fault Tolerance\n",
+            "/// - Pure boolean constant.\n",
+            "///\n",
+            "/// ## 7. Realization & Traceability\n",
+            "/// Realises: [REQ-TEST-RAW-02]\n",
+            "pub fn documented_after_raw() -> bool {\n",
+            "    true\n",
+            "}\n"
+        );
+
+        assert_eq!(
+            audit_rust_source_docstrings(rust_source, "crates/demo/src/lib.rs"),
+            Ok(2)
+        );
+
+        let mut rust_with_undocumented = String::from(rust_source);
+        rust_with_undocumented.push_str("\npub fn undocumented_after_raw_string() {}\n");
+        match audit_rust_source_docstrings(&rust_with_undocumented, "crates/demo/src/lib.rs") {
+            Ok(count) => panic!("expected Err for undocumented_after_raw_string, got Ok({})", count),
+            Err(errs) => {
+                assert!(
+                    errs.iter().any(|v| v.contains("undocumented_after_raw_string")),
+                    "expected violation for undocumented_after_raw_string, got: {:?}",
+                    errs
+                );
+            }
+        }
+    }
+
+    /// Verifies that Check 36 ignores Dart declarations and placeholders inside triple-quoted multiline strings.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ISO 26262 ASIL D Dart lexical boundary completeness for `audit_dart_source_docstrings` (refs #500).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Triple-quoted Dart strings (`'''...'''` and `"""..."""`) never trigger item classification or placeholder errors on interior lines.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory Dart source fixture contains triple-quoted strings with embedded `class`, `void`, and placeholder doc lines.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(2)` when all real Dart declarations carry valid 7-section docstrings.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(L) over the Dart fixture line count.
+    /// - Space Complexity: O(1) bounded fixture allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Invokes `audit_dart_source_docstrings` directly with deterministic UTF-8 input.
+    /// - State: Isolated per-invocation scanner state.
+    /// - Action: Verifies zero false positives on triple-quoted string interiors.
+    /// - Resource: Zero filesystem side effects.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-36-DART-TRIPLE-STRING-TEST]
+    #[test]
+    fn test_audit_dart_source_docstrings_ignores_triple_quoted_strings() {
+        let dart_source = concat!(
+            "/// Primary Dart function containing triple-quoted multiline string literals.\n",
+            "///\n",
+            "/// ## 1. Safety Intent & Regulatory Scope\n",
+            "/// Validates Dart triple-quoted string scanning.\n",
+            "///\n",
+            "/// ## 2. Invariants & Mathematical Properties\n",
+            "/// - Preserves brace and parenthesis depth across multiline strings.\n",
+            "///\n",
+            "/// ## 3. Preconditions\n",
+            "/// - None.\n",
+            "///\n",
+            "/// ## 4. Postconditions\n",
+            "/// - Returns non-empty string.\n",
+            "///\n",
+            "/// ## 5. Algorithmic Complexity Bounds\n",
+            "/// - Time Complexity: O(1).\n",
+            "/// - Space Complexity: O(1).\n",
+            "///\n",
+            "/// ## 6. Failure Modes & Fault Tolerance\n",
+            "/// - Infallible constant string return.\n",
+            "///\n",
+            "/// ## 7. Realization & Traceability\n",
+            "/// Realises: [REQ-TEST-DART-TRIPLE-01]\n",
+            "String buildSnippet() {\n",
+            "  const snippet = '''\n",
+            "/// Member documentation.\n",
+            "class FakeClassInTripleSingle {\n",
+            "  void fakeMethod(\n",
+            "''';\n",
+            "  const snippet2 = \"\"\"\n",
+            "/// Member documentation.\n",
+            "void fakeTopLevelFn(\n",
+            "\"\"\";\n",
+            "  return snippet + snippet2;\n",
+            "}\n\n",
+            "/// Secondary Dart function after triple-quoted multiline strings.\n",
+            "///\n",
+            "/// ## 1. Safety Intent & Regulatory Scope\n",
+            "/// Confirms clean delimiter state after triple-quoted strings.\n",
+            "///\n",
+            "/// ## 2. Invariants & Mathematical Properties\n",
+            "/// - Evaluated at top-level depth (`brace_depth == 0`, `paren_depth == 0`).\n",
+            "///\n",
+            "/// ## 3. Preconditions\n",
+            "/// - `buildSnippet` body closed cleanly.\n",
+            "///\n",
+            "/// ## 4. Postconditions\n",
+            "/// - Completes deterministically.\n",
+            "///\n",
+            "/// ## 5. Algorithmic Complexity Bounds\n",
+            "/// - Time Complexity: O(1).\n",
+            "/// - Space Complexity: O(1).\n",
+            "///\n",
+            "/// ## 6. Failure Modes & Fault Tolerance\n",
+            "/// - No-op execution.\n",
+            "///\n",
+            "/// ## 7. Realization & Traceability\n",
+            "/// Realises: [REQ-TEST-DART-TRIPLE-02]\n",
+            "void verifyAfterTripleQuote() {}\n"
+        );
+
+        assert_eq!(
+            audit_dart_source_docstrings(dart_source, "app_flutter/lib/demo.dart"),
+            Ok(2)
+        );
     }
 }

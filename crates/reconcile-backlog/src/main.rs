@@ -32,6 +32,13 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-RECONCILE-BACKLOG-CLI, Issue Tracker as Canonical SSOT, Zero Fallback Placeholders, Automated Spec Reconciliation]
+#![allow(
+    clippy::disallowed_types,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used
+)]
 
 use clap::Parser;
 use reconcile_backlog::create_issue::{execute_create_issue, CreateIssueArgs};

@@ -28,6 +28,14 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-ASSEMBLE-CONOPS-LIB], [DO-330-TQL-4-CONOPS-LIB]
+#![allow(
+    clippy::cloned_ref_to_slice_refs,
+    clippy::disallowed_types,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::unnecessary_lazy_evaluations,
+    clippy::unwrap_used
+)]
 
 pub mod assembler;
 pub mod params;

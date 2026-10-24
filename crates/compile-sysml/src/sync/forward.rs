@@ -644,7 +644,10 @@ fn generate_class_diagram(part: &PartDef) -> String {
     let mut lines = Vec::new();
     lines.push("classDiagram".to_string());
 
-    let has_members = !part.ports.is_empty() || !part.attributes.is_empty() || !part.operations.is_empty();
+    let has_members = !part.ports.is_empty()
+        || !part.attributes.is_empty()
+        || !part.operations.is_empty()
+        || !part.actions.is_empty();
 
     if has_members {
         lines.push(format!("    class {} {{", part.name));
@@ -666,9 +669,18 @@ fn generate_class_diagram(part: &PartDef) -> String {
             lines.push(format!("        +{} {}", a_type, attr.name));
         }
 
+        let mut emitted_ops = BTreeSet::new();
         for op in &part.operations {
             let ret = op.return_type.as_deref().unwrap_or("void");
-            lines.push(format!("        +{}() {}", op.name, ret));
+            if emitted_ops.insert(op.name.as_str()) {
+                lines.push(format!("        +{}() {}", op.name, ret));
+            }
+        }
+
+        for act in &part.actions {
+            if emitted_ops.insert(act.name.as_str()) {
+                lines.push(format!("        +{}() void", act.name));
+            }
         }
 
         lines.push("    }".to_string());
@@ -929,7 +941,10 @@ fn generate_epic_class_diagram(p: &PackageDef, primary_engine: &str, is_root: bo
     if is_root {
         let root_label = sanitize_id(&p.name);
         if let Some(root_part) = p.part_defs.iter().find(|part| part.name == root_label) {
-            let has_members = !root_part.ports.is_empty() || !root_part.attributes.is_empty() || !root_part.operations.is_empty();
+            let has_members = !root_part.ports.is_empty()
+                || !root_part.attributes.is_empty()
+                || !root_part.operations.is_empty()
+                || !root_part.actions.is_empty();
             if has_members {
                 lines.push(format!("    class {} {{", root_label));
                 for port in &root_part.ports {
@@ -947,6 +962,18 @@ fn generate_epic_class_diagram(p: &PackageDef, primary_engine: &str, is_root: bo
                     let a_type = if attr.type_name.is_empty() { "String" } else { &attr.type_name };
                     lines.push(format!("        +{} {}", a_type, attr.name));
                 }
+                let mut emitted_ops = BTreeSet::new();
+                for op in &root_part.operations {
+                    let ret = op.return_type.as_deref().unwrap_or("void");
+                    if emitted_ops.insert(op.name.as_str()) {
+                        lines.push(format!("        +{}() {}", op.name, ret));
+                    }
+                }
+                for act in &root_part.actions {
+                    if emitted_ops.insert(act.name.as_str()) {
+                        lines.push(format!("        +{}() void", act.name));
+                    }
+                }
                 lines.push("    }".to_string());
             } else {
                 lines.push(format!("    class {}", root_label));
@@ -956,7 +983,43 @@ fn generate_epic_class_diagram(p: &PackageDef, primary_engine: &str, is_root: bo
         }
         for subpart in &p.part_defs {
             if subpart.name != root_label {
-                lines.push(format!("    class {}", subpart.name));
+                let has_sub_members = !subpart.ports.is_empty()
+                    || !subpart.attributes.is_empty()
+                    || !subpart.operations.is_empty()
+                    || !subpart.actions.is_empty();
+                if has_sub_members {
+                    lines.push(format!("    class {} {{", subpart.name));
+                    for port in &subpart.ports {
+                        let dir_prefix = if port.direction == "in" {
+                            "in"
+                        } else if port.direction == "out" {
+                            "out"
+                        } else {
+                            "inout"
+                        };
+                        let p_type = if port.type_name.is_empty() { "Port" } else { &port.type_name };
+                        lines.push(format!("        +{} {} ({})", p_type, port.name, dir_prefix));
+                    }
+                    for attr in &subpart.attributes {
+                        let a_type = if attr.type_name.is_empty() { "String" } else { &attr.type_name };
+                        lines.push(format!("        +{} {}", a_type, attr.name));
+                    }
+                    let mut emitted_ops = BTreeSet::new();
+                    for op in &subpart.operations {
+                        let ret = op.return_type.as_deref().unwrap_or("void");
+                        if emitted_ops.insert(op.name.as_str()) {
+                            lines.push(format!("        +{}() {}", op.name, ret));
+                        }
+                    }
+                    for act in &subpart.actions {
+                        if emitted_ops.insert(act.name.as_str()) {
+                            lines.push(format!("        +{}() void", act.name));
+                        }
+                    }
+                    lines.push("    }".to_string());
+                } else {
+                    lines.push(format!("    class {}", subpart.name));
+                }
                 lines.push(format!("    {} --> {} : contains", root_label, subpart.name));
             }
         }
@@ -969,7 +1032,10 @@ fn generate_epic_class_diagram(p: &PackageDef, primary_engine: &str, is_root: bo
     }
 
     for part in &p.part_defs {
-        let has_members = !part.ports.is_empty() || !part.attributes.is_empty() || !part.operations.is_empty();
+        let has_members = !part.ports.is_empty()
+            || !part.attributes.is_empty()
+            || !part.operations.is_empty()
+            || !part.actions.is_empty();
         if has_members {
             lines.push(format!("    class {} {{", part.name));
             for port in &part.ports {
@@ -987,9 +1053,17 @@ fn generate_epic_class_diagram(p: &PackageDef, primary_engine: &str, is_root: bo
                 let a_type = if attr.type_name.is_empty() { "String" } else { &attr.type_name };
                 lines.push(format!("        +{} {}", a_type, attr.name));
             }
+            let mut emitted_ops = BTreeSet::new();
             for op in &part.operations {
                 let ret = op.return_type.as_deref().unwrap_or("void");
-                lines.push(format!("        +{}() {}", op.name, ret));
+                if emitted_ops.insert(op.name.as_str()) {
+                    lines.push(format!("        +{}() {}", op.name, ret));
+                }
+            }
+            for act in &part.actions {
+                if emitted_ops.insert(act.name.as_str()) {
+                    lines.push(format!("        +{}() void", act.name));
+                }
             }
             lines.push("    }".to_string());
         } else {
@@ -3136,6 +3210,250 @@ mod tests {
         assert!(
             epic_content.contains("[Use Case 01: Detect Target Use Case](../use-cases/UC-01-DetectTargetUseCase.md)"),
             "Epic must associate generated Use Case 01"
+        );
+
+        Ok(())
+    }
+
+    /// Verifies that `PartDef::actions` (including actions populated by `reverse_sync_specs_to_sysml`)
+    /// are rendered in `generate_class_diagram`, `generate_epic_class_diagram`, and forward-synced
+    /// Epic/Feature Mermaid `classDiagram` blocks without duplicating names already in `part.operations`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_defect_07_forward_reverse_sync_actions_roundtrip_parity` in `crates/compile-sysml/src/sync/forward.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves bidirectional AST-specification behavioral member parity across reverse and forward synchronization without duplicate method signatures.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary workspace directory is writable for reverse-sync fixture creation.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `PartDef::actions` and `PartDef::operations` are rendered and deduplicated across both `generate_class_diagram` and `generate_epic_class_diagram`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over fixture AST and markdown size.
+    /// - Space Complexity: O(N) bounded auxiliary memory for test fixture.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates reverse-to-forward sync boundary structures (`Result<(), Box<dyn std::error::Error>>`).
+    /// - State: Cleans up temporary test directory deterministically.
+    /// - Action: Executes round-trip sync deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds heap and filesystem allocations within temporary directory.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM, REQ-SYNC-FORWARD-GENERATE-EPIC-CLASS-DIAGRAM, REQ-SYSML-REVERSE-SYNC-ENGINE] | SysML v2: VerificationCaseDef(test_defect_07_forward_reverse_sync_actions_roundtrip_parity)
+    #[test]
+    fn test_defect_07_forward_reverse_sync_actions_roundtrip_parity() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::sync::reverse::{reverse_sync_specs_to_sysml, ReverseSyncOptions};
+        use deap_core::sysml_ast::{ActionDef, OperationDef};
+
+        let tmp_dir = std::env::temp_dir().join(format!(
+            "deap_defect_07_sync_roundtrip_{}",
+            std::process::id()
+        ));
+        if tmp_dir.exists() {
+            std::fs::remove_dir_all(&tmp_dir)?;
+        }
+        let docs_features_dir = tmp_dir.join("docs").join("features");
+        std::fs::create_dir_all(&docs_features_dir)?;
+
+        let feat_md = "| Attribute | Specification Detail |\n\
+| :--- | :--- |\n\
+| **Issue ID** | #10 |\n\
+| **Title** | Feature 01: [Guidance Subsystem] GuidanceController |\n\
+| **Type** | feature |\n\
+| **Schema Containers** | `GuidanceSubsystem::GuidanceController` |\n\
+\n\
+# Feature 01: [Guidance Subsystem] GuidanceController\n\
+\n\
+## Interface Requirements\n\
+- `+ComputeTrajectory() : void`\n\
+- `+SharedOperation() : Boolean`\n";
+        std::fs::write(
+            docs_features_dir.join("FEAT-01-GuidanceController.md"),
+            feat_md,
+        )?;
+
+        let mut root = PackageDef {
+            name: "FlightControlSystem".to_string(),
+            ..Default::default()
+        };
+        let mut sub = PackageDef {
+            name: "GuidanceSubsystem".to_string(),
+            parent_package: Some("FlightControlSystem".to_string()),
+            ..Default::default()
+        };
+        let mut controller = PartDef {
+            name: "GuidanceController".to_string(),
+            ..Default::default()
+        };
+        controller.operations.push(OperationDef {
+            name: "SharedOperation".to_string(),
+            return_type: Some("Boolean".to_string()),
+            ..Default::default()
+        });
+        controller.actions.push(ActionDef {
+            name: "PreExistingAction".to_string(),
+            ..Default::default()
+        });
+        sub.part_defs.push(controller);
+        root.packages.push(sub);
+
+        let rev_opts = ReverseSyncOptions {
+            docs_dir: tmp_dir.join("docs"),
+            schema_path: None,
+            output_path: tmp_dir.join(".pipeline").join("schema.sysml"),
+            digest_path: tmp_dir.join(".pipeline").join("schema-digest.json"),
+            allow_overwrite: true,
+        };
+
+        let (synced_root, _digest) = reverse_sync_specs_to_sysml(Some(&root), &rev_opts)?;
+        if tmp_dir.exists() {
+            std::fs::remove_dir_all(&tmp_dir)?;
+        }
+
+        let synced_sub = synced_root
+            .packages
+            .first()
+            .ok_or("expected GuidanceSubsystem package")?;
+        let synced_part = synced_sub
+            .part_defs
+            .first()
+            .ok_or("expected GuidanceController part")?;
+
+        assert!(
+            synced_part.actions.iter().any(|a| a.name == "ComputeTrajectory"),
+            "reverse_sync_specs_to_sysml must populate ComputeTrajectory in PartDef::actions"
+        );
+
+        let feat_diag = generate_class_diagram(synced_part);
+        assert!(
+            feat_diag.contains("+SharedOperation() Boolean"),
+            "generate_class_diagram must render operation signature, got:\n{}",
+            feat_diag
+        );
+        assert!(
+            feat_diag.contains("+PreExistingAction() void"),
+            "generate_class_diagram must render pre-existing PartDef::actions, got:\n{}",
+            feat_diag
+        );
+        assert!(
+            feat_diag.contains("+ComputeTrajectory() void"),
+            "generate_class_diagram must render reverse-synced PartDef::actions, got:\n{}",
+            feat_diag
+        );
+        let shared_count_feat = feat_diag
+            .lines()
+            .filter(|l| l.contains("+SharedOperation("))
+            .count();
+        assert_eq!(
+            shared_count_feat, 1,
+            "SharedOperation must not be duplicated when present in both operations and actions"
+        );
+
+        let epic_diag = generate_epic_class_diagram(synced_sub, "GuidanceController", false);
+        assert!(
+            epic_diag.contains("+SharedOperation() Boolean"),
+            "generate_epic_class_diagram must render operation signature, got:\n{}",
+            epic_diag
+        );
+        assert!(
+            epic_diag.contains("+PreExistingAction() void"),
+            "generate_epic_class_diagram must render pre-existing PartDef::actions, got:\n{}",
+            epic_diag
+        );
+        assert!(
+            epic_diag.contains("+ComputeTrajectory() void"),
+            "generate_epic_class_diagram must render reverse-synced PartDef::actions, got:\n{}",
+            epic_diag
+        );
+        let shared_count_epic = epic_diag
+            .lines()
+            .filter(|l| l.contains("+SharedOperation("))
+            .count();
+        assert_eq!(
+            shared_count_epic, 1,
+            "SharedOperation must not be duplicated in generate_epic_class_diagram"
+        );
+
+        // Also verify root-mode generate_epic_class_diagram when root part has operations and actions
+        let mut root_with_part = PackageDef {
+            name: "GuidanceSubsystem".to_string(),
+            part_defs: vec![synced_part.clone()],
+            ..Default::default()
+        };
+        let mut actions_only_subpart = PartDef {
+            name: "ActuatorUnit".to_string(),
+            ..Default::default()
+        };
+        actions_only_subpart.actions.push(ActionDef {
+            name: "DeflectFin".to_string(),
+            ..Default::default()
+        });
+        root_with_part.part_defs.push(actions_only_subpart);
+
+        let root_epic_diag = generate_epic_class_diagram(&root_with_part, "GuidanceController", true);
+        assert!(
+            root_epic_diag.contains("+SharedOperation() Boolean"),
+            "root generate_epic_class_diagram must render root_part operations, got:\n{}",
+            root_epic_diag
+        );
+        assert!(
+            root_epic_diag.contains("+ComputeTrajectory() void"),
+            "root generate_epic_class_diagram must render root_part actions, got:\n{}",
+            root_epic_diag
+        );
+        assert!(
+            root_epic_diag.contains("+DeflectFin() void"),
+            "root generate_epic_class_diagram must render actions-only subpart actions, got:\n{}",
+            root_epic_diag
+        );
+
+        let actions_only_feat_diag = generate_class_diagram(
+            root_with_part
+                .part_defs
+                .get(1)
+                .ok_or("expected ActuatorUnit subpart")?,
+        );
+        assert!(
+            actions_only_feat_diag.contains("class ActuatorUnit {"),
+            "generate_class_diagram must open class block when only PartDef::actions is non-empty, got:\n{}",
+            actions_only_feat_diag
+        );
+        assert!(
+            actions_only_feat_diag.contains("+DeflectFin() void"),
+            "generate_class_diagram must render action in actions-only PartDef, got:\n{}",
+            actions_only_feat_diag
+        );
+
+        // Full forward_sync_sysml_to_specs roundtrip check
+        let fwd_opts = ForwardSyncOptions {
+            schema_path: PathBuf::from("schema/test.sysml"),
+            docs_dir: PathBuf::from("docs"),
+            out_dir: None,
+            dry_run: true,
+            force: true,
+        };
+        let generated = forward_sync_sysml_to_specs(&synced_root, &fwd_opts)?;
+        let gen_feat = generated
+            .iter()
+            .find(|(k, _)| k.contains("FEAT-") && k.contains("GuidanceController"))
+            .map(|(_, v)| v)
+            .ok_or("expected generated FEAT-01-GuidanceController.md")?;
+        let gen_epic = generated
+            .iter()
+            .find(|(k, _)| k.contains("EPIC-") && k.contains("GuidanceSubsystem"))
+            .map(|(_, v)| v)
+            .ok_or("expected generated EPIC for GuidanceSubsystem")?;
+
+        assert!(
+            gen_feat.contains("+ComputeTrajectory() void"),
+            "Forward-synced Feature markdown must preserve reverse-synced action in classDiagram"
+        );
+        assert!(
+            gen_epic.contains("+ComputeTrajectory() void"),
+            "Forward-synced Epic markdown must preserve reverse-synced action in classDiagram"
         );
 
         Ok(())

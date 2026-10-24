@@ -179,13 +179,165 @@ impl<'a> SysmlParser<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-SOURCE] | SysML v2: ActionDef(SysmlParser::parse_source)
     pub fn parse_source(source: &str, default_pkg_name: &str) -> Result<PackageDef, ParseError> {
-        let mut scanner = Scanner::new(source);
+        let normalized = Self::normalize_type_sigils(source);
+        let mut scanner = Scanner::new(&normalized);
         let tokens = scanner.scan_all().map_err(|msg| ParseError {
             message: msg,
             span: Span::default(),
         })?;
         let mut parser = SysmlParser::new(&tokens);
         parser.parse_package_or_file(default_pkg_name)
+    }
+
+    /// Pre-processes standalone reference `&` and optional `?` type sigils outside comments and string literals into single-quoted tokens accepted by `Scanner`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::normalize_type_sigils` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves line numbers and lexical structure across all comments, string literals, and `&&` logical operators while encoding standalone `&` and `?` tokens for deterministic parsing in `PARSER-GRAMMAR`.
+    ///
+    /// ## 3. Preconditions
+    /// - `source: &str` is a valid UTF-8 source buffer supplied to `SysmlParser::normalize_type_sigils`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `String` containing the lexically normalized SysML v2 source text.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) single pass over the characters of `source`.
+    /// - Space Complexity: O(N) bounded output string allocation proportional to `source.len()`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Accepts any UTF-8 string slice without panicking.
+    /// - State: Stateless pure transformation with zero shared mutable state.
+    /// - Action: Executes deterministically in a single bounded loop.
+    /// - Resource: Bounded heap allocation proportional to input byte length.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-NORMALIZE-TYPE-SIGILS] | SysML v2: ActionDef(SysmlParser::normalize_type_sigils)
+    fn normalize_type_sigils(source: &str) -> String {
+        if !source.contains('&') && !source.contains('?') {
+            return source.to_string();
+        }
+        let chars: Vec<char> = source.chars().collect();
+        let len = chars.len();
+        let mut out = String::with_capacity(source.len() + 16);
+        let mut i = 0usize;
+        let mut in_line_comment = false;
+        let mut block_comment_depth = 0usize;
+        let mut in_string = false;
+        let mut in_single_quote = false;
+
+        while i < len {
+            let c = chars.get(i).copied().unwrap_or('\0');
+            let next = chars.get(i + 1).copied();
+
+            if in_line_comment {
+                out.push(c);
+                if c == '\n' {
+                    in_line_comment = false;
+                }
+                i += 1;
+                continue;
+            }
+
+            if block_comment_depth > 0 {
+                if c == '/' && next == Some('*') {
+                    out.push('/');
+                    out.push('*');
+                    block_comment_depth += 1;
+                    i += 2;
+                    continue;
+                }
+                if c == '*' && next == Some('/') {
+                    out.push('*');
+                    out.push('/');
+                    block_comment_depth = block_comment_depth.saturating_sub(1);
+                    i += 2;
+                    continue;
+                }
+                out.push(c);
+                i += 1;
+                continue;
+            }
+
+            if in_string {
+                out.push(c);
+                if c == '\\' {
+                    if let Some(escaped) = next {
+                        out.push(escaped);
+                        i += 2;
+                        continue;
+                    }
+                } else if c == '"' {
+                    in_string = false;
+                }
+                i += 1;
+                continue;
+            }
+
+            if in_single_quote {
+                out.push(c);
+                if c == '\'' {
+                    in_single_quote = false;
+                }
+                i += 1;
+                continue;
+            }
+
+            if c == '/' && next == Some('/') {
+                out.push('/');
+                out.push('/');
+                in_line_comment = true;
+                i += 2;
+                continue;
+            }
+
+            if c == '/' && next == Some('*') {
+                out.push('/');
+                out.push('*');
+                block_comment_depth = 1;
+                i += 2;
+                continue;
+            }
+
+            if c == '"' {
+                out.push(c);
+                in_string = true;
+                i += 1;
+                continue;
+            }
+
+            if c == '\'' {
+                out.push(c);
+                in_single_quote = true;
+                i += 1;
+                continue;
+            }
+
+            if c == '&' {
+                if next == Some('&') {
+                    out.push('&');
+                    out.push('&');
+                    i += 2;
+                    continue;
+                }
+                out.push_str("'&'");
+                i += 1;
+                continue;
+            }
+
+            if c == '?' {
+                out.push_str("'?'");
+                i += 1;
+                continue;
+            }
+
+            out.push(c);
+            i += 1;
+        }
+
+        out
     }
 
     /// Parse a package or top-level file definitions into PackageDef.
@@ -431,14 +583,55 @@ impl<'a> SysmlParser<'a> {
         parent_part: Option<&mut PartDef>,
     ) -> Result<(), ParseError> {
         self.skip_trivia();
-        let doc = self.take_doc_comment();
+        let mut doc = self.take_doc_comment();
         self.skip_trivia();
+        while let Some(extra_doc) = self.take_doc_comment() {
+            doc = Some(extra_doc);
+            self.skip_trivia();
+        }
 
-        if self.is_at_end() {
+        if self.is_at_end() || self.check(&TokenKind::CloseBrace) {
+            if let Some(d) = doc {
+                if let Some(parent) = parent_part {
+                    if parent.doc.is_none() {
+                        parent.doc = Some(d);
+                    }
+                } else if pkg.doc.is_none() {
+                    pkg.doc = Some(d);
+                }
+            }
             return Ok(());
         }
 
         match self.peek_kind() {
+            TokenKind::Doc => {
+                self.advance();
+                self.skip_trivia();
+                if self.check(&TokenKind::Eq) || self.check(&TokenKind::Colon) {
+                    self.advance();
+                    self.skip_trivia();
+                }
+                let inner_doc = if let Some(d) = self.take_doc_comment() {
+                    Some(d)
+                } else if let TokenKind::StringLit(s) = self.peek_kind().clone() {
+                    self.advance();
+                    Some(s)
+                } else {
+                    None
+                };
+                if let Some(d) = inner_doc {
+                    if let Some(parent) = parent_part {
+                        if parent.doc.is_none() {
+                            parent.doc = Some(d);
+                        }
+                    } else if pkg.doc.is_none() {
+                        pkg.doc = Some(d);
+                    }
+                }
+                if self.check(&TokenKind::Semi) {
+                    self.advance();
+                }
+            }
             TokenKind::Package => {
                 let subpkg = self.parse_package_decl(doc)?;
                 if let Some(existing) = pkg.packages.iter_mut().find(|p| p.name == subpkg.name) {
@@ -646,8 +839,14 @@ impl<'a> SysmlParser<'a> {
                 }
             }
             _ => {
-                // Skip unknown statement or delimiter to maintain fault tolerance
-                self.skip_until_semi_or_brace();
+                let tok = self.peek();
+                return Err(ParseError {
+                    message: format!(
+                        "Unexpected token '{:?}' in container scope; expected a valid SysML v2 declaration",
+                        tok.kind
+                    ),
+                    span: tok.span,
+                });
             }
         }
 
@@ -850,13 +1049,7 @@ impl<'a> SysmlParser<'a> {
 
         if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
             self.advance();
-            let mut ty = self.expect_ident()?;
-            while self.check(&TokenKind::DoubleColon) {
-                self.advance();
-                ty.push_str("::");
-                ty.push_str(&self.expect_ident()?);
-            }
-            type_name = Some(ty);
+            type_name = Some(self.parse_type_expr()?);
         }
 
         let mut part = PartDef {
@@ -974,13 +1167,7 @@ impl<'a> SysmlParser<'a> {
                 self.advance();
                 is_conjugated = true;
             }
-            let mut ty = self.expect_ident()?;
-            while self.check(&TokenKind::DoubleColon) {
-                self.advance();
-                ty.push_str("::");
-                ty.push_str(&self.expect_ident()?);
-            }
-            ty
+            self.parse_type_expr()?
         } else {
             name.clone()
         };
@@ -1034,13 +1221,7 @@ impl<'a> SysmlParser<'a> {
                     let flow_name = self.expect_ident()?;
                     let flow_type = if self.check(&TokenKind::Colon) {
                         self.advance();
-                        let mut ty = self.expect_ident()?;
-                        while self.check(&TokenKind::DoubleColon) {
-                            self.advance();
-                            ty.push_str("::");
-                            ty.push_str(&self.expect_ident()?);
-                        }
-                        ty
+                        self.parse_type_expr()?
                     } else {
                         "Item".to_string()
                     };
@@ -1100,20 +1281,9 @@ impl<'a> SysmlParser<'a> {
         let mut type_name = "String".to_string();
         let mut default_value = None;
 
-        if self.check(&TokenKind::Colon) {
+        if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
             self.advance();
-            type_name = self.expect_ident()?;
-            while self.check(&TokenKind::DoubleColon) {
-                self.advance();
-                type_name.push_str("::");
-                type_name.push_str(&self.expect_ident()?);
-            }
-            // Array-valued attribute types (`Type[]`), e.g. YANG `leaf-list` lowering.
-            if self.check(&TokenKind::OpenBracket) {
-                self.advance();
-                self.expect(&TokenKind::CloseBracket)?;
-                type_name.push_str("[]");
-            }
+            type_name = self.parse_type_expr()?;
         }
 
         if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
@@ -1188,13 +1358,7 @@ impl<'a> SysmlParser<'a> {
                 let param_name = self.expect_ident()?;
                 let param_type = if self.check(&TokenKind::Colon) {
                     self.advance();
-                    let mut type_name = self.expect_ident()?;
-                    while self.check(&TokenKind::DoubleColon) {
-                        self.advance();
-                        type_name.push_str("::");
-                        type_name.push_str(&self.expect_ident()?);
-                    }
-                    type_name
+                    self.parse_type_expr()?
                 } else {
                     "Real".to_string()
                 };
@@ -1220,7 +1384,7 @@ impl<'a> SysmlParser<'a> {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
-                let _ = self.take_doc_comment();
+                self.take_doc_comment();
                 if self.check(&TokenKind::Perform) {
                     self.advance();
                     performer = Some(self.read_until_semi());
@@ -1236,13 +1400,7 @@ impl<'a> SysmlParser<'a> {
                     let p_name = self.expect_ident()?;
                     let p_type = if self.check(&TokenKind::Colon) {
                         self.advance();
-                        let mut type_name = self.expect_ident()?;
-                        while self.check(&TokenKind::DoubleColon) {
-                            self.advance();
-                            type_name.push_str("::");
-                            type_name.push_str(&self.expect_ident()?);
-                        }
-                        type_name
+                        self.parse_type_expr()?
                     } else {
                         "Real".to_string()
                     };
@@ -1613,15 +1771,7 @@ impl<'a> SysmlParser<'a> {
                 } else if self.check(&TokenKind::Transition) {
                     self.advance();
                     let t_stmt = self.read_until_semi();
-                    transitions.push(TransitionDef {
-                        name: Some(t_stmt.clone()),
-                        source: None,
-                        target: None,
-                        trigger: None,
-                        guard: None,
-                        effect: None,
-                        doc: None,
-                    });
+                    transitions.push(Self::parse_transition_clause(&t_stmt));
                 } else {
                     self.skip_until_semi_or_brace();
                 }
@@ -1640,6 +1790,170 @@ impl<'a> SysmlParser<'a> {
             transitions,
             sub_states,
         })
+    }
+
+    /// Returns `true` when `tok` is a SysML v2 transition clause keyword (`first`, `from`, `then`, `to`, `accept`, `if`, `do`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::is_transition_clause_keyword` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Pure predicate over token slice strings in `PARSER-GRAMMAR`.
+    ///
+    /// ## 3. Preconditions
+    /// - `tok: &str` is a whitespace-delimited token slice from a transition statement.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `true` if and only if `tok` matches a reserved transition clause delimiter.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) constant-time string comparison.
+    /// - Space Complexity: O(1) zero auxiliary heap allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total function over `&str`.
+    /// - State: Stateless pure predicate.
+    /// - Action: Executes deterministically in constant time.
+    /// - Resource: Zero heap allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-IS-TRANSITION-CLAUSE-KEYWORD] | SysML v2: ActionDef(SysmlParser::is_transition_clause_keyword)
+    fn is_transition_clause_keyword(tok: &str) -> bool {
+        matches!(tok, "first" | "from" | "then" | "to" | "accept" | "if" | "do")
+    }
+
+    /// Decomposes a raw SysML v2 transition statement body into a structured `TransitionDef`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_transition_clause` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Extracts `first <src> then <tgt>` and `from <src> to <tgt>` into `TransitionDef::source` and `TransitionDef::target` while preserving optional `name`, `accept <trigger>`, `if <guard>`, and `do <effect>` clauses.
+    ///
+    /// ## 3. Preconditions
+    /// - `raw: &str` contains the normalized token text between `transition` and `;`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a populated `TransitionDef` with structured `source` and `target` endpoints when present.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(T) linear scan over the whitespace-delimited tokens `T` in `raw`.
+    /// - Space Complexity: O(T) bounded auxiliary token vector and owned clause strings.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total function over `&str`; gracefully handles partial or shorthand transition clauses.
+    /// - State: Stateless pure transformation.
+    /// - Action: Strictly advancing cursor `idx` guarantees termination.
+    /// - Resource: Bounded allocations proportional to `raw.len()`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-TRANSITION-CLAUSE] | SysML v2: ActionDef(SysmlParser::parse_transition_clause)
+    fn parse_transition_clause(raw: &str) -> TransitionDef {
+        let tokens: Vec<&str> = raw.split_whitespace().collect();
+        let mut name = None;
+        let mut source = None;
+        let mut target = None;
+        let mut trigger = None;
+        let mut guard = None;
+        let mut effect = None;
+
+        let mut idx = 0usize;
+        if let Some(first_tok) = tokens.first().copied() {
+            if !Self::is_transition_clause_keyword(first_tok) {
+                name = Some(first_tok.to_string());
+                idx = 1;
+            }
+        }
+
+        while let Some(kw) = tokens.get(idx).copied() {
+            match kw {
+                "first" | "from" => {
+                    if let Some(src_tok) = tokens.get(idx + 1).copied() {
+                        source = Some(src_tok.to_string());
+                        idx += 2;
+                    } else {
+                        idx += 1;
+                    }
+                }
+                "then" | "to" => {
+                    if let Some(tgt_tok) = tokens.get(idx + 1).copied() {
+                        target = Some(tgt_tok.to_string());
+                        idx += 2;
+                    } else {
+                        idx += 1;
+                    }
+                }
+                "accept" => {
+                    idx += 1;
+                    let mut trig_tokens = Vec::new();
+                    while let Some(tok) = tokens.get(idx).copied() {
+                        if Self::is_transition_clause_keyword(tok) {
+                            break;
+                        }
+                        trig_tokens.push(tok);
+                        idx += 1;
+                    }
+                    if !trig_tokens.is_empty() {
+                        trigger = Some(trig_tokens.join(" "));
+                    }
+                }
+                "if" => {
+                    idx += 1;
+                    let mut guard_tokens = Vec::new();
+                    while let Some(tok) = tokens.get(idx).copied() {
+                        if Self::is_transition_clause_keyword(tok) {
+                            break;
+                        }
+                        guard_tokens.push(tok);
+                        idx += 1;
+                    }
+                    if !guard_tokens.is_empty() {
+                        guard = Some(guard_tokens.join(" "));
+                    }
+                }
+                "do" => {
+                    idx += 1;
+                    let mut effect_tokens = Vec::new();
+                    while let Some(tok) = tokens.get(idx).copied() {
+                        if Self::is_transition_clause_keyword(tok) {
+                            break;
+                        }
+                        effect_tokens.push(tok);
+                        idx += 1;
+                    }
+                    if !effect_tokens.is_empty() {
+                        effect = Some(effect_tokens.join(" "));
+                    }
+                }
+                _ => {
+                    idx += 1;
+                }
+            }
+        }
+
+        if name.is_none() {
+            name = match (&source, &target) {
+                (Some(s), Some(t)) => Some(format!("{s}_to_{t}")),
+                _ => {
+                    let trimmed = raw.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                }
+            };
+        }
+
+        TransitionDef {
+            name,
+            source,
+            target,
+            trigger,
+            guard,
+            effect,
+            doc: None,
+        }
     }
 
     /// Executes deterministic fn `SysmlParser::parse_connection_decl` within `crates/compile-sysml/src/parser/grammar.rs`.
@@ -2407,7 +2721,7 @@ impl<'a> SysmlParser<'a> {
                 let p_name = self.expect_ident()?;
                 let p_type = if self.check(&TokenKind::Colon) {
                     self.advance();
-                    self.expect_ident()?
+                    self.parse_type_expr()?
                 } else {
                     "String".to_string()
                 };
@@ -2426,7 +2740,7 @@ impl<'a> SysmlParser<'a> {
 
         if self.check(&TokenKind::Colon) {
             self.advance();
-            return_type = Some(self.expect_ident()?);
+            return_type = Some(self.parse_type_expr()?);
         }
 
         self.expect_semi()?;
@@ -2558,13 +2872,7 @@ impl<'a> SysmlParser<'a> {
                 let p_name = self.expect_ident()?;
                 let p_type = if self.check(&TokenKind::Colon) {
                     self.advance();
-                    let mut type_name = self.expect_ident()?;
-                    while self.check(&TokenKind::DoubleColon) {
-                        self.advance();
-                        type_name.push_str("::");
-                        type_name.push_str(&self.expect_ident()?);
-                    }
-                    type_name
+                    self.parse_type_expr()?
                 } else {
                     "Real".to_string()
                 };
@@ -2606,13 +2914,7 @@ impl<'a> SysmlParser<'a> {
 
         if self.check(&TokenKind::Colon) {
             self.advance();
-            let mut type_name = self.expect_ident()?;
-            while self.check(&TokenKind::DoubleColon) {
-                self.advance();
-                type_name.push_str("::");
-                type_name.push_str(&self.expect_ident()?);
-            }
-            return_type = Some(type_name);
+            return_type = Some(self.parse_type_expr()?);
         }
 
         if self.check(&TokenKind::OpenBrace) {
@@ -2643,13 +2945,7 @@ impl<'a> SysmlParser<'a> {
                     let p_name = self.expect_ident()?;
                     let p_type = if self.check(&TokenKind::Colon) {
                         self.advance();
-                        let mut type_name = self.expect_ident()?;
-                        while self.check(&TokenKind::DoubleColon) {
-                            self.advance();
-                            type_name.push_str("::");
-                            type_name.push_str(&self.expect_ident()?);
-                        }
-                        type_name
+                        self.parse_type_expr()?
                     } else {
                         "Real".to_string()
                     };
@@ -3145,6 +3441,196 @@ impl<'a> SysmlParser<'a> {
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-EXPECT-IDENT] | SysML v2: ActionDef(SysmlParser::expect_ident)
     fn expect_ident(&mut self) -> Result<String, ParseError> {
         self.parse_identifier()
+    }
+
+    /// Parses a simple or composite type expression including pointers (`*const T`, `*mut T`), references (`&T`, `&mut T`), `dyn` trait objects, tuples (`()`, `(T1, T2)`), slices/arrays (`[T]`, `[T; N]`), path-qualified generics (`Pkg::Vec<T>`), multiplicity suffixes (`Type[]`, `Type[1..*]`), and optional `?` suffixes.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_type_expr` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Enforces balanced delimiter consumption across `<...>`, `(...)`, and `[...]` type expressions before statement or parameter terminators in `PARSER-GRAMMAR`.
+    ///
+    /// ## 3. Preconditions
+    /// - Parser cursor is positioned at the start of a type annotation following `:` or `,` or `<` or `(` or `[`.
+    ///
+    /// ## 4. Postconditions
+    /// - Advances cursor past the complete type expression and returns `Result<String, ParseError>` containing its canonical string representation.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(T) bounded over the number of tokens T in the type expression.
+    /// - Space Complexity: O(T) bounded auxiliary memory for nested generic/tuple string formatting.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Emits `ParseError` with source span on unbalanced delimiters, empty `<>`, or invalid pointer qualifiers.
+    /// - State: Preserves deterministic cursor position on error.
+    /// - Action: Bounded recursion depth proportional to lexical nesting of the type expression.
+    /// - Resource: Bounded string and vector allocations proportional to type token count.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-TYPE-EXPR] | SysML v2: ActionDef(SysmlParser::parse_type_expr)
+    fn parse_type_expr(&mut self) -> Result<String, ParseError> {
+        let mut out = String::new();
+
+        // 1. Pointer prefixes: *const T, *mut T
+        if self.check(&TokenKind::Star) {
+            self.advance();
+            let kw = self.expect_ident()?;
+            if kw != "const" && kw != "mut" {
+                let tok = self.peek();
+                return Err(ParseError {
+                    message: format!("Expected 'const' or 'mut' after '*', found '{}'", kw),
+                    span: tok.span,
+                });
+            }
+            out.push('*');
+            out.push_str(&kw);
+            out.push(' ');
+            let inner = self.parse_type_expr()?;
+            out.push_str(&inner);
+            return Ok(out);
+        }
+
+        // 2. Reference prefixes: &T, &mut T, &const T, &&T
+        let is_single_amp = matches!(self.peek_kind(), TokenKind::Ident(s) if s.trim_matches('\'') == "&");
+        if is_single_amp || self.check(&TokenKind::AmpAmp) {
+            if self.check(&TokenKind::AmpAmp) {
+                self.advance();
+                out.push_str("&&");
+            } else {
+                self.advance();
+                out.push('&');
+            }
+            if let TokenKind::Ident(s) = self.peek_kind().clone() {
+                if s == "mut" || s == "const" {
+                    self.advance();
+                    out.push_str(&s);
+                    out.push(' ');
+                }
+            }
+            let inner = self.parse_type_expr()?;
+            out.push_str(&inner);
+            return Ok(out);
+        }
+
+        // 3. Leading `dyn` trait object prefix: dyn Trait
+        if matches!(self.peek_kind(), TokenKind::Ident(s) if s == "dyn") {
+            self.advance();
+            let inner = self.parse_type_expr()?;
+            return Ok(format!("dyn {}", inner));
+        }
+
+        // 4. Tuple or unit type: () or (T1, T2, ...)
+        if self.check(&TokenKind::OpenParen) {
+            self.advance();
+            if self.check(&TokenKind::CloseParen) {
+                self.advance();
+                out = "()".to_string();
+            } else {
+                let mut elems = Vec::new();
+                while !self.check(&TokenKind::CloseParen) && !self.is_at_end() {
+                    elems.push(self.parse_type_expr()?);
+                    if self.check(&TokenKind::Comma) {
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+                self.expect(&TokenKind::CloseParen)?;
+                out = format!("({})", elems.join(", "));
+            }
+        } else if self.check(&TokenKind::OpenBracket) {
+            // 5. Slice or fixed-size array type: [T] or [T; N]
+            self.advance();
+            let elem_ty = self.parse_type_expr()?;
+            if self.check(&TokenKind::Semi) {
+                self.advance();
+                let tok = self.advance();
+                let len_str = match &tok.kind {
+                    TokenKind::IntLit(n) => n.to_string(),
+                    TokenKind::Ident(s) => s.clone(),
+                    other => {
+                        return Err(ParseError {
+                            message: format!("Expected array length, found '{:?}'", other),
+                            span: tok.span,
+                        });
+                    }
+                };
+                self.expect(&TokenKind::CloseBracket)?;
+                out = format!("[{}; {}]", elem_ty, len_str);
+            } else {
+                self.expect(&TokenKind::CloseBracket)?;
+                out = format!("[{}]", elem_ty);
+            }
+        } else {
+            // 6. Base qualified identifier: (::)?Ident(::Ident)*
+            if self.check(&TokenKind::DoubleColon) {
+                self.advance();
+                out.push_str("::");
+            }
+            out.push_str(&self.expect_ident()?);
+            while self.check(&TokenKind::DoubleColon) {
+                self.advance();
+                out.push_str("::");
+                out.push_str(&self.expect_ident()?);
+            }
+
+            // 7. Generic type arguments: <T1, T2, ...>
+            if self.check(&TokenKind::Lt) {
+                self.advance();
+                let mut args = Vec::new();
+                while !self.check(&TokenKind::Gt) && !self.is_at_end() {
+                    args.push(self.parse_type_expr()?);
+                    if self.check(&TokenKind::Comma) {
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+                self.expect(&TokenKind::Gt)?;
+                if args.is_empty() {
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: "Empty generic type argument list '<>' is invalid".to_string(),
+                        span: tok.span,
+                    });
+                }
+                out.push('<');
+                out.push_str(&args.join(", "));
+                out.push('>');
+            }
+        }
+
+        // 8. Trailing multiplicity/array suffixes (`Type[]`, `Type[N]`, `Type[1..*]`) and optional `?`
+        loop {
+            if self.check(&TokenKind::OpenBracket) {
+                self.advance();
+                let mut suffix = String::new();
+                while !self.check(&TokenKind::CloseBracket)
+                    && !self.check(&TokenKind::Semi)
+                    && !self.check(&TokenKind::CloseBrace)
+                    && !self.is_at_end()
+                {
+                    let tok = self.advance();
+                    match &tok.kind {
+                        TokenKind::IntLit(n) => suffix.push_str(&n.to_string()),
+                        TokenKind::Ident(s) => suffix.push_str(s),
+                        _ => suffix.push_str(tok.kind.as_str()),
+                    }
+                }
+                self.expect(&TokenKind::CloseBracket)?;
+                out.push('[');
+                out.push_str(&suffix);
+                out.push(']');
+            } else if matches!(self.peek_kind(), TokenKind::Ident(s) if s.trim_matches('\'') == "?") {
+                self.advance();
+                out.push('?');
+            } else {
+                break;
+            }
+        }
+
+        Ok(out)
     }
 
     /// Executes deterministic fn `SysmlParser::expect_ident_or_dotted` within `crates/compile-sysml/src/parser/grammar.rs`.
@@ -4875,6 +5361,288 @@ package AdversarialCommentsPackage {
             .find(|p| p.name == "CockpitSubsystem")
             .ok_or("missing reparsed CockpitSubsystem")?;
         assert_eq!(reparsed_cockpit.satisfied_requirements, cockpit.satisfied_requirements);
+
+        Ok(())
+    }
+
+    /// Executes deterministic unit test `test_defect_05_parse_composite_and_generic_types_across_declarations` within `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_defect_05_parse_composite_and_generic_types_across_declarations` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Verifies that `SysmlParser` deterministically parses generic, pointer, reference, slice, array, tuple, `dyn`, path-qualified, and optional `?` type expressions across `part`, `attribute`, `port`, `action`, and `operation` declarations.
+    ///
+    /// ## 3. Preconditions
+    /// - Input SysML v2 fixture contains well-formed composite type expressions.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<(), Box<dyn std::error::Error>>` confirming exact AST type string preservation.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over fixture token stream length.
+    /// - Space Complexity: O(N) for constructed `PackageDef` AST.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Rejects malformed type expressions with `ParseError`.
+    /// - State: Preserves complete type annotations without silent truncation.
+    /// - Action: Executes deterministically in memory.
+    /// - Resource: Bounded test fixture allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-TEST-DEFECT-05-COMPOSITE-TYPES] | SysML v2: TestCaseDef(test_defect_05_parse_composite_and_generic_types_across_declarations)
+    #[test]
+    fn test_defect_05_parse_composite_and_generic_types_across_declarations() -> Result<(), Box<dyn std::error::Error>> {
+        let source = r#"
+package CompositeTypesPkg {
+    attribute items : Vec<T>;
+    attribute raw_slice_ptr : *const [T; 10];
+    attribute byte_slice : &[u8];
+    attribute outcome : Result<T, E>;
+    attribute opt_label : Option<String> = "none";
+    attribute mut_ptr : *mut Core::Buffer<u8>;
+    attribute tuple_pair : (u32, Option<String>);
+    attribute unit_type : ();
+    attribute dyn_ref : &dyn Handler;
+    attribute nullable_type : String?;
+
+    part def SubsystemNode {
+        part child_vec : Vec<ChildPart>;
+        part ptr_array : *const [SensorNode; 10];
+        port in frame_in : ~Channel<Result<T, E>>;
+        port def DataPort {
+            in flow payload : &[u8];
+            out flow status : Result<T, E>;
+        }
+        action def ProcessBuffer(in buf : &[u8], out res : Result<Vec<u8>, E>) {
+            in ptr : *const [T; 10];
+            out summary : Option<String>;
+        }
+        operation def ExecuteOp(in slice_in : &[u8], out result_out : Result<T, E>) : Option<String>;
+    }
+}
+"#;
+        let pkg = SysmlParser::parse_source(source, "CompositeTypesPkg")?;
+        assert_eq!(pkg.name, "CompositeTypesPkg");
+        assert_eq!(pkg.attribute_defs.len(), 10);
+        assert_eq!(
+            pkg.attribute_defs.first().ok_or("missing attr 0")?.type_name,
+            "Vec<T>"
+        );
+        assert_eq!(
+            pkg.attribute_defs.get(1).ok_or("missing attr 1")?.type_name,
+            "*const [T; 10]"
+        );
+        assert_eq!(
+            pkg.attribute_defs.get(2).ok_or("missing attr 2")?.type_name,
+            "&[u8]"
+        );
+        assert_eq!(
+            pkg.attribute_defs.get(3).ok_or("missing attr 3")?.type_name,
+            "Result<T, E>"
+        );
+        assert_eq!(
+            pkg.attribute_defs.get(4).ok_or("missing attr 4")?.type_name,
+            "Option<String>"
+        );
+        assert_eq!(
+            pkg.attribute_defs.get(5).ok_or("missing attr 5")?.type_name,
+            "*mut Core::Buffer<u8>"
+        );
+        assert_eq!(
+            pkg.attribute_defs.get(6).ok_or("missing attr 6")?.type_name,
+            "(u32, Option<String>)"
+        );
+        assert_eq!(
+            pkg.attribute_defs.get(7).ok_or("missing attr 7")?.type_name,
+            "()"
+        );
+        assert_eq!(
+            pkg.attribute_defs.get(8).ok_or("missing attr 8")?.type_name,
+            "&dyn Handler"
+        );
+        assert_eq!(
+            pkg.attribute_defs.get(9).ok_or("missing attr 9")?.type_name,
+            "String?"
+        );
+
+        let node = pkg.part_defs.first().ok_or("missing SubsystemNode")?;
+        assert_eq!(node.parts.len(), 2);
+        assert_eq!(
+            node.parts.first().ok_or("missing child_vec")?.type_name.as_deref(),
+            Some("Vec<ChildPart>")
+        );
+        assert_eq!(
+            node.parts.get(1).ok_or("missing ptr_array")?.type_name.as_deref(),
+            Some("*const [SensorNode; 10]")
+        );
+
+        assert_eq!(node.ports.len(), 2);
+        let frame_in = node.ports.first().ok_or("missing frame_in")?;
+        assert!(frame_in.is_conjugated);
+        assert_eq!(frame_in.type_name, "Channel<Result<T, E>>");
+        let data_port = node.ports.get(1).ok_or("missing DataPort")?;
+        assert_eq!(data_port.item_flows.len(), 2);
+        assert_eq!(
+            data_port.item_flows.first().ok_or("missing flow 0")?.item_type,
+            "&[u8]"
+        );
+        assert_eq!(
+            data_port.item_flows.get(1).ok_or("missing flow 1")?.item_type,
+            "Result<T, E>"
+        );
+
+        let act = node.actions.first().ok_or("missing ProcessBuffer")?;
+        assert_eq!(act.in_params.len(), 2);
+        assert_eq!(act.in_params.first().ok_or("missing in 0")?.type_name, "&[u8]");
+        assert_eq!(act.in_params.get(1).ok_or("missing in 1")?.type_name, "*const [T; 10]");
+        assert_eq!(act.out_params.len(), 2);
+        assert_eq!(
+            act.out_params.first().ok_or("missing out 0")?.type_name,
+            "Result<Vec<u8>, E>"
+        );
+        assert_eq!(
+            act.out_params.get(1).ok_or("missing out 1")?.type_name,
+            "Option<String>"
+        );
+
+        let op = node.operations.first().ok_or("missing ExecuteOp")?;
+        assert_eq!(op.return_type.as_deref(), Some("Option<String>"));
+        assert_eq!(op.parameters.len(), 2);
+        assert_eq!(op.parameters.first().ok_or("missing op param 0")?.type_name, "&[u8]");
+        assert_eq!(
+            op.parameters.get(1).ok_or("missing op param 1")?.type_name,
+            "Result<T, E>"
+        );
+
+        Ok(())
+    }
+
+    /// Executes deterministic unit test `test_defect_05_reject_unknown_container_keywords_fail_closed` within `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_defect_05_reject_unknown_container_keywords_fail_closed` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Verifies that `parse_container_item` fails closed with `Err(ParseError)` and valid source span coordinates when encountering unrecognized keywords or statements at package or part container scope.
+    ///
+    /// ## 3. Preconditions
+    /// - Input SysML v2 fixtures contain unrecognized container-scope keywords (`atribute`, `unknown_block`, `requirment`).
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `SysmlParser::parse_source` returns `Err(ParseError)` with non-zero line/column coordinates.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over fixture token stream length.
+    /// - Space Complexity: O(1) auxiliary diagnostic state.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Emits structured `ParseError` with source `Span`.
+    /// - State: Prevents silent AST truncation via `skip_until_semi_or_brace`.
+    /// - Action: Terminates parsing immediately on unrecognized container token.
+    /// - Resource: Zero unbounded memory allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-TEST-DEFECT-05-FAIL-CLOSED-CONTAINER] | SysML v2: TestCaseDef(test_defect_05_reject_unknown_container_keywords_fail_closed)
+    #[test]
+    fn test_defect_05_reject_unknown_container_keywords_fail_closed() {
+        let unknown_pkg_stmt = "package BadPkg {\n    atribute typo_attr : Integer;\n}\n";
+        let err1 = SysmlParser::parse_source(unknown_pkg_stmt, "BadPkg")
+            .expect_err("unknown package-level keyword 'atribute' must return Err(ParseError)");
+        assert_eq!(err1.span.line, 2, "expected error on line 2, got {:?}", err1);
+        assert!(err1.span.col > 0, "expected positive column span, got {:?}", err1);
+
+        let unknown_pkg_block = "package BadPkg {\n    enum def UnhandledEnum {\n        attribute a : Integer;\n    }\n}\n";
+        let err2 = SysmlParser::parse_source(unknown_pkg_block, "BadPkg")
+            .expect_err("unknown braced block in package scope must return Err(ParseError)");
+        assert_eq!(err2.span.line, 2, "expected error on line 2, got {:?}", err2);
+
+        let unknown_part_stmt = "package BadPartPkg {\n    part def Node {\n        requirment typo_req;\n    }\n}\n";
+        let err3 = SysmlParser::parse_source(unknown_part_stmt, "BadPartPkg")
+            .expect_err("unknown part-level keyword 'requirment' must return Err(ParseError)");
+        assert_eq!(err3.span.line, 3, "expected error on line 3, got {:?}", err3);
+    }
+
+    /// Executes deterministic unit test `test_defect_06_parse_state_transitions_first_then_and_from_to` within `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_defect_06_parse_state_transitions_first_then_and_from_to` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Verifies that `SysmlParser::parse_state_decl` extracts structured `source`, `target`, `name`, `trigger`, `guard`, and `effect` fields on `TransitionDef` for both `first <src> then <tgt>` and `from <src> to <tgt>` forms.
+    ///
+    /// ## 3. Preconditions
+    /// - Input SysML v2 fixture contains state machine transitions with and without explicit transition names, triggers, guards, and effects.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<(), Box<dyn std::error::Error>>` confirming structured `TransitionDef` endpoints and clauses.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over fixture token stream length.
+    /// - Space Complexity: O(N) for constructed `PackageDef` AST.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates any `ParseError` via `Result`.
+    /// - State: Preserves transition ordering and endpoint fidelity.
+    /// - Action: Executes deterministically in memory.
+    /// - Resource: Bounded test fixture allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-TEST-DEFECT-06-STATE-TRANSITIONS] | SysML v2: TestCaseDef(test_defect_06_parse_state_transitions_first_then_and_from_to)
+    #[test]
+    fn test_defect_06_parse_state_transitions_first_then_and_from_to() -> Result<(), Box<dyn std::error::Error>> {
+        let source = r#"
+package StateMachinePkg {
+    part def FlightController {
+        state def FlightMode {
+            state Init;
+            state Standby;
+            state Armed;
+            state Active;
+            state SafeMode;
+
+            transition first Init then Standby;
+            transition t_arm first Standby accept ArmCmd if battery_pct > 20.0 do EnableServos then Armed;
+            transition from Armed to Active;
+            transition t_fault from Active to SafeMode accept FaultSignal if pitch_deg > 15.0 do EngageBackup;
+        }
+    }
+}
+"#;
+        let pkg = SysmlParser::parse_source(source, "StateMachinePkg")?;
+        let part = pkg.part_defs.first().ok_or("missing FlightController")?;
+        let state_def = part.states.first().ok_or("missing FlightMode")?;
+        assert_eq!(state_def.transitions.len(), 4);
+
+        let tr0 = state_def.transitions.first().ok_or("missing transition 0")?;
+        assert_eq!(tr0.source.as_deref(), Some("Init"));
+        assert_eq!(tr0.target.as_deref(), Some("Standby"));
+        assert_eq!(tr0.trigger, None);
+        assert_eq!(tr0.guard, None);
+        assert_eq!(tr0.effect, None);
+
+        let tr1 = state_def.transitions.get(1).ok_or("missing transition 1")?;
+        assert_eq!(tr1.name.as_deref(), Some("t_arm"));
+        assert_eq!(tr1.source.as_deref(), Some("Standby"));
+        assert_eq!(tr1.target.as_deref(), Some("Armed"));
+        assert_eq!(tr1.trigger.as_deref(), Some("ArmCmd"));
+        assert_eq!(tr1.guard.as_deref(), Some("battery_pct > 20.0"));
+        assert_eq!(tr1.effect.as_deref(), Some("EnableServos"));
+
+        let tr2 = state_def.transitions.get(2).ok_or("missing transition 2")?;
+        assert_eq!(tr2.source.as_deref(), Some("Armed"));
+        assert_eq!(tr2.target.as_deref(), Some("Active"));
+        assert_eq!(tr2.trigger, None);
+        assert_eq!(tr2.guard, None);
+        assert_eq!(tr2.effect, None);
+
+        let tr3 = state_def.transitions.get(3).ok_or("missing transition 3")?;
+        assert_eq!(tr3.name.as_deref(), Some("t_fault"));
+        assert_eq!(tr3.source.as_deref(), Some("Active"));
+        assert_eq!(tr3.target.as_deref(), Some("SafeMode"));
+        assert_eq!(tr3.trigger.as_deref(), Some("FaultSignal"));
+        assert_eq!(tr3.guard.as_deref(), Some("pitch_deg > 15.0"));
+        assert_eq!(tr3.effect.as_deref(), Some("EngageBackup"));
 
         Ok(())
     }

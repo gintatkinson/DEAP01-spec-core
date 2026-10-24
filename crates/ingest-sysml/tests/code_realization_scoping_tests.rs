@@ -34,6 +34,12 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-ISSUE-472-REALIZATION-SCOPING-TESTS]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic
+)]
 
 use compile_sysml::docstring::run_extract_source;
 use compile_sysml::parse_sysml;

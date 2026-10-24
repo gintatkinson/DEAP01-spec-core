@@ -35,6 +35,7 @@
 //! Realises: [REQ-DEAP-CORE-LIB], [DO-330-TQL-4-CORE-LIB]
 
 pub mod diagnostics;
+pub mod digest;
 pub mod markdown;
 pub mod rules;
 pub mod source_ast;
@@ -42,6 +43,7 @@ pub mod sysml_ast;
 pub mod workspace;
 
 pub use diagnostics::{DefectDossier, Diagnostic, DiagnosticSeverity, WhyEntry};
+pub use digest::{compute_sha256, compute_sha256_bytes};
 pub use markdown::{
     check_latex_katex_syntax, check_mermaid_syntax, strip_code_and_glfm, strip_fenced_code_blocks,
     strip_glfm_inline_math, strip_inline_code, ALLOWED_ALIGNMENT_ENVS, VALID_MERMAID_HEADERS,
@@ -82,6 +84,43 @@ pub use workspace::{
 
 #[cfg(test)]
 mod tests {
+    /// Verifies that `crates/deap-core/src/lib.rs` carries all 7 mandatory regulatory rustdoc sections.
+    ///
+    /// # Summary
+    /// Executes compile-time rustdoc header verification for `crates/deap-core/src/lib.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// # Safety
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_deap_core_lib_7_section_rustdoc` in `crates/deap-core/src/lib.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_deap_core_lib_7_section_rustdoc` (declaration #1) within `DEAP-CORE-LIB`.
+    ///
+    /// ## 3. Preconditions
+    /// # Parameters
+    /// - No runtime parameters; inspects embedded `lib.rs` module comments.
+    ///
+    /// ## 4. Postconditions
+    /// # Returns
+    /// - Returns `()` after asserting presence of sections 1 through 7 and `Realises: [`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over `lib.rs` line count in `test_deap_core_lib_7_section_rustdoc`.
+    /// - Space Complexity: O(N) bounded auxiliary memory for `test_deap_core_lib_7_section_rustdoc`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// # Errors
+    /// - Infallible test assertion harness.
+    /// # Panics
+    /// - Panics if any of the 7 module-level rustdoc sections or `Realises: [` tag is omitted.
+    /// - Interface: Validates boundary inputs and types for `test_deap_core_lib_7_section_rustdoc` (`()`).
+    /// - State: Maintains consistent state invariants across `test_deap_core_lib_7_section_rustdoc` without partial mutation on error.
+    /// - Action: Executes `test_deap_core_lib_7_section_rustdoc` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_deap_core_lib_7_section_rustdoc` (`DEAP-CORE-LIB`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// # Realises
+    /// Realises: [REQ-DEAP-CORE-LIB-7-SECTION-RUSTDOC] | SysML v2: TestCaseDef(test_deap_core_lib_7_section_rustdoc)
     #[test]
     fn test_deap_core_lib_7_section_rustdoc() {
         let source = include_str!("lib.rs");

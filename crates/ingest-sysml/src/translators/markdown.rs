@@ -558,10 +558,8 @@ fn parse_ac_header(line: &str) -> Option<(usize, String)> {
         after_ac
     } else if let Some(after_ac) = rest.strip_prefix("ac-") {
         after_ac
-    } else if let Some(after_ac) = rest.strip_prefix("ac") {
-        after_ac
     } else {
-        return None;
+        rest.strip_prefix("ac")?
     };
     let num_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
     if num_len == 0 {
@@ -1805,19 +1803,34 @@ impl MarkdownTranslator {
     pub fn translate_files(&self, file_paths: &[String], default_name: &str) -> Result<PackageDef, String> {
         use rayon::prelude::*;
 
-        // Translate each file concurrently with isolated thread contexts
+        // Translate each file concurrently with isolated thread contexts and fail-closed error propagation
         let sub_packages: Vec<PackageDef> = file_paths
             .par_iter()
-            .filter_map(|fpath| {
+            .map(|fpath| -> Result<PackageDef, String> {
                 let path = Path::new(fpath);
                 if !path.exists() {
-                    return None;
+                    return Err(format!(
+                        "Markdown specification file does not exist: '{}'",
+                        path.display()
+                    ));
                 }
-                let content = fs::read_to_string(path).ok()?;
+                let content = fs::read_to_string(path).map_err(|e| {
+                    format!(
+                        "Failed to read Markdown specification file '{}': {}",
+                        path.display(),
+                        e
+                    )
+                })?;
                 let f_basename = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Module");
-                self.translate(&content, f_basename).ok()
+                self.translate(&content, f_basename).map_err(|e| {
+                    format!(
+                        "Failed to translate Markdown specification file '{}': {}",
+                        path.display(),
+                        e
+                    )
+                })
             })
-            .collect();
+            .collect::<Result<Vec<PackageDef>, String>>()?;
 
         // Check if any translated sub-packages contain requirement definitions
         let has_requirements = sub_packages.iter().any(|p| !p.requirement_defs.is_empty());
@@ -3429,6 +3442,53 @@ The Electrical Power subsystem shall maintain bus voltage between 24V and 32V.
                 assert_ne!(part.name, "NodeArenaASTGraphEngine");
             }
         }
+    }
+
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_defect_02_translate_files_fails_closed_on_missing_or_unreadable_file` in `crates/ingest-sysml/src/translators/markdown.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Enforces fail-closed parallel batch translation across all input paths in `MarkdownTranslator::translate_files` without silent omission of missing or unreadable blueprint files.
+    ///
+    /// ## 3. Preconditions
+    /// - `file_paths` contains a nonexistent file path or an unreadable directory path passed to `MarkdownTranslator::translate_files`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts that `MarkdownTranslator::translate_files` returns `Err(String)` citing the offending path rather than silently dropping the failed entry via `filter_map`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over the two synthetic negative probe invocations.
+    /// - Space Complexity: O(1) bounded auxiliary test memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Rejects nonexistent and unreadable paths deterministically at the `MarkdownTranslator::translate_files` boundary.
+    /// - State: Prevents partial `PackageDef` synthesis when any element of `file_paths` fails to read or translate.
+    /// - Action: Short-circuits Rayon collection into `Err(String)` with zero unbounded recursion or blocking.
+    /// - Resource: Allocates zero persistent filesystem fixtures.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-INGEST-MD/test_defect_02_translate_files_fails_closed_on_missing_or_unreadable_file] | SysML v2: VerificationCaseDef(test_defect_02_translate_files_fails_closed_on_missing_or_unreadable_file)
+    #[test]
+    fn test_defect_02_translate_files_fails_closed_on_missing_or_unreadable_file() {
+        let translator = MarkdownTranslator::new();
+
+        let missing_path = std::env::temp_dir()
+            .join("nonexistent_defect_02_blueprint_491.md")
+            .to_string_lossy()
+            .to_string();
+        let missing_res = translator.translate_files(std::slice::from_ref(&missing_path), "Test_System");
+        assert!(
+            missing_res.is_err(),
+            "MarkdownTranslator::translate_files must fail closed on nonexistent path, got Ok"
+        );
+
+        let unreadable_dir_path = std::env::temp_dir().to_string_lossy().to_string();
+        let unreadable_res =
+            translator.translate_files(std::slice::from_ref(&unreadable_dir_path), "Test_System");
+        assert!(
+            unreadable_res.is_err(),
+            "MarkdownTranslator::translate_files must fail closed on unreadable directory path, got Ok"
+        );
     }
 }
 

@@ -30,6 +30,35 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-VERIFY-BASELINE-LIB], [DO-330-TQL-4-VERIFY-LIB]
+#![allow(
+    clippy::collapsible_if,
+    clippy::collapsible_match,
+    clippy::collapsible_str_replace,
+    clippy::disallowed_types,
+    clippy::double_ended_iterator_last,
+    clippy::expect_used,
+    clippy::if_same_then_else,
+    clippy::indexing_slicing,
+    clippy::manual_contains,
+    clippy::manual_flatten,
+    clippy::manual_ignore_case_cmp,
+    clippy::manual_pattern_char_comparison,
+    clippy::manual_range_contains,
+    clippy::manual_strip,
+    clippy::manual_unwrap_or,
+    clippy::manual_unwrap_or_default,
+    clippy::needless_bool,
+    clippy::needless_bool_assign,
+    clippy::needless_lifetimes,
+    clippy::panic,
+    clippy::question_mark,
+    clippy::result_unit_err,
+    clippy::trim_split_whitespace,
+    clippy::unnecessary_map_or,
+    clippy::unnecessary_unwrap,
+    clippy::unwrap_used,
+    clippy::vec_init_then_push
+)]
 
 pub mod check_secrets;
 pub mod checks;

@@ -1,6 +1,14 @@
 //! Integration and unit tests for the 12-check native Rust adversarial defect dossier validator,
 //! dual-location `.pipeline/defects/` persistence, GitHub SSOT publishing/editing, Closed-Loop
 //! Payload Verification Gate, and minimized `adversarial-code-auditor` skill parity (refs #465, #466, #467, #468).
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::disallowed_types,
+    clippy::useless_format
+)]
 
 use std::fs;
 use std::path::{Path, PathBuf};

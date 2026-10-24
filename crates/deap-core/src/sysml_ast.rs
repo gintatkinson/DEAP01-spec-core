@@ -6777,10 +6777,10 @@ impl SysmlModel {
 
         let mut hazards: Vec<HazardDef> = Vec::new();
         for haz in &discovered_hazards {
-            if referenced_hazard_ids.is_empty() || referenced_hazard_ids.contains(&haz.name) {
-                if !hazards.iter().any(|h| h.name == haz.name) {
-                    hazards.push(haz.clone());
-                }
+            if (referenced_hazard_ids.is_empty() || referenced_hazard_ids.contains(&haz.name))
+                && !hazards.iter().any(|h| h.name == haz.name)
+            {
+                hazards.push(haz.clone());
             }
         }
         for haz_id in &referenced_hazard_ids {
@@ -6892,17 +6892,11 @@ fn compute_sha256_hex(bytes: &[u8]) -> String {
     }
     msg.extend_from_slice(&bit_len.to_be_bytes());
 
-    for chunk in msg.chunks_exact(64) {
+    for chunk in msg.as_chunks::<64>().0 {
         let mut w = [0u32; 64];
-        for (i, word_bytes) in chunk.chunks_exact(4).enumerate() {
-            if let (Some(&b0), Some(&b1), Some(&b2), Some(&b3), Some(slot)) = (
-                word_bytes.first(),
-                word_bytes.get(1),
-                word_bytes.get(2),
-                word_bytes.get(3),
-                w.get_mut(i),
-            ) {
-                *slot = u32::from_be_bytes([b0, b1, b2, b3]);
+        for (i, word_bytes) in chunk.as_chunks::<4>().0.iter().enumerate() {
+            if let Some(slot) = w.get_mut(i) {
+                *slot = u32::from_be_bytes(*word_bytes);
             }
         }
         for i in 16..64 {
@@ -8687,10 +8681,13 @@ package SystemModel_SSOT {
 
         let parts = parse_part_defs(snippet);
         assert_eq!(parts.len(), 1);
-        assert_eq!(parts[0].name, "SensorController");
         assert_eq!(
-            parts[0].satisfied_requirements,
-            vec![
+            parts.first().map(|p| p.name.as_str()),
+            Some("SensorController")
+        );
+        assert_eq!(
+            parts.first().map(|p| p.satisfied_requirements.clone()),
+            Some(vec![
                 "REQ-CTRL-001".to_string(),
                 "REQ-CTRL-002".to_string(),
                 "REQ-PWR-03".to_string(),
@@ -8699,7 +8696,7 @@ package SystemModel_SSOT {
                 "REQ-COM-06".to_string(),
                 "REQ-COM-07".to_string(),
                 "REQ-COM-08".to_string(),
-            ]
+            ])
         );
     }
 

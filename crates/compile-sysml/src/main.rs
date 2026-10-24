@@ -30,6 +30,15 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-COMPILER-SYSML-CLI], [DO-330-TQL-4-CLI]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::indexing_slicing,
+        clippy::panic
+    )
+)]
 
 use clap::Parser;
 use compile_sysml::docstring::{

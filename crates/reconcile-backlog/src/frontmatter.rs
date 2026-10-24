@@ -380,7 +380,10 @@ pub fn parse_frontmatter(content: &str) -> Option<SpecFrontmatter> {
             }
         } else if in_table {
             break;
-        } else {
+        } else if !line_trimmed.is_empty()
+            && !line_trimmed.starts_with("<!--")
+            && !line_trimmed.ends_with("-->")
+        {
             pre_table_count += 1;
             if pre_table_count >= 25 {
                 break;
@@ -537,7 +540,10 @@ pub fn update_frontmatter_issue_id(content: &str, issue_id: u64) -> String {
             }
         } else if in_table {
             break;
-        } else {
+        } else if !line_trimmed.is_empty()
+            && !line_trimmed.starts_with("<!--")
+            && !line_trimmed.ends_with("-->")
+        {
             pre_table_count += 1;
             if pre_table_count >= 25 {
                 break;
@@ -915,6 +921,60 @@ type: feature
         assert_eq!(fm.issue_id, Some(456));
         assert_eq!(fm.title, "Doc Title");
         assert_eq!(fm.spec_type, "feature");
+        Ok(())
+    }
+
+    /// Verifies that preamble HTML comments and blank lines do not exhaust `pre_table_count` in `parse_frontmatter` and `update_frontmatter_issue_id`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_defect_08_preamble_html_comments_and_blank_lines_before_table` in `crates/reconcile-backlog/src/frontmatter.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_defect_08_preamble_html_comments_and_blank_lines_before_table` within `RECONCILE-BACKLOG-FRONTMATTER`.
+    ///
+    /// ## 3. Preconditions
+    /// - Input Markdown document contains more than 25 HTML comment and blank lines preceding the CommonMark 2-column metadata table.
+    ///
+    /// ## 4. Postconditions
+    /// - `parse_frontmatter` extracts the CommonMark table and `update_frontmatter_issue_id` updates `Issue ID` in place without injecting a duplicate table.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over document line count.
+    /// - Space Complexity: O(N) bounded auxiliary memory for document lines.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `parse_frontmatter` and `update_frontmatter_issue_id`.
+    /// - State: Maintains consistent state invariants across frontmatter parsing and updating without partial mutation.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `RECONCILE-BACKLOG-FRONTMATTER`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-HTML-COMMENT-PREAMBLE-GUARD] | SysML v2: TestCaseDef(test_defect_08_preamble_html_comments_and_blank_lines_before_table)
+    #[test]
+    fn test_defect_08_preamble_html_comments_and_blank_lines_before_table() -> Result<(), Box<dyn std::error::Error>> {
+        let mut preamble = String::new();
+        for idx in 1..=30 {
+            preamble.push_str(&format!("<!-- Preamble comment line {} -->\n\n", idx));
+        }
+        let content = format!(
+            "{}| Attribute | Specification Detail |\n| :--- | :--- |\n| **Issue ID** | #101 |\n| **Title** | Feature 08: Preamble Guard |\n| **Type** | feature |\n\n# Feature 08: Preamble Guard\n",
+            preamble
+        );
+
+        let fm = parse_frontmatter(&content)
+            .ok_or("parse_frontmatter returned None when >25 HTML comment lines preceded the CommonMark table")?;
+        assert_eq!(fm.issue_id, Some(101));
+        assert_eq!(fm.title, "Feature 08: Preamble Guard");
+        assert_eq!(fm.spec_type, "feature");
+
+        let updated = update_frontmatter_issue_id(&content, 777);
+        assert!(updated.contains("| **Issue ID** | #777 |"));
+        assert!(!updated.contains("#101"));
+        assert_eq!(
+            updated.matches("| Attribute | Specification Detail |").count(),
+            1,
+            "update_frontmatter_issue_id must not inject a duplicate CommonMark table when HTML comments precede the table"
+        );
         Ok(())
     }
 }

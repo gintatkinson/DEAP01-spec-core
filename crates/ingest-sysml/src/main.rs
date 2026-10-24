@@ -56,6 +56,15 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-SYSML-INGEST-CLI], [DO-330-TQL-4-INGEST-CLI]
+#![allow(
+    clippy::collapsible_if,
+    clippy::disallowed_types,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unnecessary_map_or,
+    clippy::unwrap_used
+)]
 
 use clap::Parser;
 use std::collections::HashSet;

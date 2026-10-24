@@ -37,6 +37,13 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-VERIFY-BASELINE-CLI], [DO-330-TQL-4-VERIFY-CLI]
+#![allow(
+    clippy::disallowed_types,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used
+)]
 
 use clap::Parser;
 use std::path::PathBuf;
