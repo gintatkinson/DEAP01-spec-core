@@ -4,7 +4,7 @@
 | **Title** | FEAT-42: Source-Code AST Ingestion & 7-Section Safety Docstring Synthesizer |
 | **Type** | feature |
 | **Parent Epic** | EPIC-01 |
-| **Status** | Draft |
+| **Status** | Implemented |
 | **Interface Type** | CLI / AST Compiler / Source Code Synthesizer |
 | **Schema Containers** | `IngestSysml::SourceCodeAstIngestion`, `CompileSysml::SafetyDocstringSynthesizer` |
 | **Generation Mode** | subagent |

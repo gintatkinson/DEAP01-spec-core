@@ -84,6 +84,116 @@ pub mod translators;
 use std::collections::HashSet;
 use deap_core::sysml_ast::{ConstraintDef, PackageDef, PartDef};
 
+/// Fail-safe process exit code classification for the `ingest-sysml` CLI engine.
+///
+/// # Summary
+/// Partitions `ingest-sysml` execution outcomes into deterministic exit statuses:
+/// `Clean` (`0`), `ParseOrIoError` (`1`), and `ScopeOrCryptoError` (`2`).
+///
+/// # Preconditions
+/// - Constructed by `run_ingestion_with_code` upon completing or halting an ingestion pass.
+///
+/// # Postconditions
+/// - Maps bijectively to OS process exit codes `0`, `1`, and `2` via [`IngestExitCode::code`].
+///
+/// # Invariants
+/// - `IngestExitCode::Clean as i32 == 0`.
+/// - `IngestExitCode::ParseOrIoError as i32 == 1`.
+/// - `IngestExitCode::ScopeOrCryptoError as i32 == 2`.
+///
+/// # Failure Modes
+/// - Exhaustive `#[repr(i32)]`-compatible unit enum; cannot represent unmapped status codes.
+///
+/// # Side Effects
+/// - Pure value enumeration with zero I/O or heap allocation.
+///
+/// # Determinism
+/// - Deterministic constant discriminant mapping across all target architectures.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C fail-safe
+/// tool qualification requirements for `IngestSysml::SourceCodeAstIngestion`, distinguishing
+/// lexical/syntactic/I/O failures (`1`) from architectural scope, negative-invariant, and
+/// post-write cryptographic verification failures (`2`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Total Partition: Every ingestion outcome resolves to exactly one variant in `{0, 1, 2}`.
+///
+/// ## 3. Preconditions
+/// - None; value type usable across library and CLI boundaries.
+///
+/// ## 4. Postconditions
+/// - Provides strongly typed error categorization prior to `std::process::exit`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: $O(1)$.
+/// - **Space Complexity**: $O(1)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Infallible enum representation with zero runtime failure states.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-EXIT-CODE/IngestExitCode] | SysML v2: part def SourceCodeAstIngestion
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IngestExitCode {
+    /// Clean ingestion, scope verification, and cryptographic digest verification (`0`).
+    Clean = 0,
+    /// Lexical, syntactic, format classification, or filesystem I/O error (`1`).
+    ParseOrIoError = 1,
+    /// Architectural scope starvation, negative-invariant violation, or SHA-256 verification failure (`2`).
+    ScopeOrCryptoError = 2,
+}
+
+impl IngestExitCode {
+    /// Converts this [`IngestExitCode`] into its canonical `i32` OS process exit status.
+    ///
+    /// # Summary
+    /// Returns `0` for `Clean`, `1` for `ParseOrIoError`, and `2` for `ScopeOrCryptoError`.
+    ///
+    /// # Preconditions
+    /// - `self` is a valid [`IngestExitCode`] variant.
+    ///
+    /// # Postconditions
+    /// - Returns an `i32` in the closed interval `[0, 2]`.
+    ///
+    /// # Invariants
+    /// - Referentially transparent `const fn` conversion preserving enum discriminant values.
+    ///
+    /// # Failure Modes
+    /// - Infallible total conversion; never panics or overflows.
+    ///
+    /// # Side Effects
+    /// - None.
+    ///
+    /// # Determinism
+    /// - Compile-time and runtime deterministic evaluation.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Enforces unambiguous exit code reporting to orchestrators and CI gates under DO-330 TQL-4.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `self.code() == self as i32` for all variants of [`IngestExitCode`].
+    ///
+    /// ## 3. Preconditions
+    /// - `self: IngestExitCode` is initialized.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `0`, `1`, or `2`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - **Time Complexity**: $O(1)$.
+    /// - **Space Complexity**: $O(1)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Total `const fn` with zero failure paths.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-INGEST-EXIT-CODE/code] | SysML v2: part def SourceCodeAstIngestion
+    pub const fn code(self) -> i32 {
+        self as i32
+    }
+}
+
 /// Translates a single Markdown requirement document into a canonical SysML v2 `PackageDef`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -327,6 +437,228 @@ pub fn filter_ast_to_target_scope(
             }
         }
     }
+}
+
+/// Checks whether a `PackageDef` (or any nested sub-package) contains at least one `PartDef`.
+///
+/// # Summary
+/// Performs an iterative work-stack traversal over `pkg` and `pkg.packages` to determine whether
+/// at least one `PartDef` survived scope filtering.
+///
+/// # Preconditions
+/// - `pkg` is a valid `PackageDef` reference.
+///
+/// # Postconditions
+/// - Returns `true` iff `pkg.part_defs` or any nested `sub_pkg.part_defs` is non-empty.
+///
+/// # Invariants
+/// - Bounded iterative traversal with zero recursion, zero `.unwrap()`, and zero slice indexing.
+///
+/// # Failure Modes
+/// - Infallible read-only predicate; returns `false` on empty packages.
+///
+/// # Side Effects
+/// - Allocates a transient traversal stack `Vec<&PackageDef>`; does not mutate `pkg`.
+///
+/// # Determinism
+/// - Referentially transparent predicate over `pkg`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Supports DO-178C Level A / DO-330 TQL-4 architectural scope verification (`IngestExitCode::ScopeOrCryptoError`)
+/// by detecting when `--allowed-parts` matches zero parts in the extracted model.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - $\text{package\_has\_any\_part}(P) \iff \exists Q \in \text{packages}(P) : Q.\text{part\_defs} \neq \emptyset$.
+///
+/// ## 3. Preconditions
+/// - `pkg: &PackageDef` is an initialized package tree.
+///
+/// ## 4. Postconditions
+/// - Returns `bool` indicating whether at least one `PartDef` exists in the package hierarchy.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: $O(K)$ where $K$ is the number of nested packages in `pkg`.
+/// - **Space Complexity**: $O(K)$ for the explicit package work stack.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function; never panics or fails.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-SCOPE/package_has_any_part] | SysML v2: part def SourceCodeAstIngestion
+fn package_has_any_part(pkg: &PackageDef) -> bool {
+    let mut stack: Vec<&PackageDef> = vec![pkg];
+    while let Some(curr) = stack.pop() {
+        if !curr.part_defs.is_empty() {
+            return true;
+        }
+        for sub in &curr.packages {
+            stack.push(sub);
+        }
+    }
+    false
+}
+
+/// Checks whether any declared entity in `pkg` (or nested packages/parts) matches `entity_name`.
+///
+/// # Summary
+/// Traverses `pkg`, nested `pkg.packages`, and nested `PartDef::parts` to test whether `entity_name`
+/// exists as a declared `PartDef`, `ItemDef`, `ActionDef`, `PortDef`, or `StateDef`.
+///
+/// # Preconditions
+/// - `pkg` is a valid `PackageDef` reference; `entity_name` is a non-empty trimmed identifier.
+///
+/// # Postconditions
+/// - Returns `true` iff any `PartDef`, `ItemDef`, `ActionDef`, `PortDef`, or `StateDef` in `pkg`
+///   has `name == entity_name`.
+///
+/// # Invariants
+/// - Iterative stack-based traversal with zero unbounded recursion, zero `.unwrap()`, and zero slice indexing.
+///
+/// # Failure Modes
+/// - Infallible read-only predicate; returns `false` when `entity_name` is absent.
+///
+/// # Side Effects
+/// - Allocates transient traversal stacks `Vec<&PackageDef>` and `Vec<&PartDef>`; does not mutate `pkg`.
+///
+/// # Determinism
+/// - Referentially transparent over `pkg` and `entity_name`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Enforces closed-world negative exclusion invariants (`--negative-invariants`) under DO-178C Level A
+/// and DO-330 TQL-4 by detecting forbidden phantom or out-of-boundary entities remaining in the AST.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Inspects package-level `item_defs`, `action_defs`, `port_defs`, `state_defs`, and all reachable
+///   `PartDef` nodes along with their nested `actions`, `ports`, and `states`.
+///
+/// ## 3. Preconditions
+/// - `pkg: &PackageDef` is an initialized package tree; `entity_name: &str` is the forbidden identifier.
+///
+/// ## 4. Postconditions
+/// - Returns `true` immediately upon encountering a matching entity declaration, or `false` after exhaustive scan.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: $O(K + P + I + A + R + S)$ across all packages $K$, parts $P$, items $I$,
+///   actions $A$, ports $R$, and states $S$.
+/// - **Space Complexity**: $O(K + P)$ for the explicit traversal stacks.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function; never panics or fails.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-SCOPE/package_contains_entity] | SysML v2: part def SourceCodeAstIngestion
+fn package_contains_entity(pkg: &PackageDef, entity_name: &str) -> bool {
+    let mut pkg_stack: Vec<&PackageDef> = vec![pkg];
+    while let Some(curr_pkg) = pkg_stack.pop() {
+        if curr_pkg.item_defs.iter().any(|i| i.name == entity_name)
+            || curr_pkg.action_defs.iter().any(|a| a.name == entity_name)
+            || curr_pkg.port_defs.iter().any(|port| port.name == entity_name)
+            || curr_pkg.state_defs.iter().any(|s| s.name == entity_name)
+        {
+            return true;
+        }
+        let mut part_stack: Vec<&PartDef> = curr_pkg.part_defs.iter().collect();
+        while let Some(part) = part_stack.pop() {
+            if part.name == entity_name
+                || part.actions.iter().any(|a| a.name == entity_name)
+                || part.ports.iter().any(|port| port.name == entity_name)
+                || part.states.iter().any(|s| s.name == entity_name)
+            {
+                return true;
+            }
+            for child in &part.parts {
+                part_stack.push(child);
+            }
+        }
+        for sub_pkg in &curr_pkg.packages {
+            pkg_stack.push(sub_pkg);
+        }
+    }
+    false
+}
+
+/// Verifies post-filtering architectural scope survival and negative exclusion invariants on `pkg`.
+///
+/// # Summary
+/// Validates that a non-empty `allowed_parts` filter leaves at least one surviving `PartDef` in `pkg`,
+/// and that no forbidden entity listed in `negative_invariants` exists in `pkg` as a `PartDef`,
+/// `ItemDef`, `ActionDef`, `PortDef`, or `StateDef`.
+///
+/// # Preconditions
+/// - `pkg` has already been processed by [`filter_ast_to_target_scope`].
+/// - `allowed_parts` and `negative_invariants` reflect the caller's architectural boundary configuration.
+///
+/// # Postconditions
+/// - Returns `Ok(())` iff all scope survival and negative exclusion invariants hold.
+/// - Returns `Err(String)` describing the exact scope starvation or negative-invariant violation otherwise.
+///
+/// # Invariants
+/// - Read-only verification gate; never mutates `pkg` or panics.
+///
+/// # Failure Modes
+/// - Returns `Err` when `allowed_parts` is `Some(allowed)` with `!allowed.is_empty()` and zero `PartDef`
+///   nodes survived in `pkg`.
+/// - Returns `Err` when any non-empty trimmed entry in `negative_invariants` matches a declared entity in `pkg`.
+///
+/// # Side Effects
+/// - None; pure verification function.
+///
+/// # Determinism
+/// - Deterministic validation outcome for identical `(pkg, allowed_parts, negative_invariants)` inputs.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Enforces the DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D architectural boundary contract
+/// for `IngestSysml::SourceCodeAstIngestion`, driving exit code `2` (`IngestExitCode::ScopeOrCryptoError`)
+/// whenever scope filters starve the model or forbidden entities violate negative exclusion invariants.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - **Non-Empty Scope Survival**: $\text{allowed} \neq \emptyset \implies \exists p \in \text{Parts}(pkg)$.
+/// - **Disjoint Negative Invariants**: $\forall \text{inv} \in \text{neg\_list} : \neg \text{exists}(pkg, \text{inv})$.
+///
+/// ## 3. Preconditions
+/// - `pkg: &PackageDef` is the post-filtered SysML v2 package tree.
+/// - `allowed_parts: Option<&HashSet<String>>` is the optional part whitelist.
+/// - `negative_invariants: Option<&[String]>` is the optional forbidden entity list.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(())` on full compliance or `Err(String)` mapped to `IngestExitCode::ScopeOrCryptoError`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: $O(M \cdot (K + P + I + A + R + S))$ where $M$ is `negative_invariants` length.
+/// - **Space Complexity**: $O(K + P)$ for bounded iterative traversal stacks.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Emits explicit diagnostic messages naming the offending package and entity/filter set.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-SCOPE/verify_scope_and_negative_invariants] | SysML v2: part def SourceCodeAstIngestion
+pub fn verify_scope_and_negative_invariants(
+    pkg: &PackageDef,
+    allowed_parts: Option<&HashSet<String>>,
+    negative_invariants: Option<&[String]>,
+) -> Result<(), String> {
+    if let Some(allowed) = allowed_parts {
+        if !allowed.is_empty() && !package_has_any_part(pkg) {
+            return Err(format!(
+                "Architectural scope verification failed: none of the --allowed-parts {:?} matched any extracted PartDef in package '{}'",
+                allowed, pkg.name
+            ));
+        }
+    }
+
+    if let Some(neg_list) = negative_invariants {
+        for raw_inv in neg_list {
+            let inv = raw_inv.trim();
+            if !inv.is_empty() && package_contains_entity(pkg, inv) {
+                return Err(format!(
+                    "Architectural negative-invariant violation: forbidden entity '{}' exists in package '{}'",
+                    inv, pkg.name
+                ));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Collects all declared `PartDef` names across a `PackageDef` hierarchy into `out`.

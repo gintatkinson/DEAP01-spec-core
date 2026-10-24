@@ -84,7 +84,7 @@ use ingest_sysml::translators::{
 };
 use ingest_sysml::{
     cache_ingested_sysml_model, collect_declared_part_names, filter_ast_to_realized_or_allowed,
-    filter_ast_to_target_scope,
+    filter_ast_to_target_scope, verify_scope_and_negative_invariants, IngestExitCode,
 };
 
 /// Ground 0.0 SysML v2 Universal Ingestion Engine Command-Line Arguments.
@@ -193,40 +193,85 @@ pub fn resolve_ingested_package_name(
 
 /// Binary entrypoint for the `ingest-sysml` command-line executable.
 ///
+/// # Summary
+/// Parses process arguments via [`CliArgs`] and invokes [`run_ingestion_with_code`], terminating
+/// with exit status `0` (`Clean`), `1` (`ParseOrIoError`), or `2` (`ScopeOrCryptoError`).
+///
+/// # Preconditions
+/// - Invoked as an OS process with standard argument vector and `stderr`/`stdout` streams attached.
+///
+/// # Postconditions
+/// - Terminates with exit status `0` iff [`run_ingestion_with_code`] returns `Ok(())`; terminates
+///   with `exit_code.code()` (`1` or `2`) on `Err((exit_code, e))`.
+///
+/// # Invariants
+/// - Total termination contract: never panics or leaves partial staging files on failure.
+///
+/// # Failure Modes
+/// - Prints structured diagnostic `[SysML v2 Ingestion] ERROR: <msg>` to `stderr` before calling `process::exit`.
+///
+/// # Side Effects
+/// - Reads input schemas/sources, writes `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`, and exits the process.
+///
+/// # Determinism
+/// - Deterministic exit status mapping via [`IngestExitCode::code`].
+///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Parses process arguments via [`CliArgs`] and invokes [`run_ingestion`], enforcing the
-/// DO-178C Level A / DO-330 TQL-4 fail-safe process exit contract on any ingestion failure.
+/// Parses process arguments via [`CliArgs`] and invokes [`run_ingestion_with_code`], enforcing the
+/// DO-178C Level A / DO-330 TQL-4 fail-safe `0 / 1 / 2` process exit contract on any ingestion failure.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Total termination: every execution path either completes [`run_ingestion`] with exit code `0`
-///   or prints a structured diagnostic to `stderr` and exits with code `1`.
+/// - Total termination: every execution path either completes [`run_ingestion_with_code`] with exit code `0`
+///   or prints a structured diagnostic to `stderr` and exits with code `1` or `2`.
 ///
 /// ## 3. Preconditions
 /// - Invoked as an OS process with standard argument vector and `stderr`/`stdout` streams attached.
 ///
 /// ## 4. Postconditions
-/// - Terminates with exit status `0` iff [`run_ingestion`] returns `Ok(())`; terminates with exit status `1` otherwise.
+/// - Terminates with exit status `0` iff [`run_ingestion_with_code`] returns `Ok(())`; terminates with `exit_code.code()` otherwise.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - **Time Complexity**: Dominated by [`run_ingestion`], $O(N \log N)$ in total input specification size $N$.
-/// - **Space Complexity**: Dominated by [`run_ingestion`], $O(N)$ for AST and serialization buffers.
+/// - **Time Complexity**: Dominated by [`run_ingestion_with_code`], $O(N \log N)$ in total input specification size $N$.
+/// - **Space Complexity**: Dominated by [`run_ingestion_with_code`], $O(N)$ for AST and serialization buffers.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Any `Err(e)` from [`run_ingestion`] is formatted to `stderr` with the `[SysML v2 Ingestion] ERROR:` prefix
-///   before immediate `process::exit(1)`.
+/// - Any `Err((exit_code, e))` from [`run_ingestion_with_code`] is formatted to `stderr` with the
+///   `[SysML v2 Ingestion] ERROR:` prefix before immediate `process::exit(exit_code.code())`.
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-INGEST-CLI/main], [DO-330-TQL-4-INGEST-CLI]
+/// Realises: [REQ-SYSML-INGEST-CLI/main], [DO-330-TQL-4-INGEST-CLI] | SysML v2: part def SourceCodeAstIngestion
 fn main() {
     let args = CliArgs::parse();
 
-    if let Err(e) = run_ingestion(args) {
+    if let Err((exit_code, e)) = run_ingestion_with_code(args) {
         eprintln!("[SysML v2 Ingestion] ERROR: {}", e);
-        process::exit(1);
+        process::exit(exit_code.code());
     }
 }
 
 /// Executes the end-to-end ingestion pipeline with validated input arguments.
+///
+/// # Summary
+/// Delegates to [`run_ingestion_with_code`] and projects any `(IngestExitCode, String)` error
+/// into a plain `Err(String)` diagnostic for backward-compatible library callers.
+///
+/// # Preconditions
+/// - `args` contains well-formed [`CliArgs`] parameters with readable schema/source paths and writable output directories.
+///
+/// # Postconditions
+/// - Returns `Ok(())` on clean ingestion, scope verification, and SHA-256 digest verification, or `Err(String)` on failure.
+///
+/// # Invariants
+/// - Preserves transactional atomicity of `args.out` and `args.digest`.
+///
+/// # Failure Modes
+/// - Propagates any `ParseOrIoError` or `ScopeOrCryptoError` message from [`run_ingestion_with_code`].
+///
+/// # Side Effects
+/// - Atomically writes `args.out` and `args.digest` upon successful validation.
+///
+/// # Determinism
+/// - Identical inputs and flags produce byte-identical outputs and digests.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Coordinates schema target discovery, format classification, AST translation, closed-world scope
@@ -253,25 +298,93 @@ fn main() {
 /// - **Space Complexity**: $O(N + P + I)$ heap memory for AST nodes, scope filter sets, and serialized SysML text.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Propagates discovery, file read, translator parse, unsupported format, and atomic write errors via `Result::Err`
+/// - Propagates discovery, file read, translator parse, scope/invariant, and atomic write errors via `Result::Err`
 ///   without panicking or leaking temporary staging files.
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-INGEST-CLI/run_ingestion], [DO-330-TQL-4-INGEST-CLI]
+/// Realises: [REQ-SYSML-INGEST-CLI/run_ingestion], [DO-330-TQL-4-INGEST-CLI] | SysML v2: part def SourceCodeAstIngestion
 pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
+    run_ingestion_with_code(args).map_err(|(_, msg)| msg)
+}
+
+/// Executes the end-to-end ingestion pipeline and categorizes failures by [`IngestExitCode`].
+///
+/// # Summary
+/// Performs source/schema discovery, AST translation, architectural scope & negative-invariant
+/// verification, atomic SysML/digest persistence, and post-write SHA-256 read-back verification,
+/// returning typed `(IngestExitCode, String)` diagnostics on failure.
+///
+/// # Preconditions
+/// - `args` specifies valid CLI flags for `--source` or `--schema`, `--out`, and `--digest`.
+///
+/// # Postconditions
+/// - Returns `Ok(())` when translation, scope verification, atomic writes, and post-write SHA-256
+///   verification all succeed.
+/// - Returns `Err((IngestExitCode::ParseOrIoError, msg))` on discovery, format, I/O, or syntax errors (`1`).
+/// - Returns `Err((IngestExitCode::ScopeOrCryptoError, msg))` on scope starvation, negative-invariant
+///   violations, or post-write SHA-256 mismatch (`2`).
+///
+/// # Invariants
+/// - Zero `.unwrap()`, `.expect()`, or direct slice indexing (`[i]`).
+/// - Scope and negative-invariant checks execute before any output file is written to disk.
+///
+/// # Failure Modes
+/// - Maps lexical/syntactic/filesystem errors to `IngestExitCode::ParseOrIoError` (`1`).
+/// - Maps `verify_scope_and_negative_invariants` and post-write SHA-256 verification errors to
+///   `IngestExitCode::ScopeOrCryptoError` (`2`).
+///
+/// # Side Effects
+/// - Reads input source/schema files and atomically writes `args.out`, `args.digest`, and optional AST cache.
+///
+/// # Determinism
+/// - Deterministic AST lowering, serialization, SHA-256 hashing, and exit code classification.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Implements Layer 3 CLI & Atomic Persistence Interface Binding for `IngestSysml::SourceCodeAstIngestion`
+/// under DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - **Pre-Write Scope Gate**: [`verify_scope_and_negative_invariants`] runs before [`write_atomic`],
+///   guaranteeing that scope or negative-invariant violations never overwrite `args.out` or `args.digest`.
+/// - **Closed-Loop Cryptographic Verification**: Re-reads `args.out` and `args.digest` from disk after
+///   atomic rename and verifies $\text{SHA256}(\text{persisted\_sysml}) = \text{digest.sha256}$.
+///
+/// ## 3. Preconditions
+/// - `args: CliArgs` is a populated command-line configuration structure.
+///
+/// ## 4. Postconditions
+/// - Persists verified `.sysml` and `.json` digest artifacts on `Ok(())`, or returns a categorized
+///   `(IngestExitCode, String)` error tuple.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: $O(N \log N + P + I)$ in total input byte size $N$ and filter counts $P, I$.
+/// - **Space Complexity**: $O(N + P + I)$ for AST and serialization buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Halts closed on any lexical, syntactic, I/O, scope, or cryptographic verification error.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-CLI/run_ingestion_with_code], [DO-330-TQL-4-INGEST-CLI] | SysML v2: part def SourceCodeAstIngestion
+pub fn run_ingestion_with_code(args: CliArgs) -> Result<(), (IngestExitCode, String)> {
     let mut pkg: PackageDef;
 
     if let Some(ref source_path) = args.source {
         let fmt_lower = args.format.trim().to_ascii_lowercase();
         if fmt_lower != "auto" && fmt_lower != "code" {
-            return Err(format!(
-                "Invalid format '{}' when '--source' is specified. Expected 'auto' or 'code'.",
-                args.format
+            return Err((
+                IngestExitCode::ParseOrIoError,
+                format!(
+                    "Invalid format '{}' when '--source' is specified. Expected 'auto' or 'code'.",
+                    args.format
+                ),
             ));
         }
-        let lang = SourceLanguage::from_flag(&args.language)?;
+        let lang = SourceLanguage::from_flag(&args.language)
+            .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
         let pkg_name = resolve_ingested_package_name(source_path, args.package.as_deref());
-        pkg = CodeTranslator::with_language(lang).translate_directory(source_path, &pkg_name)?;
+        pkg = CodeTranslator::with_language(lang)
+            .translate_directory(source_path, &pkg_name)
+            .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
 
         // When --schema is supplied alongside --source (and --allowed-parts is omitted),
         // scope code PartDef extraction to architectural part defs declared in the reference schema
@@ -280,27 +393,37 @@ pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
             if args.allowed_parts.is_none() {
                 let ref_pkg = if schema_path.is_dir() {
                     let (_, sysml_files) =
-                        discover_schema_targets(Some(schema_path), Some("sysml"))?;
+                        discover_schema_targets(Some(schema_path), Some("sysml"))
+                            .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
                     parse_sysml_tree(&sysml_files).map_err(|e| {
-                        format!(
-                            "Failed to parse reference schema directory '{}': {}",
-                            schema_path.display(),
-                            e
+                        (
+                            IngestExitCode::ParseOrIoError,
+                            format!(
+                                "Failed to parse reference schema directory '{}': {}",
+                                schema_path.display(),
+                                e
+                            ),
                         )
                     })?
                 } else {
                     let schema_content = fs::read_to_string(schema_path).map_err(|e| {
-                        format!(
-                            "Failed to read reference schema '{}': {}",
-                            schema_path.display(),
-                            e
+                        (
+                            IngestExitCode::ParseOrIoError,
+                            format!(
+                                "Failed to read reference schema '{}': {}",
+                                schema_path.display(),
+                                e
+                            ),
                         )
                     })?;
                     parse_sysml(&schema_content).map_err(|e| {
-                        format!(
-                            "Failed to parse reference schema '{}': {}",
-                            schema_path.display(),
-                            e
+                        (
+                            IngestExitCode::ParseOrIoError,
+                            format!(
+                                "Failed to parse reference schema '{}': {}",
+                                schema_path.display(),
+                                e
+                            ),
                         )
                     })?
                 };
@@ -320,9 +443,12 @@ pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
             .schema
             .clone()
             .unwrap_or_else(|| PathBuf::from("src"));
-        let lang = SourceLanguage::from_flag(&args.language)?;
+        let lang = SourceLanguage::from_flag(&args.language)
+            .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
         let pkg_name = resolve_ingested_package_name(&target_path, args.package.as_deref());
-        pkg = CodeTranslator::with_language(lang).translate_directory(&target_path, &pkg_name)?;
+        pkg = CodeTranslator::with_language(lang)
+            .translate_directory(&target_path, &pkg_name)
+            .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
         println!(
             "[SysML v2 Ingestion] Successfully ingested source AST from '{}' -> {}",
             target_path.display(),
@@ -331,7 +457,8 @@ pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
     } else {
         // Step 1: Discover schema targets and detect input format
         let (disc_fmt, disc_files) =
-            discover_schema_targets(args.schema.as_deref(), Some(&args.format))?;
+            discover_schema_targets(args.schema.as_deref(), Some(&args.format))
+                .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
 
         if disc_files.is_empty() {
             let target_desc = args
@@ -339,7 +466,10 @@ pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
                 .as_ref()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|| "schema/ or schema/extracted/".to_string());
-            return Err(format!("No supported schema files found in {}", target_desc));
+            return Err((
+                IngestExitCode::ParseOrIoError,
+                format!("No supported schema files found in {}", target_desc),
+            ));
         }
 
         // Step 2: Resolve format (auto vs user-specified override)
@@ -368,7 +498,9 @@ pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
                 .map(|p| p.to_string_lossy().to_string())
                 .collect();
             let translator = MarkdownTranslator::new();
-            pkg = translator.translate_files(&file_strs, def_name)?;
+            pkg = translator
+                .translate_files(&file_strs, def_name)
+                .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
 
             println!(
                 "[SysML v2 Ingestion] Successfully ingested {} markdown files -> {}",
@@ -391,7 +523,9 @@ pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
                 .map(|p| p.to_string_lossy().to_string())
                 .collect();
             let translator = YangTranslator::new();
-            pkg = translator.translate_files(&file_strs, def_name)?;
+            pkg = translator
+                .translate_files(&file_strs, def_name)
+                .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
 
             println!(
                 "[SysML v2 Ingestion] Successfully ingested {} yang files -> {}",
@@ -399,32 +533,62 @@ pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
                 args.out.display()
             );
         } else {
-            let target_file = &disc_files[0];
-            let content = fs::read_to_string(target_file)
-                .map_err(|e| format!("Failed to read file '{}': {}", target_file.display(), e))?;
+            let target_file = disc_files.first().ok_or_else(|| {
+                (
+                    IngestExitCode::ParseOrIoError,
+                    "No schema file available for single-file ingestion".to_string(),
+                )
+            })?;
+            let content = fs::read_to_string(target_file).map_err(|e| {
+                (
+                    IngestExitCode::ParseOrIoError,
+                    format!("Failed to read file '{}': {}", target_file.display(), e),
+                )
+            })?;
             let basename = target_file
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("Model");
 
-            let lang = SourceLanguage::from_flag(&args.language)?;
+            let lang = SourceLanguage::from_flag(&args.language)
+                .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
             pkg = match fmt.as_str() {
                 "sysml" => parse_sysml(&content).map_err(|e| {
-                    format!("SysML v2 parse error in '{}': {}", target_file.display(), e)
+                    (
+                        IngestExitCode::ParseOrIoError,
+                        format!("SysML v2 parse error in '{}': {}", target_file.display(), e),
+                    )
                 })?,
-                "code" => CodeTranslator::with_language(lang).translate(&content, basename)?,
-                "idl" => IDLTranslator::new().translate(&content, basename)?,
-                "openapi" => OpenAPITranslator::new().translate(&content, basename)?,
-                "markdown" => MarkdownTranslator::new().translate(&content, basename)?,
-                "yang" => YangTranslator::new().translate(&content, basename)?,
+                "code" => CodeTranslator::with_language(lang)
+                    .translate(&content, basename)
+                    .map_err(|e| (IngestExitCode::ParseOrIoError, e))?,
+                "idl" => IDLTranslator::new()
+                    .translate(&content, basename)
+                    .map_err(|e| (IngestExitCode::ParseOrIoError, e))?,
+                "openapi" => OpenAPITranslator::new()
+                    .translate(&content, basename)
+                    .map_err(|e| (IngestExitCode::ParseOrIoError, e))?,
+                "markdown" => MarkdownTranslator::new()
+                    .translate(&content, basename)
+                    .map_err(|e| (IngestExitCode::ParseOrIoError, e))?,
+                "yang" => YangTranslator::new()
+                    .translate(&content, basename)
+                    .map_err(|e| (IngestExitCode::ParseOrIoError, e))?,
                 "raw" => {
-                    return Err("AST translation is required for raw document formats. SSOT ingestion failed.".to_string());
+                    return Err((
+                        IngestExitCode::ParseOrIoError,
+                        "AST translation is required for raw document formats. SSOT ingestion failed."
+                            .to_string(),
+                    ));
                 }
                 other => {
-                    return Err(format!(
-                        "Unsupported format '{}' for file '{}'",
-                        other,
-                        target_file.display()
+                    return Err((
+                        IngestExitCode::ParseOrIoError,
+                        format!(
+                            "Unsupported format '{}' for file '{}'",
+                            other,
+                            target_file.display()
+                        ),
                     ));
                 }
             };
@@ -457,18 +621,66 @@ pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
     });
 
     filter_ast_to_target_scope(&mut pkg, allowed_set.as_ref(), neg_vec.as_deref());
+    verify_scope_and_negative_invariants(&pkg, allowed_set.as_ref(), neg_vec.as_deref())
+        .map_err(|e| (IngestExitCode::ScopeOrCryptoError, e))?;
 
     // Step 5: Serialize AST to canonical SysML v2 textual representation
     let sysml_text = to_sysml(&pkg);
 
     // Step 6: Atomically write output SysML v2 textual model
-    write_atomic(&args.out, &sysml_text)
-        .map_err(|e| format!("Failed to write output to '{}': {}", args.out.display(), e))?;
+    write_atomic(&args.out, &sysml_text).map_err(|e| {
+        (
+            IngestExitCode::ParseOrIoError,
+            format!("Failed to write output to '{}': {}", args.out.display(), e),
+        )
+    })?;
 
     // Step 7: Generate and atomically write cryptographic schema digest
     let digest = generate_digest(&pkg, &sysml_text);
-    write_digest_atomic(&args.digest, &digest)
-        .map_err(|e| format!("Failed to write digest to '{}': {}", args.digest.display(), e))?;
+    write_digest_atomic(&args.digest, &digest).map_err(|e| {
+        (
+            IngestExitCode::ParseOrIoError,
+            format!(
+                "Failed to write digest to '{}': {}",
+                args.digest.display(),
+                e
+            ),
+        )
+    })?;
+
+    // Step 7b: Closed-loop post-write cryptographic SHA-256 verification
+    let persisted_sysml = fs::read_to_string(&args.out).map_err(|e| {
+        (
+            IngestExitCode::ScopeOrCryptoError,
+            format!(
+                "Post-write cryptographic verification failed reading '{}': {}",
+                args.out.display(),
+                e
+            ),
+        )
+    })?;
+    let persisted_digest_json = fs::read_to_string(&args.digest).map_err(|e| {
+        (
+            IngestExitCode::ScopeOrCryptoError,
+            format!(
+                "Post-write cryptographic verification failed reading '{}': {}",
+                args.digest.display(),
+                e
+            ),
+        )
+    })?;
+    let computed_sha = ingest_sysml::digest::compute_sha256(persisted_sysml.as_bytes());
+    if computed_sha != digest.sha256 || !persisted_digest_json.contains(&digest.sha256) {
+        return Err((
+            IngestExitCode::ScopeOrCryptoError,
+            format!(
+                "Post-write cryptographic SHA-256 mismatch for '{}' (expected {}, computed {})",
+                args.out.display(),
+                digest.sha256,
+                computed_sha
+            ),
+        ));
+    }
 
     println!(
         "[SysML v2 Ingestion] Schema digest generated at {}",
@@ -476,7 +688,8 @@ pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
     );
 
     if args.cache_ast {
-        let (_cached_model, cache_hit) = cache_ingested_sysml_model(Path::new("."), &sysml_text)?;
+        let (_cached_model, cache_hit) = cache_ingested_sysml_model(Path::new("."), &sysml_text)
+            .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
         println!(
             "[SysML v2 Ingestion] Incremental AST cache updated (cache_hit={})",
             cache_hit

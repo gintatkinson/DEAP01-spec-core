@@ -211,12 +211,51 @@ fn main() {
 
     // 0a. Safety Docstring Synthesis & Injection (FEAT-42)
     if let Some(ref target_dir) = cli.inject_safety_docstrings {
-        let schema_model = match resolve_schema_targets(cli.schema.clone().or_else(|| cli.file.clone())) {
-            Ok(SchemaTarget::SingleFile(p)) => fs::read_to_string(&p)
-                .ok()
-                .and_then(|c| parse_sysml(&c).ok()),
-            Ok(SchemaTarget::Directory(_, files)) => parse_sysml_tree(&files).ok(),
-            Err(_) => None,
+        let explicit_schema = cli.schema.clone().or_else(|| cli.file.clone());
+        let has_explicit_schema = explicit_schema.is_some();
+        let schema_model = match resolve_schema_targets(explicit_schema) {
+            Ok(SchemaTarget::SingleFile(p)) => {
+                let content = match fs::read_to_string(&p) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!(
+                            "Error during docstring injection: failed to read schema '{}': {}",
+                            p.display(),
+                            e
+                        );
+                        process::exit(DocstringExitCode::Error.code());
+                    }
+                };
+                match parse_sysml(&content) {
+                    Ok(pkg) => Some(pkg),
+                    Err(e) => {
+                        eprintln!(
+                            "Error during docstring injection: failed to parse schema '{}': {}",
+                            p.display(),
+                            e
+                        );
+                        process::exit(DocstringExitCode::Error.code());
+                    }
+                }
+            }
+            Ok(SchemaTarget::Directory(dir, files)) => match parse_sysml_tree(&files) {
+                Ok(pkg) => Some(pkg),
+                Err(e) => {
+                    eprintln!(
+                        "Error during docstring injection: failed to parse schema directory '{}': {}",
+                        dir.display(),
+                        e
+                    );
+                    process::exit(DocstringExitCode::Error.code());
+                }
+            },
+            Err(e) => {
+                if has_explicit_schema {
+                    eprintln!("Error during docstring injection: {}", e);
+                    process::exit(DocstringExitCode::Error.code());
+                }
+                None
+            }
         };
         let opts = DocstringInjectionOptions {
             target_path: target_dir.clone(),

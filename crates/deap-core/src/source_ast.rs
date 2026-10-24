@@ -499,6 +499,103 @@ pub fn validate_source_syntax(source: &str, file_label: &str) -> Result<(), Stri
     validate_source_syntax_for_language(source, file_label, lang)
 }
 
+/// Active string-literal lexical state tuple `(quote_byte, is_triple_quoted, is_raw_string, open_line, open_col)`.
+///
+/// # Summary
+/// Encapsulates the delimiter byte, triple-quote mode, raw-string mode, and 1-indexed opening `(line, col)`
+/// coordinates for an in-flight string literal during source syntax validation.
+///
+/// # Preconditions
+/// - `quote_byte` is `b'"'` or `b'\''`.
+/// - `open_line >= 1` and `open_col >= 1`.
+///
+/// # Postconditions
+/// - Preserves exact opening coordinates for fail-closed unclosed-string diagnostics and interpolation restoration.
+///
+/// # Invariants
+/// - Copy-semantic 5-tuple with zero heap allocation.
+///
+/// # Failure Modes
+/// - None (pure type alias).
+///
+/// # Side Effects
+/// - None.
+///
+/// # Determinism
+/// - Deterministic value layout across all target architectures.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34 zero-suppression rules (`ActiveStringState`).
+/// Eliminates complex inline tuple types in `validate_source_syntax_for_language` without lint-suppression attributes.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Layout: `(u8, bool, bool, usize, usize)` representing `(quote, is_triple, is_raw, open_line, open_col)`.
+///
+/// ## 3. Preconditions
+/// - Instantiated only when entering a single-, double-, or triple-quoted string literal.
+///
+/// ## 4. Postconditions
+/// - Restored from `InterpolationFrame` when a nested `${...}` expression closes.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) copy access.
+/// - Space Complexity: O(1) stack slot.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total value type; cannot fail or panic.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-ACTIVE-STRING-STATE]
+type ActiveStringState = (u8, bool, bool, usize, usize);
+
+/// Saved string-interpolation stack frame `(saved_string_state, outer_delimiter_stack_depth)`.
+///
+/// # Summary
+/// Records the enclosing [`ActiveStringState`] and delimiter stack depth prior to entering a `${...}`
+/// string interpolation block so string scanning resumes accurately when the matching `}` is popped.
+///
+/// # Preconditions
+/// - Pushed onto `interp_stack` immediately before pushing the interpolation `'{'` delimiter onto `stack`.
+///
+/// # Postconditions
+/// - Restores `active_str` to `saved_string_state` iff `stack.len()` returns to `outer_delimiter_stack_depth`.
+///
+/// # Invariants
+/// - Preserves arbitrary nesting depth of interpolated strings and inner braced expressions.
+///
+/// # Failure Modes
+/// - None (pure type alias).
+///
+/// # Side Effects
+/// - None.
+///
+/// # Determinism
+/// - Deterministic stack frame representation.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34 zero-suppression rules (`InterpolationFrame`).
+/// Replaces nested tuple type annotations in `validate_source_syntax_for_language` without lint-suppression attributes.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Pairs an [`ActiveStringState`] with the `usize` delimiter stack depth at `${` entry.
+///
+/// ## 3. Preconditions
+/// - Constructed only inside Dart non-raw string interpolation `${`.
+///
+/// ## 4. Postconditions
+/// - Popped when the matching `}` restores `stack.len()` to the recorded depth.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) push/pop.
+/// - Space Complexity: O(1) per interpolation nesting level.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total value type; cannot fail or panic.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-INTERPOLATION-FRAME]
+type InterpolationFrame = (ActiveStringState, usize);
+
 /// Validates lexical and delimiter balance (`{}`, `()`, `[]`, strings, comments) under explicit `lang` rules.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -541,9 +638,8 @@ pub fn validate_source_syntax_for_language(
     let mut line: usize = 1;
     let mut col: usize = 1;
     let mut stack: Vec<(u8, usize, usize)> = Vec::new();
-    let mut active_str: Option<(u8, bool, bool, usize, usize)> = None;
-    #[allow(clippy::type_complexity)]
-    let mut interp_stack: Vec<((u8, bool, bool, usize, usize), usize)> = Vec::new();
+    let mut active_str: Option<ActiveStringState> = None;
+    let mut interp_stack: Vec<InterpolationFrame> = Vec::new();
     let is_dart = lang == SourceLanguage::Dart;
 
     while let Some(&b) = bytes.get(idx) {
@@ -854,8 +950,7 @@ pub fn parse_rust_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
 
     let mut items: Vec<SourceAstItem> = Vec::new();
     let mut current_doc: Vec<String> = Vec::new();
-    let mut in_multiline_comment = false;
-    let mut in_raw_string = false;
+    let mut rust_lex_state = RustStringScannerState::Normal;
     let mut in_mod_tests = false;
     let mut cfg_test_pending = false;
     let mut attr_bracket_depth: usize = 0;
@@ -872,43 +967,24 @@ pub fn parse_rust_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
     for (idx, raw_line) in source.lines().enumerate() {
         let line_no = idx.saturating_add(1);
         let trimmed = raw_line.trim();
+        let started_in_normal = rust_lex_state == RustStringScannerState::Normal;
 
-        if in_multiline_comment {
-            if trimmed.contains("*/") {
-                in_multiline_comment = false;
-            }
+        if started_in_normal && trimmed.starts_with("//!") {
             continue;
         }
-        if !in_raw_string && trimmed.starts_with("/*") && !trimmed.contains("*/") {
-            in_multiline_comment = true;
-            continue;
-        }
-        if in_raw_string {
-            if trimmed.contains("\"#") {
-                in_raw_string = false;
-            }
-            continue;
-        }
-        if trimmed.starts_with("//!") {
-            continue;
-        }
-        if trimmed.starts_with("///") {
+        if started_in_normal && trimmed.starts_with("///") {
             if !in_mod_tests {
                 current_doc.push(trimmed.to_string());
             }
             continue;
         }
 
-        let code = strip_line_comment_preserving_strings(trimmed).trim();
-        if code.is_empty() {
+        let sanitized_line = scan_rust_line_preserving_lex_state(trimmed, &mut rust_lex_state);
+        let code = sanitized_line.trim();
+        if code.is_empty()
+            || (!started_in_normal && rust_lex_state != RustStringScannerState::Normal)
+        {
             continue;
-        }
-
-        if let Some(raw_pos) = code.find("r#\"") {
-            let after_open = code.get(raw_pos.saturating_add(3)..).unwrap_or("");
-            if !after_open.contains("\"#") {
-                in_raw_string = true;
-            }
         }
 
         if code == "mod tests {"
@@ -3295,13 +3371,37 @@ pub fn extract_dart_callable_ident(code: &str) -> Option<String> {
 
 /// Determines the byte length of a single-character literal at the start of `slice`.
 ///
+/// # Summary
+/// Computes the exact byte length of a Rust or Dart single-character literal (`'a'`, `'\n'`, `'\x7F'`,
+/// `'\u{1F600}'`, `'↑'`) starting at byte 0 of `slice`, or returns `None` for lifetimes (`'a`, `'static`)
+/// and multi-character single-quoted strings.
+///
+/// # Preconditions
+/// - `slice` is a valid UTF-8 string slice positioned at a candidate `'` token.
+///
+/// # Postconditions
+/// - Returns `Some(byte_len)` with `byte_len >= 3` iff `slice` starts with a well-formed character literal; `None` otherwise.
+///
+/// # Invariants
+/// - Never uses magic byte-offset limits; inspects the exact UTF-8 scalar or escape sequence followed by `'`.
+/// - Uses non-panicking `.get(..)` and `.chars()` exclusively.
+///
+/// # Failure Modes
+/// - Unclosed single quotes, empty `''`, or lifetime identifiers (`'lifetime_alpha`) return `None`.
+///
+/// # Side Effects
+/// - Pure stateless lexical recognizer; zero I/O or mutation.
+///
+/// # Determinism
+/// - Deterministic O(1) bounded inspection of the leading character literal token.
+///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A character literal parsing standards.
 /// Correctly computes byte lengths for ASCII, escape-sequence, and multi-byte UTF-8 character literals.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Returns `Some(byte_length)` if `slice` starts with a well-formed character literal, or `None`.
-/// - Supports multi-byte unicode code points up to 4 UTF-8 bytes.
+/// - Supports multi-byte unicode code points up to 4 UTF-8 bytes and `\u{...}` hex escapes.
 ///
 /// ## 3. Preconditions
 /// - `slice` is a valid UTF-8 string slice.
@@ -3321,7 +3421,7 @@ pub fn extract_dart_callable_ident(code: &str) -> Option<String> {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SOURCE-AST-SINGLE-CHAR-LITERAL]
-fn single_char_literal_byte_len(slice: &str) -> Option<usize> {
+pub fn single_char_literal_byte_len(slice: &str) -> Option<usize> {
     if !slice.starts_with('\'') {
         return None;
     }
@@ -3353,6 +3453,423 @@ fn single_char_literal_byte_len(slice: &str) -> Option<usize> {
             None
         }
     }
+}
+
+/// Multi-line lexical scanner state for Rust source files.
+///
+/// # Summary
+/// Tracks whether the line-oriented Rust scanner is in normal code, a nested `/* ... */` block comment,
+/// a standard `"..."` string literal, or a `r#"..."#` raw string literal with `hashes` `#` delimiters.
+///
+/// # Preconditions
+/// - Initialized to [`RustStringScannerState::Normal`] at line 1 of a Rust source file.
+///
+/// # Postconditions
+/// - Updated in place by [`scan_rust_line_preserving_lex_state`] across every source line.
+///
+/// # Invariants
+/// - `BlockComment(depth)` always has `depth >= 1` while active and transitions to `Normal` when `depth == 0`.
+/// - `RawString(hashes)` closes only when `"` is immediately followed by `hashes` consecutive `#` bytes.
+///
+/// # Failure Modes
+/// - Unclosed literals or comments remain in their active non-`Normal` state through EOF.
+///
+/// # Side Effects
+/// - Pure value enum with `Copy` semantics; zero heap allocations.
+///
+/// # Determinism
+/// - Deterministic state transitions driven strictly by UTF-8 byte sequences.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34/Check 36 unified Rust lexical state machine rules (`RustStringScannerState`).
+/// Shared across `deap-core::source_ast` and `verify-baseline` to guarantee identical multi-line comment,
+/// string literal, raw string, character literal, and lifetime tokenization.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Four mutually exclusive states: `Normal`, `BlockComment(usize)`, `StringLiteral`, and `RawString(usize)`.
+///
+/// ## 3. Preconditions
+/// - Passed by mutable reference into [`scan_rust_line_preserving_lex_state`].
+///
+/// ## 4. Postconditions
+/// - Reflects the exact lexical mode at the end of each scanned line.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) state transition and comparison.
+/// - Space Complexity: O(1) stack footprint.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total state representation with zero panicking transitions.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SOURCE-AST-RUST-SCANNER-STATE]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RustStringScannerState {
+    /// Outside any comment or string literal.
+    Normal,
+    /// Inside a nested `/* ... */` block comment of the given nesting depth (`>= 1`).
+    BlockComment(usize),
+    /// Inside a standard double-quoted `"..."` string literal.
+    StringLiteral,
+    /// Inside a raw string literal `r#"..."#` with the specified number of `#` delimiters.
+    RawString(usize),
+}
+
+/// Scans a single Rust source line, blanking out comment and string/char literal interiors while updating `state`.
+///
+/// # Summary
+/// Transforms `line` into a sanitized code string in which `//` comments and `/* ... */` block comments are
+/// stripped and the interior bytes of `"..."`, `r#"..."#`, and `'c'` character literals are replaced with spaces,
+/// while preserving Rust lifetimes (`'a`, `'static`, `'lifetime_alpha`) and code tokens that follow a mid-line
+/// `*/` or closing string quote.
+///
+/// # Preconditions
+/// - `line` is a single UTF-8 line slice (without trailing newline).
+/// - `state` holds the [`RustStringScannerState`] carried over from the preceding line.
+///
+/// # Postconditions
+/// - Returns a `String` containing only top-level code tokens and placeholder quotes/spaces for literals.
+/// - Updates `*state` to the lexical state at the end of `line`.
+///
+/// # Invariants
+/// - Character literals (`'{'`, `'/'`, `'\''`, `'\u{1F600}'`) are recognized via [`single_char_literal_byte_len`]
+///   and blanked out with spaces so they never corrupt brace, parenthesis, or comment scanning.
+/// - Lifetimes (`'a`, `'static`, `'lifetime_alpha`) advance by 1 byte (`'`) without entering a string state.
+///
+/// # Failure Modes
+/// - Malformed or unclosed literals on `line` transition `*state` without panicking or out-of-bounds slicing.
+///
+/// # Side Effects
+/// - Mutates `*state` in place; allocates and returns one sanitized `String`.
+///
+/// # Determinism
+/// - Deterministic O(N) single-pass scanner over `line`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34/Check 36 Rust lexical hygiene (`scan_rust_line_preserving_lex_state`).
+/// Prevents `//`, `/*`, `{`, `}`, `(`, `)`, or `fn ` inside strings, raw strings, comments, or character
+/// literals from corrupting AST extraction or baseline compliance checks.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Handles nested `/* ... /* ... */ ... */` block comments via `BlockComment(depth)`.
+/// - Handles arbitrary-hash raw strings `r"..."`, `r#"..."#`, `r##"..."##` via `RawString(hashes)`.
+/// - Distinguishes character literals from lifetimes of any identifier length via [`single_char_literal_byte_len`].
+///
+/// ## 3. Preconditions
+/// - `line: &str` is a valid UTF-8 Rust source line; `state: &mut RustStringScannerState` is the active state.
+///
+/// ## 4. Postconditions
+/// - Returns the sanitized code string for `line` and updates `*state`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `line.len()`.
+/// - Space Complexity: O(N) for the returned sanitized `String`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking `.get(..)` and saturating index arithmetic throughout.
+/// - State: Mutates only `*state`.
+/// - Action: Preserves code tokens appearing after a mid-line `*/` block comment closure.
+/// - Resource: Single `String` allocation with capacity `line.len()`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SOURCE-AST-SCAN-RUST-LINE-LEX-STATE]
+pub fn scan_rust_line_preserving_lex_state(
+    line: &str,
+    state: &mut RustStringScannerState,
+) -> String {
+    let bytes = line.as_bytes();
+    let mut out = String::with_capacity(line.len());
+    let mut i: usize = 0;
+
+    while i < bytes.len() {
+        match *state {
+            RustStringScannerState::BlockComment(mut depth) => {
+                if bytes.get(i) == Some(&b'/') && bytes.get(i.saturating_add(1)) == Some(&b'*') {
+                    depth = depth.saturating_add(1);
+                    *state = RustStringScannerState::BlockComment(depth);
+                    i = i.saturating_add(2);
+                } else if bytes.get(i) == Some(&b'*')
+                    && bytes.get(i.saturating_add(1)) == Some(&b'/')
+                {
+                    depth = depth.saturating_sub(1);
+                    *state = if depth == 0 {
+                        RustStringScannerState::Normal
+                    } else {
+                        RustStringScannerState::BlockComment(depth)
+                    };
+                    out.push(' ');
+                    i = i.saturating_add(2);
+                } else {
+                    i = i.saturating_add(1);
+                }
+            }
+            RustStringScannerState::StringLiteral => {
+                if bytes.get(i) == Some(&b'\\') {
+                    out.push(' ');
+                    if i.saturating_add(1) < bytes.len() {
+                        out.push(' ');
+                        i = i.saturating_add(2);
+                    } else {
+                        i = i.saturating_add(1);
+                    }
+                } else if bytes.get(i) == Some(&b'"') {
+                    *state = RustStringScannerState::Normal;
+                    out.push('"');
+                    i = i.saturating_add(1);
+                } else {
+                    out.push(' ');
+                    i = i.saturating_add(1);
+                }
+            }
+            RustStringScannerState::RawString(hashes) => {
+                if bytes.get(i) == Some(&b'"') {
+                    let mut matched: usize = 0;
+                    while matched < hashes
+                        && bytes.get(i.saturating_add(1).saturating_add(matched)) == Some(&b'#')
+                    {
+                        matched = matched.saturating_add(1);
+                    }
+                    if matched == hashes {
+                        *state = RustStringScannerState::Normal;
+                        out.push('"');
+                        i = i.saturating_add(1).saturating_add(hashes);
+                        continue;
+                    }
+                }
+                out.push(' ');
+                i = i.saturating_add(1);
+            }
+            RustStringScannerState::Normal => {
+                if bytes.get(i) == Some(&b'/') && bytes.get(i.saturating_add(1)) == Some(&b'/') {
+                    break;
+                }
+                if bytes.get(i) == Some(&b'/') && bytes.get(i.saturating_add(1)) == Some(&b'*') {
+                    *state = RustStringScannerState::BlockComment(1);
+                    out.push(' ');
+                    i = i.saturating_add(2);
+                    continue;
+                }
+                if bytes.get(i) == Some(&b'r') || bytes.get(i) == Some(&b'R') {
+                    let prev_ok = i == 0
+                        || bytes
+                            .get(i.saturating_sub(1))
+                            .map(|b| (!b.is_ascii_alphanumeric() && *b != b'_') || *b == b'b')
+                            .unwrap_or(true);
+                    if prev_ok {
+                        let mut hashes: usize = 0;
+                        while bytes.get(i.saturating_add(1).saturating_add(hashes)) == Some(&b'#')
+                        {
+                            hashes = hashes.saturating_add(1);
+                        }
+                        if bytes.get(i.saturating_add(1).saturating_add(hashes)) == Some(&b'"') {
+                            *state = RustStringScannerState::RawString(hashes);
+                            out.push('"');
+                            i = i.saturating_add(2).saturating_add(hashes);
+                            continue;
+                        }
+                    }
+                }
+                if bytes.get(i) == Some(&b'"') {
+                    *state = RustStringScannerState::StringLiteral;
+                    out.push('"');
+                    i = i.saturating_add(1);
+                    continue;
+                }
+                if bytes.get(i) == Some(&b'\'') {
+                    if let Some(char_len) = line.get(i..).and_then(single_char_literal_byte_len) {
+                        for _ in 0..char_len {
+                            out.push(' ');
+                        }
+                        i = i.saturating_add(char_len);
+                        continue;
+                    }
+                    out.push('\'');
+                    i = i.saturating_add(1);
+                    continue;
+                }
+                if let Some(ch) = line.get(i..).and_then(|s| s.chars().next()) {
+                    out.push(ch);
+                    i = i.saturating_add(ch.len_utf8());
+                } else {
+                    i = i.saturating_add(1);
+                }
+            }
+        }
+    }
+
+    out
+}
+
+/// Detects a Rust hashed raw string prefix `r#"..."#` (or `R#"..."#`) at byte offset `idx`.
+///
+/// # Summary
+/// Inspects `bytes` at `idx` for an `'r'` or `'R'` token (not preceded by an identifier character `[A-Za-z0-9_]`)
+/// followed by `hashes >= 1` `'#'` bytes and an opening `'"'`, returning `Some((hashes, quote_idx))`.
+///
+/// # Preconditions
+/// - `bytes` is a source line byte slice; `idx` is the candidate byte index of `'r'` or `'R'`.
+///
+/// # Postconditions
+/// - Returns `Some((hashes, quote_idx))` where `hashes >= 1` and `bytes.get(quote_idx) == Some(&b'"')`, or `None`.
+///
+/// # Invariants
+/// - Rejects identifier suffixes ending in `r` (such as `bar#"..."`) by verifying `idx == 0` or non-identifier predecessor.
+///
+/// # Failure Modes
+/// - Returns `None` when `idx` is out of bounds, lacks `#`, or is not followed by `'"'`.
+///
+/// # Side Effects
+/// - Pure stateless helper; zero I/O or heap allocation.
+///
+/// # Determinism
+/// - Deterministic O(H) scan where H is the number of consecutive `#` characters.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34 raw string lexical recognition (`rust_raw_string_hash_count`).
+/// Enables `strip_line_comment_preserving_strings` and `update_ast_delimiter_depths` to preserve `//`
+/// and unbalanced delimiters inside `r#"..."#` literals.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `quote_idx == idx + 1 + hashes` with `hashes >= 1`.
+///
+/// ## 3. Preconditions
+/// - `bytes: &[u8]` is a UTF-8 line byte slice; `idx: usize` is a byte offset.
+///
+/// ## 4. Postconditions
+/// - Returns `Some((hashes, quote_idx))` on valid hashed raw-string opening, or `None`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(H) where H is the hash delimiter count.
+/// - Space Complexity: O(1) zero allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-panicking `.get(..)` byte inspection with saturating index addition.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SOURCE-AST-RAW-STRING-HASH-COUNT]
+fn rust_raw_string_hash_count(bytes: &[u8], idx: usize) -> Option<(usize, usize)> {
+    let b = *bytes.get(idx)?;
+    if b != b'r' && b != b'R' {
+        return None;
+    }
+    if idx > 0 {
+        let prev = *bytes.get(idx.saturating_sub(1))?;
+        if prev.is_ascii_alphanumeric() || prev == b'_' {
+            return None;
+        }
+    }
+    let mut scan = idx.saturating_add(1);
+    let mut hashes: usize = 0;
+    while bytes.get(scan) == Some(&b'#') {
+        hashes = hashes.saturating_add(1);
+        scan = scan.saturating_add(1);
+    }
+    if hashes > 0 && bytes.get(scan) == Some(&b'"') {
+        Some((hashes, scan))
+    } else {
+        None
+    }
+}
+
+/// Verifies whether a `${` sequence inside a quoted string literal has a matching `}` before the closing `quote`.
+///
+/// # Summary
+/// Scans forward from `start_idx` (immediately after `${`) to confirm that a matching closing `}`
+/// (accounting for nested braces and nested string literals inside `${...}`) appears before the outer
+/// string's closing `quote` on the same line.
+///
+/// # Preconditions
+/// - `bytes` is the byte slice of a source line.
+/// - `start_idx` is the byte index immediately following `${` (`idx.saturating_add(2)`).
+/// - `quote` is the active string delimiter (`b'"'` or `b'\''`).
+///
+/// # Postconditions
+/// - Returns `true` iff `${` is closed by a matching `}` followed by an unescaped closing `quote` on the line.
+/// - Returns `false` for unclosed `"${"` literals (such as Rust string literals containing literal `"${"`).
+///
+/// # Invariants
+/// - Preserves Dart interpolated strings with nested quotes (`"hello ${map["world"]}!"`) while rejecting
+///   Rust string literals containing literal `"${"` without a closing `}` before `"`.
+///
+/// # Failure Modes
+/// - Unclosed braces or quotes return `false` at `bytes.len()` without panicking.
+///
+/// # Side Effects
+/// - Pure stateless lookahead helper; zero I/O or heap allocation.
+///
+/// # Determinism
+/// - Deterministic O(N) byte lookahead over the remainder of the line.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A delimiter depth soundness (`has_matching_interpolation_brace_before_quote`).
+/// Prevents literal `"${"` substrings inside Rust string literals from exiting quote state in
+/// `update_ast_delimiter_depths` and corrupting `brace_depth` or `paren_depth`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Tracks brace nesting `depth` starting at `1` and optional `inner_quote` inside `${...}`.
+/// - Requires `depth` to reach `0` outside `inner_quote` with a valid closing `quote` after the `}`.
+///
+/// ## 3. Preconditions
+/// - `bytes: &[u8]`, `start_idx: usize`, `quote: u8`.
+///
+/// ## 4. Postconditions
+/// - Returns `true` only when a complete `${...}` interpolation block exists inside the quoted literal.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `bytes.len() - start_idx`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-panicking `.get(..)` indexing and saturating arithmetic.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SOURCE-AST-INTERP-BRACE-LOOKAHEAD]
+fn has_matching_interpolation_brace_before_quote(
+    bytes: &[u8],
+    start_idx: usize,
+    quote: u8,
+) -> bool {
+    let mut i = start_idx;
+    let mut depth: usize = 1;
+    let mut inner_quote: Option<u8> = None;
+
+    while let Some(&b) = bytes.get(i) {
+        if let Some(iq) = inner_quote {
+            if b == b'\\' {
+                i = i.saturating_add(2);
+                continue;
+            }
+            if b == iq {
+                inner_quote = None;
+            }
+            i = i.saturating_add(1);
+            continue;
+        }
+
+        if b == b'\\' {
+            i = i.saturating_add(2);
+            continue;
+        }
+        if b == b'{' {
+            depth = depth.saturating_add(1);
+        } else if b == b'}' {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                return has_unescaped_closing_quote(bytes, i.saturating_add(1), quote);
+            }
+        } else if b == quote {
+            if bytes.get(i.saturating_add(1)) == Some(&b';') {
+                return false;
+            }
+            inner_quote = Some(b);
+        } else if b == b'"' || b == b'\'' {
+            inner_quote = Some(b);
+        }
+
+        i = i.saturating_add(1);
+    }
+
+    false
 }
 
 /// Checks whether an unescaped closing quote character exists on the remainder of the line.
@@ -3464,12 +3981,12 @@ fn is_rust_lifetime_at(bytes: &[u8], idx: usize) -> bool {
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and Check 36 comment-stripping rules.
-/// Prevents URL protocols (`http://`, `package://`) inside string literals from being prematurely
-/// truncated as line comments in Rust and Dart source files.
+/// Prevents URL protocols (`http://`, `package://`) and comments inside standard or hashed raw string literals
+/// (`r#"..."#`) from being prematurely truncated as line comments in Rust and Dart source files.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Only truncates at `//` when neither `in_single_quote` nor `in_double_quote` is active.
-/// - Accurately skips escaped quotes and character literals.
+/// - Only truncates at `//` when neither `in_single_quote`, `in_double_quote`, nor `raw_hashes` is active.
+/// - Accurately skips escaped quotes, hashed raw strings `r#"..."#`, and character literals.
 ///
 /// ## 3. Preconditions
 /// - `line` is a valid UTF-8 string slice.
@@ -3493,11 +4010,36 @@ pub fn strip_line_comment_preserving_strings(line: &str) -> &str {
     let mut in_double_quote = false;
     let mut in_single_quote = false;
     let mut is_raw = false;
+    let mut raw_hashes: Option<usize> = None;
 
     while let Some(&b) = bytes.get(idx) {
+        if let Some(hashes) = raw_hashes {
+            if b == b'"' {
+                let mut matched: usize = 0;
+                let mut scan = idx.saturating_add(1);
+                while matched < hashes && bytes.get(scan) == Some(&b'#') {
+                    matched = matched.saturating_add(1);
+                    scan = scan.saturating_add(1);
+                }
+                if matched == hashes {
+                    raw_hashes = None;
+                    idx = scan;
+                    continue;
+                }
+            }
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
         if !in_double_quote && !in_single_quote {
             if b == b'/' && bytes.get(idx.saturating_add(1)) == Some(&b'/') {
                 return line.get(..idx).unwrap_or("");
+            }
+
+            if let Some((hashes, quote_idx)) = rust_raw_string_hash_count(bytes, idx) {
+                raw_hashes = Some(hashes);
+                idx = quote_idx.saturating_add(1);
+                continue;
             }
 
             if (b == b'r' || b == b'R')
@@ -3725,12 +4267,12 @@ pub fn extract_dart_getter_ident(code: &str) -> Option<String> {
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A delimiter tracking parity (`update_ast_delimiter_depths`).
 /// Ensures named parameter braces `({super.key})` inside `(...)` never alter `brace_depth`,
-/// and handles nested quotes inside string interpolations `${...}` and raw strings `r'...'`.
+/// and handles nested quotes inside string interpolations `${...}` and raw strings (`r'...'`, `r#"..."#`).
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - `paren_depth` updates on unquoted `'('` and `')'`.
 /// - `brace_depth` updates on unquoted `'{'` and `'}'` iff `*paren_depth == 0`.
-/// - Tracks interpolation stack `interp_stack` for nested `${...}` expressions inside strings.
+/// - Tracks interpolation stack `interp_stack` for verified `${...}` expressions inside strings.
 ///
 /// ## 3. Preconditions
 /// - `code: &str` is a comment-stripped source line; `brace_depth` and `paren_depth` are mutable counters.
@@ -3745,7 +4287,7 @@ pub fn extract_dart_getter_ident(code: &str) -> Option<String> {
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Uses `.get(..)` and saturating arithmetic.
 /// - State: Mutates only the two depth references.
-/// - Action: Skips escaped bytes inside string and character literals.
+/// - Action: Skips escaped bytes and hashed raw strings inside string and character literals.
 /// - Resource: Bounded stack allocation for interpolation frames.
 ///
 /// ## 7. Realization & Traceability
@@ -3755,15 +4297,38 @@ pub fn update_ast_delimiter_depths(code: &str, brace_depth: &mut usize, paren_de
     let mut idx: usize = 0;
     let mut active_quote: Option<u8> = None;
     let mut is_raw = false;
+    let mut raw_hashes: Option<usize> = None;
     let mut interp_stack: Vec<(u8, usize)> = Vec::new();
 
     while let Some(&b) = bytes.get(idx) {
+        if let Some(hashes) = raw_hashes {
+            if b == b'"' {
+                let mut matched: usize = 0;
+                let mut scan = idx.saturating_add(1);
+                while matched < hashes && bytes.get(scan) == Some(&b'#') {
+                    matched = matched.saturating_add(1);
+                    scan = scan.saturating_add(1);
+                }
+                if matched == hashes {
+                    raw_hashes = None;
+                    idx = scan;
+                    continue;
+                }
+            }
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
         if let Some(q) = active_quote {
             if !is_raw && b == b'\\' {
                 idx = idx.saturating_add(2);
                 continue;
             }
-            if !is_raw && b == b'$' && bytes.get(idx.saturating_add(1)) == Some(&b'{') {
+            if !is_raw
+                && b == b'$'
+                && bytes.get(idx.saturating_add(1)) == Some(&b'{')
+                && has_matching_interpolation_brace_before_quote(bytes, idx.saturating_add(2), q)
+            {
                 interp_stack.push((q, *brace_depth));
                 *brace_depth = brace_depth.saturating_add(1);
                 active_quote = None;
@@ -3792,6 +4357,12 @@ pub fn update_ast_delimiter_depths(code: &str, brace_depth: &mut usize, paren_de
                 *brace_depth = brace_depth.saturating_sub(1);
             }
             idx = idx.saturating_add(1);
+            continue;
+        }
+
+        if let Some((hashes, quote_idx)) = rust_raw_string_hash_count(bytes, idx) {
+            raw_hashes = Some(hashes);
+            idx = quote_idx.saturating_add(1);
             continue;
         }
 
@@ -3966,10 +4537,167 @@ class PathFormatter {
         Ok(())
     }
 
+    /// Detects direct range-slice indexing expressions (`ident[a..b]`) outside string and char literals.
+    ///
+    /// # Summary
+    /// Scans a comment-stripped source line outside string and character literals for `[` ... `..` ... `]`
+    /// immediately preceded by an identifier or closing delimiter (`alphanumeric`, `_`, `)`, `]`).
+    ///
+    /// # Preconditions
+    /// - `code_line` is a valid UTF-8 source line slice after line-comment stripping.
+    ///
+    /// # Postconditions
+    /// - Returns `true` if any direct range-slice indexing expression is present outside literals; `false` otherwise.
+    ///
+    /// # Invariants
+    /// - Ignores `[` and `..` tokens inside normal string literals, raw string literals, and character literals.
+    /// - Uses `.get(..)` and saturating arithmetic exclusively without direct slice indexing.
+    ///
+    /// # Failure Modes
+    /// - Unclosed literals on a single line terminate scanning safely at `bytes.len()` without panicking.
+    ///
+    /// # Side Effects
+    /// - Pure stateless predicate; performs zero I/O and mutates no external state.
+    ///
+    /// # Determinism
+    /// - Deterministic O(N) byte scan over `code_line.as_bytes()`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and Check 34 (`check_zero_regex`) non-panicking slice invariants.
+    /// Provides general AST-level self-verification that production code never uses panicking `&s[a..b]` syntax.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Matches `[` at byte index `idx > 0` iff `bytes.get(idx - 1)` is in `[A-Za-z0-9_)\]]` and a `..`
+    ///   token appears before the matching `]` at bracket depth 1.
+    ///
+    /// ## 3. Preconditions
+    /// - `code_line: &str` is a comment-stripped line from `source_ast.rs`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `true` iff a direct range-slice indexing operation exists on `code_line`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) where N is `code_line.len()`.
+    /// - Space Complexity: O(1) zero heap allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Non-panicking `.get(..)` byte access throughout.
+    /// - State: Stateless local indices.
+    /// - Action: Returns `false` on clean lines.
+    /// - Resource: Zero heap allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SOURCE-AST-CHECK34-RANGE-SLICE-DETECTOR]
+    fn contains_direct_range_slice(code_line: &str) -> bool {
+        let bytes = code_line.as_bytes();
+        let mut idx: usize = 0;
+        let mut in_double_quote = false;
+        let mut raw_hashes: Option<usize> = None;
+
+        while let Some(&b) = bytes.get(idx) {
+            if let Some(hashes) = raw_hashes {
+                if b == b'"' {
+                    let mut matched: usize = 0;
+                    let mut scan = idx.saturating_add(1);
+                    while matched < hashes && bytes.get(scan) == Some(&b'#') {
+                        matched = matched.saturating_add(1);
+                        scan = scan.saturating_add(1);
+                    }
+                    if matched == hashes {
+                        raw_hashes = None;
+                        idx = scan;
+                        continue;
+                    }
+                }
+                idx = idx.saturating_add(1);
+                continue;
+            }
+
+            if in_double_quote {
+                if b == b'\\' {
+                    idx = idx.saturating_add(2);
+                    continue;
+                }
+                if b == b'"' {
+                    in_double_quote = false;
+                }
+                idx = idx.saturating_add(1);
+                continue;
+            }
+
+            if b == b'"' {
+                in_double_quote = true;
+                idx = idx.saturating_add(1);
+                continue;
+            }
+
+            if b == b'\'' {
+                if let Some(char_len) = code_line.get(idx..).and_then(single_char_literal_byte_len) {
+                    idx = idx.saturating_add(char_len);
+                    continue;
+                }
+                idx = idx.saturating_add(1);
+                continue;
+            }
+
+            if b == b'[' && idx > 0 {
+                let prev_is_slice_target = bytes
+                    .get(idx.saturating_sub(1))
+                    .map(|&p| p.is_ascii_alphanumeric() || p == b'_' || p == b')' || p == b']')
+                    .unwrap_or(false);
+                if prev_is_slice_target {
+                    let mut scan = idx.saturating_add(1);
+                    let mut depth: usize = 1;
+                    while let Some(&sb) = bytes.get(scan) {
+                        if sb == b'[' {
+                            depth = depth.saturating_add(1);
+                        } else if sb == b']' {
+                            depth = depth.saturating_sub(1);
+                            if depth == 0 {
+                                break;
+                            }
+                        } else if depth == 1
+                            && sb == b'.'
+                            && bytes.get(scan.saturating_add(1)) == Some(&b'.')
+                        {
+                            return true;
+                        }
+                        scan = scan.saturating_add(1);
+                    }
+                }
+            }
+
+            idx = idx.saturating_add(1);
+        }
+
+        false
+    }
+
     /// Verifies comment stripping, delimiter depth tracking with char literals, and Check 34 range-slice absence.
     ///
     /// # Summary
-    /// Tests `strip_line_comment_preserving_strings` and `update_ast_delimiter_depths` on character literals and verifies zero raw range-slice indexing in production code.
+    /// Tests `strip_line_comment_preserving_strings` and `update_ast_delimiter_depths` on character literals,
+    /// hashed raw strings, and unclosed `${` strings, and verifies zero raw range-slice indexing or `#[allow(...)]` in production code.
+    ///
+    /// # Preconditions
+    /// - Invoked under `cargo test -p deap-core --lib`.
+    ///
+    /// # Postconditions
+    /// - Asserts exact stripped slices, delimiter depth counters, and absence of raw range slices or `#[allow(clippy::type_complexity)]` in production code.
+    ///
+    /// # Invariants
+    /// - `strip_line_comment_preserving_strings` preserves `'/'`, `"http://..."`, and `r#"http://... // keep"#` while stripping trailing `//`.
+    /// - `update_ast_delimiter_depths` ignores `'{'` and `'('` inside character literals, hashed raw strings, and unclosed `"${"` literals.
+    /// - Production code prior to `#[cfg(test)]` contains zero raw range-slice indexing expressions and zero `#[allow(clippy::type_complexity)]` attributes.
+    ///
+    /// # Failure Modes
+    /// - Panics if comment stripping, delimiter depth tracking, or Check 34 self-verification assertions fail.
+    ///
+    /// # Side Effects
+    /// - None (pure in-memory unit test).
+    ///
+    /// # Determinism
+    /// - Deterministic single-threaded unit test execution.
     ///
     /// # Parameters
     /// - None (unit test).
@@ -3992,11 +4720,11 @@ class PathFormatter {
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A and Check 34 (`check_zero_regex`) non-panicking slice invariants (refs #492).
     /// Ensures `strip_line_comment_preserving_strings` and `update_ast_delimiter_depths` preserve
-    /// character literals and execute without direct range-slice indexing.
+    /// character literals, hashed raw strings, and unclosed `${` tokens and execute without direct range-slice indexing.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - `strip_line_comment_preserving_strings` preserves `'/'` and `"http://..."` while stripping trailing `//`.
-    /// - `update_ast_delimiter_depths` ignores `'{'` and `'('` inside character literals and updates unquoted depths.
+    /// - `strip_line_comment_preserving_strings` preserves `'/'`, `"http://..."`, and `r#"... // ..."#` while stripping trailing `//`.
+    /// - `update_ast_delimiter_depths` ignores `'{'` and `'('` inside character literals, `r#"..."#`, and unclosed `"${"` literals.
     /// - Production code prior to `#[cfg(test)]` contains zero raw range-slice indexing expressions.
     ///
     /// ## 3. Preconditions
@@ -4010,7 +4738,7 @@ class PathFormatter {
     /// - Space Complexity: O(1) auxiliary heap allocations.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
-    /// - Fails test execution immediately if any raw range-slice token remains in production code.
+    /// - Fails test execution immediately if any raw range-slice token or `#[allow(clippy::type_complexity)]` remains in production code.
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SOURCE-AST-STRIP-LINE-COMMENT], [REQ-FEAT-42-UPDATE-AST-DELIMITER-DEPTHS]
@@ -4024,6 +4752,11 @@ class PathFormatter {
             "let ch = '/'; let url = \"http://example.com\"; "
         );
 
+        let stripped_raw = strip_line_comment_preserving_strings(
+            "let raw = r#\"http://example.com // keep\"#; // strip",
+        );
+        assert_eq!(stripped_raw, "let raw = r#\"http://example.com // keep\"#; ");
+
         let mut brace_depth: usize = 0;
         let mut paren_depth: usize = 0;
         update_ast_delimiter_depths(
@@ -4034,25 +4767,134 @@ class PathFormatter {
         assert_eq!(brace_depth, 1);
         assert_eq!(paren_depth, 0);
 
+        let mut brace_depth_interp: usize = 0;
+        let mut paren_depth_interp: usize = 0;
+        update_ast_delimiter_depths(
+            "let msg = \"unclosed ${ ( in rust\"; if ready {",
+            &mut brace_depth_interp,
+            &mut paren_depth_interp,
+        );
+        assert_eq!(brace_depth_interp, 1);
+        assert_eq!(paren_depth_interp, 0);
+
+        let mut brace_depth_raw: usize = 0;
+        let mut paren_depth_raw: usize = 0;
+        update_ast_delimiter_depths(
+            "let raw = r#\"{ ( [\"#; if ok {",
+            &mut brace_depth_raw,
+            &mut paren_depth_raw,
+        );
+        assert_eq!(brace_depth_raw, 1);
+        assert_eq!(paren_depth_raw, 0);
+
         let self_source = include_str!("source_ast.rs");
-        let prod_source = match self_source.rsplit_once("#[cfg(test)]") {
+        let cfg_test_mod_marker = ["\n#[cfg(test)]", "\nmod tests"].concat();
+        let prod_source = match self_source.split_once(&cfg_test_mod_marker) {
             Some((prod, _)) => prod,
             None => self_source,
         };
-        let forbidden_prefix_slice = format!("{}{}", "&line[..", "idx]");
-        let forbidden_line_tail_slice = format!("{}{}", "&line[idx", "..]");
-        let forbidden_code_tail_slice = format!("{}{}", "&code[idx", "..]");
+        for (line_idx, raw_line) in prod_source.lines().enumerate() {
+            let trimmed = raw_line.trim();
+            if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with('*') {
+                continue;
+            }
+            let code = strip_line_comment_preserving_strings(trimmed);
+            assert!(
+                !contains_direct_range_slice(code),
+                "Check 34 violation: direct range-slice indexing found at line {}: {}",
+                line_idx.saturating_add(1),
+                trimmed
+            );
+        }
         assert!(
-            !prod_source.contains(&forbidden_prefix_slice),
-            "strip_line_comment_preserving_strings must not use direct prefix range indexing"
+            !prod_source.contains("#[allow(clippy::type_complexity)]"),
+            "Check 34 violation: #[allow(clippy::type_complexity)] must be eliminated via type aliases"
         );
-        assert!(
-            !prod_source.contains(&forbidden_line_tail_slice),
-            "strip_line_comment_preserving_strings must not use direct tail range indexing"
-        );
-        assert!(
-            !prod_source.contains(&forbidden_code_tail_slice),
-            "update_ast_delimiter_depths must not use direct tail range indexing"
-        );
+    }
+
+    /// Verifies `scan_rust_line_preserving_lex_state` on multi-lifetime signatures, char literals, block comments, and raw strings.
+    ///
+    /// # Summary
+    /// Tests `scan_rust_line_preserving_lex_state` and `parse_rust_source_ast` on multiple long lifetime parameters,
+    /// escaped and Unicode character literals, mid-line closing block comments, and multi-hash raw strings (`r##"..."##`).
+    ///
+    /// # Preconditions
+    /// - Invoked under `cargo test -p deap-core --lib`.
+    ///
+    /// # Postconditions
+    /// - Confirms `RustStringScannerState` returns to `Normal`, char literals are blanked out, lifetimes are preserved,
+    ///   and declarations after mid-line `*/` or `r##"..."##` are extracted accurately.
+    ///
+    /// # Invariants
+    /// - Never treats a pair of long lifetime parameters (`'lifetime_alpha, 'lifetime_beta`) as a character literal.
+    /// - Never drops code tokens appearing after `*/` on the closing line of a multiline block comment.
+    ///
+    /// # Failure Modes
+    /// - Panics or returns `Err(String)` if lexical state transitions or AST extraction fail.
+    ///
+    /// # Side Effects
+    /// - None (pure in-memory unit test).
+    ///
+    /// # Determinism
+    /// - Deterministic single-threaded execution.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and Check 34/Check 36 shared Rust lexical state machine verification.
+    /// Proves that `scan_rust_line_preserving_lex_state` handles lifetimes, character literals, nested block comments,
+    /// and multi-hash raw strings without magic byte-offset limits.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Character literals (`'{'`, `'\''`, `'\u{1F600}'`) are blanked into spaces.
+    /// - Lifetimes (`'lifetime_alpha`, `'lifetime_beta`) retain their leading `'` and identifier tokens.
+    /// - Multi-hash raw strings (`r##"..."#"##`) remain in `RawString(2)` until `"##` is encountered.
+    ///
+    /// ## 3. Preconditions
+    /// - Executed by `cargo test -p deap-core`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when all scanner and AST extraction assertions pass.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over the test fixture lines.
+    /// - Space Complexity: O(N) for sanitized strings and extracted AST items.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Fails immediately on state mismatch or missing AST items.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SOURCE-AST-SCAN-RUST-LINE-LEX-STATE], [REQ-SOURCE-AST-RUST-SCANNER-STATE]
+    #[test]
+    fn test_scan_rust_line_preserving_lex_state_char_literals_and_lifetimes() -> Result<(), String> {
+        let mut state = RustStringScannerState::Normal;
+        let line = "pub fn pick<'lifetime_alpha, 'lifetime_beta>(x: &'lifetime_alpha str, c: char) -> bool where 'lifetime_alpha: 'lifetime_beta { c == '{' || c == '\\'' || c == '\\u{1F600}' }";
+        let sanitized = scan_rust_line_preserving_lex_state(line, &mut state);
+        assert_eq!(state, RustStringScannerState::Normal);
+        assert!(sanitized.contains("pub fn pick<'lifetime_alpha, 'lifetime_beta>"));
+        assert!(!sanitized.contains("'{'"));
+        assert!(!sanitized.contains("1F600"));
+
+        let rust_src = r###"/* multiline comment start
+still in comment */ pub struct AfterComment {
+    pub raw_field: usize,
+}
+
+pub fn with_multi_hash_raw<'lifetime_alpha, 'lifetime_beta>(
+    input: &'lifetime_alpha str,
+) -> &'lifetime_beta str
+where
+    'lifetime_alpha: 'lifetime_beta,
+{
+    let _raw = r##"inner "# still raw
+/// fake doc inside raw string
+pub struct FakeInsideRaw {}
+closing now "##;
+    input
+}
+"###;
+        let items = parse_rust_source_ast(rust_src, "src/lex_test.rs")?;
+        assert!(items.iter().any(|i| i.name == "AfterComment"));
+        assert!(items.iter().any(|i| i.name == "with_multi_hash_raw"));
+        assert!(!items.iter().any(|i| i.name == "FakeInsideRaw"));
+        Ok(())
     }
 }

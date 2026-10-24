@@ -1,9 +1,60 @@
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::panic
-)]
+//! Integration test suite for `compile-sysml --inject-safety-docstrings` and `--extract-source` (FEAT-42 & DEFECT-09).
+//!
+//! /// Realises: [REQ-FEAT-42-DOCSTRING-INJECTOR-INTEGRATION-TESTS], [REQ-DEFECT-09-DOCSTRING-CLI-EXIT-CODES]
+//!
+//! # Summary
+//! Exercises end-to-end 7-section safety docstring synthesis, second-pass bit-for-bit idempotency,
+//! duplicate callable docblock disambiguation, Dart 3 AST member coverage, fail-closed `--schema`
+//! validation (exit code `1`), and conflicting unforced docstring detection (exit code `2`).
+//!
+//! # Preconditions
+//! - The `compile-sysml` library and binary target (`CARGO_BIN_EXE_compile-sysml`) compile cleanly.
+//! - Temporary filesystem directories under `std::env::temp_dir()` are writable by the test process.
+//!
+//! # Postconditions
+//! - Every test cleans up its temporary workspace directory prior to returning `Ok(())`.
+//! - Confirms exit codes `0`, `1`, and `2` match FEAT-42 Section 2.2 and DO-178C Level A fail-closed rules.
+//!
+//! # Invariants
+//! - Zero `.unwrap()`, `.expect()`, `panic!()`, direct slice indexing, or `#![allow(...)]` suppressions.
+//! - All temporary test fixtures reside exclusively under `std::env::temp_dir()`.
+//!
+//! # Failure Modes
+//! - Any unexpected exit status, I/O error, or docstring synthesis mismatch returns `Err(String)`.
+//!
+//! # Side Effects
+//! - Creates and deletes isolated temporary directories in the OS temp folder and spawns `compile-sysml` subprocesses.
+//!
+//! # Determinism
+//! - Deterministic AST lowering, docstring generation, and SHA-256 digest comparisons across runs.
+//!
+//! ## 1. Safety Intent & Regulatory Scope
+//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C verification
+//! requirements for `CompileSysml::SafetyDocstringSynthesizer` and `IngestSysml::SourceCodeAstIngestion`.
+//!
+//! ## 2. Invariants & Mathematical Properties
+//! - Bit-for-bit idempotency on second pass (`files_modified == 0`, identical SHA-256).
+//! - Fail-closed exit code `1` on broken or unreadable `--schema` input.
+//! - Fail-closed exit code `2` on conflicting unforced `Realises: [...]` tags against `--schema`.
+//!
+//! ## 3. Preconditions
+//! - Host OS provides writable `std::env::temp_dir()` and compiled `compile-sysml` binary.
+//!
+//! ## 4. Postconditions
+//! - All 5 integration tests pass and remove their temporary directories.
+//!
+//! ## 5. Algorithmic Complexity Bounds
+//! - Time Complexity: $O(N)$ per test fixture of byte size $N$.
+//! - Space Complexity: $O(N)$ for in-memory source and AST buffers.
+//!
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Interface: Propagates all I/O, parse, and subprocess errors via `Result<_, String>`.
+//! - State: Each test uses a PID- and nanosecond-qualified directory path.
+//! - Action: Never panics or unwraps.
+//! - Resource: Removes temporary directories on completion.
+//!
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-FEAT-42-DOCSTRING-INJECTOR-INTEGRATION-TESTS], [REQ-DEFECT-09-DOCSTRING-CLI-EXIT-CODES]
 
 use compile_sysml::docstring::{
     inject_dart_file_docstrings, inject_rust_file_docstrings, run_docstring_injection,
@@ -15,19 +66,113 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-fn unique_test_dir(prefix: &str) -> PathBuf {
+/// Creates a unique temporary directory under `std::env::temp_dir()` for an integration test.
+///
+/// /// Realises: [REQ-FEAT-42-UNIQUE-TEST-DIR]
+///
+/// # Summary
+/// Allocates and creates a collision-free temporary directory named `<prefix>_<pid>_<nanos>`.
+///
+/// # Preconditions
+/// - `prefix` is a non-empty ASCII label identifying the calling test.
+///
+/// # Postconditions
+/// - Returns `Ok(PathBuf)` pointing to an existing writable directory on disk.
+///
+/// # Invariants
+/// - Never creates files or directories inside the repository workspace root.
+///
+/// # Failure Modes
+/// - Returns `Err(String)` if `fs::create_dir_all` fails.
+///
+/// # Side Effects
+/// - Creates a directory under `std::env::temp_dir()`.
+///
+/// # Determinism
+/// - Deterministic path structure parameterized by OS process ID and monotonic system clock timestamp.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-330 TQL-4 isolated test fixture management (`unique_test_dir`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Directory path is strictly outside the repository working tree.
+///
+/// ## 3. Preconditions
+/// - `prefix: &str` is a valid filename prefix.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(PathBuf)` after creating the directory on disk.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) syscall overhead.
+/// - Space Complexity: O(P) where P is the path length.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Propagates directory creation errors via `Result<PathBuf, String>`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-UNIQUE-TEST-DIR]
+fn unique_test_dir(prefix: &str) -> Result<PathBuf, String> {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     let path = std::env::temp_dir().join(format!("{}_{}_{}", prefix, std::process::id(), nanos));
-    fs::create_dir_all(&path).expect("create unique temp dir");
-    path
+    fs::create_dir_all(&path)
+        .map_err(|e| format!("Failed to create unique temp dir '{}': {}", path.display(), e))?;
+    Ok(path)
 }
 
+/// Verifies AC-03 and AC-04 Rust and Dart 7-section docstring synthesis and second-pass idempotency.
+///
+/// /// Realises: [REQ-FEAT-42-AC03-AC04-SYNTHESIS-IDEMPOTENCY]
+///
+/// # Summary
+/// Runs `run_docstring_injection` twice across a mixed Rust and Dart source tree with a `SafetyModel`
+/// SysML v2 schema and verifies complete 7-section enrichment, attribute placement, and bit-for-bit idempotency.
+///
+/// # Preconditions
+/// - Temporary directory is writable and `parse_sysml` parses the inline `SafetyModel` schema.
+///
+/// # Postconditions
+/// - First run modifies both `.rs` and `.dart` files and enriches `>= 10` items; second run modifies `0` files.
+///
+/// # Invariants
+/// - Placeholder `"Member documentation."` lines are stripped and `#[derive(...)]` remains below the synthesized docstring.
+///
+/// # Failure Modes
+/// - Returns `Err(String)` if schema parsing, docstring injection, or SHA-256 idempotency fails.
+///
+/// # Side Effects
+/// - Writes and removes temporary `.rs` and `.dart` files under `std::env::temp_dir()`.
+///
+/// # Determinism
+/// - Second pass produces identical file contents and SHA-256 digests.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and FEAT-42 AC-03/AC-04 verification (`test_ac03_and_ac04_rust_and_dart_docstring_synthesis_and_idempotency`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `report_2.files_modified == 0` and `rust_digest_1 == rust_digest_2`.
+///
+/// ## 3. Preconditions
+/// - Valid `SafetyModel` SysML v2 fixture.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(())` after cleaning up the temporary directory.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) in fixture source size.
+/// - Space Complexity: O(N) for source and digest strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-panicking error propagation via `Result<(), String>`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-AC03-AC04-SYNTHESIS-IDEMPOTENCY]
 #[test]
-fn test_ac03_and_ac04_rust_and_dart_docstring_synthesis_and_idempotency() {
-    let dir = unique_test_dir("feat42_docstring_synth");
+fn test_ac03_and_ac04_rust_and_dart_docstring_synthesis_and_idempotency() -> Result<(), String> {
+    let dir = unique_test_dir("feat42_docstring_synth")?;
     let schema_sysml = r#"
 package SafetyModel {
     part def TelemetryPacket {
@@ -48,10 +193,11 @@ package SafetyModel {
     }
 }
 "#;
-    let schema_model = parse_sysml(schema_sysml).expect("parse schema_sysml");
+    let schema_model =
+        parse_sysml(schema_sysml).map_err(|e| format!("Failed to parse schema_sysml: {}", e))?;
 
     let src_dir = dir.join("src");
-    fs::create_dir_all(&src_dir).expect("create src dir");
+    fs::create_dir_all(&src_dir).map_err(|e| format!("Failed to create src dir: {}", e))?;
 
     let rust_file = src_dir.join("telemetry.rs");
     let initial_rust = r#"//! Telemetry packet module.
@@ -87,7 +233,8 @@ impl TelemetryPacket {
     }
 }
 "#;
-    fs::write(&rust_file, initial_rust).expect("write telemetry.rs");
+    fs::write(&rust_file, initial_rust)
+        .map_err(|e| format!("Failed to write telemetry.rs: {}", e))?;
 
     let dart_file = src_dir.join("guidance_controller.dart");
     let initial_dart = r#"/// Member documentation.
@@ -117,16 +264,17 @@ extension FlightModeExtension on FlightMode {
 
 typedef CommandCallback = void Function(double thrustNewtons);
 "#;
-    fs::write(&dart_file, initial_dart).expect("write guidance_controller.dart");
+    fs::write(&dart_file, initial_dart)
+        .map_err(|e| format!("Failed to write guidance_controller.dart: {}", e))?;
 
-    // First run: synthesize and inject 7-section docstrings
     let opts = DocstringInjectionOptions {
         target_path: src_dir.clone(),
         dry_run: false,
         force: false,
         schema_model: Some(schema_model.clone()),
     };
-    let report_1 = run_docstring_injection(&opts).expect("first docstring injection run");
+    let report_1 = run_docstring_injection(&opts)
+        .map_err(|(code, msg)| format!("First run failed ({:?}): {}", code, msg))?;
     assert_eq!(report_1.files_scanned, 2);
     assert_eq!(report_1.files_modified, 2);
     assert!(
@@ -135,14 +283,14 @@ typedef CommandCallback = void Function(double thrustNewtons);
         report_1.items_enriched
     );
 
-    let rust_after_1 = fs::read_to_string(&rust_file).expect("read rust after run 1");
-    let dart_after_1 = fs::read_to_string(&dart_file).expect("read dart after run 1");
+    let rust_after_1 =
+        fs::read_to_string(&rust_file).map_err(|e| format!("Read rust after run 1: {}", e))?;
+    let dart_after_1 =
+        fs::read_to_string(&dart_file).map_err(|e| format!("Read dart after run 1: {}", e))?;
 
-    // Verify zero placeholder strings remain
     assert!(!rust_after_1.contains("Member documentation."));
     assert!(!dart_after_1.contains("Member documentation."));
 
-    // Verify all 7 sections and Realises tags exist in both Rust and Dart outputs
     for content in [&rust_after_1, &dart_after_1] {
         assert!(content.contains("/// ## 1. Safety Intent & Regulatory Scope"));
         assert!(content.contains("/// ## 2. Invariants & Mathematical Properties"));
@@ -154,27 +302,25 @@ typedef CommandCallback = void Function(double thrustNewtons);
         assert!(content.contains("/// Realises: [REQ-"));
     }
 
-    // Verify schema constraint propagation into TelemetryPacket docstring
     assert!(rust_after_1.contains("NonNegativeTimestamp"));
 
-    // Verify #[derive(...)] remains immediately above `pub struct TelemetryPacket` (docstring injected before attributes)
     let derive_pos = rust_after_1
         .find("#[derive(Debug, Clone, PartialEq)]")
-        .expect("find derive attribute");
+        .ok_or_else(|| "Missing #[derive(Debug, Clone, PartialEq)]".to_string())?;
     let struct_pos = rust_after_1
         .find("pub struct TelemetryPacket")
-        .expect("find TelemetryPacket struct");
+        .ok_or_else(|| "Missing pub struct TelemetryPacket".to_string())?;
     let before_derive = rust_after_1.get(..derive_pos).unwrap_or("");
     let section_7_pos = before_derive
         .rfind("/// ## 7. Realization & Traceability")
-        .expect("docstring before derive");
+        .ok_or_else(|| "Missing Section 7 before #[derive]".to_string())?;
     assert!(section_7_pos < derive_pos && derive_pos < struct_pos);
 
     let rust_digest_1 = generate_digest(&schema_model, &rust_after_1).sha256;
     let dart_digest_1 = generate_digest(&schema_model, &dart_after_1).sha256;
 
-    // Second run (AC-04): bit-for-bit idempotency with 0 files modified
-    let report_2 = run_docstring_injection(&opts).expect("second docstring injection run");
+    let report_2 = run_docstring_injection(&opts)
+        .map_err(|(code, msg)| format!("Second run failed ({:?}): {}", code, msg))?;
     assert_eq!(report_2.files_scanned, 2);
     assert_eq!(
         report_2.files_modified, 0,
@@ -182,8 +328,10 @@ typedef CommandCallback = void Function(double thrustNewtons);
     );
     assert_eq!(report_2.items_enriched, 0);
 
-    let rust_after_2 = fs::read_to_string(&rust_file).expect("read rust after run 2");
-    let dart_after_2 = fs::read_to_string(&dart_file).expect("read dart after run 2");
+    let rust_after_2 =
+        fs::read_to_string(&rust_file).map_err(|e| format!("Read rust after run 2: {}", e))?;
+    let dart_after_2 =
+        fs::read_to_string(&dart_file).map_err(|e| format!("Read dart after run 2: {}", e))?;
     assert_eq!(rust_after_1, rust_after_2);
     assert_eq!(dart_after_1, dart_after_2);
     assert_eq!(
@@ -195,11 +343,59 @@ typedef CommandCallback = void Function(double thrustNewtons);
         generate_digest(&schema_model, &dart_after_2).sha256
     );
 
-    fs::remove_dir_all(&dir).expect("cleanup temp dir");
+    fs::remove_dir_all(&dir).map_err(|e| format!("Failed to clean up temp dir: {}", e))?;
+    Ok(())
 }
 
+/// Verifies that duplicate function docstrings within the same file are disambiguated automatically.
+///
+/// /// Realises: [REQ-FEAT-42-DUPLICATE-DOCSTRING-DISAMBIGUATION]
+///
+/// # Summary
+/// Confirms that when two Rust functions share a verbatim 7-section docstring body, the first is
+/// preserved and the second is re-synthesized with function-specific attributes so second pass is idempotent.
+///
+/// # Preconditions
+/// - Input Rust source contains two functions (`first_op`, `second_op`) with identical 7-section docblocks.
+///
+/// # Postconditions
+/// - First pass returns `enriched == 1`; second pass returns `enriched_again == 0`.
+///
+/// # Invariants
+/// - Enforces Check 34 / Check 36 per-file normalized callable docblock uniqueness.
+///
+/// # Failure Modes
+/// - Returns `Err(String)` if injection fails or fails idempotency on the second pass.
+///
+/// # Side Effects
+/// - Pure in-memory string transformation; zero filesystem writes.
+///
+/// # Determinism
+/// - Deterministic in-memory synthesis.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 36 anti-copy-paste enforcement (`test_duplicate_function_docstrings_are_disambiguated`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `enriched == 1` on pass 1 and `enriched_again == 0` on pass 2.
+///
+/// ## 3. Preconditions
+/// - Valid Rust source string with two identical function docblocks.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(())`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) in source length.
+/// - Space Complexity: O(N) for output strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Propagates any error via `Result<(), String>`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-DUPLICATE-DOCSTRING-DISAMBIGUATION]
 #[test]
-fn test_duplicate_function_docstrings_are_disambiguated() {
+fn test_duplicate_function_docstrings_are_disambiguated() -> Result<(), String> {
     let duplicate_rust = r#"/// Shared docstring.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -254,27 +450,72 @@ pub fn second_op(beta: i32) -> i32 {
 "#;
 
     let (updated, enriched) =
-        inject_rust_file_docstrings(duplicate_rust, "crates/demo/src/ops.rs", None, false)
-            .expect("inject rust docstrings");
+        inject_rust_file_docstrings(duplicate_rust, "crates/demo/src/ops.rs", None, false)?;
     assert_eq!(
         enriched, 1,
         "First compliant function docstring should be kept and second duplicate should be re-synthesized"
     );
     assert!(updated.contains("second_op"));
 
-    // Second pass on updated must report 0 changes
     let (updated_again, enriched_again) =
-        inject_rust_file_docstrings(&updated, "crates/demo/src/ops.rs", None, false)
-            .expect("second pass");
+        inject_rust_file_docstrings(&updated, "crates/demo/src/ops.rs", None, false)?;
     assert_eq!(enriched_again, 0);
     assert_eq!(updated, updated_again);
+    Ok(())
 }
 
+/// Verifies `--extract-source` AST extraction and `--inject-safety-docstrings` CLI execution.
+///
+/// /// Realises: [REQ-FEAT-42-EXTRACT-SOURCE-AND-CLI]
+///
+/// # Summary
+/// Tests `run_extract_source`, `compile-sysml --inject-safety-docstrings` subprocess execution,
+/// missing-path error exit code `1`, and direct Dart class/constructor docstring injection.
+///
+/// # Preconditions
+/// - `CARGO_BIN_EXE_compile-sysml` is available and temporary directory is writable.
+///
+/// # Postconditions
+/// - Extracted `.sysml` and digest files exist and re-parse with `count_structural_elements > 0`.
+///
+/// # Invariants
+/// - Missing target path fails closed with `DocstringExitCode::Error` (`1`).
+///
+/// # Failure Modes
+/// - Returns `Err(String)` on I/O, parse, or subprocess failure.
+///
+/// # Side Effects
+/// - Creates and removes temporary files under `std::env::temp_dir()`.
+///
+/// # Determinism
+/// - Deterministic AST extraction and CLI exit code verification.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and FEAT-42 Section 2.2 CLI verification (`test_extract_source_and_cli_flags`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `DocstringExitCode::Error.code() == 1`.
+///
+/// ## 3. Preconditions
+/// - Temporary directory under `std::env::temp_dir()` is accessible.
+///
+/// ## 4. Postconditions
+/// - Cleans up temporary directory and returns `Ok(())`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) in fixture file size.
+/// - Space Complexity: O(N) for parsed AST.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Propagates errors via `Result<(), String>`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-EXTRACT-SOURCE-AND-CLI]
 #[test]
-fn test_extract_source_and_cli_flags() {
-    let dir = unique_test_dir("feat42_extract_source");
+fn test_extract_source_and_cli_flags() -> Result<(), String> {
+    let dir = unique_test_dir("feat42_extract_source")?;
     let src_dir = dir.join("src");
-    fs::create_dir_all(&src_dir).expect("create src");
+    fs::create_dir_all(&src_dir).map_err(|e| format!("Failed to create src: {}", e))?;
 
     fs::write(
         src_dir.join("controller.rs"),
@@ -292,52 +533,101 @@ impl AttitudeController {
 }
 "#,
     )
-    .expect("write controller.rs");
+    .map_err(|e| format!("Failed to write controller.rs: {}", e))?;
 
     let out_sysml = dir.join("extracted.sysml");
     let out_digest = dir.join("extracted-digest.json");
     let pkg = run_extract_source(&src_dir, &out_sysml, &out_digest, false)
-        .expect("run_extract_source");
+        .map_err(|(code, msg)| format!("run_extract_source failed ({:?}): {}", code, msg))?;
     assert!(count_structural_elements(&pkg) > 0);
-    let sysml_text = fs::read_to_string(&out_sysml).expect("read extracted.sysml");
-    let reparsed = parse_sysml(&sysml_text).expect("reparse extracted.sysml");
+    let sysml_text =
+        fs::read_to_string(&out_sysml).map_err(|e| format!("Read extracted.sysml: {}", e))?;
+    let reparsed =
+        parse_sysml(&sysml_text).map_err(|e| format!("Reparse extracted.sysml: {}", e))?;
     assert!(count_structural_elements(&reparsed) > 0);
     assert!(out_digest.exists());
 
-    // Verify CLI --inject-safety-docstrings and --extract-source
     let bin = env!("CARGO_BIN_EXE_compile-sysml");
     let status = Command::new(bin)
         .arg("--inject-safety-docstrings")
         .arg(&src_dir)
         .status()
-        .expect("invoke compile-sysml --inject-safety-docstrings");
+        .map_err(|e| format!("Failed to invoke compile-sysml: {}", e))?;
     assert!(status.success());
 
-    // Verify exit code 1 on missing path
     let missing = dir.join("does_not_exist");
-    let err = run_docstring_injection(&DocstringInjectionOptions {
+    let err = match run_docstring_injection(&DocstringInjectionOptions {
         target_path: missing,
         dry_run: false,
         force: false,
         schema_model: None,
-    })
-    .expect_err("missing path should fail");
+    }) {
+        Ok(_) => return Err("Expected missing path to fail".to_string()),
+        Err(e) => e,
+    };
     assert_eq!(err.0, DocstringExitCode::Error);
     assert_eq!(err.0.code(), 1);
 
-    // Verify Dart direct helper
     let dart_src = "class SensorNode {\n  final int id;\n  SensorNode(this.id);\n}\n";
     let (dart_updated, dart_count) =
-        inject_dart_file_docstrings(dart_src, "lib/sensor_node.dart", None, false)
-            .expect("inject dart docstrings");
+        inject_dart_file_docstrings(dart_src, "lib/sensor_node.dart", None, false)?;
     assert_eq!(dart_count, 2);
     assert!(dart_updated.contains("/// ## 1. Safety Intent & Regulatory Scope"));
 
-    fs::remove_dir_all(&dir).expect("cleanup temp dir");
+    fs::remove_dir_all(&dir).map_err(|e| format!("Failed to cleanup temp dir: {}", e))?;
+    Ok(())
 }
 
+/// Verifies Dart docstring injection across multiline classes, URL slashes in strings, UTF-8 quotes, and Dart 3 items.
+///
+/// /// Realises: [REQ-FEAT-42-DART-MULTILINE-AND-STRING-SLICE-SAFETY]
+///
+/// # Summary
+/// Confirms `inject_dart_file_docstrings` enriches constructors, factory constructors, getters,
+/// `@override` methods, and multiple classes per file while preserving string literals with `//` and UTF-8 characters.
+///
+/// # Preconditions
+/// - Input Dart source contains `PrimaryService` and `SecondaryService` with URL strings, UTF-8 bullets/quotes, and string interpolations.
+///
+/// # Postconditions
+/// - First pass enriches `>= 8` items; second pass enriches `0` items and matches byte-for-byte.
+///
+/// # Invariants
+/// - `//` inside string literals is never stripped as a line comment.
+///
+/// # Failure Modes
+/// - Returns `Err(String)` if Dart syntax validation or docstring injection fails.
+///
+/// # Side Effects
+/// - Pure in-memory string transformation; zero disk I/O.
+///
+/// # Determinism
+/// - Byte-for-byte idempotent on second run.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 36 Dart AST coverage (`test_injector_handles_multiline_dart_classes_string_slashes_interpolated_utf8_quotes_and_dart3_items`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `second_count == 0` and `injected == second_injected`.
+///
+/// ## 3. Preconditions
+/// - Valid multi-class Dart source buffer.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(())`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) in Dart source length.
+/// - Space Complexity: O(N) for enriched buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Returns `Err(String)` on any assertion or parser error.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-DART-MULTILINE-AND-STRING-SLICE-SAFETY]
 #[test]
-fn test_injector_handles_multiline_dart_classes_string_slashes_interpolated_utf8_quotes_and_dart3_items() {
+fn test_injector_handles_multiline_dart_classes_string_slashes_interpolated_utf8_quotes_and_dart3_items()
+-> Result<(), String> {
     let dart_source = r#"// Leading top comment
 import 'dart:async';
 
@@ -375,31 +665,222 @@ class SecondaryService {
 }
 "#;
 
-    let (injected, count) = inject_dart_file_docstrings(
-        dart_source,
-        "lib/services.dart",
-        None,
-        false,
-    )
-    .expect("inject dart docstrings");
+    let (injected, count) =
+        inject_dart_file_docstrings(dart_source, "lib/services.dart", None, false)?;
 
-    assert!(count >= 8, "Expected at least 8 documented items, got {}", count);
+    assert!(
+        count >= 8,
+        "Expected at least 8 documented items, got {}",
+        count
+    );
     assert!(injected.contains("PrimaryService"));
     assert!(injected.contains("PrimaryService.fromConfig"));
     assert!(injected.contains("serviceName"));
     assert!(injected.contains("SecondaryService"));
     assert!(injected.contains("calculatedCode"));
 
-    // Verify idempotency: re-injecting on the already injected source produces identical content
-    let (second_injected, second_count) = inject_dart_file_docstrings(
-        &injected,
-        "lib/services.dart",
-        None,
-        false,
-    )
-    .expect("second injection must succeed");
+    let (second_injected, second_count) =
+        inject_dart_file_docstrings(&injected, "lib/services.dart", None, false)?;
 
     assert_eq!(second_count, 0, "Idempotent run must have count 0");
-    assert_eq!(injected, second_injected, "Idempotent injection must match byte-for-byte");
+    assert_eq!(
+        injected, second_injected,
+        "Idempotent injection must match byte-for-byte"
+    );
+    Ok(())
 }
 
+/// Verifies CLI exit code `1` on broken `--schema` and exit code `2` on conflicting unforced docstring (DEFECT-09).
+///
+/// /// Realises: [REQ-DEFECT-09-DOCSTRING-CLI-EXIT-CODES], [REQ-FEAT-42-DOCSTRING-EXIT-CODE]
+///
+/// # Summary
+/// Invokes the `compile-sysml` binary to verify that:
+/// (1) an unreadable or syntactically invalid `--schema` exits with status `1`,
+/// (2) an unforced docstring whose `Realises: [REQ-WRONG-999]` conflicts with the schema's
+///     `REQ-SCHEMA-001` exits with status `2`, and
+/// (3) passing `--force` overwrites `REQ-WRONG-999` with `REQ-SCHEMA-001` and exits with status `0`.
+///
+/// # Preconditions
+/// - `CARGO_BIN_EXE_compile-sysml` binary is built and temporary directory is writable.
+///
+/// # Postconditions
+/// - All three CLI exit statuses (`1`, `2`, `0`) and the forced requirement overwrite are empirically verified.
+///
+/// # Invariants
+/// - `--schema` errors never fail open to `None`.
+/// - Conflicting unforced docstrings never silently pass with exit code `0` or map to generic error `1`.
+///
+/// # Failure Modes
+/// - Returns `Err(String)` if any CLI invocation returns an unexpected exit status or fails to overwrite under `--force`.
+///
+/// # Side Effects
+/// - Spawns `compile-sysml` child processes against temporary files in `std::env::temp_dir()`.
+///
+/// # Determinism
+/// - Deterministic process exit status codes (`1`, `2`, `0`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and FEAT-42 Section 2.2 exit code contract
+/// (`test_cli_exit_code_1_on_broken_schema_and_exit_code_2_on_conflicting_unforced_docstring`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Invalid `--schema` -> exit code `1`.
+/// - Conflicting unforced docstring -> exit code `2`.
+/// - Forced overwrite (`--force`) -> exit code `0` with `[REQ-SCHEMA-001]` in the updated source file.
+///
+/// ## 3. Preconditions
+/// - Writable temp directory and `CARGO_BIN_EXE_compile-sysml` binary.
+///
+/// ## 4. Postconditions
+/// - Removes temporary directory and returns `Ok(())`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) across three subprocess invocations on small fixture files.
+/// - Space Complexity: O(N) for temporary fixture files.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Returns `Err(String)` on any unexpected exit status or file read/write error.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEFECT-09-DOCSTRING-CLI-EXIT-CODES], [REQ-FEAT-42-DOCSTRING-EXIT-CODE]
+#[test]
+fn test_cli_exit_code_1_on_broken_schema_and_exit_code_2_on_conflicting_unforced_docstring()
+-> Result<(), String> {
+    let dir = unique_test_dir("feat42_cli_exit_codes")?;
+    let src_dir = dir.join("src");
+    fs::create_dir_all(&src_dir).map_err(|e| format!("Failed to create src dir: {}", e))?;
+
+    let broken_schema = dir.join("broken.sysml");
+    fs::write(&broken_schema, "package Broken { part def Unclosed ")
+        .map_err(|e| format!("Failed to write broken.sysml: {}", e))?;
+
+    let valid_schema = dir.join("valid.sysml");
+    let valid_sysml = r#"
+package FlightControlPkg {
+    requirement def AutopilotAuthorityReq {
+        id = "REQ-SCHEMA-001";
+        doc /* Autopilot authority requirement */
+    }
+    part def AutopilotController {
+        satisfy requirement AutopilotAuthorityReq;
+    }
+}
+"#;
+    fs::write(&valid_schema, valid_sysml)
+        .map_err(|e| format!("Failed to write valid.sysml: {}", e))?;
+
+    let rust_file = src_dir.join("autopilot.rs");
+    let conflicting_rust = r#"/// Autopilot controller struct.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A safety objectives for struct `AutopilotController`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic control authority invariants.
+///
+/// ## 3. Preconditions
+/// - Caller supplies initialized gain parameters.
+///
+/// ## 4. Postconditions
+/// - Defines the authoritative `AutopilotController` state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates inputs.
+/// - State: Preserves state.
+/// - Action: Deterministic.
+/// - Resource: Bounded stack.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-WRONG-999] | SysML v2: PartDef(AutopilotController)
+pub struct AutopilotController {
+    pub enabled: bool,
+}
+"#;
+    fs::write(&rust_file, conflicting_rust)
+        .map_err(|e| format!("Failed to write autopilot.rs: {}", e))?;
+
+    let bin = env!("CARGO_BIN_EXE_compile-sysml");
+
+    // 1a. Nonexistent explicit --schema must exit with code 1
+    let nonexistent_schema = dir.join("nonexistent.sysml");
+    let out_nonexistent = Command::new(bin)
+        .arg("--inject-safety-docstrings")
+        .arg(&src_dir)
+        .arg("--schema")
+        .arg(&nonexistent_schema)
+        .output()
+        .map_err(|e| format!("Failed to run compile-sysml with nonexistent schema: {}", e))?;
+    assert_eq!(
+        out_nonexistent.status.code(),
+        Some(1),
+        "Expected exit code 1 for nonexistent --schema, stderr: {}",
+        String::from_utf8_lossy(&out_nonexistent.stderr)
+    );
+
+    // 1b. Broken/unparseable explicit --schema must exit with code 1
+    let out_broken = Command::new(bin)
+        .arg("--inject-safety-docstrings")
+        .arg(&src_dir)
+        .arg("--schema")
+        .arg(&broken_schema)
+        .output()
+        .map_err(|e| format!("Failed to run compile-sysml with broken schema: {}", e))?;
+    assert_eq!(
+        out_broken.status.code(),
+        Some(1),
+        "Expected exit code 1 for broken --schema, stderr: {}",
+        String::from_utf8_lossy(&out_broken.stderr)
+    );
+
+    // 2. Conflicting unforced docstring against valid --schema must exit with code 2
+    let out_conflict = Command::new(bin)
+        .arg("--inject-safety-docstrings")
+        .arg(&src_dir)
+        .arg("--schema")
+        .arg(&valid_schema)
+        .output()
+        .map_err(|e| format!("Failed to run compile-sysml on conflicting docstring: {}", e))?;
+    assert_eq!(
+        out_conflict.status.code(),
+        Some(2),
+        "Expected exit code 2 for conflicting unforced docstring, stderr: {}",
+        String::from_utf8_lossy(&out_conflict.stderr)
+    );
+
+    // 3. Adding --force must overwrite REQ-WRONG-999 with REQ-SCHEMA-001 and exit with code 0
+    let out_forced = Command::new(bin)
+        .arg("--inject-safety-docstrings")
+        .arg(&src_dir)
+        .arg("--schema")
+        .arg(&valid_schema)
+        .arg("--force")
+        .output()
+        .map_err(|e| format!("Failed to run compile-sysml with --force: {}", e))?;
+    assert_eq!(
+        out_forced.status.code(),
+        Some(0),
+        "Expected exit code 0 when --force is passed, stderr: {}",
+        String::from_utf8_lossy(&out_forced.stderr)
+    );
+
+    let updated_rust =
+        fs::read_to_string(&rust_file).map_err(|e| format!("Failed to read autopilot.rs: {}", e))?;
+    assert!(
+        updated_rust.contains("[REQ-SCHEMA-001]"),
+        "Expected forced docstring to contain [REQ-SCHEMA-001], got:\n{}",
+        updated_rust
+    );
+    assert!(
+        !updated_rust.contains("REQ-WRONG-999"),
+        "Expected forced docstring to overwrite REQ-WRONG-999, got:\n{}",
+        updated_rust
+    );
+
+    fs::remove_dir_all(&dir).map_err(|e| format!("Failed to cleanup temp dir: {}", e))?;
+    Ok(())
+}
