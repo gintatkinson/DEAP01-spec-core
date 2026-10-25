@@ -55,15 +55,16 @@ pub use rules::{
 };
 pub use source_ast::{
     classify_dart_member_ast, classify_dart_top_level_ast, classify_rust_item_line_ast,
-    discover_source_files, extract_dart_callable_ident, extract_dart_getter_ident,
-    extract_leading_ast_ident, extract_realises_ids_from_doc_lines, ingest_source_directory,
-    lower_source_ast_to_package, normalize_type_for_sysml, parse_dart_callable_signature,
-    parse_dart_source_ast, parse_rust_callable_signature, parse_rust_source_ast,
-    resolve_source_package_name, sanitize_sysml_identifier,
-    strip_leading_dart_annotations, strip_line_comment_preserving_strings,
-    summary_from_doc_lines, update_ast_delimiter_depths, validate_source_syntax,
-    validate_source_syntax_for_language, ComponentMethodTable, ExtractedMethodSignature,
-    SourceAstItem, SourceField, SourceItemKind, SourceLanguage, SourceParam,
+    discover_source_files, extract_component_method_table, extract_dart_callable_ident,
+    extract_dart_getter_ident, extract_leading_ast_ident, extract_method_signature,
+    extract_realises_ids_from_doc_lines, ingest_source_directory, lower_source_ast_to_package,
+    normalize_type_for_sysml, parse_dart_callable_signature, parse_dart_source_ast,
+    parse_rust_callable_signature, parse_rust_source_ast, resolve_source_package_name,
+    sanitize_sysml_identifier, strip_leading_dart_annotations,
+    strip_line_comment_preserving_strings, summary_from_doc_lines, update_ast_delimiter_depths,
+    validate_source_syntax, validate_source_syntax_for_language, ComponentMethodTable,
+    ExtractedMethodSignature, SourceAstItem, SourceField, SourceItemKind, SourceLanguage,
+    SourceParam,
 };
 pub use sysml_ast::{
     component_matches, extract_negated_components, is_component_negated, parse_action_defs,
@@ -102,7 +103,7 @@ mod tests {
     ///
     /// ## 4. Postconditions
     /// # Returns
-    /// - Returns `()` after asserting presence of sections 1 through 7 and `Realises: [`.
+    /// - Returns `Result<(), String>` (`Ok(())`) after verifying presence of sections 1 through 7, `Realises: [`, and empty `ComponentMethodTable` extraction.
     ///
     /// ## 5. Algorithmic Complexity Bounds
     /// - Time Complexity: O(N) bounded over `lib.rs` line count in `test_deap_core_lib_7_section_rustdoc`.
@@ -110,10 +111,10 @@ mod tests {
     ///
     /// ## 6. Failure Modes & Fault Tolerance
     /// # Errors
-    /// - Infallible test assertion harness.
+    /// - Returns `Err(String)` if any of the 7 module-level rustdoc sections or `Realises: [` tag is omitted, or if `extract_component_method_table(&[])` is non-empty.
     /// # Panics
-    /// - Panics if any of the 7 module-level rustdoc sections or `Realises: [` tag is omitted.
-    /// - Interface: Validates boundary inputs and types for `test_deap_core_lib_7_section_rustdoc` (`()`).
+    /// - Never panics; all checks return fallible `Result<(), String>` errors.
+    /// - Interface: Validates boundary inputs and types for `test_deap_core_lib_7_section_rustdoc` (`Result<(), String>`).
     /// - State: Maintains consistent state invariants across `test_deap_core_lib_7_section_rustdoc` without partial mutation on error.
     /// - Action: Executes `test_deap_core_lib_7_section_rustdoc` deterministically with zero unbounded recursion or blocking.
     /// - Resource: Bounds stack and heap allocations within `test_deap_core_lib_7_section_rustdoc` (`DEAP-CORE-LIB`).
@@ -122,7 +123,7 @@ mod tests {
     /// # Realises
     /// Realises: [REQ-DEAP-CORE-LIB-7-SECTION-RUSTDOC] | SysML v2: TestCaseDef(test_deap_core_lib_7_section_rustdoc)
     #[test]
-    fn test_deap_core_lib_7_section_rustdoc() {
+    fn test_deap_core_lib_7_section_rustdoc() -> Result<(), String> {
         let source = include_str!("lib.rs");
         let module_doc: String = source
             .lines()
@@ -130,38 +131,53 @@ mod tests {
             .collect::<Vec<&str>>()
             .join("\n");
 
-        assert!(
-            module_doc.contains("//! ## 1. Safety Intent & Regulatory Scope"),
-            "Missing section 1 in module docstring"
-        );
-        assert!(
-            module_doc.contains("//! ## 2. Invariants & Mathematical Properties"),
-            "Missing section 2 in module docstring"
-        );
-        assert!(
-            module_doc.contains("//! ## 3. Preconditions"),
-            "Missing section 3 in module docstring"
-        );
-        assert!(
-            module_doc.contains("//! ## 4. Postconditions"),
-            "Missing section 4 in module docstring"
-        );
-        assert!(
-            module_doc.contains("//! ## 5. Algorithmic Complexity Bounds"),
-            "Missing section 5 in module docstring"
-        );
-        assert!(
-            module_doc.contains("//! ## 6. Failure Modes & Fault Tolerance"),
-            "Missing section 6 in module docstring"
-        );
-        assert!(
-            module_doc.contains("//! ## 7. Realization & Traceability"),
-            "Missing section 7 in module docstring"
-        );
-        assert!(
-            module_doc.contains("//! Realises: ["),
-            "Missing unfenced Realises traceability header in module docstring"
-        );
+        let required_sections = [
+            (
+                "//! ## 1. Safety Intent & Regulatory Scope",
+                "Missing section 1 in module docstring",
+            ),
+            (
+                "//! ## 2. Invariants & Mathematical Properties",
+                "Missing section 2 in module docstring",
+            ),
+            (
+                "//! ## 3. Preconditions",
+                "Missing section 3 in module docstring",
+            ),
+            (
+                "//! ## 4. Postconditions",
+                "Missing section 4 in module docstring",
+            ),
+            (
+                "//! ## 5. Algorithmic Complexity Bounds",
+                "Missing section 5 in module docstring",
+            ),
+            (
+                "//! ## 6. Failure Modes & Fault Tolerance",
+                "Missing section 6 in module docstring",
+            ),
+            (
+                "//! ## 7. Realization & Traceability",
+                "Missing section 7 in module docstring",
+            ),
+            (
+                "//! Realises: [",
+                "Missing unfenced Realises traceability header in module docstring",
+            ),
+        ];
+
+        for (needle, msg) in required_sections {
+            if !module_doc.contains(needle) {
+                return Err(msg.to_string());
+            }
+        }
+
+        let table: crate::ComponentMethodTable = crate::extract_component_method_table(&[]);
+        if !table.is_empty() {
+            return Err("Expected empty ComponentMethodTable for empty AST slice".to_string());
+        }
+
+        Ok(())
     }
 }
 

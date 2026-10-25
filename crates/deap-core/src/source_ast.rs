@@ -596,15 +596,15 @@ type ActiveStringState = (u8, bool, bool, usize, usize);
 /// Realises: [REQ-FEAT-42-INTERPOLATION-FRAME]
 type InterpolationFrame = (ActiveStringState, usize);
 
-/// Extracted method signature `(method_name, parameters, return_type)`.
+/// Extracted method signature `(in_parameters, out_parameters, return_type_name)`.
 /// # Summary
-/// Captures a parsed method identifier, parameter `(name, type)` pairs, and optional return type.
+/// Captures normalized input parameter `(name, type)` pairs, output parameter `(name, type)` pairs, and optional return type name.
 /// # Preconditions
-/// - Constructed from syntactically valid source AST method declarations.
+/// - Constructed from syntactically valid source AST callable declarations via [`extract_method_signature`].
 /// # Postconditions
-/// - Preserves exact parameter declaration order and return type metadata.
+/// - Preserves exact parameter declaration order, SysML-normalized output parameter list, and optional return type metadata.
 /// # Invariants
-/// - Tuple layout is `(String, Vec<(String, String)>, Option<String>)`.
+/// - Tuple layout is `(Vec<(String, String)>, Vec<(String, String)>, Option<String>)`.
 /// # Failure Modes
 /// - None (pure type alias).
 /// # Side Effects
@@ -612,26 +612,26 @@ type InterpolationFrame = (ActiveStringState, usize);
 /// # Determinism
 /// - Deterministic value layout across all target architectures.
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 34 zero-suppression rules (`ExtractedMethodSignature`).
+/// Conforms to DO-178C Level A, Blueprint 01 Section 6, and Check 34 zero-suppression rules (`ExtractedMethodSignature`).
 /// ## 2. Invariants & Mathematical Properties
 /// - Replaces complex nested tuple annotations in method extraction tables without lint suppressions.
 /// ## 3. Preconditions
-/// - Instantiated during AST method signature extraction.
+/// - Instantiated during AST callable signature extraction (`extract_method_signature`).
 /// ## 4. Postconditions
-/// - Stored inside [`ComponentMethodTable`] keyed by owning component name.
+/// - Stored inside [`ComponentMethodTable`] keyed by owning component name and consumed during SysML action lowering.
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(1) construction. Space Complexity: O(P) for P parameters.
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Total value type; cannot fail or panic.
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-0601]
-pub type ExtractedMethodSignature = (String, Vec<(String, String)>, Option<String>);
+/// Realises: [REQ-0601], [REQ-FEAT-42-EXTRACTED-METHOD-SIG]
+pub type ExtractedMethodSignature = (Vec<(String, String)>, Vec<(String, String)>, Option<String>);
 
 /// Deterministic lookup table mapping component names to extracted method signatures.
 /// # Summary
 /// Maps each component or type identifier to its ordered vector of [`ExtractedMethodSignature`] entries.
 /// # Preconditions
-/// - Keys are non-empty component or struct identifiers parsed from source ASTs.
+/// - Keys are non-empty sanitized component or struct identifiers parsed from source ASTs.
 /// # Postconditions
 /// - Maintains lexicographically sorted component keys via `BTreeMap`.
 /// # Invariants
@@ -643,11 +643,11 @@ pub type ExtractedMethodSignature = (String, Vec<(String, String)>, Option<Strin
 /// # Determinism
 /// - Deterministic iteration order guaranteed by `std::collections::BTreeMap`.
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 34 zero-suppression rules (`ComponentMethodTable`).
+/// Conforms to DO-178C Level A, Blueprint 01 Section 6, and Check 34 zero-suppression rules (`ComponentMethodTable`).
 /// ## 2. Invariants & Mathematical Properties
 /// - Eliminates `clippy::type_complexity` on nested method table signatures via semantic aliasing.
 /// ## 3. Preconditions
-/// - Populated during component and impl block AST traversal.
+/// - Populated during component and impl block AST traversal via [`extract_component_method_table`].
 /// ## 4. Postconditions
 /// - Provides O(log N) lookup by component name without raw indexing.
 /// ## 5. Algorithmic Complexity Bounds
@@ -655,8 +655,188 @@ pub type ExtractedMethodSignature = (String, Vec<(String, String)>, Option<Strin
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Total collection type alias; lookups return `Option` without panicking.
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-0601]
+/// Realises: [REQ-0601], [REQ-FEAT-42-COMPONENT-METHOD-TABLE]
 pub type ComponentMethodTable = std::collections::BTreeMap<String, Vec<ExtractedMethodSignature>>;
+
+/// Extracts a normalized SysML v2 [`ExtractedMethodSignature`] from a callable [`SourceAstItem`].
+///
+/// # Summary
+/// Converts a callable `SourceAstItem` (`Function` or `Method`) into `(in_parameters, out_parameters, return_type_name)`
+/// with SysML-sanitized parameter names and normalized type identifiers, returning `None` for non-callable AST items.
+///
+/// # Preconditions
+/// - `item` is a borrowed [`SourceAstItem`] produced by a language-specific source AST parser.
+///
+/// # Postconditions
+/// - Returns `None` when `!item.kind.is_callable()`.
+/// - Returns `Some((in_parameters, out_parameters, return_type_name))` when `item.kind.is_callable()`.
+///
+/// # Invariants
+/// - Every input parameter pair has a non-empty sanitized identifier (`"param"` fallback) and SysML-normalized type name.
+/// - Non-unit, non-void return types yield a single `("result", normalized_type)` entry in `out_parameters` and matching `return_type_name`.
+///
+/// # Failure Modes
+/// - Non-callable items (`Struct`, `Enum`, `Trait`, `Widget`) return `None` without panicking.
+///
+/// # Side Effects
+/// - Pure transformation; performs zero I/O and mutates no external state.
+///
+/// # Determinism
+/// - Deterministic output for identical `SourceAstItem` inputs.
+///
+/// # Parameters
+/// - `item`: Borrowed [`SourceAstItem`] to inspect and normalize.
+///
+/// # Returns
+/// - `Option<ExtractedMethodSignature>` containing `(in_parameters, out_parameters, return_type_name)`.
+///
+/// # Errors
+/// - None (total option-returning projection).
+///
+/// # Panics
+/// - Never panics.
+///
+/// # Safety
+/// - Safe pure Rust implementation (`#![forbid(unsafe_code)]` compliant).
+///
+/// # Realises
+/// - Realises: [REQ-0601], [REQ-FEAT-42-EXTRACT-METHOD-SIGNATURE]
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, Blueprint 01 Section 6, and Check 34 zero-suppression rules (`extract_method_signature`).
+/// Centralizes callable parameter and return-type normalization behind the [`ExtractedMethodSignature`] type alias.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `item.kind.is_callable() == false` implies `extract_method_signature(item) == None`.
+/// - `return_type_name == out_parameters.first().map(|(_, ty)| ty.clone())`.
+///
+/// ## 3. Preconditions
+/// - `item: &SourceAstItem` is a valid in-memory AST node reference.
+///
+/// ## 4. Postconditions
+/// - Returns a normalized [`ExtractedMethodSignature`] ready for [`ComponentMethodTable`] indexing or SysML `ActionDef` lowering.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(P + R) where P is `item.params.len()` and R is return type byte length.
+/// - Space Complexity: O(P + R) for owned parameter and return type strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Rejects non-callable `SourceAstItemKind` variants cleanly via `None`.
+/// - State: Stateless projection.
+/// - Action: Returns `None` on non-callable AST items.
+/// - Resource: Bounded by parsed parameter count P.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0601], [REQ-FEAT-42-EXTRACT-METHOD-SIGNATURE]
+pub fn extract_method_signature(item: &SourceAstItem) -> Option<ExtractedMethodSignature> {
+    if !item.kind.is_callable() {
+        return None;
+    }
+    let in_parameters: Vec<(String, String)> = item
+        .params
+        .iter()
+        .map(|p| {
+            (
+                sanitize_sysml_identifier(&p.name, "param"),
+                normalize_type_for_sysml(&p.type_name),
+            )
+        })
+        .collect();
+    let out_parameters: Vec<(String, String)> = match item.return_type.as_deref().map(str::trim) {
+        Some(trimmed_ret)
+            if !trimmed_ret.is_empty() && trimmed_ret != "()" && trimmed_ret != "void" =>
+        {
+            vec![("result".to_string(), normalize_type_for_sysml(trimmed_ret))]
+        }
+        _ => Vec::new(),
+    };
+    let return_type_name = out_parameters.first().map(|(_, ty)| ty.clone());
+    Some((in_parameters, out_parameters, return_type_name))
+}
+
+/// Builds a deterministic [`ComponentMethodTable`] from a slice of parsed [`SourceAstItem`] nodes.
+///
+/// # Summary
+/// Iterates over `items`, extracts each callable signature via [`extract_method_signature`], resolves the sanitized owning
+/// component key (`"TopLevel"` when `owner_name` is `None`), and groups signatures into a lexicographically ordered `BTreeMap`.
+///
+/// # Preconditions
+/// - `items` is a slice of [`SourceAstItem`] declarations extracted from source files.
+///
+/// # Postconditions
+/// - Returns a [`ComponentMethodTable`] mapping each sanitized component identifier to its declaration-ordered method signatures.
+///
+/// # Invariants
+/// - Non-callable items are skipped via [`extract_method_signature`].
+/// - Key order is strictly deterministic (`BTreeMap<String, Vec<ExtractedMethodSignature>>`).
+///
+/// # Failure Modes
+/// - Empty slices or slices without callable items return an empty `ComponentMethodTable` without panicking.
+///
+/// # Side Effects
+/// - Pure aggregation; performs zero I/O and mutates no external state.
+///
+/// # Determinism
+/// - Deterministic map construction and per-component vector ordering.
+///
+/// # Parameters
+/// - `items`: Slice of [`SourceAstItem`] declarations to index.
+///
+/// # Returns
+/// - [`ComponentMethodTable`] keyed by sanitized component identifier or `"TopLevel"`.
+///
+/// # Errors
+/// - None.
+///
+/// # Panics
+/// - Never panics.
+///
+/// # Safety
+/// - Safe pure Rust implementation (`#![forbid(unsafe_code)]` compliant).
+///
+/// # Realises
+/// - Realises: [REQ-0601], [REQ-FEAT-42-EXTRACT-COMPONENT-METHOD-TABLE]
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, Blueprint 01 Section 6, and Check 34 zero-suppression rules (`extract_component_method_table`).
+/// Aggregates component method signatures into [`ComponentMethodTable`] without nested tuple lint suppressions.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Total number of stored [`ExtractedMethodSignature`] entries equals the count of `item` elements where `item.kind.is_callable()`.
+///
+/// ## 3. Preconditions
+/// - `items: &[SourceAstItem]` is a valid slice reference.
+///
+/// ## 4. Postconditions
+/// - Every callable item is indexed under `sanitize_sysml_identifier(owner, "ComponentPart")` or `"TopLevel"`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N * (P + log C)) for N AST items, P parameters per callable, and C unique component owners.
+/// - Space Complexity: O(N * P) for the populated [`ComponentMethodTable`].
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts empty or non-callable slices gracefully.
+/// - State: Local `BTreeMap` accumulator only.
+/// - Action: Skips non-callable items via `let Some(sig) = extract_method_signature(item) else { continue; }`.
+/// - Resource: Bounded by input slice length `items.len()`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0601], [REQ-FEAT-42-EXTRACT-COMPONENT-METHOD-TABLE]
+pub fn extract_component_method_table(items: &[SourceAstItem]) -> ComponentMethodTable {
+    let mut table = ComponentMethodTable::new();
+    for item in items {
+        let Some(sig) = extract_method_signature(item) else {
+            continue;
+        };
+        let owner_key = item
+            .owner_name
+            .as_deref()
+            .map(|o| sanitize_sysml_identifier(o, "ComponentPart"))
+            .unwrap_or_else(|| "TopLevel".to_string());
+        table.entry(owner_key).or_default().push(sig);
+    }
+    table
+}
 
 /// Validates lexical and delimiter balance (`{}`, `()`, `[]`, strings, comments) under explicit `lang` rules.
 ///
@@ -1628,32 +1808,28 @@ pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) 
 
     // Pass 2: Lower functions, methods, and constructors into ActionDef and ConstraintDef
     for item in items {
-        if !item.kind.is_callable() {
+        let Some((in_sig, out_sig, _)) = extract_method_signature(item) else {
             continue;
-        }
+        };
         let act_name = sanitize_sysml_identifier(&item.name, "action_op");
-        let in_params: Vec<AttributeDef> = item
-            .params
-            .iter()
-            .map(|p| AttributeDef {
-                name: sanitize_sysml_identifier(&p.name, "param"),
-                type_name: normalize_type_for_sysml(&p.type_name),
+        let in_params: Vec<AttributeDef> = in_sig
+            .into_iter()
+            .map(|(name, type_name)| AttributeDef {
+                name,
+                type_name,
                 default_value: None,
                 doc: None,
             })
             .collect();
-        let mut out_params = Vec::new();
-        if let Some(ref ret) = item.return_type {
-            let trimmed_ret = ret.trim();
-            if !trimmed_ret.is_empty() && trimmed_ret != "()" && trimmed_ret != "void" {
-                out_params.push(AttributeDef {
-                    name: "result".to_string(),
-                    type_name: normalize_type_for_sysml(trimmed_ret),
-                    default_value: None,
-                    doc: None,
-                });
-            }
-        }
+        let out_params: Vec<AttributeDef> = out_sig
+            .into_iter()
+            .map(|(name, type_name)| AttributeDef {
+                name,
+                type_name,
+                default_value: None,
+                doc: None,
+            })
+            .collect();
 
         let action_def = ActionDef {
             name: act_name.clone(),
@@ -4473,6 +4649,160 @@ pub fn update_ast_delimiter_depths(code: &str, brace_depth: &mut usize, paren_de
     }
 }
 
+/// Detects direct range-slice indexing expressions (`ident[a..b]`) outside string and char literals.
+///
+/// # Summary
+/// Scans a comment-stripped source line outside string and character literals for `[` ... `..` ... `]`
+/// immediately preceded by an identifier or closing delimiter (`alphanumeric`, `_`, `)`, `]`).
+///
+/// # Preconditions
+/// - `code_line` is a valid UTF-8 source line slice after line-comment stripping.
+///
+/// # Postconditions
+/// - Returns `true` if any direct range-slice indexing expression is present outside literals; `false` otherwise.
+///
+/// # Invariants
+/// - Ignores `[` and `..` tokens inside normal string literals, raw string literals, and character literals.
+/// - Uses `.get(..)` and saturating arithmetic exclusively without direct slice indexing.
+///
+/// # Failure Modes
+/// - Unclosed literals on a single line terminate scanning safely at `bytes.len()` without panicking.
+///
+/// # Side Effects
+/// - Pure stateless predicate; performs zero I/O and mutates no external state.
+///
+/// # Determinism
+/// - Deterministic O(N) byte scan over `code_line.as_bytes()`.
+///
+/// # Parameters
+/// - `code_line`: Comment-stripped UTF-8 source line slice to inspect.
+///
+/// # Returns
+/// - `bool` (`true` if a direct range-slice indexing expression is detected outside literals).
+///
+/// # Errors
+/// - Infallible predicate; returns `bool` directly without error conditions.
+///
+/// # Panics
+/// - Never panics (`!#[forbid(clippy::indexing_slicing)]` compliant via `.get(..)`).
+///
+/// # Safety
+/// - Safe pure lexical byte scan (`!#[forbid(unsafe_code)]` compliant).
+///
+/// # Realises
+/// - Realises: [REQ-SOURCE-AST-CHECK34-RANGE-SLICE-DETECTOR]
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34 (`check_zero_regex`) non-panicking slice invariants.
+/// Provides general AST-level verification that production code never uses panicking `&s[a..b]` syntax.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Matches `[` at byte index `idx > 0` iff `bytes.get(idx - 1)` is in `[A-Za-z0-9_)\]]` and a `..`
+///   token appears before the matching `]` at bracket depth 1.
+///
+/// ## 3. Preconditions
+/// - `code_line: &str` is a comment-stripped source code line.
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff a direct range-slice indexing operation exists on `code_line`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `code_line.len()`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking `.get(..)` byte access throughout.
+/// - State: Stateless local indices.
+/// - Action: Returns `false` on clean lines.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SOURCE-AST-CHECK34-RANGE-SLICE-DETECTOR]
+pub fn contains_direct_range_slice(code_line: &str) -> bool {
+    let bytes = code_line.as_bytes();
+    let mut idx: usize = 0;
+    let mut in_double_quote = false;
+    let mut raw_hashes: Option<usize> = None;
+
+    while let Some(&b) = bytes.get(idx) {
+        if let Some(hashes) = raw_hashes {
+            if b == b'"' {
+                let mut matched: usize = 0;
+                let mut scan = idx.saturating_add(1);
+                while matched < hashes && bytes.get(scan) == Some(&b'#') {
+                    matched = matched.saturating_add(1);
+                    scan = scan.saturating_add(1);
+                }
+                if matched == hashes {
+                    raw_hashes = None;
+                    idx = scan;
+                    continue;
+                }
+            }
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
+        if in_double_quote {
+            if b == b'\\' {
+                idx = idx.saturating_add(2);
+                continue;
+            }
+            if b == b'"' {
+                in_double_quote = false;
+            }
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
+        if b == b'"' {
+            in_double_quote = true;
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
+        if b == b'\'' {
+            if let Some(char_len) = code_line.get(idx..).and_then(single_char_literal_byte_len) {
+                idx = idx.saturating_add(char_len);
+                continue;
+            }
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
+        if b == b'[' && idx > 0 {
+            let prev_is_slice_target = bytes
+                .get(idx.saturating_sub(1))
+                .map(|&p| p.is_ascii_alphanumeric() || p == b'_' || p == b')' || p == b']')
+                .unwrap_or(false);
+            if prev_is_slice_target {
+                let mut scan = idx.saturating_add(1);
+                let mut depth: usize = 1;
+                while let Some(&sb) = bytes.get(scan) {
+                    if sb == b'[' {
+                        depth = depth.saturating_add(1);
+                    } else if sb == b']' {
+                        depth = depth.saturating_sub(1);
+                        if depth == 0 {
+                            break;
+                        }
+                    } else if depth == 1
+                        && sb == b'.'
+                        && bytes.get(scan.saturating_add(1)) == Some(&b'.')
+                    {
+                        return true;
+                    }
+                    scan = scan.saturating_add(1);
+                }
+            }
+        }
+
+        idx = idx.saturating_add(1);
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4482,13 +4812,13 @@ mod tests {
         let dart_src = r#"import 'package:flutter/material.dart';
 
 /// Realises: [REQ-UI-01]
-class TelemetryPanel extends StatefulWidget {
+class WidgetAlpha extends StatefulWidget {
   final String title;
   final int refreshRateHz;
   final VoidCallback onRefresh;
   final ValueChanged<int> onRateChanged;
 
-  const TelemetryPanel({
+  const WidgetAlpha({
     super.key,
     required this.title,
     required this.refreshRateHz,
@@ -4497,10 +4827,10 @@ class TelemetryPanel extends StatefulWidget {
   });
 
   @override
-  State<TelemetryPanel> createState() => _TelemetryPanelState();
+  State<WidgetAlpha> createState() => _WidgetAlphaState();
 }
 
-class _TelemetryPanelState extends State<TelemetryPanel> {
+class _WidgetAlphaState extends State<WidgetAlpha> {
   bool isExpanded = false;
 
   void togglePanel(bool nextState) {
@@ -4509,13 +4839,13 @@ class _TelemetryPanelState extends State<TelemetryPanel> {
   }
 }
 "#;
-        let items = parse_dart_source_ast(dart_src, "lib/telemetry_panel.dart")?;
-        let pkg = lower_source_ast_to_package(&items, "TelemetryUiPkg");
+        let items = parse_dart_source_ast(dart_src, "lib/widget_alpha.dart")?;
+        let pkg = lower_source_ast_to_package(&items, "UiAlphaPkg");
         let panel = pkg
             .part_defs
             .iter()
-            .find(|p| p.name == "TelemetryPanel")
-            .ok_or_else(|| "TelemetryPanel PartDef".to_string())?;
+            .find(|p| p.name == "WidgetAlpha")
+            .ok_or_else(|| "WidgetAlpha PartDef".to_string())?;
         assert!(panel.attributes.iter().any(|a| a.name == "title"));
         assert!(panel.attributes.iter().any(|a| a.name == "refreshRateHz"));
         assert!(panel.ports.iter().any(|p| p.name == "onRefresh"));
@@ -4561,10 +4891,10 @@ impl ComponentBuffer {
     }
 
     #[test]
-    fn test_syntax_error_unclosed_brace_fails_closed_with_line_and_col() {
+    fn test_syntax_error_unclosed_brace_fails_closed_with_line_and_col() -> Result<(), String> {
         let bad_rust = "pub struct Broken {\n    pub x: u32,\n";
         let err = match parse_rust_source_ast(bad_rust, "src/broken.rs") {
-            Ok(_) => String::new(),
+            Ok(_) => return Err("Expected syntax error for unclosed brace".to_string()),
             Err(e) => e,
         };
         assert!(
@@ -4572,6 +4902,7 @@ impl ComponentBuffer {
             "Expected line/col diagnostic, got: {}",
             err
         );
+        Ok(())
     }
 
     #[test]
@@ -4599,142 +4930,6 @@ class PathFormatter {
         Ok(())
     }
 
-    /// Detects direct range-slice indexing expressions (`ident[a..b]`) outside string and char literals.
-    ///
-    /// # Summary
-    /// Scans a comment-stripped source line outside string and character literals for `[` ... `..` ... `]`
-    /// immediately preceded by an identifier or closing delimiter (`alphanumeric`, `_`, `)`, `]`).
-    ///
-    /// # Preconditions
-    /// - `code_line` is a valid UTF-8 source line slice after line-comment stripping.
-    ///
-    /// # Postconditions
-    /// - Returns `true` if any direct range-slice indexing expression is present outside literals; `false` otherwise.
-    ///
-    /// # Invariants
-    /// - Ignores `[` and `..` tokens inside normal string literals, raw string literals, and character literals.
-    /// - Uses `.get(..)` and saturating arithmetic exclusively without direct slice indexing.
-    ///
-    /// # Failure Modes
-    /// - Unclosed literals on a single line terminate scanning safely at `bytes.len()` without panicking.
-    ///
-    /// # Side Effects
-    /// - Pure stateless predicate; performs zero I/O and mutates no external state.
-    ///
-    /// # Determinism
-    /// - Deterministic O(N) byte scan over `code_line.as_bytes()`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and Check 34 (`check_zero_regex`) non-panicking slice invariants.
-    /// Provides general AST-level self-verification that production code never uses panicking `&s[a..b]` syntax.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Matches `[` at byte index `idx > 0` iff `bytes.get(idx - 1)` is in `[A-Za-z0-9_)\]]` and a `..`
-    ///   token appears before the matching `]` at bracket depth 1.
-    ///
-    /// ## 3. Preconditions
-    /// - `code_line: &str` is a comment-stripped line from `source_ast.rs`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `true` iff a direct range-slice indexing operation exists on `code_line`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N) where N is `code_line.len()`.
-    /// - Space Complexity: O(1) zero heap allocation.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Non-panicking `.get(..)` byte access throughout.
-    /// - State: Stateless local indices.
-    /// - Action: Returns `false` on clean lines.
-    /// - Resource: Zero heap allocations.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SOURCE-AST-CHECK34-RANGE-SLICE-DETECTOR]
-    fn contains_direct_range_slice(code_line: &str) -> bool {
-        let bytes = code_line.as_bytes();
-        let mut idx: usize = 0;
-        let mut in_double_quote = false;
-        let mut raw_hashes: Option<usize> = None;
-
-        while let Some(&b) = bytes.get(idx) {
-            if let Some(hashes) = raw_hashes {
-                if b == b'"' {
-                    let mut matched: usize = 0;
-                    let mut scan = idx.saturating_add(1);
-                    while matched < hashes && bytes.get(scan) == Some(&b'#') {
-                        matched = matched.saturating_add(1);
-                        scan = scan.saturating_add(1);
-                    }
-                    if matched == hashes {
-                        raw_hashes = None;
-                        idx = scan;
-                        continue;
-                    }
-                }
-                idx = idx.saturating_add(1);
-                continue;
-            }
-
-            if in_double_quote {
-                if b == b'\\' {
-                    idx = idx.saturating_add(2);
-                    continue;
-                }
-                if b == b'"' {
-                    in_double_quote = false;
-                }
-                idx = idx.saturating_add(1);
-                continue;
-            }
-
-            if b == b'"' {
-                in_double_quote = true;
-                idx = idx.saturating_add(1);
-                continue;
-            }
-
-            if b == b'\'' {
-                if let Some(char_len) = code_line.get(idx..).and_then(single_char_literal_byte_len) {
-                    idx = idx.saturating_add(char_len);
-                    continue;
-                }
-                idx = idx.saturating_add(1);
-                continue;
-            }
-
-            if b == b'[' && idx > 0 {
-                let prev_is_slice_target = bytes
-                    .get(idx.saturating_sub(1))
-                    .map(|&p| p.is_ascii_alphanumeric() || p == b'_' || p == b')' || p == b']')
-                    .unwrap_or(false);
-                if prev_is_slice_target {
-                    let mut scan = idx.saturating_add(1);
-                    let mut depth: usize = 1;
-                    while let Some(&sb) = bytes.get(scan) {
-                        if sb == b'[' {
-                            depth = depth.saturating_add(1);
-                        } else if sb == b']' {
-                            depth = depth.saturating_sub(1);
-                            if depth == 0 {
-                                break;
-                            }
-                        } else if depth == 1
-                            && sb == b'.'
-                            && bytes.get(scan.saturating_add(1)) == Some(&b'.')
-                        {
-                            return true;
-                        }
-                        scan = scan.saturating_add(1);
-                    }
-                }
-            }
-
-            idx = idx.saturating_add(1);
-        }
-
-        false
-    }
-
     /// Verifies comment stripping, delimiter depth tracking with char literals, and Check 34 range-slice absence.
     ///
     /// # Summary
@@ -4753,7 +4948,7 @@ class PathFormatter {
     /// - Production code prior to `#[cfg(test)]` contains zero raw range-slice indexing expressions and zero `#[allow(clippy::type_complexity)]` attributes.
     ///
     /// # Failure Modes
-    /// - Panics if comment stripping, delimiter depth tracking, or Check 34 self-verification assertions fail.
+    /// - Panics or returns `Err` if comment stripping, delimiter depth tracking, or Check 34 self-verification assertions fail.
     ///
     /// # Side Effects
     /// - None (pure in-memory unit test).
@@ -4765,10 +4960,10 @@ class PathFormatter {
     /// - None (unit test).
     ///
     /// # Returns
-    /// - `()` on assertion success.
+    /// - `Result<(), String>` (`Ok(())` on assertion success).
     ///
     /// # Errors
-    /// - None.
+    /// - Returns `Err(String)` if any invariant check fails.
     ///
     /// # Panics
     /// - Panics if comment stripping, delimiter depth tracking, or range-slice purity assertions fail.
@@ -4805,7 +5000,7 @@ class PathFormatter {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SOURCE-AST-STRIP-LINE-COMMENT], [REQ-FEAT-42-UPDATE-AST-DELIMITER-DEPTHS]
     #[test]
-    fn test_strip_comment_and_delimiter_depths_zero_range_slice_indexing() {
+    fn test_strip_comment_and_delimiter_depths_zero_range_slice_indexing() -> Result<(), String> {
         let stripped = strip_line_comment_preserving_strings(
             "let ch = '/'; let url = \"http://example.com\"; // trailing comment",
         );
@@ -4872,6 +5067,7 @@ class PathFormatter {
             !prod_source.contains("#[allow(clippy::type_complexity)]"),
             "Check 34 violation: #[allow(clippy::type_complexity)] must be eliminated via type aliases"
         );
+        Ok(())
     }
 
     /// Verifies `scan_rust_line_preserving_lex_state` on multi-lifetime signatures, char literals, block comments, and raw strings.
@@ -4964,27 +5160,69 @@ closing now "##;
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A and Check 34/Check 36 verification for semantic type aliases (`REQ-0601`).
     /// ## 2. Invariants & Mathematical Properties
-    /// - Retrieving a populated component key yields `Some(methods)` with `!methods.is_empty()`.
+    /// - `extract_method_signature` returns `None` for non-callable `Struct` AST items and `Some` for callable `Method` items.
+    /// - `extract_component_method_table` and `lower_source_ast_to_package` preserve normalized parameters and return types.
     /// ## 3. Preconditions
-    /// - Executed by `cargo test -p deap-core` with a valid in-memory `ExtractedMethodSignature`.
+    /// - Executed by `cargo test -p deap-core` on an abstract Rust component fixture (`ComponentAlpha`).
     /// ## 4. Postconditions
-    /// - `retrieved.is_some()` and non-empty method slice assertions pass without indexing or `unwrap()`.
+    /// - Negative probe (`Struct` -> `None`), `ComponentMethodTable` lookup, and `PartDef` action lowering assertions pass without indexing or `unwrap()`.
     /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(log N) insertion and lookup. Space Complexity: O(1) fixture allocation.
+    /// - Time Complexity: O(N log C) over parsed AST items. Space Complexity: O(N) fixture allocation.
     /// ## 6. Failure Modes & Fault Tolerance
-    /// - Fails test execution immediately if lookup returns `None` or an empty method slice.
+    /// - Returns `Err(String)` or fails test execution immediately if signature extraction or table lookup deviates.
     /// ## 7. Realization & Traceability
-    /// Realises: [REQ-0601]
+    /// Realises: [REQ-0601], [REQ-FEAT-42-EXTRACT-METHOD-SIGNATURE], [REQ-FEAT-42-EXTRACT-COMPONENT-METHOD-TABLE]
     #[test]
-    fn test_req_0601_ac04_semantic_type_aliases() {
-        let sig: ExtractedMethodSignature = (
-            "compute_guidance".to_string(),
-            vec![("dt_sec".to_string(), "f64".to_string())],
-            Some("Result<f64, String>".to_string()),
+    fn test_req_0601_ac04_semantic_type_aliases() -> Result<(), String> {
+        let rust_src = r#"pub struct ComponentAlpha {
+    pub threshold: i64,
+}
+
+impl ComponentAlpha {
+    pub fn process_signal(&self, input_val: i64) -> bool {
+        input_val > 0
+    }
+}
+"#;
+        let items = parse_rust_source_ast(rust_src, "src/component_alpha.rs")?;
+        let struct_item = items
+            .iter()
+            .find(|i| i.name == "ComponentAlpha")
+            .ok_or_else(|| "Missing ComponentAlpha struct AST item".to_string())?;
+        assert_eq!(extract_method_signature(struct_item), None);
+
+        let method_item = items
+            .iter()
+            .find(|i| i.name == "process_signal")
+            .ok_or_else(|| "Missing process_signal method AST item".to_string())?;
+        let extracted: ExtractedMethodSignature = extract_method_signature(method_item)
+            .ok_or_else(|| "Expected Some(ExtractedMethodSignature) for process_signal".to_string())?;
+        assert_eq!(
+            extracted.0,
+            vec![("input_val".to_string(), "Integer".to_string())]
         );
-        let mut table: ComponentMethodTable = ComponentMethodTable::new();
-        table.insert("FlightDirector".to_string(), vec![sig]);
-        let retrieved = table.get("FlightDirector");
-        assert!(retrieved.is_some() && retrieved.is_some_and(|m| !m.is_empty()));
+        assert_eq!(
+            extracted.1,
+            vec![("result".to_string(), "Boolean".to_string())]
+        );
+        assert_eq!(extracted.2, Some("Boolean".to_string()));
+
+        let table: ComponentMethodTable = extract_component_method_table(&items);
+        let methods = table
+            .get("ComponentAlpha")
+            .ok_or_else(|| "Missing ComponentAlpha entry in ComponentMethodTable".to_string())?;
+        assert_eq!(methods.len(), 1);
+        assert_eq!(methods.first(), Some(&extracted));
+
+        let pkg = lower_source_ast_to_package(&items, "PkgAlpha");
+        let part = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "ComponentAlpha")
+            .ok_or_else(|| "Missing ComponentAlpha PartDef in PkgAlpha".to_string())?;
+        assert!(part.actions.iter().any(|a| {
+            a.name == "process_signal" && a.in_params.len() == 1 && a.out_params.len() == 1
+        }));
+        Ok(())
     }
 }
