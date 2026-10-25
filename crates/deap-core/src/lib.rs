@@ -62,8 +62,8 @@ pub use source_ast::{
     resolve_source_package_name, sanitize_sysml_identifier,
     strip_leading_dart_annotations, strip_line_comment_preserving_strings,
     summary_from_doc_lines, update_ast_delimiter_depths, validate_source_syntax,
-    validate_source_syntax_for_language, SourceAstItem, SourceField, SourceItemKind,
-    SourceLanguage, SourceParam,
+    validate_source_syntax_for_language, ComponentMethodTable, ExtractedMethodSignature,
+    SourceAstItem, SourceField, SourceItemKind, SourceLanguage, SourceParam,
 };
 pub use sysml_ast::{
     component_matches, extract_negated_components, is_component_negated, parse_action_defs,

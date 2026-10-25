@@ -596,6 +596,68 @@ type ActiveStringState = (u8, bool, bool, usize, usize);
 /// Realises: [REQ-FEAT-42-INTERPOLATION-FRAME]
 type InterpolationFrame = (ActiveStringState, usize);
 
+/// Extracted method signature `(method_name, parameters, return_type)`.
+/// # Summary
+/// Captures a parsed method identifier, parameter `(name, type)` pairs, and optional return type.
+/// # Preconditions
+/// - Constructed from syntactically valid source AST method declarations.
+/// # Postconditions
+/// - Preserves exact parameter declaration order and return type metadata.
+/// # Invariants
+/// - Tuple layout is `(String, Vec<(String, String)>, Option<String>)`.
+/// # Failure Modes
+/// - None (pure type alias).
+/// # Side Effects
+/// - None.
+/// # Determinism
+/// - Deterministic value layout across all target architectures.
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34 zero-suppression rules (`ExtractedMethodSignature`).
+/// ## 2. Invariants & Mathematical Properties
+/// - Replaces complex nested tuple annotations in method extraction tables without lint suppressions.
+/// ## 3. Preconditions
+/// - Instantiated during AST method signature extraction.
+/// ## 4. Postconditions
+/// - Stored inside [`ComponentMethodTable`] keyed by owning component name.
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) construction. Space Complexity: O(P) for P parameters.
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total value type; cannot fail or panic.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0601]
+pub type ExtractedMethodSignature = (String, Vec<(String, String)>, Option<String>);
+
+/// Deterministic lookup table mapping component names to extracted method signatures.
+/// # Summary
+/// Maps each component or type identifier to its ordered vector of [`ExtractedMethodSignature`] entries.
+/// # Preconditions
+/// - Keys are non-empty component or struct identifiers parsed from source ASTs.
+/// # Postconditions
+/// - Maintains lexicographically sorted component keys via `BTreeMap`.
+/// # Invariants
+/// - Every entry maps `String -> Vec<ExtractedMethodSignature>`.
+/// # Failure Modes
+/// - None (pure type alias).
+/// # Side Effects
+/// - None.
+/// # Determinism
+/// - Deterministic iteration order guaranteed by `std::collections::BTreeMap`.
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34 zero-suppression rules (`ComponentMethodTable`).
+/// ## 2. Invariants & Mathematical Properties
+/// - Eliminates `clippy::type_complexity` on nested method table signatures via semantic aliasing.
+/// ## 3. Preconditions
+/// - Populated during component and impl block AST traversal.
+/// ## 4. Postconditions
+/// - Provides O(log N) lookup by component name without raw indexing.
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(log N) lookup/insertion. Space Complexity: O(N * M) across N components.
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total collection type alias; lookups return `Option` without panicking.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0601]
+pub type ComponentMethodTable = std::collections::BTreeMap<String, Vec<ExtractedMethodSignature>>;
+
 /// Validates lexical and delimiter balance (`{}`, `()`, `[]`, strings, comments) under explicit `lang` rules.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -4896,5 +4958,33 @@ closing now "##;
         assert!(items.iter().any(|i| i.name == "with_multi_hash_raw"));
         assert!(!items.iter().any(|i| i.name == "FakeInsideRaw"));
         Ok(())
+    }
+
+    /// Verifies semantic type aliases `ExtractedMethodSignature` and `ComponentMethodTable` for REQ-0601 AC-04.
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and Check 34/Check 36 verification for semantic type aliases (`REQ-0601`).
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Retrieving a populated component key yields `Some(methods)` with `!methods.is_empty()`.
+    /// ## 3. Preconditions
+    /// - Executed by `cargo test -p deap-core` with a valid in-memory `ExtractedMethodSignature`.
+    /// ## 4. Postconditions
+    /// - `retrieved.is_some()` and non-empty method slice assertions pass without indexing or `unwrap()`.
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(log N) insertion and lookup. Space Complexity: O(1) fixture allocation.
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Fails test execution immediately if lookup returns `None` or an empty method slice.
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0601]
+    #[test]
+    fn test_req_0601_ac04_semantic_type_aliases() {
+        let sig: ExtractedMethodSignature = (
+            "compute_guidance".to_string(),
+            vec![("dt_sec".to_string(), "f64".to_string())],
+            Some("Result<f64, String>".to_string()),
+        );
+        let mut table: ComponentMethodTable = ComponentMethodTable::new();
+        table.insert("FlightDirector".to_string(), vec![sig]);
+        let retrieved = table.get("FlightDirector");
+        assert!(retrieved.is_some() && retrieved.is_some_and(|m| !m.is_empty()));
     }
 }
