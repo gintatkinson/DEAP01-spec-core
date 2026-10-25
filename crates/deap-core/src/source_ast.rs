@@ -661,7 +661,7 @@ pub type ComponentMethodTable = std::collections::BTreeMap<String, Vec<Extracted
 /// Extracts a normalized SysML v2 [`ExtractedMethodSignature`] from a callable [`SourceAstItem`].
 ///
 /// # Summary
-/// Converts a callable `SourceAstItem` (`Function` or `Method`) into `(in_parameters, out_parameters, return_type_name)`
+/// Converts a callable AST item (`Function`, `Method`, or `Constructor`) into `(in_parameters, out_parameters, return_type_name)`
 /// with SysML-sanitized parameter names and normalized type identifiers, returning `None` for non-callable AST items.
 ///
 /// # Preconditions
@@ -698,9 +698,6 @@ pub type ComponentMethodTable = std::collections::BTreeMap<String, Vec<Extracted
 ///
 /// # Safety
 /// - Safe pure Rust implementation (`#![forbid(unsafe_code)]` compliant).
-///
-/// # Realises
-/// - Realises: [REQ-0601], [REQ-FEAT-42-EXTRACT-METHOD-SIGNATURE]
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, Blueprint 01 Section 6, and Check 34 zero-suppression rules (`extract_method_signature`).
@@ -793,9 +790,6 @@ pub fn extract_method_signature(item: &SourceAstItem) -> Option<ExtractedMethodS
 ///
 /// # Safety
 /// - Safe pure Rust implementation (`#![forbid(unsafe_code)]` compliant).
-///
-/// # Realises
-/// - Realises: [REQ-0601], [REQ-FEAT-42-EXTRACT-COMPONENT-METHOD-TABLE]
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, Blueprint 01 Section 6, and Check 34 zero-suppression rules (`extract_component_method_table`).
@@ -4684,13 +4678,10 @@ pub fn update_ast_delimiter_depths(code: &str, brace_depth: &mut usize, paren_de
 /// - Infallible predicate; returns `bool` directly without error conditions.
 ///
 /// # Panics
-/// - Never panics (`!#[forbid(clippy::indexing_slicing)]` compliant via `.get(..)`).
+/// - Never panics (`#![forbid(clippy::indexing_slicing)]` compliant via `.get(..)`).
 ///
 /// # Safety
-/// - Safe pure lexical byte scan (`!#[forbid(unsafe_code)]` compliant).
-///
-/// # Realises
-/// - Realises: [REQ-SOURCE-AST-CHECK34-RANGE-SLICE-DETECTOR]
+/// - Safe pure lexical byte scan (`#![forbid(unsafe_code)]` compliant).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and Check 34 (`check_zero_regex`) non-panicking slice invariants.
@@ -4698,86 +4689,40 @@ pub fn update_ast_delimiter_depths(code: &str, brace_depth: &mut usize, paren_de
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Matches `[` at byte index `idx > 0` iff `bytes.get(idx - 1)` is in `[A-Za-z0-9_)\]]` and a `..`
-///   token appears before the matching `]` at bracket depth 1.
+///   token appears before the matching `]` at any bracket depth inside the indexing expression.
 ///
 /// ## 3. Preconditions
-/// - `code_line: &str` is a comment-stripped source code line.
+/// - `code_line: &str` is a source code line.
 ///
 /// ## 4. Postconditions
-/// - Returns `true` iff a direct range-slice indexing operation exists on `code_line`.
+/// - Returns `true` iff a direct range-slice indexing operation exists on `code_line` outside comments and string/character literals.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N) where N is `code_line.len()`.
-/// - Space Complexity: O(1) zero heap allocation.
+/// - Space Complexity: O(N) for the lexically sanitized line buffer.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Non-panicking `.get(..)` byte access throughout.
-/// - State: Stateless local indices.
+/// - State: Stateless local indices with `RustStringScannerState::Normal`.
 /// - Action: Returns `false` on clean lines.
-/// - Resource: Zero heap allocations.
+/// - Resource: Bounded single-line buffer allocation.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SOURCE-AST-CHECK34-RANGE-SLICE-DETECTOR]
 pub fn contains_direct_range_slice(code_line: &str) -> bool {
-    let bytes = code_line.as_bytes();
+    let sanitized =
+        scan_rust_line_preserving_lex_state(code_line, &mut RustStringScannerState::Normal);
+    let bytes = sanitized.as_bytes();
     let mut idx: usize = 0;
-    let mut in_double_quote = false;
-    let mut raw_hashes: Option<usize> = None;
-
     while let Some(&b) = bytes.get(idx) {
-        if let Some(hashes) = raw_hashes {
-            if b == b'"' {
-                let mut matched: usize = 0;
-                let mut scan = idx.saturating_add(1);
-                while matched < hashes && bytes.get(scan) == Some(&b'#') {
-                    matched = matched.saturating_add(1);
-                    scan = scan.saturating_add(1);
-                }
-                if matched == hashes {
-                    raw_hashes = None;
-                    idx = scan;
-                    continue;
-                }
-            }
-            idx = idx.saturating_add(1);
-            continue;
-        }
-
-        if in_double_quote {
-            if b == b'\\' {
-                idx = idx.saturating_add(2);
-                continue;
-            }
-            if b == b'"' {
-                in_double_quote = false;
-            }
-            idx = idx.saturating_add(1);
-            continue;
-        }
-
-        if b == b'"' {
-            in_double_quote = true;
-            idx = idx.saturating_add(1);
-            continue;
-        }
-
-        if b == b'\'' {
-            if let Some(char_len) = code_line.get(idx..).and_then(single_char_literal_byte_len) {
-                idx = idx.saturating_add(char_len);
-                continue;
-            }
-            idx = idx.saturating_add(1);
-            continue;
-        }
-
-        if b == b'[' && idx > 0 {
-            let prev_is_slice_target = bytes
-                .get(idx.saturating_sub(1))
-                .map(|&p| p.is_ascii_alphanumeric() || p == b'_' || p == b')' || p == b']')
-                .unwrap_or(false);
-            if prev_is_slice_target {
-                let mut scan = idx.saturating_add(1);
+        if b == b'[' {
+            let prev_is_indexable = idx > 0
+                && bytes.get(idx.saturating_sub(1)).is_some_and(|p| {
+                    p.is_ascii_alphanumeric() || *p == b'_' || *p == b')' || *p == b']'
+                });
+            if prev_is_indexable {
                 let mut depth: usize = 1;
+                let mut scan = idx.saturating_add(1);
                 while let Some(&sb) = bytes.get(scan) {
                     if sb == b'[' {
                         depth = depth.saturating_add(1);
@@ -4786,20 +4731,15 @@ pub fn contains_direct_range_slice(code_line: &str) -> bool {
                         if depth == 0 {
                             break;
                         }
-                    } else if depth == 1
-                        && sb == b'.'
-                        && bytes.get(scan.saturating_add(1)) == Some(&b'.')
-                    {
+                    } else if sb == b'.' && bytes.get(scan.saturating_add(1)) == Some(&b'.') {
                         return true;
                     }
                     scan = scan.saturating_add(1);
                 }
             }
         }
-
         idx = idx.saturating_add(1);
     }
-
     false
 }
 
@@ -4846,14 +4786,27 @@ class _WidgetAlphaState extends State<WidgetAlpha> {
             .iter()
             .find(|p| p.name == "WidgetAlpha")
             .ok_or_else(|| "WidgetAlpha PartDef".to_string())?;
-        assert!(panel.attributes.iter().any(|a| a.name == "title"));
-        assert!(panel.attributes.iter().any(|a| a.name == "refreshRateHz"));
-        assert!(panel.ports.iter().any(|p| p.name == "onRefresh"));
-        assert!(panel.ports.iter().any(|p| p.name == "onRateChanged"));
-        assert!(panel
+        if !panel.attributes.iter().any(|a| a.name == "title") {
+            return Err("Missing 'title' attribute on WidgetAlpha".to_string());
+        }
+        if !panel.attributes.iter().any(|a| a.name == "refreshRateHz") {
+            return Err("Missing 'refreshRateHz' attribute on WidgetAlpha".to_string());
+        }
+        if !panel.ports.iter().any(|p| p.name == "onRefresh") {
+            return Err("Missing 'onRefresh' port on WidgetAlpha".to_string());
+        }
+        if !panel.ports.iter().any(|p| p.name == "onRateChanged") {
+            return Err("Missing 'onRateChanged' port on WidgetAlpha".to_string());
+        }
+        if !panel
             .satisfied_requirements
-            .contains(&"REQ-UI-01".to_string()));
-        assert!(!panel.states.is_empty());
+            .contains(&"REQ-UI-01".to_string())
+        {
+            return Err("Missing 'REQ-UI-01' satisfied requirement on WidgetAlpha".to_string());
+        }
+        if panel.states.is_empty() {
+            return Err("Expected non-empty states on WidgetAlpha".to_string());
+        }
         Ok(())
     }
 
@@ -4867,7 +4820,7 @@ pub struct ComponentBuffer {
 
 impl ComponentBuffer {
     pub fn push_item(&mut self, value: u32) -> Result<usize, String> {
-        assert!(self.count <= self.capacity);
+        debug_assert!(self.count <= self.capacity);
         Ok(self.count)
     }
 }
@@ -4879,14 +4832,26 @@ impl ComponentBuffer {
             .iter()
             .find(|p| p.name == "ComponentBuffer")
             .ok_or_else(|| "ComponentBuffer PartDef".to_string())?;
-        assert_eq!(buf.attributes.len(), 2);
-        assert!(buf.actions.iter().any(|a| a.name == "push_item"
-            && a.in_params.len() == 1
-            && a.out_params.len() == 1));
-        assert!(!buf.constraints.is_empty());
-        assert!(buf
+        if buf.attributes.len() != 2 {
+            return Err(format!(
+                "Expected 2 attributes on ComponentBuffer, got {}",
+                buf.attributes.len()
+            ));
+        }
+        if !buf.actions.iter().any(|a| {
+            a.name == "push_item" && a.in_params.len() == 1 && a.out_params.len() == 1
+        }) {
+            return Err("Missing expected 'push_item' action on ComponentBuffer".to_string());
+        }
+        if buf.constraints.is_empty() {
+            return Err("Expected non-empty constraints on ComponentBuffer".to_string());
+        }
+        if !buf
             .satisfied_requirements
-            .contains(&"REQ-BUF-01".to_string()));
+            .contains(&"REQ-BUF-01".to_string())
+        {
+            return Err("Missing 'REQ-BUF-01' satisfied requirement on ComponentBuffer".to_string());
+        }
         Ok(())
     }
 
@@ -4897,11 +4862,9 @@ impl ComponentBuffer {
             Ok(_) => return Err("Expected syntax error for unclosed brace".to_string()),
             Err(e) => e,
         };
-        assert!(
-            err.contains("src/broken.rs:1:19") && err.contains("unclosed delimiter '{'"),
-            "Expected line/col diagnostic, got: {}",
-            err
-        );
+        if !err.contains("src/broken.rs:1:19") || !err.contains("unclosed delimiter '{'") {
+            return Err(format!("Expected line/col diagnostic, got: {err}"));
+        }
         Ok(())
     }
 
@@ -4940,7 +4903,7 @@ class PathFormatter {
     /// - Invoked under `cargo test -p deap-core --lib`.
     ///
     /// # Postconditions
-    /// - Asserts exact stripped slices, delimiter depth counters, and absence of raw range slices or `#[allow(clippy::type_complexity)]` in production code.
+    /// - Verifies exact stripped slices, delimiter depth counters, positive/negative `contains_direct_range_slice` probes, and absence of raw range slices or `#[allow(clippy::type_complexity)]` in production code.
     ///
     /// # Invariants
     /// - `strip_line_comment_preserving_strings` preserves `'/'`, `"http://..."`, and `r#"http://... // keep"#` while stripping trailing `//`.
@@ -4948,7 +4911,7 @@ class PathFormatter {
     /// - Production code prior to `#[cfg(test)]` contains zero raw range-slice indexing expressions and zero `#[allow(clippy::type_complexity)]` attributes.
     ///
     /// # Failure Modes
-    /// - Panics or returns `Err` if comment stripping, delimiter depth tracking, or Check 34 self-verification assertions fail.
+    /// - Returns `Err(String)` if comment stripping, delimiter depth tracking, or Check 34 self-verification checks fail.
     ///
     /// # Side Effects
     /// - None (pure in-memory unit test).
@@ -4960,19 +4923,16 @@ class PathFormatter {
     /// - None (unit test).
     ///
     /// # Returns
-    /// - `Result<(), String>` (`Ok(())` on assertion success).
+    /// - `Result<(), String>` (`Ok(())` on check success).
     ///
     /// # Errors
     /// - Returns `Err(String)` if any invariant check fails.
     ///
     /// # Panics
-    /// - Panics if comment stripping, delimiter depth tracking, or range-slice purity assertions fail.
+    /// - Never panics (`#![forbid(clippy::indexing_slicing)]` and fallible `Result` return compliant).
     ///
     /// # Safety
-    /// - Safe pure lexical unit test (`!#[forbid(unsafe_code)]` compliant).
-    ///
-    /// # Realises
-    /// - Realises: [REQ-SOURCE-AST-STRIP-LINE-COMMENT], [REQ-FEAT-42-UPDATE-AST-DELIMITER-DEPTHS]
+    /// - Safe pure lexical unit test (`#![forbid(unsafe_code)]` compliant).
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A and Check 34 (`check_zero_regex`) non-panicking slice invariants (refs #492).
@@ -4988,14 +4948,14 @@ class PathFormatter {
     /// - Invoked under `cargo test -p deap-core --lib`.
     ///
     /// ## 4. Postconditions
-    /// - Asserts exact stripped slices, delimiter depth counters, and absence of raw range slices in production code.
+    /// - Verifies exact stripped slices, delimiter depth counters, and absence of raw range slices in production code.
     ///
     /// ## 5. Algorithmic Complexity Bounds
     /// - Time Complexity: O(N) where N is byte length of `source_ast.rs`.
     /// - Space Complexity: O(1) auxiliary heap allocations.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
-    /// - Fails test execution immediately if any raw range-slice token or `#[allow(clippy::type_complexity)]` remains in production code.
+    /// - Fails test execution immediately via `Err(String)` if any raw range-slice token or `#[allow(clippy::type_complexity)]` remains in production code.
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SOURCE-AST-STRIP-LINE-COMMENT], [REQ-FEAT-42-UPDATE-AST-DELIMITER-DEPTHS]
@@ -5004,15 +4964,16 @@ class PathFormatter {
         let stripped = strip_line_comment_preserving_strings(
             "let ch = '/'; let url = \"http://example.com\"; // trailing comment",
         );
-        assert_eq!(
-            stripped,
-            "let ch = '/'; let url = \"http://example.com\"; "
-        );
+        if stripped != "let ch = '/'; let url = \"http://example.com\"; " {
+            return Err(format!("Unexpected stripped line: {stripped}"));
+        }
 
         let stripped_raw = strip_line_comment_preserving_strings(
             "let raw = r#\"http://example.com // keep\"#; // strip",
         );
-        assert_eq!(stripped_raw, "let raw = r#\"http://example.com // keep\"#; ");
+        if stripped_raw != "let raw = r#\"http://example.com // keep\"#; " {
+            return Err(format!("Unexpected stripped_raw line: {stripped_raw}"));
+        }
 
         let mut brace_depth: usize = 0;
         let mut paren_depth: usize = 0;
@@ -5021,8 +4982,11 @@ class PathFormatter {
             &mut brace_depth,
             &mut paren_depth,
         );
-        assert_eq!(brace_depth, 1);
-        assert_eq!(paren_depth, 0);
+        if brace_depth != 1 || paren_depth != 0 {
+            return Err(format!(
+                "Unexpected delimiter depths: brace={brace_depth}, paren={paren_depth}"
+            ));
+        }
 
         let mut brace_depth_interp: usize = 0;
         let mut paren_depth_interp: usize = 0;
@@ -5031,8 +4995,11 @@ class PathFormatter {
             &mut brace_depth_interp,
             &mut paren_depth_interp,
         );
-        assert_eq!(brace_depth_interp, 1);
-        assert_eq!(paren_depth_interp, 0);
+        if brace_depth_interp != 1 || paren_depth_interp != 0 {
+            return Err(format!(
+                "Unexpected interp depths: brace={brace_depth_interp}, paren={paren_depth_interp}"
+            ));
+        }
 
         let mut brace_depth_raw: usize = 0;
         let mut paren_depth_raw: usize = 0;
@@ -5041,8 +5008,40 @@ class PathFormatter {
             &mut brace_depth_raw,
             &mut paren_depth_raw,
         );
-        assert_eq!(brace_depth_raw, 1);
-        assert_eq!(paren_depth_raw, 0);
+        if brace_depth_raw != 1 || paren_depth_raw != 0 {
+            return Err(format!(
+                "Unexpected raw depths: brace={brace_depth_raw}, paren={paren_depth_raw}"
+            ));
+        }
+
+        let positive_probes = [
+            "let x = &s[0..1];",
+            "let p = r\"C:\\\\\"; let y = &s[0..1];",
+            "let z = arr[find(\"]\") + s[0..1]];",
+            "let w = call()[start..end];",
+        ];
+        for probe in positive_probes {
+            if !contains_direct_range_slice(probe) {
+                return Err(format!(
+                    "Expected contains_direct_range_slice to return true for: {probe}"
+                ));
+            }
+        }
+
+        let negative_probes = [
+            "let a = map[\"a..b\"];",
+            "let b = map[r#\"a..b\"#];",
+            "let c = r#\"quote \" then s[0..1]\"#;",
+            "let d = arr[find(\"..\")];",
+            "let r = 0..10;",
+        ];
+        for probe in negative_probes {
+            if contains_direct_range_slice(probe) {
+                return Err(format!(
+                    "Expected contains_direct_range_slice to return false for: {probe}"
+                ));
+            }
+        }
 
         let self_source = include_str!("source_ast.rs");
         let cfg_test_mod_marker = ["\n#[cfg(test)]", "\nmod tests"].concat();
@@ -5056,17 +5055,20 @@ class PathFormatter {
                 continue;
             }
             let code = strip_line_comment_preserving_strings(trimmed);
-            assert!(
-                !contains_direct_range_slice(code),
-                "Check 34 violation: direct range-slice indexing found at line {}: {}",
-                line_idx.saturating_add(1),
-                trimmed
+            if contains_direct_range_slice(code) {
+                return Err(format!(
+                    "Check 34 violation: direct range-slice indexing found at line {}: {}",
+                    line_idx.saturating_add(1),
+                    trimmed
+                ));
+            }
+        }
+        if prod_source.contains("#[allow(clippy::type_complexity)]") {
+            return Err(
+                "Check 34 violation: #[allow(clippy::type_complexity)] must be eliminated via type aliases"
+                    .to_string(),
             );
         }
-        assert!(
-            !prod_source.contains("#[allow(clippy::type_complexity)]"),
-            "Check 34 violation: #[allow(clippy::type_complexity)] must be eliminated via type aliases"
-        );
         Ok(())
     }
 
@@ -5088,7 +5090,7 @@ class PathFormatter {
     /// - Never drops code tokens appearing after `*/` on the closing line of a multiline block comment.
     ///
     /// # Failure Modes
-    /// - Panics or returns `Err(String)` if lexical state transitions or AST extraction fail.
+    /// - Returns `Err(String)` if lexical state transitions or AST extraction fail.
     ///
     /// # Side Effects
     /// - None (pure in-memory unit test).
@@ -5110,14 +5112,14 @@ class PathFormatter {
     /// - Executed by `cargo test -p deap-core`.
     ///
     /// ## 4. Postconditions
-    /// - Returns `Ok(())` when all scanner and AST extraction assertions pass.
+    /// - Returns `Ok(())` when all scanner and AST extraction checks pass.
     ///
     /// ## 5. Algorithmic Complexity Bounds
     /// - Time Complexity: O(N) over the test fixture lines.
     /// - Space Complexity: O(N) for sanitized strings and extracted AST items.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
-    /// - Fails immediately on state mismatch or missing AST items.
+    /// - Fails immediately via `Err(String)` on state mismatch or missing AST items.
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SOURCE-AST-SCAN-RUST-LINE-LEX-STATE], [REQ-SOURCE-AST-RUST-SCANNER-STATE]
@@ -5126,10 +5128,15 @@ class PathFormatter {
         let mut state = RustStringScannerState::Normal;
         let line = "pub fn pick<'lifetime_alpha, 'lifetime_beta>(x: &'lifetime_alpha str, c: char) -> bool where 'lifetime_alpha: 'lifetime_beta { c == '{' || c == '\\'' || c == '\\u{1F600}' }";
         let sanitized = scan_rust_line_preserving_lex_state(line, &mut state);
-        assert_eq!(state, RustStringScannerState::Normal);
-        assert!(sanitized.contains("pub fn pick<'lifetime_alpha, 'lifetime_beta>"));
-        assert!(!sanitized.contains("'{'"));
-        assert!(!sanitized.contains("1F600"));
+        if state != RustStringScannerState::Normal {
+            return Err(format!("Expected Normal scanner state, got {state:?}"));
+        }
+        if !sanitized.contains("pub fn pick<'lifetime_alpha, 'lifetime_beta>") {
+            return Err(format!("Missing lifetime signature in sanitized line: {sanitized}"));
+        }
+        if sanitized.contains("'{'") || sanitized.contains("1F600") {
+            return Err(format!("Character literals were not blanked in sanitized line: {sanitized}"));
+        }
 
         let rust_src = r###"/* multiline comment start
 still in comment */ pub struct AfterComment {
@@ -5150,9 +5157,15 @@ closing now "##;
 }
 "###;
         let items = parse_rust_source_ast(rust_src, "src/lex_test.rs")?;
-        assert!(items.iter().any(|i| i.name == "AfterComment"));
-        assert!(items.iter().any(|i| i.name == "with_multi_hash_raw"));
-        assert!(!items.iter().any(|i| i.name == "FakeInsideRaw"));
+        if !items.iter().any(|i| i.name == "AfterComment") {
+            return Err("Missing 'AfterComment' item after multiline block comment".to_string());
+        }
+        if !items.iter().any(|i| i.name == "with_multi_hash_raw") {
+            return Err("Missing 'with_multi_hash_raw' function item".to_string());
+        }
+        if items.iter().any(|i| i.name == "FakeInsideRaw") {
+            return Err("Unexpected 'FakeInsideRaw' parsed from inside raw string".to_string());
+        }
         Ok(())
     }
 
@@ -5160,16 +5173,16 @@ closing now "##;
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A and Check 34/Check 36 verification for semantic type aliases (`REQ-0601`).
     /// ## 2. Invariants & Mathematical Properties
-    /// - `extract_method_signature` returns `None` for non-callable `Struct` AST items and `Some` for callable `Method` items.
+    /// - `extract_method_signature` returns `None` for non-callable `Struct` AST items and `Some` for callable `Function`, `Method`, and `Constructor` items.
     /// - `extract_component_method_table` and `lower_source_ast_to_package` preserve normalized parameters and return types.
     /// ## 3. Preconditions
     /// - Executed by `cargo test -p deap-core` on an abstract Rust component fixture (`ComponentAlpha`).
     /// ## 4. Postconditions
-    /// - Negative probe (`Struct` -> `None`), `ComponentMethodTable` lookup, and `PartDef` action lowering assertions pass without indexing or `unwrap()`.
+    /// - Negative probe (`Struct` -> `None`), `Function`/`Method`/`Constructor` signature checks, `ComponentMethodTable` lookup, and `PartDef` action lowering checks pass without indexing or `unwrap()`.
     /// ## 5. Algorithmic Complexity Bounds
     /// - Time Complexity: O(N log C) over parsed AST items. Space Complexity: O(N) fixture allocation.
     /// ## 6. Failure Modes & Fault Tolerance
-    /// - Returns `Err(String)` or fails test execution immediately if signature extraction or table lookup deviates.
+    /// - Returns `Err(String)` immediately if signature extraction or table lookup deviates.
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-0601], [REQ-FEAT-42-EXTRACT-METHOD-SIGNATURE], [REQ-FEAT-42-EXTRACT-COMPONENT-METHOD-TABLE]
     #[test]
@@ -5184,35 +5197,79 @@ impl ComponentAlpha {
     }
 }
 "#;
-        let items = parse_rust_source_ast(rust_src, "src/component_alpha.rs")?;
+        let mut items = parse_rust_source_ast(rust_src, "src/component_alpha.rs")?;
         let struct_item = items
             .iter()
             .find(|i| i.name == "ComponentAlpha")
             .ok_or_else(|| "Missing ComponentAlpha struct AST item".to_string())?;
-        assert_eq!(extract_method_signature(struct_item), None);
+        if extract_method_signature(struct_item).is_some() {
+            return Err("Expected None from extract_method_signature for Struct item".to_string());
+        }
 
         let method_item = items
             .iter()
             .find(|i| i.name == "process_signal")
-            .ok_or_else(|| "Missing process_signal method AST item".to_string())?;
-        let extracted: ExtractedMethodSignature = extract_method_signature(method_item)
+            .ok_or_else(|| "Missing process_signal method AST item".to_string())?
+            .clone();
+        let extracted: ExtractedMethodSignature = extract_method_signature(&method_item)
             .ok_or_else(|| "Expected Some(ExtractedMethodSignature) for process_signal".to_string())?;
-        assert_eq!(
-            extracted.0,
-            vec![("input_val".to_string(), "Integer".to_string())]
-        );
-        assert_eq!(
-            extracted.1,
-            vec![("result".to_string(), "Boolean".to_string())]
-        );
-        assert_eq!(extracted.2, Some("Boolean".to_string()));
+        if extracted.0 != vec![("input_val".to_string(), "Integer".to_string())] {
+            return Err(format!("Unexpected in_params: {:?}", extracted.0));
+        }
+        if extracted.1 != vec![("result".to_string(), "Boolean".to_string())] {
+            return Err(format!("Unexpected out_params: {:?}", extracted.1));
+        }
+        if extracted.2 != Some("Boolean".to_string()) {
+            return Err(format!("Unexpected return_type: {:?}", extracted.2));
+        }
+
+        let mut top_fn_item = method_item.clone();
+        top_fn_item.kind = SourceItemKind::Function;
+        top_fn_item.name = "reset_global".to_string();
+        top_fn_item.owner_name = None;
+        top_fn_item.return_type = Some("()".to_string());
+        let top_extracted = extract_method_signature(&top_fn_item)
+            .ok_or_else(|| "Expected Some(ExtractedMethodSignature) for top-level Function".to_string())?;
+        if !top_extracted.1.is_empty() || top_extracted.2.is_some() {
+            return Err(format!(
+                "Expected empty out_params and None ret_type for unit Function, got {top_extracted:?}"
+            ));
+        }
+
+        let mut ctor_item = method_item;
+        ctor_item.kind = SourceItemKind::Constructor;
+        ctor_item.name = "new".to_string();
+        ctor_item.owner_name = Some("ComponentAlpha".to_string());
+        ctor_item.return_type = Some("ComponentAlpha".to_string());
+        let ctor_extracted = extract_method_signature(&ctor_item)
+            .ok_or_else(|| "Expected Some(ExtractedMethodSignature) for Constructor".to_string())?;
+        if ctor_extracted.2 != Some("ComponentAlpha".to_string()) {
+            return Err(format!(
+                "Expected Some(\"ComponentAlpha\") return type for Constructor, got {:?}",
+                ctor_extracted.2
+            ));
+        }
+
+        items.push(top_fn_item);
+        items.push(ctor_item);
 
         let table: ComponentMethodTable = extract_component_method_table(&items);
+        let top_methods = table
+            .get("TopLevel")
+            .ok_or_else(|| "Missing TopLevel entry in ComponentMethodTable".to_string())?;
+        if top_methods.len() != 1 || top_methods.first() != Some(&top_extracted) {
+            return Err(format!("Unexpected TopLevel methods entry: {top_methods:?}"));
+        }
+
         let methods = table
             .get("ComponentAlpha")
             .ok_or_else(|| "Missing ComponentAlpha entry in ComponentMethodTable".to_string())?;
-        assert_eq!(methods.len(), 1);
-        assert_eq!(methods.first(), Some(&extracted));
+        if methods.len() != 2
+            || methods.first() != Some(&extracted)
+            || methods.get(1) != Some(&ctor_extracted)
+        {
+            return Err(format!("Unexpected ComponentAlpha methods entry: {methods:?}"));
+        }
 
         let pkg = lower_source_ast_to_package(&items, "PkgAlpha");
         let part = pkg
@@ -5220,9 +5277,11 @@ impl ComponentAlpha {
             .iter()
             .find(|p| p.name == "ComponentAlpha")
             .ok_or_else(|| "Missing ComponentAlpha PartDef in PkgAlpha".to_string())?;
-        assert!(part.actions.iter().any(|a| {
+        if !part.actions.iter().any(|a| {
             a.name == "process_signal" && a.in_params.len() == 1 && a.out_params.len() == 1
-        }));
+        }) {
+            return Err("Missing 'process_signal' action on ComponentAlpha PartDef".to_string());
+        }
         Ok(())
     }
 }

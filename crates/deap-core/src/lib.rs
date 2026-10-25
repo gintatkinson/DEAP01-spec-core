@@ -55,16 +55,17 @@ pub use rules::{
 };
 pub use source_ast::{
     classify_dart_member_ast, classify_dart_top_level_ast, classify_rust_item_line_ast,
-    discover_source_files, extract_component_method_table, extract_dart_callable_ident,
-    extract_dart_getter_ident, extract_leading_ast_ident, extract_method_signature,
-    extract_realises_ids_from_doc_lines, ingest_source_directory, lower_source_ast_to_package,
-    normalize_type_for_sysml, parse_dart_callable_signature, parse_dart_source_ast,
-    parse_rust_callable_signature, parse_rust_source_ast, resolve_source_package_name,
-    sanitize_sysml_identifier, strip_leading_dart_annotations,
+    contains_direct_range_slice, discover_source_files, extract_component_method_table,
+    extract_dart_callable_ident, extract_dart_getter_ident, extract_leading_ast_ident,
+    extract_method_signature, extract_realises_ids_from_doc_lines, ingest_source_directory,
+    lower_source_ast_to_package, normalize_type_for_sysml, parse_dart_callable_signature,
+    parse_dart_source_ast, parse_rust_callable_signature, parse_rust_source_ast,
+    resolve_source_package_name, sanitize_sysml_identifier, scan_rust_line_preserving_lex_state,
+    single_char_literal_byte_len, strip_leading_dart_annotations,
     strip_line_comment_preserving_strings, summary_from_doc_lines, update_ast_delimiter_depths,
     validate_source_syntax, validate_source_syntax_for_language, ComponentMethodTable,
-    ExtractedMethodSignature, SourceAstItem, SourceField, SourceItemKind, SourceLanguage,
-    SourceParam,
+    ExtractedMethodSignature, RustStringScannerState, SourceAstItem, SourceField, SourceItemKind,
+    SourceLanguage, SourceParam,
 };
 pub use sysml_ast::{
     component_matches, extract_negated_components, is_component_negated, parse_action_defs,
@@ -103,7 +104,7 @@ mod tests {
     ///
     /// ## 4. Postconditions
     /// # Returns
-    /// - Returns `Result<(), String>` (`Ok(())`) after verifying presence of sections 1 through 7, `Realises: [`, and empty `ComponentMethodTable` extraction.
+    /// - Returns `Result<(), String>` (`Ok(())`) after verifying presence of sections 1 through 7, `Realises: [`, empty `ComponentMethodTable` extraction, and `contains_direct_range_slice` crate-level re-exports.
     ///
     /// ## 5. Algorithmic Complexity Bounds
     /// - Time Complexity: O(N) bounded over `lib.rs` line count in `test_deap_core_lib_7_section_rustdoc`.
@@ -111,7 +112,7 @@ mod tests {
     ///
     /// ## 6. Failure Modes & Fault Tolerance
     /// # Errors
-    /// - Returns `Err(String)` if any of the 7 module-level rustdoc sections or `Realises: [` tag is omitted, or if `extract_component_method_table(&[])` is non-empty.
+    /// - Returns `Err(String)` if any of the 7 module-level rustdoc sections or `Realises: [` tag is omitted, if `extract_component_method_table(&[])` is non-empty, or if `contains_direct_range_slice` misclassifies range vs string-literal inputs.
     /// # Panics
     /// - Never panics; all checks return fallible `Result<(), String>` errors.
     /// - Interface: Validates boundary inputs and types for `test_deap_core_lib_7_section_rustdoc` (`Result<(), String>`).
@@ -120,8 +121,7 @@ mod tests {
     /// - Resource: Bounds stack and heap allocations within `test_deap_core_lib_7_section_rustdoc` (`DEAP-CORE-LIB`).
     ///
     /// ## 7. Realization & Traceability
-    /// # Realises
-    /// Realises: [REQ-DEAP-CORE-LIB-7-SECTION-RUSTDOC] | SysML v2: TestCaseDef(test_deap_core_lib_7_section_rustdoc)
+    /// Realises: [REQ-0601, REQ-DEAP-CORE-LIB-7-SECTION-RUSTDOC] | SysML v2: TestCaseDef(test_deap_core_lib_7_section_rustdoc)
     #[test]
     fn test_deap_core_lib_7_section_rustdoc() -> Result<(), String> {
         let source = include_str!("lib.rs");
@@ -175,6 +175,12 @@ mod tests {
         let table: crate::ComponentMethodTable = crate::extract_component_method_table(&[]);
         if !table.is_empty() {
             return Err("Expected empty ComponentMethodTable for empty AST slice".to_string());
+        }
+
+        if !crate::contains_direct_range_slice("let x = &s[0..1];")
+            || crate::contains_direct_range_slice("let a = map[\"a..b\"];")
+        {
+            return Err("Unexpected contains_direct_range_slice classification".to_string());
         }
 
         Ok(())
