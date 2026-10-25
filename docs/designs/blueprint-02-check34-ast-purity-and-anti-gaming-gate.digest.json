@@ -1,0 +1,99 @@
+{
+  "sha256": "24252b649605491baf090b349a8d74b3c4f49cf1611cff3e14792ebec77af0aa",
+  "total_lines": 1,
+  "node_counts": {
+    "action_defs": 0,
+    "attribute_defs": 21,
+    "calc_defs": 0,
+    "capability_defs": 0,
+    "connection_defs": 0,
+    "constraint_defs": 5,
+    "containers": 5,
+    "groupings": 0,
+    "hazard_defs": 0,
+    "identities": 0,
+    "interaction_defs": 0,
+    "item_defs": 0,
+    "leaves": 21,
+    "lists": 0,
+    "operation_defs": 0,
+    "packages": 1,
+    "part_defs": 5,
+    "port_defs": 4,
+    "requirement_defs": 1,
+    "risk_defs": 0,
+    "state_defs": 0,
+    "test_case_defs": 0,
+    "typedefs": 0,
+    "use_case_defs": 0
+  },
+  "schema_nodes": [
+    "AntiGamingTestBodyAuditor",
+    "Blueprint_ID",
+    "Check34AstPurityAndAntiGamingGate",
+    "Check34GateStatusPort",
+    "Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint",
+    "FailClosedIoAstVerifier",
+    "Generation_Mode",
+    "PurityViolationDiagnosticPort",
+    "REQ_0602_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint",
+    "RangeSliceAstDetector",
+    "Requirement_ID",
+    "Specification_Source",
+    "SsotSymbolDeduplicationGate",
+    "Status",
+    "Target_Crates",
+    "TestFunctionAstStreamPort",
+    "Title",
+    "Tracked_Issues",
+    "WorkspaceSourceAstPort",
+    "assert_direct_range_slice_count_range",
+    "assert_duplicate_lexer_impl_count_range",
+    "assert_duplicate_sha256_impl_count_range",
+    "assert_fail_open_io_site_count_range",
+    "assert_vacuous_test_count_range",
+    "direct_range_slice_count",
+    "duplicate_lexer_impl_count",
+    "duplicate_sha256_impl_count",
+    "fail_open_io_site_count",
+    "quantity",
+    "type",
+    "vacuous_test_count"
+  ],
+  "operational_activities": [],
+  "operational_exchanges": [],
+  "operational_scenarios": [],
+  "operational_nodes": [
+    {
+      "name": "RangeSliceAstDetector",
+      "node_type": "Part",
+      "doc": "Zero-regex token-stream analyzer that detects panicking Rust bracket range indexing (`expr[a..b]`, `expr[..b]`, `expr[a..]`) outside string literals, comments, and `.get(..)` calls",
+      "allocated_activities": []
+    },
+    {
+      "name": "FailClosedIoAstVerifier",
+      "node_type": "Part",
+      "doc": "AST pattern verifier that rejects fail-open iterator flattening, `.filter_map(Result::ok)`, `.unwrap_or_default()` on filesystem reads, and `let _ = fs::` error discarding",
+      "allocated_activities": []
+    },
+    {
+      "name": "AntiGamingTestBodyAuditor",
+      "node_type": "Part",
+      "doc": "Test AST auditor that parses `#[test]` functions and rejects zero-assertion bodies, `mem::size_of` tautologies, unguarded `.exists()` skips, and non-RAII temp paths",
+      "allocated_activities": []
+    },
+    {
+      "name": "SsotSymbolDeduplicationGate",
+      "node_type": "Part",
+      "doc": "Workspace-wide AST symbol scanner enforcing single-module residency for SHA-256 constants (`0x428a2f98`) and Rust lexical state machines",
+      "allocated_activities": []
+    },
+    {
+      "name": "Check34AstPurityAndAntiGamingGate",
+      "node_type": "Part",
+      "doc": "Total detected panicking direct range-slice indexing expressions (`expr[a..b]`) across audited workspace modules [unit: count]",
+      "allocated_activities": []
+    }
+  ],
+  "file_manifest": []
+}

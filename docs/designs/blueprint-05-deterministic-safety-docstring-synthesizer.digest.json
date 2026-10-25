@@ -1,0 +1,97 @@
+{
+  "sha256": "f47057609fed05a26950c77b170336c0af4ed0fcbfb261d84eda3d26495935b3",
+  "total_lines": 1,
+  "node_counts": {
+    "action_defs": 0,
+    "attribute_defs": 20,
+    "calc_defs": 0,
+    "capability_defs": 0,
+    "connection_defs": 0,
+    "constraint_defs": 4,
+    "containers": 5,
+    "groupings": 0,
+    "hazard_defs": 0,
+    "identities": 0,
+    "interaction_defs": 0,
+    "item_defs": 0,
+    "leaves": 20,
+    "lists": 0,
+    "operation_defs": 0,
+    "packages": 1,
+    "part_defs": 5,
+    "port_defs": 4,
+    "requirement_defs": 1,
+    "risk_defs": 0,
+    "state_defs": 0,
+    "test_case_defs": 0,
+    "typedefs": 0,
+    "use_case_defs": 0
+  },
+  "schema_nodes": [
+    "Blueprint_ID",
+    "Check36AstCompletenessVerifier",
+    "Check36VerificationReportPort",
+    "EnrichedSourceOutputPort",
+    "Generation_Mode",
+    "REQ_0605_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
+    "Requirement_ID",
+    "ScopedSchemaContextResolver",
+    "SevenSectionDocstringGenerator",
+    "SourceCodeFileInputPort",
+    "Specification_Source",
+    "Status",
+    "SysmlSchemaTraceabilityPort",
+    "Target_Crates",
+    "Title",
+    "Tracked_Issues",
+    "UnifiedRustDartLexicalScanner",
+    "UnifiedSafetyDocstringSynthesizer",
+    "Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
+    "assert_docstring_idempotency_diff_bytes_range",
+    "assert_false_attribution_count_range",
+    "assert_lexer_duplication_count_range",
+    "assert_magic_offset_constant_count_range",
+    "docstring_idempotency_diff_bytes",
+    "false_attribution_count",
+    "lexer_duplication_count",
+    "magic_offset_constant_count",
+    "quantity",
+    "type"
+  ],
+  "operational_activities": [],
+  "operational_exchanges": [],
+  "operational_scenarios": [],
+  "operational_nodes": [
+    {
+      "name": "UnifiedRustDartLexicalScanner",
+      "node_type": "Part",
+      "doc": "Canonical zero-regex lexical state machine in `deap_core::source_ast` handling nested `/ * * /`, `r#\"...\"#`, Dart `${...}` frames, and exact char-literal vs. lifetime disambiguation",
+      "allocated_activities": []
+    },
+    {
+      "name": "ScopedSchemaContextResolver",
+      "node_type": "Part",
+      "doc": "Strict SysML v2 requirement and constraint resolver in `compile-sysml` traversing recursive `part.parts` trees with `owner_name` isolation and zero `.first()` fallback",
+      "allocated_activities": []
+    },
+    {
+      "name": "SevenSectionDocstringGenerator",
+      "node_type": "Part",
+      "doc": "Deterministic forward synthesizer interpolating AST parameters, return types, struct fields, invariants, and `Realises:` bindings into unique 7-section docblocks",
+      "allocated_activities": []
+    },
+    {
+      "name": "Check36AstCompletenessVerifier",
+      "node_type": "Part",
+      "doc": "Baseline verification gate in `verify-baseline` auditing 100% per-item 7-section docstring coverage and Check 34 normalized body uniqueness using `deap_core::source_ast`",
+      "allocated_activities": []
+    },
+    {
+      "name": "UnifiedSafetyDocstringSynthesizer",
+      "node_type": "Part",
+      "doc": "--- | Count of hardcoded byte-offset lookahead constants (`10` or `14`) in character/lifetime lexing [unit: count]",
+      "allocated_activities": []
+    }
+  ],
+  "file_manifest": []
+}

@@ -37,17 +37,11 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-VERIFY-BASELINE-CLI], [DO-330-TQL-4-VERIFY-CLI]
-#![allow(
-    clippy::disallowed_types,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used
-)]
 
-use clap::Parser;
+use clap::{Arg, ArgAction, Command};
 use std::path::PathBuf;
 use std::process;
+use verify_baseline::blueprint_gate::{self, BlueprintCliOptions};
 use verify_baseline::check_secrets::{self, CheckSecretsArgs};
 use verify_baseline::commit_msg::{self, CommitMsgArgs};
 use verify_baseline::defect_dossier::{self, DefectDossierArgs};
@@ -81,49 +75,414 @@ use verify_baseline::setup_hooks::{self, SetupHooksArgs};
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-VERIFY-BASELINE-MAIN-CLI] | SysML v2: PartDef(Cli)
-#[derive(Parser, Debug)]
-#[command(name = "verify-baseline")]
-#[command(about = "Verify downstream project baseline conformance", long_about = None)]
-#[command(subcommand_precedence_over_arg = true)]
+#[derive(Debug)]
 struct Cli {
-    #[command(subcommand)]
     command: Option<Subcommands>,
 
     /// Target destination directory or repository root (defaults to current directory)
-    #[arg(default_value = ".")]
     destination: String,
 
     /// Skip domain type compatibility validation and build/test commands
-    #[arg(long)]
     no_domain: bool,
 
     /// Enforce strict baseline conformance (reject pending or missing specifications)
-    #[arg(long)]
     strict: bool,
 
     /// Gracefully allow missing specifications if in downstream customer mode
-    #[arg(long)]
     allow_missing_specs: bool,
 
     /// Target execution platform profile (e.g. flutter, react)
-    #[arg(long)]
     target: Option<String>,
 
     /// Optional path to write output report or defect dossier
-    #[arg(long)]
     output: Option<String>,
 
     /// Run only the specification quality and coverage audit suite
-    #[arg(long)]
     spec_only: bool,
 
     /// Audit only a specific markdown file
-    #[arg(long)]
     only: Option<String>,
 
     /// Filter to run a specific audit gate
-    #[arg(long)]
     gate: Option<String>,
+}
+
+impl Cli {
+    /// Parses process command-line arguments into a validated `Cli` configuration using explicit `clap::Command` builders.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D command-line argument parsing
+    /// governance. Constructs the `verify-baseline` CLI grammar without `clap_derive` proc-macro
+    /// lint-suppression injections so crate-level `forbid` lint policies remain uncompromised.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves 100% flag, alias, positional argument, and subcommand parity across `check-commit-msg`,
+    ///   `check-output`, `check-defect`, `setup-hooks`, and `check-secrets`.
+    /// - Enforces `subcommand_precedence_over_arg(true)` so subcommand tokens take priority over `destination`.
+    ///
+    /// ## 3. Preconditions
+    /// - Process environment supplies valid OS argument tokens via `std::env::args_os`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a populated `Cli` instance with deterministic `command` and top-level baseline flags.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(A)$ where $A$ is the number of CLI argument tokens.
+    /// - Space Complexity: $O(A)$ for parsed `ArgMatches` and owned `Cli` fields.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Invalid flags or missing required values are intercepted by `clap::Command::get_matches`,
+    ///   emitting usage diagnostics and exiting with a non-zero status code.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0601-VERIFY-BASELINE-CLI-PARSE]
+    fn parse() -> Self {
+        let matches = Command::new("verify-baseline")
+            .about("Verify downstream project baseline conformance")
+            .subcommand_precedence_over_arg(true)
+            .arg(
+                Arg::new("destination")
+                    .default_value(".")
+                    .action(ArgAction::Set)
+                    .help("Target destination directory or repository root (defaults to current directory)"),
+            )
+            .arg(
+                Arg::new("no_domain")
+                    .long("no-domain")
+                    .action(ArgAction::SetTrue)
+                    .help("Skip domain type compatibility validation and build/test commands"),
+            )
+            .arg(
+                Arg::new("strict")
+                    .long("strict")
+                    .action(ArgAction::SetTrue)
+                    .help("Enforce strict baseline conformance (reject pending or missing specifications)"),
+            )
+            .arg(
+                Arg::new("allow_missing_specs")
+                    .long("allow-missing-specs")
+                    .action(ArgAction::SetTrue)
+                    .help("Gracefully allow missing specifications if in downstream customer mode"),
+            )
+            .arg(
+                Arg::new("target")
+                    .long("target")
+                    .action(ArgAction::Set)
+                    .help("Target execution platform profile (e.g. flutter, react)"),
+            )
+            .arg(
+                Arg::new("output")
+                    .long("output")
+                    .action(ArgAction::Set)
+                    .help("Optional path to write output report or defect dossier"),
+            )
+            .arg(
+                Arg::new("spec_only")
+                    .long("spec-only")
+                    .action(ArgAction::SetTrue)
+                    .help("Run only the specification quality and coverage audit suite"),
+            )
+            .arg(
+                Arg::new("only")
+                    .long("only")
+                    .action(ArgAction::Set)
+                    .help("Audit only a specific markdown file"),
+            )
+            .arg(
+                Arg::new("gate")
+                    .long("gate")
+                    .action(ArgAction::Set)
+                    .help("Filter to run a specific audit gate"),
+            )
+            .subcommand(
+                Command::new("check-commit-msg")
+                    .visible_alias("check-commit")
+                    .about("Port of verify_commit_messages: check commit message non-closure invariant")
+                    .arg(
+                        Arg::new("msg_file")
+                            .long("msg-file")
+                            .action(ArgAction::Set)
+                            .value_parser(clap::value_parser!(PathBuf))
+                            .help("Path to file containing commit message"),
+                    )
+                    .arg(
+                        Arg::new("range")
+                            .long("range")
+                            .action(ArgAction::Set)
+                            .help("Git revision range to inspect (e.g. origin/main..HEAD)"),
+                    )
+                    .arg(
+                        Arg::new("head")
+                            .long("head")
+                            .action(ArgAction::SetTrue)
+                            .help("Check the latest HEAD commit"),
+                    )
+                    .arg(
+                        Arg::new("check_text")
+                            .long("check-text")
+                            .action(ArgAction::Set)
+                            .help("Check raw text directly"),
+                    )
+                    .arg(
+                        Arg::new("target")
+                            .value_name("TARGET")
+                            .action(ArgAction::Set)
+                            .help("Positional file or text to check"),
+                    ),
+            )
+            .subcommand(
+                Command::new("check-output")
+                    .visible_alias("verify-subagent-output")
+                    .visible_alias("check-output-integrity")
+                    .about("Port of verify_subagent_output: check markdown size, escape tokens, code fences")
+                    .arg(
+                        Arg::new("dir")
+                            .long("dir")
+                            .action(ArgAction::Set)
+                            .value_parser(clap::value_parser!(PathBuf))
+                            .help("Target directory to scan for markdown files"),
+                    )
+                    .arg(
+                        Arg::new("files")
+                            .long("files")
+                            .num_args(1..)
+                            .action(ArgAction::Append)
+                            .value_parser(clap::value_parser!(PathBuf))
+                            .help("Explicit list of files to verify"),
+                    )
+                    .arg(
+                        Arg::new("targets")
+                            .value_name("TARGETS")
+                            .num_args(0..)
+                            .action(ArgAction::Append)
+                            .value_parser(clap::value_parser!(PathBuf))
+                            .help("Positional targets (directory or file paths)"),
+                    ),
+            )
+            .subcommand(
+                Command::new("check-defect")
+                    .visible_alias("verify-defect-dossier")
+                    .about("Port of file_defect validator: check 7-section defect dossier schema")
+                    .arg(
+                        Arg::new("body_file")
+                            .long("body-file")
+                            .action(ArgAction::Set)
+                            .value_parser(clap::value_parser!(PathBuf))
+                            .help("Path to markdown defect dossier body file"),
+                    )
+                    .arg(
+                        Arg::new("title")
+                            .long("title")
+                            .action(ArgAction::Set)
+                            .help("Title of the defect issue ([AUDIT] [file.ext]: <description>)"),
+                    )
+                    .arg(
+                        Arg::new("repo")
+                            .long("repo")
+                            .action(ArgAction::Set)
+                            .help("Repository identifier (<owner>/<repo>); auto-resolved from git remote get-url origin when omitted"),
+                    )
+                    .arg(
+                        Arg::new("label")
+                            .long("label")
+                            .action(ArgAction::Set)
+                            .help("Override label to apply"),
+                    )
+                    .arg(
+                        Arg::new("provider")
+                            .long("provider")
+                            .default_value("github")
+                            .action(ArgAction::Set)
+                            .help("Issue tracker provider (github or gitlab)"),
+                    )
+                    .arg(
+                        Arg::new("dry_run")
+                            .long("dry-run")
+                            .visible_alias("validate-only")
+                            .action(ArgAction::SetTrue)
+                            .help("Validate defect dossier schema without submitting to remote tracker"),
+                    )
+                    .arg(
+                        Arg::new("publish")
+                            .long("publish")
+                            .action(ArgAction::SetTrue)
+                            .help("Publish a new issue to the remote GitHub SSOT tracker and run closed-loop verification"),
+                    )
+                    .arg(
+                        Arg::new("issue")
+                            .long("issue")
+                            .action(ArgAction::Set)
+                            .value_parser(clap::value_parser!(u64))
+                            .help("Existing GitHub issue number to overwrite atomically (gh issue edit) and verify closed-loop"),
+                    )
+                    .arg(
+                        Arg::new("target")
+                            .value_name("BODY_FILE")
+                            .action(ArgAction::Set)
+                            .value_parser(clap::value_parser!(PathBuf))
+                            .help("Positional body file path"),
+                    ),
+            )
+            .subcommand(
+                Command::new("check-blueprint")
+                    .about("Verify contract-bounded engineering design blueprint (Checks 1-12) and compile in-repo SysML v2")
+                    .arg(
+                        Arg::new("path")
+                            .value_name("PATH")
+                            .required(true)
+                            .action(ArgAction::Set)
+                            .value_parser(clap::value_parser!(PathBuf))
+                            .help("Path to engineering design blueprint (docs/designs/blueprint-*.md)"),
+                    )
+                    .arg(
+                        Arg::new("repo")
+                            .long("repo")
+                            .value_name("OWNER/REPO")
+                            .action(ArgAction::Set)
+                            .help("Target GitHub repository identifier (<owner>/<repo>)"),
+                    )
+                    .arg(
+                        Arg::new("issue")
+                            .long("issue")
+                            .value_name("ID")
+                            .action(ArgAction::Set)
+                            .value_parser(clap::value_parser!(u64))
+                            .help("Existing GitHub issue number to update atomically and verify closed-loop"),
+                    )
+                    .arg(
+                        Arg::new("title")
+                            .long("title")
+                            .value_name("TITLE")
+                            .action(ArgAction::Set)
+                            .help("Override issue title for GitHub SSOT publication"),
+                    )
+                    .arg(
+                        Arg::new("publish")
+                            .long("publish")
+                            .action(ArgAction::SetTrue)
+                            .help("Publish or update issue on remote GitHub SSOT tracker and run closed-loop verification"),
+                    )
+                    .arg(
+                        Arg::new("dry_run")
+                            .long("dry-run")
+                            .action(ArgAction::SetTrue)
+                            .help("Run Checks 1-11 (including in-repo SysML v2 compilation) without remote GitHub publishing"),
+                    ),
+            )
+            .subcommand(
+                Command::new("setup-hooks")
+                    .about("Setup cross-platform git hooks natively")
+                    .arg(
+                        Arg::new("destination")
+                            .default_value(".")
+                            .action(ArgAction::Set)
+                            .help("Target repository root or destination directory (defaults to current directory)"),
+                    ),
+            )
+            .subcommand(
+                Command::new("check-secrets")
+                    .about("Check post-build assets for leaked credentials and secrets")
+                    .arg(
+                        Arg::new("destination")
+                            .default_value(".")
+                            .action(ArgAction::Set)
+                            .help("Target repository root or destination directory (defaults to current directory)"),
+                    )
+                    .arg(
+                        Arg::new("dirs")
+                            .long("dirs")
+                            .value_delimiter(' ')
+                            .action(ArgAction::Append)
+                            .help("Optional explicit directories to scan (defaults to dist, build/web, build/macos)"),
+                    ),
+            )
+            .get_matches();
+
+        let command = match matches.subcommand() {
+            Some(("check-commit-msg", sub)) => Some(Subcommands::CommitMsg(CommitMsgArgs {
+                msg_file: sub.get_one::<PathBuf>("msg_file").cloned(),
+                range: sub.get_one::<String>("range").cloned(),
+                head: sub.get_flag("head"),
+                check_text: sub.get_one::<String>("check_text").cloned(),
+                target: sub.get_one::<String>("target").cloned(),
+            })),
+            Some(("check-output", sub)) => {
+                let files = sub
+                    .get_many::<PathBuf>("files")
+                    .map(|vals| vals.cloned().collect());
+                let targets = sub
+                    .get_many::<PathBuf>("targets")
+                    .map(|vals| vals.cloned().collect())
+                    .unwrap_or_default();
+                Some(Subcommands::OutputIntegrity(OutputIntegrityArgs {
+                    dir: sub.get_one::<PathBuf>("dir").cloned(),
+                    files,
+                    targets,
+                }))
+            }
+            Some(("check-defect", sub)) => Some(Subcommands::Defect(DefectDossierArgs {
+                body_file: sub.get_one::<PathBuf>("body_file").cloned(),
+                title: sub.get_one::<String>("title").cloned(),
+                repo: sub.get_one::<String>("repo").cloned(),
+                label: sub.get_one::<String>("label").cloned(),
+                provider: sub
+                    .get_one::<String>("provider")
+                    .cloned()
+                    .unwrap_or_else(|| "github".to_string()),
+                dry_run: sub.get_flag("dry_run"),
+                publish: sub.get_flag("publish"),
+                issue: sub.get_one::<u64>("issue").copied(),
+                target: sub.get_one::<PathBuf>("target").cloned(),
+            })),
+            Some(("check-blueprint", sub)) => Some(Subcommands::Blueprint(BlueprintCliOptions {
+                path: sub
+                    .get_one::<PathBuf>("path")
+                    .cloned()
+                    .unwrap_or_default(),
+                repo: sub.get_one::<String>("repo").cloned(),
+                issue: sub.get_one::<u64>("issue").copied(),
+                title: sub.get_one::<String>("title").cloned(),
+                publish: sub.get_flag("publish"),
+                dry_run: sub.get_flag("dry_run"),
+            })),
+            Some(("setup-hooks", sub)) => Some(Subcommands::SetupHooks(SetupHooksArgs {
+                destination: sub
+                    .get_one::<String>("destination")
+                    .cloned()
+                    .unwrap_or_else(|| ".".to_string()),
+            })),
+            Some(("check-secrets", sub)) => {
+                let dirs = sub
+                    .get_many::<String>("dirs")
+                    .map(|vals| vals.cloned().collect())
+                    .unwrap_or_default();
+                Some(Subcommands::Secrets(CheckSecretsArgs {
+                    destination: sub
+                        .get_one::<String>("destination")
+                        .cloned()
+                        .unwrap_or_else(|| ".".to_string()),
+                    dirs,
+                }))
+            }
+            _ => None,
+        };
+
+        Self {
+            command,
+            destination: matches
+                .get_one::<String>("destination")
+                .cloned()
+                .unwrap_or_else(|| ".".to_string()),
+            no_domain: matches.get_flag("no_domain"),
+            strict: matches.get_flag("strict"),
+            allow_missing_specs: matches.get_flag("allow_missing_specs"),
+            target: matches.get_one::<String>("target").cloned(),
+            output: matches.get_one::<String>("output").cloned(),
+            spec_only: matches.get_flag("spec_only"),
+            only: matches.get_one::<String>("only").cloned(),
+            gate: matches.get_one::<String>("gate").cloned(),
+        }
+    }
 }
 
 /// Executes deterministic enum `Subcommands` within `crates/verify-baseline/src/main.rs`.
@@ -132,10 +491,10 @@ struct Cli {
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `Subcommands` in `crates/verify-baseline/src/main.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for enum `Subcommands` across member set `[CheckCommitMsg, CheckOutput, CheckDefect, SetupHooks, CheckSecrets]`.
+/// - Preserves structural type invariants for enum `Subcommands` across member set `[CommitMsg, OutputIntegrity, Defect, SetupHooks, Secrets]`.
 ///
 /// ## 3. Preconditions
-/// - Caller supplies well-formed values for `Subcommands` members (`CheckCommitMsg, CheckOutput, CheckDefect, SetupHooks, CheckSecrets`).
+/// - Caller supplies well-formed values for `Subcommands` members (`CommitMsg, OutputIntegrity, Defect, SetupHooks, Secrets`).
 ///
 /// ## 4. Postconditions
 /// - Defines the authoritative `Subcommands` representation for enum `Subcommands`.
@@ -152,28 +511,25 @@ struct Cli {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-VERIFY-BASELINE-MAIN-SUBCOMMANDS] | SysML v2: PartDef(Subcommands)
-#[derive(clap::Subcommand, Debug)]
-#[allow(clippy::enum_variant_names)]
+#[derive(Debug)]
 enum Subcommands {
     /// Port of verify_commit_messages: check commit message non-closure invariant
-    #[command(name = "check-commit-msg", alias = "check-commit")]
-    CheckCommitMsg(CommitMsgArgs),
+    CommitMsg(CommitMsgArgs),
 
     /// Port of verify_subagent_output: check markdown size, escape tokens, code fences
-    #[command(name = "check-output", alias = "verify-subagent-output")]
-    CheckOutput(OutputIntegrityArgs),
+    OutputIntegrity(OutputIntegrityArgs),
 
     /// Port of file_defect validator: check 7-section defect dossier schema
-    #[command(name = "check-defect", alias = "verify-defect-dossier")]
-    CheckDefect(DefectDossierArgs),
+    Defect(DefectDossierArgs),
+
+    /// Verify contract-bounded engineering design blueprint (Checks 1-12)
+    Blueprint(BlueprintCliOptions),
 
     /// Setup cross-platform git hooks natively
-    #[command(name = "setup-hooks")]
     SetupHooks(SetupHooksArgs),
 
     /// Check post-build assets for leaked credentials and secrets
-    #[command(name = "check-secrets")]
-    CheckSecrets(CheckSecretsArgs),
+    Secrets(CheckSecretsArgs),
 }
 
 /// Executes the `verify-baseline` CLI entrypoint and dispatches subcommands.
@@ -215,18 +571,25 @@ fn main() {
 
     if let Some(cmd) = cli.command {
         match cmd {
-            Subcommands::CheckCommitMsg(args) => {
-                if let Err(()) = commit_msg::run_check_commit_msg(&args) {
-                    process::exit(1);
+            Subcommands::CommitMsg(args) => {
+                if let Err(code) = commit_msg::run_check_commit_msg(&args) {
+                    process::exit(code);
                 }
             }
-            Subcommands::CheckOutput(args) => {
+            Subcommands::OutputIntegrity(args) => {
                 if let Err(code) = output_integrity::run_check_output(&args) {
                     process::exit(code);
                 }
             }
-            Subcommands::CheckDefect(args) => {
+            Subcommands::Defect(args) => {
                 if let Err(code) = defect_dossier::run_check_defect(&args) {
+                    process::exit(code);
+                }
+            }
+            Subcommands::Blueprint(opts) => {
+                let workspace_root = PathBuf::from(&cli.destination);
+                let code = blueprint_gate::run_blueprint_cli(&workspace_root, &opts);
+                if code != 0 {
                     process::exit(code);
                 }
             }
@@ -235,7 +598,7 @@ fn main() {
                     process::exit(code);
                 }
             }
-            Subcommands::CheckSecrets(args) => {
+            Subcommands::Secrets(args) => {
                 if let Err(code) = check_secrets::run_check_secrets(&args) {
                     process::exit(code);
                 }
@@ -254,8 +617,8 @@ fn main() {
             gate: cli.gate,
         };
 
-        if let Err(()) = run(&options) {
-            process::exit(1);
+        if let Err(code) = run(&options) {
+            process::exit(code);
         }
     }
 }
