@@ -6124,9 +6124,14 @@ impl UnifiedSchemaModelExtractor {
                 if entry.file_type().is_file() {
                     let fpath = entry.path();
                     let fname = fpath.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    let fname_lower = fname.to_ascii_lowercase();
                     if fname.starts_with('.')
                         || fname.starts_with('#')
-                        || fname.eq_ignore_ascii_case("readme.md")
+                        || fname_lower == "readme.md"
+                        || fname_lower == "digest.json"
+                        || fname_lower.ends_with(".digest.json")
+                        || fname_lower.ends_with("-digest.json")
+                        || fname_lower.ends_with("_digest.json")
                     {
                         continue;
                     }
@@ -8930,6 +8935,89 @@ package SystemModel_SSOT {
 
         let _ = std::fs::remove_dir_all(&tmp_root);
         Ok(())
+    }
+
+    /// Regression test verifying `UnifiedSchemaModelExtractor::discover_schema_files` excludes `.digest.json` sidecars.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Prevents digest sidecar files from polluting
+    /// the discovered schema file list.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Only genuine schema files (`blueprint-01-alpha.sysml` and `valid_schema.json`) are discovered; all digest sidecars are excluded.
+    ///
+    /// ## 3. Preconditions & Domain Bounds
+    /// - Temporary directory contains mixed schema files and `.digest.json` / `-digest.json` / `_digest.json` / `digest.json` sidecars.
+    ///
+    /// ## 4. Postconditions & State Mutation Contract
+    /// - Temporary directory is cleaned up after verification.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Asserts exact file membership and removes temporary fixtures unconditionally.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/DISCOVER-SCHEMA-FILES]
+    #[test]
+    fn test_issue_549_discover_schema_files_excludes_digest_json_sidecars() {
+        let tmp_dir = std::env::temp_dir().join(format!(
+            "deap_core_issue_549_test_{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&tmp_dir).expect("create temp dir");
+        let files = [
+            "blueprint-01-alpha.sysml",
+            "blueprint-01-alpha.digest.json",
+            "schema-digest.json",
+            "schema_digest.json",
+            "digest.json",
+            "valid_schema.json",
+        ];
+        for fname in &files {
+            std::fs::write(tmp_dir.join(fname), "{}").expect("write test file");
+        }
+
+        let discovered =
+            UnifiedSchemaModelExtractor::discover_schema_files(std::slice::from_ref(&tmp_dir));
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+
+        let discovered_names: Vec<String> = discovered
+            .iter()
+            .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(String::from))
+            .collect();
+
+        assert!(
+            discovered_names.contains(&"blueprint-01-alpha.sysml".to_string()),
+            "Expected blueprint-01-alpha.sysml in discovered: {:?}",
+            discovered_names
+        );
+        assert!(
+            discovered_names.contains(&"valid_schema.json".to_string()),
+            "Expected valid_schema.json in discovered: {:?}",
+            discovered_names
+        );
+        assert!(
+            !discovered_names.contains(&"blueprint-01-alpha.digest.json".to_string()),
+            "Did not expect blueprint-01-alpha.digest.json in discovered: {:?}",
+            discovered_names
+        );
+        assert!(
+            !discovered_names.contains(&"schema-digest.json".to_string()),
+            "Did not expect schema-digest.json in discovered: {:?}",
+            discovered_names
+        );
+        assert!(
+            !discovered_names.contains(&"schema_digest.json".to_string()),
+            "Did not expect schema_digest.json in discovered: {:?}",
+            discovered_names
+        );
+        assert!(
+            !discovered_names.contains(&"digest.json".to_string()),
+            "Did not expect digest.json in discovered: {:?}",
+            discovered_names
+        );
     }
 }
 
