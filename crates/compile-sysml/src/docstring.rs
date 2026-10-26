@@ -1586,15 +1586,24 @@ fn inspect_rust_item_details(
 
     if kind.is_callable() {
         let mut sig_buf = String::new();
+        let mut brace_depth: i32 = 0;
+        let mut saw_open_brace = false;
+        let mut body_start_idx = start_idx.saturating_add(1);
         let end_sig_scan = start_idx.saturating_add(16).min(raw_lines.len());
         if let Some(window) = raw_lines.get(start_idx..end_sig_scan) {
-            for &line in window {
+            for (offset, &line) in window.iter().enumerate() {
                 let code = strip_line_comment_preserving_strings(line.trim());
                 if !sig_buf.is_empty() {
                     sig_buf.push(' ');
                 }
                 sig_buf.push_str(code);
-                if code.contains('{') || code.ends_with(';') {
+                let (delta, has_open) = count_rust_line_brace_delta(code);
+                if has_open {
+                    saw_open_brace = true;
+                }
+                brace_depth = brace_depth.saturating_add(delta);
+                body_start_idx = start_idx.saturating_add(offset).saturating_add(1);
+                if has_open || code.ends_with(';') {
                     break;
                 }
             }
@@ -1603,20 +1612,29 @@ fn inspect_rust_item_details(
         params = p;
         return_type = r;
 
-        let end_body_scan = start_idx.saturating_add(35).min(raw_lines.len());
-        if let Some(body_window) = raw_lines.get(start_idx.saturating_add(1)..end_body_scan) {
-            for &line in body_window {
-                let t = line.trim();
-                if let Some(rest) = t.strip_prefix("assert!(").or_else(|| t.strip_prefix("debug_assert!(")) {
-                    if let Some((cond, _)) = rest.split_once(')') {
-                        let clean_cond = cond.split_once(',').map(|(c, _)| c.trim()).unwrap_or(cond.trim());
-                        if !clean_cond.is_empty() && invariants.len() < 3 {
-                            invariants.push(clean_cond.replace('"', "'"));
+        if saw_open_brace && brace_depth > 0 {
+            let end_body_scan = start_idx.saturating_add(35).min(raw_lines.len());
+            if let Some(body_window) = raw_lines.get(body_start_idx..end_body_scan) {
+                for &line in body_window {
+                    let t = strip_line_comment_preserving_strings(line.trim());
+                    if let Some(rest) = t
+                        .strip_prefix("assert!(")
+                        .or_else(|| t.strip_prefix("debug_assert!("))
+                    {
+                        if let Some(clean_cond) = extract_balanced_rust_assert_cond(rest) {
+                            if !clean_cond.is_empty() && invariants.len() < 3 {
+                                invariants.push(clean_cond.replace('"', "'"));
+                            }
                         }
                     }
-                }
-                if t == "}" {
-                    break;
+                    let (delta, has_open) = count_rust_line_brace_delta(t);
+                    if has_open {
+                        saw_open_brace = true;
+                    }
+                    brace_depth = brace_depth.saturating_add(delta);
+                    if saw_open_brace && brace_depth <= 0 {
+                        break;
+                    }
                 }
             }
         }
@@ -1729,6 +1747,235 @@ fn collect_all_parts<'a>(pkg: &'a PackageDef, out: &mut Vec<&'a deap_core::sysml
     }
 }
 
+/// Extracts the first argument expression of a Rust `assert!(...)` or `debug_assert!(...)` invocation with balanced delimiter tracking.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and FEAT-42 Section 3.2 invariant extraction (`extract_balanced_rust_assert_cond`).
+/// Ensures `assert!(...)` conditions containing nested function calls, tuple/array literals, or commas are extracted intact without premature truncation.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Tracks `paren_depth` (initialized to `1`), `bracket_depth`, `brace_depth`, string literals, and character literals.
+/// - Returns `after_open_paren.get(..idx).map(str::trim)` when a top-level `,` (`paren_depth == 1 && bracket_depth == 0 && brace_depth == 0`) or closing `)` (`paren_depth == 0`) is encountered.
+///
+/// ## 3. Preconditions
+/// - `after_open_paren: &str` is the slice immediately following `"assert!("` or `"debug_assert!("`.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(condition_slice)` when the balanced condition argument is delimited on the line, or `None` if unclosed.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `after_open_paren.len()`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Uses `.get(..idx)` slice projection with zero direct indexing.
+/// - State: Pure lexical state machine over a single line slice.
+/// - Action: Returns `None` gracefully on multiline or unclosed macro invocations.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-EXTRACT-BALANCED-RUST-ASSERT-COND]
+fn extract_balanced_rust_assert_cond(after_open_paren: &str) -> Option<&str> {
+    let mut paren_depth: i32 = 1;
+    let mut bracket_depth: i32 = 0;
+    let mut brace_depth: i32 = 0;
+    let mut in_string = false;
+    let mut in_char = false;
+    let mut escaped = false;
+
+    for (idx, ch) in after_open_paren.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if in_string {
+            if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        if in_char {
+            if ch == '\\' {
+                escaped = true;
+            } else if ch == '\'' {
+                in_char = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_string = true,
+            '\'' => {
+                if let Some(rem) = after_open_paren.get(idx.saturating_add(1)..) {
+                    let mut it = rem.chars();
+                    let is_char_lit = match (it.next(), it.next()) {
+                        (Some('\\'), Some(_)) => it.next() == Some('\''),
+                        (Some(c), Some('\'')) if c != '\'' => true,
+                        _ => false,
+                    };
+                    if is_char_lit {
+                        in_char = true;
+                    }
+                }
+            }
+            '(' => paren_depth = paren_depth.saturating_add(1),
+            ')' => {
+                paren_depth = paren_depth.saturating_sub(1);
+                if paren_depth == 0 {
+                    return after_open_paren.get(..idx).map(str::trim);
+                }
+            }
+            '[' => bracket_depth = bracket_depth.saturating_add(1),
+            ']' => bracket_depth = bracket_depth.saturating_sub(1).max(0),
+            '{' => brace_depth = brace_depth.saturating_add(1),
+            '}' => brace_depth = brace_depth.saturating_sub(1).max(0),
+            ',' if paren_depth == 1 && bracket_depth == 0 && brace_depth == 0 => {
+                return after_open_paren.get(..idx).map(str::trim);
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Computes the net `{` minus `}` brace depth delta on a comment-stripped Rust line outside string and char literals.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and FEAT-42 Section 3.2 callable body boundary tracking (`count_rust_line_brace_delta`).
+/// Prevents inner `{ ... }` control-flow blocks from prematurely terminating `inspect_rust_item_details` invariant scans.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Increments `delta` and sets `saw_open = true` on each `{` outside string/character literals; decrements `delta` on each `}`.
+/// - Distinguishes Rust lifetime annotations (`'a`, `'static`) from character literals (`'{'`, `'}'`).
+///
+/// ## 3. Preconditions
+/// - `code: &str` is a comment-stripped Rust source line.
+///
+/// ## 4. Postconditions
+/// - Returns `(net_brace_delta, saw_open_brace)` for `code`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `code.len()`.
+/// - Space Complexity: O(1) constant stack memory.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Uses saturating arithmetic and `.get(..)` slice bounds.
+/// - State: Pure stateless lexical scan.
+/// - Action: Never panics on malformed literals or lifetimes.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-COUNT-RUST-LINE-BRACE-DELTA]
+fn count_rust_line_brace_delta(code: &str) -> (i32, bool) {
+    let mut delta: i32 = 0;
+    let mut saw_open = false;
+    let mut in_string = false;
+    let mut in_char = false;
+    let mut escaped = false;
+
+    for (idx, ch) in code.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if in_string {
+            if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        if in_char {
+            if ch == '\\' {
+                escaped = true;
+            } else if ch == '\'' {
+                in_char = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_string = true,
+            '\'' => {
+                if let Some(rem) = code.get(idx.saturating_add(1)..) {
+                    let mut it = rem.chars();
+                    let is_char_lit = match (it.next(), it.next()) {
+                        (Some('\\'), Some(_)) => it.next() == Some('\''),
+                        (Some(c), Some('\'')) if c != '\'' => true,
+                        _ => false,
+                    };
+                    if is_char_lit {
+                        in_char = true;
+                    }
+                }
+            }
+            '{' => {
+                delta = delta.saturating_add(1);
+                saw_open = true;
+            }
+            '}' => {
+                delta = delta.saturating_sub(1);
+            }
+            _ => {}
+        }
+    }
+    (delta, saw_open)
+}
+
+/// Checks whether a SysML `ConstraintDef` name (`c_name`) matches an `ActionDef` or callable name (`act_name`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and FEAT-42 AC-03 schema constraint-to-action traceability (`constraint_matches_action`).
+/// Matches both direct action-named constraints and compiler-emitted `invariant_<act_name>_<idx>` constraint definitions.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` if `schema_identifiers_match(c_name, act_name)` holds.
+/// - Also returns `true` when `c_name` starts with `invariant_` or `INVARIANT_` and the stripped body (or its prefix before the first or last `'_'`) matches `act_name`.
+///
+/// ## 3. Preconditions
+/// - `c_name: &str` is a candidate `ConstraintDef::name`; `act_name: &str` is an `ActionDef` or callable identifier.
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff `c_name` is traceable to `act_name`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N + M) where N is `c_name.len()` and M is `act_name.len()`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking `strip_prefix`, `split_once`, and `rsplit_once`.
+/// - State: Pure stateless comparator.
+/// - Action: Returns `false` for unrelated constraint names.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-CONSTRAINT-MATCHES-ACTION]
+fn constraint_matches_action(c_name: &str, act_name: &str) -> bool {
+    if schema_identifiers_match(c_name, act_name) {
+        return true;
+    }
+    if let Some(rest) = c_name
+        .strip_prefix("invariant_")
+        .or_else(|| c_name.strip_prefix("INVARIANT_"))
+    {
+        if schema_identifiers_match(rest, act_name) {
+            return true;
+        }
+        if let Some((prefix, _)) = rest.split_once('_') {
+            if schema_identifiers_match(prefix, act_name) {
+                return true;
+            }
+        }
+        if let Some((prefix, _)) = rest.rsplit_once('_') {
+            if schema_identifiers_match(prefix, act_name) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Resolves optional requirement ID and constraint expression from `schema_model` for `(owner_name, item_name)`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1738,7 +1985,7 @@ fn collect_all_parts<'a>(pkg: &'a PackageDef, out: &mut Vec<&'a deap_core::sysml
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Searches `PartDef::satisfied_requirements`, inline `PartDef::requirements`, `PartDef::safety_realises`,
-///   `RequirementDef::satisfied_by`, `PartDef::constraints`, `PackageDef::requirement_defs`,
+///   `RequirementDef::satisfied_by`, `PartDef::constraints`, `PackageDef::action_defs`, `PackageDef::requirement_defs`,
 ///   and `PackageDef::constraint_defs` deterministically without falling back to unrelated `.first()` package entries.
 ///
 /// ## 3. Preconditions
@@ -1749,7 +1996,7 @@ fn collect_all_parts<'a>(pkg: &'a PackageDef, out: &mut Vec<&'a deap_core::sysml
 /// - Returns `(Option<req_id>, Option<constraint_expr>)` matched from `schema_model`, or `(None, None)` when unmatched.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(P + R + C) where P is total part count, R is requirement count, and C is constraint count.
+/// - Time Complexity: O(P + A + R + C) where P is total part count, A is action count, R is requirement count, and C is constraint count.
 /// - Space Complexity: O(P) for collected package and part reference slices.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
@@ -1815,6 +2062,23 @@ fn resolve_schema_context(
             }
         }
         Some(trimmed.to_string())
+    };
+
+    let extract_doc_req = |doc: &str| -> Option<String> {
+        let doc_lines: Vec<String> = doc.lines().map(|l| l.to_string()).collect();
+        let reqs = extract_realises_ids_from_doc_lines(&doc_lines);
+        if let Some(first_req) = reqs.first() {
+            return resolve_req_token(first_req);
+        }
+        if let Some((_, after_prefix)) = doc.split_once("Realises: [") {
+            if let Some((inside, _)) = after_prefix.split_once(']') {
+                let first_tok = inside.split(',').next().unwrap_or(inside).trim();
+                if !first_tok.is_empty() {
+                    return resolve_req_token(first_tok);
+                }
+            }
+        }
+        None
     };
 
     let extract_part_req_and_constraint =
@@ -1885,19 +2149,22 @@ fn resolve_schema_context(
                 .iter()
                 .find(|a| schema_identifiers_match(&a.name, item_name))
             {
+                if let Some(ref doc) = act.doc {
+                    if let Some(a_req) = extract_doc_req(doc) {
+                        matched_req = Some(a_req);
+                    }
+                }
                 if let Some(act_c) = owner_part
                     .constraints
                     .iter()
-                    .find(|c| schema_identifiers_match(&c.name, &act.name))
+                    .find(|c| constraint_matches_action(&c.name, &act.name))
                 {
                     if let Some(formatted) = format_constraint(&act_c.name, &act_c.expression) {
                         matched_constraint = Some(formatted);
                     }
-                } else if matched_constraint.is_none() {
-                    if let Some(step_expr) = act.steps.first() {
-                        if let Some(formatted) = format_constraint(&act.name, step_expr) {
-                            matched_constraint = Some(formatted);
-                        }
+                } else if let Some(step_expr) = act.steps.first() {
+                    if let Some(formatted) = format_constraint(&act.name, step_expr) {
+                        matched_constraint = Some(formatted);
                     }
                 }
             }
@@ -1910,6 +2177,50 @@ fn resolve_schema_context(
         let (p_req, p_const) = extract_part_req_and_constraint(part);
         matched_req = p_req;
         matched_constraint = p_const;
+    } else {
+        for pkg in &all_pkgs {
+            if let Some(act) = pkg
+                .action_defs
+                .iter()
+                .find(|a| schema_identifiers_match(&a.name, item_name))
+            {
+                if let Some(ref doc) = act.doc {
+                    matched_req = extract_doc_req(doc);
+                }
+                if matched_req.is_none() {
+                    if let Some(req_def) = pkg.requirement_defs.iter().find(|r| {
+                        schema_identifiers_match(&r.name, &act.name)
+                            || schema_identifiers_match(&r.req_id, &act.name)
+                            || r.satisfied_by
+                                .iter()
+                                .any(|s| schema_identifiers_match(s, &act.name))
+                    }) {
+                        let id = if !req_def.req_id.is_empty() {
+                            req_def.req_id.clone()
+                        } else {
+                            req_def.name.clone()
+                        };
+                        if !id.is_empty() {
+                            matched_req = Some(id);
+                        }
+                    }
+                }
+                if let Some(act_c) = pkg
+                    .constraint_defs
+                    .iter()
+                    .find(|c| constraint_matches_action(&c.name, &act.name))
+                {
+                    if let Some(formatted) = format_constraint(&act_c.name, &act_c.expression) {
+                        matched_constraint = Some(formatted);
+                    }
+                } else if let Some(step_expr) = act.steps.first() {
+                    if let Some(formatted) = format_constraint(&act.name, step_expr) {
+                        matched_constraint = Some(formatted);
+                    }
+                }
+                break;
+            }
+        }
     }
 
     let target_ident = owner_name.unwrap_or(item_name);
@@ -1943,6 +2254,7 @@ fn resolve_schema_context(
             if let Some(c_def) = pkg.constraint_defs.iter().find(|c| {
                 schema_identifiers_match(&c.name, target_ident)
                     || schema_identifiers_match(&c.name, item_name)
+                    || constraint_matches_action(&c.name, item_name)
             }) {
                 if let Some(formatted) = format_constraint(&c_def.name, &c_def.expression) {
                     matched_constraint = Some(formatted);
@@ -2727,5 +3039,94 @@ mod tests {
             "src/docstring.rs must be 100% self-compliant with Check 36 7-section docstrings"
         );
         Ok(())
+    }
+
+    /// Verifies balanced `assert!(...)` condition extraction across inner `{ ... }` blocks and `pkg.action_defs` lookup (refs #559).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 docstring invariant extraction and SysML v2 action traceability
+    /// (`test_issue_559_balanced_assert_extraction_and_pkg_action_defs_lookup`).
+    /// Ensures `inspect_rust_item_details` does not truncate `assert!(...)` conditions containing nested calls/commas
+    /// or halt at inner `}` blocks, and ensures `resolve_schema_context` binds `pkg.action_defs` and `invariant_<act>_*` constraints.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `inspect_rust_item_details` balances parentheses/brackets/braces and string/char literals inside `assert!(...)`
+    ///   and tracks function body `brace_depth` across inner blocks.
+    /// - `resolve_schema_context` resolves top-level `PackageDef::action_defs` requirements and `invariant_<act_name>_*` constraints.
+    ///
+    /// ## 3. Preconditions
+    /// - A Rust function snippet with an inner `if ready { ... }` block followed by `assert!(x.is_finite() && in_range(x, 0.0, 100.0), "out of range");`.
+    /// - A `PackageDef` containing `ActionDef("compute_trajectory")` with `Realises: [REQ-NAV-TRAJ-01]` and `ConstraintDef("invariant_compute_trajectory_0")`.
+    ///
+    /// ## 4. Postconditions
+    /// - Extracted `invariants` contains `"x.is_finite() && in_range(x, 0.0, 100.0)"`.
+    /// - `resolve_schema_context(Some(&pkg), None, "compute_trajectory")` returns `(Some("REQ-NAV-TRAJ-01"), Some("invariant_compute_trajectory_0 (dt > 0.0)"))`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over the fixture lines and schema elements.
+    /// - Space Complexity: O(1) auxiliary state beyond the fixture vectors.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Asserts exact invariant and schema context strings.
+    /// - State: Pure in-memory fixture evaluation.
+    /// - Action: Fails deterministically if parentheses/commas truncate the condition or inner `}` aborts body scanning.
+    /// - Resource: Zero filesystem I/O.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-ISSUE-559-BALANCED-ASSERT-AND-ACTION-DEFS-TEST]
+    #[test]
+    fn test_issue_559_balanced_assert_extraction_and_pkg_action_defs_lookup() {
+        let fn_src = [
+            "pub fn validate_reading(x: f64, ready: bool) -> f64 {",
+            "    if ready {",
+            "        let _ = 1;",
+            "    }",
+            "    assert!(x.is_finite() && in_range(x, 0.0, 100.0), \"out of range\");",
+            "    x",
+            "}",
+        ];
+        let (_params, _ret, _fields, invariants) =
+            inspect_rust_item_details(&fn_src, 0, SourceItemKind::Function);
+        assert!(
+            invariants
+                .iter()
+                .any(|inv| inv == "x.is_finite() && in_range(x, 0.0, 100.0)"),
+            "Expected full balanced assert condition without truncation at inner ')' or ',' and after inner '}}' block, got: {:?}",
+            invariants
+        );
+
+        let pkg = PackageDef {
+            name: "NavigationPkg".to_string(),
+            action_defs: vec![ActionDef {
+                name: "compute_trajectory".to_string(),
+                doc: Some("Realises: [REQ-NAV-TRAJ-01]".to_string()),
+                is_def: true,
+                ..Default::default()
+            }],
+            constraint_defs: vec![ConstraintDef {
+                name: "invariant_compute_trajectory_0".to_string(),
+                doc: None,
+                parameters: Vec::new(),
+                expression: "dt > 0.0".to_string(),
+                is_assertion: true,
+                pre_conditions: Vec::new(),
+                post_conditions: Vec::new(),
+            }],
+            ..Default::default()
+        };
+
+        let (matched_req, matched_constraint) =
+            resolve_schema_context(Some(&pkg), None, "compute_trajectory");
+        assert_eq!(
+            matched_req,
+            Some("REQ-NAV-TRAJ-01".to_string()),
+            "Expected top-level ActionDef in pkg.action_defs to resolve Realises requirement"
+        );
+        let constraint_str = matched_constraint.unwrap_or_default();
+        assert!(
+            constraint_str.contains("dt > 0.0"),
+            "Expected invariant_compute_trajectory_0 constraint to resolve for compute_trajectory, got: {:?}",
+            constraint_str
+        );
     }
 }
