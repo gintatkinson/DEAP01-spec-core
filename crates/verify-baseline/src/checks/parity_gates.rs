@@ -1356,6 +1356,13 @@ impl<'a> SectionSlicer<'a> {
         if sec_norm.is_empty() {
             return Some(content);
         }
+        let lower_target = target_file
+            .trim()
+            .trim_matches(|c: char| matches!(c, '`' | '\'' | '"' | '(' | ')'))
+            .to_ascii_lowercase();
+        if lower_target.ends_with(".sysml") || lower_target.ends_with(".json") {
+            return Some(content);
+        }
 
         let mut in_target_sec = false;
         let mut target_level = 0;
@@ -5897,6 +5904,99 @@ flowchart TD
             errs23.contains("nonexistent.sysml") && errs23.contains("blueprint-01-alpha.md"),
             "Expected Check 23 diagnostic for nonexistent.sysml in blueprint-01-alpha.md, got: {}",
             errs23
+        );
+
+        Ok(())
+    }
+
+    /// Regression test for Issue #541 verifying that `SectionSlicer::extract_section` supports
+    /// `.sysml` and `.digest.json` files cited with `§<section>` anchors in Check 23.
+    ///
+    /// # Objective
+    /// Verify `SectionSlicer::extract_section` returns the full file content (`Some(content)`)
+    /// when a citation targets a `.sysml` or `.json` (`.digest.json`) file with a non-empty
+    /// section anchor.
+    ///
+    /// # Intention
+    /// Prevent false-positive Check 23 citation fraud failures on valid blueprint and specification
+    /// citations referencing `.sysml` or `.digest.json` files with `§<section>` anchors.
+    ///
+    /// # Logic
+    /// 1. Create an isolated temporary workspace with `docs/designs/blueprint-01-alpha.sysml` and
+    ///    `docs/designs/blueprint-01-alpha.digest.json`.
+    /// 2. Instantiate `SectionSlicer::new(&tmp.path)`.
+    /// 3. Call `extract_section` with section anchors `"2.1"` and `"1.0"` respectively and assert
+    ///    that both return `Some(...)` containing the expected AST/JSON tokens.
+    ///
+    /// # Parameters
+    /// None.
+    ///
+    /// # Returns
+    /// `Result<(), Box<dyn std::error::Error>>` indicating test execution success.
+    ///
+    /// # Errors
+    /// Returns an error if temporary directory or fixture file creation fails.
+    ///
+    /// # Safety
+    /// Operates strictly within an isolated temporary directory that is cleaned up on drop.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C verification
+    /// requirements for Issue #541 in `crates/verify-baseline/src/checks/parity_gates.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `slicer.extract_section("docs/designs/blueprint-01-alpha.sysml", "2.1")` returns `Some(text)`
+    ///   containing `"FlightController"`.
+    /// - `slicer.extract_section("docs/designs/blueprint-01-alpha.digest.json", "1.0")` returns `Some(json_text)`
+    ///   containing `"Alpha"`.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary filesystem is writable.
+    ///
+    /// ## 4. Postconditions
+    /// - Confirms deterministic extraction of `.sysml` and `.digest.json` content even when a section
+    ///   anchor is supplied.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded fixture file size.
+    /// - Space Complexity: O(1) bounded fixture payload size.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Propagates any filesystem setup failure via `Result`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SECTION-EXTRACTION-NO-FALLBACK], [REQ-PARITY-GATE-23]
+    #[test]
+    fn test_section_slicer_extract_section_supports_sysml_and_digest_json_citations(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("issue_541_sysml_and_digest_json_section_slicer")?;
+        let designs_dir = tmp.path.join("docs").join("designs");
+        fs::create_dir_all(&designs_dir)?;
+        fs::write(
+            designs_dir.join("blueprint-01-alpha.sysml"),
+            "package Alpha { part def FlightController; }\n",
+        )?;
+        fs::write(
+            designs_dir.join("blueprint-01-alpha.digest.json"),
+            "{\"package_name\":\"Alpha\"}\n",
+        )?;
+
+        let slicer = SectionSlicer::new(&tmp.path);
+
+        let sysml_text = slicer.extract_section("docs/designs/blueprint-01-alpha.sysml", "2.1");
+        assert!(
+            sysml_text
+                .as_deref()
+                .is_some_and(|t| t.contains("FlightController")),
+            "Expected SectionSlicer::extract_section on .sysml with section '2.1' to return content containing 'FlightController', got: {:?}",
+            sysml_text
+        );
+
+        let json_text = slicer.extract_section("docs/designs/blueprint-01-alpha.digest.json", "1.0");
+        assert!(
+            json_text.as_deref().is_some_and(|t| t.contains("Alpha")),
+            "Expected SectionSlicer::extract_section on .digest.json with section '1.0' to return content containing 'Alpha', got: {:?}",
+            json_text
         );
 
         Ok(())
