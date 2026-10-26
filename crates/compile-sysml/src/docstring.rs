@@ -1015,7 +1015,9 @@ pub fn inject_dart_file_docstrings(
                         }
                         let indent = leading_whitespace(raw_line);
                         let (params, return_type) = if kind.is_callable() {
-                            parse_dart_callable_signature(code, &item_name)
+                            let sig_code =
+                                deap_core::source_ast::collect_dart_callable_signature(&raw_lines, idx);
+                            parse_dart_callable_signature(&sig_code, &item_name)
                         } else {
                             (Vec::new(), None)
                         };
@@ -1098,8 +1100,10 @@ pub fn inject_dart_file_docstrings(
                                 }
                             }
                             let indent = leading_whitespace(raw_line);
+                            let sig_code =
+                                deap_core::source_ast::collect_dart_callable_signature(&raw_lines, idx);
                             let (params, return_type) =
-                                parse_dart_callable_signature(code, &member_name);
+                                parse_dart_callable_signature(&sig_code, &member_name);
                             let ctx = ItemSynthesisContext {
                                 file_rel,
                                 module_tag: &module_tag,
@@ -3517,5 +3521,72 @@ mod tests {
             "Expected Dart conflict error to reference 'computeThrust' and 'REQ-ACTION', got: {}",
             dart_err
         );
+    }
+
+    /// Verifies that `inject_dart_file_docstrings` extracts formal parameter names from multi-line Dart class methods and top-level functions when synthesizing 7-section safety docstrings (`#561`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_issue_561_inject_dart_docstrings_multiline_callable_params`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `inject_dart_file_docstrings` collects the full multi-line Dart callable header before calling `parse_dart_callable_signature`.
+    /// - Synthesized Section 3 (`## 3. Preconditions`) includes the formal parameter identifiers (`targetAltitudeMeters`, `modeCode`, `speedMps`, `ceilingMeters`) declared on continuation lines.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory Dart source file containing a class with a multi-line method and a multi-line top-level function without prior docstrings.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts that `inject_dart_file_docstrings` succeeds and the enriched Dart output references `targetAltitudeMeters`, `modeCode`, `speedMps`, and `ceilingMeters` inside `///` doc comments.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(L) over source lines L.
+    /// - Space Complexity: O(L) for enriched output buffer.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Asserts `Ok((enriched, count))` from `inject_dart_file_docstrings`.
+    /// - State: Stateless in-memory test.
+    /// - Action: Deterministic substring verification over `///` lines.
+    /// - Resource: Bounded in-memory strings.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-INJECT-DART-DOCSTRINGS]
+    #[test]
+    fn test_issue_561_inject_dart_docstrings_multiline_callable_params() {
+        let dart_src = concat!(
+            "class FlightDirector {\n",
+            "  void engageHold(\n",
+            "    String callsign,\n",
+            "    {\n",
+            "      required double targetAltitudeMeters,\n",
+            "      int modeCode = 1,\n",
+            "    }\n",
+            "  ) {\n",
+            "    return;\n",
+            "  }\n",
+            "}\n",
+            "\n",
+            "bool validateEnvelope(\n",
+            "  double speedMps,\n",
+            "  double ceilingMeters,\n",
+            ") {\n",
+            "  return speedMps <= ceilingMeters;\n",
+            "}\n",
+        );
+
+        let (enriched, count) =
+            inject_dart_file_docstrings(dart_src, "lib/flight_director.dart", None, false)
+                .expect("inject_dart_file_docstrings should succeed on multi-line Dart callables");
+        assert!(count >= 3, "Expected at least 3 enriched Dart items, got {count}");
+        let doc_only: String = enriched
+            .lines()
+            .filter(|l| l.trim_start().starts_with("///"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for param_name in ["targetAltitudeMeters", "modeCode", "speedMps", "ceilingMeters"] {
+            assert!(
+                doc_only.contains(param_name),
+                "Expected synthesized Dart docstrings to mention multi-line parameter '{param_name}', got:\n{doc_only}"
+            );
+        }
     }
 }

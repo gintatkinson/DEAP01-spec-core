@@ -1511,6 +1511,7 @@ pub fn parse_rust_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
 pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<SourceAstItem>, String> {
     validate_source_syntax_for_language(source, file_label, SourceLanguage::Dart)?;
 
+    let raw_lines: Vec<&str> = source.lines().collect();
     let mut items: Vec<SourceAstItem> = Vec::new();
     let mut current_doc: Vec<String> = Vec::new();
     let mut in_multiline_comment = false;
@@ -1520,7 +1521,7 @@ pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
     let mut active_class_name: Option<String> = None;
     let mut active_fn_idx: Option<usize> = None;
 
-    for (idx, raw_line) in source.lines().enumerate() {
+    for (idx, &raw_line) in raw_lines.iter().enumerate() {
         let line_no = idx.saturating_add(1);
         let trimmed = raw_line.trim();
 
@@ -1551,7 +1552,8 @@ pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
                 if let Some((kind, name, parent_type)) = classify_dart_top_level_ast(code) {
                     let reqs = extract_realises_ids_from_doc_lines(&current_doc);
                     let (params, return_type) = if kind.is_callable() {
-                        parse_dart_callable_signature(code, &name)
+                        let sig_code = collect_dart_callable_signature(&raw_lines, idx);
+                        parse_dart_callable_signature(&sig_code, &name)
                     } else {
                         (Vec::new(), None)
                     };
@@ -1603,8 +1605,9 @@ pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
                         classify_dart_member_ast(code, cls_name)
                     {
                         let reqs = extract_realises_ids_from_doc_lines(&current_doc);
+                        let sig_code = collect_dart_callable_signature(&raw_lines, idx);
                         let (params, return_type) =
-                            parse_dart_callable_signature(code, &member_name);
+                            parse_dart_callable_signature(&sig_code, &member_name);
                         let m_idx = items.len();
                         items.push(SourceAstItem {
                             kind: member_kind,
@@ -1633,6 +1636,13 @@ pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
                         current_doc.clear();
                     }
                 } else {
+                    if let Some(f_idx) = active_fn_idx {
+                        if let Some(inv) = extract_assertion_invariant(code) {
+                            if let Some(f_item) = items.get_mut(f_idx) {
+                                f_item.invariants.push(inv);
+                            }
+                        }
+                    }
                     current_doc.clear();
                 }
             } else {
@@ -1650,12 +1660,18 @@ pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
         let prev_brace_depth = brace_depth;
         update_ast_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
         if (prev_brace_depth > 0 && brace_depth == 0)
-            || (brace_depth == 0 && (code.ends_with(';') || code.ends_with('}')))
+            || (brace_depth == 0
+                && paren_depth == 0
+                && (code.ends_with(';') || code.ends_with('}')))
         {
             active_class_idx = None;
             active_class_name = None;
             active_fn_idx = None;
-        } else if brace_depth == 1 {
+        } else if brace_depth == 1
+            && paren_depth == 0
+            && active_class_name.is_some()
+            && (prev_brace_depth >= 2 || code.ends_with(';') || code.ends_with('}'))
+        {
             active_fn_idx = None;
         }
     }
@@ -2983,6 +2999,73 @@ fn parse_dart_field_line(code: &str, doc_lines: &[String]) -> Option<SourceField
     })
 }
 
+/// Collects a potentially multi-line Dart callable signature starting at `start_idx` until its parameter list closes.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `collect_dart_callable_signature`.
+/// Ensures multi-line Dart constructors, methods, and top-level functions preserve all formal parameters across line breaks.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strips line comments (`strip_line_comment_preserving_strings`) on every joined line and leading Dart annotations (`strip_leading_dart_annotations`) on the opening line.
+/// - Tracks balanced parenthesis depth via `update_ast_delimiter_depths` and terminates as soon as `'('` has been observed and `paren_depth == 0` (or after the first line when `'('` is absent, such as getters).
+///
+/// ## 3. Preconditions
+/// - `raw_lines: &[&str]` is the full slice of lines in a Dart source file.
+/// - `start_idx: usize` is the 0-based line index of a Dart callable declaration.
+///
+/// ## 4. Postconditions
+/// - Returns a single whitespace-joined `String` containing the complete callable signature through its closing `')'`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(W) where W is the character count across at most 32 continuation lines.
+/// - Space Complexity: O(W) for the joined signature `String`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Uses `.get(start_idx..end_idx)` with bounded lookahead (max 32 lines).
+/// - State: Pure lexical aggregator with local delimiter depth state.
+/// - Action: Zero panics, unwraps, or expectations.
+/// - Resource: Bounded heap allocation proportional to signature length.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-COLLECT-DART-CALLABLE-SIG]
+pub fn collect_dart_callable_signature(raw_lines: &[&str], start_idx: usize) -> String {
+    let mut combined = String::new();
+    let mut brace_depth: usize = 0;
+    let mut paren_depth: usize = 0;
+    let mut saw_open_paren = false;
+    let end_idx = start_idx.saturating_add(32).min(raw_lines.len());
+    let slice = raw_lines.get(start_idx..end_idx).unwrap_or(&[]);
+
+    for (offset, raw_line) in slice.iter().enumerate() {
+        let trimmed = raw_line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("///") || trimmed.starts_with("//") {
+            continue;
+        }
+        let without_comment = strip_line_comment_preserving_strings(trimmed).trim();
+        let cleaned = if offset == 0 {
+            strip_leading_dart_annotations(without_comment).trim()
+        } else {
+            without_comment
+        };
+        if cleaned.is_empty() {
+            continue;
+        }
+        if !combined.is_empty() {
+            combined.push(' ');
+        }
+        combined.push_str(cleaned);
+        if cleaned.contains('(') {
+            saw_open_paren = true;
+        }
+        update_ast_delimiter_depths(cleaned, &mut brace_depth, &mut paren_depth);
+        if !saw_open_paren || paren_depth == 0 {
+            break;
+        }
+    }
+
+    combined
+}
+
 /// Parses formal parameters and return type from a Dart function, method, or constructor line.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -3040,18 +3123,72 @@ pub fn parse_dart_callable_signature(
         }
     };
 
-    let param_section = after_open
-        .rsplit_once(')')
-        .map(|(inside, _)| inside)
-        .unwrap_or(after_open);
-    let cleaned_section = param_section
-        .trim()
-        .trim_start_matches('{')
-        .trim_end_matches('}')
-        .trim_start_matches('[')
-        .trim_end_matches(']');
+    let mut depth: usize = 1;
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut escaped = false;
+    let mut close_idx: Option<usize> = None;
+    for (i, ch) in after_open.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' && (in_single || in_double) {
+            escaped = true;
+            continue;
+        }
+        if ch == '\'' && !in_double {
+            in_single = !in_single;
+            continue;
+        }
+        if ch == '"' && !in_single {
+            in_double = !in_double;
+            continue;
+        }
+        if in_single || in_double {
+            continue;
+        }
+        if ch == '(' {
+            depth = depth.saturating_add(1);
+        } else if ch == ')' {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                close_idx = Some(i);
+                break;
+            }
+        }
+    }
 
-    for raw_param in split_top_level_comma(cleaned_section) {
+    let param_section = match close_idx {
+        Some(c_idx) => after_open.get(..c_idx).unwrap_or(""),
+        None => after_open,
+    };
+
+    let mut expanded_params: Vec<&str> = Vec::new();
+    for top_seg in split_top_level_comma(param_section.trim()) {
+        let seg = top_seg.trim();
+        if seg.is_empty() {
+            continue;
+        }
+        if seg.starts_with('{') || seg.starts_with('[') {
+            let inner = seg
+                .trim_start_matches('{')
+                .trim_end_matches('}')
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .trim();
+            for inner_seg in split_top_level_comma(inner) {
+                let trimmed_inner = inner_seg.trim();
+                if !trimmed_inner.is_empty() {
+                    expanded_params.push(trimmed_inner);
+                }
+            }
+        } else {
+            expanded_params.push(seg);
+        }
+    }
+
+    for raw_param in expanded_params {
         let mut p = raw_param
             .trim()
             .trim_start_matches('{')
@@ -5874,6 +6011,186 @@ impl ComponentAlpha {
                     proc_part.actions
                 ));
             }
+        }
+
+        Ok(())
+    }
+
+    /// Verifies that `parse_dart_source_ast` and `lower_source_ast_to_package` extract all formal parameters and `assert(...)` invariants from multi-line Dart constructors, methods, `async` methods with next-line `{`, and top-level functions (`#561`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_issue_561_multiline_dart_callable_signatures_and_invariants`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Multi-line Dart callable signatures (`const FlightControlWidget({\n...\n});`, `void engageHold(\n...\n)`, `Future<void> syncTelemetry(\n...\n) async\n{`, and `bool validateEnvelope(\n...\n)`) retain 100% of positional and named formal parameters.
+    /// - Mixed positional + named parameter groups (`String callsign, { required double targetAltitudeMeters, int modeCode = 1 }`) expand inner named parameters cleanly.
+    /// - `assert(...)` statements inside multi-line class methods (including next-line `{`) and top-level Dart functions are preserved in `SourceAstItem::invariants` and lowered into `ConstraintDef` nodes.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory Dart source fixture containing multi-line class constructors, methods, `async` methods, and top-level functions with runtime `assert(...)` invariants.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when all formal parameters and assertion invariants are present in both the parsed `SourceAstItem` slice and the lowered `PackageDef`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(L) over source lines L.
+    /// - Space Complexity: O(I + P) for extracted items I and parameters P.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), String>` with descriptive mismatch diagnostics.
+    /// - State: Stateless in-memory test.
+    /// - Action: Zero panics, unwraps, or expectations.
+    /// - Resource: Bounded stack and heap fixture strings.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-PARSE-DART-CALLABLE-SIG]
+    #[test]
+    fn test_issue_561_multiline_dart_callable_signatures_and_invariants() -> Result<(), String> {
+        let dart_src = concat!(
+            "class FlightControlWidget {\n",
+            "  final String vehicleCallsign;\n",
+            "  final double initialAltitudeMeters;\n",
+            "\n",
+            "  const FlightControlWidget({\n",
+            "    super.key,\n",
+            "    required this.vehicleCallsign,\n",
+            "    required this.initialAltitudeMeters,\n",
+            "  });\n",
+            "\n",
+            "  void engageHold(\n",
+            "    String callsign,\n",
+            "    {\n",
+            "      required double targetAltitudeMeters,\n",
+            "      int modeCode = 1,\n",
+            "    }\n",
+            "  ) {\n",
+            "    assert(targetAltitudeMeters >= 0.0);\n",
+            "  }\n",
+            "\n",
+            "  Future<void> syncTelemetry(\n",
+            "    int sequenceNumber,\n",
+            "  ) async\n",
+            "  {\n",
+            "    assert(sequenceNumber > 0);\n",
+            "  }\n",
+            "}\n",
+            "\n",
+            "bool validateEnvelope(\n",
+            "  double speedMps,\n",
+            "  double ceilingMeters,\n",
+            ") {\n",
+            "  assert(speedMps >= 0.0);\n",
+            "  return speedMps <= ceilingMeters;\n",
+            "}\n",
+        );
+
+        let ast = parse_dart_source_ast(dart_src, "flight_control_widget.dart")?;
+
+        let ctor = ast
+            .iter()
+            .find(|i| i.kind == SourceItemKind::Constructor && i.name == "FlightControlWidget")
+            .ok_or_else(|| "Expected Constructor 'FlightControlWidget'".to_string())?;
+        let ctor_params: Vec<&str> = ctor.params.iter().map(|p| p.name.as_str()).collect();
+        if ctor_params != vec!["key", "vehicleCallsign", "initialAltitudeMeters"] {
+            return Err(format!(
+                "Expected FlightControlWidget constructor params [\"key\", \"vehicleCallsign\", \"initialAltitudeMeters\"], got {:?}",
+                ctor_params
+            ));
+        }
+
+        let engage = ast
+            .iter()
+            .find(|i| i.kind == SourceItemKind::Method && i.name == "engageHold")
+            .ok_or_else(|| "Expected Method 'engageHold'".to_string())?;
+        let engage_params: Vec<&str> = engage.params.iter().map(|p| p.name.as_str()).collect();
+        if engage_params != vec!["callsign", "targetAltitudeMeters", "modeCode"] {
+            return Err(format!(
+                "Expected engageHold params [\"callsign\", \"targetAltitudeMeters\", \"modeCode\"], got {:?}",
+                engage_params
+            ));
+        }
+        if !engage
+            .invariants
+            .iter()
+            .any(|inv| inv == "targetAltitudeMeters >= 0.0")
+        {
+            return Err(format!(
+                "Expected engageHold.invariants to contain 'targetAltitudeMeters >= 0.0', got {:?}",
+                engage.invariants
+            ));
+        }
+
+        let sync_fn = ast
+            .iter()
+            .find(|i| i.kind == SourceItemKind::Method && i.name == "syncTelemetry")
+            .ok_or_else(|| "Expected Method 'syncTelemetry'".to_string())?;
+        let sync_params: Vec<&str> = sync_fn.params.iter().map(|p| p.name.as_str()).collect();
+        if sync_params != vec!["sequenceNumber"] {
+            return Err(format!(
+                "Expected syncTelemetry params [\"sequenceNumber\"], got {:?}",
+                sync_params
+            ));
+        }
+        if !sync_fn
+            .invariants
+            .iter()
+            .any(|inv| inv == "sequenceNumber > 0")
+        {
+            return Err(format!(
+                "Expected syncTelemetry.invariants to contain 'sequenceNumber > 0', got {:?}",
+                sync_fn.invariants
+            ));
+        }
+
+        let top_fn = ast
+            .iter()
+            .find(|i| i.kind == SourceItemKind::Function && i.name == "validateEnvelope")
+            .ok_or_else(|| "Expected Function 'validateEnvelope'".to_string())?;
+        let top_params: Vec<&str> = top_fn.params.iter().map(|p| p.name.as_str()).collect();
+        if top_params != vec!["speedMps", "ceilingMeters"] {
+            return Err(format!(
+                "Expected validateEnvelope params [\"speedMps\", \"ceilingMeters\"], got {:?}",
+                top_params
+            ));
+        }
+        if !top_fn
+            .invariants
+            .iter()
+            .any(|inv| inv == "speedMps >= 0.0")
+        {
+            return Err(format!(
+                "Expected validateEnvelope.invariants to contain 'speedMps >= 0.0', got {:?}",
+                top_fn.invariants
+            ));
+        }
+
+        let pkg = lower_source_ast_to_package(&ast, "FlightControlPkg");
+        let part = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "FlightControlWidget")
+            .ok_or_else(|| "Expected PartDef 'FlightControlWidget'".to_string())?;
+        for expected_expr in ["targetAltitudeMeters >= 0.0", "sequenceNumber > 0"] {
+            if !part
+                .constraints
+                .iter()
+                .any(|c| c.expression.contains(expected_expr))
+            {
+                return Err(format!(
+                    "Expected FlightControlWidget.constraints to contain '{expected_expr}', got {:?}",
+                    part.constraints
+                ));
+            }
+        }
+        if !pkg
+            .constraint_defs
+            .iter()
+            .any(|c| c.expression.contains("speedMps >= 0.0"))
+        {
+            return Err(format!(
+                "Expected pkg.constraint_defs to contain 'speedMps >= 0.0', got {:?}",
+                pkg.constraint_defs
+            ));
         }
 
         Ok(())
