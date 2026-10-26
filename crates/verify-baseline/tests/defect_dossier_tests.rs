@@ -16,8 +16,9 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use verify_baseline::checks::audit_source_purity;
 use verify_baseline::defect_dossier::{
-    build_gh_command, derive_defect_title, extract_file_basename, parse_github_repo_slug,
-    resolve_target_repo, run_check_defect, validate_defect_dossier, validate_defect_title,
+    build_gh_command, derive_defect_title, domain_cleanliness_gate, extract_file_basename,
+    parse_github_repo_slug, resolve_target_repo, run_check_defect, validate_defect_dossier,
+    validate_defect_title, validate_section_6_code_and_target_grounding,
     verify_closed_loop_payload, DefectDossierArgs,
 };
 
@@ -920,6 +921,165 @@ fn test_issue_474_governance_and_dry_run_contract_alignment() {
     assert!(
         !leaked_exists,
         "run_check_defect with dry_run: true must NOT persist into .pipeline/defects/ even when publish: true or issue: Some(...) is set"
+    );
+}
+
+#[test]
+fn test_section_6_rust_zero_regex_rejection() {
+    let base = sample_valid_critical_dossier();
+    let kw_re = ["reg", "ex"].concat();
+    let kw_cap_re = ["Reg", "ex"].concat();
+
+    // 1. Diff fence with added regex import/constructor must be rejected
+    let diff_lines = vec![
+        "```diff".to_string(),
+        format!("+use {}::{};", kw_re, kw_cap_re),
+        format!("+let re = {}::new(\"^a+\").unwrap();", kw_cap_re),
+        "```".to_string(),
+    ];
+    let mut errs_diff = Vec::new();
+    validate_section_6_code_and_target_grounding(
+        &diff_lines,
+        "crates/verify-baseline/tests/defect_dossier_tests.rs",
+        true,
+        &mut errs_diff,
+    );
+    assert!(
+        !errs_diff.is_empty(),
+        "Expected Section 6 diff block containing regex usage to be rejected"
+    );
+
+    // 2. Whitespace-separated `use  regex`, `extern crate regex`, and `regex ::` must be rejected
+    for bad_line in [
+        format!("use  {}::{};", kw_re, kw_cap_re),
+        format!("extern crate {};", kw_re),
+        format!("let _ = {} :: {}::new(\"a\");", kw_re, kw_cap_re),
+    ] {
+        let sec6 = vec!["```rust".to_string(), bad_line.clone(), "```".to_string()];
+        let mut errs = Vec::new();
+        validate_section_6_code_and_target_grounding(
+            &sec6,
+            "crates/verify-baseline/tests/defect_dossier_tests.rs",
+            true,
+            &mut errs,
+        );
+        assert!(
+            !errs.is_empty(),
+            "Expected Section 6 rust block with '{}' to be rejected",
+            bad_line
+        );
+    }
+
+    // 3. Full dossier validation with ```diff regex block must fail
+    let diff_dossier = base.replace(
+        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+        &diff_lines.join("\n"),
+    );
+    assert!(
+        validate_defect_dossier(&diff_dossier).is_err(),
+        "Full dossier with regex in Section 6 diff fence must be rejected"
+    );
+}
+
+#[test]
+fn test_upstream_test_target_crate_grounding() {
+    let valid_sec6 = vec![
+        "```rust".to_string(),
+        "pub fn clean_helper(s: &str) -> bool { s.starts_with(\"ok\") }".to_string(),
+        "```".to_string(),
+    ];
+
+    // 1. Bare crate root without file subpath (`crates/verify-baseline` or `crates/verify-baseline/`) must be rejected
+    for invalid_target in [
+        "",
+        "crates/verify-baseline",
+        "crates/verify-baseline/",
+        "crates/cuas-coa-engine/src/lib.rs",
+        "tests/standalone_test.rs",
+    ] {
+        let mut errs = Vec::new();
+        validate_section_6_code_and_target_grounding(&valid_sec6, invalid_target, true, &mut errs);
+        assert!(
+            !errs.is_empty(),
+            "Expected invalid upstream test_target '{}' to be rejected",
+            invalid_target
+        );
+    }
+
+    // 2. Valid upstream crate with concrete file subpath passes
+    let mut errs_ok = Vec::new();
+    validate_section_6_code_and_target_grounding(
+        &valid_sec6,
+        "crates/verify-baseline/tests/defect_dossier_tests.rs",
+        true,
+        &mut errs_ok,
+    );
+    assert!(
+        errs_ok.is_empty(),
+        "Expected valid upstream test_target to pass, got: {:?}",
+        errs_ok
+    );
+
+    // 3. Full dossier with bare `crates/verify-baseline/` in Section 1 must fail
+    let bare_crate_dossier = sample_valid_critical_dossier().replace(
+        "crates/verify-baseline/tests/defect_dossier_tests.rs",
+        "crates/verify-baseline/",
+    );
+    assert!(
+        validate_defect_dossier(&bare_crate_dossier).is_err(),
+        "Dossier with bare crates/verify-baseline/ test-target must be rejected"
+    );
+}
+
+#[test]
+fn test_domain_cleanliness_gate() {
+    // 1. Downstream crate path in Section 6 must be rejected when is_upstream is true
+    let dirty_sec6 = vec![
+        "Update `crates/cuas-coa-engine/src/threat_eval.rs` as follows:".to_string(),
+        "```rust".to_string(),
+        "// crates/cuas-coa-engine/src/threat_eval.rs".to_string(),
+        "pub fn evaluate() {}".to_string(),
+        "```".to_string(),
+    ];
+    let mut errs_dirty = Vec::new();
+    domain_cleanliness_gate(&dirty_sec6, true, &mut errs_dirty);
+    assert!(
+        !errs_dirty.is_empty(),
+        "domain_cleanliness_gate must reject downstream crates/cuas-coa-engine/... in upstream workspace"
+    );
+
+    // 2. Downstream crate path in Section 6 is permitted when is_upstream is false
+    let mut errs_downstream = Vec::new();
+    domain_cleanliness_gate(&dirty_sec6, false, &mut errs_downstream);
+    assert!(
+        errs_downstream.is_empty(),
+        "domain_cleanliness_gate must allow downstream crate paths when is_upstream is false, got: {:?}",
+        errs_downstream
+    );
+
+    // 3. Clean upstream crate path in Section 6 passes when is_upstream is true
+    let clean_sec6 = vec![
+        "Update `crates/verify-baseline/src/defect_dossier.rs`:".to_string(),
+        "```rust".to_string(),
+        "pub fn check_clean() -> bool { true }".to_string(),
+        "```".to_string(),
+    ];
+    let mut errs_clean = Vec::new();
+    domain_cleanliness_gate(&clean_sec6, true, &mut errs_clean);
+    assert!(
+        errs_clean.is_empty(),
+        "domain_cleanliness_gate must accept upstream crates/verify-baseline/... path, got: {:?}",
+        errs_clean
+    );
+
+    // 4. Full dossier with downstream crate reference in Section 6 must fail validate_defect_dossier
+    let dirty_dossier = sample_valid_critical_dossier().replace(
+        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+        &dirty_sec6.join("\n"),
+    );
+    assert!(
+        validate_defect_dossier(&dirty_dossier).is_err(),
+        "validate_defect_dossier must reject downstream crate reference in Section 6"
     );
 }
 

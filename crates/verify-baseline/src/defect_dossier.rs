@@ -1098,17 +1098,34 @@ fn check_forbidden_regex_tokens(line: &str) -> Option<String> {
     let needle_cap_new = concat!("Reg", "ex::new");
     let needle_set = concat!("Reg", "exSet");
     let needle_use = concat!("use ", "regex");
-    if line.contains(needle_inline) {
-        return Some(needle_inline.to_string());
-    }
-    if line.contains(needle_cap_new) {
-        return Some(needle_cap_new.to_string());
-    }
-    if line.contains(needle_set) {
-        return Some(needle_set.to_string());
-    }
-    if line.contains(needle_use) {
-        return Some(needle_use.to_string());
+    let needle_extern = concat!("extern crate ", "regex");
+
+    let stripped_diff = line
+        .trim_start()
+        .trim_start_matches(['+', '-'])
+        .trim_start();
+    let collapsed = stripped_diff.split_whitespace().collect::<Vec<_>>().join(" ");
+    let normalized = collapsed
+        .replace(" :: ", "::")
+        .replace(" ::", "::")
+        .replace(":: ", "::");
+
+    for candidate in [line, collapsed.as_str(), normalized.as_str()] {
+        if candidate.contains(needle_inline) {
+            return Some(needle_inline.to_string());
+        }
+        if candidate.contains(needle_cap_new) {
+            return Some(needle_cap_new.to_string());
+        }
+        if candidate.contains(needle_set) {
+            return Some(needle_set.to_string());
+        }
+        if candidate.contains(needle_use) {
+            return Some(needle_use.to_string());
+        }
+        if candidate.contains(needle_extern) {
+            return Some(needle_extern.to_string());
+        }
     }
     None
 }
@@ -1117,13 +1134,12 @@ fn check_forbidden_regex_tokens(line: &str) -> Option<String> {
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ISO 26262 ASIL D verification rules. Ensures that no proposed
-/// code corrections in Section 6 introduce forbidden `regex` crate dependencies (`regex::`,
-/// `Regex::new`, `RegexSet`, `use regex`), eliminating ReDoS vulnerabilities and non-deterministic
-/// backtracking hazards.
+/// code corrections in Section 6 introduce forbidden `regex` crate dependencies, eliminating ReDoS
+/// vulnerabilities and non-deterministic backtracking hazards.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Every ` ```rust ` or ` ```rs ` code fence inside Section 6 must contain zero occurrences of
-///   forbidden regex tokens.
+/// - Every ` ```rust `, ` ```rs `, ` ```diff `, or ` ```patch ` code fence inside Section 6 must
+///   contain zero occurrences of forbidden regex tokens.
 ///
 /// ## 3. Preconditions
 /// - `sec6_lines` is the slice of lines belonging to Section 6.
@@ -1141,29 +1157,35 @@ fn check_forbidden_regex_tokens(line: &str) -> Option<String> {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-SECTION6-ZERO-REGEX-GATE]
 fn validate_section_6_zero_regex(sec6_lines: &[String], errors: &mut Vec<String>) {
-    let mut in_rust_fence = false;
+    let mut in_checked_fence = false;
     for raw_line in sec6_lines {
         let trimmed = raw_line.trim();
         if let Some(after_ticks) = trimmed.strip_prefix("```") {
-            if !in_rust_fence {
+            if !in_checked_fence {
                 let tag = after_ticks.trim();
                 let lower = tag.to_ascii_lowercase();
                 if lower == "rust"
                     || lower == "rs"
+                    || lower == "diff"
+                    || lower == "patch"
                     || lower.starts_with("rust ")
                     || lower.starts_with("rust,")
                     || lower.starts_with("rs ")
                     || lower.starts_with("rs,")
+                    || lower.starts_with("diff ")
+                    || lower.starts_with("diff,")
+                    || lower.starts_with("patch ")
+                    || lower.starts_with("patch,")
                 {
-                    in_rust_fence = true;
+                    in_checked_fence = true;
                 }
             } else {
-                in_rust_fence = false;
+                in_checked_fence = false;
             }
             continue;
         }
 
-        if in_rust_fence {
+        if in_checked_fence {
             if let Some(token) = check_forbidden_regex_tokens(trimmed) {
                 errors.push(format!(
                     "Check 34 Zero Regex Invariant violation in Section 6: forbidden regex token '{}' in proposed correction.",
@@ -1174,26 +1196,97 @@ fn validate_section_6_zero_regex(sec6_lines: &[String], errors: &mut Vec<String>
     }
 }
 
-/// Validates that Section 1 `test-target` is grounded in an upstream crate when in an UPSTREAM_SPEC_CORE_COMPILER workspace.
+/// Enforces the upstream domain cleanliness gate on Section 6 lines, rejecting downstream crate paths
+/// when validating in an `UPSTREAM_SPEC_CORE_COMPILER` workspace.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C poly-repo boundary isolation controls. Prevents
+/// downstream domain or application crate paths (such as `crates/cuas-coa-engine/`) from leaking
+/// into upstream compiler defect dossiers.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - When `is_upstream` is `false`, performs a no-op and appends zero errors.
+/// - When `is_upstream` is `true`, every concrete `crates/<crate_name>` reference in `sec6_lines`
+///   must satisfy `is_valid_upstream_crate_name(crate_name)`.
+///
+/// ## 3. Preconditions
+/// - `sec6_lines` is a slice of UTF-8 lines from Section 6 (or another inspected section).
+/// - `is_upstream` indicates whether the target repository/workspace is `UPSTREAM_SPEC_CORE_COMPILER`.
+///
+/// ## 4. Postconditions
+/// - Appends a diagnostic message to `errors` for every non-upstream `crates/<name>` reference when `is_upstream` is `true`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L_6)$ linear in total byte length of `sec6_lines`.
+/// - Space Complexity: $O(1)$ auxiliary memory beyond error diagnostics.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total non-panicking lexical scan using `split_once` and `split`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEFECT-DOSSIER-DOMAIN-CLEANLINESS-GATE]
+pub fn domain_cleanliness_gate(
+    sec6_lines: &[String],
+    is_upstream: bool,
+    errors: &mut Vec<String>,
+) {
+    if !is_upstream {
+        return;
+    }
+
+    for raw_line in sec6_lines {
+        let mut rest = raw_line.as_str();
+        while let Some((_, after_prefix)) = rest.split_once("crates/") {
+            rest = after_prefix;
+            let first_char = after_prefix.chars().next();
+            if matches!(first_char, None | Some('{') | Some('<') | Some('[')) {
+                continue;
+            }
+            let crate_name = after_prefix
+                .split(['/', ' ', '\t', '`', '"', '\'', ')', ']', '>', ':', ';', ','])
+                .next()
+                .unwrap_or("");
+            let is_crate_ident = crate_name
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_lowercase())
+                .unwrap_or(false)
+                && crate_name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+            if is_crate_ident && !is_valid_upstream_crate_name(crate_name) {
+                errors.push(format!(
+                    "Domain cleanliness gate violation in Section 6: downstream crate path 'crates/{}' is forbidden in UPSTREAM_SPEC_CORE_COMPILER.",
+                    crate_name
+                ));
+            }
+        }
+    }
+}
+
+/// Validates that Section 1 `test-target` is grounded in a concrete file path within one of the 6
+/// upstream compiler crates when in an `UPSTREAM_SPEC_CORE_COMPILER` workspace.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ECSS-E-ST-40C poly-repo tier boundary controls. Prevents
-/// downstream crate paths (e.g., `crates/cuas-coa-engine/`) from being cited in upstream specification
-/// compiler defect dossiers, ensuring all test targets resolve to valid Tier 0 crates.
+/// downstream crate paths (e.g., `crates/cuas-coa-engine/`) or bare directory prefixes without a
+/// file subpath (e.g., `crates/verify-baseline/`) from being cited in upstream specification
+/// compiler defect dossiers.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - When `is_upstream` is true and `test_target` is non-empty: `test_target` must start with
-///   `crates/<crate_name>/` where `crate_name` satisfies `is_valid_upstream_crate_name`.
+/// - When `is_upstream` is `true`: `test_target` must be non-empty and match
+///   `crates/<crate_name>/<non_empty_subpath>` where `crate_name` satisfies `is_valid_upstream_crate_name`.
 ///
 /// ## 3. Preconditions
 /// - `test_target` is the normalized path extracted from Section 1.
 /// - `is_upstream` indicates whether the repository or target scope is `UPSTREAM_SPEC_CORE_COMPILER`.
 ///
 /// ## 4. Postconditions
-/// - Appends a diagnostic message to `errors` if `is_upstream` is true and `test_target` does not start with a valid prefix.
+/// - Appends a diagnostic message to `errors` if `is_upstream` is `true` and `test_target` is empty,
+///   lacks a concrete file subpath, or does not belong to one of the 6 upstream compiler crates.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(P)$ prefix byte length.
+/// - Time Complexity: $O(P)$ where $P$ is `test_target.len()`.
 /// - Space Complexity: $O(1)$ auxiliary allocation.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
@@ -1206,16 +1299,17 @@ fn validate_upstream_test_target_grounding(
     is_upstream: bool,
     errors: &mut Vec<String>,
 ) {
-    if !is_upstream || test_target.is_empty() {
+    if !is_upstream {
         return;
     }
 
     let clean = test_target.trim().trim_matches('`').trim();
     let is_valid = if let Some(after_crates) = clean.strip_prefix("crates/") {
-        if let Some((crate_name, _subpath)) = after_crates.split_once('/') {
-            is_valid_upstream_crate_name(crate_name)
+        if let Some((crate_name, subpath)) = after_crates.split_once('/') {
+            let clean_subpath = subpath.trim().trim_matches('/');
+            is_valid_upstream_crate_name(crate_name) && !clean_subpath.is_empty()
         } else {
-            is_valid_upstream_crate_name(after_crates)
+            false
         }
     } else {
         false
@@ -1223,10 +1317,54 @@ fn validate_upstream_test_target_grounding(
 
     if !is_valid {
         errors.push(format!(
-            "Upstream test-target crate grounding violation: '{}' does not belong to any of the 6 upstream compiler crates (crates/{{deap-core, compile-sysml, ingest-sysml, verify-baseline, assemble-conops, reconcile-backlog}}/).",
+            "Upstream test-target crate grounding violation: '{}' does not resolve to a file inside one of the 6 upstream compiler crates (crates/{{deap-core, compile-sysml, ingest-sysml, verify-baseline, assemble-conops, reconcile-backlog}}/<file>).",
             clean
         ));
     }
+}
+
+/// Validates Section 6 proposed correction code blocks (Check 34 Zero Regex Invariant and upstream
+/// domain cleanliness) and verifies upstream `test-target` crate grounding.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D verification rules. Unifies
+/// Section 6 zero-regex code inspection, Section 6 upstream domain cleanliness verification, and
+/// Section 1 `test-target` upstream crate grounding into a single deterministic verification gate.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Rejects any ` ```rust `, ` ```rs `, ` ```diff `, or ` ```patch ` block in `sec6_lines` containing
+///   forbidden regex tokens.
+/// - When `is_upstream` is `true`, rejects any downstream `crates/<non_upstream>` reference in `sec6_lines`
+///   via `domain_cleanliness_gate`.
+/// - When `is_upstream` is `true`, requires `test_target` to resolve to a non-empty file path under
+///   one of the 6 canonical upstream compiler crates.
+///
+/// ## 3. Preconditions
+/// - `sec6_lines` contains the lines of Section 6 (`## 6. Proposed Correction`).
+/// - `test_target` is the extracted test target path string.
+/// - `is_upstream` indicates whether the workspace/repository is `UPSTREAM_SPEC_CORE_COMPILER`.
+///
+/// ## 4. Postconditions
+/// - Appends all detected Section 6 zero-regex, domain cleanliness, and test-target grounding errors to `errors`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L_6 + P)$ linear in Section 6 byte length and `test_target` length.
+/// - Space Complexity: $O(1)$ auxiliary memory beyond appended diagnostics.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-panicking total function.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEFECT-DOSSIER-VALIDATE-SEC6-AND-TARGET-GROUNDING]
+pub fn validate_section_6_code_and_target_grounding(
+    sec6_lines: &[String],
+    test_target: &str,
+    is_upstream: bool,
+    errors: &mut Vec<String>,
+) {
+    validate_section_6_zero_regex(sec6_lines, errors);
+    domain_cleanliness_gate(sec6_lines, is_upstream, errors);
+    validate_upstream_test_target_grounding(test_target, is_upstream, errors);
 }
 
 /// Detects whether the current workspace or provided root directory is an UPSTREAM_SPEC_CORE_COMPILER workspace.
@@ -1501,9 +1639,6 @@ pub fn validate_defect_dossier_scoped(
     let sec1_slice = get_section_slice(DossierSection::ContextAndReferences);
     let (symptom, test_target) = validate_section_1_context(sec1_slice, &mut errors);
 
-    // Validate upstream test-target crate grounding (Gate 14)
-    validate_upstream_test_target_grounding(&test_target, is_upstream, &mut errors);
-
     // 6. Validate Section 2 5-Whys
     let sec2_slice = get_section_slice(DossierSection::RootCauseAnalysis);
     validate_section_2_whys(sec2_slice, &mut errors);
@@ -1516,8 +1651,13 @@ pub fn validate_defect_dossier_scoped(
     let sec6_slice = get_section_slice(DossierSection::ProposedCorrection);
     validate_fences_ascii_art_and_em_dash(sec6_slice, content, &mut errors);
 
-    // Validate Section 6 zero-regex compliance (Check 34 / Gate 13)
-    validate_section_6_zero_regex(sec6_slice, &mut errors);
+    // Validate Section 6 zero-regex compliance, domain cleanliness, and upstream test-target crate grounding
+    validate_section_6_code_and_target_grounding(
+        sec6_slice,
+        &test_target,
+        is_upstream,
+        &mut errors,
+    );
 
     if !errors.is_empty() {
         Err(errors)
