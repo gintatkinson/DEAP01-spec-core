@@ -224,7 +224,10 @@ pub fn detect_format(schema_path: &str, content: &str) -> Result<String, String>
 /// Realises: [REQ-INGEST-SYSML-DETECTORS-IS-OUTPUT-SYSML] | SysML v2: ActionDef(is_output_sysml)
 fn is_output_sysml(p: &Path) -> bool {
     if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
-        name == "model.sysml" || name == "schema.sysml" || p.with_extension("md").is_file()
+        name == "model.sysml"
+            || name == "schema.sysml"
+            || (name.starts_with("blueprint-") && name.ends_with(".sysml"))
+            || p.with_extension("md").is_file()
     } else {
         false
     }
@@ -1030,6 +1033,67 @@ mod tests {
 
         let discovered = discover_schema_targets(Some(&sidecar_only_dir), Some("auto"))?;
         assert_eq!(discovered, ("unknown".to_string(), Vec::<PathBuf>::new()));
+        Ok(())
+    }
+
+    /// Verifies that `is_output_sysml` and `discover_schema_targets(..., Some("auto"))` treat `blueprint-*.sysml` files as generated output sidecars even when no co-located `.md` file exists on disk.
+    ///
+    /// # Purpose
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_discover_schema_targets_auto_skips_blueprint_output_sysml_for_markdown`.
+    ///
+    /// # Invariants
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Any path matching `blueprint-*.sysml` is classified as an output SysML artifact (`is_output_sysml(p) == true`) independent of filesystem sidecar presence.
+    /// - Canonical input SysML schemas (e.g., `schema/domain.sysml`) remain classified as non-output schemas (`is_output_sysml(p) == false`).
+    /// - Under `discover_schema_targets(Some(dir), Some("auto"))`, an unpaired `blueprint-*.sysml` sidecar does not mask co-located `blueprint-*.md` files.
+    ///
+    /// # Inputs
+    /// ## 3. Preconditions
+    /// - Writable system temporary directory exists.
+    ///
+    /// # Outputs
+    /// ## 4. Postconditions
+    /// - `is_output_sysml(Path::new("docs/designs/blueprint-01-lint.sysml"))` returns `true` and `discover_schema_targets` returns `Ok(("markdown", vec![blueprint-01-lint.md]))`.
+    ///
+    /// # Complexity
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(F \log F)$ over directory entries $F$. Space Complexity: $O(F)$.
+    ///
+    /// # Failure Modes
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Cleans up temporary directory deterministically on drop via `TempDirGuard`.
+    ///
+    /// # Verification
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-INGEST-SYSML-DETECTORS-IS-OUTPUT-SYSML]
+    #[test]
+    fn test_discover_schema_targets_auto_skips_blueprint_output_sysml_for_markdown(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        assert!(is_output_sysml(Path::new(
+            "docs/designs/blueprint-01-lint.sysml"
+        )));
+        assert!(!is_output_sysml(Path::new("schema/domain.sysml")));
+
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            ".deap_blueprint_sidecar_skip_{}_{}",
+            std::process::id(),
+            nanos
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let guard = TempDirGuard(root.clone());
+        fs::create_dir_all(&guard.0)?;
+
+        let bp1_md = guard.0.join("blueprint-01-lint.md");
+        let bp2_stale_sysml = guard.0.join("blueprint-02-stale.sysml");
+        fs::write(&bp1_md, "# Blueprint 01\n")?;
+        fs::write(&bp2_stale_sysml, "package StaleBlueprintSidecar {}\n")?;
+
+        let discovered = discover_schema_targets(Some(&guard.0), Some("auto"))?;
+        assert_eq!(discovered, ("markdown".to_string(), vec![bp1_md]));
         Ok(())
     }
 }
