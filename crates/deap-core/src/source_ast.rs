@@ -1683,6 +1683,19 @@ pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) 
         ..Default::default()
     };
     let mut registered_reqs: BTreeSet<String> = BTreeSet::new();
+    let mut state_to_widget: std::collections::BTreeMap<String, String> =
+        std::collections::BTreeMap::new();
+    for item in items {
+        if item.kind == SourceItemKind::Class {
+            if let Some(ref parent) = item.parent_type {
+                if let Some(widget_name) = extract_state_generic_target(parent) {
+                    let state_clean = sanitize_sysml_identifier(&item.name, "ComponentPart");
+                    let widget_clean = sanitize_sysml_identifier(&widget_name, "ComponentPart");
+                    state_to_widget.insert(state_clean, widget_clean);
+                }
+            }
+        }
+    }
 
     // Pass 1: Create PartDef and StateDef nodes for structs, classes, traits, mixins, extensions, and enums
     for item in items {
@@ -1730,30 +1743,38 @@ pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) 
                 }
 
                 // If this Dart class is `State<OwnerWidget>`, also attach its attributes/ports and a StateDef to `OwnerWidget`
-                if let Some(ref parent) = item.parent_type {
-                    if let Some(widget_name) = extract_state_generic_target(parent) {
-                        if let Some(owner_part) = pkg
-                            .part_defs
-                            .iter_mut()
-                            .find(|p| p.name == widget_name)
-                        {
-                            owner_part.attributes.extend(attributes.clone());
-                            owner_part.ports.extend(ports.clone());
-                            for req in &item.satisfied_requirements {
-                                if !owner_part.satisfied_requirements.contains(req) {
-                                    owner_part.satisfied_requirements.push(req.clone());
-                                }
+                if let Some(widget_clean) = state_to_widget.get(&part_name).cloned() {
+                    if !pkg.part_defs.iter().any(|p| p.name == widget_clean) {
+                        pkg.part_defs.push(PartDef {
+                            name: widget_clean.clone(),
+                            is_def: true,
+                            ..Default::default()
+                        });
+                    }
+                    if let Some(owner_part) = pkg
+                        .part_defs
+                        .iter_mut()
+                        .find(|p| p.name == widget_clean)
+                    {
+                        owner_part.attributes.extend(attributes.clone());
+                        owner_part.ports.extend(ports.clone());
+                        for req in &item.satisfied_requirements {
+                            if !owner_part.satisfied_requirements.contains(req) {
+                                owner_part.satisfied_requirements.push(req.clone());
                             }
-                            owner_part.states.push(StateDef {
-                                name: part_name.clone(),
-                                doc: summary_from_doc_lines(&item.doc_lines),
-                                ..Default::default()
-                            });
                         }
+                        owner_part.states.push(StateDef {
+                            name: part_name.clone(),
+                            doc: summary_from_doc_lines(&item.doc_lines),
+                            ..Default::default()
+                        });
                     }
                 }
 
                 if let Some(existing) = pkg.part_defs.iter_mut().find(|p| p.name == part_name) {
+                    if existing.doc.is_none() {
+                        existing.doc = summary_from_doc_lines(&item.doc_lines);
+                    }
                     existing.attributes.extend(attributes);
                     existing.ports.extend(ports);
                     for req in &item.satisfied_requirements {
@@ -1850,7 +1871,7 @@ pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) 
                 });
             }
             if let Some(owner_part) = pkg.part_defs.iter_mut().find(|p| p.name == owner_clean) {
-                owner_part.actions.push(action_def);
+                owner_part.actions.push(action_def.clone());
                 for req in &item.satisfied_requirements {
                     if !owner_part.satisfied_requirements.contains(req) {
                         owner_part.satisfied_requirements.push(req.clone());
@@ -1863,6 +1884,38 @@ pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) 
                         is_assertion: true,
                         ..Default::default()
                     });
+                }
+            }
+            if let Some(widget_clean) = state_to_widget.get(&owner_clean).cloned() {
+                if !pkg.part_defs.iter().any(|p| p.name == widget_clean) {
+                    pkg.part_defs.push(PartDef {
+                        name: widget_clean.clone(),
+                        is_def: true,
+                        ..Default::default()
+                    });
+                }
+                if let Some(widget_part) = pkg.part_defs.iter_mut().find(|p| p.name == widget_clean)
+                {
+                    if !widget_part.actions.iter().any(|a| a.name == action_def.name) {
+                        widget_part.actions.push(action_def);
+                    }
+                    for req in &item.satisfied_requirements {
+                        if !widget_part.satisfied_requirements.contains(req) {
+                            widget_part.satisfied_requirements.push(req.clone());
+                        }
+                    }
+                    for (inv_idx, inv_expr) in item.invariants.iter().enumerate() {
+                        let inv_name =
+                            format!("invariant_{}_{}", act_name, inv_idx.saturating_add(1));
+                        if !widget_part.constraints.iter().any(|c| c.name == inv_name) {
+                            widget_part.constraints.push(ConstraintDef {
+                                name: inv_name,
+                                expression: inv_expr.clone(),
+                                is_assertion: true,
+                                ..Default::default()
+                            });
+                        }
+                    }
                 }
             }
         } else {
@@ -5569,6 +5622,99 @@ impl ComponentAlpha {
         if summary != expected_summary {
             return Err(format!(
                 "Expected {expected_summary:?}, got {summary:?}"
+            ));
+        }
+        Ok(())
+    }
+
+    /// Verifies that `lower_source_ast_to_package` lowers `State<WidgetName>` fields, methods (`ActionDef`), `satisfied_requirements`, and `assert(...)` invariants (`ConstraintDef`) onto the owning `WidgetName` `PartDef` regardless of declaration order (`#557`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_issue_557_dart_state_methods_and_asserts_lowered_onto_owning_widget_part_def`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - When `State<WidgetName>` appears before `WidgetName` in a Dart translation unit, `WidgetName` still receives all `State<WidgetName>` attributes, ports, state definitions, methods, requirement satisfactions, and assertion constraints, and retains its own doc comment.
+    /// - Pass 2 forwards `State<WidgetName>` methods (`ActionDef`), `satisfied_requirements`, and `assert(...)` `ConstraintDef` invariants onto `WidgetName` without duplicating action or constraint names.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory Dart source fixture declaring `_TelemetryPanelState extends State<TelemetryPanel>` prior to `TelemetryPanel extends StatefulWidget`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when `TelemetryPanel` in `pkg.part_defs` contains the expected `refreshHz` attribute, `updateTelemetry` action, `REQ-UI-TELEM-01` satisfaction, and `sample >= 0.0` constraint invariant.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(I * P) over AST items I and package part definitions P.
+    /// - Space Complexity: O(I) for lowered package definitions.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), String>` on missing part, attribute, action, requirement, or constraint.
+    /// - State: Stateless in-memory test.
+    /// - Action: Zero panics, unwraps, or expectations.
+    /// - Resource: Bounded stack and heap fixture strings.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-LOWER-AST-TO-PACKAGE]
+    #[test]
+    fn test_issue_557_dart_state_methods_and_asserts_lowered_onto_owning_widget_part_def() -> Result<(), String> {
+        let src = concat!(
+            "class _TelemetryPanelState extends State<TelemetryPanel> {\n",
+            "  int refreshHz = 60;\n",
+            "\n",
+            "  /// Realises: [REQ-UI-TELEM-01]\n",
+            "  void updateTelemetry(double sample) {\n",
+            "    assert(sample >= 0.0);\n",
+            "  }\n",
+            "}\n",
+            "\n",
+            "/// Primary telemetry panel widget.\n",
+            "class TelemetryPanel extends StatefulWidget {\n",
+            "  final String title;\n",
+            "}\n",
+        );
+        let ast = parse_dart_source_ast(src, "issue_557.dart")?;
+        let pkg = lower_source_ast_to_package(&ast, "UiPkg");
+        let panel = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "TelemetryPanel")
+            .ok_or_else(|| "Expected TelemetryPanel PartDef in pkg.part_defs".to_string())?;
+
+        if !panel.attributes.iter().any(|a| a.name == "refreshHz") {
+            return Err(format!(
+                "Expected TelemetryPanel.attributes to contain 'refreshHz', got {:?}",
+                panel.attributes
+            ));
+        }
+        if !panel.actions.iter().any(|a| a.name == "updateTelemetry") {
+            return Err(format!(
+                "Expected TelemetryPanel.actions to contain 'updateTelemetry', got {:?}",
+                panel.actions
+            ));
+        }
+        if !panel
+            .satisfied_requirements
+            .iter()
+            .any(|r| r == "REQ-UI-TELEM-01")
+        {
+            return Err(format!(
+                "Expected TelemetryPanel.satisfied_requirements to contain 'REQ-UI-TELEM-01', got {:?}",
+                panel.satisfied_requirements
+            ));
+        }
+        if !panel
+            .constraints
+            .iter()
+            .any(|c| c.expression.contains("sample >= 0.0"))
+        {
+            return Err(format!(
+                "Expected TelemetryPanel.constraints to contain expression 'sample >= 0.0', got {:?}",
+                panel.constraints
+            ));
+        }
+        if panel.doc.as_deref() != Some("Primary telemetry panel widget.") {
+            return Err(format!(
+                "Expected TelemetryPanel.doc to be preserved, got {:?}",
+                panel.doc
             ));
         }
         Ok(())
