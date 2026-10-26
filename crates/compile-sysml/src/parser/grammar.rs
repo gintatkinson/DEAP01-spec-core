@@ -3971,12 +3971,32 @@ pub fn discover_sysml_files(dir: &Path) -> Vec<PathBuf> {
         return Vec::new();
     }
 
+    const EXCLUDED_DIRS: &[&str] = &[
+        "target",
+        "node_modules",
+        "build",
+        "Pods",
+        "vendor",
+        "dist",
+        "ephemeral",
+        "generated",
+    ];
+
     let mut files = Vec::new();
     for entry in WalkDir::new(dir)
         .into_iter()
         .filter_entry(|e| {
+            if e.depth() == 0 {
+                return true;
+            }
             let file_name = e.file_name().to_string_lossy();
-            !file_name.starts_with('.') && !file_name.starts_with('#')
+            if file_name.starts_with('.') || file_name.starts_with('#') {
+                return false;
+            }
+            if e.file_type().is_dir() && EXCLUDED_DIRS.contains(&file_name.as_ref()) {
+                return false;
+            }
+            true
         })
         .filter_map(|e| e.ok())
     {
@@ -5644,6 +5664,55 @@ package StateMachinePkg {
         assert_eq!(tr3.guard.as_deref(), Some("pitch_deg > 15.0"));
         assert_eq!(tr3.effect.as_deref(), Some("EngageBackup"));
 
+        Ok(())
+    }
+
+    /// Verifies that `discover_sysml_files` allows a `.`-prefixed root directory at depth 0 while excluding `target/` and hidden directories at depth > 0.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_discover_sysml_files_allows_dot_root_and_excludes_target` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic traversal over `dir` when `dir` starts with `.` and prunes `target/` and hidden subdirectories.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked within a valid test execution context for `test_discover_sysml_files_allows_dot_root_and_excludes_target`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts only canonical `.sysml` files outside `target/` and `.hidden/` are returned.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over directory entries.
+    /// - Space Complexity: O(N) bounded auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `test_discover_sysml_files_allows_dot_root_and_excludes_target`.
+    /// - State: Cleans up temporary test directory deterministically.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `PARSER-GRAMMAR`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-DISCOVER-SYSML-FILES] | SysML v2: TestCaseDef(test_discover_sysml_files_allows_dot_root_and_excludes_target)
+    #[test]
+    fn test_discover_sysml_files_allows_dot_root_and_excludes_target() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir().join(format!(".deap_test_discover_sysml_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        let schema_dir = temp_dir.join("schema");
+        let target_dir = temp_dir.join("target").join("debug");
+        let hidden_dir = temp_dir.join(".pipeline");
+        fs::create_dir_all(&schema_dir)?;
+        fs::create_dir_all(&target_dir)?;
+        fs::create_dir_all(&hidden_dir)?;
+
+        let valid_sysml = schema_dir.join("model.sysml");
+        fs::write(&valid_sysml, "package P {}\n")?;
+        fs::write(target_dir.join("cached.sysml"), "package Cached {}\n")?;
+        fs::write(hidden_dir.join("schema.sysml"), "package Hidden {}\n")?;
+
+        let discovered = discover_sysml_files(&temp_dir);
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        assert_eq!(discovered, vec![valid_sysml]);
         Ok(())
     }
 }

@@ -294,6 +294,7 @@ fn clean_normative_text(raw: &str) -> String {
     let text = text.replace('`', "");
     let text = text.replace('$', "");
     let text = strip_latex_math_commands(&text, Some(&["mathbf", "mathcal", "text", "oint"]));
+    let text = text.replace('\\', "");
     let mut cleaned = collapse_whitespace(&text);
     cleaned = cleaned.replace('"', "\\\"");
 
@@ -355,6 +356,12 @@ fn extract_normative_statement(content: &str) -> String {
         if found_heading {
             if trimmed.starts_with("##") || trimmed.starts_with("---") {
                 break;
+            }
+            if trimmed.starts_with('|') {
+                if !statement_lines.is_empty() {
+                    break;
+                }
+                continue;
             }
             if !trimmed.is_empty() {
                 statement_lines.push(trimmed);
@@ -443,6 +450,9 @@ fn extract_req_metadata(
 
     for line in content.lines() {
         let trimmed = line.trim();
+        if trimmed.starts_with("## ") {
+            break;
+        }
         if trimmed.starts_with('|') && trimmed.contains('|') {
             let cells: Vec<&str> = trimmed
                 .split('|')
@@ -646,9 +656,19 @@ fn extract_acceptance_criteria(content: &str) -> Vec<(String, String, String)> {
     let lines: Vec<&str> = content.lines().collect();
     let mut i = 0;
     let n = lines.len();
+    let mut in_fence = false;
 
     while i < n {
         let line = lines[i].trim();
+        if line.starts_with("```") || line.starts_with("~~~") {
+            in_fence = !in_fence;
+            i += 1;
+            continue;
+        }
+        if in_fence {
+            i += 1;
+            continue;
+        }
         if let Some((num, raw_title)) = parse_ac_header(line) {
             let ac_num_str = format!("{:02}", num);
             let clean_ac_slug = sanitize_identifier(&raw_title, "Criteria");
@@ -662,7 +682,11 @@ fn extract_acceptance_criteria(content: &str) -> Vec<(String, String, String)> {
 
             while i < n {
                 let cur_line = lines[i].trim();
-                if cur_line.starts_with('#') || cur_line.starts_with("---") {
+                if cur_line.starts_with('#')
+                    || cur_line.starts_with("---")
+                    || cur_line.starts_with("```")
+                    || cur_line.starts_with("~~~")
+                {
                     break;
                 }
                 if !cur_line.is_empty() {
@@ -860,9 +884,24 @@ fn clean_invariant_title(raw: &str) -> String {
     let text = strip_dollar_math_spans(&text);
     // Remove LaTeX commands
     let text = strip_latex_commands(&text);
+    let text = {
+        let trimmed_text = text.trim_start();
+        if let Some((first_tok, rest_after_num)) = trimmed_text.split_once(char::is_whitespace) {
+            if !first_tok.is_empty()
+                && first_tok.chars().any(|c| c.is_ascii_digit())
+                && first_tok.chars().all(|c| c.is_ascii_digit() || c == '.')
+            {
+                rest_after_num.trim_start().to_string()
+            } else {
+                trimmed_text.to_string()
+            }
+        } else {
+            trimmed_text.to_string()
+        }
+    };
 
     // Truncate at common connectors
-    let mut s = text.to_string();
+    let mut s = text;
     for delim in &[" over ", " across ", " for ", " where ", " on ", " satisfying ", " satisfies ", " under "] {
         if let Some(pos) = s.to_ascii_lowercase().find(delim) {
             s = s[..pos].to_string();
@@ -902,7 +941,7 @@ fn clean_invariant_title(raw: &str) -> String {
 fn clean_math_doc(raw: &str) -> String {
     let mut cleaned = collapse_whitespace(raw);
     cleaned = cleaned.replace('\u{2014}', "--");
-    cleaned = cleaned.replace("*/", "* /");
+    cleaned = cleaned.replace("*/", "* /").replace("/*", "/ *");
     cleaned
 }
 
@@ -934,110 +973,157 @@ fn clean_math_doc(raw: &str) -> String {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-INGEST-MD/extract_formal_invariants] | SysML v2: ActionDef(extract_formal_invariants)
 pub fn extract_formal_invariants(content: &str, req_num: &str) -> Vec<ConstraintDef> {
-    let mut sec2_content = "";
-    if let Some(start_pos) = content.find("## 2. Formal Invariant")
+    let mut section_slices: Vec<&str> = Vec::new();
+    if let Some(start_pos) = content
+        .find("## 2. Formal Invariant")
         .or_else(|| content.find("## 2."))
     {
-        let after_start = &content[start_pos..];
+        let after_start = content.get(start_pos..).unwrap_or("");
         if let Some(newline_pos) = after_start.find('\n') {
-            let body = &after_start[newline_pos + 1..];
+            let body = after_start.get(newline_pos + 1..).unwrap_or("");
             let mut end_pos = body.len();
-            for marker in &["\n## 3.", "\n## 3", "\n---\n\n## 3", "\n---\r\n\r\n## 3", "\n---"] {
+            for marker in &[
+                "\n## ",
+                "\n## 3.",
+                "\n## 3",
+                "\n---\n\n## 3",
+                "\n---\r\n\r\n## 3",
+                "\n---",
+            ] {
                 if let Some(p) = body.find(marker) {
                     if p < end_pos {
                         end_pos = p;
                     }
                 }
             }
-            sec2_content = &body[..end_pos];
+            section_slices.push(body.get(..end_pos).unwrap_or(body));
+        }
+    }
+    if let Some(start_pos) = content
+        .find("## 4. Formal")
+        .or_else(|| content.find("## 4. Mathematical"))
+        .or_else(|| content.find("## 4. Safety"))
+    {
+        let after_start = content.get(start_pos..).unwrap_or("");
+        if let Some(newline_pos) = after_start.find('\n') {
+            let body = after_start.get(newline_pos + 1..).unwrap_or("");
+            let mut end_pos = body.len();
+            for marker in &[
+                "\n## ",
+                "\n## 5.",
+                "\n## 5",
+                "\n---\n\n## 5",
+                "\n---\r\n\r\n## 5",
+                "\n---",
+            ] {
+                if let Some(p) = body.find(marker) {
+                    if p < end_pos {
+                        end_pos = p;
+                    }
+                }
+            }
+            section_slices.push(body.get(..end_pos).unwrap_or(body));
         }
     }
 
     let mut invariants = Vec::new();
-    let lines: Vec<&str> = sec2_content.lines().collect();
-    let mut i = 0;
-    let n = lines.len();
-    let mut pending_title: Option<String> = None;
+    for sec_content in section_slices {
+        let lines: Vec<&str> = sec_content.lines().collect();
+        let mut i = 0;
+        let n = lines.len();
+        let mut pending_title: Option<String> = None;
 
-    while i < n {
-        let line = lines[i].trim();
-        if line.is_empty() {
-            i += 1;
-            continue;
-        }
-
-        let lower = line.to_ascii_lowercase();
-        let is_candidate_title = (lower.contains("invariant")
-            || lower.contains("contract")
-            || lower.contains("gate")
-            || lower.contains("ordering")
-            || lower.contains("zero diff churn")
-            || lower.contains("determinism")
-            || lower.contains("equivalence")
-            || lower.contains("bound")
-            || line.ends_with(':'))
-            && !lower.starts_with("let ")
-            && !lower.starts_with("where ")
-            && !lower.starts_with("for each")
-            && !lower.starts_with("each ")
-            && !line.starts_with('|')
-            && !line.starts_with("```");
-
-        if is_candidate_title {
-            let cleaned_title = clean_invariant_title(line);
-            if !cleaned_title.is_empty() {
-                pending_title = Some(cleaned_title);
-            }
-        }
-
-        if line.starts_with("```math") {
-            let mut math_lines = Vec::new();
-            i += 1;
-            while i < n && !lines[i].trim().starts_with("```") {
-                let m_line = lines[i].trim();
-                if !m_line.is_empty() {
-                    math_lines.push(m_line);
-                }
-                i += 1;
-            }
-
-            let raw_math = math_lines.join(" ");
-            let math_doc = clean_math_doc(&raw_math);
-
-            let slug = if let Some(ref t) = pending_title {
-                let s = sanitize_identifier(t, "FormalInvariant");
-                if s.is_empty() || s.to_ascii_lowercase() == "invariant" {
-                    "FormalInvariant".to_string()
-                } else {
-                    s
-                }
-            } else {
-                "FormalInvariant".to_string()
+        while i < n {
+            let Some(raw_line) = lines.get(i).copied() else {
+                break;
             };
-
-            let base_name = format!("Invariant_REQ_{}_{}", req_num, slug);
-            let mut inv_name = base_name.clone();
-            let mut suffix = 2;
-            while invariants.iter().any(|inv: &ConstraintDef| inv.name == inv_name) {
-                inv_name = format!("{}_{}", base_name, suffix);
-                suffix += 1;
+            let line = raw_line.trim();
+            if line.is_empty() {
+                i += 1;
+                continue;
             }
 
-            invariants.push(ConstraintDef {
-                name: inv_name,
-                doc: if math_doc.is_empty() {
-                    None
+            let lower = line.to_ascii_lowercase();
+            let is_candidate_title = (lower.contains("invariant")
+                || lower.contains("contract")
+                || lower.contains("gate")
+                || lower.contains("ordering")
+                || lower.contains("zero diff churn")
+                || lower.contains("determinism")
+                || lower.contains("equivalence")
+                || lower.contains("bound")
+                || line.ends_with(':')
+                || line.starts_with("### "))
+                && !lower.starts_with("let ")
+                && !lower.starts_with("where ")
+                && !lower.starts_with("for each")
+                && !lower.starts_with("each ")
+                && !line.starts_with('|')
+                && !line.starts_with("```")
+                && !line.starts_with("$$");
+
+            if is_candidate_title {
+                let cleaned_title = clean_invariant_title(line);
+                if !cleaned_title.is_empty() {
+                    pending_title = Some(cleaned_title);
+                }
+            }
+
+            if line.starts_with("```math") || line == "$$" {
+                let closing_fence = if line == "$$" { "$$" } else { "```" };
+                let mut math_lines = Vec::new();
+                i += 1;
+                while let Some(m_raw) = lines.get(i).copied() {
+                    let m_line = m_raw.trim();
+                    if (closing_fence == "$$" && m_line == "$$")
+                        || (closing_fence == "```" && m_line.starts_with("```"))
+                    {
+                        break;
+                    }
+                    if !m_line.is_empty() {
+                        math_lines.push(m_line);
+                    }
+                    i += 1;
+                }
+
+                let raw_math = math_lines.join(" ");
+                let math_doc = clean_math_doc(&raw_math);
+
+                let slug = if let Some(ref t) = pending_title {
+                    let s = sanitize_identifier(t, "FormalInvariant");
+                    if s.is_empty() || s.eq_ignore_ascii_case("invariant") {
+                        "FormalInvariant".to_string()
+                    } else {
+                        s
+                    }
                 } else {
-                    Some(math_doc)
-                },
-                is_assertion: false,
-                ..Default::default()
-            });
+                    "FormalInvariant".to_string()
+                };
 
-            pending_title = None;
+                let base_name = format!("Invariant_REQ_{}_{}", req_num, slug);
+                let mut inv_name = base_name.clone();
+                let mut suffix = 2;
+                while invariants.iter().any(|inv: &ConstraintDef| inv.name == inv_name) {
+                    inv_name = format!("{}_{}", base_name, suffix);
+                    suffix += 1;
+                }
+
+                invariants.push(ConstraintDef {
+                    name: inv_name,
+                    doc: if math_doc.is_empty() {
+                        None
+                    } else {
+                        Some(math_doc)
+                    },
+                    is_assertion: false,
+                    ..Default::default()
+                });
+
+                pending_title = None;
+            }
+
+            i += 1;
         }
-
-        i += 1;
     }
 
     if invariants.is_empty() {
@@ -1380,17 +1466,77 @@ fn strip_pkg_words(s: &str) -> String {
 /// Realises: [REQ-TRANSLATORS-MARKDOWN-STRIP-COMP-PREFIX] | SysML v2: ActionDef(strip_comp_prefix)
 fn strip_comp_prefix(header: &str) -> String {
     const PREFIXES: &[&str] = &["component", "part", "subsystem", "assembly", "block", "module"];
-    let lower = header.to_ascii_lowercase();
+    let mut candidate = header.trim();
+    if let Some((first_tok, rest_after_num)) = candidate.split_once(char::is_whitespace) {
+        if !first_tok.is_empty()
+            && first_tok.chars().any(|c| c.is_ascii_digit())
+            && first_tok.chars().all(|c| c.is_ascii_digit() || c == '.')
+        {
+            candidate = rest_after_num.trim_start();
+        }
+    }
+    let lower = candidate.to_ascii_lowercase();
     for &prefix in PREFIXES {
         if lower.starts_with(prefix) {
-            let rest = &header[prefix.len()..];
-            let trimmed = rest.trim_start();
-            if let Some(after_sep) = trimmed.strip_prefix(':').or_else(|| trimmed.strip_prefix('-')) {
-                return after_sep.trim().to_string();
+            if let Some(rest) = candidate.get(prefix.len()..) {
+                let trimmed = rest.trim_start();
+                if let Some(after_sep) = trimmed.strip_prefix(':').or_else(|| trimmed.strip_prefix('-')) {
+                    return after_sep.trim().to_string();
+                }
             }
         }
     }
-    header.trim().to_string()
+    candidate.trim().to_string()
+}
+
+/// Sanitizes and wraps a raw Markdown cell string as a valid SysML v2 double-quoted string literal.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `escape_sysml_string_literal` in `crates/ingest-sysml/src/translators/markdown.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strips outer Markdown inline code backticks or outer quotes and escapes all interior `\` and `"` characters so the returned `"..."` literal is lexically closed under `Scanner::scan_string`.
+///
+/// ## 3. Preconditions
+/// - `raw: &str` is a valid UTF-8 slice extracted from a Markdown table cell.
+///
+/// ## 4. Postconditions
+/// - Returns a double-quoted `String` literal with zero unescaped interior `"` or `\` characters.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) single pass over `raw`.
+/// - Space Complexity: O(N) bounded output string allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total function over `&str` with zero panics or slice indexing.
+/// - State: Pure stateless transformation.
+/// - Action: Executes deterministically in a single loop.
+/// - Resource: Bounded heap allocation proportional to `raw.len()`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-TRANSLATORS-MARKDOWN-ESCAPE-SYSML-STRING-LITERAL] | SysML v2: ActionDef(escape_sysml_string_literal)
+fn escape_sysml_string_literal(raw: &str) -> String {
+    let mut s = raw.trim().trim_end_matches(';').trim();
+    if let Some(inner) = s.strip_prefix('`').and_then(|v| v.strip_suffix('`')) {
+        s = inner.trim();
+    }
+    if let Some(inner) = s.strip_prefix('"').and_then(|v| v.strip_suffix('"')) {
+        s = inner;
+    } else if let Some(inner) = s.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')) {
+        s = inner;
+    }
+    let mut out = String::with_capacity(s.len() + 4);
+    out.push('"');
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' | '\r' => out.push(' '),
+            other => out.push(other),
+        }
+    }
+    out.push('"');
+    out
 }
 
 /// Deterministic translator that transforms Level 0 OEM Markdown requirements into canonical SysML v2 ASTs.
@@ -1481,38 +1627,95 @@ impl MarkdownTranslator {
     /// Realises: [REQ-SYSML-INGEST-MD/parse_frontmatter] | SysML v2: ActionDef(MarkdownTranslator::parse_frontmatter)
     pub fn parse_frontmatter(content: &str) -> (Frontmatter, &str) {
         let trimmed = content.trim_start();
-        if !trimmed.starts_with("---") {
-            return (Frontmatter::default(), content);
+        if let Some(after_opening) = trimmed.strip_prefix("---") {
+            let after_opening_trimmed = after_opening.trim_start_matches(|c| c == '\r' || c == '\n');
+            if let Some(close_idx) = after_opening_trimmed.find("\n---") {
+                let yaml_block = &after_opening_trimmed[..close_idx];
+                let rest = &after_opening_trimmed[close_idx + 4..];
+                let rest_trimmed = rest.trim_start_matches(|c| c == '\r' || c == '\n');
+
+                let mut fm = Frontmatter::default();
+                for line in yaml_block.lines() {
+                    let l = line.trim();
+                    if let Some(colon_idx) = l.find(':') {
+                        let key = l[..colon_idx].trim();
+                        let val = l[colon_idx + 1..].trim().trim_matches('"').trim_matches('\'').trim();
+                        match key {
+                            "id" => fm.id = Some(val.to_string()),
+                            "title" => fm.title = Some(val.to_string()),
+                            "subsystem" => fm.subsystem = Some(val.to_string()),
+                            "uuidv5" => fm.uuidv5 = Some(val.to_string()),
+                            _ => {}
+                        }
+                    }
+                }
+
+                return (fm, rest_trimmed);
+            }
         }
 
-        // Find closing fence `\n---`
-        let after_opening = &trimmed[3..];
-        let after_opening_trimmed = after_opening.trim_start_matches(|c| c == '\r' || c == '\n');
-        if let Some(close_idx) = after_opening_trimmed.find("\n---") {
-            let yaml_block = &after_opening_trimmed[..close_idx];
-            let rest = &after_opening_trimmed[close_idx + 4..];
-            let rest_trimmed = rest.trim_start_matches(|c| c == '\r' || c == '\n');
-
-            let mut fm = Frontmatter::default();
-            for line in yaml_block.lines() {
-                let l = line.trim();
-                if let Some(colon_idx) = l.find(':') {
-                    let key = l[..colon_idx].trim();
-                    let val = l[colon_idx + 1..].trim().trim_matches('"').trim_matches('\'').trim();
-                    match key {
-                        "id" => fm.id = Some(val.to_string()),
-                        "title" => fm.title = Some(val.to_string()),
-                        "subsystem" => fm.subsystem = Some(val.to_string()),
-                        "uuidv5" => fm.uuidv5 = Some(val.to_string()),
+        let mut fm = Frontmatter::default();
+        let mut blueprint_id: Option<String> = None;
+        let mut h1_title: Option<String> = None;
+        for line in content.lines() {
+            let l = line.trim();
+            if l.starts_with("## ") {
+                break;
+            }
+            if let Some(rest) = l.strip_prefix("# ") {
+                let t = rest.trim();
+                if !t.is_empty() && h1_title.is_none() {
+                    h1_title = Some(t.to_string());
+                }
+                continue;
+            }
+            if l.starts_with('|') && l.contains('|') {
+                let cells: Vec<&str> = l.trim_matches('|').split('|').map(str::trim).collect();
+                if cells.len() == 2 && !cells.iter().all(|c| is_table_delimiter_cell(c)) {
+                    let (Some(&raw_key), Some(&raw_val)) = (cells.first(), cells.get(1)) else {
+                        continue;
+                    };
+                    let key = normalize_col(raw_key);
+                    let val = clean_meta_val(raw_val)
+                        .trim()
+                        .trim_matches('"')
+                        .trim_matches('\'')
+                        .trim()
+                        .to_string();
+                    if val.is_empty() {
+                        continue;
+                    }
+                    match key.as_str() {
+                        "requirement_id" | "id" if fm.id.is_none() => {
+                            let first_req = find_req_ids(&val).first().copied();
+                            fm.id = Some(first_req.unwrap_or(val.as_str()).to_string());
+                        }
+                        "blueprint_id" if blueprint_id.is_none() => {
+                            blueprint_id = Some(val);
+                        }
+                        "title" if fm.title.is_none() => {
+                            fm.title = Some(val);
+                        }
+                        "subsystem" | "target_crates" if fm.subsystem.is_none() => {
+                            fm.subsystem = Some(val);
+                        }
+                        "uuidv5" | "deterministic_uuidv5" if fm.uuidv5.is_none() => {
+                            fm.uuidv5 = Some(val);
+                        }
                         _ => {}
                     }
                 }
             }
-
-            return (fm, rest_trimmed);
         }
 
-        (Frontmatter::default(), content)
+        if fm.id.is_none() {
+            fm.id = blueprint_id.clone();
+        }
+        if fm.id.is_some() && fm.title.is_none() {
+            fm.title = blueprint_id.or(h1_title);
+        }
+
+        (fm, content)
     }
 
     /// Translates a single Markdown document string into a canonical SysML v2 `PackageDef`.
@@ -1660,7 +1863,11 @@ impl MarkdownTranslator {
 
         // Step 6: Extract formal RequirementDef if this is a requirement document
         if let Some(ref req_id) = frontmatter.id {
-            if req_id.starts_with("REQ-") || req_id.starts_with("REQ_") {
+            if req_id.starts_with("REQ-")
+                || req_id.starts_with("REQ_")
+                || req_id.starts_with("BP-")
+                || req_id.starts_with("BP_")
+            {
                 let sub_str = frontmatter.subsystem.as_deref().unwrap_or("").trim();
                 let parent_pkg_name = if !sub_str.is_empty() {
                     sanitize_identifier(sub_str, &pkg.name)
@@ -2082,12 +2289,78 @@ impl MarkdownTranslator {
             tbls.clear();
         };
 
+        let has_explicit_comp_prefix = |header: &str| -> bool {
+            const PREFIXES: &[&str] = &["component", "part", "subsystem", "assembly", "block", "module"];
+            let mut candidate = header.trim();
+            if let Some((first_tok, rest_after_num)) = candidate.split_once(char::is_whitespace) {
+                if !first_tok.is_empty()
+                    && first_tok.chars().any(|c| c.is_ascii_digit())
+                    && first_tok.chars().all(|c| c.is_ascii_digit() || c == '.')
+                {
+                    candidate = rest_after_num.trim_start();
+                }
+            }
+            let lower = candidate.to_ascii_lowercase();
+            for &prefix in PREFIXES {
+                if lower.starts_with(prefix) {
+                    if let Some(rest) = candidate.get(prefix.len()..) {
+                        let trimmed = rest.trim_start();
+                        if trimmed.starts_with(':') || trimmed.starts_with('-') {
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        };
+
+        let doc_has_explicit_comp_headings = {
+            let mut in_fence = false;
+            let mut found = false;
+            for l in &lines {
+                let t = l.trim();
+                if t.starts_with("```") || t.starts_with("~~~") {
+                    in_fence = !in_fence;
+                    continue;
+                }
+                if in_fence {
+                    continue;
+                }
+                let hc = t.chars().take_while(|&c| c == '#').count();
+                if (2..=4).contains(&hc) {
+                    let after = &t[hc..];
+                    if after.starts_with(char::is_whitespace) && has_explicit_comp_prefix(after.trim()) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            found
+        };
+
         let mut i = 0;
         let n = lines.len();
+        let mut in_code_block = false;
 
         while i < n {
             let line = lines[i];
             let line_str = line.trim();
+
+            if line_str.starts_with("```") || line_str.starts_with("~~~") {
+                if in_table {
+                    flush_table(
+                        &mut in_table, &mut table_raw_headers, &mut table_norm_headers,
+                        &mut table_units, &mut table_rows, &mut current_tables,
+                    );
+                }
+                in_code_block = !in_code_block;
+                i += 1;
+                continue;
+            }
+            if in_code_block {
+                i += 1;
+                continue;
+            }
 
             // Heading 1 detection: # <PackageName>
             let is_h1 = if let Some(rest) = line_str.strip_prefix('#') {
@@ -2182,15 +2455,30 @@ impl MarkdownTranslator {
                     || clean_header_key.starts_with("ac ")
                     || clean_header_key.starts_with("acceptance criteria");
 
-                let is_functional = is_ac || NON_COMPONENT_SECTION_KEYWORDS.iter().any(|&kw| {
-                    clean_header_key == *kw
-                        || clean_header_key.starts_with(&format!("{} ", kw))
-                        || clean_header_key.ends_with(&format!(" {}", kw))
-                });
+                let explicit_comp = has_explicit_comp_prefix(raw_header);
+                let is_numbered_non_comp = !explicit_comp
+                    && raw_header
+                        .trim()
+                        .split_once(char::is_whitespace)
+                        .is_some_and(|(first_tok, _)| {
+                            !first_tok.is_empty()
+                                && first_tok.chars().any(|c| c.is_ascii_digit())
+                                && first_tok.chars().all(|c| c.is_ascii_digit() || c == '.')
+                        });
+                let padded_key = format!(" {} ", clean_header_key);
+                let is_functional = !explicit_comp
+                    && (is_ac
+                        || is_numbered_non_comp
+                        || NON_COMPONENT_SECTION_KEYWORDS
+                            .iter()
+                            .any(|&kw| padded_key.contains(&format!(" {} ", kw))));
 
                 if is_ac {
                     current_component_target = None;
-                } else if is_functional {
+                } else if has_explicit_comp_prefix(raw_header) {
+                    let comp_cand = strip_comp_prefix(raw_header);
+                    current_component_target = Some(comp_cand);
+                } else if doc_has_explicit_comp_headings || is_functional {
                     if level <= 2 {
                         current_component_target = None;
                     }
@@ -2450,8 +2738,7 @@ impl MarkdownTranslator {
                 } else if val.eq_ignore_ascii_case("true") || val.eq_ignore_ascii_case("false") {
                     ("Boolean".to_string(), val.to_ascii_lowercase())
                 } else {
-                    let clean_str = val.trim_matches(|c| c == '"' || c == '\'' || c == ';' || c == ' ');
-                    ("String".to_string(), format!("\"{}\"", clean_str))
+                    ("String".to_string(), escape_sysml_string_literal(val))
                 };
 
                 let doc_str = compose_grounded_doc("", &row_citation, &eff_unit);
@@ -2569,7 +2856,7 @@ impl MarkdownTranslator {
             }
             .to_string();
 
-            let raw_type = type_col.and_then(|c| row.get(c)).map_or("", |v| v.trim());
+            let raw_type = type_col.and_then(|c| row.get(c)).map_or("", |v| v.trim().trim_matches('`').trim());
             let type_name = if !raw_type.is_empty() {
                 match raw_type.to_ascii_lowercase().as_str() {
                     "float" | "float32" | "float64" | "double" | "real" => "Real".to_string(),
@@ -2806,7 +3093,11 @@ impl MarkdownTranslator {
             }
 
             let expression = if let Some(c) = constraint_col {
-                row.get(c).map_or("", |v| v.trim()).trim_end_matches(';').trim().to_string()
+                row.get(c)
+                    .map_or("", |v| v.trim().trim_matches('`').trim())
+                    .trim_end_matches(';')
+                    .trim()
+                    .to_string()
             } else if let (Some(mn), Some(mx)) = (min_val, max_val) {
                 format!("{} >= {} and {} <= {}", param_name, mn, param_name, mx)
             } else if let Some(mn) = min_val {
@@ -2839,14 +3130,30 @@ impl MarkdownTranslator {
                 }
             }
 
-            let raw_type = type_col.and_then(|c| row.get(c)).map_or("", |v| v.trim());
+            let raw_type = type_col
+                .and_then(|c| row.get(c))
+                .map_or("", |v| v.trim().trim_matches('`').trim());
             let type_name = if !raw_type.is_empty() {
                 let low = raw_type.to_ascii_lowercase();
-                if low.contains("int") {
+                if matches!(
+                    low.as_str(),
+                    "int"
+                        | "integer"
+                        | "usize"
+                        | "u64"
+                        | "u32"
+                        | "u16"
+                        | "u8"
+                        | "isize"
+                        | "i64"
+                        | "i32"
+                        | "i16"
+                        | "i8"
+                ) {
                     "Integer".to_string()
-                } else if low.contains("bool") {
+                } else if matches!(low.as_str(), "bool" | "boolean") {
                     "Boolean".to_string()
-                } else if low.contains("str") {
+                } else if matches!(low.as_str(), "str" | "string") {
                     "String".to_string()
                 } else {
                     sanitize_identifier(raw_type, "Real")
@@ -2855,15 +3162,17 @@ impl MarkdownTranslator {
                 "Real".to_string()
             };
 
-            let raw_def = def_col.and_then(|c| row.get(c)).map_or("", |v| v.trim());
+            let raw_def = def_col
+                .and_then(|c| row.get(c))
+                .map_or("", |v| v.trim().trim_matches('`').trim());
             let def_val = if !raw_def.is_empty() {
                 let (num_v, _, int_v) = parse_numeric_with_unit(raw_def);
-                if int_v.is_some() && type_name == "Integer" {
-                    Some(int_v.unwrap().to_string())
+                if let Some(i_val) = int_v.filter(|_| type_name == "Integer") {
+                    Some(i_val.to_string())
                 } else if let Some(n_v) = num_v {
                     Some(n_v.to_string())
                 } else {
-                    Some(format!("\"{}\"", raw_def.trim()))
+                    Some(escape_sysml_string_literal(raw_def))
                 }
             } else {
                 None
@@ -2922,15 +3231,34 @@ impl MarkdownTranslator {
         pkg: &mut PackageDef,
     ) {
         let headers = &table.normalized_headers;
-        if headers.is_empty() {
+        if headers.is_empty()
+            || headers.iter().any(|h| {
+                h.contains("derivation_grade")
+                    || h.contains("ssot_input_anchor")
+                    || h.contains("methodology_citation")
+                    || h.contains("claim_requirement")
+                    || h.contains("caveat_downstream_impact")
+            })
+        {
             return;
         }
 
-        let k_col = &headers[0];
-        let v_col = if headers.len() > 1 {
-            &headers[1]
+        let Some(k_col) = headers.first() else {
+            return;
+        };
+        let type_col = headers
+            .iter()
+            .find(|h| ["type", "data_type", "attribute_type", "value_type"].contains(&h.as_str()));
+        let def_col = headers
+            .iter()
+            .find(|h| ["default", "default_value", "value", "initial_value", "nominal"].contains(&h.as_str()));
+
+        let v_col = if type_col.is_some() && def_col.is_some() {
+            def_col.unwrap_or(k_col)
+        } else if let Some(second) = headers.get(1) {
+            second
         } else {
-            &headers[0]
+            k_col
         };
 
         let mut d_col: Option<&String> = headers
@@ -2940,9 +3268,13 @@ impl MarkdownTranslator {
             .iter()
             .find(|h| ["unit", "units", "engineering_units"].contains(&h.as_str()));
 
-        if d_col.is_none() && headers.len() > 2 {
-            for h in &headers[2..] {
-                if !PROVENANCE_COLUMNS.contains(&h.as_str()) && Some(h) != unit_col {
+        if d_col.is_none() {
+            for h in headers.iter().skip(2) {
+                if !PROVENANCE_COLUMNS.contains(&h.as_str())
+                    && Some(h) != unit_col
+                    && Some(h) != type_col
+                    && Some(h) != def_col
+                {
                     d_col = Some(h);
                     break;
                 }
@@ -2960,26 +3292,95 @@ impl MarkdownTranslator {
             let cit = extract_provenance_citation(row, headers);
             let raw_desc = d_col.and_then(|c| row.get(c)).map_or("", |v| v.trim());
 
-            let (num_v, parsed_unit, int_v) = parse_numeric_with_unit(raw_v);
-            let row_unit = unit_col.and_then(|c| row.get(c)).map_or("", |v| v.trim());
+            let clean_v = raw_v.trim_matches('`').trim();
+            let (num_v, parsed_unit, int_v) = {
+                let (nv, pu, iv) = parse_numeric_with_unit(clean_v);
+                let is_non_unit_ident = pu.as_deref().is_some_and(|u| {
+                    !u.is_empty()
+                        && !clean_v.contains(char::is_whitespace)
+                        && (u.contains('-')
+                            || (!u.starts_with('^')
+                                && !u.starts_with('/')
+                                && u.chars().any(|c| c.is_ascii_digit())))
+                });
+                if is_non_unit_ident {
+                    (None, None, None)
+                } else {
+                    (nv, pu, iv)
+                }
+            };
+            let row_unit = unit_col
+                .and_then(|c| row.get(c))
+                .map_or("", |v| v.trim().trim_matches('`').trim());
             let unit = if !row_unit.is_empty() {
                 row_unit.to_string()
             } else {
                 parsed_unit.unwrap_or_default()
             };
 
-            let (type_name, def_val) = if let Some(i_val) = int_v {
-                if !raw_v.contains('.') {
+            let explicit_type = type_col
+                .and_then(|c| row.get(c))
+                .map_or("", |v| v.trim().trim_matches('`').trim());
+
+            let (type_name, def_val) = if !explicit_type.is_empty() {
+                let low = explicit_type.to_ascii_lowercase();
+                if matches!(low.as_str(), "bool" | "boolean") {
+                    let b_val = if clean_v.eq_ignore_ascii_case("true")
+                        || clean_v.eq_ignore_ascii_case("false")
+                    {
+                        Some(clean_v.to_ascii_lowercase())
+                    } else {
+                        None
+                    };
+                    ("Boolean".to_string(), b_val)
+                } else if matches!(
+                    low.as_str(),
+                    "int"
+                        | "integer"
+                        | "usize"
+                        | "u64"
+                        | "u32"
+                        | "u16"
+                        | "u8"
+                        | "isize"
+                        | "i64"
+                        | "i32"
+                        | "i16"
+                        | "i8"
+                ) {
+                    let i_str = if let Some(i_val) = int_v {
+                        Some(i_val.to_string())
+                    } else {
+                        clean_v.parse::<i64>().ok().map(|v| v.to_string())
+                    };
+                    ("Integer".to_string(), i_str)
+                } else if matches!(low.as_str(), "real" | "float" | "double" | "f64" | "f32") {
+                    let r_str = if let Some(n_val) = num_v {
+                        Some(n_val.to_string())
+                    } else {
+                        clean_v.parse::<f64>().ok().map(|v| v.to_string())
+                    };
+                    ("Real".to_string(), r_str)
+                } else {
+                    let s_val = if !clean_v.is_empty() {
+                        Some(escape_sysml_string_literal(clean_v))
+                    } else {
+                        None
+                    };
+                    ("String".to_string(), s_val)
+                }
+            } else if let Some(i_val) = int_v {
+                if !clean_v.contains('.') {
                     ("Integer".to_string(), Some(i_val.to_string()))
                 } else {
-                    ("Real".to_string(), Some(num_v.unwrap().to_string()))
+                    ("Real".to_string(), Some(num_v.unwrap_or(i_val as f64).to_string()))
                 }
             } else if let Some(n_val) = num_v {
                 ("Real".to_string(), Some(n_val.to_string()))
-            } else if raw_v.eq_ignore_ascii_case("true") || raw_v.eq_ignore_ascii_case("false") {
-                ("Boolean".to_string(), Some(raw_v.to_ascii_lowercase()))
-            } else if !raw_v.is_empty() {
-                ("String".to_string(), Some(format!("\"{}\"", raw_v.trim())))
+            } else if clean_v.eq_ignore_ascii_case("true") || clean_v.eq_ignore_ascii_case("false") {
+                ("Boolean".to_string(), Some(clean_v.to_ascii_lowercase()))
+            } else if !clean_v.is_empty() {
+                ("String".to_string(), Some(escape_sysml_string_literal(clean_v)))
             } else {
                 ("String".to_string(), None)
             };
@@ -3036,7 +3437,13 @@ impl MarkdownTranslator {
         target_part: Option<&mut PartDef>,
         pkg: &mut PackageDef,
     ) {
-        if table.normalized_headers.len() >= 2 {
+        let is_prop_header = (2..=6).contains(&table.normalized_headers.len())
+            && table.normalized_headers.first().is_some_and(|first| {
+                ["property", "parameter", "attribute", "key", "field", "name"]
+                    .iter()
+                    .any(|k| first.contains(k))
+            });
+        if (2..=3).contains(&table.normalized_headers.len()) || is_prop_header {
             self.process_properties_table(table, target_part, pkg);
         }
     }

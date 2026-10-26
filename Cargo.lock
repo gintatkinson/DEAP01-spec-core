@@ -605,7 +605,9 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "clap",
+ "compile-sysml",
  "deap-core",
+ "ingest-sysml",
  "pulldown-cmark",
  "rayon",
  "serde",

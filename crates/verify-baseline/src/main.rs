@@ -572,8 +572,8 @@ fn main() {
     if let Some(cmd) = cli.command {
         match cmd {
             Subcommands::CommitMsg(args) => {
-                if let Err(code) = commit_msg::run_check_commit_msg(&args) {
-                    process::exit(code);
+                if commit_msg::run_check_commit_msg(&args).is_err() {
+                    process::exit(1);
                 }
             }
             Subcommands::OutputIntegrity(args) => {
@@ -617,8 +617,8 @@ fn main() {
             gate: cli.gate,
         };
 
-        if let Err(code) = run(&options) {
-            process::exit(code);
+        if run(&options).is_err() {
+            process::exit(1);
         }
     }
 }
@@ -640,5 +640,7 @@ mod tests {
         assert!(src.contains("/// ## 1. Safety Intent & Regulatory Scope"));
         assert!(src.contains("/// ## 7. Realization & Traceability"));
         assert!(src.contains("/// Realises: [REQ-VERIFY-BASELINE-MAIN]"));
+        let prod_src = src.split("#[cfg(test)]").next().unwrap_or("");
+        assert!(!prod_src.contains("process::exit(0)"));
     }
 }

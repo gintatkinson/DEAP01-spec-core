@@ -2082,14 +2082,31 @@ pub fn discover_source_files(
 
     let mut files = Vec::new();
     for entry_res in WalkDir::new(root)
+        .follow_links(false)
         .sort_by_file_name()
         .into_iter()
         .filter_entry(|e| {
+            if e.depth() == 0 {
+                return true;
+            }
+            let dname = e.file_name().to_string_lossy();
+            if dname.starts_with('.') || dname.starts_with('#') {
+                return false;
+            }
             if e.file_type().is_dir() {
-                let dname = e.file_name().to_string_lossy();
                 !matches!(
                     dname.as_ref(),
-                    "target" | ".git" | "build" | "Pods" | "ephemeral" | ".dart_tool" | "generated"
+                    "target"
+                        | "node_modules"
+                        | "build"
+                        | "Pods"
+                        | "ephemeral"
+                        | "generated"
+                        | "vendor"
+                        | "dist"
+                        | "tests"
+                        | "benches"
+                        | "examples"
                 )
             } else {
                 true
@@ -5281,6 +5298,60 @@ impl ComponentAlpha {
             a.name == "process_signal" && a.in_params.len() == 1 && a.out_params.len() == 1
         }) {
             return Err("Missing 'process_signal' action on ComponentAlpha PartDef".to_string());
+        }
+        Ok(())
+    }
+
+    /// Verifies that `discover_source_files` allows `.`-prefixed root directories while excluding `.cargo`, `target`, `node_modules`, and `tests` subdirectories.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_discover_source_files_excludes_hidden_caches_and_target`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Ensures bounded O(F log F) source discovery that never traverses hidden dependency caches or build/test trees.
+    ///
+    /// ## 3. Preconditions
+    /// - Writable system temporary directory exists.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when only canonical `src/lib.rs` is discovered and `.cargo/`, `target/`, and `tests/` files are excluded.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(F log F) over fixture entries.
+    /// - Space Complexity: O(F) auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates filesystem errors via `Result<(), String>`.
+    /// - State: Removes temporary directory before returning.
+    /// - Action: Zero panics or unwraps.
+    /// - Resource: Bounded temporary fixture directory.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-DISCOVER-SOURCE-FILES]
+    #[test]
+    fn test_discover_source_files_excludes_hidden_caches_and_target() -> Result<(), String> {
+        let temp_dir = std::env::temp_dir().join(format!(".deap_test_src_discover_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        let src_dir = temp_dir.join("src");
+        let cargo_cache_dir = temp_dir.join(".cargo").join("registry").join("src");
+        let target_dir = temp_dir.join("target").join("debug");
+        let tests_dir = temp_dir.join("tests");
+        std::fs::create_dir_all(&src_dir).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&cargo_cache_dir).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&tests_dir).map_err(|e| e.to_string())?;
+
+        let valid_rs = src_dir.join("lib.rs");
+        std::fs::write(&valid_rs, "pub struct ValidComponent;\n").map_err(|e| e.to_string())?;
+        std::fs::write(cargo_cache_dir.join("cached.rs"), "pub struct CachedDep;\n").map_err(|e| e.to_string())?;
+        std::fs::write(target_dir.join("build_gen.rs"), "pub struct BuildGen;\n").map_err(|e| e.to_string())?;
+        std::fs::write(tests_dir.join("integration.rs"), "pub struct IntegrationFixture;\n").map_err(|e| e.to_string())?;
+
+        let discovered = discover_source_files(&temp_dir, SourceLanguage::Rust);
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        let files = discovered?;
+        if files != vec![valid_rs] {
+            return Err(format!("Expected only src/lib.rs, got {files:?}"));
         }
         Ok(())
     }

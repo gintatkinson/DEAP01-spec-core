@@ -447,11 +447,42 @@ pub fn discover_schema_targets(
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0001/find_files_with_ext_recursive]
 fn find_files_with_ext(dir: &Path, ext: &str) -> Vec<PathBuf> {
+    const EXCLUDED_DIRS: &[&str] = &[
+        "target",
+        "node_modules",
+        "build",
+        "Pods",
+        "vendor",
+        "dist",
+        "ephemeral",
+        "generated",
+        "epics",
+        "features",
+        "user-stories",
+        "use-cases",
+        "safety",
+        "conops",
+        "interfaces",
+        "management",
+    ];
     let mut results = Vec::new();
     let walker = walkdir::WalkDir::new(dir)
+        .follow_links(false)
         .sort_by_file_name()
         .into_iter()
-        .filter_entry(|e| e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.'));
+        .filter_entry(|e| {
+            if e.depth() == 0 {
+                return true;
+            }
+            let name = e.file_name().to_string_lossy();
+            if name.starts_with('.') || name.starts_with('#') {
+                return false;
+            }
+            if e.file_type().is_dir() && EXCLUDED_DIRS.contains(&name.as_ref()) {
+                return false;
+            }
+            true
+        });
     for entry in walker.flatten() {
         let p = entry.path();
         if p.is_file() {
@@ -721,5 +752,56 @@ mod tests {
             .expect("discover_schema_targets failed with explicit yang hint");
         assert_eq!(hint_fmt, "yang");
         assert_eq!(hint_files.len(), 3);
+    }
+
+    /// Verifies that `find_files_with_ext` excludes `target/`, `node_modules/`, and generated backlog directories (`features/`, `user-stories/`, `epics/`, `use-cases/`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_find_files_with_ext_excludes_build_and_generated_backlog_dirs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Prevents multiplicative re-ingestion of generated specification outputs (`FEAT-*.md`, `US-*.md`) and build caches.
+    ///
+    /// ## 3. Preconditions
+    /// - Writable system temporary directory exists.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts only canonical input schema markdown files are discovered.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(F \log F)$ over fixture entries. Space Complexity: $O(F)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Cleans up temporary directory via `TempDirGuard`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0001/find_files_with_ext_recursive]
+    #[test]
+    fn test_find_files_with_ext_excludes_build_and_generated_backlog_dirs() -> Result<(), Box<dyn std::error::Error>> {
+        let root = std::env::temp_dir().join(format!(
+            ".deap_find_ext_exclusion_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let guard = TempDirGuard(root.clone());
+
+        let designs_dir = guard.0.join("docs").join("designs");
+        let features_dir = guard.0.join("docs").join("features");
+        let stories_dir = guard.0.join("docs").join("user-stories");
+        let target_dir = guard.0.join("target").join("doc");
+        fs::create_dir_all(&designs_dir)?;
+        fs::create_dir_all(&features_dir)?;
+        fs::create_dir_all(&stories_dir)?;
+        fs::create_dir_all(&target_dir)?;
+
+        let blueprint_md = designs_dir.join("blueprint-01.md");
+        fs::write(&blueprint_md, "# Blueprint 01\n")?;
+        fs::write(features_dir.join("FEAT-001.md"), "# Generated Feature\n")?;
+        fs::write(stories_dir.join("US-001.md"), "# Generated Story\n")?;
+        fs::write(target_dir.join("cached.md"), "# Cached Doc\n")?;
+
+        let found = find_files_with_ext(&guard.0, "md");
+        assert_eq!(found, vec![blueprint_md]);
+        Ok(())
     }
 }

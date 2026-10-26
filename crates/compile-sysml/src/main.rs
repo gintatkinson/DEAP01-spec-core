@@ -823,6 +823,16 @@ pub fn resolve_schema_targets(explicit_path: Option<PathBuf>) -> Result<SchemaTa
         } else if path.is_dir() {
             let files = discover_sysml_files(&path);
             if files.is_empty() {
+                if path.file_name().is_some_and(|n| n == "schema") {
+                    let ws_root = path
+                        .parent()
+                        .filter(|p| !p.as_os_str().is_empty())
+                        .unwrap_or_else(|| Path::new("."));
+                    let fallback = ws_root.join(".pipeline").join("schema.sysml");
+                    if fallback.is_file() {
+                        return Ok(SchemaTarget::SingleFile(fallback));
+                    }
+                }
                 return Err(format!("Error: No .sysml files found in directory: {}", path.display()));
             }
             if let [only] = files.as_slice() {
@@ -843,6 +853,11 @@ pub fn resolve_schema_targets(explicit_path: Option<PathBuf>) -> Result<SchemaTa
             }
             return Ok(SchemaTarget::Directory(schema_dir.to_path_buf(), files));
         }
+    }
+
+    let pipeline_fallback = Path::new(".pipeline/schema.sysml");
+    if pipeline_fallback.is_file() {
+        return Ok(SchemaTarget::SingleFile(pipeline_fallback.to_path_buf()));
     }
 
     Err(SCHEMA_REMEDIATION_MESSAGE.to_string())
@@ -1042,5 +1057,49 @@ mod tests {
             cli.emit_flutter_contracts,
             Some(PathBuf::from("app_flutter"))
         );
+    }
+
+    /// Verifies that `resolve_schema_targets` falls back to `<ws>/.pipeline/schema.sysml` when `<ws>/schema/` contains no `.sysml` files.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_resolve_schema_targets_falls_back_to_pipeline_schema`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Resolves `SchemaTarget::SingleFile(<ws>/.pipeline/schema.sysml)` deterministically when `<ws>/schema/` is empty.
+    ///
+    /// ## 3. Preconditions
+    /// - Writable temporary workspace directory exists.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `resolve_schema_targets(Some(schema_dir))` returns `Ok(SchemaTarget::SingleFile(pipeline_schema))`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$ over empty `schema/` fixture. Space Complexity: $O(1)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Cleans up temporary workspace directory deterministically.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-COMPILER-SYSML-RESOLVE-TARGETS]
+    #[test]
+    fn test_resolve_schema_targets_falls_back_to_pipeline_schema() -> Result<(), Box<dyn std::error::Error>> {
+        use super::*;
+        let temp_ws = std::env::temp_dir().join(format!(".deap_test_resolve_schema_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_ws);
+        let schema_dir = temp_ws.join("schema");
+        let pipeline_dir = temp_ws.join(".pipeline");
+        fs::create_dir_all(&schema_dir)?;
+        fs::create_dir_all(&pipeline_dir)?;
+        fs::write(schema_dir.join(".gitkeep"), "")?;
+        let pipeline_schema = pipeline_dir.join("schema.sysml");
+        fs::write(&pipeline_schema, "package FallbackPkg {}\n")?;
+
+        let resolved = resolve_schema_targets(Some(schema_dir));
+        let _ = fs::remove_dir_all(&temp_ws);
+        match resolved {
+            Ok(SchemaTarget::SingleFile(path)) => assert_eq!(path, pipeline_schema),
+            other => panic!("expected SingleFile fallback to .pipeline/schema.sysml, got {:?}", other.err()),
+        }
+        Ok(())
     }
 }

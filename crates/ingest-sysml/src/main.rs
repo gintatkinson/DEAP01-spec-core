@@ -635,6 +635,41 @@ pub fn run_ingestion_with_code(args: CliArgs) -> Result<(), (IngestExitCode, Str
         )
     })?;
 
+    if args.out.ends_with(".pipeline/schema.sysml") {
+        let ws_root = args
+            .out
+            .parent()
+            .and_then(|p| p.parent())
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let upstream_dir = ws_root.join(".pipeline").join("upstream");
+        let schema_dir = ws_root.join("schema");
+        if !upstream_dir.exists() && schema_dir.is_dir() {
+            let has_sysml = fs::read_dir(&schema_dir)
+                .ok()
+                .map(|entries| {
+                    entries.flatten().any(|e| {
+                        e.path().is_file()
+                            && e.path().extension().is_some_and(|ext| ext == "sysml")
+                    })
+                })
+                .unwrap_or(false);
+            if !has_sysml {
+                let model_out = schema_dir.join("model.sysml");
+                write_atomic(&model_out, &sysml_text).map_err(|e| {
+                    (
+                        IngestExitCode::ParseOrIoError,
+                        format!(
+                            "Failed to write downstream schema model to '{}': {}",
+                            model_out.display(),
+                            e
+                        ),
+                    )
+                })?;
+            }
+        }
+    }
+
     // Step 7: Generate and atomically write cryptographic schema digest
     let digest = generate_digest(&pkg, &sysml_text);
     write_digest_atomic(&args.digest, &digest).map_err(|e| {
@@ -707,5 +742,64 @@ mod tests {
     fn test_cli_cache_ast_flag() {
         let parsed = CliArgs::parse_from(vec!["ingest-sysml", "--cache-ast"]);
         assert!(parsed.cache_ast);
+    }
+
+    /// Verifies that `run_ingestion_with_code` populates `schema/model.sysml` in downstream workspaces while keeping `schema/` untouched in upstream workspaces.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_downstream_populates_schema_dir`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves Upstream Clean Landing Zone Invariant when `.pipeline/upstream` exists and populates `schema/model.sysml` when absent.
+    ///
+    /// ## 3. Preconditions
+    /// - Writable temporary workspace directory exists.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `schema/model.sysml` is created in downstream workspace and omitted in upstream workspace.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N)$ over input fixture size. Space Complexity: $O(N)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Cleans up temporary workspace directory deterministically.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0001/run_ingestion_with_code]
+    #[test]
+    fn test_downstream_populates_schema_dir() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_ws = std::env::temp_dir().join(format!(".deap_test_downstream_ingest_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_ws);
+        let schema_dir = temp_ws.join("schema");
+        let pipeline_dir = temp_ws.join(".pipeline");
+        fs::create_dir_all(&schema_dir)?;
+        fs::create_dir_all(&pipeline_dir)?;
+        let input_md = schema_dir.join("spec.md");
+        fs::write(&input_md, "# SubsystemSpec\n\n### FlightActuator\n\n| Attribute | Type |\n| --- | --- |\n| torque | Real |\n")?;
+
+        let make_args = || CliArgs {
+            source: None,
+            schema: Some(input_md.clone()),
+            package: Some("DownstreamPkg".to_string()),
+            format: "markdown".to_string(),
+            language: "auto".to_string(),
+            out: pipeline_dir.join("schema.sysml"),
+            digest: pipeline_dir.join("schema.digest.json"),
+            allowed_parts: None,
+            negative_invariants: None,
+            cache_ast: false,
+        };
+        let res = run_ingestion_with_code(make_args());
+        assert!(res.is_ok(), "downstream ingestion failed: {:?}", res.err());
+        assert!(schema_dir.join("model.sysml").is_file(), "expected schema/model.sysml to be created in downstream workspace");
+
+        // Now verify upstream workspace (.pipeline/upstream exists) does NOT create schema/model.sysml
+        fs::remove_file(schema_dir.join("model.sysml"))?;
+        fs::create_dir_all(pipeline_dir.join("upstream"))?;
+        let res_upstream = run_ingestion_with_code(make_args());
+        let _ = fs::remove_dir_all(&temp_ws);
+        assert!(res_upstream.is_ok(), "upstream ingestion failed: {:?}", res_upstream.err());
+        assert!(!schema_dir.join("model.sysml").exists(), "upstream workspace must keep schema/ clean");
+        Ok(())
     }
 }
