@@ -332,6 +332,7 @@ pub enum TargetScanDir {
     Interfaces,
     Icd,
     Architecture,
+    Designs,
     Epics,
     Features,
     UserStories,
@@ -347,6 +348,7 @@ impl TargetScanDir {
         Self::Interfaces,
         Self::Icd,
         Self::Architecture,
+        Self::Designs,
         Self::Epics,
         Self::Features,
         Self::UserStories,
@@ -384,6 +386,7 @@ impl TargetScanDir {
             Self::Interfaces => "interfaces",
             Self::Icd => "icd",
             Self::Architecture => "architecture",
+            Self::Designs => "designs",
             Self::Epics => "epics",
             Self::Features => "features",
             Self::UserStories => "user-stories",
@@ -448,6 +451,7 @@ impl TargetScanDir {
             | Self::Interfaces
             | Self::Icd
             | Self::Architecture
+            | Self::Designs
             | Self::Epics
             | Self::Features
             | Self::UserStories
@@ -947,8 +951,12 @@ pub fn check_semantic_diagram_ast_parity(repo_root: &Path) -> Result<ParityOutco
     }
 
     let mut errors = Vec::new();
+    let is_upstream = is_upstream_compiler(repo_root);
 
     for &scan_dir in TargetScanDir::ALL {
+        if scan_dir == TargetScanDir::Designs && is_upstream {
+            continue;
+        }
         let dir = scan_dir.resolve(repo_root);
         if !dir.is_dir() {
             continue;
@@ -5205,13 +5213,15 @@ flowchart TD
     #[test]
     fn test_target_scan_dir_taxonomy_unification_option_b() {
         let set: BTreeSet<TargetScanDir> = TargetScanDir::ALL.iter().copied().collect();
-        assert_eq!(set.len(), 11, "TargetScanDir::ALL must contain 11 unique variants");
-        assert_eq!(TargetScanDir::ALL.len(), 11);
+        assert_eq!(set.len(), 12, "TargetScanDir::ALL must contain 12 unique variants");
+        assert_eq!(TargetScanDir::ALL.len(), 12);
+        assert_eq!(TargetScanDir::Designs.docs_subdir(), "designs");
         assert!(TargetScanDir::Conops.requires_factual_grounding());
         assert!(TargetScanDir::Safety.requires_factual_grounding());
         assert!(TargetScanDir::Interfaces.requires_factual_grounding());
         assert!(TargetScanDir::Icd.requires_factual_grounding());
         assert!(TargetScanDir::Architecture.requires_factual_grounding());
+        assert!(TargetScanDir::Designs.requires_factual_grounding());
         assert!(TargetScanDir::Epics.requires_factual_grounding());
         assert!(TargetScanDir::Features.requires_factual_grounding());
         assert!(TargetScanDir::UserStories.requires_factual_grounding());
@@ -5803,6 +5813,90 @@ flowchart TD
             res_identical,
             Ok(ParityOutcome::DualSchemaIdentical),
             "Check 31 must return Ok(DualSchemaIdentical) when .pipeline/schema.sysml matches docs/designs/blueprint-01-alpha.sysml"
+        );
+
+        Ok(())
+    }
+
+    /// Regression test for Issue #540 verifying that `TargetScanDir` includes `docs/designs/`
+    /// so Check 21 (`check_semantic_diagram_ast_parity`) and Check 23 (`check_factual_grounding`)
+    /// audit engineering design blueprints in downstream workspaces.
+    ///
+    /// # Parameters
+    /// None.
+    ///
+    /// # Returns
+    /// `Result<(), Box<dyn std::error::Error>>` indicating test execution success.
+    ///
+    /// # Errors
+    /// Returns an error if temporary directory or fixture file creation fails.
+    ///
+    /// # Safety
+    /// Operates strictly within an isolated temporary directory that is cleaned up on drop.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ISO 26262 ASIL D verification requirements for Issue #540.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `TargetScanDir::ALL` includes a variant mapping to `docs/designs` with factual grounding enabled.
+    /// - Check 21 detects undeclared class diagram blocks inside `docs/designs/blueprint-01-alpha.md`.
+    /// - Check 23 detects citation fraud inside `docs/designs/blueprint-01-alpha.md`.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary filesystem is writable.
+    ///
+    /// ## 4. Postconditions
+    /// - Confirms deterministic failure of Check 21 on `UndeclaredGhost` and Check 23 on fraudulent citations
+    ///   in `docs/designs/blueprint-01-alpha.md`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded fixture file count.
+    /// - Space Complexity: O(1) bounded fixture payload size.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Propagates any filesystem setup failure via `Result`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARITY-GATE-21], [REQ-PARITY-GATE-23]
+    #[test]
+    fn test_target_scan_dir_includes_designs_for_check_21_and_check_23() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("issue_540_designs_scan_dir")?;
+        let schema_dir = tmp.path.join("schema");
+        fs::create_dir_all(&schema_dir)?;
+        fs::write(
+            schema_dir.join("model.sysml"),
+            "package Sys {\n  part def DeclaredController;\n}\n",
+        )?;
+
+        let designs_dir = tmp.path.join("docs").join("designs");
+        fs::create_dir_all(&designs_dir)?;
+        fs::write(
+            designs_dir.join("blueprint-01-alpha.md"),
+            "# Blueprint 01 Alpha\n\n[Source: schema/nonexistent.sysml#§1]\n\n```mermaid\nclassDiagram\n    class DeclaredController\n    class UndeclaredGhost\n    DeclaredController --> UndeclaredGhost\n```\n",
+        )?;
+
+        let res_check21 = check_semantic_diagram_ast_parity(&tmp.path);
+        assert!(
+            res_check21.is_err(),
+            "Check 21 must fail when docs/designs/blueprint-01-alpha.md references undeclared class UndeclaredGhost"
+        );
+        let errs21 = res_check21.err().unwrap_or_default().join("\n");
+        assert!(
+            errs21.contains("UndeclaredGhost") && errs21.contains("blueprint-01-alpha.md"),
+            "Expected Check 21 diagnostic for UndeclaredGhost in blueprint-01-alpha.md, got: {}",
+            errs21
+        );
+
+        let res_check23 = check_factual_grounding(&tmp.path, false, true);
+        assert!(
+            res_check23.is_err(),
+            "Check 23 must fail when docs/designs/blueprint-01-alpha.md contains a fraudulent citation"
+        );
+        let errs23 = res_check23.err().unwrap_or_default().join("\n");
+        assert!(
+            errs23.contains("nonexistent.sysml") && errs23.contains("blueprint-01-alpha.md"),
+            "Expected Check 23 diagnostic for nonexistent.sysml in blueprint-01-alpha.md, got: {}",
+            errs23
         );
 
         Ok(())
