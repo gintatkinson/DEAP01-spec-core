@@ -847,3 +847,80 @@ fn test_rejects_downstream_crate_paths_in_upstream_workspace() {
     }
 }
 
+#[test]
+fn test_issue_474_governance_and_dry_run_contract_alignment() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("repo root");
+
+    let agents_md = fs::read_to_string(repo_root.join("AGENTS.md")).expect("read AGENTS.md");
+    let dispatch_rules =
+        fs::read_to_string(repo_root.join("rules/subagent-dispatch-standards.md"))
+            .expect("read rules/subagent-dispatch-standards.md");
+    let dossier_rs =
+        fs::read_to_string(repo_root.join("crates/verify-baseline/src/defect_dossier.rs"))
+            .expect("read defect_dossier.rs");
+
+    for (name, content) in [
+        ("AGENTS.md", &agents_md),
+        ("rules/subagent-dispatch-standards.md", &dispatch_rules),
+    ] {
+        assert!(
+            !content.contains("validate it offline via `./target/release/verify-baseline check-defect` before submitting"),
+            "{} must not describe check-defect as an offline-only step before separate submission (refs #474)",
+            name
+        );
+        assert!(
+            !content.contains("./target/release/file-defect"),
+            "{} must not reference retired ./target/release/file-defect binary (refs #474)",
+            name
+        );
+        assert!(
+            content.contains("./target/release/verify-baseline check-defect .pipeline/defects/"),
+            "{} must mandate atomic validation, persistence, and publishing via verify-baseline check-defect (refs #474)",
+            name
+        );
+    }
+
+    assert!(
+        !dossier_rs.contains("if !args.dry_run || args.publish || args.issue.is_some()"),
+        "defect_dossier.rs must gate persistence strictly on `if !args.dry_run` (refs #474)"
+    );
+    assert!(
+        !dossier_rs.contains("When `--publish` or `--issue` is active without `--dry-run`"),
+        "defect_dossier.rs module Rustdoc must state publishing is active whenever `--dry-run` is not passed (refs #474)"
+    );
+
+    let tmp = ScopedTempWorkspace::new("dry_run_no_persist_474");
+    let custom_dossier = tmp
+        .root
+        .join("DEFECT_DRY_RUN_NO_PERSIST_UNIQUE_474_TEST.md");
+    fs::write(&custom_dossier, sample_valid_critical_dossier()).expect("write custom dossier");
+    let leaked_dest = PathBuf::from(".pipeline")
+        .join("defects")
+        .join("DEFECT_DRY_RUN_NO_PERSIST_UNIQUE_474_TEST.md");
+    let _ = fs::remove_file(&leaked_dest);
+
+    let dry_run_with_publish = DefectDossierArgs {
+        body_file: Some(custom_dossier.clone()),
+        title: Some("[AUDIT] [bridge.cpp]: Dry run must not persist".to_string()),
+        repo: Some("gintatkinson/DEAP01-spec-core".to_string()),
+        label: None,
+        provider: "github".to_string(),
+        dry_run: true,
+        publish: true,
+        issue: Some(474),
+        target: None,
+    };
+    let res = run_check_defect(&dry_run_with_publish);
+    let leaked_exists = leaked_dest.exists();
+    let _ = fs::remove_file(&leaked_dest);
+    assert_eq!(res, Ok(()), "Expected dry_run: true to succeed");
+    assert!(
+        !leaked_exists,
+        "run_check_defect with dry_run: true must NOT persist into .pipeline/defects/ even when publish: true or issue: Some(...) is set"
+    );
+}
+
+

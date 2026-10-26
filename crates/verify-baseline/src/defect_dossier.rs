@@ -21,18 +21,18 @@
 //!
 //! ## 3. Preconditions
 //! - Input markdown payloads are valid UTF-8 strings or accessible filesystem paths.
-//! - When `--publish` or `--issue` is active without `--dry-run`, the `gh` CLI is installed and
+//! - Whenever `--dry-run` is not passed, the `gh` CLI is installed and
 //!   authenticated against the target repository.
 //!
 //! ## 4. Postconditions
 //! - Returns `Ok(DefectSchemaValidation)` from `validate_defect_dossier` if and only if all 12
 //!   structural, lexical, and Mermaid invariants hold.
-//! - Returns `Ok(())` from `run_check_defect` only after validation (and, when publishing/editing,
-//!   local `.pipeline/defects/` persistence and remote closed-loop verification) succeeds.
+//! - Returns `Ok(())` from `run_check_defect` only after validation (and, whenever `--dry-run` is not
+//!   passed, local `.pipeline/defects/` persistence and remote closed-loop verification) succeeds.
 //!
 //! ## 5. Algorithmic Complexity Bounds
 //! - Time Complexity: $O(N)$ linear scan over dossier byte length $N$ for all 12 validation gates,
-//!   plus bounded subprocess invocation latency when `--publish` or `--issue` is enabled.
+//!   plus bounded subprocess invocation latency whenever `--dry-run` is not passed.
 //! - Space Complexity: $O(N)$ auxiliary line slice and diagnostic buffer allocation.
 //!
 //! ## 6. Failure Modes & Fault Tolerance
@@ -359,11 +359,11 @@ pub struct DefectDossierArgs {
     #[arg(long = "provider", default_value = "github")]
     pub provider: String,
 
-    /// Validate defect dossier schema without submitting to remote tracker
+    /// Validate defect dossier schema without persisting to `.pipeline/defects/` or submitting to remote tracker
     #[arg(long = "dry-run", alias = "validate-only")]
     pub dry_run: bool,
 
-    /// Publish a new issue to the remote GitHub SSOT tracker and run closed-loop verification
+    /// Explicit publication flag (publishing to remote GitHub SSOT and closed-loop verification are active by default whenever `--dry-run` is not passed)
     #[arg(long = "publish")]
     pub publish: bool,
 
@@ -2158,8 +2158,8 @@ pub fn publish_or_edit_github_issue(
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and DO-330 TQL-4 CLI tool qualification standards. Orchestrates
 /// ephemeral `/tmp/` path rejection, 12-check dossier schema and Mermaid validation, Check 11 title
-/// validation or derivation, local `.pipeline/defects/` persistence, and optional GitHub SSOT
-/// publishing/editing with closed-loop verification.
+/// validation or derivation, and (whenever `--dry-run` is not passed) local `.pipeline/defects/`
+/// persistence and GitHub SSOT publishing/editing with closed-loop verification.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Rejects `/tmp/` paths outside `.pipeline/defects/` unconditionally regardless of `--dry-run`, `--publish`, or `--issue`.
@@ -2174,7 +2174,7 @@ pub fn publish_or_edit_github_issue(
 ///   or diagnostic errors to stderr with `Err(1)` on any violation.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over dossier file byte length $N$, plus optional `gh` CLI subprocess round-trips.
+/// - Time Complexity: $O(N)$ over dossier file byte length $N$, plus `gh` CLI subprocess round-trips whenever `--dry-run` is not passed.
 /// - Space Complexity: $O(N)$ for file content and validation buffers.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
@@ -2267,7 +2267,7 @@ pub fn run_check_defect(args: &DefectDossierArgs) -> Result<(), i32> {
                 None => derive_defect_title(&validation.file_location, &validation.symptom),
             };
 
-            let persisted_path = if !args.dry_run || args.publish || args.issue.is_some() {
+            let persisted_path = if !args.dry_run {
                 match ensure_persisted_in_pipeline_defects(body_file, &content) {
                     Ok(p) => p,
                     Err(e) => {
