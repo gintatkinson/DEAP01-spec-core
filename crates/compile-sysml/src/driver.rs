@@ -80,11 +80,11 @@ use std::path::{Path, PathBuf};
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-REMEDIATION-MSG], [DO-330-TQL-4-CLI]
 pub const SCHEMA_REMEDIATION_MESSAGE: &str = "\
-Error: No .sysml schema file found in schema/.
+Error: No .sysml schema file found in schema/ or .pipeline/schema.sysml.
 If starting from unstructured OEM prose manuals, PDF documentation, or BOM markdown tables:
   1. Place your OEM documentation or extract tables into schema/ or schema/extracted/.
   2. Execute Step 0.0 Level 0 OEM Ground Truth Ingestion:
-     ./target/release/ingest-sysml --schema <path_to_markdown> --format markdown --out schema/model.sysml
+     ./target/release/ingest-sysml --schema <path_to_markdown> --format markdown --out .pipeline/schema.sysml
   3. Re-run ./target/release/compile-sysml --compile to satisfy the compilation gate.";
 
 /// Target SysML schema input resolved from CLI flags or default paths.
@@ -118,6 +118,46 @@ pub enum SchemaTarget {
     SingleFile(PathBuf),
     /// A directory containing multiple discovered `.sysml` files.
     Directory(PathBuf, Vec<PathBuf>),
+}
+
+/// Resolves `<ws>/.pipeline/schema.sysml` when `path` is a `<ws>/schema` directory path.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Ensures deterministic fallback to the workspace Single Source of Truth (`.pipeline/schema.sysml`)
+/// when a caller passes `<ws>/schema` and that directory is either empty or absent on disk, under
+/// DO-178C Level A and DO-330 TQL-4 configuration management rules.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `Some(SchemaTarget::SingleFile(<ws>/.pipeline/schema.sysml))` if and only if the
+///   terminal path component of `path` is `"schema"` and `<ws>/.pipeline/schema.sysml` exists as a regular file.
+///
+/// ## 3. Preconditions
+/// - `path` is a candidate filesystem path supplied to schema resolution.
+///
+/// ## 4. Postconditions
+/// - Side-effect-free read-only filesystem probe returning `Option<SchemaTarget>`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ path inspection and metadata stat call.
+/// - Space Complexity: $O(1)$ for the constructed fallback `PathBuf`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-`"schema"` paths or missing `.pipeline/schema.sysml` files return `None` without panicking.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-RESOLVE-DIR-TARGET], [REQ-COMPILER-SYSML-RESOLVE-TARGETS]
+fn resolve_schema_dir_pipeline_fallback(path: &Path) -> Option<SchemaTarget> {
+    if path.file_name().is_some_and(|n| n == "schema") {
+        let ws_root = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let fallback = ws_root.join(".pipeline").join("schema.sysml");
+        if fallback.is_file() {
+            return Some(SchemaTarget::SingleFile(fallback));
+        }
+    }
+    None
 }
 
 /// Resolves an existing directory path into a `SchemaTarget`, checking `.pipeline/schema.sysml` fallbacks when empty.
@@ -159,20 +199,12 @@ fn resolve_directory_schema_target(dir: PathBuf) -> Result<SchemaTarget, String>
     if direct_fallback.is_file() {
         return Ok(SchemaTarget::SingleFile(direct_fallback));
     }
-    if dir.file_name().is_some_and(|n| n == "schema") {
-        let ws_root = dir
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new("."));
-        let fallback = ws_root.join(".pipeline").join("schema.sysml");
-        if fallback.is_file() {
-            return Ok(SchemaTarget::SingleFile(fallback));
-        }
-    }
-    Err(format!(
-        "Error: No .sysml files found in directory: {}",
-        dir.display()
-    ))
+    resolve_schema_dir_pipeline_fallback(&dir).ok_or_else(|| {
+        format!(
+            "Error: No .sysml files found in directory: {}",
+            dir.display()
+        )
+    })
 }
 
 /// Resolve input schema path into either a single file or a directory containing `.sysml` files.
@@ -213,10 +245,12 @@ pub fn resolve_schema_targets(explicit_path: Option<PathBuf>) -> Result<SchemaTa
         if path.is_dir() {
             return resolve_directory_schema_target(path);
         }
-        return Err(format!(
-            "Error: Schema file does not exist: {}",
-            path.display()
-        ));
+        return resolve_schema_dir_pipeline_fallback(&path).ok_or_else(|| {
+            format!(
+                "Error: Schema file does not exist: {}",
+                path.display()
+            )
+        });
     }
 
     let schema_dir = Path::new("schema");

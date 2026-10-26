@@ -230,3 +230,111 @@ fn test_issue_552_forward_sync_does_not_emit_hardcoded_colliding_issue_ids(
 
     Ok(())
 }
+
+/// Verifies that `resolve_schema_targets` and `SCHEMA_REMEDIATION_MESSAGE` honor `.pipeline/schema.sysml`
+/// as the fallback Single Source of Truth (SSOT) when `schema/` is absent on disk, when `schema/`
+/// contains only `.gitkeep`, and when `explicit_path` is `None`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `test_issue_546_resolve_schema_targets_falls_back_to_pipeline_schema` in
+/// `crates/compile-sysml/tests/reproducer_tests.rs` (refs #546).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Fallback Resolution Invariant: When `<ws>/.pipeline/schema.sysml` exists on disk and `<ws>/schema`
+///   either does not exist or contains zero `.sysml` files, `resolve_schema_targets(Some(<ws>/schema))`
+///   and `resolve_schema_targets(None)` deterministically resolve to `SchemaTarget::SingleFile(.pipeline/schema.sysml)`.
+/// - Remediation Diagnostic Invariant: `SCHEMA_REMEDIATION_MESSAGE` explicitly references both `schema/`
+///   and `.pipeline/schema.sysml` and instructs operators to emit `--out .pipeline/schema.sysml`.
+///
+/// ## 3. Preconditions
+/// - `std::env::temp_dir()` is writable for creating an isolated temporary workspace directory `temp_ws`.
+///
+/// ## 4. Postconditions
+/// - All fallback resolution assertions and remediation message assertions hold, the original working
+///   directory is restored, and `temp_ws` is removed before returning.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ over the bounded temporary directory entries.
+/// - Space Complexity: $O(1)$ auxiliary memory.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates `Some(<ws>/schema)` (both absent and `.gitkeep`-only) and `None` inputs to `resolve_schema_targets`.
+/// - State: Restores process working directory unconditionally before asserting `res_none`.
+/// - Action: Executes deterministically with zero panics on valid I/O state.
+/// - Resource: Cleans up `temp_ws` unconditionally prior to function exit.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-RESOLVE-TARGETS] | SysML v2: VerificationCaseDef(test_issue_546_resolve_schema_targets_falls_back_to_pipeline_schema)
+#[test]
+fn test_issue_546_resolve_schema_targets_falls_back_to_pipeline_schema(
+) -> Result<(), Box<dyn std::error::Error>> {
+    assert!(
+        compile_sysml::SCHEMA_REMEDIATION_MESSAGE
+            .contains("Error: No .sysml schema file found in schema/ or .pipeline/schema.sysml."),
+        "SCHEMA_REMEDIATION_MESSAGE must mention both schema/ and .pipeline/schema.sysml:\n{}",
+        compile_sysml::SCHEMA_REMEDIATION_MESSAGE
+    );
+    assert!(
+        compile_sysml::SCHEMA_REMEDIATION_MESSAGE.contains("--out .pipeline/schema.sysml"),
+        "SCHEMA_REMEDIATION_MESSAGE must reference --out .pipeline/schema.sysml:\n{}",
+        compile_sysml::SCHEMA_REMEDIATION_MESSAGE
+    );
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let temp_ws = std::env::temp_dir().join(format!(
+        "deap_issue_546_resolve_schema_{}_{}",
+        std::process::id(),
+        nanos
+    ));
+    if temp_ws.exists() {
+        fs::remove_dir_all(&temp_ws)?;
+    }
+    let pipeline_dir = temp_ws.join(".pipeline");
+    fs::create_dir_all(&pipeline_dir)?;
+    let pipeline_schema = pipeline_dir.join("schema.sysml");
+    fs::write(&pipeline_schema, "package Issue546FallbackPkg {}\n")?;
+
+    // Case 1: temp_ws/schema does NOT exist on disk, but temp_ws/.pipeline/schema.sysml exists
+    let res_missing_schema_dir = compile_sysml::resolve_schema_targets(Some(temp_ws.join("schema")));
+    assert_eq!(
+        res_missing_schema_dir,
+        Ok(compile_sysml::SchemaTarget::SingleFile(
+            pipeline_schema.clone()
+        )),
+        "resolve_schema_targets(Some(<ws>/schema)) must fall back to <ws>/.pipeline/schema.sysml even when <ws>/schema directory does not exist"
+    );
+
+    // Case 2: temp_ws/schema exists on disk with only .gitkeep inside it
+    let schema_dir = temp_ws.join("schema");
+    fs::create_dir_all(&schema_dir)?;
+    fs::write(schema_dir.join(".gitkeep"), "")?;
+    let res_empty_schema_dir = compile_sysml::resolve_schema_targets(Some(schema_dir));
+    assert_eq!(
+        res_empty_schema_dir,
+        Ok(compile_sysml::SchemaTarget::SingleFile(
+            pipeline_schema.clone()
+        )),
+        "resolve_schema_targets(Some(<ws>/schema)) must fall back to <ws>/.pipeline/schema.sysml when <ws>/schema has only .gitkeep"
+    );
+
+    // Case 3: resolve_schema_targets(None) from inside temp_ws
+    let orig_cwd = std::env::current_dir()?;
+    std::env::set_current_dir(&temp_ws)?;
+    let res_none = compile_sysml::resolve_schema_targets(None);
+    std::env::set_current_dir(&orig_cwd)?;
+    let _ = fs::remove_dir_all(&temp_ws);
+
+    assert_eq!(
+        res_none,
+        Ok(compile_sysml::SchemaTarget::SingleFile(PathBuf::from(
+            ".pipeline/schema.sysml"
+        ))),
+        "resolve_schema_targets(None) must fall back to .pipeline/schema.sysml"
+    );
+
+    Ok(())
+}
