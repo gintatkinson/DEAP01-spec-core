@@ -619,20 +619,22 @@ fn scan_governed_files_for_python_references(repo_root: &Path, violations: &mut 
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A deterministic file-type classification controls.
 /// Restricts `is_governed_python_scan_extension` to structured documentation and configuration
-/// formats (`.md`, `.yaml`, `.yml`, `.json`, `.toml`) without static string-slice arrays.
+/// formats (`.md`, `.yaml`, `.yml`, `.json`, `.toml`) while excluding machine-generated digest
+/// JSON sidecars (`*.digest.json`, `*-digest.json`, `schema-digest.json`) without static string-slice arrays.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// Case-insensitive extension predicate returning `true` if and only if the file extension
-/// matches `md`, `yaml`, `yml`, `json`, or `toml`.
+/// matches `md`, `yaml`, `yml`, `json`, or `toml` and the filename does not end with
+/// `.digest.json` or `-digest.json`.
 ///
 /// ## 3. Preconditions
 /// `path: &Path` is a valid filesystem path reference.
 ///
 /// ## 4. Postconditions
-/// Returns `true` when `path` has a governed text extension; returns `false` otherwise.
+/// Returns `true` when `path` has a governed text extension and is not a digest sidecar; returns `false` otherwise.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// Time Complexity: O(E) where E is extension byte length. Space Complexity: O(E) for ASCII lowercase conversion.
+/// Time Complexity: O(N) where N is filename byte length. Space Complexity: O(N) for ASCII lowercase conversion.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// Total, non-panicking predicate; paths without an extension return `false`.
@@ -640,6 +642,14 @@ fn scan_governed_files_for_python_references(repo_root: &Path, violations: &mut 
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-33-GOVERNED-EXTENSIONS].
 fn is_governed_python_scan_extension(path: &Path) -> bool {
+    if let Some(fname) = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_ascii_lowercase())
+    {
+        if fname.ends_with(".digest.json") || fname.ends_with("-digest.json") {
+            return false;
+        }
+    }
     let ext = match path.extension() {
         Some(e) => e.to_string_lossy().to_ascii_lowercase(),
         None => return false,
@@ -3403,6 +3413,71 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             errs.iter().any(|e| e.contains("\\u2014") || e.contains("em dash")),
             "Must report em dash violation: {:?}",
             errs
+        );
+    }
+
+    /// Verifies that Check 33 excludes machine-generated digest JSON sidecars from governed text scanning.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A deterministic verification and Check 33 (Zero Python Scripts Invariant)
+    /// scope boundaries (`REQ-CHECK-33-GOVERNED-EXTENSIONS`, refs #532). Ensures machine-generated digest
+    /// sidecar artifacts (`*.digest.json`, `*-digest.json`, `schema-digest.json`) are excluded from
+    /// operational Python token text scanning while regular `.json` configuration files remain governed.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `is_governed_python_scan_extension` returns `false` for `*.digest.json` and `*-digest.json` paths,
+    ///   and `true` for regular `.json` files.
+    /// - `check_zero_python_scripts_invariant` returns `Ok(())` when a `.digest.json` sidecar contains
+    ///   serialized strings referencing `pytest` or `run_tests.py` without prohibition keywords.
+    ///
+    /// ## 3. Preconditions
+    /// Temporary test directory is writable and isolated.
+    ///
+    /// ## 4. Postconditions
+    /// Asserts predicate classification and end-to-end Check 33 exemption for digest sidecar files.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) bounded fixture file count and size. Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Panics if `is_governed_python_scan_extension` classifies a digest JSON sidecar as a governed text
+    /// file or if `check_zero_python_scripts_invariant` flags a `.digest.json` sidecar.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-33-GOVERNED-EXTENSIONS].
+    #[test]
+    fn test_check_33_excludes_digest_json_sidecars() {
+        assert!(!is_governed_python_scan_extension(Path::new(
+            "docs/designs/blueprint-01.digest.json"
+        )));
+        assert!(!is_governed_python_scan_extension(Path::new(
+            "docs/designs/foo-digest.json"
+        )));
+        assert!(!is_governed_python_scan_extension(Path::new(
+            ".pipeline/schema-digest.json"
+        )));
+        assert!(is_governed_python_scan_extension(Path::new(
+            "docs/config.json"
+        )));
+
+        let tmp = TempDir::new("c33_digest_json_sidecar");
+        let designs_dir = tmp.path.join("docs").join("designs");
+        fs::create_dir_all(&designs_dir).unwrap();
+        let digest_file = designs_dir.join("blueprint-01.digest.json");
+        let mut f = File::create(&digest_file).unwrap();
+        let token = ["run_", "tests.py"].concat();
+        writeln!(
+            f,
+            "{{\"summary\": \"executes pytest and {} in downstream runner\"}}",
+            token
+        )
+        .unwrap();
+
+        let res = check_zero_python_scripts(&tmp.path);
+        assert!(
+            res.is_ok(),
+            "Check 33 must exclude machine-generated .digest.json sidecars (refs #532), got: {:?}",
+            res.err()
         );
     }
 }
