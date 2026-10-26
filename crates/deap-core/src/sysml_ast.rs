@@ -6399,6 +6399,7 @@ impl UnifiedSchemaModelExtractor {
                         continue;
                     }
                     if !in_table {
+                        col_subsys_idx = None;
                         for (idx, cell) in cells.iter().enumerate() {
                             let clower = cell.to_ascii_lowercase();
                             if clower.contains("subsystem")
@@ -6411,13 +6412,8 @@ impl UnifiedSchemaModelExtractor {
                                 break;
                             }
                         }
-                    } else {
-                        let candidate_cell = if let Some(idx) = col_subsys_idx {
-                            cells.get(idx).copied()
-                        } else {
-                            cells.first().copied()
-                        };
-                        if let Some(raw_cand) = candidate_cell {
+                    } else if let Some(idx) = col_subsys_idx {
+                        if let Some(raw_cand) = cells.get(idx).copied() {
                             let clean_cand = raw_cand
                                 .replace(['`', '*', '_', '[', ']'], "")
                                 .trim()
@@ -9231,6 +9227,70 @@ package FlightPkg {
             json_parts.is_empty(),
             "Expected SchemaDigest JSON to yield empty parts set, got: {:?}",
             json_parts
+        );
+    }
+
+    /// Regression test for Issue #553: ensures `extract_subsystem_parts_from_text` ignores
+    /// unrelated Markdown tables that lack a subsystem/component/segment/part/unit header column.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Prevents phantom subsystem identifier
+    /// pollution from glossary, revision history, and traceability Markdown tables.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Only Markdown tables containing a header matching `"subsystem"`, `"component"`,
+    ///   `"segment"`, `"part"`, or `"unit"` yield extracted subsystem identifiers.
+    /// - Tables without a matching header column (`col_subsys_idx == None`) never fall back to
+    ///   extracting column 0.
+    ///
+    /// ## 3. Preconditions & Input Domain
+    /// - `md_src` contains a valid component table (`| ID | Subsystem | Owner |`) followed by an
+    ///   unrelated glossary table (`| Acronym | Meaning |`).
+    ///
+    /// ## 4. Postconditions & State Mutation Contract
+    /// - Pure in-memory verification with zero filesystem side effects.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Asserts exact inclusion of `"NavigationUnit"` and exclusion of `"GNSSReceiverTerm"` and
+    ///   `"INSDriftTerm"`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
+    #[test]
+    fn test_issue_553_extract_subsystem_parts_ignores_unrelated_markdown_tables() {
+        let md_src = r#"
+# Architecture Overview
+
+| ID | Subsystem | Owner |
+| --- | --- | --- |
+| 1 | NavigationUnit | Avionics |
+
+## Glossary
+
+| Acronym | Meaning |
+| --- | --- |
+| GNSSReceiverTerm | Global Navigation Satellite System |
+| INSDriftTerm | Inertial Navigation System Drift |
+"#;
+        let md_parts =
+            UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".md", md_src);
+        assert!(
+            md_parts.contains("NavigationUnit"),
+            "Expected NavigationUnit in extracted parts: {:?}",
+            md_parts
+        );
+        assert!(
+            !md_parts.contains("GNSSReceiverTerm"),
+            "Did not expect glossary term GNSSReceiverTerm in extracted parts: {:?}",
+            md_parts
+        );
+        assert!(
+            !md_parts.contains("INSDriftTerm"),
+            "Did not expect glossary term INSDriftTerm in extracted parts: {:?}",
+            md_parts
         );
     }
 }
