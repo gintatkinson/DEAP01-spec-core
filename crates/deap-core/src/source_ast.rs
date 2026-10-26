@@ -819,7 +819,8 @@ pub fn extract_method_signature(item: &SourceAstItem) -> Option<ExtractedMethodS
 pub fn extract_component_method_table(items: &[SourceAstItem]) -> ComponentMethodTable {
     let mut table = ComponentMethodTable::new();
     for item in items {
-        let Some(sig) = extract_method_signature(item) else {
+        let resolved_item = resolve_callable_param_types(item, items);
+        let Some(sig) = extract_method_signature(&resolved_item) else {
             continue;
         };
         let owner_key = item
@@ -1676,6 +1677,7 @@ pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
         }
     }
 
+    resolve_owner_field_params(&mut items);
     Ok(items)
 }
 
@@ -1863,7 +1865,8 @@ pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) 
 
     // Pass 2: Lower functions, methods, and constructors into ActionDef and ConstraintDef
     for item in items {
-        let Some((in_sig, out_sig, _)) = extract_method_signature(item) else {
+        let resolved_item = resolve_callable_param_types(item, items);
+        let Some((in_sig, out_sig, _)) = extract_method_signature(&resolved_item) else {
             continue;
         };
         let act_name = sanitize_sysml_identifier(&item.name, "action_op");
@@ -1975,7 +1978,7 @@ pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) 
     // Ensure at least one PartDef exists when top-level functions were ingested without a struct/class
     if pkg.part_defs.is_empty() && !pkg.action_defs.is_empty() {
         pkg.part_defs.push(PartDef {
-            name: format!("{}Controller", clean_pkg_name),
+            name: format!("{}Module", clean_pkg_name),
             is_def: true,
             actions: pkg.action_defs.clone(),
             satisfied_requirements: pkg.satisfied_requirements.clone(),
@@ -2943,32 +2946,14 @@ fn parse_dart_field_line(code: &str, doc_lines: &[String]) -> Option<SourceField
         return None;
     }
     let without_semi = code.trim_end_matches(';').trim();
-    let before_eq = without_semi
+    let (before_eq, rhs_opt) = without_semi
         .split_once('=')
-        .map(|(b, _)| b.trim())
-        .unwrap_or(without_semi);
+        .map(|(b, rhs)| (b.trim(), Some(rhs.trim())))
+        .unwrap_or((without_semi, None));
     if before_eq.contains('(') && !before_eq.contains("Function(") {
         return None;
     }
-
-    let mut rest = before_eq;
-    for _ in 0..4 {
-        if let Some(r) = rest.strip_prefix("static ") {
-            rest = r.trim_start();
-        } else if let Some(r) = rest.strip_prefix("late ") {
-            rest = r.trim_start();
-        } else if let Some(r) = rest.strip_prefix("final ") {
-            rest = r.trim_start();
-        } else if let Some(r) = rest.strip_prefix("const ") {
-            rest = r.trim_start();
-        } else if let Some(r) = rest.strip_prefix("covariant ") {
-            rest = r.trim_start();
-        } else {
-            break;
-        }
-    }
-
-    // Extract trailing identifier as field name, and preceding part as type_name
+    let rest = strip_dart_field_modifiers(before_eq);
     let mut rev_chars = rest.chars().rev();
     let mut name_rev = String::new();
     for ch in &mut rev_chars {
@@ -2986,7 +2971,7 @@ fn parse_dart_field_line(code: &str, doc_lines: &[String]) -> Option<SourceField
     let name: String = name_rev.chars().rev().collect();
     let type_part: String = rev_chars.collect::<String>().chars().rev().collect();
     let clean_type = if type_part.trim().is_empty() || type_part.trim() == "var" {
-        "String".to_string()
+        infer_dart_literal_type(rhs_opt)
     } else {
         type_part.trim().to_string()
     };
@@ -2997,6 +2982,111 @@ fn parse_dart_field_line(code: &str, doc_lines: &[String]) -> Option<SourceField
         is_callback_or_port: is_port,
         doc: summary_from_doc_lines(doc_lines),
     })
+}
+
+/// Strips leading Dart field modifiers (`static`, `late`, `final`, `const`, `covariant`) from a declaration prefix.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `strip_dart_field_modifiers`.
+/// Isolates the `<Type> <fieldName>` or `var <fieldName>` segment of a Dart class field declaration.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strips at most 4 leading modifier keywords in declaration order without regex or panicking slices.
+///
+/// ## 3. Preconditions
+/// - `rest: &str` is the pre-`=` segment of a candidate Dart field line.
+///
+/// ## 4. Postconditions
+/// - Returns the trimmed slice following all leading field modifiers.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) bounded 4-pass prefix check.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts any UTF-8 slice and returns a subslice.
+/// - State: Pure stateless helper.
+/// - Action: Zero panics or unwraps.
+/// - Resource: Zero dynamic memory.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-PARSE-DART-FIELD]
+fn strip_dart_field_modifiers(mut rest: &str) -> &str {
+    for _ in 0..4 {
+        if let Some(r) = rest.strip_prefix("static ") {
+            rest = r.trim_start();
+        } else if let Some(r) = rest.strip_prefix("late ") {
+            rest = r.trim_start();
+        } else if let Some(r) = rest.strip_prefix("final ") {
+            rest = r.trim_start();
+        } else if let Some(r) = rest.strip_prefix("const ") {
+            rest = r.trim_start();
+        } else if let Some(r) = rest.strip_prefix("covariant ") {
+            rest = r.trim_start();
+        } else {
+            break;
+        }
+    }
+    rest
+}
+
+/// Infers a canonical Dart primitive type name (`"bool"`, `"int"`, `"double"`, or `"String"`) from an optional literal initializer.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `infer_dart_literal_type`.
+/// Preserves numeric and boolean type fidelity for untyped `final`, `const`, and `var` Dart field declarations and default parameter values (`#518`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Maps `"true"` / `"false"` to `"bool"`.
+/// - Maps signed/unsigned decimal integer literals to `"int"` and floating-point literals with a decimal point to `"double"`.
+/// - Falls back to `"String"` for absent or non-primitive initializer expressions.
+///
+/// ## 3. Preconditions
+/// - `rhs_opt: Option<&str>` is the optional trimmed right-hand side of `=` in a field or parameter declaration.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty owned Dart type string ready for `normalize_type_for_sysml`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) where L is the byte length of `rhs_opt`.
+/// - Space Complexity: O(1) bounded string allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles `None` or arbitrary expression syntax by returning `"String"`.
+/// - State: Pure function.
+/// - Action: Zero panics, unwraps, or regex operations.
+/// - Resource: Single short `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-PARSE-DART-FIELD]
+fn infer_dart_literal_type(rhs_opt: Option<&str>) -> String {
+    let Some(raw) = rhs_opt else {
+        return "String".to_string();
+    };
+    let trimmed = raw.trim();
+    if trimmed == "true" || trimmed == "false" {
+        return "bool".to_string();
+    }
+    let num_part = trimmed
+        .strip_prefix('-')
+        .or_else(|| trimmed.strip_prefix('+'))
+        .unwrap_or(trimmed);
+    if !num_part.is_empty()
+        && num_part.chars().all(|c| c.is_ascii_digit() || c == '_')
+        && num_part.chars().any(|c| c.is_ascii_digit())
+    {
+        return "int".to_string();
+    }
+    if let Some((int_part, frac_part)) = num_part.split_once('.') {
+        if !int_part.is_empty()
+            && !frac_part.is_empty()
+            && int_part.chars().all(|c| c.is_ascii_digit() || c == '_')
+            && frac_part.chars().all(|c| c.is_ascii_digit() || c == '_')
+        {
+            return "double".to_string();
+        }
+    }
+    "String".to_string()
 }
 
 /// Collects a potentially multi-line Dart callable signature starting at `start_idx` until its parameter list closes.
@@ -3104,25 +3194,101 @@ pub fn parse_dart_callable_signature(
     let Some((before_open, after_open)) = code.split_once('(') else {
         return (params, None);
     };
-
-    let return_type = {
-        let trimmed_before = before_open.trim();
-        if let Some(prefix) = trimmed_before.strip_suffix(callable_name) {
-            let clean_ret = prefix
-                .trim()
-                .strip_prefix("static ")
-                .unwrap_or(prefix.trim())
-                .trim();
-            if clean_ret.is_empty() || clean_ret == "const" || clean_ret == "factory" {
-                None
-            } else {
-                Some(clean_ret.to_string())
-            }
-        } else {
-            None
+    let return_type = extract_dart_callable_return_type(before_open, callable_name);
+    let param_section = slice_balanced_dart_param_section(after_open);
+    for top_seg in split_top_level_comma(param_section.trim()) {
+        let seg = top_seg.trim();
+        if seg.is_empty() {
+            continue;
         }
-    };
+        if seg.starts_with('{') || seg.starts_with('[') {
+            let inner = seg
+                .trim_start_matches('{')
+                .trim_end_matches('}')
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .trim();
+            for inner_seg in split_top_level_comma(inner) {
+                if let Some(parsed) = parse_single_dart_param(inner_seg) {
+                    params.push(parsed);
+                }
+            }
+        } else if let Some(parsed) = parse_single_dart_param(seg) {
+            params.push(parsed);
+        }
+    }
+    (params, return_type)
+}
 
+/// Extracts the declared return type preceding `callable_name` in a Dart signature prefix.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `extract_dart_callable_return_type`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strips `callable_name` and optional leading `static ` modifier; returns `None` for `const`/`factory` constructors or empty prefixes.
+///
+/// ## 3. Preconditions
+/// - `before_open: &str` is the substring preceding `'('` in a Dart callable signature.
+/// - `callable_name: &str` is the callable's identifier.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(return_type)` when an explicit return type is present, or `None`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `before_open.len()`.
+/// - Space Complexity: O(R) for the extracted return type string.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking `strip_suffix` and `strip_prefix`.
+/// - State: Pure helper.
+/// - Action: Zero panics or unwraps.
+/// - Resource: Bounded single `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-PARSE-DART-CALLABLE-SIG]
+fn extract_dart_callable_return_type(before_open: &str, callable_name: &str) -> Option<String> {
+    let trimmed_before = before_open.trim();
+    let prefix = trimmed_before.strip_suffix(callable_name)?;
+    let clean_ret = prefix
+        .trim()
+        .strip_prefix("static ")
+        .unwrap_or(prefix.trim())
+        .trim();
+    if clean_ret.is_empty() || clean_ret == "const" || clean_ret == "factory" {
+        None
+    } else {
+        Some(clean_ret.to_string())
+    }
+}
+
+/// Returns the balanced formal parameter substring inside `(` ... `)` from `after_open`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `slice_balanced_dart_param_section`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Tracks nested parentheses and single/double-quoted string literals to locate the matching closing `')'`.
+///
+/// ## 3. Preconditions
+/// - `after_open: &str` is the slice immediately following the opening `'('` of a Dart callable signature.
+///
+/// ## 4. Postconditions
+/// - Returns the slice up to the matching `')'`, or `after_open` if unclosed.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `after_open.len()`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Uses `.get(..c_idx)` exclusively.
+/// - State: Local scalar counters and flags.
+/// - Action: Zero panics or unwraps.
+/// - Resource: Zero dynamic memory.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-PARSE-DART-CALLABLE-SIG]
+fn slice_balanced_dart_param_section(after_open: &str) -> &str {
     let mut depth: usize = 1;
     let mut in_single = false;
     let mut in_double = false;
@@ -3145,118 +3311,244 @@ pub fn parse_dart_callable_signature(
             in_double = !in_double;
             continue;
         }
-        if in_single || in_double {
-            continue;
-        }
-        if ch == '(' {
-            depth = depth.saturating_add(1);
-        } else if ch == ')' {
-            depth = depth.saturating_sub(1);
-            if depth == 0 {
-                close_idx = Some(i);
-                break;
-            }
-        }
-    }
-
-    let param_section = match close_idx {
-        Some(c_idx) => after_open.get(..c_idx).unwrap_or(""),
-        None => after_open,
-    };
-
-    let mut expanded_params: Vec<&str> = Vec::new();
-    for top_seg in split_top_level_comma(param_section.trim()) {
-        let seg = top_seg.trim();
-        if seg.is_empty() {
-            continue;
-        }
-        if seg.starts_with('{') || seg.starts_with('[') {
-            let inner = seg
-                .trim_start_matches('{')
-                .trim_end_matches('}')
-                .trim_start_matches('[')
-                .trim_end_matches(']')
-                .trim();
-            for inner_seg in split_top_level_comma(inner) {
-                let trimmed_inner = inner_seg.trim();
-                if !trimmed_inner.is_empty() {
-                    expanded_params.push(trimmed_inner);
+        if !in_single && !in_double {
+            if ch == '(' {
+                depth = depth.saturating_add(1);
+            } else if ch == ')' {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    close_idx = Some(i);
+                    break;
                 }
             }
+        }
+    }
+    match close_idx {
+        Some(c_idx) => after_open.get(..c_idx).unwrap_or(""),
+        None => after_open,
+    }
+}
+
+/// Parses a single formal parameter token (including `this.<field>`, `super.<param>`, `<Type> this.<field>`, and `<Type> <name>`) into a `SourceParam`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `parse_single_dart_param` (`#518`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strips parameter modifiers (`required`, `covariant`, `final`, `var`) and default value expressions (`= <rhs>`).
+/// - Preserves explicit `<Type>` before `this.<field>` / `super.<param>`, or infers literal default types via `infer_dart_literal_type` without hardcoding `"Key"`.
+///
+/// ## 3. Preconditions
+/// - `raw_param: &str` is a single comma-delimited parameter segment from a Dart callable signature.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(SourceParam)` for valid parameter tokens, or `None` when empty.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(P) where P is `raw_param.len()`.
+/// - Space Complexity: O(P) for the parameter name and type strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking prefix/delimiter splitting.
+/// - State: Pure function.
+/// - Action: Zero panics, unwraps, or regex operations.
+/// - Resource: Bounded by single parameter token length.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-PARSE-DART-CALLABLE-SIG]
+fn parse_single_dart_param(raw_param: &str) -> Option<SourceParam> {
+    let mut p = raw_param
+        .trim()
+        .trim_start_matches('{')
+        .trim_end_matches('}')
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim();
+    if p.is_empty() {
+        return None;
+    }
+    let (before_default, rhs_opt) = p
+        .split_once('=')
+        .map(|(b, r)| (b.trim(), Some(r.trim())))
+        .unwrap_or((p, None));
+    p = before_default;
+    for prefix in ["required ", "covariant ", "final ", "var "] {
+        if let Some(after) = p.strip_prefix(prefix) {
+            p = after.trim();
+        }
+    }
+    for marker in ["super.", "this."] {
+        if let Some((type_prefix, after_marker)) = p.split_once(marker) {
+            if type_prefix.is_empty() || type_prefix.ends_with(char::is_whitespace) {
+                let ident = extract_leading_ast_ident(after_marker.trim())?;
+                let explicit_type = type_prefix.trim();
+                let type_name = if explicit_type.is_empty() {
+                    infer_dart_literal_type(rhs_opt)
+                } else {
+                    explicit_type.to_string()
+                };
+                return Some(SourceParam {
+                    name: ident,
+                    type_name,
+                });
+            }
+        }
+    }
+    let mut rev_chars = p.chars().rev();
+    let mut pname_rev = String::new();
+    for ch in &mut rev_chars {
+        if ch.is_ascii_alphanumeric() || ch == '_' {
+            pname_rev.push(ch);
         } else {
-            expanded_params.push(seg);
+            break;
         }
     }
+    let pname: String = pname_rev.chars().rev().collect();
+    if pname.is_empty() {
+        return None;
+    }
+    let ptype_raw: String = rev_chars.collect::<String>().chars().rev().collect();
+    let ptype = if ptype_raw.trim().is_empty() {
+        infer_dart_literal_type(rhs_opt)
+    } else {
+        ptype_raw.trim().to_string()
+    };
+    Some(SourceParam {
+        name: pname,
+        type_name: ptype,
+    })
+}
 
-    for raw_param in expanded_params {
-        let mut p = raw_param
-            .trim()
-            .trim_start_matches('{')
-            .trim_end_matches('}')
-            .trim_start_matches('[')
-            .trim_end_matches(']')
-            .trim();
-        if p.is_empty() {
-            continue;
-        }
-        if let Some((before_default, _)) = p.split_once('=') {
-            p = before_default.trim();
-        }
-        if let Some(after_req) = p.strip_prefix("required ") {
-            p = after_req.trim();
-        }
-        if let Some(after_cov) = p.strip_prefix("covariant ") {
-            p = after_cov.trim();
-        }
-        if let Some(after_final) = p.strip_prefix("final ") {
-            p = after_final.trim();
-        }
+/// Resolves `this.<field>` and `super.<param>` parameter types in-place across a parsed slice of `SourceAstItem` nodes.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `resolve_owner_field_params` (`#518`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Updates callable parameter types whose initial type is `"String"` when a matching field declaration exists on the owning class or its superclass chain in `items`.
+///
+/// ## 3. Preconditions
+/// - `items: &mut [SourceAstItem]` contains the declarations extracted from a source translation unit.
+///
+/// ## 4. Postconditions
+/// - Mutates `items` in-place so constructor and method parameters reflect declared class/superclass field types.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(I * P * C) where I is item count, P is parameter count, and C is class count.
+/// - Space Complexity: O(I) for the read-only snapshot vector.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Preserves existing parameter types when no matching field exists.
+/// - State: Bounded in-place slice mutation.
+/// - Action: Zero panics or unwraps.
+/// - Resource: Bounded snapshot clone.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-PARSE-DART-CALLABLE-SIG]
+fn resolve_owner_field_params(items: &mut [SourceAstItem]) {
+    let snapshot = items.to_vec();
+    for item in items.iter_mut() {
+        *item = resolve_callable_param_types(item, &snapshot);
+    }
+}
 
-        if let Some(super_field) = p.strip_prefix("super.") {
-            if let Some(ident) = extract_leading_ast_ident(super_field) {
-                params.push(SourceParam {
-                    name: ident,
-                    type_name: "Key".to_string(),
-                });
+/// Returns a copy of `item` with callable parameter types resolved against owning class and superclass fields in `all_items`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `resolve_callable_param_types` (`#518`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - For callable items with `owner_name: Some(owner)`, any parameter whose `type_name == "String"` is resolved via `lookup_owner_field_type(owner, &param.name, all_items)`.
+///
+/// ## 3. Preconditions
+/// - `item: &SourceAstItem` is a candidate AST item; `all_items: &[SourceAstItem]` is the full package AST item slice.
+///
+/// ## 4. Postconditions
+/// - Returns a `SourceAstItem` with resolved `SourceParam::type_name` entries.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(P * C) where P is `item.params.len()` and C is `all_items.len()`.
+/// - Space Complexity: O(P) for the cloned item.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Leaves non-callable or ownerless items unchanged.
+/// - State: Pure function.
+/// - Action: Zero panics or unwraps.
+/// - Resource: Single `SourceAstItem` clone.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-LOWER-AST-TO-PACKAGE]
+fn resolve_callable_param_types(
+    item: &SourceAstItem,
+    all_items: &[SourceAstItem],
+) -> SourceAstItem {
+    let mut resolved = item.clone();
+    if !resolved.kind.is_callable() {
+        return resolved;
+    }
+    let Some(ref owner) = resolved.owner_name else {
+        return resolved;
+    };
+    for param in &mut resolved.params {
+        if param.type_name == "String" {
+            if let Some(field_ty) = lookup_owner_field_type(owner, &param.name, all_items) {
+                param.type_name = field_ty;
             }
-            continue;
-        }
-        if let Some(this_field) = p.strip_prefix("this.") {
-            if let Some(ident) = extract_leading_ast_ident(this_field) {
-                params.push(SourceParam {
-                    name: ident,
-                    type_name: "String".to_string(),
-                });
-            }
-            continue;
-        }
-
-        // Otherwise `<Type> <name>` or `<name>`
-        let mut rev_chars = p.chars().rev();
-        let mut pname_rev = String::new();
-        for ch in &mut rev_chars {
-            if ch.is_ascii_alphanumeric() || ch == '_' {
-                pname_rev.push(ch);
-            } else {
-                break;
-            }
-        }
-        let pname: String = pname_rev.chars().rev().collect();
-        let ptype_raw: String = rev_chars.collect::<String>().chars().rev().collect();
-        if !pname.is_empty() {
-            let ptype = if ptype_raw.trim().is_empty() {
-                "String".to_string()
-            } else {
-                ptype_raw.trim().to_string()
-            };
-            params.push(SourceParam {
-                name: pname,
-                type_name: ptype,
-            });
         }
     }
+    resolved
+}
 
-    (params, return_type)
+/// Looks up the declared `type_name` of `field_name` on `owner_name` or its superclass chain (up to 4 hops) in `all_items`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `lookup_owner_field_type` (`#518`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Traverses at most 4 inheritance hops via `parent_type` to prevent unbounded loops on cyclic class hierarchies.
+///
+/// ## 3. Preconditions
+/// - `owner_name: &str` and `field_name: &str` are non-empty identifiers; `all_items: &[SourceAstItem]` contains class/struct items.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(type_name)` when a matching `SourceField` is found on the class or a superclass, or `None`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(C + F) bounded by 4 superclass hops over `all_items`.
+/// - Space Complexity: O(1) auxiliary memory.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `None` when the owner or superclass is external to `all_items`.
+/// - State: Pure lookup.
+/// - Action: Zero panics or unwraps.
+/// - Resource: At most one `String` clone on match.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-PARSE-DART-CALLABLE-SIG]
+fn lookup_owner_field_type(
+    owner_name: &str,
+    field_name: &str,
+    all_items: &[SourceAstItem],
+) -> Option<String> {
+    let mut current_owner = owner_name.trim();
+    for _ in 0..4 {
+        let cls = all_items
+            .iter()
+            .find(|i| !i.kind.is_callable() && i.name == current_owner)?;
+        if let Some(field) = cls.fields.iter().find(|f| f.name == field_name) {
+            return Some(field.type_name.clone());
+        }
+        let parent_raw = cls.parent_type.as_deref()?.trim();
+        let parent_base = parent_raw
+            .split_once('<')
+            .map(|(b, _)| b.trim())
+            .unwrap_or(parent_raw);
+        if parent_base.is_empty() || parent_base == current_owner {
+            return None;
+        }
+        current_owner = parent_base;
+    }
+    None
 }
 
 /// Determines whether a struct or class field represents a callback handler or stream port (`PortDef`).
@@ -3538,13 +3830,29 @@ pub fn normalize_type_for_sysml(raw_type: &str) -> String {
             .unwrap_or(inner_slice.trim());
     }
 
-    // If generic `Outer<Inner>`, extract `Outer` (or for Option/Future/Stream/Vec, preserve a built-in identifier)
-    let base = if let Some((outer, _)) = s.split_once('<') {
-        outer.trim()
-    } else {
-        s.trim()
-    };
+    if let Some((outer_raw, rest)) = s.split_once('<') {
+        if let Some(inner_raw) = rest.strip_suffix('>') {
+            let outer_last = outer_raw
+                .trim()
+                .rsplit_once("::")
+                .map(|(_, last)| last.trim())
+                .unwrap_or(outer_raw.trim());
+            if is_unwrappable_generic_container(outer_last) {
+                if let Some(first_arg) = split_top_level_comma(inner_raw)
+                    .into_iter()
+                    .find(|arg| !arg.trim().starts_with('\''))
+                {
+                    let trimmed_arg = first_arg.trim();
+                    if !trimmed_arg.is_empty() && trimmed_arg != "()" && trimmed_arg != "void" {
+                        return normalize_type_for_sysml(trimmed_arg);
+                    }
+                    return "String".to_string();
+                }
+            }
+        }
+    }
 
+    let base = s.split_once('<').map(|(outer, _)| outer.trim()).unwrap_or(s.trim());
     let last_segment = base.rsplit_once("::").map(|(_, last)| last).unwrap_or(base);
     let ident = sanitize_sysml_identifier(last_segment, "String");
     match ident.as_str() {
@@ -3553,12 +3861,66 @@ pub fn normalize_type_for_sysml(raw_type: &str) -> String {
         "f32" | "f64" | "double" | "num" => "Real".to_string(),
         "bool" => "Boolean".to_string(),
         "str" | "String" | "char" | "Path" | "PathBuf" => "String".to_string(),
-        "Self" | "Result" | "Option" | "Vec" | "Box" | "Arc" | "Rc" | "Future" | "Stream" => {
-            "String".to_string()
-        }
+        "Self" | "Result" | "Option" | "Vec" | "Box" | "Arc" | "Rc" | "Future" | "Stream"
+        | "void" | "dynamic" | "Object" | "Never" => "String".to_string(),
         other if is_sysml_reserved_keyword(other) => "String".to_string(),
         other => other.to_string(),
     }
+}
+
+/// Returns `true` if `outer_ident` is a generic wrapper or collection container whose primary payload type should be unwrapped during SysML v2 normalization (`#518`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `is_unwrappable_generic_container`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Matches Rust and Dart generic wrapper, smart-pointer, asynchronous, and collection containers (`Result`, `Option`, `Vec`, `List`, `Future`, `Stream`, `ValueChanged`, `Arc`, `Mutex`, etc.).
+///
+/// ## 3. Preconditions
+/// - `outer_ident: &str` is the unqualified outer generic type identifier preceding `'<'`.
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff `normalize_type_for_sysml` must recursively unwrap the first non-lifetime type argument.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) static token match.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts any UTF-8 slice.
+/// - State: Pure stateless predicate.
+/// - Action: Zero panics or unwraps.
+/// - Resource: Zero dynamic memory.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-NORMALIZE-TYPE-SYSML]
+fn is_unwrappable_generic_container(outer_ident: &str) -> bool {
+    matches!(
+        outer_ident,
+        "Result"
+            | "Option"
+            | "Vec"
+            | "List"
+            | "Set"
+            | "Iterable"
+            | "Box"
+            | "Arc"
+            | "Rc"
+            | "Future"
+            | "Stream"
+            | "ValueChanged"
+            | "ValueSetter"
+            | "ValueGetter"
+            | "EventSink"
+            | "Sender"
+            | "Receiver"
+            | "Cow"
+            | "Mutex"
+            | "RwLock"
+            | "RefCell"
+            | "Cell"
+            | "Pin"
+    )
 }
 
 /// Checks whether an identifier collides with a reserved SysML v2 / KerML grammar keyword.
@@ -6262,6 +6624,80 @@ impl ComponentAlpha {
             ));
         }
 
+        Ok(())
+    }
+
+    /// Verifies generic container type unwrapping, Dart `this.`/`super.` field parameter resolution, literal field inference, and `<Pkg>Module` fallback synthesis (`#518`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_issue_518_generic_unwrapping_dart_field_params_and_module_fallback`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `normalize_type_for_sysml` recursively unwraps single-argument and primary-payload generic containers (`Option<T>`, `Result<T, E>`, `Vec<T>`, `Future<T>`, `Stream<T>`, `ValueChanged<T>`, `Arc<Mutex<T>>`) to their inner SysML v2 type while normalizing `Future<void>` and `Result<(), E>` to `"String"`.
+    /// - `parse_dart_source_ast` and `lower_source_ast_to_package` infer untyped field literal types (`bool`, `int`, `double`), resolve `this.<field>` and `super.<param>` against declared class/superclass fields without hardcoding `"Key"`, and support `<Type> this.<field>` / `<Type> super.<param>`.
+    /// - `lower_source_ast_to_package` synthesizes `<Package>Module` (never `<Package>Controller`) when only top-level functions are present.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory Rust and Dart fixtures with abstract domain-neutral identifiers.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when generic unwrapping, Dart constructor/field type resolution, and `<Package>Module` fallback all match expected SysML v2 types.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over fixture input size.
+    /// - Space Complexity: O(I) for parsed AST items and lowered package definitions.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), String>` with descriptive diagnostic messages on mismatch.
+    /// - State: Stateless in-memory unit test.
+    /// - Action: Zero panics, unwraps, or expectations.
+    /// - Resource: Bounded stack and heap allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-NORMALIZE-TYPE-SYSML], [REQ-FEAT-42-PARSE-DART-CALLABLE-SIG], [REQ-FEAT-42-LOWER-AST-TO-PACKAGE]
+    #[test]
+    fn test_issue_518_generic_unwrapping_dart_field_params_and_module_fallback() -> Result<(), String> {
+        for (raw, expected) in [
+            ("Option<u32>", "Integer"),
+            ("Result<f64, String>", "Real"),
+            ("Vec<SampleRecord>", "SampleRecord"),
+            ("Future<bool>", "Boolean"),
+            ("Stream<int>", "Integer"),
+            ("ValueChanged<double>", "Real"),
+            ("Arc<Mutex<NodeState>>", "NodeState"),
+            ("Future<void>", "String"),
+            ("Result<(), String>", "String"),
+        ] {
+            let actual = normalize_type_for_sysml(raw);
+            if actual != expected {
+                return Err(format!("normalize_type_for_sysml({raw:?}) = {actual:?}, expected {expected:?}"));
+            }
+        }
+        let fn_only = parse_rust_source_ast("pub fn compute_metric(x: Option<i64>) -> Result<f64, String> { Ok(1.0) }\n", "mod.rs")?;
+        let fn_pkg = lower_source_ast_to_package(&fn_only, "SignalPkg");
+        if fn_pkg.part_defs.first().map(|p| p.name.as_str()) != Some("SignalPkgModule") {
+            return Err(format!("Expected fallback PartDef 'SignalPkgModule', got {:?}", fn_pkg.part_defs));
+        }
+        let dart_src = concat!(
+            "class BaseNode {\n  final int nodeId;\n  const BaseNode({required this.nodeId});\n}\n",
+            "class ChildNode extends BaseNode {\n  final double scaleFactor;\n  final maxRetries = 3;\n  var isReady = true;\n",
+            "  const ChildNode({required super.nodeId, super.untypedToken, required this.scaleFactor, this.maxRetries = 3, this.isReady = true, int this.extraCode = 0});\n}\n",
+        );
+        let dart_pkg = lower_source_ast_to_package(&parse_dart_source_ast(dart_src, "nodes.dart")?, "NodePkg");
+        let child = dart_pkg.part_defs.iter().find(|p| p.name == "ChildNode").ok_or("Missing ChildNode")?;
+        let ctor = child.actions.iter().find(|a| a.name == "ChildNode").ok_or("Missing ChildNode ctor")?;
+        let got: Vec<(&str, &str)> = ctor.in_params.iter().map(|p| (p.name.as_str(), p.type_name.as_str())).collect();
+        let expected_params = vec![
+            ("nodeId", "Integer"),
+            ("untypedToken", "String"),
+            ("scaleFactor", "Real"),
+            ("maxRetries", "Integer"),
+            ("isReady", "Boolean"),
+            ("extraCode", "Integer"),
+        ];
+        if got != expected_params {
+            return Err(format!("Expected ChildNode ctor params {expected_params:?}, got {got:?}"));
+        }
         Ok(())
     }
 }
