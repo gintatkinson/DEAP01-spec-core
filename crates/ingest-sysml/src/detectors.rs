@@ -56,6 +56,22 @@ pub const RAW_EXTENSIONS: &[&str] = &[".pdf", ".txt", ".doc", ".docx"];
 /// Realises: [REQ-0001/detect_format] | SysML v2: ActionDef(detect_format)
 pub fn detect_format(schema_path: &str, content: &str) -> Result<String, String> {
     let path = Path::new(schema_path);
+    let lower_name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(schema_path)
+        .to_ascii_lowercase();
+    if lower_name == "digest.json"
+        || lower_name.ends_with(".digest.json")
+        || lower_name.ends_with("-digest.json")
+        || lower_name.ends_with("_digest.json")
+    {
+        return Err(format!(
+            "Unsupported schema format for '{}': digest sidecar files are not ingestible schemas.",
+            schema_path
+        ));
+    }
+
     let ext = path
         .extension()
         .and_then(|s| s.to_str())
@@ -129,8 +145,16 @@ pub fn detect_format(schema_path: &str, content: &str) -> Result<String, String>
     if ext == ".proto" {
         return Ok("protobuf".to_string());
     }
+    let has_openapi_markers = content.contains("\"openapi\"")
+        || content.contains("openapi:")
+        || content.contains("\"swagger\"")
+        || content.contains("swagger:")
+        || content.contains("\"paths\":")
+        || content.contains("paths:");
     if ext == ".json" || ext == ".yaml" || ext == ".yml" {
-        return Ok("openapi".to_string());
+        if content.trim().is_empty() || has_openapi_markers {
+            return Ok("openapi".to_string());
+        }
     }
     if ext == ".rs" || ext == ".dart" {
         return Ok("code".to_string());
@@ -162,7 +186,7 @@ pub fn detect_format(schema_path: &str, content: &str) -> Result<String, String>
     if content.contains("syntax =") || content.contains("message ") {
         return Ok("protobuf".to_string());
     }
-    if content.contains("openapi") || content.contains("swagger") || content.contains("\"paths\":") {
+    if has_openapi_markers {
         return Ok("openapi".to_string());
     }
 
@@ -877,5 +901,53 @@ mod tests {
         assert_eq!(md_fmt, "markdown");
         assert_eq!(md_files, vec![bp1_md, bp2_md]);
         Ok(())
+    }
+
+    /// Verifies that `detect_format` rejects `.digest.json` sidecar files and non-OpenAPI JSON payloads while accepting valid OpenAPI JSON inputs.
+    ///
+    /// # Purpose
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_detect_format_rejects_digest_json_sidecars`.
+    ///
+    /// # Invariants
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Digest sidecars (`digest.json`, `*.digest.json`, `*-digest.json`, `*_digest.json`) are deterministically rejected before extension categorization.
+    /// - `.json`, `.yaml`, and `.yml` inputs are classified as `"openapi"` only when empty or containing OpenAPI/Swagger structural markers.
+    ///
+    /// # Inputs
+    /// ## 3. Preconditions
+    /// - In-memory path strings and payload slices covering digest sidecars, arbitrary JSON, and OpenAPI JSON.
+    ///
+    /// # Outputs
+    /// ## 4. Postconditions
+    /// - Digest sidecars and non-OpenAPI JSON return `Err`; empty or valid OpenAPI `.json` inputs return `Ok("openapi")`.
+    ///
+    /// # Complexity
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N)$ over input string length. Space Complexity: $O(1)$.
+    ///
+    /// # Failure Modes
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Rejects sidecar digest metadata deterministically with descriptive diagnostic error strings.
+    ///
+    /// # Verification
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0001/detect_format]
+    #[test]
+    fn test_detect_format_rejects_digest_json_sidecars() {
+        assert!(detect_format(
+            "docs/designs/blueprint-01.digest.json",
+            r#"{"sha256":"abc","total_lines":10}"#
+        )
+        .is_err());
+        assert!(detect_format("schema-digest.json", r#"{"sha256":"abc"}"#).is_err());
+        assert!(detect_format("docs/designs/blueprint-01.digest.json", "").is_err());
+        assert!(detect_format("digest.json", "").is_err());
+        assert!(detect_format("arbitrary.json", r#"{"sha256":"abc","not_openapi":true}"#).is_err());
+        assert_eq!(detect_format("api.json", "").unwrap(), "openapi");
+        assert_eq!(
+            detect_format("api.json", r#"{"openapi":"3.0.0","paths":{}}"#).unwrap(),
+            "openapi"
+        );
     }
 }
