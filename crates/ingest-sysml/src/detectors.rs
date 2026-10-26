@@ -522,6 +522,14 @@ fn find_files_with_ext(dir: &Path, ext: &str) -> Vec<PathBuf> {
     for entry in walker.flatten() {
         let p = entry.path();
         if p.is_file() {
+            let lower_name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+            if lower_name == "digest.json"
+                || lower_name.ends_with(".digest.json")
+                || lower_name.ends_with("-digest.json")
+                || lower_name.ends_with("_digest.json")
+            {
+                continue;
+            }
             if let Some(e) = p.extension() {
                 if e.to_string_lossy().eq_ignore_ascii_case(ext) {
                     results.push(p.to_path_buf());
@@ -949,5 +957,79 @@ mod tests {
             detect_format("api.json", r#"{"openapi":"3.0.0","paths":{}}"#).unwrap(),
             "openapi"
         );
+    }
+
+    /// Verifies that `find_files_with_ext` excludes `.digest.json`, `-digest.json`, `_digest.json`, and `digest.json` sidecar files when scanning for `.json` schemas.
+    ///
+    /// # Purpose
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_find_files_with_ext_excludes_digest_json_sidecars`.
+    ///
+    /// # Invariants
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Digest sidecars (`digest.json`, `*.digest.json`, `*-digest.json`, `*_digest.json`) are deterministically excluded by `find_files_with_ext` before returning matched `.json` paths.
+    /// - Directories containing only digest sidecar files yield `("unknown", vec![])` under `discover_schema_targets(..., Some("auto"))`.
+    ///
+    /// # Inputs
+    /// ## 3. Preconditions
+    /// - Writable system temporary directory exists.
+    ///
+    /// # Outputs
+    /// ## 4. Postconditions
+    /// - `find_files_with_ext(&guard.0, "json")` returns only `[openapi.json]`, and `discover_schema_targets` on a sidecar-only directory returns `Ok(("unknown", vec![]))`.
+    ///
+    /// # Complexity
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(F \log F)$ over directory entries $F$. Space Complexity: $O(F)$.
+    ///
+    /// # Failure Modes
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Cleans up temporary directory deterministically on drop via `TempDirGuard`.
+    ///
+    /// # Verification
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0001/find_files_with_ext_recursive]
+    #[test]
+    fn test_find_files_with_ext_excludes_digest_json_sidecars(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            ".deap_digest_sidecar_exclusion_{}_{}",
+            std::process::id(),
+            nanos
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let guard = TempDirGuard(root.clone());
+        fs::create_dir_all(&guard.0)?;
+
+        fs::write(guard.0.join("digest.json"), r#"{"sha256":"abc"}"#)?;
+        fs::write(
+            guard.0.join("blueprint-01.digest.json"),
+            r#"{"sha256":"def","total_lines":10}"#,
+        )?;
+        fs::write(guard.0.join("schema-digest.json"), r#"{"sha256":"ghi"}"#)?;
+        fs::write(guard.0.join("model_digest.json"), r#"{"sha256":"jkl"}"#)?;
+        let openapi_json = guard.0.join("openapi.json");
+        fs::write(&openapi_json, r#"{"openapi":"3.0.0","paths":{}}"#)?;
+
+        let found = find_files_with_ext(&guard.0, "json");
+        assert_eq!(found, vec![openapi_json]);
+
+        let sidecar_only_dir = guard.0.join("sidecar_only");
+        fs::create_dir_all(&sidecar_only_dir)?;
+        fs::write(
+            sidecar_only_dir.join("blueprint-01.digest.json"),
+            r#"{"sha256":"def","total_lines":10}"#,
+        )?;
+        fs::write(
+            sidecar_only_dir.join("schema-digest.json"),
+            r#"{"sha256":"ghi"}"#,
+        )?;
+
+        let discovered = discover_schema_targets(Some(&sidecar_only_dir), Some("auto"))?;
+        assert_eq!(discovered, ("unknown".to_string(), Vec::<PathBuf>::new()));
+        Ok(())
     }
 }
