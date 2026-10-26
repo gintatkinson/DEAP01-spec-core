@@ -1696,7 +1696,7 @@ impl MarkdownTranslator {
                         "title" if fm.title.is_none() => {
                             fm.title = Some(val);
                         }
-                        "subsystem" | "target_crates" if fm.subsystem.is_none() => {
+                        "subsystem" if fm.subsystem.is_none() => {
                             fm.subsystem = Some(val);
                         }
                         "uuidv5" | "deterministic_uuidv5" if fm.uuidv5.is_none() => {
@@ -1711,8 +1711,15 @@ impl MarkdownTranslator {
         if fm.id.is_none() {
             fm.id = blueprint_id.clone();
         }
-        if fm.id.is_some() && fm.title.is_none() {
-            fm.title = blueprint_id.or(h1_title);
+        if let Some(bp_id) = blueprint_id {
+            let raw_title = fm.title.take().or(h1_title);
+            fm.title = Some(match raw_title {
+                Some(t) if !t.is_empty() && !t.starts_with(&bp_id) => format!("{bp_id} {t}"),
+                Some(t) if !t.is_empty() => t,
+                _ => bp_id,
+            });
+        } else if fm.id.is_some() && fm.title.is_none() {
+            fm.title = h1_title;
         }
 
         (fm, content)
@@ -1868,8 +1875,11 @@ impl MarkdownTranslator {
                 || req_id.starts_with("BP-")
                 || req_id.starts_with("BP_")
             {
+                let is_blueprint = req_id.starts_with("BP-")
+                    || req_id.starts_with("BP_")
+                    || pkg.name.starts_with("BP_");
                 let sub_str = frontmatter.subsystem.as_deref().unwrap_or("").trim();
-                let parent_pkg_name = if !sub_str.is_empty() {
+                let parent_pkg_name = if !is_blueprint && !sub_str.is_empty() {
                     sanitize_identifier(sub_str, &pkg.name)
                 } else {
                     pkg.name.clone()
@@ -2391,7 +2401,9 @@ impl MarkdownTranslator {
                 } else {
                     raw_pkg.to_string()
                 };
-                pkg_name = sanitize_identifier(&cand_name, &pkg_name);
+                if !pkg_name.starts_with("BP_") {
+                    pkg_name = sanitize_identifier(&cand_name, &pkg_name);
+                }
                 current_sec_header = raw_pkg.to_string();
                 current_component_target = None;
                 i += 1;
