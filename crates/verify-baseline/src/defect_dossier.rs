@@ -319,8 +319,8 @@ impl DossierSeverity {
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Either `body_file` (`--body-file`) or `target` (`BODY_FILE`) identifies the input markdown path.
-/// - When `publish` (`--publish`) or `issue` (`--issue <ID>`) is set, ephemeral `/tmp/` paths are
-///   rejected and the validated dossier is persisted in `.pipeline/defects/` prior to GitHub sync.
+/// - Ephemeral `/tmp/` paths outside `.pipeline/defects/` are unconditionally rejected regardless of
+///   `--dry-run`, `--publish`, or `--issue`, and validated dossiers are persisted in `.pipeline/defects/` prior to GitHub sync.
 ///
 /// ## 3. Preconditions
 /// - Populated by `clap::Parser` or constructed directly by integration tests.
@@ -1976,18 +1976,61 @@ pub fn verify_closed_loop_payload(
     Ok(remote_url)
 }
 
+/// Constructs a `gh` CLI subprocess `Command` configured with `/etc/ssl/cert.pem` TLS certificate
+/// fallback for macOS `sandbox-exec` environments where `Security.framework` IPC is blocked.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DO-330 TQL-4 automated SSOT synchronization controls.
+/// Ensures Go `crypto/x509` inside `gh` can verify GitHub TLS certificates without querying the
+/// restricted macOS `com.apple.trustd` Mach daemon.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Always sets the executable program to `"gh"`.
+/// - When `SSL_CERT_FILE` is not set in the parent process environment and `/etc/ssl/cert.pem`
+///   exists as a regular file, injects `SSL_CERT_FILE=/etc/ssl/cert.pem` into the child environment.
+/// - Preserves any caller-provided `SSL_CERT_FILE` override unchanged.
+///
+/// ## 3. Preconditions
+/// - None; safe to invoke in any host or sandboxed environment.
+///
+/// ## 4. Postconditions
+/// - Returns a configured `std::process::Command` ready for argument appending and execution.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ environment lookup and single filesystem metadata check.
+/// - Space Complexity: $O(1)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Infallible builder; if `/etc/ssl/cert.pem` does not exist on a non-Unix host, leaves
+///   `SSL_CERT_FILE` unset so the system default certificate store is used.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEFECT-DOSSIER-BUILD-GH-COMMAND]
+pub fn build_gh_command() -> Command {
+    let mut cmd = Command::new("gh");
+    if std::env::var_os("SSL_CERT_FILE").is_none() {
+        let cert_bundle = Path::new("/etc/ssl/cert.pem");
+        if cert_bundle.is_file() {
+            cmd.env("SSL_CERT_FILE", cert_bundle);
+        }
+    }
+    cmd
+}
+
 /// Publishes a new GitHub issue or edits an existing GitHub issue from the persisted `.pipeline/defects/`
 /// file and immediately executes the Closed-Loop Payload Verification Gate.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and DO-330 TQL-4 automated SSOT synchronization controls.
 /// Executes `gh issue edit` (when `issue_id` is `Some`) or `gh issue create` (when `issue_id` is `None`)
-/// using `--body-file` pointing to `.pipeline/defects/<filename>.md`, then queries `gh issue view`
-/// and verifies byte-for-byte fidelity via `verify_closed_loop_payload`.
+/// via `build_gh_command()` using `--body-file` pointing to `.pipeline/defects/<filename>.md`, then queries
+/// `gh issue view` and verifies byte-for-byte fidelity via `verify_closed_loop_payload`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Never invokes `gh issue comment` for defect bodies; always overwrites or creates the canonical
 ///   issue title and body atomically via `--title` and `--body-file`.
+/// - All `gh` subprocesses are constructed via `build_gh_command()` so `SSL_CERT_FILE=/etc/ssl/cert.pem`
+///   is injected automatically when unset on macOS sandboxed hosts.
 /// - Returns `Ok(String)` only if both the write command and the subsequent `gh issue view`
 ///   closed-loop check succeed.
 ///
@@ -2021,7 +2064,7 @@ pub fn publish_or_edit_github_issue(
 
     let issue_identifier = if let Some(id) = issue_id {
         let id_str = id.to_string();
-        let output = Command::new("gh")
+        let output = build_gh_command()
             .args([
                 "issue",
                 "edit",
@@ -2048,7 +2091,7 @@ pub fn publish_or_edit_github_issue(
         }
         id_str
     } else {
-        let output = Command::new("gh")
+        let output = build_gh_command()
             .args([
                 "issue",
                 "create",
@@ -2079,7 +2122,7 @@ pub fn publish_or_edit_github_issue(
         created_ref.to_string()
     };
 
-    let view_output = Command::new("gh")
+    let view_output = build_gh_command()
         .args([
             "issue",
             "view",
@@ -2119,7 +2162,7 @@ pub fn publish_or_edit_github_issue(
 /// publishing/editing with closed-loop verification.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Rejects `/tmp/` paths outside `.pipeline/defects/` immediately when `--publish` or `--issue` is set.
+/// - Rejects `/tmp/` paths outside `.pipeline/defects/` unconditionally regardless of `--dry-run`, `--publish`, or `--issue`.
 /// - Validates or auto-derives the `[AUDIT] [<file.ext>]: <description>` title against `FILE_LOCATION`.
 /// - Returns `Ok(())` if and only if all enabled validation, persistence, and closed-loop sync steps succeed.
 ///
@@ -2151,9 +2194,9 @@ pub fn run_check_defect(args: &DefectDossierArgs) -> Result<(), i32> {
         }
     };
 
-    if (!args.dry_run || args.publish || args.issue.is_some()) && is_ephemeral_tmp_path(body_file) {
+    if is_ephemeral_tmp_path(body_file) {
         eprintln!(
-            "Error: Ephemeral /tmp/ path '{}' is forbidden when publishing or updating GitHub SSOT issues. Write defect dossiers directly to .pipeline/defects/<name>.md.",
+            "Error: Ephemeral /tmp/ path '{}' is forbidden. Write defect dossiers directly to .pipeline/defects/<name>.md.",
             body_file.display()
         );
         return Err(1);

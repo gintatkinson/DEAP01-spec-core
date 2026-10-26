@@ -16,9 +16,9 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use verify_baseline::checks::audit_source_purity;
 use verify_baseline::defect_dossier::{
-    derive_defect_title, extract_file_basename, parse_github_repo_slug, resolve_target_repo,
-    run_check_defect, validate_defect_dossier, validate_defect_title, verify_closed_loop_payload,
-    DefectDossierArgs,
+    build_gh_command, derive_defect_title, extract_file_basename, parse_github_repo_slug,
+    resolve_target_repo, run_check_defect, validate_defect_dossier, validate_defect_title,
+    verify_closed_loop_payload, DefectDossierArgs,
 };
 
 struct ScopedTempWorkspace {
@@ -358,6 +358,42 @@ fn test_rejects_ephemeral_tmp_path_when_publish_or_issue_is_set() {
         run_check_defect(&default_pub_args).is_err(),
         "Ephemeral /tmp/ path must be rejected by default when dry_run is false even if publish is false"
     );
+
+    let ephemeral_dry_run_file = PathBuf::from("/tmp/gh_body_ephemeral_dry_run_480.md");
+    fs::write(&ephemeral_dry_run_file, sample_valid_critical_dossier())
+        .expect("write ephemeral /tmp/ dry-run test file");
+    let dry_run_args = DefectDossierArgs {
+        body_file: Some(ephemeral_dry_run_file.clone()),
+        title: Some("[AUDIT] [bridge.cpp]: Use-after-free".to_string()),
+        repo: Some("gintatkinson/DEAP01-spec-core".to_string()),
+        label: None,
+        provider: "github".to_string(),
+        dry_run: true,
+        publish: false,
+        issue: None,
+        target: None,
+    };
+    let res_dry_run = run_check_defect(&dry_run_args);
+    let _ = fs::remove_file(&ephemeral_dry_run_file);
+    assert!(
+        res_dry_run.is_err(),
+        "Ephemeral /tmp/ path outside .pipeline/defects/ must be rejected even when --dry-run is set"
+    );
+}
+
+#[test]
+fn test_build_gh_command_injects_ssl_cert_file_for_macos_sandbox() {
+    let cmd = build_gh_command();
+    assert_eq!(cmd.get_program(), "gh");
+    if std::env::var_os("SSL_CERT_FILE").is_none() && Path::new("/etc/ssl/cert.pem").is_file() {
+        let has_ssl_cert_file = cmd.get_envs().any(|(k, v)| {
+            k == "SSL_CERT_FILE" && v == Some(std::ffi::OsStr::new("/etc/ssl/cert.pem"))
+        });
+        assert!(
+            has_ssl_cert_file,
+            "build_gh_command() must inject SSL_CERT_FILE=/etc/ssl/cert.pem when unset and /etc/ssl/cert.pem exists"
+        );
+    }
 }
 
 #[test]
