@@ -1267,6 +1267,23 @@ mod tests {
         );
     }
 
+    fn verify_canonical_architecture_blueprints_on_disk(repo_root: &Path) -> Result<(), String> {
+        if !crate::workspace::is_upstream_compiler(repo_root) {
+            return Ok(());
+        }
+        let blueprints_dir = repo_root.join("docs").join("architecture").join("blueprints");
+        for blueprint_name in CANONICAL_ARCHITECTURE_BLUEPRINTS.iter() {
+            let path = blueprints_dir.join(blueprint_name);
+            if !path.is_file() {
+                return Err(format!(
+                    "Expected canonical architecture blueprint file to exist on disk: {}",
+                    path.display()
+                ));
+            }
+        }
+        Ok(())
+    }
+
     #[test]
     fn test_canonical_architecture_blueprints_exist_on_disk() -> Result<(), Box<dyn std::error::Error>>
     {
@@ -1274,15 +1291,53 @@ mod tests {
             .parent()
             .and_then(|p| p.parent())
             .ok_or("repo root")?;
-        let blueprints_dir = repo_root.join("docs").join("architecture").join("blueprints");
-        for blueprint_name in CANONICAL_ARCHITECTURE_BLUEPRINTS.iter() {
-            let path = blueprints_dir.join(blueprint_name);
-            assert!(
-                path.is_file(),
-                "Expected canonical architecture blueprint file to exist on disk: {}",
-                path.display()
-            );
+        verify_canonical_architecture_blueprints_on_disk(repo_root)?;
+        Ok(())
+    }
+
+    struct ScopedTempDir(std::path::PathBuf);
+
+    impl ScopedTempDir {
+        fn new(suffix: &str) -> std::io::Result<Self> {
+            let path = std::env::temp_dir().join(format!(
+                "deap_core_rules_{}_{}",
+                std::process::id(),
+                suffix
+            ));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(&path)?;
+            Ok(Self(path))
         }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for ScopedTempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn test_canonical_architecture_blueprints_skipped_in_downstream_workspace(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let downstream_dir = ScopedTempDir::new("downstream_473")?;
+        let res = verify_canonical_architecture_blueprints_on_disk(downstream_dir.path());
+        assert!(
+            res.is_ok(),
+            "Downstream workspace without .pipeline/upstream must skip canonical blueprint check, got: {:?}",
+            res
+        );
+
+        let upstream_dir = ScopedTempDir::new("upstream_473")?;
+        std::fs::create_dir_all(upstream_dir.path().join(".pipeline").join("upstream"))?;
+        let upstream_res = verify_canonical_architecture_blueprints_on_disk(upstream_dir.path());
+        assert!(
+            upstream_res.is_err(),
+            "Upstream workspace missing canonical blueprints on disk must fail"
+        );
         Ok(())
     }
 }
