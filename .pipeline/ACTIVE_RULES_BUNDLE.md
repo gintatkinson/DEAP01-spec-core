@@ -197,10 +197,11 @@
 <a id="rule-subagent-dispatch-standards"></a>
 ## 14. Rule: Subagent Dispatch Standards (`rules/subagent-dispatch-standards.md`)
 
-**ALWAYS enforce:** Subagent dispatches must adhere strictly to canonical prompt standards, single-item scoping, and pre-flight self-rejection.
+**ALWAYS enforce:** Subagent dispatches must adhere strictly to canonical prompt standards, single-item scoping, target-file read locks, and pre-flight self-rejection.
 
 ### Hard Constraints
-- **Step 1 Skill Directive**: Dispatch prompt MUST direct `view_file` on `SKILL.md` by explicit path as its first step.
+- **Step 1 Skill Directive & Surgical Edit Fast-Path**: Dispatch prompt MUST direct `view_file` on `SKILL.md` by explicit path as its first step for pipeline skill workflows. For surgical edits where exact `Target`/`Replacement` blocks are already approved in `implementation_plan.md`, reading any `SKILL.md` is prohibited fake work; the subagent must apply the exact edits and exit immediately.
+- **Strict Target-File Read & Verification Boundary**: Subagents are strictly forbidden from reading, searching, or inspecting any file outside the explicit target file list in their prompt, and must never redundantly run `verify-baseline` inside single-item edit dispatches.
 - **Repository Classification**: Prompt MUST state the verbatim repository classification (e.g. `UPSTREAM_SPEC_CORE_COMPILER`).
 - **Zero Leading Steering**: Coordinators are forbidden from injecting pseudo-code or pre-digested code before the skill read.
 - **Single-Item Scope**: Every dispatch must target at most 1 item (max 1 Epic, Feature, Story, Use Case, or bounded micro-task).

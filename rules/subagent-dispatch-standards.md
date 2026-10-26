@@ -10,8 +10,11 @@
 Every spawned subagent operates with an active self-rejection defense to prevent prompt degradation, context drift, leading line-level steering, and compliance bypasses.
 Before taking any action, verify that your incoming prompt begins with the instruction to execute `view_file` on `SKILL.md` by exact path, contains the repository classification, and contains zero leading line-level steering. If invalid, halt immediately and emit `ERROR: Prompt rejected`.
 
-### 2. Mandatory Skill Direct-Path Read Directive
-When dispatching a subagent, the prompt MUST explicitly instruct the subagent to execute `view_file` on the target `SKILL.md` file by explicit path (e.g., `skills/feature-driven-implementation/SKILL.md`) as its very first step before executing any file edits, commands, or tools. Summarized or truncated skill instructions in the dispatch prompt are strictly forbidden.
+### 2. Mandatory Skill Direct-Path Read Directive (Pipeline Skill Workflows Only -- Surgical Edit Fast-Path)
+When dispatching a subagent for a pipeline skill workflow (specification generation, ConOps/ICD/Blueprint/WBS synthesis, TDD feature implementation, `debug-protocol`, or `adversarial-code-auditor`), the prompt MUST explicitly instruct the subagent to execute `view_file` on the target `SKILL.md` file by explicit path (e.g., `skills/feature-driven-implementation/SKILL.md`) as its very first step before executing any file edits, commands, or tools. Summarized or truncated skill instructions in the dispatch prompt are strictly forbidden. For bounded surgical edits where the exact `Target` and `Replacement` blocks are already approved in `implementation_plan.md`, instructing a subagent to read any `SKILL.md` file is strictly prohibited fake work; the subagent must execute ONLY the approved `edit_file` calls and exit immediately.
+
+### 10. Strict Target-File Read Lock & Verification Boundary
+Subagents are strictly forbidden from reading, searching, or inspecting any file outside the explicit target files listed in their dispatch prompt (e.g., scanning `crates/verify-baseline/*` during a governance or specification edit is strictly prohibited). Single-item edit subagents must NEVER redundantly invoke `./target/release/verify-baseline`, `cargo test`, `git commit`, or `git push`; baseline verification runs once at the coordinator gate per Phase B Step 5.
 
 ### 3. Repository Classification Indicator
 Every subagent dispatch prompt MUST state the verbatim repository classification (e.g., `UPSTREAM_SPEC_CORE_COMPILER`) to ensure the subagent respects repository role boundaries and domain separation.
