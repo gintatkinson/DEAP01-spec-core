@@ -13,9 +13,13 @@ resolver = "2"
 unsafe_code = "forbid"
 
 [workspace.lints.clippy]
-disallowed_types = "deny"
-unwrap_used = "deny"
-expect_used = "deny"
-panic = "deny"
-indexing_slicing = "deny"
+disallowed_types = "forbid"
+unwrap_used = "forbid"
+expect_used = "forbid"
+panic = "forbid"
+indexing_slicing = "forbid"
+type_complexity = "forbid"
+dbg_macro = "forbid"
+todo = "forbid"
+unimplemented = "forbid"
 
