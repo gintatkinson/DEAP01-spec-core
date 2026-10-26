@@ -362,39 +362,40 @@ fn parse_issue_id_from_content(content: &str) -> Option<usize> {
     None
 }
 
-/// Extracts issue ID from an existing file if present, preserving historical issue links.
+/// Extracts issue ID from an existing file if present, preserving historical tracker issue links
+/// and returning `None` when no tracker issue has been allocated yet.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `resolve_issue_id` in `crates/compile-sysml/src/sync/forward.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `resolve_existing_issue_id` in `crates/compile-sysml/src/sync/forward.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `resolve_issue_id` (declaration #8) within `SYNC-FORWARD`.
+/// - Preserves deterministic state conservation and referential transparency for fn `resolve_existing_issue_id` (declaration #8) within `SYNC-FORWARD`.
+/// - Never invents synthetic fallback issue IDs (`+ 9`, `+ 88`, `+ 94`, `+ 100`) when a target specification file is absent or unallocated on disk.
 ///
 /// ## 3. Preconditions
-/// - `target_out_dir: &Path` must satisfy domain and type-safety constraints prior to invoking `resolve_issue_id`.
-/// - `rel_path: &str` must satisfy domain and type-safety constraints prior to invoking `resolve_issue_id`.
-/// - `fallback_id: usize` must satisfy domain and type-safety constraints prior to invoking `resolve_issue_id`.
+/// - `target_out_dir: &Path` must satisfy domain and type-safety constraints prior to invoking `resolve_existing_issue_id`.
+/// - `rel_path: &str` must satisfy domain and type-safety constraints prior to invoking `resolve_existing_issue_id`.
 ///
 /// ## 4. Postconditions
-/// - Returns `usize` from `resolve_issue_id` with deterministic post-execution state.
+/// - Returns `Option<usize>` from `resolve_existing_issue_id` (`Some(id)` when a positive tracker issue ID exists on disk, `None` otherwise).
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(target_out_dir)) bounded over input/member dimension of `resolve_issue_id`.
-/// - Space Complexity: O(N(target_out_dir)) bounded auxiliary memory for `resolve_issue_id`.
+/// - Time Complexity: O(N(target_out_dir)) bounded over input/member dimension of `resolve_existing_issue_id`.
+/// - Space Complexity: O(N(target_out_dir)) bounded auxiliary memory for `resolve_existing_issue_id`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `resolve_issue_id` (`usize`).
-/// - State: Maintains consistent state invariants across `resolve_issue_id` without partial mutation on error.
-/// - Action: Executes `resolve_issue_id` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `resolve_issue_id` (`SYNC-FORWARD`).
+/// - Interface: Validates boundary inputs and types for `resolve_existing_issue_id` (`Option<usize>`).
+/// - State: Maintains consistent state invariants across `resolve_existing_issue_id` without partial mutation on error.
+/// - Action: Executes `resolve_existing_issue_id` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `resolve_existing_issue_id` (`SYNC-FORWARD`).
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-SYNC-FORWARD-RESOLVE-ISSUE-ID] | SysML v2: ActionDef(resolve_issue_id)
-fn resolve_issue_id(target_out_dir: &Path, rel_path: &str, fallback_id: usize) -> usize {
+/// Realises: [REQ-SYNC-FORWARD-RESOLVE-ISSUE-ID] | SysML v2: ActionDef(resolve_existing_issue_id)
+fn resolve_existing_issue_id(target_out_dir: &Path, rel_path: &str) -> Option<usize> {
     let full = target_out_dir.join(rel_path);
     if let Ok(content) = fs::read_to_string(&full) {
         if let Some(id) = parse_issue_id_from_content(&content) {
-            return id;
+            return Some(id);
         }
     }
     // Prefix lookup for renamed files (e.g., UC-01-*.md)
@@ -413,7 +414,7 @@ fn resolve_issue_id(target_out_dir: &Path, rel_path: &str, fallback_id: usize) -
                         if name_str.starts_with(prefix) && name_str.ends_with(".md") {
                             if let Ok(content) = fs::read_to_string(entry.path()) {
                                 if let Some(id) = parse_issue_id_from_content(&content) {
-                                    return id;
+                                    return Some(id);
                                 }
                             }
                         }
@@ -422,7 +423,40 @@ fn resolve_issue_id(target_out_dir: &Path, rel_path: &str, fallback_id: usize) -
             }
         }
     }
-    fallback_id
+    None
+}
+
+/// Formats an optional resolved tracker issue ID as `#<id>` when allocated or `TBD` when unallocated.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `format_issue_id_cell` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Bijective formatting: `Some(id)` with `id > 0` maps to `format!("#{}", id)`; `None` or `Some(0)` maps to `"TBD"`.
+///
+/// ## 3. Preconditions
+/// - `issue_id: Option<usize>` is the output of `resolve_existing_issue_id`.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty `String` (`"#<id>"` or `"TBD"`) suitable for specification metadata tables, checklists, and realization matrices.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ constant-time integer formatting.
+/// - Space Complexity: $O(1)$ bounded heap string allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles both `Some` and `None` variants deterministically.
+/// - State: Pure function with zero side effects.
+/// - Action: Executes without panics or unbounded loops.
+/// - Resource: Bounded single small `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-RESOLVE-ISSUE-ID] | SysML v2: ActionDef(format_issue_id_cell)
+fn format_issue_id_cell(issue_id: Option<usize>) -> String {
+    match issue_id {
+        Some(id) if id > 0 => format!("#{}", id),
+        _ => "TBD".to_string(),
+    }
 }
 
 /// Generates a valid Draft 2020-12 JSON Schema payload from PartDef ports and attributes.
@@ -1628,7 +1662,7 @@ pub fn forward_sync_sysml_to_specs(
         let is_root = p.name == "SysML_Model" || p.name == pkg.name;
         let is_conops = p.name == "ConOps";
 
-        let (title, rel_path, default_issue_id) = if is_root {
+        let (title, rel_path) = if is_root {
             let root_title = if p.name == "DEAP_Compiler_System" {
                 "Epic 01: System Architecture and Compiler Primacy".to_string()
             } else {
@@ -1637,24 +1671,21 @@ pub fn forward_sync_sysml_to_specs(
             (
                 root_title,
                 format!("epics/EPIC-{:02}-{}.md", epic_num, p.name),
-                101,
             )
         } else if is_conops {
             (
                 "Epic 02: Concept of Operations Operational Activities".to_string(),
                 "epics/EPIC-02-ConOps.md".to_string(),
-                102,
             )
         } else {
             (
                 format!("Epic {:02}: {}", epic_num, to_display_name(&p.name)),
                 format!("epics/EPIC-{:02}-{}.md", epic_num, p.name),
-                epic_num + 100,
             )
         };
 
         let _epic_date = resolve_date(&target_out_dir, &rel_path, &today_iso);
-        let epic_issue_id = resolve_issue_id(&target_out_dir, &rel_path, default_issue_id);
+        let epic_issue_id = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &rel_path));
 
         let subsys_display = if is_root {
             "System Architecture".to_string()
@@ -1686,7 +1717,7 @@ pub fn forward_sync_sysml_to_specs(
         for (f_idx, ctx) in part_contexts.iter().enumerate() {
             let f_num = f_idx + 1;
             let f_path = format!("features/FEAT-{:02}-{}.md", f_num, ctx.part.name);
-            let f_issue = resolve_issue_id(&target_out_dir, &f_path, f_num + 9);
+            let f_issue = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &f_path));
             let is_match = ctx.pkg_name == p.name
                 || (is_conops && ctx.pkg_name == "ConOps")
                 || (is_root && (ctx.pkg_name == pkg.name || ctx.pkg_name == "SysML_Model"));
@@ -1706,7 +1737,7 @@ pub fn forward_sync_sysml_to_specs(
                     mapped.join(", ")
                 };
                 feat_checklist.push(format!(
-                    "- [ ] #{} - [{}]({}) ({})",
+                    "- [ ] {} - [{}]({}) ({})",
                     f_issue, feat_title, feat_url, mapped_clauses
                 ));
             }
@@ -1722,9 +1753,9 @@ pub fn forward_sync_sysml_to_specs(
             let clean_name = strip_use_case_prefix(&uc_m.uc.name);
             let uc_slug = sanitize_id(clean_name);
             let uc_path = format!("use-cases/UC-{:02}-{}.md", uc_m.u_num, uc_slug);
-            let uc_issue = resolve_issue_id(&target_out_dir, &uc_path, 94 + uc_m.u_num);
+            let uc_issue = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &uc_path));
             assoc_uc.push(format!(
-                "- [ ] #{} - [Use Case {:02}: {}](../use-cases/UC-{:02}-{}.md)",
+                "- [ ] {} - [Use Case {:02}: {}](../use-cases/UC-{:02}-{}.md)",
                 uc_issue, uc_m.u_num, to_display_name(clean_name), uc_m.u_num, uc_slug
             ));
         }
@@ -1733,9 +1764,9 @@ pub fn forward_sync_sysml_to_specs(
         for s_m in story_metas.iter().filter(|m| m.pkg_name == p.name || is_conops) {
             let us_slug = sanitize_id(&s_m.action_name);
             let us_path = format!("user-stories/US-{:02}-{}.md", s_m.s_num, us_slug);
-            let us_issue = resolve_issue_id(&target_out_dir, &us_path, 88 + s_m.s_num);
+            let us_issue = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &us_path));
             assoc_us.push(format!(
-                "- [ ] #{} - [User Story {:02}: {}](../user-stories/US-{:02}-{}.md)",
+                "- [ ] {} - [User Story {:02}: {}](../user-stories/US-{:02}-{}.md)",
                 us_issue, s_m.s_num, to_display_name(&s_m.action_name), s_m.s_num, us_slug
             ));
         }
@@ -1785,7 +1816,7 @@ Subsystem architectural composition and formal invariants derive from `schema/mo
         let content = format!(
             r#"| Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #{epic_issue_id} |
+| **Issue ID** | {epic_issue_id} |
 | **Title** | {title} |
 | **Type** | epic |
 | **Package** | {pkg_name} |
@@ -1856,7 +1887,7 @@ Safety-critical invariant satisfaction, formal trace matrix closure, and zero ha
         let part_name = &ctx.part.name;
         let rel_path = format!("features/FEAT-{:02}-{}.md", f_num, part_name);
         let _feat_date = resolve_date(&target_out_dir, &rel_path, &today_iso);
-        let feat_issue_id = resolve_issue_id(&target_out_dir, &rel_path, f_num + 9);
+        let feat_issue_id = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &rel_path));
         let title = format!("Feature {:02}: [{}] {}", f_num, ctx.subsys_display, part_name);
 
         let class_diagram_block = generate_class_diagram(ctx.part);
@@ -1923,7 +1954,7 @@ Safety-critical invariant satisfaction, formal trace matrix closure, and zero ha
         let content = format!(
             r#"| Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #{feat_issue_id} |
+| **Issue ID** | {feat_issue_id} |
 | **Title** | {title} |
 | **Type** | feature |
 | **Parent Epic** | {parent_epic_link} |
@@ -1995,7 +2026,7 @@ Component behavior and interface definitions derive from `schema/model.sysml` pu
         let story_slug = sanitize_id(&s_meta.action_name);
         let rel_path = format!("user-stories/US-{:02}-{}.md", s_num, story_slug);
         let _us_date = resolve_date(&target_out_dir, &rel_path, &today_iso);
-        let us_issue_id = resolve_issue_id(&target_out_dir, &rel_path, s_num + 88);
+        let us_issue_id = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &rel_path));
         let title = format!("User Story {:02}: {}", s_num, to_display_name(&s_meta.action_name));
 
         let action_name = &s_meta.action_name;
@@ -2107,7 +2138,7 @@ Authoritative user story flows and interaction lifelines derive from `schema/sub
         let content = format!(
             r#"| Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #{us_issue_id} |
+| **Issue ID** | {us_issue_id} |
 | **Title** | {title} |
 | **Type** | user-story |
 | **Parent Epic** | {parent_epic_link} |
@@ -2159,7 +2190,7 @@ Operational concept definitions and system sequence interaction models:
         let uc_slug = sanitize_id(clean_name);
         let rel_path = format!("use-cases/UC-{:02}-{}.md", u_num, uc_slug);
         let _uc_date = resolve_date(&target_out_dir, &rel_path, &today_iso);
-        let uc_issue_id = resolve_issue_id(&target_out_dir, &rel_path, u_num + 94);
+        let uc_issue_id = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &rel_path));
         let title = format!("Use Case {:02}: {}", u_num, to_display_name(clean_name));
 
         let parsed_doc = parse_use_case_doc(uc_m.uc.doc.as_deref());
@@ -2285,11 +2316,10 @@ Operational concept definitions and system sequence interaction models:
         let feat_link_num = uc_m.engine_feat_num;
         let feat_part = &uc_m.engine_name;
         let feat_subsys = to_display_name(&uc_m.pkg_name);
-        let feat_issue = resolve_issue_id(
+        let feat_issue = format_issue_id_cell(resolve_existing_issue_id(
             &target_out_dir,
             &format!("features/FEAT-{:02}-{}.md", feat_link_num, feat_part),
-            feat_link_num + 9,
-        );
+        ));
 
         let matching_story = uc_m
             .story_s_num
@@ -2299,13 +2329,12 @@ Operational concept definitions and system sequence interaction models:
             let us_link_num = story.s_num;
             let us_slug = sanitize_id(&story.action_name);
             let us_display = to_display_name(&story.action_name);
-            let us_issue = resolve_issue_id(
+            let us_issue = format_issue_id_cell(resolve_existing_issue_id(
                 &target_out_dir,
                 &format!("user-stories/US-{:02}-{}.md", us_link_num, us_slug),
-                us_link_num + 88,
-            );
+            ));
             format!(
-                "| **#{}** | User Story | [User Story {:02}: {}](../user-stories/US-{:02}-{}.md) |\n",
+                "| **{}** | User Story | [User Story {:02}: {}](../user-stories/US-{:02}-{}.md) |\n",
                 us_issue, us_link_num, us_display, us_link_num, us_slug
             )
         } else {
@@ -2313,7 +2342,7 @@ Operational concept definitions and system sequence interaction models:
         };
 
         let feat_row = format!(
-            "| **#{}** | Feature | [Feature {:02}: [{}] {}](../features/FEAT-{:02}-{}.md) |\n",
+            "| **{}** | Feature | [Feature {:02}: [{}] {}](../features/FEAT-{:02}-{}.md) |\n",
             feat_issue, feat_link_num, feat_subsys, feat_part, feat_link_num, feat_part
         );
 
@@ -2357,7 +2386,7 @@ Operational use case realization and traceability links derive from `schema/subs
         let content = format!(
             r#"| Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #{uc_issue_id} |
+| **Issue ID** | {uc_issue_id} |
 | **Title** | {title} |
 | **Type** | use-case |
 | **Primary Actor** | {primary_actor} |
