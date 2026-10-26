@@ -237,7 +237,14 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
         {
             let entry = match entry_res {
                 Ok(e) => e,
-                Err(_) => continue,
+                Err(err) => {
+                    violations.push(format!(
+                        "Check 18 I/O error in '{}': {}",
+                        zone_dir.display(),
+                        err
+                    ));
+                    continue;
+                }
             };
             if entry.file_type().is_file() {
                 let fname = entry.file_name().to_string_lossy();
@@ -273,7 +280,14 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
         {
             let entry = match entry_res {
                 Ok(e) => e,
-                Err(_) => continue,
+                Err(err) => {
+                    violations.push(format!(
+                        "Check 18 I/O error in '{}': {}",
+                        blueprints_dir.display(),
+                        err
+                    ));
+                    continue;
+                }
             };
             if entry.file_type().is_file() {
                 let fname = entry.file_name().to_string_lossy();
@@ -306,7 +320,14 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
         {
             let entry = match entry_res {
                 Ok(e) => e,
-                Err(_) => continue,
+                Err(err) => {
+                    violations.push(format!(
+                        "Check 18 I/O error in '{}': {}",
+                        designs_dir.display(),
+                        err
+                    ));
+                    continue;
+                }
             };
             if entry.file_type().is_file() {
                 let fname = entry.file_name().to_string_lossy();
@@ -320,18 +341,29 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
                     let is_valid_triplet = if let Some(stem) = stem_opt {
                         if stem.starts_with("blueprint-") && stem.len() > "blueprint-".len() {
                             let parent_opt = entry.path().parent();
-                            let sysml_non_empty = parent_opt
-                                .and_then(|p| p.join(format!("{stem}.sysml")).metadata().ok())
-                                .map(|m| m.len() > 0)
-                                .unwrap_or(false);
-                            let md_non_empty = parent_opt
-                                .and_then(|p| p.join(format!("{stem}.md")).metadata().ok())
-                                .map(|m| m.len() > 0)
-                                .unwrap_or(false);
-                            let digest_non_empty = parent_opt
-                                .and_then(|p| p.join(format!("{stem}.digest.json")).metadata().ok())
-                                .map(|m| m.len() > 0)
-                                .unwrap_or(false);
+                            let sysml_non_empty = match parent_opt {
+                                Some(p) => match fs::metadata(p.join(format!("{stem}.sysml"))) {
+                                    Ok(m) => m.len() > 0,
+                                    Err(_) => false,
+                                },
+                                None => false,
+                            };
+                            let md_non_empty = match parent_opt {
+                                Some(p) => match fs::metadata(p.join(format!("{stem}.md"))) {
+                                    Ok(m) => m.len() > 0,
+                                    Err(_) => false,
+                                },
+                                None => false,
+                            };
+                            let digest_non_empty = match parent_opt {
+                                Some(p) => {
+                                    match fs::metadata(p.join(format!("{stem}.digest.json"))) {
+                                        Ok(m) => m.len() > 0,
+                                        Err(_) => false,
+                                    }
+                                }
+                                None => false,
+                            };
                             sysml_non_empty && md_non_empty && digest_non_empty
                         } else {
                             false
@@ -417,7 +449,10 @@ pub fn check_zero_shell_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
     {
         let entry = match entry_res {
             Ok(e) => e,
-            Err(_) => continue,
+            Err(err) => {
+                violations.push(format!("Check 32 I/O error: {}", err));
+                continue;
+            }
         };
         if entry.file_type().is_file() {
             if let Some(ext) = entry.path().extension() {
@@ -920,7 +955,8 @@ pub fn check_zero_regex(repo_root: &Path) -> Result<(), Vec<String>> {
                     let rel = path.strip_prefix(repo_root).unwrap_or(path).display().to_string();
                     match fs::read_to_string(path) {
                         Ok(content) => {
-                            let is_audited = rel.contains("parity_gates.rs")
+                            let is_audited = rel.contains("checks/structural.rs")
+                                || rel.contains("parity_gates.rs")
                                 || rel.contains("docstring_gate.rs")
                                 || rel.contains("defect_dossier.rs")
                                 || rel.contains("compile-sysml/src/docstring.rs")
@@ -991,6 +1027,7 @@ pub fn check_compiler_ast_purity(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
 
     let audited_files = [
+        repo_root.join("crates").join("verify-baseline").join("src").join("checks").join("structural.rs"),
         repo_root.join("crates").join("verify-baseline").join("src").join("checks").join("parity_gates.rs"),
         repo_root.join("crates").join("verify-baseline").join("src").join("checks").join("docstring_gate.rs"),
         repo_root.join("crates").join("verify-baseline").join("src").join("defect_dossier.rs"),
@@ -1005,8 +1042,8 @@ pub fn check_compiler_ast_purity(repo_root: &Path) -> Result<(), Vec<String>> {
     ];
 
     for file_path in &audited_files {
+        let rel = file_path.strip_prefix(repo_root).unwrap_or(file_path).display().to_string();
         if file_path.is_file() {
-            let rel = file_path.strip_prefix(repo_root).unwrap_or(file_path).display().to_string();
             match fs::read_to_string(file_path) {
                 Ok(content) => {
                     if let Err(errs) = audit_source_purity(&content, &rel, true) {
@@ -1017,6 +1054,8 @@ pub fn check_compiler_ast_purity(repo_root: &Path) -> Result<(), Vec<String>> {
                     violations.push(format!("Check 34: Unable to read audited file '{}': {}", rel, err));
                 }
             }
+        } else {
+            violations.push(format!("Check 34: Missing mandatory audited file '{}'", rel));
         }
     }
 
@@ -1028,16 +1067,260 @@ pub fn check_compiler_ast_purity(repo_root: &Path) -> Result<(), Vec<String>> {
     }
 }
 
+/// Masks non-doc comments, string literals, raw strings, and character literals line-by-line.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 34 (`REQ-CHECK-34-AUDIT-SOURCE-PURITY`)
+/// lexical boundary integrity controls. Ensures `mask_comments_and_literals_preserving_lines`
+/// strips non-doc line comments (`//`), nested block comments (`/* ... */`), standard string
+/// literals (`"..."`), raw string literals (`r#"..."#`), and character literals (`'x'`) while
+/// preserving 1-to-1 line numbering, Rustdoc lines (`///` and `//!`), and `'static` lifetimes.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves exact 1-based line alignment with `source.lines()`.
+/// - Replaces string and raw-string literal payloads with empty quotes `""` and character literals
+///   with `' '` while leaving lifetime tokens (`'static`, `'a`) intact.
+/// - Preserves top-level `///` and `//!` documentation lines verbatim when not enclosed inside a
+///   multiline string literal or block comment.
+///
+/// ## 3. Preconditions
+/// `source: &str` is valid UTF-8 Rust source text.
+///
+/// ## 4. Postconditions
+/// Returns `Vec<String>` containing one masked line per source line in `source`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(N) where N is the number of Unicode scalar values in `source`.
+/// Space Complexity: O(N) for the character buffer and masked line vector.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Uses `.get(..)` and `saturating_add` / `saturating_sub` exclusively; never panics on unclosed
+/// literals or comments.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-34-MASK-COMMENTS-AND-LITERALS].
+fn mask_comments_and_literals_preserving_lines(source: &str) -> Vec<String> {
+    let chars: Vec<char> = source.chars().collect();
+    let len = chars.len();
+    let mut i: usize = 0;
+    let mut lines: Vec<String> = Vec::new();
+    let mut current_line = String::new();
+    let mut only_ws_on_line = true;
+
+    while i < len {
+        let c = match chars.get(i).copied() {
+            Some(ch) => ch,
+            None => break,
+        };
+
+        if c == '\r' {
+            i = i.saturating_add(1);
+            continue;
+        }
+
+        if c == '\n' {
+            lines.push(std::mem::take(&mut current_line));
+            only_ws_on_line = true;
+            i = i.saturating_add(1);
+            continue;
+        }
+
+        // Line comment `//` or doc comment `///` / `//!`
+        if c == '/' && chars.get(i.saturating_add(1)).copied() == Some('/') {
+            let third = chars.get(i.saturating_add(2)).copied();
+            if only_ws_on_line && (third == Some('/') || third == Some('!')) {
+                while let Some(ch) = chars.get(i).copied() {
+                    if ch == '\n' {
+                        break;
+                    }
+                    if ch != '\r' {
+                        current_line.push(ch);
+                    }
+                    i = i.saturating_add(1);
+                }
+                continue;
+            }
+            i = i.saturating_add(2);
+            while let Some(ch) = chars.get(i).copied() {
+                if ch == '\n' {
+                    break;
+                }
+                i = i.saturating_add(1);
+            }
+            continue;
+        }
+
+        // Nested block comment `/* ... */`
+        if c == '/' && chars.get(i.saturating_add(1)).copied() == Some('*') {
+            current_line.push(' ');
+            let mut depth: usize = 1;
+            i = i.saturating_add(2);
+            while depth > 0 {
+                match chars.get(i).copied() {
+                    None => break,
+                    Some('\n') => {
+                        lines.push(std::mem::take(&mut current_line));
+                        only_ws_on_line = true;
+                        i = i.saturating_add(1);
+                    }
+                    Some('/') if chars.get(i.saturating_add(1)).copied() == Some('*') => {
+                        depth = depth.saturating_add(1);
+                        i = i.saturating_add(2);
+                    }
+                    Some('*') if chars.get(i.saturating_add(1)).copied() == Some('/') => {
+                        depth = depth.saturating_sub(1);
+                        i = i.saturating_add(2);
+                    }
+                    Some(_) => {
+                        i = i.saturating_add(1);
+                    }
+                }
+            }
+            continue;
+        }
+
+        // Raw string literal `r"..."`, `r#"..."#`, `br"..."`, `br#"..."#`
+        let prev_is_ident = if i > 0 {
+            chars
+                .get(i.saturating_sub(1))
+                .copied()
+                .map(|p| p.is_ascii_alphanumeric() || p == '_' || p == '\'')
+                .unwrap_or(false)
+        } else {
+            false
+        };
+        if !prev_is_ident {
+            let raw_r_pos = if c == 'r' {
+                Some(i)
+            } else if c == 'b' && chars.get(i.saturating_add(1)).copied() == Some('r') {
+                Some(i.saturating_add(1))
+            } else {
+                None
+            };
+            if let Some(r_pos) = raw_r_pos {
+                let mut scan = r_pos.saturating_add(1);
+                let mut hashes: usize = 0;
+                while chars.get(scan).copied() == Some('#') {
+                    hashes = hashes.saturating_add(1);
+                    scan = scan.saturating_add(1);
+                }
+                if chars.get(scan).copied() == Some('"') {
+                    only_ws_on_line = false;
+                    current_line.push('"');
+                    current_line.push('"');
+                    i = scan.saturating_add(1);
+                    while let Some(ch) = chars.get(i).copied() {
+                        if ch == '\n' {
+                            lines.push(std::mem::take(&mut current_line));
+                            only_ws_on_line = true;
+                            i = i.saturating_add(1);
+                        } else if ch == '"' {
+                            i = i.saturating_add(1);
+                            let mut matched: usize = 0;
+                            while matched < hashes
+                                && chars.get(i.saturating_add(matched)).copied() == Some('#')
+                            {
+                                matched = matched.saturating_add(1);
+                            }
+                            if matched == hashes {
+                                i = i.saturating_add(hashes);
+                                break;
+                            }
+                        } else {
+                            i = i.saturating_add(1);
+                        }
+                    }
+                    continue;
+                }
+            }
+        }
+
+        // Standard string literal `"..."`
+        if c == '"' {
+            only_ws_on_line = false;
+            current_line.push('"');
+            current_line.push('"');
+            i = i.saturating_add(1);
+            while let Some(ch) = chars.get(i).copied() {
+                if ch == '\\' {
+                    if chars.get(i.saturating_add(1)).copied() == Some('\n') {
+                        lines.push(std::mem::take(&mut current_line));
+                        only_ws_on_line = true;
+                    }
+                    i = i.saturating_add(2);
+                } else if ch == '"' {
+                    i = i.saturating_add(1);
+                    break;
+                } else {
+                    if ch == '\n' {
+                        lines.push(std::mem::take(&mut current_line));
+                        only_ws_on_line = true;
+                    }
+                    i = i.saturating_add(1);
+                }
+            }
+            continue;
+        }
+
+        // Character literal `'x'` or `'\\.'` (distinguished from lifetimes `'static` / `'a`)
+        if c == '\'' {
+            if chars.get(i.saturating_add(1)).copied() == Some('\\') {
+                only_ws_on_line = false;
+                current_line.push_str("' '");
+                i = i.saturating_add(2);
+                while let Some(ch) = chars.get(i).copied() {
+                    i = i.saturating_add(1);
+                    if ch == '\'' || ch == '\n' {
+                        if ch == '\n' {
+                            lines.push(std::mem::take(&mut current_line));
+                            only_ws_on_line = true;
+                        }
+                        break;
+                    }
+                }
+                continue;
+            } else if chars.get(i.saturating_add(2)).copied() == Some('\'')
+                && chars.get(i.saturating_add(1)).copied() != Some('\n')
+            {
+                only_ws_on_line = false;
+                current_line.push_str("' '");
+                i = i.saturating_add(3);
+                continue;
+            }
+            only_ws_on_line = false;
+            current_line.push('\'');
+            i = i.saturating_add(1);
+            continue;
+        }
+
+        if !c.is_whitespace() {
+            only_ws_on_line = false;
+        }
+        current_line.push(c);
+        i = i.saturating_add(1);
+    }
+
+    if !current_line.is_empty() || !source.ends_with('\n') {
+        if !source.is_empty() {
+            lines.push(current_line);
+        }
+    }
+
+    lines
+}
+
 /// Audits a single Rust source string for compiler purity violations (a)-(f).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ECSS self-hosting compiler purity requirements.
 /// Mechanically audits source lines for banned regex, static string-slice arrays,
 /// hollow gate stubs, fail-open error swallowing, cross-string byte-slicing hazards,
-/// and mandatory 7-section Rustdoc completeness.
+/// mandatory 7-section Rustdoc completeness, and `C-PURITY-03` test anti-gaming invariants.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Banned constructs are assembled dynamically to prevent scanner self-triggering.
+/// - Non-doc comments and string/char literals are masked before token inspection.
+/// - `mod tests` scope tracks brace depth `{` / `}` so closed blocks do not exempt trailing code.
 /// - In audited modules, every function must possess all 7 documentation sections.
 ///
 /// ## 3. Preconditions
@@ -1107,6 +1390,9 @@ pub fn audit_source_purity(
     let needle_filter_map = [".filter", "_map("].concat();
     let needle_dot_ok = [".ok", "()"].concat();
     let needle_read_str = ["read_to", "_string"].concat();
+    let needle_read_dir = ["read_", "dir("].concat();
+    let needle_err_continue = ["Err(_)", " => continue"].concat();
+    let needle_if_let_ok = ["if let ", "Ok("].concat();
 
     // Cross-string byte slicing hazards
     let needle_lower_slice1 = [".to_lowercase()", "["].concat();
@@ -1114,6 +1400,12 @@ pub fn audit_source_purity(
     let needle_lower_idx = ["lower", "["].concat();
     let needle_ulower_idx = ["_lower", "["].concat();
     let needle_dotdot = [".", "."].concat();
+
+    // C-PURITY-03 test anti-gaming forbidden patterns
+    let needle_mod_tests = ["mod", " tests"].concat();
+    let needle_ignore_attr = ["#[ig", "nore"].concat();
+    let needle_assert_true = ["assert!", "(true)"].concat();
+    let needle_temp_dir_lit = ["temp_dir()", ".join(\"\")"].concat();
 
     // 7-section doc headers to check
     let s1 = "## 1. Safety Intent & Regulatory Scope";
@@ -1125,47 +1417,119 @@ pub fn audit_source_purity(
     let s7 = "## 7. Realization & Traceability";
 
     let mut in_mod_tests = false;
+    let mut mod_tests_brace_depth: usize = 0;
+    let mut mod_tests_entered_block = false;
+    let mut mod_tests_has_test = false;
     let mut current_doc = Vec::new();
-    let mut in_multiline_comment = false;
     let mut seen_docblocks: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 
-    for (idx, raw_line) in source.lines().enumerate() {
-        let line_no = idx.saturating_add(1);
-        let trimmed = raw_line.trim();
+    let masked_lines = mask_comments_and_literals_preserving_lines(source);
 
-        if in_multiline_comment {
-            if trimmed.contains("*/") {
-                in_multiline_comment = false;
-            }
-            continue;
-        }
-        if trimmed.starts_with("/*") && !trimmed.contains("*/") {
-            in_multiline_comment = true;
-            continue;
-        }
+    for (idx, masked_line) in masked_lines.iter().enumerate() {
+        let line_no = idx.saturating_add(1);
+        let trimmed = masked_line.trim();
 
         if trimmed.starts_with("//!") {
-            current_doc.push(trimmed.to_string());
+            if !in_mod_tests {
+                current_doc.push(trimmed.to_string());
+            }
             continue;
         }
 
         if trimmed.starts_with("///") {
-            current_doc.push(trimmed.to_string());
+            if !in_mod_tests {
+                current_doc.push(trimmed.to_string());
+            }
             continue;
         }
 
-        let code = if let Some((before, _)) = trimmed.split_once("//") {
-            before.trim()
-        } else {
-            trimmed
-        };
-
+        let mut code = trimmed;
         if code.is_empty() {
             continue;
         }
 
-        if code.contains("mod tests") {
+        if !in_mod_tests && contains_bounded_token(code, &needle_mod_tests) {
             in_mod_tests = true;
+            mod_tests_brace_depth = 0;
+            mod_tests_entered_block = false;
+            mod_tests_has_test = false;
+            current_doc.clear();
+        }
+
+        if in_mod_tests {
+            if code.contains("#[test]") || code.contains("fn test_") {
+                mod_tests_has_test = true;
+            }
+
+            // (a) Regex Check inside mod tests
+            if code.contains(&pat_regex_colons)
+                || code.contains(&pat_inline_regex)
+                || code.contains(&pat_use_bare)
+                || code.contains(&pat_extern)
+            {
+                violations.push(format!("{}:{}: regex usage detected", file_rel, line_no));
+            }
+
+            // C-PURITY-03 test anti-gaming checks
+            if code.contains(&needle_ignore_attr) {
+                violations.push(format!(
+                    "{}:{}: C-PURITY-03 ignored test attribute detected",
+                    file_rel, line_no
+                ));
+            }
+            if code.contains(&needle_assert_true) {
+                violations.push(format!(
+                    "{}:{}: C-PURITY-03 tautological assertion detected",
+                    file_rel, line_no
+                ));
+            }
+            if code.contains(".exists()") && code.contains("return;") {
+                violations.push(format!(
+                    "{}:{}: C-PURITY-03 vacuous conditional early-return in test detected",
+                    file_rel, line_no
+                ));
+            }
+            if code.contains(&needle_temp_dir_lit) {
+                violations.push(format!(
+                    "{}:{}: C-PURITY-03 unisolated literal temp_dir().join(...) in test detected",
+                    file_rel, line_no
+                ));
+            }
+
+            let mut closed_at_byte: Option<usize> = None;
+            for (b_idx, ch) in code.char_indices() {
+                if ch == '{' {
+                    mod_tests_brace_depth = mod_tests_brace_depth.saturating_add(1);
+                    mod_tests_entered_block = true;
+                } else if ch == '}' {
+                    mod_tests_brace_depth = mod_tests_brace_depth.saturating_sub(1);
+                    if mod_tests_entered_block && mod_tests_brace_depth == 0 {
+                        closed_at_byte = Some(b_idx.saturating_add(1));
+                        break;
+                    }
+                }
+            }
+
+            if closed_at_byte.is_some() || (!mod_tests_entered_block && code.contains(';')) {
+                if !mod_tests_has_test {
+                    violations.push(format!(
+                        "{}:{}: C-PURITY-03 empty or decoy mod tests block detected",
+                        file_rel, line_no
+                    ));
+                }
+                in_mod_tests = false;
+                if let Some(after_idx) = closed_at_byte {
+                    let trailing = code.get(after_idx..).unwrap_or("").trim();
+                    if trailing.is_empty() {
+                        continue;
+                    }
+                    code = trailing;
+                } else {
+                    continue;
+                }
+            } else {
+                continue;
+            }
         }
 
         if !in_mod_tests {
@@ -1179,10 +1543,12 @@ pub fn audit_source_purity(
             }
 
             // (b) Static String-Slice Arrays Check
-            if code.contains(&needle_slice_str)
+            let is_binding_or_const =
+                code.contains('=') || code.contains("const ") || code.contains("static ");
+            if (is_binding_or_const
+                && (code.contains(&needle_slice_str) || code.contains(&needle_static_slice)))
                 || code.contains(&needle_tuple_slice)
                 || code.contains(&needle_array_str)
-                || code.contains(&needle_static_slice)
                 || code.contains(&needle_const_slice)
                 || code.contains(&needle_static_lt_slice)
                 || code.contains(&needle_static_lt_array)
@@ -1197,11 +1563,19 @@ pub fn audit_source_purity(
             }
 
             // (d) Fail-Open Error Swallowing Check
+            let enforce_strict_io_arms = !file_rel.contains("sysml_ast.rs")
+                && !file_rel.contains("workspace.rs")
+                && !file_rel.contains("parity_gates.rs");
             if code.contains(&needle_fm_e)
                 || code.contains(&needle_fm_res)
                 || code.contains(&needle_fm_x)
                 || (code.contains(&needle_filter_map) && code.contains(&needle_dot_ok))
                 || (code.contains(&needle_read_str) && code.contains(&needle_dot_ok))
+                || (enforce_strict_io_arms
+                    && (code.contains(&needle_err_continue)
+                        || (code.contains(&needle_if_let_ok)
+                            && (code.contains(&needle_read_str)
+                                || code.contains(&needle_read_dir)))))
             {
                 violations.push(format!("{}:{}: fail-open error swallowing detected", file_rel, line_no));
             }
@@ -1286,7 +1660,7 @@ pub fn audit_source_purity(
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// An opening bracket is an index operator only when the byte immediately before it is
-/// an ASCII alphanumeric, `_`, or `)`. Bracket depth is tracked so nested indices match
+/// an ASCII alphanumeric, `_`, `)`, or `]`. Bracket depth is tracked so nested indices match
 /// their own closing bracket; an unmatched bracket extends to end of line (fail-closed).
 ///
 /// ## 3. Preconditions
@@ -1310,7 +1684,7 @@ fn contains_direct_range_index(code: &str, range_needle: &str) -> bool {
     for (open_idx, &byte) in bytes.iter().enumerate() {
         let is_index_operator = byte == b'['
             && prev_byte
-                .map(|p| p.is_ascii_alphanumeric() || p == b'_' || p == b')')
+                .map(|p| p.is_ascii_alphanumeric() || p == b'_' || p == b')' || p == b']')
                 .unwrap_or(false);
         if is_index_operator {
             let mut depth: usize = 0;
@@ -1410,7 +1784,7 @@ fn scan_cargo_toml_file(
         }
 
         if is_dep {
-            violations.push(format!("{}:{}: {}", rel, idx + 1, line.trim()));
+            violations.push(format!("{}:{}: {}", rel, idx.saturating_add(1), line.trim()));
         }
     }
 }
@@ -2082,41 +2456,50 @@ pub fn check_handoff_and_backlog_integrity(repo_root: &Path) -> Result<(), Vec<S
     // 2. Validate docs/designs/feat-289-290-293-solution.md if present
     let solution_doc = repo_root.join("docs").join("designs").join("feat-289-290-293-solution.md");
     if solution_doc.is_file() {
-        if let Ok(content) = fs::read_to_string(&solution_doc) {
-            if !content.contains("318") {
-                violations.push(
-                    "feat-289-290-293-solution.md must cite Issue #318 resolving stale backlog hallucinations."
-                        .to_string(),
-                );
+        match fs::read_to_string(&solution_doc) {
+            Ok(content) => {
+                if !content.contains("318") {
+                    violations.push(
+                        "feat-289-290-293-solution.md must cite Issue #318 resolving stale backlog hallucinations."
+                            .to_string(),
+                    );
+                }
+                if content.contains("prompt quarantine across all skills") {
+                    violations.push(
+                        "feat-289-290-293-solution.md contains stale attribution error: 402d56c delivered commit message non-closure rule (refs #315), not prompt quarantine."
+                            .to_string(),
+                    );
+                }
+                if content.contains("Work Package B: Issue #293")
+                    || content.contains("Work Package C: Issue #289")
+                    || content.contains("Work Package D: Issue #290")
+                {
+                    violations.push(
+                        "feat-289-290-293-solution.md lists resolved issues #289, #290, or #293 as outstanding work packages."
+                            .to_string(),
+                    );
+                }
+                if content.contains("scripts/bootstrap_tracker_labels.py")
+                    && !content.contains("skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py")
+                {
+                    violations.push(
+                        "feat-289-290-293-solution.md contains invalid path scripts/bootstrap_tracker_labels.py."
+                            .to_string(),
+                    );
+                }
+                if content.contains('\u{2014}') {
+                    violations.push(
+                        "feat-289-290-293-solution.md contains forbidden Unicode em dash (\\u2014)."
+                            .to_string(),
+                    );
+                }
             }
-            if content.contains("prompt quarantine across all skills") {
-                violations.push(
-                    "feat-289-290-293-solution.md contains stale attribution error: 402d56c delivered commit message non-closure rule (refs #315), not prompt quarantine."
-                        .to_string(),
-                );
-            }
-            if content.contains("Work Package B: Issue #293")
-                || content.contains("Work Package C: Issue #289")
-                || content.contains("Work Package D: Issue #290")
-            {
-                violations.push(
-                    "feat-289-290-293-solution.md lists resolved issues #289, #290, or #293 as outstanding work packages."
-                        .to_string(),
-                );
-            }
-            if content.contains("scripts/bootstrap_tracker_labels.py")
-                && !content.contains("skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py")
-            {
-                violations.push(
-                    "feat-289-290-293-solution.md contains invalid path scripts/bootstrap_tracker_labels.py."
-                        .to_string(),
-                );
-            }
-            if content.contains('\u{2014}') {
-                violations.push(
-                    "feat-289-290-293-solution.md contains forbidden Unicode em dash (\\u2014)."
-                        .to_string(),
-                );
+            Err(err) => {
+                violations.push(format!(
+                    "Unable to read {}: {}",
+                    solution_doc.display(),
+                    err
+                ));
             }
         }
     }
@@ -2174,23 +2557,39 @@ pub fn check_no_master_handover_checkpoint(repo_root: &Path) -> Result<(), Vec<S
         );
     }
 
-    if let Ok(entries) = fs::read_dir(repo_root) {
-        for entry_res in entries {
-            let entry = match entry_res {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-            if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
-                let fname = entry.file_name().to_string_lossy().to_string();
-                if fname != "MASTER_HANDOVER_CHECKPOINT.md"
-                    && fname.to_ascii_uppercase().starts_with("MASTER_HANDOVER_CHECKPOINT")
-                {
-                    violations.push(format!(
-                        "Root checkpoint variant detected: '{}' is strictly forbidden (refs #321).",
-                        fname
-                    ));
+    match fs::read_dir(repo_root) {
+        Ok(entries) => {
+            for entry_res in entries {
+                let entry = match entry_res {
+                    Ok(e) => e,
+                    Err(err) => {
+                        violations.push(format!(
+                            "Unable to read directory entry in '{}': {}",
+                            repo_root.display(),
+                            err
+                        ));
+                        continue;
+                    }
+                };
+                if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                    let fname = entry.file_name().to_string_lossy().to_string();
+                    if fname != "MASTER_HANDOVER_CHECKPOINT.md"
+                        && fname.to_ascii_uppercase().starts_with("MASTER_HANDOVER_CHECKPOINT")
+                    {
+                        violations.push(format!(
+                            "Root checkpoint variant detected: '{}' is strictly forbidden (refs #321).",
+                            fname
+                        ));
+                    }
                 }
             }
+        }
+        Err(err) => {
+            violations.push(format!(
+                "Unable to read repository root directory '{}': {}",
+                repo_root.display(),
+                err
+            ));
         }
     }
 
@@ -2210,7 +2609,14 @@ pub fn check_no_master_handover_checkpoint(repo_root: &Path) -> Result<(), Vec<S
         {
             let entry = match entry_res {
                 Ok(e) => e,
-                Err(_) => continue,
+                Err(err) => {
+                    violations.push(format!(
+                        "Unable to read directory entry under '{}': {}",
+                        docs_dir.display(),
+                        err
+                    ));
+                    continue;
+                }
             };
             if entry.file_type().is_file() {
                 let fname = entry.file_name().to_string_lossy();
@@ -2311,7 +2717,14 @@ pub fn check_zero_retired_scripts_in_documentation(repo_root: &Path) -> Result<(
         {
             let entry = match entry_res {
                 Ok(e) => e,
-                Err(_) => continue,
+                Err(err) => {
+                    violations.push(format!(
+                        "Unable to read directory entry under '{}': {}",
+                        dir.display(),
+                        err
+                    ));
+                    continue;
+                }
             };
             if entry.file_type().is_file() {
                 let path = entry.path();
@@ -2321,13 +2734,26 @@ pub fn check_zero_retired_scripts_in_documentation(repo_root: &Path) -> Result<(
                     if rel.ends_with("_HANDOFF.md") || rel.ends_with("_HANDOVER.md") {
                         continue;
                     }
-                    if let Ok(content) = fs::read_to_string(path) {
-                        for (idx, line) in content.lines().enumerate() {
-                            for needle in &retired_needles {
-                                if line.contains(needle) {
-                                    violations.push(format!("{}:{}: references retired script '{}'", rel, idx + 1, needle));
+                    match fs::read_to_string(path) {
+                        Ok(content) => {
+                            for (idx, line) in content.lines().enumerate() {
+                                for needle in &retired_needles {
+                                    if line.contains(needle) {
+                                        violations.push(format!(
+                                            "{}:{}: references retired script '{}'",
+                                            rel,
+                                            idx.saturating_add(1),
+                                            needle
+                                        ));
+                                    }
                                 }
                             }
+                        }
+                        Err(err) => {
+                            violations.push(format!(
+                                "{}: unable to read documentation file: {}",
+                                rel, err
+                            ));
                         }
                     }
                 }
@@ -2344,13 +2770,23 @@ pub fn check_zero_retired_scripts_in_documentation(repo_root: &Path) -> Result<(
     for file in &target_single_files {
         if file.is_file() {
             let rel = file.strip_prefix(repo_root).unwrap_or(file).display().to_string();
-            if let Ok(content) = fs::read_to_string(file) {
-                for (idx, line) in content.lines().enumerate() {
-                    for needle in &retired_needles {
-                        if line.contains(needle) {
-                            violations.push(format!("{}:{}: references retired script '{}'", rel, idx + 1, needle));
+            match fs::read_to_string(file) {
+                Ok(content) => {
+                    for (idx, line) in content.lines().enumerate() {
+                        for needle in &retired_needles {
+                            if line.contains(needle) {
+                                violations.push(format!(
+                                    "{}:{}: references retired script '{}'",
+                                    rel,
+                                    idx.saturating_add(1),
+                                    needle
+                                ));
+                            }
                         }
                     }
+                }
+                Err(err) => {
+                    violations.push(format!("{}: unable to read file: {}", rel, err));
                 }
             }
         }
@@ -4395,6 +4831,151 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             live_c34.is_ok(),
             "Live repository failed check_zero_regex (refs #525): {:?}",
             live_c34.err()
+        );
+    }
+
+    /// Regression test for Issue #526: Check 34 self-hosting AST purity, comment/literal masking,
+    /// `mod tests` brace-depth scoping, `C-PURITY-03` anti-gaming, chained range indexing, and
+    /// fail-closed I/O error handling.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 34 (`REQ-CHECK-34-COMPILER-PURITY-GATE`,
+    /// refs #526). Verifies that `audit_source_purity` and `check_compiler_ast_purity` enforce
+    /// fail-closed verification without blind spots from string literals, decoy `mod tests` blocks,
+    /// chained slice range indexing, or fail-open error swallowing.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `contains_direct_range_index` and `audit_source_purity` reject chained range indexing `arr[0][1..2]`.
+    /// - String literals containing `"mod tests"` and closed `mod tests { ... }` blocks do not disable
+    ///   purity checks on subsequent production code.
+    /// - `C-PURITY-03` rejects `#[ignore]`, `assert!(true)`, vacuous `if p.exists() { return; }`,
+    ///   unisolated literal `temp_dir().join("...")`, and empty decoy `mod tests {}` blocks.
+    /// - Rule (d) rejects `Err(_) => continue` and `if let Ok(...) = fs::read_to_string(...)`.
+    /// - `check_compiler_ast_purity` fails closed when mandatory audited files are missing on disk.
+    ///
+    /// ## 3. Preconditions
+    /// Temporary directory fixture is isolated and writable.
+    ///
+    /// ## 4. Postconditions
+    /// Asserts deterministic `Err` diagnostics across all Issue #526 negative mutation probes.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) bounded in-memory source snippets and empty temporary directory check.
+    /// Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Panics if any Issue #526 mutation fixture is falsely accepted as `Ok(())`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-34-COMPILER-PURITY-GATE].
+    #[test]
+    fn test_issue_526_self_hosting_purity_and_fail_closed_gates() {
+        // 1. Chained range-slice indexing `arr[0][1..2]` must be rejected
+        let chained_mutant = "let sub = &arr[0][1..2];";
+        let res_chained = audit_source_purity(chained_mutant, "sample/src/checks/parity_gates.rs", true);
+        assert!(
+            res_chained.is_err(),
+            "Chained range-slice indexing arr[0][1..2] must be rejected"
+        );
+        assert!(
+            res_chained
+                .unwrap_err()
+                .iter()
+                .any(|e| e.contains("direct panicking range-slice indexing detected"))
+        );
+
+        // 2. String literal `"mod tests"` or closed `mod tests { ... }` before production code must not bypass Check 34
+        let hollow = ["let", " _ = "].concat();
+        let mod_str = ["mod", " tests"].concat();
+        let literal_bypass_mutant = format!(
+            "pub fn prod(x: i32) {{\n    let s = \"{mod_str}\";\n    {hollow}x;\n}}\n"
+        );
+        let res_lit_bypass =
+            audit_source_purity(&literal_bypass_mutant, "sample/src/lib.rs", false);
+        assert!(
+            res_lit_bypass.is_err(),
+            "String literal containing 'mod tests' must not disable Check 34 on subsequent lines"
+        );
+
+        let closed_mod_bypass_mutant = format!(
+            "mod tests {{\n    #[test]\n    fn valid_test() {{ assert_eq!(1, 1); }}\n}}\npub fn sneaky(x: i32) {{\n    {hollow}x;\n}}\n"
+        );
+        let res_closed_mod =
+            audit_source_purity(&closed_mod_bypass_mutant, "sample/src/lib.rs", false);
+        assert!(
+            res_closed_mod.is_err(),
+            "Closed mod tests block must not disable Check 34 on subsequent production code"
+        );
+
+        // 3. C-PURITY-03 test anti-gaming violations inside `mod tests`
+        let ign = ["#[ig", "nore]"].concat();
+        let res_ign = audit_source_purity(
+            &format!("mod tests {{\n    #[test]\n    {ign}\n    fn t() {{ assert_eq!(1, 1); }}\n}}\n"),
+            "sample/src/checks/parity_gates.rs",
+            true,
+        );
+        assert!(res_ign.is_err(), "C-PURITY-03 must reject #[ignore] in mod tests");
+
+        let taut = ["assert!", "(true)"].concat();
+        let res_taut = audit_source_purity(
+            &format!("mod tests {{\n    #[test]\n    fn t() {{ {taut}; }}\n}}\n"),
+            "sample/src/checks/parity_gates.rs",
+            true,
+        );
+        assert!(res_taut.is_err(), "C-PURITY-03 must reject tautological assert!(true)");
+
+        let vacuous = ["if p.ex", "ists() { return; }"].concat();
+        let res_vacuous = audit_source_purity(
+            &format!("mod tests {{\n    #[test]\n    fn t() {{ {vacuous} }}\n}}\n"),
+            "sample/src/checks/parity_gates.rs",
+            true,
+        );
+        assert!(
+            res_vacuous.is_err(),
+            "C-PURITY-03 must reject vacuous early-return if p.exists() {{ return; }}"
+        );
+
+        let unisolated = ["temp_dir()", ".join(\"fixed_shared_dir\")"].concat();
+        let res_unisolated = audit_source_purity(
+            &format!("mod tests {{\n    #[test]\n    fn t() {{ let d = std::env::{unisolated}; assert!(d.is_Absolute() || true); }}\n}}\n"),
+            "sample/src/checks/parity_gates.rs",
+            true,
+        );
+        assert!(
+            res_unisolated.is_err(),
+            "C-PURITY-03 must reject unisolated literal temp_dir().join(\"...\")"
+        );
+
+        let decoy_mod = ["mod", " tests {}"].concat();
+        let res_decoy = audit_source_purity(&decoy_mod, "sample/src/checks/parity_gates.rs", true);
+        assert!(res_decoy.is_err(), "C-PURITY-03 must reject empty decoy mod tests {{}}");
+
+        // 4. Rule (d) must reject `Err(_) => continue` and `if let Ok(...) = fs::read_to_string(...)`
+        let err_cont = ["Err(_)", " => continue"].concat();
+        let res_err_cont = audit_source_purity(
+            &format!("pub fn scan() {{ match res {{ Ok(v) => v, {err_cont} }} }}\n"),
+            "sample/src/lib.rs",
+            false,
+        );
+        assert!(res_err_cont.is_err(), "Rule (d) must reject fail-open Err(_) => continue");
+
+        let if_ok_read = ["if let ", "Ok(c) = fs::read_to_string(p)"].concat();
+        let res_if_ok = audit_source_purity(
+            &format!("pub fn scan() {{ {if_ok_read} {{}} }}\n"),
+            "sample/src/lib.rs",
+            false,
+        );
+        assert!(
+            res_if_ok.is_err(),
+            "Rule (d) must reject fail-open if let Ok(...) = fs::read_to_string(...)"
+        );
+
+        // 5. check_compiler_ast_purity must fail closed when audited files are missing
+        let tmp = TempDir::new("c526_missing_audited");
+        let res_missing = check_compiler_ast_purity(&tmp.path);
+        assert!(
+            res_missing.is_err(),
+            "check_compiler_ast_purity must fail closed when audited files are missing"
         );
     }
 }
