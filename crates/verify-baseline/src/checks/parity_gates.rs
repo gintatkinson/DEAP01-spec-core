@@ -726,6 +726,26 @@ pub fn discover_sysml_model_text(repo_root: &Path) -> Option<String> {
         }
     }
 
+    let designs_dir = repo_root.join("docs").join("designs");
+    if designs_dir.is_dir() {
+        let mut paths =
+            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[&designs_dir]);
+        paths.sort();
+        let mut design_sysml_contents = Vec::new();
+        for p in paths {
+            if p.extension().is_some_and(|ext| ext == "sysml") {
+                if let Ok(content) = fs::read_to_string(&p) {
+                    if !content.trim().is_empty() {
+                        design_sysml_contents.push(content);
+                    }
+                }
+            }
+        }
+        if !design_sysml_contents.is_empty() {
+            return Some(design_sysml_contents.join("\n\n"));
+        }
+    }
+
     None
 }
 
@@ -5388,6 +5408,111 @@ flowchart TD
                 err
             );
         }
+        Ok(())
+    }
+
+    /// Verifies that `discover_sysml_model_text` falls back to `docs/designs/*.sysml` when
+    /// `schema/` is a clean landing zone (`.gitkeep` only) and `.pipeline/schema.sysml` is absent.
+    ///
+    /// # Objective
+    /// Regression test for Issue #537 (`discover_sysml_model_text` ignores `docs/designs/*.sysml`).
+    ///
+    /// # Intention
+    /// Ensure blueprint-first workspaces with `docs/designs/*.sysml` models are discovered deterministically.
+    ///
+    /// # Logic
+    /// Creates a temporary workspace where `schema/` contains only `.gitkeep`, `.pipeline/schema.sysml`
+    /// does not exist, and `docs/designs/` contains two `.sysml` files plus `.md` and `.digest.json`
+    /// artifacts, then asserts `discover_sysml_model_text` returns the concatenated `.sysml` content in
+    /// sorted order while ignoring non-SysML files.
+    ///
+    /// # Parameters
+    /// None.
+    ///
+    /// # Returns
+    /// `Result<(), Box<dyn std::error::Error>>` indicating test execution success.
+    ///
+    /// # Errors
+    /// Returns an error if temporary directory or fixture file creation fails.
+    ///
+    /// # Safety
+    /// Operates strictly within an isolated temporary directory that is cleaned up on drop.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ISO 26262 ASIL D verification requirements for Issue #537.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Discovers `docs/designs/*.sysml` in deterministic lexicographical order (`blueprint-01-alpha.sysml`
+    ///   before `blueprint-02-beta.sysml`).
+    /// - Ignores `.md` and `.digest.json` files inside `docs/designs/`.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary filesystem is writable.
+    ///
+    /// ## 4. Postconditions
+    /// - Confirms `Some(text)` is returned containing both `part def EngineA` and `part def EngineB`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded fixture file count.
+    /// - Space Complexity: O(1) bounded fixture payload size.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Propagates any filesystem setup failure via `Result`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-MODEL-DISCOVERY]
+    #[test]
+    fn test_discover_sysml_model_text_falls_back_to_docs_designs_sysml() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("issue_537_docs_designs_sysml")?;
+        let schema_dir = tmp.path.join("schema");
+        fs::create_dir_all(&schema_dir)?;
+        fs::write(schema_dir.join(".gitkeep"), "")?;
+
+        let designs_dir = tmp.path.join("docs").join("designs");
+        fs::create_dir_all(&designs_dir)?;
+        fs::write(
+            designs_dir.join("blueprint-02-beta.sysml"),
+            "package Beta { part def EngineB; }\n",
+        )?;
+        fs::write(
+            designs_dir.join("blueprint-01-alpha.sysml"),
+            "package Alpha { part def EngineA; }\n",
+        )?;
+        fs::write(
+            designs_dir.join("blueprint-01-alpha.md"),
+            "# Blueprint 01 Alpha\nMarkdown content should be ignored.\n",
+        )?;
+        fs::write(
+            designs_dir.join("blueprint-01-alpha.digest.json"),
+            "{\"ignored\": true}\n",
+        )?;
+
+        let model_opt = discover_sysml_model_text(&tmp.path);
+        assert!(
+            model_opt.is_some(),
+            "discover_sysml_model_text must fall back to docs/designs/*.sysml when schema/ only has .gitkeep and .pipeline/schema.sysml is absent"
+        );
+        let text = model_opt.unwrap_or_default();
+        assert!(
+            text.contains("part def EngineA"),
+            "Discovered text must contain 'part def EngineA', got: {}",
+            text
+        );
+        assert!(
+            text.contains("part def EngineB"),
+            "Discovered text must contain 'part def EngineB', got: {}",
+            text
+        );
+        let pos_a = text.find("part def EngineA").unwrap_or(usize::MAX);
+        let pos_b = text.find("part def EngineB").unwrap_or(0);
+        assert!(
+            pos_a < pos_b,
+            "blueprint-01-alpha.sysml must appear before blueprint-02-beta.sysml in sorted order"
+        );
+        assert!(
+            !text.contains("Markdown content should be ignored") && !text.contains("\"ignored\""),
+            "Discovered text must ignore .md and .digest.json files in docs/designs/"
+        );
         Ok(())
     }
 }
