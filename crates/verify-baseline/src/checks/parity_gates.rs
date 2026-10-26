@@ -761,8 +761,9 @@ pub fn discover_sysml_model_text(repo_root: &Path) -> Option<String> {
 /// architectural `part def` components in the domain model.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - When `schema/` contains both architectural `.sysml` files and `*_realization.sysml` files,
-///   concatenates only the architectural `.sysml` files in deterministic lexicographical order.
+/// - Scans `schema/` and `docs/designs/` for architectural `.sysml` files and, when both architectural
+///   `.sysml` files and `*_realization.sysml` files exist, concatenates only the architectural `.sysml`
+///   files in deterministic lexicographical order.
 /// - Strips inline `package <Name>_Realization { ... }` blocks whenever the remaining model still
 ///   contains architectural `part def` declarations.
 /// - Falls back to the full model text if only realization schemas exist.
@@ -772,7 +773,7 @@ pub fn discover_sysml_model_text(repo_root: &Path) -> Option<String> {
 ///
 /// ## 4. Postconditions
 /// - Returns `Some(String)` containing the consolidated architectural SysML v2 model text, or `None`
-///   if no schema artifacts exist in `schema/` or `.pipeline/schema.sysml`.
+///   if no schema artifacts exist in `schema/`, `docs/designs/`, or `.pipeline/schema.sysml`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(F \log F + B)$ where $F$ is the schema file count and $B$ is total byte size.
@@ -787,12 +788,20 @@ pub fn discover_sysml_model_text(repo_root: &Path) -> Option<String> {
 pub fn discover_architectural_sysml_model_text(repo_root: &Path) -> Option<String> {
     let raw_text = {
         let schema_dir = repo_root.join("schema");
-        let mut resolved: Option<String> = None;
+        let designs_dir = repo_root.join("docs").join("designs");
+        let mut scan_roots: Vec<&Path> = Vec::new();
         if schema_dir.is_dir() {
+            scan_roots.push(&schema_dir);
+        }
+        if designs_dir.is_dir() {
+            scan_roots.push(&designs_dir);
+        }
+        let mut resolved: Option<String> = None;
+        if !scan_roots.is_empty() {
             let mut paths =
-                deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[
-                    &schema_dir,
-                ]);
+                deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(
+                    &scan_roots,
+                );
             paths.sort();
             let mut domain_sysml_contents = Vec::new();
             let mut all_sysml_contents = Vec::new();
@@ -817,7 +826,7 @@ pub fn discover_architectural_sysml_model_text(repo_root: &Path) -> Option<Strin
                             all_sysml_contents.push(content);
                         }
                     }
-                } else {
+                } else if p.starts_with(&schema_dir) {
                     non_sysml_paths.push(p);
                 }
             }
@@ -5512,6 +5521,132 @@ flowchart TD
         assert!(
             !text.contains("Markdown content should be ignored") && !text.contains("\"ignored\""),
             "Discovered text must ignore .md and .digest.json files in docs/designs/"
+        );
+        Ok(())
+    }
+
+    /// # Objective
+    /// Verify that `discover_architectural_sysml_model_text` discovers `.sysml` files under `docs/designs/`
+    /// both when `schema/` contains only `.gitkeep` and alongside `schema/*.sysml`, while preserving
+    /// realization stripping and ignoring non-SysML files inside `docs/designs/`.
+    ///
+    /// # Intention
+    /// Ensure Check 17 (FMECA) and architectural SysML consumers include blueprint-generated
+    /// `docs/designs/*.sysml` models alongside `schema/*.sysml` without losing realization filtering.
+    ///
+    /// # Logic
+    /// 1. Creates a temporary workspace where `schema/` contains only `.gitkeep`, `.pipeline/schema.sysml`
+    ///    is absent, and `docs/designs/` contains `blueprint-01-alpha.sysml` (with both an architectural
+    ///    `part def ArchController` and an inline `package alpha_realization { part def CodeImpl; }`),
+    ///    `blueprint-01-alpha.md`, and `blueprint-01-alpha.digest.json`. Asserts that
+    ///    `discover_architectural_sysml_model_text` returns `Some(text)` containing `part def ArchController`
+    ///    and excluding `part def CodeImpl` as well as `.md`/`.digest.json` content.
+    /// 2. Adds `schema/domain.sysml` (`package Domain { part def DomainPlant; }`) and asserts that
+    ///    `discover_architectural_sysml_model_text` returns `Some(text)` containing both
+    ///    `part def DomainPlant` and `part def ArchController`.
+    ///
+    /// # Parameters
+    /// None.
+    ///
+    /// # Returns
+    /// `Result<(), Box<dyn std::error::Error>>` indicating test execution success.
+    ///
+    /// # Errors
+    /// Returns an error if temporary directory or fixture file creation fails.
+    ///
+    /// # Safety
+    /// Operates strictly within an isolated temporary directory that is cleaned up on drop.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ISO 26262 ASIL D verification requirements for Issue #538.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Discovers `docs/designs/*.sysml` when `schema/` has only `.gitkeep` and when `schema/*.sysml` coexists.
+    /// - Strips `*_realization` packages and ignores `.md` / `.digest.json` files in `docs/designs/`.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary filesystem is writable.
+    ///
+    /// ## 4. Postconditions
+    /// - Confirms `Some(text)` contains `part def ArchController` (and `part def DomainPlant` in case 2)
+    ///   while excluding `part def CodeImpl` and non-SysML content.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded fixture file count.
+    /// - Space Complexity: O(1) bounded fixture payload size.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Propagates any filesystem setup failure via `Result`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-ARCH-MODEL-DISCOVERY], [REQ-ISSUE-472-CHECK17-REALIZATION-CLOSURE]
+    #[test]
+    fn test_discover_architectural_sysml_model_text_includes_docs_designs_sysml() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("issue_538_arch_docs_designs_sysml")?;
+        let schema_dir = tmp.path.join("schema");
+        fs::create_dir_all(&schema_dir)?;
+        fs::write(schema_dir.join(".gitkeep"), "")?;
+
+        let designs_dir = tmp.path.join("docs").join("designs");
+        fs::create_dir_all(&designs_dir)?;
+        fs::write(
+            designs_dir.join("blueprint-01-alpha.sysml"),
+            "package Alpha { part def ArchController; }\npackage alpha_realization { part def CodeImpl; }\n",
+        )?;
+        fs::write(
+            designs_dir.join("blueprint-01-alpha.md"),
+            "# Blueprint 01 Alpha\nMarkdown content should be ignored.\n",
+        )?;
+        fs::write(
+            designs_dir.join("blueprint-01-alpha.digest.json"),
+            "{\"ignored\": true}\n",
+        )?;
+
+        let model_opt = discover_architectural_sysml_model_text(&tmp.path);
+        assert!(
+            model_opt.is_some(),
+            "discover_architectural_sysml_model_text must include docs/designs/*.sysml when schema/ only has .gitkeep and .pipeline/schema.sysml is absent"
+        );
+        let text = model_opt.unwrap_or_default();
+        assert!(
+            text.contains("part def ArchController"),
+            "Discovered architectural text must contain 'part def ArchController', got: {}",
+            text
+        );
+        assert!(
+            !text.contains("part def CodeImpl"),
+            "Discovered architectural text must strip 'package alpha_realization', got: {}",
+            text
+        );
+        assert!(
+            !text.contains("Markdown content should be ignored") && !text.contains("\"ignored\""),
+            "Discovered architectural text must ignore .md and .digest.json files in docs/designs/"
+        );
+
+        fs::write(
+            schema_dir.join("domain.sysml"),
+            "package Domain { part def DomainPlant; }\n",
+        )?;
+        let combined_opt = discover_architectural_sysml_model_text(&tmp.path);
+        assert!(
+            combined_opt.is_some(),
+            "discover_architectural_sysml_model_text must return Some(text) when both schema/domain.sysml and docs/designs/blueprint-01-alpha.sysml exist"
+        );
+        let combined_text = combined_opt.unwrap_or_default();
+        assert!(
+            combined_text.contains("part def DomainPlant"),
+            "Combined architectural text must contain 'part def DomainPlant', got: {}",
+            combined_text
+        );
+        assert!(
+            combined_text.contains("part def ArchController"),
+            "Combined architectural text must contain 'part def ArchController', got: {}",
+            combined_text
+        );
+        assert!(
+            !combined_text.contains("part def CodeImpl"),
+            "Combined architectural text must strip 'package alpha_realization', got: {}",
+            combined_text
         );
         Ok(())
     }
