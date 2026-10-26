@@ -454,8 +454,17 @@ pub fn reverse_sync_specs_to_sysml(
                     });
                 }
                 _ => {
-                    // Check if file is STPA_MATRIX.md
-                    if path.file_name().map(|f| f == "STPA_MATRIX.md").unwrap_or(false) {
+                    // Check if file is STPA_MATRIX.md or an engineering design blueprint
+                    let is_stpa_or_blueprint = doc_type == "blueprint"
+                        || path
+                            .file_name()
+                            .and_then(|f| f.to_str())
+                            .map(|name| {
+                                name == "STPA_MATRIX.md"
+                                    || (name.starts_with("blueprint-") && name.ends_with(".md"))
+                            })
+                            .unwrap_or(false);
+                    if is_stpa_or_blueprint {
                         for line in content.lines() {
                             let trimmed = line.trim();
                             if !trimmed.starts_with('|') {
@@ -463,7 +472,9 @@ pub fn reverse_sync_specs_to_sysml(
                             }
                             let cols: Vec<&str> = trimmed.split('|').map(|s| s.trim()).collect();
                             if let &[_, sc_cell, stmt_cell, _, ..] = cols.as_slice() {
-                                let raw_sc = sc_cell.trim_matches('*').trim();
+                                let raw_sc = sc_cell.trim_matches(|c: char| {
+                                    c == '*' || c == '`' || c.is_whitespace()
+                                });
                                 if raw_sc
                                     .strip_prefix("SC-")
                                     .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
@@ -471,13 +482,19 @@ pub fn reverse_sync_specs_to_sysml(
                                     let stmt = stmt_cell.trim();
                                     if !stmt.is_empty() {
                                         let sc_id = raw_sc.replace('-', "_");
-                                        extracted_constraints.push(ConstraintDef {
-                                            name: format!("{}_SafetyConstraint", sc_id),
-                                            doc: Some(stmt.to_string()),
-                                            expression: format!("{} == true", sc_id),
-                                            is_assertion: true,
-                                            ..Default::default()
-                                        });
+                                        let constraint_name = format!("{}_SafetyConstraint", sc_id);
+                                        if !extracted_constraints
+                                            .iter()
+                                            .any(|c: &ConstraintDef| c.name == constraint_name)
+                                        {
+                                            extracted_constraints.push(ConstraintDef {
+                                                name: constraint_name,
+                                                doc: Some(stmt.to_string()),
+                                                expression: format!("{} == true", sc_id),
+                                                is_assertion: true,
+                                                ..Default::default()
+                                            });
+                                        }
                                     }
                                 }
                             }
@@ -682,6 +699,211 @@ part: CoreSubsystem
             pkg.part_defs.iter().any(|p| p.name == "CoreController"),
             "Canonical docs/features/fea-01.md part CoreController must be preserved"
         );
+        Ok(())
+    }
+
+    /// Regression test for Issue #535 verifying that `reverse_sync_specs_to_sysml` extracts
+    /// `SC-*` safety constraints from `docs/designs/blueprint-*.md` (including backtick-wrapped
+    /// and bold-wrapped cells) and deduplicates constraints across `STPA_MATRIX.md` and blueprints.
+    ///
+    /// # Objective
+    /// Verify `SC-*` safety constraints declared in `docs/designs/blueprint-*.md` 5-column STPA
+    /// Derivation-Annotation tables are extracted into `.pipeline/schema.sysml` without duplication.
+    ///
+    /// # Intention
+    /// Prevent silent loss of blueprint-defined `SC-*` safety constraints during reverse sync.
+    ///
+    /// # Logic
+    /// Creates a temporary workspace containing `docs/designs/blueprint-01-core.md` (declaring
+    /// backtick-wrapped `` `SC-01` `` and bold-wrapped `**SC-02**`) and
+    /// `docs/architecture/safety/STPA_MATRIX.md` (declaring `**SC-01**`), runs
+    /// `reverse_sync_specs_to_sysml`, and verifies both `SC_01_SafetyConstraint` and
+    /// `SC_02_SafetyConstraint` are emitted with `SC_01_SafetyConstraint` appearing once.
+    ///
+    /// # Parameters
+    /// - None (self-contained unit test fixture).
+    ///
+    /// # Returns
+    /// - `Result<(), String>` indicating test pass or failure reason.
+    ///
+    /// # Errors
+    /// - Returns `Err(String)` if temporary filesystem operations or reverse sync execution fail.
+    ///
+    /// # Safety
+    /// - Purely operates on an isolated temporary directory under `std::env::temp_dir()`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+    /// for fn `test_reverse_sync_extracts_blueprint_sc_constraints` in `crates/compile-sysml/src/sync/reverse.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Blueprint Constraint Extraction & Deduplication Invariant: Every unique `SC-<digits>` row in
+    ///   `STPA_MATRIX.md` and `docs/designs/blueprint-*.md` produces exactly one `SC_<digits>_SafetyConstraint`
+    ///   in the resulting `PackageDef` and `.pipeline/schema.sysml`.
+    ///
+    /// ## 3. Preconditions
+    /// - Host temporary directory is writable.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `.pipeline/schema.sysml` contains `constraint def SC_01_SafetyConstraint` (exactly once)
+    ///   and `constraint def SC_02_SafetyConstraint`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over the 2 fixture markdown files.
+    /// - Space Complexity: O(1) bounded auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates `ReverseSyncOptions` boundary paths.
+    /// - State: Cleans up temporary test directory before returning.
+    /// - Action: Executes deterministically without network or external dependencies.
+    /// - Resource: Bounded temporary filesystem usage under `std::env::temp_dir()`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-SYNC-REVERSE/BLUEPRINT-SC-EXTRACTION] | SysML v2: VerificationCase(test_reverse_sync_extracts_blueprint_sc_constraints)
+    #[test]
+    fn test_reverse_sync_extracts_blueprint_sc_constraints() -> Result<(), String> {
+        let tmp_dir = std::env::temp_dir().join(format!(
+            "deap_issue_535_rev_sync_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&tmp_dir);
+
+        let pipeline_dir = tmp_dir.join(".pipeline");
+        let designs_dir = tmp_dir.join("docs").join("designs");
+        let safety_dir = tmp_dir.join("docs").join("architecture").join("safety");
+        fs::create_dir_all(&pipeline_dir).map_err(|e| e.to_string())?;
+        fs::create_dir_all(&designs_dir).map_err(|e| e.to_string())?;
+        fs::create_dir_all(&safety_dir).map_err(|e| e.to_string())?;
+
+        let schema_path = pipeline_dir.join("schema.sysml");
+        let digest_path = pipeline_dir.join("schema-digest.json");
+        fs::write(
+            &schema_path,
+            "package TestSys {\n    part def CoreController;\n}\n",
+        )
+        .map_err(|e| e.to_string())?;
+
+        fs::write(
+            designs_dir.join("blueprint-01-core.md"),
+            "---\ntitle: \"Blueprint 01: Core\"\ntype: blueprint\n---\n\n# Blueprint 01\n\n| SC ID | Safety Constraint | UCA | Hazard | Mitigation |\n| :--- | :--- | :--- | :--- | :--- |\n| `SC-01` | Controller must enforce bounds | UCA-01 | H-01 | Clamp output |\n| **SC-02** | Controller must reject stale telemetry | UCA-02 | H-02 | Check timestamp |\n| `SC-03` | Controller must validate checksum | UCA-03 | H-03 | Verify CRC |\n",
+        )
+        .map_err(|e| e.to_string())?;
+
+        fs::write(
+            safety_dir.join("STPA_MATRIX.md"),
+            "# STPA Matrix\n\n| SC ID | Safety Constraint | UCA | Hazard |\n| :--- | :--- | :--- | :--- |\n| **SC-01** | Controller must enforce bounds | UCA-01 | H-01 |\n",
+        )
+        .map_err(|e| e.to_string())?;
+
+        let base_pkg = PackageDef {
+            name: "TestSys".to_string(),
+            part_defs: vec![PartDef {
+                name: "CoreController".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let opts = ReverseSyncOptions {
+            docs_dir: tmp_dir.join("docs"),
+            schema_path: Some(schema_path.clone()),
+            output_path: schema_path.clone(),
+            digest_path,
+            allow_overwrite: true,
+        };
+
+        let (pkg, _) = reverse_sync_specs_to_sysml(Some(&base_pkg), &opts)?;
+        let emitted_sysml = fs::read_to_string(&schema_path).map_err(|e| e.to_string())?;
+        let _ = fs::remove_dir_all(&tmp_dir);
+
+        assert!(
+            emitted_sysml.contains("assert constraint SC_01_SafetyConstraint"),
+            "Expected assert constraint SC_01_SafetyConstraint in .pipeline/schema.sysml, got:\n{}",
+            emitted_sysml
+        );
+        assert!(
+            emitted_sysml.contains("assert constraint SC_02_SafetyConstraint"),
+            "Expected assert constraint SC_02_SafetyConstraint from blueprint-01-core.md in .pipeline/schema.sysml, got:\n{}",
+            emitted_sysml
+        );
+        assert!(
+            emitted_sysml.contains("assert constraint SC_03_SafetyConstraint"),
+            "Expected assert constraint SC_03_SafetyConstraint (backtick-wrapped) from blueprint-01-core.md in .pipeline/schema.sysml, got:\n{}",
+            emitted_sysml
+        );
+        assert_eq!(
+            emitted_sysml.matches("SC_01_SafetyConstraint").count(),
+            1,
+            "Expected SC_01_SafetyConstraint to appear exactly once, got:\n{}",
+            emitted_sysml
+        );
+        assert_eq!(
+            pkg.constraint_defs.iter().filter(|c| c.name == "SC_01_SafetyConstraint").count(),
+            1,
+            "Expected exactly 1 SC_01_SafetyConstraint in PackageDef.constraint_defs"
+        );
+        Ok(())
+    }
+
+    /// Verifies `ARCH-04`: `reverse_sync_specs_to_sysml_with_dry_run` performs zero disk writes when `dry_run` is `true`
+    /// and writes atomically when `dry_run` is `false`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_arch_04_reverse_sync_with_dry_run_skips_writes` in `crates/compile-sysml/src/sync/reverse.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves side-effect-free simulation during `dry_run: true` and atomic persistence during `dry_run: false`.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary workspace directory is writable.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `output_path` and `digest_path` do not exist after `dry_run: true`, and both exist with zero leftover `.tmp.*` files after `dry_run: false`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over synthetic fixture.
+    /// - Space Complexity: O(N) bounded memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Removes temporary directory on test completion.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-REVERSE-REVERSE-SYNC-SPECS-TO-SYSML] | SysML v2: VerificationCaseDef(test_arch_04_reverse_sync_with_dry_run_skips_writes)
+    #[test]
+    fn test_arch_04_reverse_sync_with_dry_run_skips_writes() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp_dir = std::env::temp_dir().join(format!(
+            "deap_test_reverse_sync_dry_run_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&tmp_dir);
+        let features_dir = tmp_dir.join("docs").join("features");
+        fs::create_dir_all(&features_dir).map_err(|e| e.to_string())?;
+        fs::write(
+            features_dir.join("FEAT-001.md"),
+            "---\nid: FEAT-001\ntitle: CoreController\n---\n# Feature: CoreController\n",
+        )
+        .map_err(|e| e.to_string())?;
+
+        let schema_path = tmp_dir.join("schema.sysml");
+        let digest_path = tmp_dir.join("schema_digest.json");
+        let opts = ReverseSyncOptions {
+            docs_dir: tmp_dir.join("docs"),
+            schema_path: None,
+            output_path: schema_path.clone(),
+            digest_path: digest_path.clone(),
+            allow_overwrite: true,
+        };
+
+        let (pkg_dry, _) = reverse_sync_specs_to_sysml_with_dry_run(None, &opts, true)?;
+        assert_eq!(pkg_dry.part_defs.len(), 1);
+        assert!(!schema_path.exists(), "Dry-run must not write output_path");
+        assert!(!digest_path.exists(), "Dry-run must not write digest_path");
+
+        let (_pkg_live, _) = reverse_sync_specs_to_sysml_with_dry_run(None, &opts, false)?;
+        assert!(schema_path.exists(), "Non-dry-run must atomically write output_path");
+        assert!(digest_path.exists(), "Non-dry-run must atomically write digest_path");
+
+        let _ = fs::remove_dir_all(&tmp_dir);
         Ok(())
     }
 }
