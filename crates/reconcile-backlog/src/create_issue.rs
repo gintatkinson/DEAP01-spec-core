@@ -470,10 +470,12 @@ pub fn run_create_issue<T: TrackerClient>(
             .or_else(|| crate::detect_git_repo(workspace_root));
         let branch = crate::detect_git_branch(workspace_root).unwrap_or_else(|| "main".to_string());
 
-        let projected_body = crate::project_body_for_tracker(
+        let upstream_prefix = crate::detect_upstream_prefix(workspace_root);
+        let projected_body = crate::project_body_for_tracker_with_prefix(
             &body_content,
             repo_slug.as_deref(),
             &branch,
+            upstream_prefix,
             &spec_path_to_issue,
         );
 

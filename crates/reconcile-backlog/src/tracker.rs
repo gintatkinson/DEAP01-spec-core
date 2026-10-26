@@ -1920,6 +1920,49 @@ impl IssueIndex {
         }
     }
 
+    /// Inserts a newly created or updated `TrackerIssue` into the in-memory `IssueIndex`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `IssueIndex::insert_issue` in `crates/reconcile-backlog/src/tracker.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `IssueIndex::insert_issue` within `RECONCILE-BACKLOG-TRACKER`.
+    ///
+    /// ## 3. Preconditions
+    /// - `issue: TrackerIssue` must satisfy domain and type-safety constraints prior to invoking `IssueIndex::insert_issue`.
+    ///
+    /// ## 4. Postconditions
+    /// - Updates `by_number`, `by_type_and_title`, and `by_normalized_title` maps deterministically.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N(issue)) bounded over input/member dimension of `IssueIndex::insert_issue`.
+    /// - Space Complexity: O(N(issue)) bounded auxiliary memory for `IssueIndex::insert_issue`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `IssueIndex::insert_issue` (`()`).
+    /// - State: Maintains consistent state invariants across `IssueIndex::insert_issue` without partial mutation on error.
+    /// - Action: Executes `IssueIndex::insert_issue` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `IssueIndex::insert_issue` (`RECONCILE-BACKLOG-TRACKER`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-ISSUEINDEX-INSERT-ISSUE] | SysML v2: ActionDef(IssueIndex::insert_issue)
+    pub fn insert_issue(&mut self, issue: TrackerIssue) {
+        let norm = normalize_title(&issue.title);
+        if !norm.is_empty() {
+            for label in &issue.labels {
+                let canonical = canonicalize_spec_type(label.name());
+                self.by_type_and_title
+                    .insert((canonical, norm.clone()), issue.clone());
+            }
+            if let Some(inferred) = infer_spec_type_from_title(&issue.title) {
+                self.by_type_and_title
+                    .insert((inferred, norm.clone()), issue.clone());
+            }
+            self.by_normalized_title.insert(norm, issue.clone());
+        }
+        self.by_number.insert(issue.number, issue);
+    }
+
     /// Executes deterministic fn `IssueIndex::find_issue_for_type` within `crates/reconcile-backlog/src/tracker.rs`.
     ///
     /// ## 1. Safety Intent & Regulatory Scope

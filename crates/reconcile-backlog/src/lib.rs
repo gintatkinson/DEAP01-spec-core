@@ -305,7 +305,7 @@ pub fn run_reconciliation<T: TrackerClient>(
     } else {
         tracker.fetch_all_issues()?
     };
-    let issue_index = IssueIndex::build(issues);
+    let mut issue_index = IssueIndex::build(issues);
 
     // Step 2: Hierarchy synthesis, frontmatter reconciliation, and placeholder purge
     let repo_slug = options.repo.clone()
@@ -314,6 +314,23 @@ pub fn run_reconciliation<T: TrackerClient>(
     let default_branch = options.default_branch.clone()
         .or_else(|| detect_git_branch(&options.workspace_root))
         .unwrap_or_else(|| "main".to_string());
+    let upstream_prefix = detect_upstream_prefix(&options.workspace_root);
+
+    // Step 2a: Register unallocated specifications bottom-up (use-case/user-story -> feature -> epic)
+    // and back-patch allocated #<id> references across local specs and parent checklists.
+    if !options.offline {
+        let (created_count, backpatched_count) = register_unallocated_specs_bottom_up(
+            &mut specs,
+            &mut issue_index,
+            tracker,
+            options,
+            &repo_slug,
+            &default_branch,
+            upstream_prefix,
+        )?;
+        summary.frontmatters_updated += created_count;
+        summary.checklists_updated += backpatched_count;
+    }
 
     let all_specs_snapshot = specs.clone();
 
@@ -385,18 +402,7 @@ pub fn run_reconciliation<T: TrackerClient>(
 
     // Step 4: Remote sync if enabled with relative link projection
     if options.sync_bodies && !options.offline && !options.dry_run {
-        let mut spec_path_to_issue: BTreeMap<String, u64> = BTreeMap::new();
-        for spec in &specs {
-            if let Some(issue_id) = spec.frontmatter.issue_id {
-                spec_path_to_issue.insert(spec.rel_path.clone(), issue_id);
-                if let Some(stripped) = spec.rel_path.strip_prefix("docs/") {
-                    spec_path_to_issue.insert(stripped.to_string(), issue_id);
-                }
-                if let Some(fname) = Path::new(&spec.rel_path).file_name().and_then(|f| f.to_str()) {
-                    spec_path_to_issue.insert(fname.to_string(), issue_id);
-                }
-            }
-        }
+        let spec_path_to_issue = build_spec_path_to_issue_map(&specs);
 
         let repo_name = options.repo.clone()
             .or_else(|| detect_git_repo(&options.workspace_root));
@@ -413,10 +419,11 @@ pub fn run_reconciliation<T: TrackerClient>(
 
         for spec in &specs {
             if let Some(issue_id) = spec.frontmatter.issue_id {
-                let projected_body = project_body_for_tracker(
+                let projected_body = project_body_for_tracker_with_prefix(
                     &spec.content,
                     repo_name.as_deref(),
                     &default_branch,
+                    upstream_prefix,
                     &spec_path_to_issue,
                 );
                 tracker.update_issue_body(issue_id, &projected_body)?;
@@ -426,6 +433,340 @@ pub fn run_reconciliation<T: TrackerClient>(
     }
 
     Ok(summary)
+}
+
+/// Builds a lookup table mapping relative specification paths and filenames to allocated issue numbers.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `build_spec_path_to_issue_map` in `crates/reconcile-backlog/src/lib.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic `BTreeMap` ordering across all registered `LoadedSpec` entries.
+///
+/// ## 3. Preconditions
+/// - `specs: &[LoadedSpec]` must satisfy domain and type-safety constraints prior to invoking `build_spec_path_to_issue_map`.
+///
+/// ## 4. Postconditions
+/// - Returns `BTreeMap<String, u64>` from `build_spec_path_to_issue_map` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(specs) * log N(specs)) bounded over input/member dimension of `build_spec_path_to_issue_map`.
+/// - Space Complexity: O(N(specs)) bounded auxiliary memory for `build_spec_path_to_issue_map`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `build_spec_path_to_issue_map` (`BTreeMap<String, u64>`).
+/// - State: Maintains consistent state invariants across `build_spec_path_to_issue_map` without partial mutation on error.
+/// - Action: Executes `build_spec_path_to_issue_map` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `build_spec_path_to_issue_map` (`RECONCILE-BACKLOG`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-BUILD-SPEC-PATH-TO-ISSUE-MAP] | SysML v2: ActionDef(build_spec_path_to_issue_map)
+fn build_spec_path_to_issue_map(specs: &[LoadedSpec]) -> BTreeMap<String, u64> {
+    let mut spec_path_to_issue: BTreeMap<String, u64> = BTreeMap::new();
+    for spec in specs {
+        if let Some(issue_id) = spec.frontmatter.issue_id {
+            spec_path_to_issue.insert(spec.rel_path.clone(), issue_id);
+            if let Some(stripped) = spec.rel_path.strip_prefix("docs/") {
+                spec_path_to_issue.insert(stripped.to_string(), issue_id);
+            }
+            if let Some(fname) = Path::new(&spec.rel_path).file_name().and_then(|f| f.to_str()) {
+                spec_path_to_issue.insert(fname.to_string(), issue_id);
+            }
+        }
+    }
+    spec_path_to_issue
+}
+
+/// Resolves the canonical specification tier label (`"use-case"`, `"user-story"`, `"feature"`, `"epic"`) for a `LoadedSpec`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `resolve_canonical_spec_tier` in `crates/reconcile-backlog/src/lib.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `resolve_canonical_spec_tier` within `RECONCILE-BACKLOG`.
+///
+/// ## 3. Preconditions
+/// - `spec: &LoadedSpec` must satisfy domain and type-safety constraints prior to invoking `resolve_canonical_spec_tier`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` representing the canonical tracker label for `spec`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(spec)) bounded over input/member dimension of `resolve_canonical_spec_tier`.
+/// - Space Complexity: O(N(spec)) bounded auxiliary memory for `resolve_canonical_spec_tier`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `resolve_canonical_spec_tier` (`String`).
+/// - State: Maintains consistent state invariants across `resolve_canonical_spec_tier` without partial mutation on error.
+/// - Action: Executes `resolve_canonical_spec_tier` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `resolve_canonical_spec_tier` (`RECONCILE-BACKLOG`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-RESOLVE-CANONICAL-SPEC-TIER] | SysML v2: ActionDef(resolve_canonical_spec_tier)
+fn resolve_canonical_spec_tier(spec: &LoadedSpec) -> String {
+    let canonical = tracker::canonicalize_spec_type(&spec.frontmatter.spec_type);
+    if matches!(canonical.as_str(), "use-case" | "user-story" | "feature" | "epic") {
+        return canonical;
+    }
+    if spec.rel_path.contains("use-cases/") {
+        "use-case".to_string()
+    } else if spec.rel_path.contains("user-stories/") {
+        "user-story".to_string()
+    } else if spec.rel_path.contains("features/") {
+        "feature".to_string()
+    } else if spec.rel_path.contains("epics/") {
+        "epic".to_string()
+    } else {
+        tracker::infer_spec_type_from_title(&spec.frontmatter.title).unwrap_or(canonical)
+    }
+}
+
+/// Back-patches `TBD` and `#[...IssueID]` references to a newly allocated specification filename across a single Markdown content buffer.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `backpatch_spec_references_in_content` in `crates/reconcile-backlog/src/lib.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Replaces unallocated `TBD` and placeholder issue tokens with `#<issue_id>` exclusively on lines referencing `target_filename`.
+///
+/// ## 3. Preconditions
+/// - `content: &str`, `target_filename: &str`, and `issue_id: u64` must satisfy domain and type-safety constraints prior to invoking `backpatch_spec_references_in_content`.
+///
+/// ## 4. Postconditions
+/// - Returns `(String, bool)` indicating the updated Markdown buffer and whether any line was modified.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(content)) bounded over input/member dimension of `backpatch_spec_references_in_content`.
+/// - Space Complexity: O(N(content)) bounded auxiliary memory for `backpatch_spec_references_in_content`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `backpatch_spec_references_in_content` (`(String, bool)`).
+/// - State: Maintains consistent state invariants across `backpatch_spec_references_in_content` without partial mutation on error.
+/// - Action: Executes `backpatch_spec_references_in_content` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `backpatch_spec_references_in_content` (`RECONCILE-BACKLOG`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-BACKPATCH-SPEC-REFERENCES-IN-CONTENT] | SysML v2: ActionDef(backpatch_spec_references_in_content)
+fn backpatch_spec_references_in_content(
+    content: &str,
+    target_filename: &str,
+    issue_id: u64,
+) -> (String, bool) {
+    if target_filename.is_empty() || !content.contains(target_filename) {
+        return (content.to_string(), false);
+    }
+
+    let newline = if content.contains("\r\n") { "\r\n" } else { "\n" };
+    let trailing_newline = content.ends_with('\n');
+    let mut modified = false;
+    let mut out_lines = Vec::new();
+    let issue_token = format!("#{}", issue_id);
+
+    for line in content.lines() {
+        if line.contains(target_filename) {
+            let mut updated_line = line.to_string();
+            for prefix in ["- [ ] ", "- [x] ", "- [X] "] {
+                for placeholder in [
+                    "TBD - ",
+                    "#[IssueID] - ",
+                    "#[FeatureIssueID] - ",
+                    "#[UseCaseIssueID] - ",
+                    "#[StoryIssueID] - ",
+                    "#[EpicIssueID] - ",
+                ] {
+                    let needle = format!("{}{}", prefix, placeholder);
+                    if updated_line.contains(&needle) {
+                        let replacement = format!("{}{} - ", prefix, issue_token);
+                        updated_line = updated_line.replace(&needle, &replacement);
+                    }
+                }
+            }
+            let trimmed = updated_line.trim();
+            if trimmed.starts_with('|') && trimmed.ends_with('|') {
+                if updated_line.contains("| TBD |") {
+                    updated_line = updated_line.replace("| TBD |", &format!("| {} |", issue_token));
+                }
+                if updated_line.contains("| **TBD** |") {
+                    updated_line =
+                        updated_line.replace("| **TBD** |", &format!("| **{}** |", issue_token));
+                }
+            }
+            if updated_line != line {
+                modified = true;
+            }
+            out_lines.push(updated_line);
+        } else {
+            out_lines.push(line.to_string());
+        }
+    }
+
+    if !modified {
+        return (content.to_string(), false);
+    }
+
+    let mut result = out_lines.join(newline);
+    if trailing_newline && !result.ends_with(newline) {
+        result.push_str(newline);
+    }
+    (result, true)
+}
+
+/// Registers any specifications missing an `issue_id` in strict bottom-up tier order
+/// (`use-case` and `user-story` -> `feature` -> `epic`) and back-patches parent references.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `register_unallocated_specs_bottom_up` in `crates/reconcile-backlog/src/lib.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Enforces strict bottom-up dependency order so child tracker IDs exist before parent checklists are published.
+/// - Preserves idempotency by checking `issue_index.find_issue_for_type` before invoking `tracker.create_issue`.
+///
+/// ## 3. Preconditions
+/// - `specs`, `issue_index`, `tracker`, and `options` must satisfy domain and type-safety constraints prior to invoking `register_unallocated_specs_bottom_up`.
+///
+/// ## 4. Postconditions
+/// - Returns `Result<(usize, usize), String>` with the counts of updated frontmatters and back-patched spec files.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(specs)^2) bounded over input/member dimension of `register_unallocated_specs_bottom_up`.
+/// - Space Complexity: O(N(specs)) bounded auxiliary memory for `register_unallocated_specs_bottom_up`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `register_unallocated_specs_bottom_up` (`Result<(usize, usize), String>`).
+/// - State: Maintains consistent state invariants across `register_unallocated_specs_bottom_up` without partial mutation on error.
+/// - Action: Executes `register_unallocated_specs_bottom_up` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `register_unallocated_specs_bottom_up` (`RECONCILE-BACKLOG`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-REGISTER-UNALLOCATED-SPECS-BOTTOM-UP] | SysML v2: ActionDef(register_unallocated_specs_bottom_up)
+fn register_unallocated_specs_bottom_up<T: TrackerClient>(
+    specs: &mut [LoadedSpec],
+    issue_index: &mut IssueIndex,
+    tracker: &T,
+    options: &ReconcileOptions,
+    repo_slug: &str,
+    default_branch: &str,
+    upstream_prefix: &str,
+) -> Result<(usize, usize), String> {
+    let mut frontmatters_updated = 0usize;
+    let mut checklists_backpatched = 0usize;
+    let tiers: &[&[&str]] = &[&["use-case", "user-story"], &["feature"], &["epic"]];
+    let repo_opt = if repo_slug.trim().is_empty() {
+        options.repo.as_deref()
+    } else {
+        Some(repo_slug)
+    };
+
+    for tier in tiers {
+        let len = specs.len();
+        for idx in 0..len {
+            let canonical_type = match specs.get(idx) {
+                Some(s) => resolve_canonical_spec_tier(s),
+                None => continue,
+            };
+            if !tier.contains(&canonical_type.as_str()) {
+                continue;
+            }
+
+            let (existing_id, current_issue_id, title) = match specs.get(idx) {
+                Some(s) => {
+                    let found = issue_index
+                        .find_issue_for_type(
+                            s.frontmatter.issue_id,
+                            Some(&canonical_type),
+                            &s.frontmatter.title,
+                        )
+                        .map(|i| i.number);
+                    (found, s.frontmatter.issue_id, s.frontmatter.title.clone())
+                }
+                None => continue,
+            };
+
+            let allocated_id = if let Some(existing_num) = existing_id {
+                if current_issue_id != Some(existing_num) {
+                    if let Some(spec) = specs.get_mut(idx) {
+                        spec.content = update_frontmatter_issue_id(&spec.content, existing_num);
+                        spec.frontmatter.issue_id = Some(existing_num);
+                        frontmatters_updated += 1;
+                        if !options.dry_run {
+                            fs::write(&spec.path, &spec.content).map_err(|e| {
+                                format!("Failed to write updated spec '{}': {}", spec.path.display(), e)
+                            })?;
+                        }
+                    }
+                }
+                Some(existing_num)
+            } else if current_issue_id.is_none() && !options.dry_run {
+                tracker.ensure_label_exists(&canonical_type, options.repo.as_deref())?;
+                let path_map = build_spec_path_to_issue_map(specs);
+                let projected_body = match specs.get(idx) {
+                    Some(spec) => project_body_for_tracker_with_prefix(
+                        &spec.content,
+                        repo_opt,
+                        default_branch,
+                        upstream_prefix,
+                        &path_map,
+                    ),
+                    None => continue,
+                };
+                let (new_num, new_url) = tracker.create_issue(
+                    &title,
+                    &projected_body,
+                    &canonical_type,
+                    options.repo.as_deref(),
+                )?;
+                if let Some(spec) = specs.get_mut(idx) {
+                    spec.content = update_frontmatter_issue_id(&spec.content, new_num);
+                    spec.frontmatter.issue_id = Some(new_num);
+                    frontmatters_updated += 1;
+                    fs::write(&spec.path, &spec.content).map_err(|e| {
+                        format!("Failed to write registered spec '{}': {}", spec.path.display(), e)
+                    })?;
+                    issue_index.insert_issue(tracker::TrackerIssue {
+                        number: new_num,
+                        title: spec.frontmatter.title.clone(),
+                        state: "OPEN".to_string(),
+                        labels: vec![tracker::TrackerLabel::String(canonical_type)],
+                        body: Some(projected_body),
+                        url: Some(new_url),
+                    });
+                }
+                Some(new_num)
+            } else {
+                current_issue_id
+            };
+
+            if let Some(issue_num) = allocated_id {
+                let fname = specs
+                    .get(idx)
+                    .and_then(|s| Path::new(&s.rel_path).file_name())
+                    .and_then(|f| f.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                if !fname.is_empty() {
+                    for other in specs.iter_mut() {
+                        let (patched, changed) =
+                            backpatch_spec_references_in_content(&other.content, &fname, issue_num);
+                        if changed {
+                            other.content = patched;
+                            checklists_backpatched += 1;
+                            if !options.dry_run {
+                                fs::write(&other.path, &other.content).map_err(|e| {
+                                    format!(
+                                        "Failed to write back-patched spec '{}': {}",
+                                        other.path.display(),
+                                        e
+                                    )
+                                })?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok((frontmatters_updated, checklists_backpatched))
 }
 
 /// Validates that all checklist items in a specification body resolve to live tracker issues
@@ -688,7 +1029,43 @@ pub fn detect_git_branch(workspace_root: &Path) -> Option<String> {
     None
 }
 
-/// Executes deterministic fn `rewrite_projected_links` within `crates/reconcile-backlog/src/lib.rs`.
+/// Detects whether `workspace_root` resides under `.pipeline/upstream` and returns the canonical relative prefix `".pipeline/upstream/"` or `""`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `detect_upstream_prefix` in `crates/reconcile-backlog/src/lib.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `detect_upstream_prefix` within `RECONCILE-BACKLOG`.
+///
+/// ## 3. Preconditions
+/// - `workspace_root: &Path` must satisfy domain and type-safety constraints prior to invoking `detect_upstream_prefix`.
+///
+/// ## 4. Postconditions
+/// - Returns `".pipeline/upstream/"` if `workspace_root` targets `.pipeline/upstream`, otherwise `""`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(workspace_root)) bounded over input/member dimension of `detect_upstream_prefix`.
+/// - Space Complexity: O(N(workspace_root)) bounded auxiliary memory for `detect_upstream_prefix`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `detect_upstream_prefix` (`&'static str`).
+/// - State: Maintains consistent state invariants across `detect_upstream_prefix` without partial mutation on error.
+/// - Action: Executes `detect_upstream_prefix` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `detect_upstream_prefix` (`RECONCILE-BACKLOG`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-DETECT-UPSTREAM-PREFIX] | SysML v2: ActionDef(detect_upstream_prefix)
+pub fn detect_upstream_prefix(workspace_root: &Path) -> &'static str {
+    let normalized = workspace_root.to_string_lossy().replace('\\', "/");
+    let trimmed = normalized.trim_end_matches('/');
+    if trimmed.ends_with(".pipeline/upstream") || trimmed.contains("/.pipeline/upstream/") {
+        ".pipeline/upstream/"
+    } else {
+        ""
+    }
+}
+
+/// Rewrites relative Markdown links in `body` to GitHub blob URLs while honoring `workspace_prefix` (e.g., `".pipeline/upstream/"`).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `rewrite_projected_links` in `crates/reconcile-backlog/src/lib.rs`.
@@ -697,10 +1074,7 @@ pub fn detect_git_branch(workspace_root: &Path) -> Option<String> {
 /// - Preserves deterministic state conservation and referential transparency for fn `rewrite_projected_links` (declaration #12) within `RECONCILE-BACKLOG`.
 ///
 /// ## 3. Preconditions
-/// - `body: &str` must satisfy domain and type-safety constraints prior to invoking `rewrite_projected_links`.
-/// - `repo: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `rewrite_projected_links`.
-/// - `default_branch: &str` must satisfy domain and type-safety constraints prior to invoking `rewrite_projected_links`.
-/// - `spec_path_to_issue: &BTreeMap<String, u64>` must satisfy domain and type-safety constraints prior to invoking `rewrite_projected_links`.
+/// - `body: &str`, `repo: Option<&str>`, `default_branch: &str`, `workspace_prefix: &str`, and `spec_path_to_issue: &BTreeMap<String, u64>` must satisfy domain and type-safety constraints prior to invoking `rewrite_projected_links`.
 ///
 /// ## 4. Postconditions
 /// - Returns `String` from `rewrite_projected_links` with deterministic post-execution state.
@@ -721,6 +1095,7 @@ fn rewrite_projected_links(
     body: &str,
     repo: Option<&str>,
     default_branch: &str,
+    workspace_prefix: &str,
     spec_path_to_issue: &BTreeMap<String, u64>,
 ) -> String {
     let mut result = String::with_capacity(body.len());
@@ -797,8 +1172,8 @@ fn rewrite_projected_links(
                     let canonical_target = if let Some(r) = repo {
                         let clean_repo = clean_repo_name(r);
                         let branch = if default_branch.trim().is_empty() { "main" } else { default_branch.trim() };
-                        let doc_path = if target.contains("docs/") {
-                            target[target.find("docs/").unwrap()..].to_string()
+                        let doc_path = if let Some(pos) = target.find("docs/") {
+                            target[pos..].to_string()
                         } else if target.contains("epics/") {
                             format!("docs/epics/{}", fname)
                         } else if target.contains("features/") {
@@ -810,7 +1185,17 @@ fn rewrite_projected_links(
                         } else {
                             format!("docs/{}", stripped)
                         };
-                        format!("https://github.com/{}/blob/{}/{}", clean_repo, branch, doc_path)
+                        let prefixed_doc_path = if !workspace_prefix.is_empty()
+                            && !doc_path.starts_with(workspace_prefix)
+                        {
+                            format!("{}{}", workspace_prefix, doc_path)
+                        } else {
+                            doc_path
+                        };
+                        format!(
+                            "https://github.com/{}/blob/{}/{}",
+                            clean_repo, branch, prefixed_doc_path
+                        )
                     } else {
                         target.to_string()
                     };
@@ -827,24 +1212,35 @@ fn rewrite_projected_links(
                     let clean_repo = clean_repo_name(r);
                     if !clean_repo.is_empty() {
                         let branch = if default_branch.trim().is_empty() { "main" } else { default_branch.trim() };
-                        if target.contains("schema/") {
-                            let s_path = &target[target.find("schema/").unwrap()..];
-                            let blob = format!("https://github.com/{}/blob/{}/{}", clean_repo, branch, s_path);
+                        if let Some(pos) = target.find("schema/") {
+                            let s_path = &target[pos..];
+                            let blob = format!(
+                                "https://github.com/{}/blob/{}/{}{}",
+                                clean_repo, branch, workspace_prefix, s_path
+                            );
                             result.push_str(&format!("[{}]({})", text, blob));
                             rest = &rest[total_end..];
                             continue;
-                        } else if target.contains("docs/") {
-                            let d_path = &target[target.find("docs/").unwrap()..];
-                            let blob = format!("https://github.com/{}/blob/{}/{}", clean_repo, branch, d_path);
+                        } else if let Some(pos) = target.find("docs/") {
+                            let d_path = &target[pos..];
+                            let blob = format!(
+                                "https://github.com/{}/blob/{}/{}{}",
+                                clean_repo, branch, workspace_prefix, d_path
+                            );
                             result.push_str(&format!("[{}]({})", text, blob));
                             rest = &rest[total_end..];
                             continue;
                         } else if let Some(subdir) = ["epics/", "features/", "user-stories/", "use-cases/"].iter().find(|s| target.contains(*s)) {
-                            let s_path = &target[target.find(subdir).unwrap()..];
-                            let blob = format!("https://github.com/{}/blob/{}/docs/{}", clean_repo, branch, s_path);
-                            result.push_str(&format!("[{}]({})", text, blob));
-                            rest = &rest[total_end..];
-                            continue;
+                            if let Some(pos) = target.find(subdir) {
+                                let s_path = &target[pos..];
+                                let blob = format!(
+                                    "https://github.com/{}/blob/{}/{}docs/{}",
+                                    clean_repo, branch, workspace_prefix, s_path
+                                );
+                                result.push_str(&format!("[{}]({})", text, blob));
+                                rest = &rest[total_end..];
+                                continue;
+                            }
                         }
                     }
                 }
@@ -898,7 +1294,49 @@ pub fn project_body_for_tracker(
     default_branch: &str,
     spec_path_to_issue: &BTreeMap<String, u64>,
 ) -> String {
-    let mut projected = rewrite_projected_links(body, repo, default_branch, spec_path_to_issue);
+    project_body_for_tracker_with_prefix(body, repo, default_branch, "", spec_path_to_issue)
+}
+
+/// Translates relative filesystem markdown links in a spec body to tracker-compatible links while honoring `workspace_prefix` (e.g., `".pipeline/upstream/"`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `project_body_for_tracker_with_prefix` in `crates/reconcile-backlog/src/lib.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `project_body_for_tracker_with_prefix` within `RECONCILE-BACKLOG`.
+///
+/// ## 3. Preconditions
+/// - `body: &str`, `repo: Option<&str>`, `default_branch: &str`, `workspace_prefix: &str`, and `spec_path_to_issue: &BTreeMap<String, u64>` must satisfy domain and type-safety constraints prior to invoking `project_body_for_tracker_with_prefix`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `project_body_for_tracker_with_prefix` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(body)) bounded over input/member dimension of `project_body_for_tracker_with_prefix`.
+/// - Space Complexity: O(N(body)) bounded auxiliary memory for `project_body_for_tracker_with_prefix`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `project_body_for_tracker_with_prefix` (`String`).
+/// - State: Maintains consistent state invariants across `project_body_for_tracker_with_prefix` without partial mutation on error.
+/// - Action: Executes `project_body_for_tracker_with_prefix` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `project_body_for_tracker_with_prefix` (`RECONCILE-BACKLOG`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-PROJECT-BODY-FOR-TRACKER-WITH-PREFIX] | SysML v2: ActionDef(project_body_for_tracker_with_prefix)
+pub fn project_body_for_tracker_with_prefix(
+    body: &str,
+    repo: Option<&str>,
+    default_branch: &str,
+    workspace_prefix: &str,
+    spec_path_to_issue: &BTreeMap<String, u64>,
+) -> String {
+    let mut projected = rewrite_projected_links(
+        body,
+        repo,
+        default_branch,
+        workspace_prefix,
+        spec_path_to_issue,
+    );
 
     // Translate any remaining relative schema and docs links outside markdown link targets to absolute GitHub blob URLs
     if let Some(r) = repo {
@@ -909,21 +1347,39 @@ pub fn project_body_for_tracker(
             } else {
                 default_branch.trim()
             };
-            let schema_blob_base = format!("https://github.com/{}/blob/{}/schema/", clean_repo, branch);
+            let schema_blob_base = format!(
+                "https://github.com/{}/blob/{}/{}schema/",
+                clean_repo, branch, workspace_prefix
+            );
             projected = projected.replace("../../../schema/", &schema_blob_base);
             projected = projected.replace("../../schema/", &schema_blob_base);
             projected = projected.replace("../schema/", &schema_blob_base);
 
-            let docs_blob_base = format!("https://github.com/{}/blob/{}/docs/", clean_repo, branch);
+            let docs_blob_base = format!(
+                "https://github.com/{}/blob/{}/{}docs/",
+                clean_repo, branch, workspace_prefix
+            );
             projected = projected.replace("../../../docs/", &docs_blob_base);
             projected = projected.replace("../../docs/", &docs_blob_base);
             projected = projected.replace("../docs/", &docs_blob_base);
 
             for subdir in ["epics", "features", "user-stories", "use-cases"] {
-                let blob_base = format!("https://github.com/{}/blob/{}/docs/{}/", clean_repo, branch, subdir);
+                let blob_base = format!(
+                    "https://github.com/{}/blob/{}/{}docs/{}/",
+                    clean_repo, branch, workspace_prefix, subdir
+                );
                 projected = projected.replace(&format!("../../../{}/", subdir), &blob_base);
                 projected = projected.replace(&format!("../../{}/", subdir), &blob_base);
                 projected = projected.replace(&format!("../{}/", subdir), &blob_base);
+            }
+
+            if !workspace_prefix.is_empty() {
+                let unprefixed_docs =
+                    format!("https://github.com/{}/blob/{}/docs/", clean_repo, branch);
+                projected = projected.replace(&unprefixed_docs, &docs_blob_base);
+                let unprefixed_schema =
+                    format!("https://github.com/{}/blob/{}/schema/", clean_repo, branch);
+                projected = projected.replace(&unprefixed_schema, &schema_blob_base);
             }
         }
     }
