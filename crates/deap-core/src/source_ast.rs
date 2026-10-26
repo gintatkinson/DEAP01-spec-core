@@ -944,19 +944,28 @@ pub fn validate_source_syntax_for_language(
             continue;
         }
 
-        // Block comment `/* ... */`
+        // Block comment `/* ... */` (supports nested `/* ... /* ... */ ... */`)
         if b == b'/' && bytes.get(idx.saturating_add(1)) == Some(&b'*') {
             let open_line = line;
             let open_col = col;
             idx = idx.saturating_add(2);
             col = col.saturating_add(2);
-            let mut closed = false;
+            let mut depth: usize = 1;
             while let Some(&cb) = bytes.get(idx) {
-                if cb == b'*' && bytes.get(idx.saturating_add(1)) == Some(&b'/') {
+                if cb == b'/' && bytes.get(idx.saturating_add(1)) == Some(&b'*') {
+                    depth = depth.saturating_add(1);
                     idx = idx.saturating_add(2);
                     col = col.saturating_add(2);
-                    closed = true;
-                    break;
+                    continue;
+                }
+                if cb == b'*' && bytes.get(idx.saturating_add(1)) == Some(&b'/') {
+                    depth = depth.saturating_sub(1);
+                    idx = idx.saturating_add(2);
+                    col = col.saturating_add(2);
+                    if depth == 0 {
+                        break;
+                    }
+                    continue;
                 }
                 if cb == b'\n' {
                     line = line.saturating_add(1);
@@ -966,7 +975,7 @@ pub fn validate_source_syntax_for_language(
                 }
                 idx = idx.saturating_add(1);
             }
-            if !closed {
+            if depth != 0 {
                 return Err(format!(
                     "{}:{}:{}: syntax error: unclosed block comment starting at line {}, column {}",
                     file_label, open_line, open_col, open_line, open_col
@@ -975,8 +984,8 @@ pub fn validate_source_syntax_for_language(
             continue;
         }
 
-        // Rust raw string literal `r#"..."#`
-        if !is_dart && b == b'r' {
+        // Rust raw string literal `r#"..."#` or raw byte string literal `br#"..."#`
+        if !is_dart && (b == b'r' || b == b'R') && is_valid_raw_string_prefix(bytes, idx, true) {
             let mut scan = idx.saturating_add(1);
             let mut hashes: usize = 0;
             while bytes.get(scan) == Some(&b'#') {
@@ -1022,13 +1031,8 @@ pub fn validate_source_syntax_for_language(
             }
         }
 
-        let is_raw_quote = idx > 0
-            && bytes.get(idx.saturating_sub(1)) == Some(&b'r')
-            && (idx < 2
-                || bytes
-                    .get(idx.saturating_sub(2))
-                    .map(|&p| !p.is_ascii_alphanumeric() && p != b'_')
-                    .unwrap_or(true));
+        let is_raw_quote =
+            idx > 0 && is_valid_raw_string_prefix(bytes, idx.saturating_sub(1), !is_dart);
 
         // Triple-quoted string in Dart (`"""..."""` or `'''...'''`)
         if is_dart
@@ -3898,24 +3902,16 @@ pub fn scan_rust_line_preserving_lex_state(
                     i = i.saturating_add(2);
                     continue;
                 }
-                if bytes.get(i) == Some(&b'r') || bytes.get(i) == Some(&b'R') {
-                    let prev_ok = i == 0
-                        || bytes
-                            .get(i.saturating_sub(1))
-                            .map(|b| (!b.is_ascii_alphanumeric() && *b != b'_') || *b == b'b')
-                            .unwrap_or(true);
-                    if prev_ok {
-                        let mut hashes: usize = 0;
-                        while bytes.get(i.saturating_add(1).saturating_add(hashes)) == Some(&b'#')
-                        {
-                            hashes = hashes.saturating_add(1);
-                        }
-                        if bytes.get(i.saturating_add(1).saturating_add(hashes)) == Some(&b'"') {
-                            *state = RustStringScannerState::RawString(hashes);
-                            out.push('"');
-                            i = i.saturating_add(2).saturating_add(hashes);
-                            continue;
-                        }
+                if is_valid_raw_string_prefix(bytes, i, true) {
+                    let mut hashes: usize = 0;
+                    while bytes.get(i.saturating_add(1).saturating_add(hashes)) == Some(&b'#') {
+                        hashes = hashes.saturating_add(1);
+                    }
+                    if bytes.get(i.saturating_add(1).saturating_add(hashes)) == Some(&b'"') {
+                        *state = RustStringScannerState::RawString(hashes);
+                        out.push('"');
+                        i = i.saturating_add(2).saturating_add(hashes);
+                        continue;
                     }
                 }
                 if bytes.get(i) == Some(&b'"') {
@@ -3949,10 +3945,85 @@ pub fn scan_rust_line_preserving_lex_state(
     out
 }
 
-/// Detects a Rust hashed raw string prefix `r#"..."#` (or `R#"..."#`) at byte offset `idx`.
+/// Validates whether byte index `r_idx` in `bytes` is a standalone raw string prefix (`r`/`R` or `br`/`BR`).
 ///
 /// # Summary
-/// Inspects `bytes` at `idx` for an `'r'` or `'R'` token (not preceded by an identifier character `[A-Za-z0-9_]`)
+/// Checks that `bytes.get(r_idx)` is `b'r'` or `b'R'` and is either at the start of `bytes`, preceded by a
+/// non-identifier byte (`![A-Za-z0-9_]`), or (when `allow_byte_prefix` is `true`) preceded by `b'b'` / `b'B'`
+/// which is itself at index 0 or preceded by a non-identifier byte.
+///
+/// # Preconditions
+/// - `bytes` is a UTF-8 source or line byte slice; `r_idx` is the candidate index of `'r'` or `'R'`.
+///
+/// # Postconditions
+/// - Returns `true` iff `r_idx` is a valid raw string (or raw byte string) prefix token boundary.
+///
+/// # Invariants
+/// - Rejects identifier suffixes ending in `r` or `br` (such as `bar"..."` or `subr"..."`).
+///
+/// # Failure Modes
+/// - Returns `false` when `r_idx` is out of bounds or preceded by an identifier character.
+///
+/// # Side Effects
+/// - Pure stateless predicate; zero I/O or heap allocation.
+///
+/// # Determinism
+/// - Deterministic O(1) bounded byte lookbehind.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `is_valid_raw_string_prefix`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `r_idx == 0` or predecessor is non-identifier, or (when `allow_byte_prefix`) predecessor is `b`/`B` with non-identifier before it.
+///
+/// ## 3. Preconditions
+/// - `bytes: &[u8]` is a valid byte slice; `r_idx: usize` is a byte offset; `allow_byte_prefix: bool` controls Rust `br` acceptance.
+///
+/// ## 4. Postconditions
+/// - Returns `true` on a valid raw string prefix boundary and `false` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) constant-time 2-byte lookbehind.
+/// - Space Complexity: O(1) zero allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking `.get(..)` byte inspection with saturating subtraction.
+/// - State: Stateless.
+/// - Action: Zero panics, unwraps, or slice indexing.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SOURCE-AST-RAW-STRING-HASH-COUNT]
+fn is_valid_raw_string_prefix(bytes: &[u8], r_idx: usize, allow_byte_prefix: bool) -> bool {
+    if !matches!(bytes.get(r_idx), Some(b'r' | b'R')) {
+        return false;
+    }
+    if r_idx == 0 {
+        return true;
+    }
+    let prev = match bytes.get(r_idx.saturating_sub(1)) {
+        Some(&p) => p,
+        None => return true,
+    };
+    if !prev.is_ascii_alphanumeric() && prev != b'_' {
+        return true;
+    }
+    if allow_byte_prefix && (prev == b'b' || prev == b'B') {
+        if r_idx < 2 {
+            return true;
+        }
+        return bytes
+            .get(r_idx.saturating_sub(2))
+            .map(|&p2| !p2.is_ascii_alphanumeric() && p2 != b'_')
+            .unwrap_or(true);
+    }
+    false
+}
+
+/// Detects a Rust hashed raw string prefix `r#"..."#` (or `br#"..."#`) at byte offset `idx`.
+///
+/// # Summary
+/// Inspects `bytes` at `idx` for an `'r'` or `'R'` token (validated via [`is_valid_raw_string_prefix`])
 /// followed by `hashes >= 1` `'#'` bytes and an opening `'"'`, returning `Some((hashes, quote_idx))`.
 ///
 /// # Preconditions
@@ -3962,7 +4033,7 @@ pub fn scan_rust_line_preserving_lex_state(
 /// - Returns `Some((hashes, quote_idx))` where `hashes >= 1` and `bytes.get(quote_idx) == Some(&b'"')`, or `None`.
 ///
 /// # Invariants
-/// - Rejects identifier suffixes ending in `r` (such as `bar#"..."`) by verifying `idx == 0` or non-identifier predecessor.
+/// - Rejects identifier suffixes ending in `r` or `br` (such as `bar#"..."` or `subr#"..."`).
 ///
 /// # Failure Modes
 /// - Returns `None` when `idx` is out of bounds, lacks `#`, or is not followed by `'"'`.
@@ -3976,7 +4047,7 @@ pub fn scan_rust_line_preserving_lex_state(
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and Check 34 raw string lexical recognition (`rust_raw_string_hash_count`).
 /// Enables `strip_line_comment_preserving_strings` and `update_ast_delimiter_depths` to preserve `//`
-/// and unbalanced delimiters inside `r#"..."#` literals.
+/// and unbalanced delimiters inside `r#"..."#` and `br#"..."#` literals.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - `quote_idx == idx + 1 + hashes` with `hashes >= 1`.
@@ -3998,14 +4069,8 @@ pub fn scan_rust_line_preserving_lex_state(
 /// Realises: [REQ-SOURCE-AST-RAW-STRING-HASH-COUNT]
 fn rust_raw_string_hash_count(bytes: &[u8], idx: usize) -> Option<(usize, usize)> {
     let b = *bytes.get(idx)?;
-    if b != b'r' && b != b'R' {
+    if (b != b'r' && b != b'R') || !is_valid_raw_string_prefix(bytes, idx, true) {
         return None;
-    }
-    if idx > 0 {
-        let prev = *bytes.get(idx.saturating_sub(1))?;
-        if prev.is_ascii_alphanumeric() || prev == b'_' {
-            return None;
-        }
     }
     let mut scan = idx.saturating_add(1);
     let mut hashes: usize = 0;
@@ -4291,22 +4356,13 @@ pub fn strip_line_comment_preserving_strings(line: &str) -> &str {
                 continue;
             }
 
-            if (b == b'r' || b == b'R')
-                && (bytes.get(idx.saturating_add(1)) == Some(&b'\'') || bytes.get(idx.saturating_add(1)) == Some(&b'"'))
+            if is_valid_raw_string_prefix(bytes, idx, true)
+                && (bytes.get(idx.saturating_add(1)) == Some(&b'\'')
+                    || bytes.get(idx.saturating_add(1)) == Some(&b'"'))
             {
-                let prev_is_ident = if idx > 0 {
-                    bytes
-                        .get(idx.saturating_sub(1))
-                        .map(|&p| p.is_ascii_alphanumeric() || p == b'_')
-                        .unwrap_or(false)
-                } else {
-                    false
-                };
-                if !prev_is_ident {
-                    is_raw = true;
-                    idx = idx.saturating_add(1);
-                    continue;
-                }
+                is_raw = true;
+                idx = idx.saturating_add(1);
+                continue;
             }
 
             if b == b'"' {
@@ -4615,22 +4671,13 @@ pub fn update_ast_delimiter_depths(code: &str, brace_depth: &mut usize, paren_de
             continue;
         }
 
-        if (b == b'r' || b == b'R')
-            && (bytes.get(idx.saturating_add(1)) == Some(&b'\'') || bytes.get(idx.saturating_add(1)) == Some(&b'"'))
+        if is_valid_raw_string_prefix(bytes, idx, true)
+            && (bytes.get(idx.saturating_add(1)) == Some(&b'\'')
+                || bytes.get(idx.saturating_add(1)) == Some(&b'"'))
         {
-            let prev_is_ident = if idx > 0 {
-                bytes
-                    .get(idx.saturating_sub(1))
-                    .map(|&p| p.is_ascii_alphanumeric() || p == b'_')
-                    .unwrap_or(false)
-            } else {
-                false
-            };
-            if !prev_is_ident {
-                is_raw = true;
-                idx = idx.saturating_add(1);
-                continue;
-            }
+            is_raw = true;
+            idx = idx.saturating_add(1);
+            continue;
         }
 
         if b == b'"' {
@@ -5354,5 +5401,66 @@ impl ComponentAlpha {
             return Err(format!("Expected only src/lib.rs, got {files:?}"));
         }
         Ok(())
+    }
+
+    /// Verifies that `parse_rust_source_ast` handles nested `/* ... /* ... */ ... */` block comments and `br"..."` / `br#"..."#` raw byte string literals (`#555`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_issue_555_nested_block_comments_and_raw_byte_strings`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Nested block comments track nesting depth so unbalanced delimiters after an inner `*/` do not leak into top-level syntax validation.
+    /// - Unclosed nested block comments (`depth > 0` at EOF) deterministically return an `"unclosed block comment"` syntax error.
+    /// - Raw byte strings `br"\"` and `br#"unclosed " quote"#` are recognized as raw literals without escaping the closing quote or failing on interior quotes.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory Rust source fixtures containing nested block comments and raw byte string literals.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when `ByteStringOwner` is extracted from valid source and unclosed nested block comments are rejected.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over fixture byte length.
+    /// - Space Complexity: O(I) for extracted AST items.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), String>` on assertion mismatch.
+    /// - State: Stateless in-memory test.
+    /// - Action: Zero panics, unwraps, or expectations.
+    /// - Resource: Bounded stack and heap fixture strings.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-PARSE-RUST-AST]
+    #[test]
+    fn test_issue_555_nested_block_comments_and_raw_byte_strings() -> Result<(), String> {
+        let valid_src = concat!(
+            "/* outer /* inner */ { unmatched brace inside outer comment */\n",
+            "pub fn use_raw_bytes() -> &'static [u8] {\n",
+            "    let a = br\"\\\";\n",
+            "    let b = br#\"unclosed \" quote\"#;\n",
+            "    let _ = a;\n",
+            "    b\n",
+            "}\n",
+            "pub struct ByteStringOwner {\n",
+            "    pub id: u32,\n",
+            "}\n",
+        );
+        let items = parse_rust_source_ast(valid_src, "issue_555_valid.rs")?;
+        if !items
+            .iter()
+            .any(|item| item.kind == SourceItemKind::Struct && item.name == "ByteStringOwner")
+        {
+            return Err(format!(
+                "Expected Struct ByteStringOwner in extracted AST items, got {items:?}"
+            ));
+        }
+
+        let unclosed_src = "/* outer /* inner */ pub struct Broken {}\n";
+        match parse_rust_source_ast(unclosed_src, "issue_555_unclosed.rs") {
+            Err(err) if err.contains("unclosed block comment") => Ok(()),
+            other => Err(format!(
+                "Expected Err containing 'unclosed block comment', got {other:?}"
+            )),
+        }
     }
 }
