@@ -33,7 +33,7 @@
 //! Realises: [REQ-SYNC-FORWARD-RESOLVE-ISSUE-ID] | SysML v2: VerificationCaseDef(reproducer_tests)
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use compile_sysml::sync::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
@@ -334,6 +334,108 @@ fn test_issue_546_resolve_schema_targets_falls_back_to_pipeline_schema(
             ".pipeline/schema.sysml"
         ))),
         "resolve_schema_targets(None) must fall back to .pipeline/schema.sysml"
+    );
+
+    Ok(())
+}
+
+/// Verifies that `run_compilation_gate` compiles each `blueprint-*.sysml` file inside a
+/// `docs/designs` blueprint triplet directory in place and emits per-file `blueprint-*.digest.json`
+/// sidecars when invoked with the default compilation paths (`.pipeline/schema.sysml` and
+/// `.pipeline/schema-digest.json`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `test_issue_547_run_compilation_gate_compiles_blueprint_triplet_dir_in_place` in
+/// `crates/compile-sysml/tests/reproducer_tests.rs` (refs #547).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Per-Blueprint Triplet Isolation Invariant: When compiling a directory $D$ of `blueprint-*.sysml`
+///   files with default output/digest paths, each $f_i \in D$ is validated, canonicalized in place
+///   at $f_i$, and paired with its cryptographic SHA-256 digest at $f_i\text{.with\_extension("digest.json")}$
+///   without cross-merging sibling blueprint packages into $f_i$.
+///
+/// ## 3. Preconditions
+/// - `std::env::temp_dir()` is writable for creating an ephemeral `docs/designs` fixture containing
+///   `blueprint-01-alpha.sysml` (`AlphaPkg`) and `blueprint-02-beta.sysml` (`BetaPkg`).
+///
+/// ## 4. Postconditions
+/// - `run_compilation_gate` returns exit code `0`.
+/// - Both `blueprint-01-alpha.digest.json` and `blueprint-02-beta.digest.json` exist on disk.
+/// - `blueprint-01-alpha.sysml` preserves `package AlphaPkg` without `BetaActuator`, and
+///   `blueprint-02-beta.sysml` preserves `package BetaPkg` without `AlphaController`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N \log N)$ over the two synthetic blueprint AST fixtures.
+/// - Space Complexity: $O(N)$ auxiliary memory for serialized SysML and digest strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates directory-target invocation of `run_compilation_gate` with default output paths.
+/// - State: Uses a unique process- and timestamp-scoped directory under `std::env::temp_dir()`.
+/// - Action: Executes deterministically with zero panics or `.unwrap()` calls.
+/// - Resource: Removes the temporary directory prior to assertions so failed assertions leave zero debris.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-BLUEPRINT-TRIPLET-DIR] | SysML v2: VerificationCaseDef(test_issue_547_run_compilation_gate_compiles_blueprint_triplet_dir_in_place)
+#[test]
+fn test_issue_547_run_compilation_gate_compiles_blueprint_triplet_dir_in_place(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let temp_ws = std::env::temp_dir().join(format!(
+        "deap_issue_547_blueprint_triplet_{}_{}",
+        std::process::id(),
+        nanos
+    ));
+    let _ = fs::remove_dir_all(&temp_ws);
+    let designs_dir = temp_ws.join("docs").join("designs");
+    fs::create_dir_all(&designs_dir)?;
+
+    let alpha_path = designs_dir.join("blueprint-01-alpha.sysml");
+    let beta_path = designs_dir.join("blueprint-02-beta.sysml");
+    fs::write(
+        &alpha_path,
+        "package AlphaPkg {\n    part def AlphaController {\n        attribute id : Integer;\n    }\n}\n",
+    )?;
+    fs::write(
+        &beta_path,
+        "package BetaPkg {\n    part def BetaActuator {\n        attribute speed : Real;\n    }\n}\n",
+    )?;
+
+    let code = compile_sysml::run_compilation_gate(
+        Some(designs_dir.clone()),
+        Path::new(".pipeline/schema.sysml"),
+        Path::new(".pipeline/schema-digest.json"),
+    );
+
+    let has_alpha_digest = designs_dir.join("blueprint-01-alpha.digest.json").is_file();
+    let has_beta_digest = designs_dir.join("blueprint-02-beta.digest.json").is_file();
+    let alpha_content = fs::read_to_string(&alpha_path)?;
+    let beta_content = fs::read_to_string(&beta_path)?;
+    let _ = fs::remove_dir_all(&temp_ws);
+
+    assert_eq!(
+        code, 0,
+        "run_compilation_gate on docs/designs blueprint triplet directory must return 0"
+    );
+    assert!(
+        has_alpha_digest,
+        "blueprint-01-alpha.digest.json sidecar must be created in docs/designs"
+    );
+    assert!(
+        has_beta_digest,
+        "blueprint-02-beta.digest.json sidecar must be created in docs/designs"
+    );
+    assert!(
+        alpha_content.contains("package AlphaPkg") && !alpha_content.contains("BetaActuator"),
+        "blueprint-01-alpha.sysml must remain isolated to AlphaPkg:\n{}",
+        alpha_content
+    );
+    assert!(
+        beta_content.contains("package BetaPkg") && !beta_content.contains("AlphaController"),
+        "blueprint-02-beta.sysml must remain isolated to BetaPkg:\n{}",
+        beta_content
     );
 
     Ok(())

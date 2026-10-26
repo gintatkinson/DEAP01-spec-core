@@ -537,11 +537,144 @@ fn sync_downstream_model_sysml(output_path: &Path, sysml_text: &str) -> Result<(
     Ok(())
 }
 
-/// Internal SESE implementation of the Pipeline 0 compilation gate supporting `dry_run`.
+/// Checks whether `path` is a blueprint SysML v2 triplet file (`blueprint-*.sysml`).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Executes the Pipeline 0 SysML v2 compilation gate with atomic persistence and `dry_run`
-/// simulation support (`ARCH-04`, `ARCH-05`) under DO-178C Level A and DO-330 TQL-4.
+/// Identifies per-blueprint SysML v2 metamodel files (`blueprint-XX-<slug>.sysml`) under
+/// DO-178C Level A and DO-330 TQL-4 artifact isolation rules (Check 53).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` if and only if the terminal file name of `path` starts with `"blueprint-"`
+///   and ends with `".sysml"`.
+///
+/// ## 3. Preconditions
+/// - `path` is a candidate filesystem path.
+///
+/// ## 4. Postconditions
+/// - Pure, side-effect-free predicate returning `bool`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ over the terminal filename component.
+/// - Space Complexity: $O(1)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-UTF-8 or missing file names return `false` cleanly without panicking.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-BLUEPRINT-TRIPLET-DIR], [DO-330-TQL-4-GATE]
+fn is_blueprint_sysml_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|name| name.starts_with("blueprint-") && name.ends_with(".sysml"))
+}
+
+/// Checks whether a resolved schema directory represents a `docs/designs` blueprint triplet directory.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Distinguishes a directory of independent engineering design blueprint SysML v2 triplet files
+/// (`docs/designs/blueprint-*.sysml`) from a multi-file root `schema/` tree under DO-178C Level A
+/// and DO-330 TQL-4 configuration management rules.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` when `files` is non-empty and either `dir` ends with `"docs/designs"` or every
+///   discovered `.sysml` file in `files` satisfies `is_blueprint_sysml_file`.
+///
+/// ## 3. Preconditions
+/// - `dir` is a directory path and `files` is the slice of `.sysml` files discovered inside `dir`.
+///
+/// ## 4. Postconditions
+/// - Pure predicate returning `bool` with zero filesystem mutations.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(F)$ where $F$ is `files.len()`.
+/// - Space Complexity: $O(1)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Empty file slices deterministically return `false`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-BLUEPRINT-TRIPLET-DIR], [DO-330-TQL-4-GATE]
+fn is_blueprint_triplet_dir(dir: &Path, files: &[PathBuf]) -> bool {
+    !files.is_empty()
+        && (dir.ends_with("docs/designs") || files.iter().all(|f| is_blueprint_sysml_file(f)))
+}
+
+/// Checks whether `output_path` and `digest_path` match the default CLI compilation targets.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Ensures explicit caller-supplied `--output` or `--digest` overrides are preserved while
+/// allowing default `--compile --schema docs/designs/` invocations to compile blueprint triplets
+/// in place under DO-178C Level A and DO-330 TQL-4.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` if and only if `output_path == Path::new(".pipeline/schema.sysml")` and
+///   `digest_path == Path::new(".pipeline/schema-digest.json")`.
+///
+/// ## 3. Preconditions
+/// - `output_path` and `digest_path` are path references passed to the compilation gate.
+///
+/// ## 4. Postconditions
+/// - Pure path equality check returning `bool`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$.
+/// - Space Complexity: $O(1)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Cannot fail or panic.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-BLUEPRINT-TRIPLET-DIR], [DO-330-TQL-4-GATE]
+fn is_default_compilation_paths(output_path: &Path, digest_path: &Path) -> bool {
+    output_path == Path::new(".pipeline/schema.sysml")
+        && digest_path == Path::new(".pipeline/schema-digest.json")
+}
+
+/// Compiles each blueprint `.sysml` file in `files` in place and writes its `.digest.json` sidecar.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Enforces per-blueprint compilation isolation and cryptographic sidecar generation
+/// (`blueprint-XX-<slug>.digest.json`) required by `verify-baseline` Check 53 under
+/// DO-178C Level A and DO-330 TQL-4.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Each `schema_file` in `files` is validated independently via `compile_single_or_merged_schema`,
+///   canonicalized in place at `schema_file`, and paired with `schema_file.with_extension("digest.json")`.
+/// - Fails closed on the first blueprint file that fails parsing, semantic validation, or atomic persistence.
+///
+/// ## 3. Preconditions
+/// - `files` is a non-empty slice of blueprint `.sysml` paths; `dry_run` controls filesystem persistence.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(0)` when all blueprint triplets compile cleanly, or `Err((1, String))` on the first failure.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(\sum_i N_i \log N_i)$ across all blueprint files in `files`.
+/// - Space Complexity: $O(\max_i N_i)$ for the active blueprint AST and serialized text buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Propagates structured `Err((1, msg))` immediately on any validation or I/O failure.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-BLUEPRINT-TRIPLET-DIR], [DO-330-TQL-4-GATE]
+fn compile_blueprint_triplet_dir(files: &[PathBuf], dry_run: bool) -> Result<i32, (i32, String)> {
+    for schema_file in files {
+        let digest_sidecar = schema_file.with_extension("digest.json");
+        compile_single_or_merged_schema(
+            Some(schema_file.clone()),
+            schema_file,
+            &digest_sidecar,
+            dry_run,
+        )?;
+    }
+    Ok(0)
+}
+
+/// Compiles a single schema file or merged schema directory into `output_path` and `digest_path`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Executes the core Pipeline 0 SysML v2 validation, canonical serialization, atomic persistence,
+/// and SHA-256 `SchemaDigest` emission (`ARCH-04`, `ARCH-05`) under DO-178C Level A and DO-330 TQL-4.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Validates non-empty structural element count and full `SemanticValidator` soundness via `load_and_validate_schema`.
@@ -564,7 +697,7 @@ fn sync_downstream_model_sysml(output_path: &Path, sysml_text: &str) -> Result<(
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-GATE-DRY-RUN], [DO-330-TQL-4-GATE]
-fn run_compilation_gate_with_dry_run(
+fn compile_single_or_merged_schema(
     explicit_schema: Option<PathBuf>,
     output_path: &Path,
     digest_path: &Path,
@@ -625,6 +758,52 @@ fn run_compilation_gate_with_dry_run(
     );
 
     Ok(0)
+}
+
+/// Internal SESE implementation of the Pipeline 0 compilation gate supporting `dry_run`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Executes the Pipeline 0 SysML v2 compilation gate with atomic persistence, per-blueprint
+/// triplet directory compilation (`docs/designs/blueprint-*.sysml`), and `dry_run` simulation
+/// support (`ARCH-04`, `ARCH-05`) under DO-178C Level A and DO-330 TQL-4.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - When `output_path` and `digest_path` are at their default `.pipeline/` locations and
+///   `explicit_schema` resolves to a blueprint triplet directory (`is_blueprint_triplet_dir`),
+///   compiles each `blueprint-*.sysml` file in place with its `.digest.json` sidecar.
+/// - Otherwise delegates to `compile_single_or_merged_schema`.
+///
+/// ## 3. Preconditions
+/// - `explicit_schema` is an optional schema file or directory path; `output_path` and `digest_path` are target paths.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(0)` on clean compilation or `Err((1, String))` on any validation or I/O error.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N \log N)$ in schema size and AST node count.
+/// - Space Complexity: $O(N)$ for AST and serialized output buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Returns structured `Err((1, msg))` without calling `process::exit`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-GATE-DRY-RUN], [REQ-COMPILER-SYSML-BLUEPRINT-TRIPLET-DIR], [DO-330-TQL-4-GATE]
+fn run_compilation_gate_with_dry_run(
+    explicit_schema: Option<PathBuf>,
+    output_path: &Path,
+    digest_path: &Path,
+    dry_run: bool,
+) -> Result<i32, (i32, String)> {
+    if is_default_compilation_paths(output_path, digest_path) {
+        if let Ok(SchemaTarget::Directory(ref dir, ref files)) =
+            resolve_schema_targets(explicit_schema.clone())
+        {
+            if is_blueprint_triplet_dir(dir, files) {
+                return compile_blueprint_triplet_dir(files, dry_run);
+            }
+        }
+    }
+    compile_single_or_merged_schema(explicit_schema, output_path, digest_path, dry_run)
 }
 
 /// Execute the Pipeline 0 compilation gate.
