@@ -70,9 +70,10 @@ use walkdir::WalkDir;
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-SOURCE-LANGUAGE-ENUM]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum SourceLanguage {
     /// Automatically detect `.rs` and `.dart` files from file extensions.
+    #[default]
     Auto,
     /// Parse Rust (`.rs`) source files exclusively.
     Rust,
@@ -594,7 +595,124 @@ type ActiveStringState = (u8, bool, bool, usize, usize);
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-INTERPOLATION-FRAME]
-type InterpolationFrame = (ActiveStringState, usize);
+type SyntaxInterpolationFrame = (ActiveStringState, usize);
+
+/// Unified string interpolation stack frame for `REQ-0605` line-by-line Rust and Dart lexical scanning.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `InterpolationFrame` (`REQ-0605` `AC-01`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Records the enclosing string literal's `quote_byte` (`b'"'` or `b'\''`), `is_triple`, `is_raw`, and active `brace_depth` inside `${...}`.
+/// - Pushed when entering `${` inside a non-raw string literal and popped when `brace_depth` returns to `0`.
+///
+/// ## 3. Preconditions
+/// - Constructed when encountering `${` inside an active non-raw string literal in `scan_line_with_unified_lex_state`.
+///
+/// ## 4. Postconditions
+/// - Restores `(quote_byte, is_triple, is_raw)` to `RustDartLexState::active_string` upon matching `}`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) construction and field access.
+/// - Space Complexity: O(1) stack value representation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Plain value struct with `Copy` and `Eq` semantics.
+/// - State: Immutable once pushed except for bounded `brace_depth` updates.
+/// - Action: Zero panics or allocations.
+/// - Resource: Constant stack footprint.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0605], [REQ-FEAT-42-INTERPOLATION-FRAME]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InterpolationFrame {
+    /// Quote delimiter byte (`b'"'` or `b'\''`) of the suspended outer string literal.
+    pub quote_byte: u8,
+    /// Whether the suspended outer string literal is triple-quoted (`"""` or `'''`).
+    pub is_triple: bool,
+    /// Whether the suspended outer string literal is a raw string.
+    pub is_raw: bool,
+    /// Current nesting depth of `{` ... `}` inside the active `${...}` interpolation expression.
+    pub brace_depth: usize,
+}
+
+/// Unified stateful lexical scanner context across Rust and Dart source lines (`REQ-0605` `AC-01`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `RustDartLexState` (`REQ-0605` `AC-01..AC-02`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Tracks `language`, nested `block_comment_depth`, Rust hashed raw string `raw_hash_count`, active string tuple `(quote_byte, is_triple, is_raw)`, and nested `interp_stack` across line boundaries.
+///
+/// ## 3. Preconditions
+/// - Initialized via `RustDartLexState::default()` (or with explicit `language: SourceLanguage::Rust` / `SourceLanguage::Dart`) before scanning line 1 of a source file.
+///
+/// ## 4. Postconditions
+/// - Updated in place by [`scan_line_with_unified_lex_state`] on each source line.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) state transitions per scanned token.
+/// - Space Complexity: O(D) where D is the maximum `${...}` interpolation nesting depth.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Safe value struct with `Default`, `Clone`, and `PartialEq`/`Eq`.
+/// - State: Isolated per-file lexical state machine.
+/// - Action: Non-panicking saturating counter updates.
+/// - Resource: Bounded vector for nested string interpolations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0605]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RustDartLexState {
+    /// Target source language (`Auto`, `Rust`, or `Dart`).
+    pub language: SourceLanguage,
+    /// Nesting depth of active `/* ... */` block comments (`0` when outside block comments).
+    pub block_comment_depth: usize,
+    /// Active Rust raw string `#` delimiter count (`Some(hashes)` inside `r#"..."#`, `None` otherwise).
+    pub raw_hash_count: Option<usize>,
+    /// Active string literal state `(quote_byte, is_triple, is_raw)` when inside a string literal.
+    pub active_string: Option<(u8, bool, bool)>,
+    /// Stack of suspended outer string literals across nested `${...}` interpolations.
+    pub interp_stack: Vec<InterpolationFrame>,
+}
+
+/// Scoped declaration and test/annotation gate state across Rust and Dart AST/audit passes (`REQ-0605` `AC-02`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `ScopedItemScannerState` (`REQ-0605` `AC-02`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Tracks `mod_tests_brace_depth`, `cfg_test_block_brace_depth`, `cfg_test_pending`, and `dart_annotation_paren_depth` so multi-line `@pragma(\n...\n)` annotations and `#[cfg(test)]` blocks are tracked deterministically.
+///
+/// ## 3. Preconditions
+/// - Initialized via `ScopedItemScannerState::default()` at the beginning of a file scan.
+///
+/// ## 4. Postconditions
+/// - Preserves accumulated `///` documentation across multi-line Dart annotations while `dart_annotation_paren_depth > 0`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) field reads and updates.
+/// - Space Complexity: O(1) stack footprint.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total value struct with `Default`, `Clone`, and `PartialEq`/`Eq`.
+/// - State: Isolated per-file scope state.
+/// - Action: Zero panics or heap allocations.
+/// - Resource: Constant stack memory.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0605]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ScopedItemScannerState {
+    /// Brace depth at which a `mod tests` block was entered (`None` when outside `mod tests`).
+    pub mod_tests_brace_depth: Option<usize>,
+    /// Brace depth at which a `#[cfg(test)]` item block was entered (`None` when outside).
+    pub cfg_test_block_brace_depth: Option<usize>,
+    /// Whether a `#[cfg(test)]` attribute is pending attachment to the next item declaration.
+    pub cfg_test_pending: bool,
+    /// Open parenthesis depth inside a multi-line Dart `@annotation(...)` prefix (`0` when outside).
+    pub dart_annotation_paren_depth: usize,
+}
 
 /// Extracted method signature `(in_parameters, out_parameters, return_type_name)`.
 /// # Summary
@@ -876,7 +994,7 @@ pub fn validate_source_syntax_for_language(
     let mut col: usize = 1;
     let mut stack: Vec<(u8, usize, usize)> = Vec::new();
     let mut active_str: Option<ActiveStringState> = None;
-    let mut interp_stack: Vec<InterpolationFrame> = Vec::new();
+    let mut interp_stack: Vec<SyntaxInterpolationFrame> = Vec::new();
     let is_dart = lang == SourceLanguage::Dart;
 
     while let Some(&b) = bytes.get(idx) {
@@ -1515,7 +1633,11 @@ pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
     let raw_lines: Vec<&str> = source.lines().collect();
     let mut items: Vec<SourceAstItem> = Vec::new();
     let mut current_doc: Vec<String> = Vec::new();
-    let mut in_multiline_comment = false;
+    let mut dart_lex_state = RustDartLexState {
+        language: SourceLanguage::Dart,
+        ..RustDartLexState::default()
+    };
+    let mut scoped_state = ScopedItemScannerState::default();
     let mut brace_depth: usize = 0;
     let mut paren_depth: usize = 0;
     let mut active_class_idx: Option<usize> = None;
@@ -1525,24 +1647,29 @@ pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
     for (idx, &raw_line) in raw_lines.iter().enumerate() {
         let line_no = idx.saturating_add(1);
         let trimmed = raw_line.trim();
+        let started_in_normal = dart_lex_state.block_comment_depth == 0
+            && dart_lex_state.active_string.is_none()
+            && dart_lex_state.raw_hash_count.is_none();
 
-        if in_multiline_comment {
-            if trimmed.contains("*/") {
-                in_multiline_comment = false;
-            }
-            continue;
-        }
-        if trimmed.starts_with("/*") && !trimmed.contains("*/") {
-            in_multiline_comment = true;
-            continue;
-        }
-        if trimmed.starts_with("///") {
+        if started_in_normal && trimmed.starts_with("///") {
             current_doc.push(trimmed.to_string());
             continue;
         }
 
+        let lex_sanitized = scan_line_with_unified_lex_state(trimmed, &mut dart_lex_state);
+        if lex_sanitized.trim().is_empty()
+            || (!started_in_normal
+                && (dart_lex_state.block_comment_depth > 0
+                    || dart_lex_state.active_string.is_some()))
+        {
+            continue;
+        }
+
         let code = strip_line_comment_preserving_strings(trimmed).trim();
-        let stripped_code = strip_leading_dart_annotations(code);
+        let stripped_code = strip_dart_annotations_tracking_state(
+            code,
+            &mut scoped_state.dart_annotation_paren_depth,
+        );
         if stripped_code.trim().is_empty() {
             continue;
         }
@@ -2339,6 +2466,63 @@ pub fn summary_from_doc_lines(doc_lines: &[String]) -> Option<String> {
     None
 }
 
+/// Extracts the top-level header prefix (up to and excluding the opening `{`) of a Rust `impl` block.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `extract_rust_impl_header_prefix` (`REQ-0605` `AC-02`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Accepts `impl` and `unsafe impl` headers with arbitrary generic `<...>` and `Fn(...) -> ...` bounds.
+/// - Scans for the first opening `{` at `angle_depth == 0 && paren_depth == 0` while ignoring `>` inside `->`.
+///
+/// ## 3. Preconditions
+/// - `code: &str` is a comment-stripped Rust `impl` header line or accumulated multi-line `impl` header.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(prefix)` containing the trimmed `impl` header before `{`, or `None` if `code` is not a complete `impl` header.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `code.len()`.
+/// - Space Complexity: O(1) zero-copy slice borrow.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking `.get(..)` slicing and character iteration.
+/// - State: Stateless pure function.
+/// - Action: Returns `None` when `code` does not start with `impl` / `unsafe impl` or lacks a top-level `{`.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0605], [REQ-FEAT-42-PARSE-RUST-IMPL-HEADER]
+pub fn extract_rust_impl_header_prefix(code: &str) -> Option<&str> {
+    let trimmed = code.trim();
+    let after_unsafe = trimmed.strip_prefix("unsafe ").unwrap_or(trimmed).trim_start();
+    let after_impl = after_unsafe.strip_prefix("impl")?;
+    if !after_impl.is_empty()
+        && !after_impl.starts_with('<')
+        && !after_impl.starts_with(char::is_whitespace)
+    {
+        return None;
+    }
+
+    let mut angle_depth: usize = 0;
+    let mut paren_depth: usize = 0;
+    let mut prev_ch: Option<char> = None;
+    for (i, ch) in trimmed.char_indices() {
+        match ch {
+            '<' => angle_depth = angle_depth.saturating_add(1),
+            '>' if prev_ch != Some('-') => angle_depth = angle_depth.saturating_sub(1),
+            '(' => paren_depth = paren_depth.saturating_add(1),
+            ')' => paren_depth = paren_depth.saturating_sub(1),
+            '{' if angle_depth == 0 && paren_depth == 0 => {
+                return trimmed.get(..i).map(str::trim);
+            }
+            _ => {}
+        }
+        prev_ch = Some(ch);
+    }
+    None
+}
+
 /// Parses a Rust `impl` block header line and returns the target type identifier.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -2367,9 +2551,13 @@ pub fn summary_from_doc_lines(doc_lines: &[String]) -> Option<String> {
 /// - Resource: Single identifier `String` allocation.
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-FEAT-42-PARSE-RUST-IMPL-HEADER]
-fn parse_rust_impl_header(code: &str) -> Option<String> {
-    let after_unsafe = code.strip_prefix("unsafe ").unwrap_or(code).trim_start();
+/// Realises: [REQ-0605], [REQ-FEAT-42-PARSE-RUST-IMPL-HEADER]
+pub fn parse_rust_impl_header(code: &str) -> Option<String> {
+    let before_brace = extract_rust_impl_header_prefix(code)?;
+    let after_unsafe = before_brace
+        .strip_prefix("unsafe ")
+        .unwrap_or(before_brace)
+        .trim_start();
     let rest = if let Some(r) = after_unsafe
         .strip_prefix("impl")
         .map(str::trim_start)
@@ -2395,19 +2583,13 @@ fn parse_rust_impl_header(code: &str) -> Option<String> {
         after_unsafe.strip_prefix("impl ")?.trim_start()
     };
 
-    if !code.contains('{') {
-        return None;
-    }
-
-    let before_brace = rest.split_once('{').map(|(b, _)| b.trim()).unwrap_or(rest);
-    let without_where = before_brace
+    let without_where = rest
         .split_once(" where ")
         .map(|(before, _)| before.trim())
         .unwrap_or_else(|| {
-            before_brace
-                .strip_suffix(" where")
+            rest.strip_suffix(" where")
                 .map(str::trim)
-                .unwrap_or(before_brace)
+                .unwrap_or(rest)
         });
 
     let mut angle_depth: usize = 0;
@@ -4577,6 +4759,264 @@ pub fn scan_rust_line_preserving_lex_state(
     out
 }
 
+/// Scans a single Rust or Dart source line with unified [`RustDartLexState`] tracking (`REQ-0605` `AC-01..AC-02`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `scan_line_with_unified_lex_state` (`REQ-0605` `AC-01..AC-02`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Maintains `block_comment_depth`, `raw_hash_count`, `active_string`, and nested `interp_stack` (`Vec<InterpolationFrame>`) across lines.
+/// - Strips `//` line comments and `/* ... */` block comments while blanking string and character literal interiors with spaces.
+/// - Preserves Rust lifetimes (`'a`, `'static`) in Rust mode while handling single-quoted, double-quoted, triple-quoted, raw, and `${...}` interpolated strings in Dart mode.
+///
+/// ## 3. Preconditions
+/// - `line: &str` is a single UTF-8 source line slice; `state: &mut RustDartLexState` carries the active file's lexical state.
+///
+/// ## 4. Postconditions
+/// - Returns the sanitized code string for `line` and updates `*state` in place.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `line.len()`.
+/// - Space Complexity: O(N) for the returned sanitized `String`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking `.get(..)` byte access and saturating arithmetic throughout.
+/// - State: Mutates only `*state`.
+/// - Action: Zero panics, unwraps, expectations, or raw slice indexing.
+/// - Resource: Bounded single `String` allocation of capacity `line.len()`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0605], [REQ-SOURCE-AST-SCAN-RUST-LINE-LEX-STATE]
+pub fn scan_line_with_unified_lex_state(line: &str, state: &mut RustDartLexState) -> String {
+    let bytes = line.as_bytes();
+    let mut out = String::with_capacity(line.len());
+    let mut i: usize = 0;
+
+    while i < bytes.len() {
+        if state.block_comment_depth > 0 {
+            if bytes.get(i) == Some(&b'/') && bytes.get(i.saturating_add(1)) == Some(&b'*') {
+                state.block_comment_depth = state.block_comment_depth.saturating_add(1);
+                i = i.saturating_add(2);
+            } else if bytes.get(i) == Some(&b'*') && bytes.get(i.saturating_add(1)) == Some(&b'/') {
+                state.block_comment_depth = state.block_comment_depth.saturating_sub(1);
+                out.push(' ');
+                i = i.saturating_add(2);
+            } else {
+                i = i.saturating_add(1);
+            }
+            continue;
+        }
+
+        if let Some(hashes) = state.raw_hash_count {
+            if bytes.get(i) == Some(&b'"') {
+                let mut matched: usize = 0;
+                while matched < hashes
+                    && bytes.get(i.saturating_add(1).saturating_add(matched)) == Some(&b'#')
+                {
+                    matched = matched.saturating_add(1);
+                }
+                if matched == hashes {
+                    state.raw_hash_count = None;
+                    out.push('"');
+                    i = i.saturating_add(1).saturating_add(hashes);
+                    continue;
+                }
+            }
+            out.push(' ');
+            i = i.saturating_add(1);
+            continue;
+        }
+
+        if let Some((quote, is_triple, is_raw)) = state.active_string {
+            if !is_raw && bytes.get(i) == Some(&b'\\') {
+                out.push(' ');
+                if i.saturating_add(1) < bytes.len() {
+                    out.push(' ');
+                    i = i.saturating_add(2);
+                } else {
+                    i = i.saturating_add(1);
+                }
+                continue;
+            }
+            if state.language != SourceLanguage::Rust
+                && !is_raw
+                && bytes.get(i) == Some(&b'$')
+                && bytes.get(i.saturating_add(1)) == Some(&b'{')
+                && (state.language == SourceLanguage::Dart
+                    || is_triple
+                    || has_matching_interpolation_brace_before_quote(
+                        bytes,
+                        i.saturating_add(2),
+                        quote,
+                    ))
+            {
+                state.interp_stack.push(InterpolationFrame {
+                    quote_byte: quote,
+                    is_triple,
+                    is_raw,
+                    brace_depth: 1,
+                });
+                state.active_string = None;
+                out.push(' ');
+                out.push(' ');
+                i = i.saturating_add(2);
+                continue;
+            }
+            if is_triple {
+                if bytes.get(i) == Some(&quote)
+                    && bytes.get(i.saturating_add(1)) == Some(&quote)
+                    && bytes.get(i.saturating_add(2)) == Some(&quote)
+                {
+                    state.active_string = None;
+                    if state.interp_stack.is_empty() {
+                        out.push(char::from(quote));
+                    } else {
+                        out.push(' ');
+                    }
+                    i = i.saturating_add(3);
+                    continue;
+                }
+            } else if bytes.get(i) == Some(&quote) {
+                state.active_string = None;
+                if state.interp_stack.is_empty() {
+                    out.push(char::from(quote));
+                } else {
+                    out.push(' ');
+                }
+                i = i.saturating_add(1);
+                continue;
+            }
+            out.push(' ');
+            i = i.saturating_add(1);
+            continue;
+        }
+
+        if bytes.get(i) == Some(&b'/') && bytes.get(i.saturating_add(1)) == Some(&b'/') {
+            break;
+        }
+        if bytes.get(i) == Some(&b'/') && bytes.get(i.saturating_add(1)) == Some(&b'*') {
+            state.block_comment_depth = 1;
+            out.push(' ');
+            i = i.saturating_add(2);
+            continue;
+        }
+
+        if bytes.get(i) == Some(&b'{') && !state.interp_stack.is_empty() {
+            if let Some(frame) = state.interp_stack.last_mut() {
+                frame.brace_depth = frame.brace_depth.saturating_add(1);
+            }
+            out.push(' ');
+            i = i.saturating_add(1);
+            continue;
+        }
+        if bytes.get(i) == Some(&b'}') && !state.interp_stack.is_empty() {
+            let mut closed_interp = false;
+            if let Some(frame) = state.interp_stack.last_mut() {
+                frame.brace_depth = frame.brace_depth.saturating_sub(1);
+                if frame.brace_depth == 0 {
+                    closed_interp = true;
+                }
+            }
+            if closed_interp {
+                if let Some(popped) = state.interp_stack.pop() {
+                    state.active_string =
+                        Some((popped.quote_byte, popped.is_triple, popped.is_raw));
+                }
+            }
+            out.push(' ');
+            i = i.saturating_add(1);
+            continue;
+        }
+
+        if state.language != SourceLanguage::Dart && is_valid_raw_string_prefix(bytes, i, true) {
+            let mut hashes: usize = 0;
+            while bytes.get(i.saturating_add(1).saturating_add(hashes)) == Some(&b'#') {
+                hashes = hashes.saturating_add(1);
+            }
+            if bytes.get(i.saturating_add(1).saturating_add(hashes)) == Some(&b'"') {
+                state.raw_hash_count = Some(hashes);
+                out.push('"');
+                i = i.saturating_add(2).saturating_add(hashes);
+                continue;
+            }
+        }
+
+        if state.language != SourceLanguage::Rust && is_valid_raw_string_prefix(bytes, i, false) {
+            let next_idx = i.saturating_add(1);
+            if let Some(&q) = bytes.get(next_idx) {
+                if q == b'"' || q == b'\'' {
+                    let is_triple = bytes.get(next_idx.saturating_add(1)) == Some(&q)
+                        && bytes.get(next_idx.saturating_add(2)) == Some(&q);
+                    state.active_string = Some((q, is_triple, true));
+                    if state.interp_stack.is_empty() {
+                        out.push(char::from(q));
+                    } else {
+                        out.push(' ');
+                    }
+                    i = next_idx.saturating_add(if is_triple { 3 } else { 1 });
+                    continue;
+                }
+            }
+        }
+
+        if bytes.get(i) == Some(&b'"') {
+            let is_triple = state.language != SourceLanguage::Rust
+                && bytes.get(i.saturating_add(1)) == Some(&b'"')
+                && bytes.get(i.saturating_add(2)) == Some(&b'"');
+            state.active_string = Some((b'"', is_triple, false));
+            if state.interp_stack.is_empty() {
+                out.push('"');
+            } else {
+                out.push(' ');
+            }
+            i = i.saturating_add(if is_triple { 3 } else { 1 });
+            continue;
+        }
+
+        if bytes.get(i) == Some(&b'\'') {
+            if state.language != SourceLanguage::Dart {
+                if let Some(char_len) = line.get(i..).and_then(single_char_literal_byte_len) {
+                    for _ in 0..char_len {
+                        out.push(' ');
+                    }
+                    i = i.saturating_add(char_len);
+                    continue;
+                }
+                if state.language == SourceLanguage::Rust || is_rust_lifetime_at(bytes, i) {
+                    out.push('\'');
+                    i = i.saturating_add(1);
+                    continue;
+                }
+            }
+            let is_triple = bytes.get(i.saturating_add(1)) == Some(&b'\'')
+                && bytes.get(i.saturating_add(2)) == Some(&b'\'');
+            state.active_string = Some((b'\'', is_triple, false));
+            if state.interp_stack.is_empty() {
+                out.push('\'');
+            } else {
+                out.push(' ');
+            }
+            i = i.saturating_add(if is_triple { 3 } else { 1 });
+            continue;
+        }
+
+        if !state.interp_stack.is_empty() {
+            out.push(' ');
+            i = i.saturating_add(1);
+            continue;
+        }
+
+        if let Some(ch) = line.get(i..).and_then(|s| s.chars().next()) {
+            out.push(ch);
+            i = i.saturating_add(ch.len_utf8());
+        } else {
+            i = i.saturating_add(1);
+        }
+    }
+
+    out
+}
+
 /// Validates whether byte index `r_idx` in `bytes` is a standalone raw string prefix (`r`/`R` or `br`/`BR`).
 ///
 /// # Summary
@@ -4778,6 +5218,7 @@ fn has_matching_interpolation_brace_before_quote(
     let mut i = start_idx;
     let mut depth: usize = 1;
     let mut inner_quote: Option<u8> = None;
+    let mut last_non_ws: Option<u8> = None;
 
     while let Some(&b) = bytes.get(i) {
         if let Some(iq) = inner_quote {
@@ -4787,6 +5228,7 @@ fn has_matching_interpolation_brace_before_quote(
             }
             if b == iq {
                 inner_quote = None;
+                last_non_ws = Some(b);
             }
             i = i.saturating_add(1);
             continue;
@@ -4798,15 +5240,48 @@ fn has_matching_interpolation_brace_before_quote(
         }
         if b == b'{' {
             depth = depth.saturating_add(1);
+            last_non_ws = Some(b);
         } else if b == b'}' {
             depth = depth.saturating_sub(1);
             if depth == 0 {
                 return has_unescaped_closing_quote(bytes, i.saturating_add(1), quote);
             }
+            last_non_ws = Some(b);
         } else if b == quote {
-            return false;
+            let can_open_inner_quote = matches!(
+                last_non_ws,
+                Some(
+                    b'(' | b'['
+                        | b'{'
+                        | b','
+                        | b':'
+                        | b'?'
+                        | b'='
+                        | b'+'
+                        | b'-'
+                        | b'*'
+                        | b'/'
+                        | b'%'
+                        | b'&'
+                        | b'|'
+                        | b'^'
+                        | b'!'
+                        | b'<'
+                        | b'>'
+                        | b'~'
+                )
+            );
+            if can_open_inner_quote {
+                inner_quote = Some(b);
+                last_non_ws = Some(b);
+            } else {
+                return false;
+            }
         } else if b == b'"' || b == b'\'' {
             inner_quote = Some(b);
+            last_non_ws = Some(b);
+        } else if !b.is_ascii_whitespace() {
+            last_non_ws = Some(b);
         }
 
         i = i.saturating_add(1);
@@ -4924,12 +5399,12 @@ fn is_rust_lifetime_at(bytes: &[u8], idx: usize) -> bool {
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and Check 36 comment-stripping rules.
-/// Prevents URL protocols (`http://`, `package://`) and comments inside standard or hashed raw string literals
-/// (`r#"..."#`) from being prematurely truncated as line comments in Rust and Dart source files.
+/// Prevents URL protocols (`http://`, `package://`) and comments inside standard, interpolated (`${...}`),
+/// or hashed raw string literals (`r#"..."#`) from being prematurely truncated as line comments in Rust and Dart source files.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Only truncates at `//` when neither `in_single_quote`, `in_double_quote`, nor `raw_hashes` is active.
-/// - Accurately skips escaped quotes, hashed raw strings `r#"..."#`, and character literals.
+/// - Only truncates at `//` when neither `active_quote` nor `raw_hashes` is active.
+/// - Accurately skips escaped quotes, hashed raw strings `r#"..."#`, nested `${...}` interpolations, and character literals.
 ///
 /// ## 3. Preconditions
 /// - `line` is a valid UTF-8 string slice.
@@ -4939,21 +5414,22 @@ fn is_rust_lifetime_at(bytes: &[u8], idx: usize) -> bool {
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(L) where L is byte length of `line`.
-/// - Space Complexity: O(1) zero heap allocations.
+/// - Space Complexity: O(D) where D is maximum string interpolation nesting depth.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Non-panicking byte scanner using `.get(..)`.
 /// - Stateless pure function.
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-SOURCE-AST-STRIP-LINE-COMMENT]
+/// Realises: [REQ-0605], [REQ-SOURCE-AST-STRIP-LINE-COMMENT]
 pub fn strip_line_comment_preserving_strings(line: &str) -> &str {
     let bytes = line.as_bytes();
     let mut idx: usize = 0;
-    let mut in_double_quote = false;
-    let mut in_single_quote = false;
+    let mut active_quote: Option<u8> = None;
     let mut is_raw = false;
     let mut raw_hashes: Option<usize> = None;
+    let mut brace_depth: usize = 0;
+    let mut interp_stack: Vec<(u8, bool, usize)> = Vec::new();
 
     while let Some(&b) = bytes.get(idx) {
         if let Some(hashes) = raw_hashes {
@@ -4974,84 +5450,238 @@ pub fn strip_line_comment_preserving_strings(line: &str) -> &str {
             continue;
         }
 
-        if !in_double_quote && !in_single_quote {
-            if b == b'/' && bytes.get(idx.saturating_add(1)) == Some(&b'/') {
-                return line.get(..idx).unwrap_or("");
-            }
-
-            if let Some((hashes, quote_idx)) = rust_raw_string_hash_count(bytes, idx) {
-                raw_hashes = Some(hashes);
-                idx = quote_idx.saturating_add(1);
+        if let Some(q) = active_quote {
+            if !is_raw && b == b'\\' {
+                idx = idx.saturating_add(2);
                 continue;
             }
-
-            if is_valid_raw_string_prefix(bytes, idx, true)
-                && (bytes.get(idx.saturating_add(1)) == Some(&b'\'')
-                    || bytes.get(idx.saturating_add(1)) == Some(&b'"'))
+            if !is_raw
+                && b == b'$'
+                && bytes.get(idx.saturating_add(1)) == Some(&b'{')
+                && has_matching_interpolation_brace_before_quote(bytes, idx.saturating_add(2), q)
             {
-                is_raw = true;
-                idx = idx.saturating_add(1);
+                interp_stack.push((q, is_raw, brace_depth));
+                brace_depth = brace_depth.saturating_add(1);
+                active_quote = None;
+                is_raw = false;
+                idx = idx.saturating_add(2);
                 continue;
             }
-
-            if b == b'"' {
-                in_double_quote = true;
-                idx = idx.saturating_add(1);
-                continue;
+            if b == q {
+                active_quote = None;
+                is_raw = false;
             }
+            idx = idx.saturating_add(1);
+            continue;
+        }
 
-            if b == b'\'' {
-                if let Some(char_len) = line.get(idx..).and_then(single_char_literal_byte_len) {
-                    idx = idx.saturating_add(char_len);
-                    is_raw = false;
-                    continue;
-                }
-                if is_rust_lifetime_at(bytes, idx) {
+        if b == b'/' && bytes.get(idx.saturating_add(1)) == Some(&b'/') {
+            return line.get(..idx).unwrap_or("");
+        }
+
+        if b == b'{' {
+            brace_depth = brace_depth.saturating_add(1);
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
+        if b == b'}' {
+            if let Some(&(saved_quote, saved_raw, saved_depth)) = interp_stack.last() {
+                if brace_depth == saved_depth.saturating_add(1) {
+                    interp_stack.pop();
+                    brace_depth = saved_depth;
+                    active_quote = Some(saved_quote);
+                    is_raw = saved_raw;
                     idx = idx.saturating_add(1);
                     continue;
                 }
-                if has_unescaped_closing_quote(bytes, idx.saturating_add(1), b'\'') {
-                    in_single_quote = true;
-                }
+            }
+            brace_depth = brace_depth.saturating_sub(1);
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
+        if let Some((hashes, quote_idx)) = rust_raw_string_hash_count(bytes, idx) {
+            raw_hashes = Some(hashes);
+            idx = quote_idx.saturating_add(1);
+            continue;
+        }
+
+        if is_valid_raw_string_prefix(bytes, idx, true)
+            && (bytes.get(idx.saturating_add(1)) == Some(&b'\'')
+                || bytes.get(idx.saturating_add(1)) == Some(&b'"'))
+        {
+            is_raw = true;
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
+        if b == b'"' {
+            active_quote = Some(b'"');
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
+        if b == b'\'' {
+            if let Some(char_len) = line.get(idx..).and_then(single_char_literal_byte_len) {
+                idx = idx.saturating_add(char_len);
+                is_raw = false;
+                continue;
+            }
+            if is_rust_lifetime_at(bytes, idx) {
                 idx = idx.saturating_add(1);
                 continue;
             }
-
-            is_raw = false;
-            idx = idx.saturating_add(1);
-            continue;
-        }
-
-        if in_double_quote {
-            if !is_raw && b == b'\\' {
-                idx = idx.saturating_add(2);
-                continue;
-            }
-            if b == b'"' {
-                in_double_quote = false;
-                is_raw = false;
+            if has_unescaped_closing_quote(bytes, idx.saturating_add(1), b'\'') {
+                active_quote = Some(b'\'');
             }
             idx = idx.saturating_add(1);
             continue;
         }
 
-        if in_single_quote {
-            if !is_raw && b == b'\\' {
-                idx = idx.saturating_add(2);
-                continue;
-            }
-            if b == b'\'' {
-                in_single_quote = false;
-                is_raw = false;
-            }
-            idx = idx.saturating_add(1);
-            continue;
-        }
-
+        is_raw = false;
         idx = idx.saturating_add(1);
     }
 
     line
+}
+
+/// Strips leading and multi-line Dart annotations while updating `dart_annotation_paren_depth` (`REQ-0605` `AC-02`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `strip_dart_annotations_tracking_state` (`REQ-0605` `AC-02`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - When `*dart_annotation_paren_depth > 0`, consumes continuation tokens of a multi-line `@annotation(...)` until matching `)` brings depth to `0`.
+/// - When encountering a new leading `@identifier(` whose `)` does not close on the same line, records the remaining open parenthesis depth in `*dart_annotation_paren_depth` and returns `""`.
+///
+/// ## 3. Preconditions
+/// - `code` is a comment-stripped UTF-8 line slice; `dart_annotation_paren_depth` tracks open annotation parentheses across lines.
+///
+/// ## 4. Postconditions
+/// - Returns the remaining code slice after all closed annotations on `code`, or `""` while inside an unclosed annotation.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `code.len()`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking `.get(..)` slicing and saturating depth counters.
+/// - State: Mutates only `*dart_annotation_paren_depth`.
+/// - Action: Zero panics, unwraps, or raw slice indexing.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0605], [REQ-SOURCE-AST-STRIP-DART-ANNOTATIONS]
+fn strip_dart_annotations_tracking_state<'a>(
+    mut code: &'a str,
+    dart_annotation_paren_depth: &mut usize,
+) -> &'a str {
+    if *dart_annotation_paren_depth > 0 {
+        let bytes = code.as_bytes();
+        let mut idx: usize = 0;
+        let mut active_quote: Option<u8> = None;
+        let mut closed_at: Option<usize> = None;
+        while let Some(&b) = bytes.get(idx) {
+            if let Some(q) = active_quote {
+                if b == b'\\' {
+                    idx = idx.saturating_add(2);
+                    continue;
+                }
+                if b == q {
+                    active_quote = None;
+                }
+                idx = idx.saturating_add(1);
+                continue;
+            }
+            if b == b'\'' || b == b'"' {
+                active_quote = Some(b);
+            } else if b == b'(' {
+                *dart_annotation_paren_depth = dart_annotation_paren_depth.saturating_add(1);
+            } else if b == b')' {
+                *dart_annotation_paren_depth = dart_annotation_paren_depth.saturating_sub(1);
+                if *dart_annotation_paren_depth == 0 {
+                    closed_at = Some(idx.saturating_add(1));
+                    break;
+                }
+            }
+            idx = idx.saturating_add(1);
+        }
+        match closed_at {
+            Some(end) => {
+                code = code.get(end..).unwrap_or("");
+            }
+            None => return "",
+        }
+    }
+
+    loop {
+        let trimmed = code.trim_start();
+        if !trimmed.starts_with('@') {
+            return trimmed;
+        }
+        let after_at = match trimmed.get(1..) {
+            Some(s) => s,
+            None => return "",
+        };
+        let mut idx = 0;
+        let bytes = after_at.as_bytes();
+        while let Some(&b) = bytes.get(idx) {
+            if b.is_ascii_alphanumeric() || b == b'_' || b == b'.' {
+                idx = idx.saturating_add(1);
+            } else {
+                break;
+            }
+        }
+        if idx == 0 {
+            return trimmed;
+        }
+        let rest = match after_at.get(idx..) {
+            Some(r) => r,
+            None => return "",
+        };
+        let rest_trimmed = rest.trim_start();
+        if rest_trimmed.starts_with('(') {
+            let r_bytes = rest_trimmed.as_bytes();
+            let mut p_idx: usize = 0;
+            let mut paren_depth: usize = 0;
+            let mut active_quote: Option<u8> = None;
+            let mut paren_end = None;
+            while let Some(&b) = r_bytes.get(p_idx) {
+                if let Some(q) = active_quote {
+                    if b == b'\\' {
+                        p_idx = p_idx.saturating_add(2);
+                        continue;
+                    }
+                    if b == q {
+                        active_quote = None;
+                    }
+                    p_idx = p_idx.saturating_add(1);
+                    continue;
+                }
+                if b == b'\'' || b == b'"' {
+                    active_quote = Some(b);
+                } else if b == b'(' {
+                    paren_depth = paren_depth.saturating_add(1);
+                } else if b == b')' {
+                    paren_depth = paren_depth.saturating_sub(1);
+                    if paren_depth == 0 {
+                        paren_end = Some(p_idx.saturating_add(1));
+                        break;
+                    }
+                }
+                p_idx = p_idx.saturating_add(1);
+            }
+            if let Some(end) = paren_end {
+                code = rest_trimmed.get(end..).unwrap_or("");
+                continue;
+            } else {
+                *dart_annotation_paren_depth = paren_depth;
+                return "";
+            }
+        }
+        code = rest;
+    }
 }
 
 /// Strips leading Dart annotations (e.g. `@override`, `@visibleForTesting`, `@pragma(...)`) from a code line.
@@ -5080,53 +5710,9 @@ pub fn strip_line_comment_preserving_strings(line: &str) -> &str {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SOURCE-AST-STRIP-DART-ANNOTATIONS]
-pub fn strip_leading_dart_annotations(mut code: &str) -> &str {
-    loop {
-        let trimmed = code.trim_start();
-        if !trimmed.starts_with('@') {
-            return trimmed;
-        }
-        let after_at = match trimmed.get(1..) {
-            Some(s) => s,
-            None => return "",
-        };
-        let mut idx = 0;
-        let bytes = after_at.as_bytes();
-        while let Some(&b) = bytes.get(idx) {
-            if b.is_ascii_alphanumeric() || b == b'_' || b == b'.' {
-                idx = idx.saturating_add(1);
-            } else {
-                break;
-            }
-        }
-        if idx == 0 {
-            return trimmed;
-        }
-        let rest = match after_at.get(idx..) {
-            Some(r) => r,
-            None => return "",
-        };
-        if rest.trim_start().starts_with('(') {
-            let mut paren_depth: usize = 0;
-            let mut paren_end = None;
-            for (p_idx, b) in rest.char_indices() {
-                if b == '(' {
-                    paren_depth = paren_depth.saturating_add(1);
-                } else if b == ')' {
-                    paren_depth = paren_depth.saturating_sub(1);
-                    if paren_depth == 0 {
-                        paren_end = Some(p_idx.saturating_add(1));
-                        break;
-                    }
-                }
-            }
-            if let Some(end) = paren_end {
-                code = rest.get(end..).unwrap_or("");
-                continue;
-            }
-        }
-        code = rest;
-    }
+pub fn strip_leading_dart_annotations(code: &str) -> &str {
+    let mut depth: usize = 0;
+    strip_dart_annotations_tracking_state(code, &mut depth)
 }
 
 /// Extracts a Dart getter identifier (`<Type> get <name> => ...` or `get <name> => ...`) from a code line.
@@ -6698,6 +7284,154 @@ impl ComponentAlpha {
         if got != expected_params {
             return Err(format!("Expected ChildNode ctor params {expected_params:?}, got {got:?}"));
         }
+        Ok(())
+    }
+
+    /// Verifies `REQ-0605` `AC-01..AC-02` unified lexical scanner types (`InterpolationFrame`, `RustDartLexState`, `ScopedItemScannerState`), `scan_line_with_unified_lex_state`, `extract_rust_impl_header_prefix`, `parse_rust_impl_header`, `strip_line_comment_preserving_strings` on nested Dart string interpolations, and `parse_dart_source_ast` multi-line annotation doc preservation (`#529`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_issue_529_part_a_req_0605_unified_lex_state_and_dart_interp`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `InterpolationFrame`, `RustDartLexState`, and `ScopedItemScannerState` are publicly exported with deterministic state transitions in `scan_line_with_unified_lex_state`.
+    /// - `extract_rust_impl_header_prefix` and `parse_rust_impl_header` extract multi-line and generic Rust `impl` headers cleanly.
+    /// - `strip_line_comment_preserving_strings` preserves `"http://"` inside nested `${map["http://"]}` string interpolations while stripping trailing `// comment`.
+    /// - `parse_dart_source_ast` preserves `/// Realises: [REQ-0605]` doc comments across multi-line `@pragma(\n  'vm:prefer-inline',\n)` annotations and inline `/* ... */` comments.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked under `cargo test -p deap-core --lib` with in-memory Rust and Dart lexical fixtures.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when all unified lexical state transitions, `impl` header extractions, comment strippers, and Dart AST doc bindings match expected outputs.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over the test fixture byte length N.
+    /// - Space Complexity: O(N) for parsed AST items and sanitized line buffers.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), String>` with descriptive diagnostic messages on any mismatch.
+    /// - State: Isolated local test state.
+    /// - Action: Zero panics, unwraps, expectations, or raw slice indexing.
+    /// - Resource: Bounded stack and heap allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0605], [REQ-SOURCE-AST-STRIP-LINE-COMMENT], [REQ-FEAT-42-PARSE-DART-AST]
+    #[test]
+    fn test_issue_529_part_a_req_0605_unified_lex_state_and_dart_interp() -> Result<(), String> {
+        let frame = InterpolationFrame {
+            quote_byte: b'"',
+            is_triple: false,
+            is_raw: false,
+            brace_depth: 1,
+        };
+        if frame.quote_byte != b'"' || frame.is_triple || frame.is_raw || frame.brace_depth != 1 {
+            return Err(format!("Unexpected InterpolationFrame fields: {frame:?}"));
+        }
+
+        let scoped = ScopedItemScannerState::default();
+        if scoped.mod_tests_brace_depth.is_some()
+            || scoped.cfg_test_block_brace_depth.is_some()
+            || scoped.cfg_test_pending
+            || scoped.dart_annotation_paren_depth != 0
+        {
+            return Err(format!("Unexpected default ScopedItemScannerState: {scoped:?}"));
+        }
+
+        let mut rust_state = RustDartLexState {
+            language: SourceLanguage::Rust,
+            ..RustDartLexState::default()
+        };
+        let scanned_rust = scan_line_with_unified_lex_state(
+            "pub fn check<'lifetime_a>(s: &'lifetime_a str) -> char { '/' } // comment",
+            &mut rust_state,
+        );
+        if rust_state.block_comment_depth != 0
+            || rust_state.raw_hash_count.is_some()
+            || rust_state.active_string.is_some()
+        {
+            return Err(format!("Expected clean RustDartLexState, got {rust_state:?}"));
+        }
+        if !scanned_rust.contains("pub fn check<'lifetime_a>") || scanned_rust.contains("comment") {
+            return Err(format!("Unexpected scanned_rust output: {scanned_rust:?}"));
+        }
+
+        let mut dart_state = RustDartLexState {
+            language: SourceLanguage::Dart,
+            ..RustDartLexState::default()
+        };
+        let scanned_dart = scan_line_with_unified_lex_state(
+            "final s = \"url: ${map[\"http://\"]}\"; // trailing",
+            &mut dart_state,
+        );
+        if dart_state.active_string.is_some() || !dart_state.interp_stack.is_empty() {
+            return Err(format!(
+                "Expected Dart interpolation stack to close cleanly, got {dart_state:?}"
+            ));
+        }
+        if scanned_dart.contains("trailing") || !scanned_dart.contains("final s =") {
+            return Err(format!("Unexpected scanned_dart output: {scanned_dart:?}"));
+        }
+
+        let impl_code = "impl<T: Clone> TraitBound for TargetComponent<T> where T: Send { fn run(&self) {} }";
+        let prefix = extract_rust_impl_header_prefix(impl_code)
+            .ok_or_else(|| "Expected Some(prefix) from extract_rust_impl_header_prefix".to_string())?;
+        if !prefix.starts_with("impl<T: Clone>") || !prefix.ends_with("where T: Send") {
+            return Err(format!("Unexpected impl header prefix: {prefix:?}"));
+        }
+        let target = parse_rust_impl_header(impl_code)
+            .ok_or_else(|| "Expected Some(target) from parse_rust_impl_header".to_string())?;
+        if target != "TargetComponent" {
+            return Err(format!("Expected TargetComponent from parse_rust_impl_header, got {target:?}"));
+        }
+
+        let interp_line = "final u = \"url: ${map[\"http://\"]}\"; // comment";
+        let stripped = strip_line_comment_preserving_strings(interp_line);
+        if stripped != "final u = \"url: ${map[\"http://\"]}\"; " {
+            return Err(format!(
+                "Expected strip_line_comment_preserving_strings to preserve nested interpolation quote, got {stripped:?}"
+            ));
+        }
+
+        let dart_src = concat!(
+            "/// Summary of annotated service.\n",
+            "/// Realises: [REQ-0605]\n",
+            "@pragma(\n",
+            "  'vm:prefer-inline',\n",
+            ")\n",
+            "/* inline block comment */\n",
+            "class AnnotatedService {\n",
+            "  /// Summary of execute action.\n",
+            "  /// Realises: [REQ-0605]\n",
+            "  @pragma(\n",
+            "    'vm:prefer-inline',\n",
+            "  )\n",
+            "  void executeAction() {\n",
+            "    final msg = \"url: ${map[\"http://\"]}\"; // keep brace depth intact\n",
+            "  }\n",
+            "}\n",
+        );
+        let dart_items = parse_dart_source_ast(dart_src, "annotated_service.dart")?;
+        let cls = dart_items
+            .iter()
+            .find(|i| i.kind == SourceItemKind::Class && i.name == "AnnotatedService")
+            .ok_or_else(|| "Missing AnnotatedService class".to_string())?;
+        if cls.satisfied_requirements != vec!["REQ-0605".to_string()] {
+            return Err(format!(
+                "Expected AnnotatedService satisfied_requirements == [\"REQ-0605\"], got {:?}",
+                cls.satisfied_requirements
+            ));
+        }
+        let method = dart_items
+            .iter()
+            .find(|i| i.kind == SourceItemKind::Method && i.name == "executeAction")
+            .ok_or_else(|| "Missing executeAction method".to_string())?;
+        if method.satisfied_requirements != vec!["REQ-0605".to_string()] {
+            return Err(format!(
+                "Expected executeAction satisfied_requirements == [\"REQ-0605\"], got {:?}",
+                method.satisfied_requirements
+            ));
+        }
+
         Ok(())
     }
 }
