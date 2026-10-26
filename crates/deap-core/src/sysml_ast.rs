@@ -7114,6 +7114,38 @@ pub struct IncrementalAstCache {
     pub cache_dir: std::path::PathBuf,
 }
 
+/// Computes the lowercase hexadecimal SHA-256 digest of `bytes` by delegating to `crate::digest::compute_sha256`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and FIPS 180-4 single-source-of-truth
+/// cryptographic digest rules (`compute_sha256_hex`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Produces the exact 64-character lowercase hexadecimal SHA-256 digest returned by `crate::digest::compute_sha256(bytes)`
+///   with zero duplicated compression constants.
+///
+/// ## 3. Preconditions
+/// - `bytes: &[u8]` is an arbitrary byte slice.
+///
+/// ## 4. Postconditions
+/// - Returns a 64-character lowercase hex `String`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ where $N$ is `bytes.len()`.
+/// - Space Complexity: $O(N)$ for message block padding in `crate::digest::compute_sha256`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts empty and arbitrarily sized byte slices safely.
+/// - State: Pure function.
+/// - Action: Delegates directly to `crate::digest::compute_sha256(bytes)`.
+/// - Resource: Bounded by `bytes.len()`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-AST-CACHE-DIGEST] | Issue: #494, #503, #522
+fn compute_sha256_hex(bytes: &[u8]) -> String {
+    crate::digest::compute_sha256(bytes)
+}
+
 impl IncrementalAstCache {
     /// Initializes an `IncrementalAstCache` rooted at `<repo_root>/.pipeline/cache/ast`.
     ///
@@ -7173,9 +7205,9 @@ impl IncrementalAstCache {
     /// - Resource: Bounded by `sysml_source.len()`.
     ///
     /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SYSML-AST-CACHE-DIGEST]
+    /// Realises: [REQ-SYSML-AST-CACHE-DIGEST] | Issue: #494, #503, #522
     pub fn compute_digest(sysml_source: &str) -> String {
-        crate::digest::compute_sha256(sysml_source.as_bytes())
+        compute_sha256_hex(sysml_source.as_bytes())
     }
 
     /// Loads a cached `SysmlModel` by SHA-256 digest if present on disk, or parses `sysml_source` and populates the cache.
@@ -9390,7 +9422,7 @@ state def BP_01_LifecycleState {
     /// - Propagates assertion failures via `Result::Err` with zero unwrap or expect calls.
     ///
     /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SYSML-AST-CACHE-DIGEST] | Issue: #494, #503
+    /// Realises: [REQ-SYSML-AST-CACHE-DIGEST] | Issue: #494, #503, #522
     #[test]
     fn test_issue_494_compute_sha256_hex_delegates_to_canonical_digest(
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -9400,6 +9432,10 @@ state def BP_01_LifecycleState {
             "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
             "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
         ] {
+            assert_eq!(
+                compute_sha256_hex(sample.as_bytes()),
+                crate::digest::compute_sha256(sample.as_bytes())
+            );
             assert_eq!(
                 IncrementalAstCache::compute_digest(sample),
                 crate::digest::compute_sha256(sample.as_bytes())

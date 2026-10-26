@@ -177,6 +177,54 @@ fn parse_table_row(line: &str) -> Option<(String, String)> {
     Some((key, val.to_string()))
 }
 
+/// Advances multi-line HTML comment tracking state (`<!-- ... -->`) and returns `true` when `line_trimmed` belongs to a comment preamble.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `advance_html_comment_state` in `crates/reconcile-backlog/src/frontmatter.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation across single-line and multi-line `<!-- ... -->` comment preambles within `RECONCILE-BACKLOG-FRONTMATTER`.
+/// - Guarantees interior lines (including pipe-delimited comment rows) inside an unclosed `<!--` block return `true` until the closing `-->` delimiter is reached.
+///
+/// ## 3. Preconditions
+/// - `line_trimmed: &str` is a whitespace-trimmed Markdown line slice.
+/// - `in_html_comment: &mut bool` tracks whether a prior line opened an unclosed `<!--` comment block.
+///
+/// ## 4. Postconditions
+/// - Updates `*in_html_comment` to reflect whether an HTML comment remains open after `line_trimmed` and returns `true` if `line_trimmed` is part of an HTML comment.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(line_trimmed)) bounded over line byte length.
+/// - Space Complexity: O(1) auxiliary memory.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `advance_html_comment_state` (`bool`).
+/// - State: Updates `in_html_comment` deterministically without partial mutation or panicking.
+/// - Action: Executes `advance_html_comment_state` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Zero heap allocations within `advance_html_comment_state` (`RECONCILE-BACKLOG-FRONTMATTER`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-ADVANCE-HTML-COMMENT-STATE] | SysML v2: ActionDef(advance_html_comment_state) | Issue: #522
+fn advance_html_comment_state(line_trimmed: &str, in_html_comment: &mut bool) -> bool {
+    if *in_html_comment {
+        if let Some((_, after_close)) = line_trimmed.split_once("-->") {
+            *in_html_comment = false;
+            let rem = after_close.trim();
+            if rem.starts_with("<!--") && !rem.contains("-->") {
+                *in_html_comment = true;
+            }
+        }
+        return true;
+    }
+    if let Some(after_open) = line_trimmed.strip_prefix("<!--") {
+        if !after_open.contains("-->") {
+            *in_html_comment = true;
+        }
+        return true;
+    }
+    line_trimmed.ends_with("-->")
+}
+
 /// Extracts metadata from native CommonMark 2-column table or YAML frontmatter.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -279,6 +327,7 @@ pub fn parse_frontmatter(content: &str) -> Option<SpecFrontmatter> {
 
     let search_start = yaml_end_line.map(|idx| idx + 1).unwrap_or(0);
     let mut in_table = false;
+    let mut in_html_comment = false;
     let mut pre_table_count = 0;
 
     let parse_issue_number = |v: &str| -> Option<u64> {
@@ -304,6 +353,9 @@ pub fn parse_frontmatter(content: &str) -> Option<SpecFrontmatter> {
 
     for line in content.lines().skip(search_start) {
         let line_trimmed = line.trim();
+        if !in_table && advance_html_comment_state(line_trimmed, &mut in_html_comment) {
+            continue;
+        }
         if line_trimmed.starts_with('|') && line_trimmed.ends_with('|') {
             in_table = true;
             if let Some((key, val)) = parse_table_row(line) {
@@ -380,10 +432,7 @@ pub fn parse_frontmatter(content: &str) -> Option<SpecFrontmatter> {
             }
         } else if in_table {
             break;
-        } else if !line_trimmed.is_empty()
-            && !line_trimmed.starts_with("<!--")
-            && !line_trimmed.ends_with("-->")
-        {
+        } else if !line_trimmed.is_empty() {
             pre_table_count += 1;
             if pre_table_count >= 25 {
                 break;
@@ -506,10 +555,14 @@ pub fn update_frontmatter_issue_id(content: &str, issue_id: u64) -> String {
     let mut table_issue_id_idx = None;
     let mut table_fallback_id_idx = None;
     let mut in_table = false;
+    let mut in_html_comment = false;
     let mut pre_table_count = 0;
 
     for (idx, line) in lines.iter().enumerate().skip(search_start) {
         let line_trimmed = line.trim();
+        if !in_table && advance_html_comment_state(line_trimmed, &mut in_html_comment) {
+            continue;
+        }
         if line_trimmed.starts_with('|') && line_trimmed.ends_with('|') {
             in_table = true;
             let inner = line_trimmed.trim_matches('|');
@@ -540,10 +593,7 @@ pub fn update_frontmatter_issue_id(content: &str, issue_id: u64) -> String {
             }
         } else if in_table {
             break;
-        } else if !line_trimmed.is_empty()
-            && !line_trimmed.starts_with("<!--")
-            && !line_trimmed.ends_with("-->")
-        {
+        } else if !line_trimmed.is_empty() {
             pre_table_count += 1;
             if pre_table_count >= 25 {
                 break;
@@ -974,6 +1024,66 @@ type: feature
             updated.matches("| Attribute | Specification Detail |").count(),
             1,
             "update_frontmatter_issue_id must not inject a duplicate CommonMark table when HTML comments precede the table"
+        );
+        Ok(())
+    }
+
+    /// Verifies that multi-line HTML comment preambles (`<!-- ... -->`) and interior pipe-delimited lines do not exhaust `pre_table_count` or prematurely trigger `in_table` in `parse_frontmatter` and `update_frontmatter_issue_id` (Issue #522).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_522_multiline_html_comment_preamble_and_idempotency` in `crates/reconcile-backlog/src/frontmatter.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_issue_522_multiline_html_comment_preamble_and_idempotency` within `RECONCILE-BACKLOG-FRONTMATTER`.
+    ///
+    /// ## 3. Preconditions
+    /// - Input Markdown document contains a 30-line multi-line HTML comment preamble (`<!--\n...\n-->`) including an interior pipe-delimited comment line before a CommonMark 2-column metadata table.
+    ///
+    /// ## 4. Postconditions
+    /// - `parse_frontmatter` returns `Some(meta)` with `issue_id == Some(101)` and `update_frontmatter_issue_id` updates `Issue ID` in place without prepending a duplicate CommonMark table.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over document line count.
+    /// - Space Complexity: O(N) bounded auxiliary memory for document lines.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `parse_frontmatter` and `update_frontmatter_issue_id`.
+    /// - State: Maintains consistent state invariants across frontmatter parsing and updating without partial mutation.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `RECONCILE-BACKLOG-FRONTMATTER`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-MULTILINE-HTML-COMMENT-GUARD] | SysML v2: TestCaseDef(test_issue_522_multiline_html_comment_preamble_and_idempotency) | Issue: #522
+    #[test]
+    fn test_issue_522_multiline_html_comment_preamble_and_idempotency() -> Result<(), Box<dyn std::error::Error>> {
+        let mut preamble = String::from("<!--\n");
+        for idx in 1..=30 {
+            if idx == 15 {
+                preamble.push_str("| Commented | Pipe Line |\n");
+            } else {
+                preamble.push_str(&format!("Multi-line comment body line {}\n", idx));
+            }
+        }
+        preamble.push_str("-->\n\n");
+
+        let content = format!(
+            "{}| Attribute | Specification Detail |\n| :--- | :--- |\n| **Issue ID** | #101 |\n| **Title** | Feature 522: Multi-Line Preamble Guard |\n| **Type** | feature |\n\n# Feature 522: Multi-Line Preamble Guard\n",
+            preamble
+        );
+
+        let fm = parse_frontmatter(&content)
+            .ok_or("parse_frontmatter returned None when a 30-line multi-line HTML comment preceded the CommonMark table")?;
+        assert_eq!(fm.issue_id, Some(101));
+        assert_eq!(fm.title, "Feature 522: Multi-Line Preamble Guard");
+        assert_eq!(fm.spec_type, "feature");
+
+        let updated = update_frontmatter_issue_id(&content, 522);
+        assert!(updated.contains("| **Issue ID** | #522 |"));
+        assert!(!updated.contains("#101"));
+        assert_eq!(
+            updated.matches("| Attribute | Specification Detail |").count(),
+            1,
+            "update_frontmatter_issue_id must not prepend a duplicate CommonMark table when a multi-line HTML comment precedes the table"
         );
         Ok(())
     }
