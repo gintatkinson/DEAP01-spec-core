@@ -17,18 +17,18 @@
 graph TD
     subgraph "AgileSpecForwardProjector System Boundary"
         UC_Main(["Deterministic Multi Story Use Case and Con Ops Parent Epic Projection"])
-        UC_Step01(["Actor `Operator` submits input payload for `Deterministic..."])
-        UC_Step02(["`AgileSpecForwardProjector` validates input schema struct..."])
-        UC_Step03(["`AgileSpecForwardProjector` executes core domain transfor..."])
-        UC_Step04(["`AgileSpecForwardProjector` evaluates formal postconditio..."])
-        UC_Step05(["`AgileSpecForwardProjector` commits verified output state..."])
+        UC_Step01(["Actor Operator submits input payload for Deterministic Mu..."])
+        UC_Step02(["AgileSpecForwardProjector validates input schema structur..."])
+        UC_Step03(["AgileSpecForwardProjector executes core domain transforma..."])
+        UC_Step04(["AgileSpecForwardProjector evaluates formal postcondition ..."])
+        UC_Step05(["AgileSpecForwardProjector commits verified output state a..."])
     end
     Operator(("Operator")) --- UC_Main
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step01
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step02
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step03
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step04
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step05
+    UC_Main -. "<<include>>" .-> UC_Step01
+    UC_Main -. "<<include>>" .-> UC_Step02
+    UC_Main -. "<<include>>" .-> UC_Step03
+    UC_Main -. "<<include>>" .-> UC_Step04
+    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors

@@ -419,6 +419,49 @@ fn test_upstream_blueprint_to_spec_and_github_projection_zero_defects(
             )
             .into());
         }
+
+        // 6. Zero Inline Backticks or HTML Entities Inside Any Mermaid Diagram Block
+        let mut in_mermaid = false;
+        for (line_idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if !in_mermaid && trimmed.starts_with("```mermaid") {
+                in_mermaid = true;
+                continue;
+            }
+            if in_mermaid && trimmed.starts_with("```") {
+                in_mermaid = false;
+                continue;
+            }
+            if in_mermaid {
+                if trimmed.contains('`') {
+                    return Err(format!(
+                        "Inline backtick found inside Mermaid block at {}:{} -> {}",
+                        file_name,
+                        line_idx + 1,
+                        trimmed
+                    )
+                    .into());
+                }
+                if trimmed.contains("&lt;") || trimmed.contains("&gt;") {
+                    return Err(format!(
+                        "HTML entity found inside Mermaid block at {}:{} -> {}",
+                        file_name,
+                        line_idx + 1,
+                        trimmed
+                    )
+                    .into());
+                }
+            }
+        }
+        if file_name.starts_with("UC-")
+            && !content.contains("UC_Main -. \"<<include>>\" .-> UC_Step01")
+        {
+            return Err(format!(
+                "Use Case diagram missing clean <<include>> edge in {}",
+                file_name
+            )
+            .into());
+        }
     }
 
     Ok(())

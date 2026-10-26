@@ -17,18 +17,18 @@
 graph TD
     subgraph "NativeSigilAndLifetimeLexer System Boundary"
         UC_Main(["Native Lexer Sigil and Lifetime Tokenization"])
-        UC_Step01(["Actor `Operator` submits input payload for `Native Lexer ..."])
-        UC_Step02(["`NativeSigilAndLifetimeLexer` validates input schema stru..."])
-        UC_Step03(["`NativeSigilAndLifetimeLexer` executes core domain transf..."])
-        UC_Step04(["`NativeSigilAndLifetimeLexer` evaluates formal postcondit..."])
-        UC_Step05(["`NativeSigilAndLifetimeLexer` commits verified output sta..."])
+        UC_Step01(["Actor Operator submits input payload for Native Lexer Sig..."])
+        UC_Step02(["NativeSigilAndLifetimeLexer validates input schema struct..."])
+        UC_Step03(["NativeSigilAndLifetimeLexer executes core domain transfor..."])
+        UC_Step04(["NativeSigilAndLifetimeLexer evaluates formal postconditio..."])
+        UC_Step05(["NativeSigilAndLifetimeLexer commits verified output state..."])
     end
     Operator(("Operator")) --- UC_Main
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step01
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step02
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step03
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step04
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step05
+    UC_Main -. "<<include>>" .-> UC_Step01
+    UC_Main -. "<<include>>" .-> UC_Step02
+    UC_Main -. "<<include>>" .-> UC_Step03
+    UC_Main -. "<<include>>" .-> UC_Step04
+    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors

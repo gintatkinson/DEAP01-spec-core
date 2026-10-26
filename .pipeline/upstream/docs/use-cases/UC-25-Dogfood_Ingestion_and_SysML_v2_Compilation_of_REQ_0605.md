@@ -17,18 +17,18 @@
 graph TD
     subgraph "UnifiedRustDartLexicalScanner System Boundary"
         UC_Main(["Dogfood Ingestion and Sys ML v2 Compilation of REQ 0605"])
-        UC_Step01(["Actor `Operator` submits input payload for `Dogfood Inges..."])
-        UC_Step02(["`UnifiedRustDartLexicalScanner` validates input schema st..."])
-        UC_Step03(["`UnifiedRustDartLexicalScanner` executes core domain tran..."])
-        UC_Step04(["`UnifiedRustDartLexicalScanner` evaluates formal postcond..."])
-        UC_Step05(["`UnifiedRustDartLexicalScanner` commits verified output s..."])
+        UC_Step01(["Actor Operator submits input payload for Dogfood Ingestio..."])
+        UC_Step02(["UnifiedRustDartLexicalScanner validates input schema stru..."])
+        UC_Step03(["UnifiedRustDartLexicalScanner executes core domain transf..."])
+        UC_Step04(["UnifiedRustDartLexicalScanner evaluates formal postcondit..."])
+        UC_Step05(["UnifiedRustDartLexicalScanner commits verified output sta..."])
     end
     Operator(("Operator")) --- UC_Main
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step01
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step02
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step03
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step04
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step05
+    UC_Main -. "<<include>>" .-> UC_Step01
+    UC_Main -. "<<include>>" .-> UC_Step02
+    UC_Main -. "<<include>>" .-> UC_Step03
+    UC_Main -. "<<include>>" .-> UC_Step04
+    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors

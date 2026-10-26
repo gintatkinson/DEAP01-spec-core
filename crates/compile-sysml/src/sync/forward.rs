@@ -789,23 +789,33 @@ fn generate_use_case_diagram(
     clean_title: &str,
     main_scenario: &[String],
 ) -> String {
+    let clean_subject = subject.replace('`', "").replace('"', "'");
+    let clean_main_title = clean_title.replace('`', "").replace('"', "'");
+    let clean_actor = primary_actor.replace('`', "").replace('"', "'");
+
     let mut lines = Vec::new();
     lines.push("graph TD".to_string());
-    lines.push(format!("    subgraph \"{} System Boundary\"", subject));
-    lines.push(format!("        UC_Main([\"{}\"])", clean_title));
+    lines.push(format!("    subgraph \"{} System Boundary\"", clean_subject));
+    lines.push(format!("        UC_Main([\"{}\"])", clean_main_title));
 
     let mut step_ids = Vec::new();
     for (idx, step) in main_scenario.iter().enumerate().take(6) {
         let step_id = format!("UC_Step{:02}", idx + 1);
-        let mut clean_step = step.trim().to_string();
+        let mut clean_step = step.replace('`', "").trim().to_string();
         if let Some(dot_idx) = clean_step.find(". ") {
-            if clean_step[..dot_idx].chars().all(|c| c.is_ascii_digit()) {
-                clean_step = clean_step[dot_idx + 2..].trim().to_string();
+            let is_num_prefix = clean_step
+                .get(..dot_idx)
+                .map(|prefix| !prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_digit()))
+                .unwrap_or(false);
+            if is_num_prefix {
+                if let Some(rest) = clean_step.get(dot_idx + 2..) {
+                    clean_step = rest.trim().to_string();
+                }
             }
         }
-        if clean_step.len() > 60 {
-            clean_step.truncate(57);
-            clean_step.push_str("...");
+        if clean_step.chars().count() > 60 {
+            let truncated: String = clean_step.chars().take(57).collect();
+            clean_step = format!("{}...", truncated);
         }
         let clean_step = clean_step.replace('"', "'");
         lines.push(format!("        {}([\"{}\"])", step_id, clean_step));
@@ -813,10 +823,10 @@ fn generate_use_case_diagram(
     }
     lines.push("    end".to_string());
 
-    let actor_id = sanitize_id(primary_actor);
-    lines.push(format!("    {}((\"{}\")) --- UC_Main", actor_id, primary_actor));
+    let actor_id = sanitize_id(&clean_actor);
+    lines.push(format!("    {}((\"{}\")) --- UC_Main", actor_id, clean_actor));
     for step_id in step_ids {
-        lines.push(format!("    UC_Main -. \"&lt;&lt;include&gt;&gt;\" .-> {}", step_id));
+        lines.push(format!("    UC_Main -. \"<<include>>\" .-> {}", step_id));
     }
 
     lines.join("\n")
@@ -3148,11 +3158,35 @@ mod tests {
         Ok(())
     }
 
+    /// Verifies `generate_use_case_diagram` strips inline backticks before truncation and emits `<<include>>`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_generate_use_case_diagram_model_integrity` in `crates/compile-sysml/src/sync/forward.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Emitted Mermaid `graph TD` diagram contains zero backtick characters (`'\`'`).
+    /// - Include edges use `UC_Main -. "<<include>>" .-> UC_StepXX`.
+    ///
+    /// ## 3. Preconditions
+    /// - Scenario steps may contain Markdown inline-code backticks around actor and component identifiers.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when all node labels and include edges are sanitized and free of backticks.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) over fixed 2-step scenario fixture.
+    /// - Space Complexity: O(1) bounded test buffer.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Returns assertion failure if any backtick or HTML entity leaks into the generated diagram.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-FORWARD-TEST-USE-CASE-DIAGRAM] | SysML v2: TestCaseDef(test_generate_use_case_diagram_model_integrity)
     #[test]
     fn test_generate_use_case_diagram_model_integrity() -> Result<(), Box<dyn std::error::Error>> {
         let scenario = vec![
-            "1. Actor initiates task".to_string(),
-            "2. Engine validates model".to_string(),
+            "1. Actor `Operator` initiates task".to_string(),
+            "2. `StateMachineSolverEngine` validates input schema structure and precondition guards for `State Machine Solver Workflow`.".to_string(),
         ];
         let diag = generate_use_case_diagram(
             "CIContinuousIntegrationRunner",
@@ -3161,14 +3195,15 @@ mod tests {
             &scenario,
         );
 
+        assert!(!diag.contains('`'));
         assert!(diag.contains("graph TD"));
         assert!(diag.contains("subgraph \"StateMachineSolverEngine System Boundary\""));
         assert!(diag.contains("UC_Main([\"State Machine Solver Workflow\"])"));
-        assert!(diag.contains("UC_Step01([\"Actor initiates task\"])"));
-        assert!(diag.contains("UC_Step02([\"Engine validates model\"])"));
+        assert!(diag.contains("UC_Step01([\"Actor Operator initiates task\"])"));
+        assert!(diag.contains("UC_Step02([\"StateMachineSolverEngine validates input schema structure...\"])"));
         assert!(diag.contains("end"));
         assert!(diag.contains("CIContinuousIntegrationRunner((\"CIContinuousIntegrationRunner\")) --- UC_Main"));
-        assert!(diag.contains("UC_Main -. \"&lt;&lt;include&gt;&gt;\" .-> UC_Step01"));
+        assert!(diag.contains("UC_Main -. \"<<include>>\" .-> UC_Step01"));
         Ok(())
     }
 

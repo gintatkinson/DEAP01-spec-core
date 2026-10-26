@@ -17,18 +17,18 @@
 graph TD
     subgraph "ClosedLoopDefectPublisherGate System Boundary"
         UC_Main(["Closed Loop Git Hub SSOT Publishing and Byte Parity Verification"])
-        UC_Step01(["Actor `Operator` submits input payload for `Closed Loop G..."])
-        UC_Step02(["`ClosedLoopDefectPublisherGate` validates input schema st..."])
-        UC_Step03(["`ClosedLoopDefectPublisherGate` executes core domain tran..."])
-        UC_Step04(["`ClosedLoopDefectPublisherGate` evaluates formal postcond..."])
-        UC_Step05(["`ClosedLoopDefectPublisherGate` commits verified output s..."])
+        UC_Step01(["Actor Operator submits input payload for Closed Loop Git ..."])
+        UC_Step02(["ClosedLoopDefectPublisherGate validates input schema stru..."])
+        UC_Step03(["ClosedLoopDefectPublisherGate executes core domain transf..."])
+        UC_Step04(["ClosedLoopDefectPublisherGate evaluates formal postcondit..."])
+        UC_Step05(["ClosedLoopDefectPublisherGate commits verified output sta..."])
     end
     Operator(("Operator")) --- UC_Main
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step01
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step02
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step03
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step04
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step05
+    UC_Main -. "<<include>>" .-> UC_Step01
+    UC_Main -. "<<include>>" .-> UC_Step02
+    UC_Main -. "<<include>>" .-> UC_Step03
+    UC_Main -. "<<include>>" .-> UC_Step04
+    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors

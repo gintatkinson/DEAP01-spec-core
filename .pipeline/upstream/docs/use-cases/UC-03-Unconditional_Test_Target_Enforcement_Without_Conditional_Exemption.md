@@ -17,18 +17,18 @@
 graph TD
     subgraph "CompilerLintEnforcementGate System Boundary"
         UC_Main(["Unconditional Test Target Enforcement Without Conditional Exemption"])
-        UC_Step01(["Actor `Operator` submits input payload for `Unconditional..."])
-        UC_Step02(["`CompilerLintEnforcementGate` validates input schema stru..."])
-        UC_Step03(["`CompilerLintEnforcementGate` executes core domain transf..."])
-        UC_Step04(["`CompilerLintEnforcementGate` evaluates formal postcondit..."])
-        UC_Step05(["`CompilerLintEnforcementGate` commits verified output sta..."])
+        UC_Step01(["Actor Operator submits input payload for Unconditional Te..."])
+        UC_Step02(["CompilerLintEnforcementGate validates input schema struct..."])
+        UC_Step03(["CompilerLintEnforcementGate executes core domain transfor..."])
+        UC_Step04(["CompilerLintEnforcementGate evaluates formal postconditio..."])
+        UC_Step05(["CompilerLintEnforcementGate commits verified output state..."])
     end
     Operator(("Operator")) --- UC_Main
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step01
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step02
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step03
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step04
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step05
+    UC_Main -. "<<include>>" .-> UC_Step01
+    UC_Main -. "<<include>>" .-> UC_Step02
+    UC_Main -. "<<include>>" .-> UC_Step03
+    UC_Main -. "<<include>>" .-> UC_Step04
+    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors

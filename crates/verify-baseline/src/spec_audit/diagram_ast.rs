@@ -1006,10 +1006,15 @@ pub fn validate_mermaid_invariants(block: &MermaidBlock) -> Result<(), Vec<SpecA
             continue;
         }
 
-        // Invariant check: orphan backticks
+        // Invariant check: orphan backticks or inline backticks inside Mermaid statements
         if clean.starts_with("```") || clean.starts_with("~~~") {
             errors.push(SpecAuditError::ValidationError(format!(
                 "Stray or nested markdown code fence within Mermaid diagram at line {}.",
+                line_num
+            )));
+        } else if clean.contains('`') {
+            errors.push(SpecAuditError::ValidationError(format!(
+                "Inline backtick character ('`') is forbidden inside Mermaid diagram at line {} (triggers GitHub Mermaid <md_string> lexical error).",
                 line_num
             )));
         }
@@ -2918,5 +2923,54 @@ mod tests {
         } else {
             panic!("Expected State diagram AST");
         }
+    }
+
+    /// Verifies that inline backtick characters inside Mermaid node labels are rejected by `validate_mermaid_invariants`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_inline_backtick_in_mermaid_node_label_rejected` in `crates/verify-baseline/src/spec_audit/diagram_ast.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Any Mermaid diagram line containing `'`'` outside a fence delimiter must return `Err(SpecAuditError::ValidationError)` from `parse_mermaid_diagram`.
+    ///
+    /// ## 3. Preconditions
+    /// - Synthetic `MermaidBlock` fixtures with and without inline backticks inside `(["..."])` node labels.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when the backtick-polluted diagram is rejected and the clean diagram is accepted.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) over fixed 7-line Mermaid test fixture.
+    /// - Space Complexity: O(1) auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Returns `Err` if either the negative probe passes or the positive probe fails.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SPEC-AUDIT-DIAGRAM-AST-INLINE-BACKTICK-REJECTED] | SysML v2: TestCaseDef(test_inline_backtick_in_mermaid_node_label_rejected)
+    #[test]
+    fn test_inline_backtick_in_mermaid_node_label_rejected() -> Result<(), String> {
+        let bad_raw = "graph TD\n    subgraph \"CompilerLintEnforcementGate System Boundary\"\n        UC_Main([\"Rustc E0453 Hard Rejection\"])\n        UC_Step01([\"Actor `Operator` submits input payload\"])\n        UC_Step02([\"`CompilerLintEnforcementGate` validates input schema\"])\n    end\n";
+        let bad_block = MermaidBlock {
+            raw: bad_raw.to_string(),
+            header: "graph TD".to_string(),
+            start_line: 1,
+            end_line: 6,
+        };
+        if parse_mermaid_diagram(&bad_block).is_ok() {
+            return Err("Expected Mermaid diagram with inline backticks to be rejected".to_string());
+        }
+
+        let good_raw = "graph TD\n    subgraph \"CompilerLintEnforcementGate System Boundary\"\n        UC_Main([\"Rustc E0453 Hard Rejection\"])\n        UC_Step01([\"Actor Operator submits input payload\"])\n        UC_Step02([\"CompilerLintEnforcementGate validates input schema\"])\n    end\n";
+        let good_block = MermaidBlock {
+            raw: good_raw.to_string(),
+            header: "graph TD".to_string(),
+            start_line: 1,
+            end_line: 6,
+        };
+        if let Err(e) = parse_mermaid_diagram(&good_block) {
+            return Err(format!("Expected sanitized Mermaid diagram to pass, got {:?}", e));
+        }
+        Ok(())
     }
 }

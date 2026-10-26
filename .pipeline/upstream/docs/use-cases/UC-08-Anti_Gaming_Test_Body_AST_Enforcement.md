@@ -17,18 +17,18 @@
 graph TD
     subgraph "RangeSliceAstDetector System Boundary"
         UC_Main(["Anti Gaming Test Body AST Enforcement"])
-        UC_Step01(["Actor `Operator` submits input payload for `Anti Gaming T..."])
-        UC_Step02(["`RangeSliceAstDetector` validates input schema structure ..."])
-        UC_Step03(["`RangeSliceAstDetector` executes core domain transformati..."])
-        UC_Step04(["`RangeSliceAstDetector` evaluates formal postcondition as..."])
-        UC_Step05(["`RangeSliceAstDetector` commits verified output state and..."])
+        UC_Step01(["Actor Operator submits input payload for Anti Gaming Test..."])
+        UC_Step02(["RangeSliceAstDetector validates input schema structure an..."])
+        UC_Step03(["RangeSliceAstDetector executes core domain transformation..."])
+        UC_Step04(["RangeSliceAstDetector evaluates formal postcondition asse..."])
+        UC_Step05(["RangeSliceAstDetector commits verified output state and e..."])
     end
     Operator(("Operator")) --- UC_Main
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step01
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step02
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step03
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step04
-    UC_Main -. "&lt;&lt;include&gt;&gt;" .-> UC_Step05
+    UC_Main -. "<<include>>" .-> UC_Step01
+    UC_Main -. "<<include>>" .-> UC_Step02
+    UC_Main -. "<<include>>" .-> UC_Step03
+    UC_Main -. "<<include>>" .-> UC_Step04
+    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
