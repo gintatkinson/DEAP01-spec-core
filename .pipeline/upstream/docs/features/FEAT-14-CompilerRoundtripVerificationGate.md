@@ -7,7 +7,7 @@
 | **Interface Type** | Physical / Structural / Internal Bus |
 | **Schema Containers** | `BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint::CompilerRoundtripVerificationGate` |
 | **Generation Mode** | subagent |
-| **Specification Source** | [schema/subsystems/b_p_03_sys_m_l_v2_a_s_t_bijective_roundtrip_and_token_stream_parser_gate_blueprint/architecture.sysml](../../schema/subsystems/b_p_03_sys_m_l_v2_a_s_t_bijective_roundtrip_and_token_stream_parser_gate_blueprint/architecture.sysml) |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
 # Feature 14: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] CompilerRoundtripVerificationGate
 
@@ -81,8 +81,7 @@ Presentation interface binding and diagnostic event routing for CompilerRoundtri
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:
-- Subsystem Requirements: `schema/subsystems/b_p_03_sys_m_l_v2_a_s_t_bijective_roundtrip_and_token_stream_parser_gate_blueprint/requirements.sysml`
-- Subsystem Architecture: `schema/subsystems/b_p_03_sys_m_l_v2_a_s_t_bijective_roundtrip_and_token_stream_parser_gate_blueprint/architecture.sysml`
+- System Architecture Model: `schema/model.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process
 
 Component behavior and interface definitions derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 15288.

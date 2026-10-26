@@ -1651,6 +1651,50 @@ fn extract_bom_bullet_parts(content: &str, pkg: &mut PackageDef) {
     }
 }
 
+/// Strips leading `US_AC_<digits>_` or `US_<digits>_` prefixes from ingested sequence diagram action identifiers.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_ingested_action_prefix` in `crates/ingest-sysml/src/translators/markdown.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic identifier normalization and referential transparency for fn `strip_ingested_action_prefix` within `TRANSLATORS-MARKDOWN`.
+/// - Guarantees a non-empty returned slice by falling back to `raw` whenever stripping `US_AC_<digits>_` or `US_<digits>_` would yield an empty remainder.
+///
+/// ## 3. Preconditions
+/// - `raw: &str` is a valid UTF-8 identifier candidate produced by `sanitize_identifier`.
+///
+/// ## 4. Postconditions
+/// - Returns `&str` with any leading `US_AC_<digits>_` or `US_<digits>_` prefix removed while preserving the trailing domain action identifier.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(raw)) single linear scan over the prefix bytes of `raw`.
+/// - Space Complexity: O(1) zero-allocation borrowed sub-slice return.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts any `&str` input without panicking or allocating.
+/// - State: Pure stateless transformation with zero side effects.
+/// - Action: Uses only safe `.strip_prefix(..)` and `.split_once(..)` combinators with zero slice indexing or regex evaluation.
+/// - Resource: Zero heap or unbounded stack allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-MD/strip_ingested_action_prefix] | SysML v2: ActionDef(strip_ingested_action_prefix)
+fn strip_ingested_action_prefix(raw: &str) -> &str {
+    if let Some(after_prefix) = raw
+        .strip_prefix("US_AC_")
+        .or_else(|| raw.strip_prefix("US_"))
+    {
+        if let Some((digits, rest)) = after_prefix.split_once('_') {
+            if !digits.is_empty()
+                && digits.bytes().all(|b| b.is_ascii_digit())
+                && !rest.is_empty()
+            {
+                return rest;
+            }
+        }
+    }
+    raw
+}
+
 /// Extracts behavioral AST nodes (`ActionDef`, `InteractionDef`, `StateDef`, `UseCaseDef`) from Mermaid diagrams and `### AC-XX` sections.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1658,7 +1702,7 @@ fn extract_bom_bullet_parts(content: &str, pkg: &mut PackageDef) {
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves deterministic state conservation and referential transparency for fn `extract_behavioral_ast_nodes` within `TRANSLATORS-MARKDOWN`.
-/// - Maps fenced Mermaid `sequenceDiagram` blocks into `ActionDef` and `InteractionDef`, `stateDiagram-v2` blocks into `StateDef`, and `### AC-XX` acceptance criteria into `UseCaseDef`.
+/// - Maps fenced Mermaid `sequenceDiagram` blocks into `ActionDef` and `InteractionDef`, `stateDiagram-v2` blocks into `StateDef` (with populated `sub_states`), and `### AC-XX` acceptance criteria into `UseCaseDef`, synthesizing a fallback package `StateDef` when no `stateDiagram` block is present.
 ///
 /// ## 3. Preconditions
 /// - `content: &str` and `pkg: &mut PackageDef` must satisfy domain and type-safety constraints prior to invoking `extract_behavioral_ast_nodes`.
@@ -1730,9 +1774,27 @@ fn extract_behavioral_ast_nodes(content: &str, pkg: &mut PackageDef) {
                 };
                 let state_name = sanitize_identifier(&raw_state_name, "LifecycleState");
                 if !pkg.state_defs.iter().any(|s| s.name == state_name) {
+                    let mut sub_states: Vec<StateDef> = Vec::new();
+                    for tr in &state_transitions {
+                        for candidate in [tr.source.as_deref(), tr.target.as_deref()] {
+                            if let Some(st_id) = candidate {
+                                if st_id != "Initial"
+                                    && st_id != "Terminal"
+                                    && !st_id.is_empty()
+                                    && !sub_states.iter().any(|s| s.name == st_id)
+                                {
+                                    sub_states.push(StateDef {
+                                        name: st_id.to_string(),
+                                        ..Default::default()
+                                    });
+                                }
+                            }
+                        }
+                    }
                     pkg.state_defs.push(StateDef {
                         name: state_name,
                         doc: Some("Extracted from Mermaid stateDiagram specification.".to_string()),
+                        sub_states,
                         transitions: std::mem::take(&mut state_transitions),
                         ..Default::default()
                     });
@@ -1815,10 +1877,11 @@ fn extract_behavioral_ast_nodes(content: &str, pkg: &mut PackageDef) {
                     .find(|s| !s.trim().is_empty())
                     .unwrap_or("ExecuteAction");
                 let action_name = sanitize_identifier(action_head, "ExecuteAction");
+                let clean_action = strip_ingested_action_prefix(&action_name).to_string();
                 let doc_clean = clean_bdd_text(msg_clean);
-                if !pkg.action_defs.iter().any(|a| a.name == action_name) {
+                if !pkg.action_defs.iter().any(|a| a.name == clean_action) {
                     pkg.action_defs.push(ActionDef {
-                        name: action_name.clone(),
+                        name: clean_action.clone(),
                         doc: if doc_clean.is_empty() {
                             None
                         } else {
@@ -1828,7 +1891,7 @@ fn extract_behavioral_ast_nodes(content: &str, pkg: &mut PackageDef) {
                         ..Default::default()
                     });
                 }
-                let msg_stmt = format!("{action_name} from {sender_id} to {receiver_id}");
+                let msg_stmt = format!("{clean_action} from {sender_id} to {receiver_id}");
                 if !seq_messages.contains(&msg_stmt) {
                     seq_messages.push(msg_stmt);
                 }
@@ -1873,6 +1936,122 @@ fn extract_behavioral_ast_nodes(content: &str, pkg: &mut PackageDef) {
                 }
             }
         }
+    }
+
+    if pkg.state_defs.is_empty() {
+        let state_name =
+            sanitize_identifier(&format!("{}_LifecycleState", pkg.name), "LifecycleState");
+        let mut child_names: Vec<String> = Vec::new();
+        for part in pkg.part_defs.iter().take(3) {
+            let candidate = sanitize_identifier(&format!("{}_State", part.name), "State");
+            if !child_names.contains(&candidate) {
+                child_names.push(candidate);
+            }
+        }
+        for fallback_suffix in ["InitState", "ActiveState", "VerifiedState"] {
+            if child_names.len() >= 3 {
+                break;
+            }
+            let candidate =
+                sanitize_identifier(&format!("{}_{}", pkg.name, fallback_suffix), "State");
+            if !child_names.contains(&candidate) {
+                child_names.push(candidate);
+            }
+        }
+        let s1 = child_names
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "InitState".to_string());
+        let s2 = child_names
+            .get(1)
+            .cloned()
+            .unwrap_or_else(|| "ActiveState".to_string());
+        let s3 = child_names
+            .get(2)
+            .cloned()
+            .unwrap_or_else(|| "VerifiedState".to_string());
+        let trig1 = pkg
+            .action_defs
+            .first()
+            .map(|a| a.name.clone())
+            .unwrap_or_else(|| sanitize_identifier(&format!("Initialize_{}", pkg.name), "Action"));
+        let trig2 = pkg
+            .action_defs
+            .get(1)
+            .or_else(|| pkg.action_defs.first())
+            .map(|a| a.name.clone())
+            .unwrap_or_else(|| sanitize_identifier(&format!("Verify_{}", pkg.name), "Action"));
+        let sub_states = vec![
+            StateDef {
+                name: s1.clone(),
+                ..Default::default()
+            },
+            StateDef {
+                name: s2.clone(),
+                ..Default::default()
+            },
+            StateDef {
+                name: s3.clone(),
+                ..Default::default()
+            },
+        ];
+        let transitions = vec![
+            TransitionDef {
+                name: Some(sanitize_identifier(
+                    &format!("Initial_to_{s1}"),
+                    "Transition",
+                )),
+                source: Some("Initial".to_string()),
+                target: Some(s1.clone()),
+                trigger: None,
+                guard: None,
+                effect: None,
+                doc: None,
+            },
+            TransitionDef {
+                name: Some(sanitize_identifier(
+                    &format!("{s1}_to_{s2}_on_{trig1}"),
+                    "Transition",
+                )),
+                source: Some(s1),
+                target: Some(s2.clone()),
+                trigger: Some(trig1),
+                guard: None,
+                effect: None,
+                doc: None,
+            },
+            TransitionDef {
+                name: Some(sanitize_identifier(
+                    &format!("{s2}_to_{s3}_on_{trig2}"),
+                    "Transition",
+                )),
+                source: Some(s2),
+                target: Some(s3.clone()),
+                trigger: Some(trig2),
+                guard: None,
+                effect: None,
+                doc: None,
+            },
+            TransitionDef {
+                name: Some(sanitize_identifier(
+                    &format!("{s3}_to_Terminal"),
+                    "Transition",
+                )),
+                source: Some(s3),
+                target: Some("Terminal".to_string()),
+                trigger: None,
+                guard: None,
+                effect: None,
+                doc: None,
+            },
+        ];
+        pkg.state_defs.push(StateDef {
+            name: state_name,
+            doc: Some("Synthesized deterministic package lifecycle state machine.".to_string()),
+            sub_states,
+            transitions,
+            ..Default::default()
+        });
     }
 
     let subject_name = pkg.part_defs.first().map(|p| p.name.clone());
@@ -4319,6 +4498,122 @@ The Electrical Power subsystem shall maintain bus voltage between 24V and 32V.
             unreadable_res.is_err(),
             "MarkdownTranslator::translate_files must fail closed on unreadable directory path, got Ok"
         );
+    }
+
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_extract_behavioral_ast_nodes_populates_sub_states_and_fallback_state_def` in `crates/ingest-sysml/src/translators/markdown.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Verifies that `extract_behavioral_ast_nodes` populates `sub_states` from Mermaid `stateDiagram-v2` transitions, strips `US_AC_<digits>_` prefixes from sequence diagram action names, and synthesizes a deterministic fallback `StateDef` when no `stateDiagram` block is present.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked with synthetic Markdown inputs both containing and omitting `stateDiagram-v2` blocks.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts that `state_defs` contains non-empty `sub_states` and structured `{src}_to_{tgt}_on_{trig}` transitions in both cases, and that `action_defs` stores stripped action identifiers.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over the two synthetic Markdown test fixtures.
+    /// - Space Complexity: O(1) bounded auxiliary test memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates diagnostic assertion failures via `Result<(), String>` without panicking.
+    /// - State: Operates on isolated in-memory `PackageDef` instances with zero shared mutable state.
+    /// - Action: Uses `.first()` and `.get(..)` exclusively with zero `.unwrap()`, `.expect()`, or slice indexing.
+    /// - Resource: Allocates zero filesystem fixtures.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-INGEST-MD/test_extract_behavioral_ast_nodes_populates_sub_states_and_fallback_state_def] | SysML v2: VerificationCaseDef(test_extract_behavioral_ast_nodes_populates_sub_states_and_fallback_state_def)
+    #[test]
+    fn test_extract_behavioral_ast_nodes_populates_sub_states_and_fallback_state_def() -> Result<(), String> {
+        let md_with_state = r#"
+```mermaid
+sequenceDiagram
+    participant A as Alpha
+    participant B as Beta
+    A->>B: US_AC_01_DispatchCommand(payload)
+```
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Active : DispatchCommand
+    Active --> [*]
+```
+"#;
+        let mut pkg1 = PackageDef {
+            name: "PkgOne".to_string(),
+            ..Default::default()
+        };
+        extract_behavioral_ast_nodes(md_with_state, &mut pkg1);
+
+        let first_action = pkg1
+            .action_defs
+            .first()
+            .ok_or_else(|| "missing extracted action_def".to_string())?;
+        assert_eq!(first_action.name, "DispatchCommand");
+
+        let state1 = pkg1
+            .state_defs
+            .first()
+            .ok_or_else(|| "missing extracted state_def".to_string())?;
+        let sub_names: Vec<&str> = state1.sub_states.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(sub_names, vec!["Idle", "Active"]);
+        let tr_names: Vec<&str> = state1
+            .transitions
+            .iter()
+            .filter_map(|t| t.name.as_deref())
+            .collect();
+        assert_eq!(
+            tr_names,
+            vec![
+                "Initial_to_Idle",
+                "Idle_to_Active_on_DispatchCommand",
+                "Active_to_Terminal"
+            ]
+        );
+
+        let md_without_state = r#"
+```mermaid
+sequenceDiagram
+    participant C as Controller
+    participant D as Driver
+    C->>D: US_02_StartEngine(cmd)
+    D-->>C: US_AC_03_ConfirmReady(ack)
+```
+"#;
+        let mut pkg2 = PackageDef {
+            name: "PkgTwo".to_string(),
+            ..Default::default()
+        };
+        extract_behavioral_ast_nodes(md_without_state, &mut pkg2);
+
+        let state2 = pkg2
+            .state_defs
+            .first()
+            .ok_or_else(|| "missing fallback state_def".to_string())?;
+        assert_eq!(state2.sub_states.len(), 3);
+        assert_eq!(state2.transitions.len(), 4);
+        let t0 = state2
+            .transitions
+            .first()
+            .ok_or_else(|| "missing transition 0".to_string())?;
+        let t1 = state2
+            .transitions
+            .get(1)
+            .ok_or_else(|| "missing transition 1".to_string())?;
+        let t2 = state2
+            .transitions
+            .get(2)
+            .ok_or_else(|| "missing transition 2".to_string())?;
+        let t3 = state2
+            .transitions
+            .get(3)
+            .ok_or_else(|| "missing transition 3".to_string())?;
+        assert_eq!(t0.source.as_deref(), Some("Initial"));
+        assert_eq!(t1.trigger.as_deref(), Some("StartEngine"));
+        assert_eq!(t2.trigger.as_deref(), Some("ConfirmReady"));
+        assert_eq!(t3.target.as_deref(), Some("Terminal"));
+        Ok(())
     }
 }
 

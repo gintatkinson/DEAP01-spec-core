@@ -1217,7 +1217,10 @@ mod tests {
         let orig_cwd = std::env::current_dir()?;
         std::env::set_current_dir(&guard.0)?;
         let res_fallback = discover_schema_targets(None, Some("auto"));
-        fs::write(schema_dir.join("REQ-0001.md"), "# Requirement 0001\n")?;
+        fs::write(
+            schema_dir.join("REQ-0001.md"),
+            "# Requirement 0001\n## 1. Normative Statement\n",
+        )?;
         let res_priority = discover_schema_targets(None, Some("auto"));
         std::env::set_current_dir(&orig_cwd)?;
 

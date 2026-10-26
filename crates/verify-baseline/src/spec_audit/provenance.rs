@@ -407,7 +407,7 @@ pub fn find_naked_numeric_quantities(line: &str) -> Vec<(String, usize)> {
                 word_start -= 1;
             }
             let prefix = &bytes[word_start..start];
-            let is_id_token_prefix = prefix.iter().any(|b| b.is_ascii_alphabetic() || *b == b'_');
+            let is_id_token_prefix = prefix.iter().any(|b| b.is_ascii_alphabetic() || *b == b'_' || *b == b'#');
 
             let mut dot_seen = false;
             while idx < len && (bytes[idx].is_ascii_digit() || (bytes[idx] == b'.' && !dot_seen && idx + 1 < len && bytes[idx + 1].is_ascii_digit())) {
@@ -442,7 +442,7 @@ pub fn find_naked_numeric_quantities(line: &str) -> Vec<(String, usize)> {
                 let before_text = line[..word_start].trim_end();
                 let last_word = before_text.rsplit(|c: char| c.is_whitespace() || c == '|' || c == '*' || c == '`' || c == '#').next().unwrap_or("");
                 let lw_clean = last_word.trim().to_lowercase();
-                matches!(lw_clean.as_str(), "feature" | "feat" | "epic" | "req" | "ac" | "step" | "item" | "section" | "table" | "figure" | "level" | "mode" | "id" | "issue")
+                matches!(lw_clean.as_str(), "feature" | "feat" | "epic" | "req" | "ac" | "step" | "item" | "section" | "table" | "figure" | "level" | "mode" | "id" | "issue" | "case" | "story" | "check" | "bp" | "blueprint")
             } else {
                 false
             };
@@ -1639,9 +1639,11 @@ pub fn is_valid_epic_feature_checklist_item(line: &str) -> bool {
         return false;
     }
 
-    // 4. Must contain trailing parenthetical (<clauses>)
-    let after_link = after_target_open[close_paren_rel + 1..].trim();
-    if !after_link.starts_with('(') || !after_link.ends_with(')') || after_link.len() < 3 {
+    // 4. Optional trailing parenthetical (<clauses>)
+    let after_link = after_target_open.get(close_paren_rel + 1..).unwrap_or("").trim();
+    if !after_link.is_empty()
+        && (!after_link.starts_with('(') || !after_link.ends_with(')') || after_link.len() < 3)
+    {
         return false;
     }
 
@@ -1747,6 +1749,15 @@ pub fn count_feature_acceptance_criteria(content: &str) -> usize {
 
         if trimmed.starts_with('#') {
             let lower_heading = trimmed.to_lowercase();
+            if lower_heading.contains("associated use cases")
+                || lower_heading.contains("associated user stories")
+                || lower_heading.contains("linked use cases")
+                || lower_heading.contains("linked user stories")
+                || lower_heading.contains("traceability")
+            {
+                in_ac_section = false;
+                continue;
+            }
             if lower_heading.contains("acceptance criteria")
                 || lower_heading.contains("verification")
                 || lower_heading.contains("conformance")
@@ -1762,7 +1773,10 @@ pub fn count_feature_acceptance_criteria(content: &str) -> usize {
         let lower = trimmed.to_lowercase();
         // Checkbox criteria e.g. "- [ ] AC-01", "- [ ] REQ-01"
         if trimmed.starts_with("- [ ]") || trimmed.starts_with("- [x]") || trimmed.starts_with("* [ ]") || trimmed.starts_with("* [x]") {
-            count += 1;
+            let after_box = trimmed.get(5..).unwrap_or("").trim_start();
+            if !after_box.starts_with('#') {
+                count += 1;
+            }
         } else if in_ac_section && (trimmed.starts_with('-') || trimmed.starts_with('*') || (trimmed.len() >= 2 && trimmed.as_bytes()[0].is_ascii_digit() && trimmed.as_bytes()[1] == b'.')) {
             if lower.contains("ac-") || lower.contains("req-") || lower.contains("shall") || lower.contains("given") || lower.contains("when") || lower.contains("then") {
                 count += 1;

@@ -40,6 +40,12 @@ package BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Archit
     }
     doc /* Extracted from Mermaid stateDiagram specification. */
     state def BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_LifecycleState {
+        state ScanningSource;
+        state SkippingLineComment;
+        state SkippingBlockComment;
+        state InspectingAttribute;
+        state NormalizingBracketBody;
+        state ViolationRecorded;
         transition Initial_to_ScanningSource;
         transition ScanningSource_to_SkippingLineComment_on_slashSlashDetected;
         transition SkippingLineComment_to_ScanningSource_on_newlineReached;
@@ -95,8 +101,8 @@ package BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Archit
         message Execute from Eng to Ingest;
         message Emit from Ingest to Eng;
     }
-    doc /* Configures `clippy::unwrap_used = "forbid"` across the workspace [unit: flag] */
     part def CompilerLintEnforcementGate {
+        doc /* Configures `clippy::unwrap_used = "forbid"` across the workspace [unit: flag] */
         attribute forbid_unwrap_used : Boolean = true;
         doc /* Configures `clippy::expect_used = "forbid"` across the workspace [unit: flag] */
         attribute forbid_expect_used : Boolean = true;
@@ -206,6 +212,16 @@ package BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Bluep
         verify by AC_05_Deterministic_Dogfood_Ingestion_into_Canonical_SysML_v2;
         satisfy by RangeSliceAstDetector;
     }
+    doc /* Synthesized deterministic package lifecycle state machine. */
+    state def BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint_LifecycleState {
+        state RangeSliceAstDetector_State;
+        state FailClosedIoAstVerifier_State;
+        state AntiGamingTestBodyAuditor_State;
+        transition Initial_to_RangeSliceAstDetector_State;
+        transition RangeSliceAstDetector_State_to_FailClosedIoAstVerifier_State_on_check_compiler_ast_purity;
+        transition FailClosedIoAstVerifier_State_to_AntiGamingTestBodyAuditor_State_on_mask_literals_and_comments;
+        transition AntiGamingTestBodyAuditor_State_to_Terminal;
+    }
     doc /* - **Given**: Any audited Rust source file in crates/ containing a direct range-slice indexing expression (&s[a..b], &rest[..idx], &buf[start..], or &items[..=end]) outside string literals and comments. - **When**: ./target/release/verify-baseline . --no-domain executes Check 34 (C-PURITY-01). - **Then**: contains_direct_range_slice detects the bracketed .. operator regardless of variable name, emits a file-and-line diagnostic instructing the caller to use .get(..), and exits fail-closed with code 1. */
     use case def UC_AC_01_General_Direct_Range_Slice_Indexing_Rejection {
         subject RangeSliceAstDetector;
@@ -251,8 +267,8 @@ package BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Bluep
     }
     doc /* Zero-regex token-stream analyzer that detects panicking Rust bracket range indexing (`expr[a..b]`, `expr[..b]`, `expr[a..]`) outside string literals, comments, and `.get(..)` calls */
     part def RangeSliceAstDetector {
-        attribute type : String = "Subcomponent";
         attribute quantity : Integer = 1;
+        attribute type : String = "Subcomponent";
     }
     doc /* AST pattern verifier that rejects fail-open iterator flattening, `.filter_map(Result::ok)`, `.unwrap_or_default()` on filesystem reads, and `let _ = fs::` error discarding */
     part def FailClosedIoAstVerifier {
@@ -261,16 +277,16 @@ package BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Bluep
     }
     doc /* Test AST auditor that parses `#[test]` functions and rejects zero-assertion bodies, `mem::size_of` tautologies, unguarded `.exists()` skips, and non-RAII temp paths */
     part def AntiGamingTestBodyAuditor {
-        attribute type : String = "Subcomponent";
         attribute quantity : Integer = 1;
+        attribute type : String = "Subcomponent";
     }
     doc /* Workspace-wide AST symbol scanner enforcing single-module residency for SHA-256 constants (`0x428a2f98`) and Rust lexical state machines */
     part def SsotSymbolDeduplicationGate {
         attribute type : String = "Subcomponent";
         attribute quantity : Integer = 1;
     }
-    doc /* Total detected panicking direct range-slice indexing expressions (`expr[a..b]`) across audited workspace modules [unit: count] */
     part def Check34AstPurityAndAntiGamingGate {
+        doc /* Total detected panicking direct range-slice indexing expressions (`expr[a..b]`) across audited workspace modules [unit: count] */
         attribute direct_range_slice_count : Integer = 0;
         doc /* Total detected fail-open filesystem or directory traversal error-swallowing call sites across workspace crates [unit: count] */
         attribute fail_open_io_site_count : Integer = 0;
@@ -369,6 +385,15 @@ package BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blue
     }
     doc /* Extracted from Mermaid stateDiagram specification. */
     state def BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_LifecycleState {
+        state LexicalScanning;
+        state RecursiveDescentParsing;
+        state RejectedE0100;
+        state CanonicalSerialization;
+        state RejectedE0200;
+        state RoundtripReparsing;
+        state AstStructuralEqualityCheck;
+        state RejectedE0400;
+        state VerifiedBijectiveAst;
         transition Initial_to_LexicalScanning;
         transition LexicalScanning_to_RecursiveDescentParsing_on_zeroDriftTokenStream;
         transition LexicalScanning_to_RejectedE0100_on_lexicalSpanError;
@@ -556,6 +581,14 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
     }
     doc /* Extracted from Mermaid stateDiagram specification. */
     state def BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_LifecycleState {
+        state AstLoaded;
+        state ForwardProjected;
+        state IcdSynthesized;
+        state WbsExported;
+        state BacklogReconciled;
+        state ReverseSynced;
+        state Rejected;
+        state VerifiedRoundtrip;
         transition Initial_to_AstLoaded;
         transition AstLoaded_to_ForwardProjected_on_forwardSyncSpecs;
         transition ForwardProjected_to_IcdSynthesized_on_emitLogicalIcd;
@@ -620,8 +653,8 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
         message Merge from Rev to Rev;
         message Bit_identical from Rev to CLI;
     }
-    doc /* Maximum deterministic execution bound for `--forward-sync` across all package subtrees. [unit: ms] */
     part def AgileSpecForwardProjector {
+        doc /* Maximum deterministic execution bound for `--forward-sync` across all package subtrees. [unit: ms] */
         attribute maxForwardLatencyMs : Integer = 25;
         doc /* Enforces symmetric `in` and `out` `ActionDef` parameter emission across Mermaid and Markdown bullets. [unit: flag] */
         attribute preserveTypedActionParams : Boolean = true;
@@ -634,8 +667,8 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
             attribute protocol_family : String = "AtomicFsWrite";
         }
     }
-    doc /* Tracks multi-line `in_html_comment` state to prevent commented example tables from spoofing frontmatter issue IDs. [unit: flag] */
     part def BidirectionalBacklogReconciler {
+        doc /* Tracks multi-line `in_html_comment` state to prevent commented example tables from spoofing frontmatter issue IDs. [unit: flag] */
         attribute trackHtmlCommentState : Boolean = true;
         doc /* Computes parent-inclusive Epic count so child-only slices never trigger single-epic wildcard matching. [unit: flag] */
         attribute parentInclusiveEpics : Boolean = true;
@@ -648,8 +681,8 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
             attribute protocol_family : String = "AtomicFsWrite";
         }
     }
-    doc /* Total number of generative LLM subagents invoked during specification, ICD, and WBS forward compilation (`C-FWD-01 == 0`). [unit: count] */
     part def DeterministicSpecIcdWbsForwardCompiler {
+        doc /* Total number of generative LLM subagents invoked during specification, ICD, and WBS forward compilation (`C-FWD-01 == 0`). [unit: count] */
         attribute llm_subagent_invocation_count : Integer = 0;
         doc /* Percentage of declared SysML v2 AST packages, parts, ports, flows, interactions, and use cases projected into specifications (`C-FWD-02 == 100.0`). [unit: percent] */
         attribute ast_node_coverage_percent : Real = 100;
@@ -674,8 +707,8 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
             attribute protocol_family : String = "AtomicFsWrite";
         }
     }
-    doc /* Maximum deterministic execution bound for `--emit-icd` interface matrix and signal dictionary compilation. [unit: ms] */
     part def LogicalIcdMatrixCompiler {
+        doc /* Maximum deterministic execution bound for `--emit-icd` interface matrix and signal dictionary compilation. [unit: ms] */
         attribute maxIcdLatencyMs : Integer = 10;
         doc /* Orders all `PartDef` matrix axes and `ConnectionDef` channels via `BTreeMap` deterministic traversal. [unit: flag] */
         attribute lexicographicalSort : Boolean = true;
@@ -688,8 +721,8 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
             attribute protocol_family : String = "AtomicFsWrite";
         }
     }
-    doc /* Canonical 4-level MIL-STD-881E decomposition depth (System, Subsystem, Work Package, Deliverable Task). [unit: levels] */
     part def MilStd881eWbsExporter {
+        doc /* Canonical 4-level MIL-STD-881E decomposition depth (System, Subsystem, Work Package, Deliverable Task). [unit: levels] */
         attribute wbsHierarchyDepth : Integer = 4;
         doc /* Maximum deterministic execution bound for `--emit-wbs` Markdown and CSV/JSON export generation. [unit: ms] */
         attribute maxWbsLatencyMs : Integer = 15;
@@ -745,6 +778,16 @@ package BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification
         verify by AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0605;
         satisfy by UnifiedRustDartLexicalScanner;
     }
+    doc /* Synthesized deterministic package lifecycle state machine. */
+    state def BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState {
+        state UnifiedRustDartLexicalScanner_State;
+        state ScopedSchemaContextResolver_State;
+        state SevenSectionDocstringGenerator_State;
+        transition Initial_to_UnifiedRustDartLexicalScanner_State;
+        transition UnifiedRustDartLexicalScanner_State_to_ScopedSchemaContextResolver_State_on_Run;
+        transition ScopedSchemaContextResolver_State_to_SevenSectionDocstringGenerator_State_on_Scan;
+        transition SevenSectionDocstringGenerator_State_to_Terminal;
+    }
     doc /* - **Given**: .rs and .dart source files containing nested / * outer / * inner * / * / block comments, hashed raw strings r#\"...\"# and r##\"...\"##, Rust string literals containing \"{\", Dart interpolated strings \"value: {map['key']}\" containing nested quotes and comments, multi-byte UTF-8 character literals '↑', and multiple short lifetimes fn foo<'a, 'b>(x: &'a str, y: &'b str) within 10 bytes. - **When**: deap_core::source_ast, compile-sysml --inject-safety-docstrings, and verify-baseline Check 36 scan the files. - **Then**: All three crates execute the single unified. */
     use case def UC_AC_01_Unified_Rust_and_Dart_Lexical_State_Machine_Without_Magic_Offsets {
         subject UnifiedRustDartLexicalScanner;
@@ -791,8 +834,8 @@ package BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification
     }
     doc /* Canonical zero-regex lexical state machine in `deap_core::source_ast` handling nested `/ * * /`, `r#"..."#`, Dart `${...}` frames, and exact char-literal vs. lifetime disambiguation */
     part def UnifiedRustDartLexicalScanner {
-        attribute type : String = "Component";
         attribute quantity : Integer = 1;
+        attribute type : String = "Component";
     }
     doc /* Strict SysML v2 requirement and constraint resolver in `compile-sysml` traversing recursive `part.parts` trees with `owner_name` isolation and zero `.first()` fallback */
     part def ScopedSchemaContextResolver {
@@ -806,8 +849,8 @@ package BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification
     }
     doc /* Baseline verification gate in `verify-baseline` auditing 100% per-item 7-section docstring coverage and Check 34 normalized body uniqueness using `deap_core::source_ast` */
     part def Check36AstCompletenessVerifier {
-        attribute type : String = "Component";
         attribute quantity : Integer = 1;
+        attribute type : String = "Component";
     }
     doc /* --- */
     part def UnifiedSafetyDocstringSynthesizer {
@@ -914,6 +957,15 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
     }
     doc /* Extracted from Mermaid stateDiagram specification. */
     state def BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_LifecycleState {
+        state Idle;
+        state IngestingSourceAst;
+        state EvaluatingFivePillars;
+        state SynthesizingDossier;
+        state Verified;
+        state Validating12Gates;
+        state Rejected;
+        state DeduplicatingSsot;
+        state PublishingClosedLoop;
         transition Initial_to_Idle;
         transition Idle_to_IngestingSourceAst_on_verify_baseline_audit_code_path;
         transition IngestingSourceAst_to_EvaluatingFivePillars_on_SourceAstItem_slice_parsed;
@@ -983,8 +1035,8 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
         message CLOSED_LOOP from Gate to CLI;
         message Exit_item from CLI to User;
     }
-    doc /* Enforces all 12 `validate_defect_dossier` checks prior to persistence or publication. [unit: checks] */
     part def ClosedLoopDefectPublisherGate {
+        doc /* Enforces all 12 `validate_defect_dossier` checks prior to persistence or publication. [unit: checks] */
         attribute schemaGateCount : Integer = 12;
         doc /* Requires zero byte discrepancy between local `.pipeline/defects/` file and remote GitHub issue body. [unit: flag] */
         attribute requireByteParity : Boolean = true;
@@ -997,8 +1049,8 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
             attribute protocol_family : String = "GhCliJson";
         }
     }
-    doc /* Enforces all 7 canonical `DossierSection` headers plus the `## Audit Source` footer. [unit: sections] */
     part def DeterministicDossierSynthesizer {
+        doc /* Enforces all 7 canonical `DossierSection` headers plus the `## Audit Source` footer. [unit: sections] */
         attribute mandatorySectionCount : Integer = 7;
         doc /* Enforces 5 numbered causal `Why ...? Because ...` root-cause steps in Section 2. [unit: steps] */
         attribute whysChainDepth : Integer = 5;
@@ -1011,8 +1063,8 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
             attribute protocol_family : String = "CommonMarkText";
         }
     }
-    doc /* Number of LLM subagents dispatched during static code auditing and defect dossier generation. [unit: count] */
     part def DeterministicStaticDefectAuditor {
+        doc /* Number of LLM subagents dispatched during static code auditing and defect dossier generation. [unit: count] */
         attribute auditor_subagent_count : Integer = 0;
         doc /* Number of deterministic structural, lexical, and Mermaid validation checks enforced per synthesized dossier. [unit: checks] */
         attribute dossier_schema_check_count : Integer = 12;
@@ -1037,8 +1089,8 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
             attribute protocol_family : String = "GhCliSubprocess";
         }
     }
-    doc /* Count of active static AST evaluators (`E0601` through `E0605`). [unit: pillars] */
     part def FivePillarStaticAstAnalyzer {
+        doc /* Count of active static AST evaluators (`E0601` through `E0605`). [unit: pillars] */
         attribute activePillarCount : Integer = 5;
         doc /* Enforces linear token-stream and `SourceAstItem` slice traversal without regular expressions. [unit: flag] */
         attribute zeroRegexMode : Boolean = true;
@@ -1051,8 +1103,8 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
             attribute protocol_family : String = "AuditFindingVec";
         }
     }
-    doc /* Guarantees zero semicolons and quoted special tokens inside Section 4 Mermaid blocks. [unit: flag] */
     part def MermaidUmlDiagramGenerator {
+        doc /* Guarantees zero semicolons and quoted special tokens inside Section 4 Mermaid blocks. [unit: flag] */
         attribute forbidSemicolons : Boolean = true;
         doc /* Enforces Rules E1 through E5 across synthesized `sequenceDiagram` and `classDiagram` blocks. [unit: flag] */
         attribute check13bCompliant : Boolean = true;

@@ -835,6 +835,54 @@ pub fn collect_spec_files(
     Ok(files)
 }
 
+/// Resolves `rules/behavioral_triggers.json` from `repo_root` or an ancestor workspace directory.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `resolve_behavioral_triggers_path` in `crates/verify-baseline/src/spec_audit/mod.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `resolve_behavioral_triggers_path` (declaration #15a) within `SPEC-AUDIT-MOD`.
+///
+/// ## 3. Preconditions
+/// - `repo_root: &Path` must satisfy domain and type-safety constraints prior to invoking `resolve_behavioral_triggers_path`.
+///
+/// ## 4. Postconditions
+/// - Returns `Option<PathBuf>` from `resolve_behavioral_triggers_path` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(repo_root)) bounded over path ancestor depth of `resolve_behavioral_triggers_path`.
+/// - Space Complexity: O(N(repo_root)) bounded auxiliary memory for `resolve_behavioral_triggers_path`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `resolve_behavioral_triggers_path` (`Option<PathBuf>`).
+/// - State: Maintains consistent state invariants across `resolve_behavioral_triggers_path` without partial mutation on error.
+/// - Action: Executes `resolve_behavioral_triggers_path` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `resolve_behavioral_triggers_path` (`SPEC-AUDIT-MOD`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SPEC-AUDIT-MOD-RESOLVE-BEHAVIORAL-TRIGGERS-PATH] | SysML v2: ActionDef(resolve_behavioral_triggers_path)
+fn resolve_behavioral_triggers_path(repo_root: &Path) -> Option<PathBuf> {
+    let direct = repo_root.join("rules").join("behavioral_triggers.json");
+    if direct.is_file() {
+        return Some(direct);
+    }
+    for ancestor in repo_root.ancestors().skip(1) {
+        let candidate = ancestor.join("rules").join("behavioral_triggers.json");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    if let Ok(canon) = fs::canonicalize(repo_root) {
+        for ancestor in canon.ancestors().skip(1) {
+            let candidate = ancestor.join("rules").join("behavioral_triggers.json");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
 /// Primary orchestrator for the specification quality and coverage audit suite.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -870,8 +918,8 @@ pub fn run_spec_audit(options: &SpecAuditOptions) -> Result<SpecAuditSummary, Sp
 
     // 2. Load behavioral_triggers.json once into memory
     let triggers_path = options.repo_root.join("rules").join("behavioral_triggers.json");
-    let triggers = if triggers_path.is_file() {
-        load_behavioral_triggers(&triggers_path)?
+    let triggers = if let Some(resolved_triggers_path) = resolve_behavioral_triggers_path(&options.repo_root) {
+        load_behavioral_triggers(&resolved_triggers_path)?
     } else if options.allow_missing_specs || !active_gates.behavioral {
         Vec::new()
     } else {
@@ -1467,5 +1515,52 @@ Links to [FEAT-06-SystemVisionEngine.md](../features/feat-06.md).
         assert!(index.part_names.contains("TelemetryGateway"));
 
         fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    /// Verifies that `resolve_behavioral_triggers_path` falls back to an ancestor workspace directory.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace` in `crates/verify-baseline/src/spec_audit/mod.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace` (declaration #25) within `SPEC-AUDIT-MOD`.
+    ///
+    /// ## 3. Preconditions
+    /// - `()` must satisfy domain and type-safety constraints prior to invoking `test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<(), Box<dyn std::error::Error>>` from `test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace` with deterministic post-execution state.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over input/member dimension of `test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace`.
+    /// - Space Complexity: O(1) bounded auxiliary memory for `test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace` (`Result<(), Box<dyn std::error::Error>>`).
+    /// - State: Maintains consistent state invariants across `test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace` without partial mutation on error.
+    /// - Action: Executes `test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace` (`SPEC-AUDIT-MOD`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SPEC-AUDIT-MOD-TEST-RESOLVE-BEHAVIORAL-TRIGGERS-PATH] | SysML v2: VerificationCaseDef(test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace)
+    #[test]
+    fn test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace() -> Result<(), Box<dyn std::error::Error>> {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let temp_root = std::env::temp_dir().join(format!("test_ancestor_triggers_{}", ts));
+        let rules_dir = temp_root.join("rules");
+        let nested_root = temp_root.join(".pipeline").join("upstream");
+        fs::create_dir_all(&rules_dir)?;
+        fs::create_dir_all(&nested_root)?;
+
+        let triggers_file = rules_dir.join("behavioral_triggers.json");
+        fs::write(&triggers_file, "[]")?;
+
+        let resolved = resolve_behavioral_triggers_path(&nested_root);
+        assert_eq!(resolved.as_deref(), Some(triggers_file.as_path()));
+
+        let _ = fs::remove_dir_all(&temp_root);
+        Ok(())
     }
 }

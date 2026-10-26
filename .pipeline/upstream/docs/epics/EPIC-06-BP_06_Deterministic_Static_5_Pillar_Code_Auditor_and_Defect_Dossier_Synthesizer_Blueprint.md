@@ -14,21 +14,21 @@
 Subsystem package for BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint
 
 ## 2. Requirements & Checklist
-- [ ] #680 - [Feature 26: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] ClosedLoopDefectPublisherGate](../features/FEAT-26-ClosedLoopDefectPublisherGate.md) (b_p_06_deterministic_static_5_pillar_code_auditor_and_defect_dossier_synthesizer_blueprint.sysml)
-- [ ] #681 - [Feature 27: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] DeterministicDossierSynthesizer](../features/FEAT-27-DeterministicDossierSynthesizer.md) (b_p_06_deterministic_static_5_pillar_code_auditor_and_defect_dossier_synthesizer_blueprint.sysml)
-- [ ] #682 - [Feature 28: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] DeterministicStaticDefectAuditor](../features/FEAT-28-DeterministicStaticDefectAuditor.md) (b_p_06_deterministic_static_5_pillar_code_auditor_and_defect_dossier_synthesizer_blueprint.sysml)
-- [ ] #683 - [Feature 29: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] FivePillarStaticAstAnalyzer](../features/FEAT-29-FivePillarStaticAstAnalyzer.md) (b_p_06_deterministic_static_5_pillar_code_auditor_and_defect_dossier_synthesizer_blueprint.sysml)
-- [ ] #684 - [Feature 30: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] MermaidUmlDiagramGenerator](../features/FEAT-30-MermaidUmlDiagramGenerator.md) (b_p_06_deterministic_static_5_pillar_code_auditor_and_defect_dossier_synthesizer_blueprint.sysml)
+- [ ] #680 - [Feature 26: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] ClosedLoopDefectPublisherGate](../features/FEAT-26-ClosedLoopDefectPublisherGate.md)
+- [ ] #681 - [Feature 27: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] DeterministicDossierSynthesizer](../features/FEAT-27-DeterministicDossierSynthesizer.md)
+- [ ] #682 - [Feature 28: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] DeterministicStaticDefectAuditor](../features/FEAT-28-DeterministicStaticDefectAuditor.md)
+- [ ] #683 - [Feature 29: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] FivePillarStaticAstAnalyzer](../features/FEAT-29-FivePillarStaticAstAnalyzer.md)
+- [ ] #684 - [Feature 30: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] MermaidUmlDiagramGenerator](../features/FEAT-30-MermaidUmlDiagramGenerator.md)
 
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #649 - [Use Case 26: UC AC 01 Static Five Pillar AST Defect Detection](../use-cases/UC-26-UC_AC_01_Static_Five_Pillar_AST_Defect_Detection.md)
-- [ ] #650 - [Use Case 27: UC AC 02 Deterministic Seven Section Dossier and Mermaid Synthesis](../use-cases/UC-27-UC_AC_02_Deterministic_Seven_Section_Dossier_and_Mermaid_Synthesis.md)
-- [ ] #651 - [Use Case 28: UC AC 03 Idempotent Local and Remote SSOT Deduplication](../use-cases/UC-28-UC_AC_03_Idempotent_Local_and_Remote_SSOT_Deduplication.md)
-- [ ] #652 - [Use Case 29: UC AC 04 Closed Loop Git Hub SSOT Publishing and Byte Parity Verification](../use-cases/UC-29-UC_AC_04_Closed_Loop_GitHub_SSOT_Publishing_and_Byte_Parity_Verification.md)
-- [ ] #653 - [Use Case 30: UC AC 05 Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence](../use-cases/UC-30-UC_AC_05_Fail_Closed_Rejection_on_Malformed_Dossier_Schema_Ephemeral_Paths_or_Payload_Divergence.md)
-- [ ] #654 - [Use Case 31: UC AC 06 Dogfood Sys ML v2 Markdown Ingestion and Blueprint Gate Conformance](../use-cases/UC-31-UC_AC_06_Dogfood_SysML_v2_Markdown_Ingestion_and_Blueprint_Gate_Conformance.md)
+- [ ] #649 - [Use Case 26: Static Five Pillar AST Defect Detection](../use-cases/UC-26-Static_Five_Pillar_AST_Defect_Detection.md)
+- [ ] #650 - [Use Case 27: Deterministic Seven Section Dossier and Mermaid Synthesis](../use-cases/UC-27-Deterministic_Seven_Section_Dossier_and_Mermaid_Synthesis.md)
+- [ ] #651 - [Use Case 28: Idempotent Local and Remote SSOT Deduplication](../use-cases/UC-28-Idempotent_Local_and_Remote_SSOT_Deduplication.md)
+- [ ] #652 - [Use Case 29: Closed Loop Git Hub SSOT Publishing and Byte Parity Verification](../use-cases/UC-29-Closed_Loop_GitHub_SSOT_Publishing_and_Byte_Parity_Verification.md)
+- [ ] #653 - [Use Case 30: Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence](../use-cases/UC-30-Fail_Closed_Rejection_on_Malformed_Dossier_Schema_Ephemeral_Paths_or_Payload_Divergence.md)
+- [ ] #654 - [Use Case 31: Dogfood Sys ML v2 Markdown Ingestion and Blueprint Gate Conformance](../use-cases/UC-31-Dogfood_SysML_v2_Markdown_Ingestion_and_Blueprint_Gate_Conformance.md)
 
 #### Associated User Stories
 - [ ] #610 - [User Story 49: verify baseline](../user-stories/US-49-verify_baseline.md)
@@ -39,7 +39,7 @@ Subsystem package for BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defec
 - [ ] #615 - [User Story 54: synthesize defect dossier markdown](../user-stories/US-54-synthesize_defect_dossier_markdown.md)
 - [ ] #616 - [User Story 55: Compliant](../user-stories/US-55-Compliant.md)
 - [ ] #617 - [User Story 56: run check defect](../user-stories/US-56-run_check_defect.md)
-- [ ] #618 - [User Story 57: Execute](../user-stories/US-57-Execute.md)
+- [ ] #618 - [User Story 57: [ClosedLoopDefectPublisherGate] Execute](../user-stories/US-57-Execute.md)
 - [ ] #619 - [User Story 58: gh](../user-stories/US-58-gh.md)
 - [ ] #620 - [User Story 59: Created](../user-stories/US-59-Created.md)
 - [ ] #621 - [User Story 60: Live](../user-stories/US-60-Live.md)
@@ -57,8 +57,6 @@ Safety-critical invariant satisfaction, formal trace matrix closure, and zero ha
 
 ## 6. Source References
 - System Architecture Model: `schema/model.sysml`
-- Subsystem Specification Model: `schema/subsystems/b_p_06_deterministic_static_5_pillar_code_auditor_and_defect_dossier_synthesizer_blueprint/architecture.sysml`
-- Subsystem Requirements Model: `schema/subsystems/b_p_06_deterministic_static_5_pillar_code_auditor_and_defect_dossier_synthesizer_blueprint/requirements.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process
 
 Subsystem architectural composition and formal invariants derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 15288.
@@ -111,12 +109,18 @@ classDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_BlueprintInitialization
-    BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_BlueprintInitialization --> ClosedLoopDefectPublisherGateReady : configure_b_p_06_deterministic_static_5_pillar_code_auditor_and_defect_dossier_synthesizer_blueprint
-    ClosedLoopDefectPublisherGateReady --> verify_baselineActive : dispatch_b_p_06_deterministic_static_5_pillar_code_auditor_and_defect_dossier_synthesizer_blueprint
-    verify_baselineActive --> BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_BlueprintVerification : validate_invariants
-    BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_BlueprintVerification --> BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_BlueprintNominalComplete : invariants_satisfied
-    BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_BlueprintVerification --> BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_BlueprintSafeFallback : constraint_violation
-    BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_BlueprintNominalComplete --> [*]
-    BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_BlueprintSafeFallback --> [*]
+    [*] --> Idle
+    Idle --> IngestingSourceAst : verify_baseline_audit_code_path
+    IngestingSourceAst --> EvaluatingFivePillars : SourceAstItem_slice_parsed
+    EvaluatingFivePillars --> SynthesizingDossier : AuditFinding_emitted
+    EvaluatingFivePillars --> Verified : zero_findings_detected
+    SynthesizingDossier --> Validating12Gates : synthesize_defect_dossier_markdown
+    Validating12Gates --> Rejected : schema_or_Mermaid_check_violation
+    Validating12Gates --> DeduplicatingSsot : all_12_checks_passed
+    DeduplicatingSsot --> Verified : existing_finding_skipped
+    DeduplicatingSsot --> PublishingClosedLoop : new_finding_persisted_to_pipeline_defects
+    PublishingClosedLoop --> Verified : closed_loop_mismatch_bytes_0
+    PublishingClosedLoop --> Rejected : remote_payload_mismatch
+    Rejected --> [*]
+    Verified --> [*]
 ```

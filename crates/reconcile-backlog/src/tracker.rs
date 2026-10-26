@@ -502,6 +502,37 @@ pub trait TrackerClient {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-UPDATE-ISSUE-BODY] | SysML v2: ActionDef(TrackerClient::update_issue_body)
     fn update_issue_body(&self, issue_number: u64, body: &str) -> Result<(), String>;
+    /// Executes deterministic fn `TrackerClient::update_issue_title` within `crates/reconcile-backlog/src/tracker.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TrackerClient::update_issue_title` in `crates/reconcile-backlog/src/tracker.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `TrackerClient::update_issue_title` within `RECONCILE-BACKLOG-TRACKER`.
+    ///
+    /// ## 3. Preconditions
+    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::update_issue_title`.
+    /// - `title: &str` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::update_issue_title`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<(), String>` from `TrackerClient::update_issue_title` with deterministic post-execution state.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N(title)) bounded over input/member dimension of `TrackerClient::update_issue_title`.
+    /// - Space Complexity: O(N(title)) bounded auxiliary memory for `TrackerClient::update_issue_title`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `TrackerClient::update_issue_title` (`Result<(), String>`).
+    /// - State: Maintains consistent state invariants across `TrackerClient::update_issue_title` without partial mutation on error.
+    /// - Action: Executes `TrackerClient::update_issue_title` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `TrackerClient::update_issue_title` (`RECONCILE-BACKLOG-TRACKER`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-UPDATE-ISSUE-TITLE] | SysML v2: ActionDef(TrackerClient::update_issue_title)
+    fn update_issue_title(&self, issue_number: u64, title: &str) -> Result<(), String> {
+        let _ = (issue_number, title);
+        Ok(())
+    }
     /// Executes deterministic fn `TrackerClient::add_label` within `crates/reconcile-backlog/src/tracker.rs`.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
@@ -856,6 +887,44 @@ impl TrackerClient for OfflineTracker {
             .find(|i| i.number == issue_number)
             .ok_or_else(|| format!("Offline tracker: issue #{} not found", issue_number))?;
         issue.body = Some(body.to_string());
+        Ok(())
+    }
+
+    /// Executes deterministic fn `OfflineTracker::update_issue_title` within `crates/reconcile-backlog/src/tracker.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `OfflineTracker::update_issue_title` in `crates/reconcile-backlog/src/tracker.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `OfflineTracker::update_issue_title` within `RECONCILE-BACKLOG-TRACKER`.
+    ///
+    /// ## 3. Preconditions
+    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::update_issue_title`.
+    /// - `title: &str` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::update_issue_title`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<(), String>` from `OfflineTracker::update_issue_title` with deterministic post-execution state.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N(issues)) bounded over input/member dimension of `OfflineTracker::update_issue_title`.
+    /// - Space Complexity: O(N(title)) bounded auxiliary memory for `OfflineTracker::update_issue_title`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `OfflineTracker::update_issue_title` (`Result<(), String>`).
+    /// - State: Maintains consistent state invariants across `OfflineTracker::update_issue_title` without partial mutation on error.
+    /// - Action: Executes `OfflineTracker::update_issue_title` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `OfflineTracker::update_issue_title` (`RECONCILE-BACKLOG-TRACKER`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-UPDATE-ISSUE-TITLE] | SysML v2: ActionDef(OfflineTracker::update_issue_title)
+    fn update_issue_title(&self, issue_number: u64, title: &str) -> Result<(), String> {
+        let mut guard = self.state.lock().map_err(|e| e.to_string())?;
+        let issue = guard
+            .issues
+            .iter_mut()
+            .find(|i| i.number == issue_number)
+            .ok_or_else(|| format!("Offline tracker: issue #{} not found", issue_number))?;
+        issue.title = title.to_string();
         Ok(())
     }
 
@@ -1329,6 +1398,52 @@ impl TrackerClient for GitHubTracker {
             ));
         }
 
+        Ok(())
+    }
+
+    /// Executes deterministic fn `GitHubTracker::update_issue_title` within `crates/reconcile-backlog/src/tracker.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `GitHubTracker::update_issue_title` in `crates/reconcile-backlog/src/tracker.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `GitHubTracker::update_issue_title` within `RECONCILE-BACKLOG-TRACKER`.
+    ///
+    /// ## 3. Preconditions
+    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::update_issue_title`.
+    /// - `title: &str` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::update_issue_title`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<(), String>` from `GitHubTracker::update_issue_title` with deterministic post-execution state.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N(title)) bounded over input/member dimension of `GitHubTracker::update_issue_title`.
+    /// - Space Complexity: O(N(title)) bounded auxiliary memory for `GitHubTracker::update_issue_title`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `GitHubTracker::update_issue_title` (`Result<(), String>`).
+    /// - State: Maintains consistent state invariants across `GitHubTracker::update_issue_title` without partial mutation on error.
+    /// - Action: Executes `GitHubTracker::update_issue_title` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `GitHubTracker::update_issue_title` (`RECONCILE-BACKLOG-TRACKER`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATE-ISSUE-TITLE] | SysML v2: ActionDef(GitHubTracker::update_issue_title)
+    fn update_issue_title(&self, issue_number: u64, title: &str) -> Result<(), String> {
+        let trimmed = title.trim();
+        if trimmed.is_empty() {
+            return Err(format!("Cannot set empty title for issue #{}", issue_number));
+        }
+        let mut cmd = Command::new("gh");
+        cmd.args(["issue", "edit", &issue_number.to_string(), "--title", trimmed]);
+        if let Some(ref r) = self.repo {
+            cmd.args(["--repo", r]);
+        }
+        let output = cmd.output()
+            .map_err(|e| format!("Failed to execute 'gh issue edit --title': {}", e))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("'gh issue edit --title' failed for issue #{}: {}", issue_number, stderr));
+        }
         Ok(())
     }
 
@@ -2554,6 +2669,67 @@ mod tests {
                 .map(|i| i.number),
             Some(129)
         );
+    }
+
+    /// Executes deterministic fn `test_offline_tracker_update_issue_title_synchronizes_in_place` within `crates/reconcile-backlog/src/tracker.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_offline_tracker_update_issue_title_synchronizes_in_place` in `crates/reconcile-backlog/src/tracker.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_offline_tracker_update_issue_title_synchronizes_in_place` within `RECONCILE-BACKLOG-TRACKER`.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked within a valid test execution context for `test_offline_tracker_update_issue_title_synchronizes_in_place` in `RECONCILE-BACKLOG-TRACKER`.
+    ///
+    /// ## 4. Postconditions
+    /// - Verifies that `OfflineTracker::update_issue_title` updates an existing issue title in place and returns an error for missing issue numbers.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over the constant fixture size of `test_offline_tracker_update_issue_title_synchronizes_in_place`.
+    /// - Space Complexity: O(1) bounded auxiliary memory for `test_offline_tracker_update_issue_title_synchronizes_in_place`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and error diagnostics for `OfflineTracker::update_issue_title`.
+    /// - State: Confirms consistent state invariants across `OfflineTracker::update_issue_title` without partial mutation on error.
+    /// - Action: Executes `test_offline_tracker_update_issue_title_synchronizes_in_place` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_offline_tracker_update_issue_title_synchronizes_in_place` (`RECONCILE-BACKLOG-TRACKER`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEST-OFFLINE-TRACKER-UPDATE-ISSUE-TITLE] | SysML v2: VerificationCaseDef(test_offline_tracker_update_issue_title_synchronizes_in_place)
+    #[test]
+    fn test_offline_tracker_update_issue_title_synchronizes_in_place() -> Result<(), String> {
+        let tracker = OfflineTracker::with_issues(vec![TrackerIssue {
+            number: 20,
+            title: "Use Case 01: Old Stale Title".to_string(),
+            state: "OPEN".to_string(),
+            labels: vec![TrackerLabel::String("use-case".to_string())],
+            body: Some("Initial body".to_string()),
+            url: None,
+        }]);
+
+        tracker.update_issue_title(20, "Use Case 01: Rustc E0453 Forbid Direct Override")?;
+
+        let issues = tracker.fetch_all_issues()?;
+        let updated = issues
+            .first()
+            .ok_or_else(|| "Expected issue #20 to remain in OfflineTracker".to_string())?;
+        assert_eq!(
+            updated.title,
+            "Use Case 01: Rustc E0453 Forbid Direct Override"
+        );
+
+        let missing_err = tracker
+            .update_issue_title(999, "Nonexistent")
+            .err()
+            .ok_or_else(|| "Expected error when updating nonexistent issue #999".to_string())?;
+        assert!(
+            missing_err.contains("issue #999 not found"),
+            "Unexpected error message: {}",
+            missing_err
+        );
+
+        Ok(())
     }
 }
 

@@ -1936,6 +1936,30 @@ impl<'a> SysmlParser<'a> {
             }
         }
 
+        if source.is_none() && target.is_none() {
+            if let Some(raw_name) = name.as_deref() {
+                if let Some(to_idx) = raw_name.find("_to_") {
+                    let src_part = raw_name.get(..to_idx).unwrap_or("").trim();
+                    let after_to = raw_name.get(to_idx + 4..).unwrap_or("").trim();
+                    let (tgt_part, trig_part) = if let Some(on_idx) = after_to.find("_on_") {
+                        (
+                            after_to.get(..on_idx).unwrap_or("").trim(),
+                            after_to.get(on_idx + 4..).unwrap_or("").trim(),
+                        )
+                    } else {
+                        (after_to, "")
+                    };
+                    if !src_part.is_empty() && !tgt_part.is_empty() {
+                        source = Some(src_part.to_string());
+                        target = Some(tgt_part.to_string());
+                        if trigger.is_none() && !trig_part.is_empty() {
+                            trigger = Some(trig_part.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
         if name.is_none() {
             name = match (&source, &target) {
                 (Some(s), Some(t)) => Some(format!("{s}_to_{t}")),

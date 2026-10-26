@@ -7,7 +7,7 @@
 | **Interface Type** | Physical / Structural / Internal Bus |
 | **Schema Containers** | `BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint::WorkspaceManifestForbidGate` |
 | **Generation Mode** | subagent |
-| **Specification Source** | [schema/subsystems/b_p_01_compiler_enforced_forbid_lint_gate_and_zero_suppression_a_s_t_architecture_blueprint/architecture.sysml](../../schema/subsystems/b_p_01_compiler_enforced_forbid_lint_gate_and_zero_suppression_a_s_t_architecture_blueprint/architecture.sysml) |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
 # Feature 02: [BP 01 Compiler Enforced Forbid Lint Gate and Zero Suppression AST Architecture Blueprint] WorkspaceManifestForbidGate
 
@@ -88,6 +88,18 @@ Deterministic state machine solver and safety monitor logic for WorkspaceManifes
 ### Layer 3: Presentation & Actuator Interface Binding
 Presentation interface binding and diagnostic event routing for WorkspaceManifestForbidGate.
 
+### Associated Use Cases & User Stories
+
+#### Associated Use Cases
+- None allocated (structural subsystem component)
+
+#### Associated User Stories
+- [ ] #562 - [User Story 01: [CompilerLintEnforcementGate] Execute](../user-stories/US-01-Execute.md)
+- [ ] #563 - [User Story 02: Read](../user-stories/US-02-Read.md)
+- [ ] #564 - [User Story 03: [CompilerLintEnforcementGate] Return](../user-stories/US-03-Return.md)
+- [ ] #565 - [User Story 04: [CompilerLintEnforcementGate] Emit](../user-stories/US-04-Emit.md)
+- [ ] #566 - [User Story 05: [CompilerLintEnforcementGate] Run](../user-stories/US-05-Run.md)
+
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given nominal WorkspaceManifestForbidGate domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
 - [ ] AC-02: Given operational state, When WorkspaceManifestForbidGate evaluates constraint 'operational_invariants', Then asserts invariant satisfaction without violation.
@@ -95,8 +107,7 @@ Presentation interface binding and diagnostic event routing for WorkspaceManifes
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:
-- Subsystem Requirements: `schema/subsystems/b_p_01_compiler_enforced_forbid_lint_gate_and_zero_suppression_a_s_t_architecture_blueprint/requirements.sysml`
-- Subsystem Architecture: `schema/subsystems/b_p_01_compiler_enforced_forbid_lint_gate_and_zero_suppression_a_s_t_architecture_blueprint/architecture.sysml`
+- System Architecture Model: `schema/model.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process
 
 Component behavior and interface definitions derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 15288.

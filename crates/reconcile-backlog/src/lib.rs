@@ -419,6 +419,17 @@ pub fn run_reconciliation<T: TrackerClient>(
 
         for spec in &specs {
             if let Some(issue_id) = spec.frontmatter.issue_id {
+                let desired_title = spec.frontmatter.title.trim();
+                if !desired_title.is_empty() {
+                    let title_matches = issue_index
+                        .by_number
+                        .get(&issue_id)
+                        .is_some_and(|i| i.title.trim() == desired_title);
+                    if !title_matches {
+                        tracker.update_issue_title(issue_id, desired_title)?;
+                    }
+                }
+
                 let projected_body = project_body_for_tracker_with_prefix(
                     &spec.content,
                     repo_name.as_deref(),
@@ -1120,7 +1131,7 @@ fn rewrite_projected_links(
 
     while let Some(sep_idx) = rest.find("](") {
         // Scan backwards from sep_idx to find matching opening '['
-        let before_sep = &rest[..sep_idx];
+        let before_sep = rest.get(..sep_idx).unwrap_or("");
         let mut depth = 1;
         let mut open_b = None;
 
@@ -1140,17 +1151,17 @@ fn rewrite_projected_links(
         }
 
         if let Some(open_idx) = open_b {
-            let after_paren = &rest[sep_idx + 2..];
+            let after_paren = rest.get(sep_idx + 2..).unwrap_or("");
             if let Some(close_p_rel) = after_paren.find(')') {
-                let target = &after_paren[..close_p_rel];
-                let text = &rest[open_idx + 1..sep_idx];
+                let target = after_paren.get(..close_p_rel).unwrap_or("");
+                let text = rest.get(open_idx + 1..sep_idx).unwrap_or("");
                 let total_end = sep_idx + 2 + close_p_rel + 1;
 
-                result.push_str(&rest[..open_idx]);
+                result.push_str(rest.get(..open_idx).unwrap_or(""));
 
                 if target.starts_with("http://") || target.starts_with("https://") {
-                    result.push_str(&rest[open_idx..total_end]);
-                    rest = &rest[total_end..];
+                    result.push_str(rest.get(open_idx..total_end).unwrap_or(""));
+                    rest = rest.get(total_end..).unwrap_or("");
                     continue;
                 }
 
@@ -1183,14 +1194,14 @@ fn rewrite_projected_links(
 
                 if let Some(issue_num) = matching_issue {
                     let cur_line_start = result.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
-                    let cur_line_prefix = &result[cur_line_start..];
+                    let cur_line_prefix = result.get(cur_line_start..).unwrap_or("");
                     let already_has_issue = cur_line_prefix.contains(&format!("#{}", issue_num));
 
                     let canonical_target = if let Some(r) = repo {
                         let clean_repo = clean_repo_name(r);
                         let branch = if default_branch.trim().is_empty() { "main" } else { default_branch.trim() };
                         let doc_path = if let Some(pos) = target.find("docs/") {
-                            target[pos..].to_string()
+                            target.get(pos..).unwrap_or("").to_string()
                         } else if target.contains("epics/") {
                             format!("docs/epics/{}", fname)
                         } else if target.contains("features/") {
@@ -1223,53 +1234,53 @@ fn rewrite_projected_links(
                         result.push_str(&format!("#{} - [{}]({})", issue_num, text, canonical_target));
                     }
 
-                    rest = &rest[total_end..];
+                    rest = rest.get(total_end..).unwrap_or("");
                     continue;
                 } else if let Some(r) = repo {
                     let clean_repo = clean_repo_name(r);
                     if !clean_repo.is_empty() {
                         let branch = if default_branch.trim().is_empty() { "main" } else { default_branch.trim() };
                         if let Some(pos) = target.find("schema/") {
-                            let s_path = &target[pos..];
+                            let s_path = target.get(pos..).unwrap_or("");
                             let blob = format!(
                                 "https://github.com/{}/blob/{}/{}{}",
                                 clean_repo, branch, workspace_prefix, s_path
                             );
                             result.push_str(&format!("[{}]({})", text, blob));
-                            rest = &rest[total_end..];
+                            rest = rest.get(total_end..).unwrap_or("");
                             continue;
                         } else if let Some(pos) = target.find("docs/") {
-                            let d_path = &target[pos..];
+                            let d_path = target.get(pos..).unwrap_or("");
                             let blob = format!(
                                 "https://github.com/{}/blob/{}/{}{}",
                                 clean_repo, branch, workspace_prefix, d_path
                             );
                             result.push_str(&format!("[{}]({})", text, blob));
-                            rest = &rest[total_end..];
+                            rest = rest.get(total_end..).unwrap_or("");
                             continue;
                         } else if let Some(subdir) = ["epics/", "features/", "user-stories/", "use-cases/"].iter().find(|s| target.contains(*s)) {
                             if let Some(pos) = target.find(subdir) {
-                                let s_path = &target[pos..];
+                                let s_path = target.get(pos..).unwrap_or("");
                                 let blob = format!(
                                     "https://github.com/{}/blob/{}/{}docs/{}",
                                     clean_repo, branch, workspace_prefix, s_path
                                 );
                                 result.push_str(&format!("[{}]({})", text, blob));
-                                rest = &rest[total_end..];
+                                rest = rest.get(total_end..).unwrap_or("");
                                 continue;
                             }
                         }
                     }
                 }
 
-                result.push_str(&rest[open_idx..total_end]);
-                rest = &rest[total_end..];
+                result.push_str(rest.get(open_idx..total_end).unwrap_or(""));
+                rest = rest.get(total_end..).unwrap_or("");
                 continue;
             }
         }
 
-        result.push_str(&rest[..sep_idx + 2]);
-        rest = &rest[sep_idx + 2..];
+        result.push_str(rest.get(..sep_idx + 2).unwrap_or(""));
+        rest = rest.get(sep_idx + 2..).unwrap_or("");
     }
 
     result.push_str(rest);
@@ -1850,6 +1861,106 @@ type: epic
         // Pass 2 (Idempotency): running reconciliation again over same spec should purge 0
         let summary2 = run_reconciliation(&tracker, &options)?;
         assert_eq!(summary2.placeholders_purged, 0, "Expected 0 placeholders purged on pass 2");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+        Ok(())
+    }
+
+    /// Verifies that `run_reconciliation` synchronizes stale tracker issue titles and projects nested-bracket relative links.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_run_reconciliation_syncs_updated_issue_titles_and_nested_bracket_links` in `crates/reconcile-backlog/src/lib.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic title synchronization when local YAML frontmatter `title` diverges from the remote tracker issue title.
+    /// - Preserves balanced nested square brackets `[...]` in Markdown link text while projecting relative paths to GitHub blob URLs.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary workspace directory contains a valid Use Case specification with `issue_id: 624` and `OfflineTracker` contains stale title metadata for issue `#624`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<(), Box<dyn std::error::Error>>` confirming tracker issue `#624` title and projected body links are updated.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N(spec)) bounded over input specification length for `test_run_reconciliation_syncs_updated_issue_titles_and_nested_bracket_links`.
+    /// - Space Complexity: O(N(spec)) bounded auxiliary memory for `test_run_reconciliation_syncs_updated_issue_titles_and_nested_bracket_links`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates I/O and tracker errors via `Result::Err` without `.unwrap()` or `.expect()`.
+    /// - State: Cleans up temporary test workspace directory on completion.
+    /// - Action: Executes deterministically in offline tracker memory without external network calls.
+    /// - Resource: Bounds temporary filesystem and memory allocations within `RECONCILE-BACKLOG`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-TEST-SYNC-TITLES-AND-NESTED-BRACKET-LINKS] | SysML v2: VerificationCaseDef(test_run_reconciliation_syncs_updated_issue_titles_and_nested_bracket_links)
+    #[test]
+    fn test_run_reconciliation_syncs_updated_issue_titles_and_nested_bracket_links() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "reconcile_title_nested_links_{}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        let uc_dir = temp_dir.join("docs/use-cases");
+        fs::create_dir_all(&uc_dir)?;
+
+        let uc_content = r#"---
+issue_id: 624
+title: "Use Case 01: Rustc E0453 Forbid Direct Override"
+type: use-case
+---
+# Use Case 01: Rustc E0453 Forbid Direct Override
+
+## Realizing Features
+- [ ] [Feature 01: [BP 01 Check 34] Compiler](../features/FEAT-01-Compiler.md)
+"#;
+        let uc_path = uc_dir.join("UC-01-Rustc_E0453_Forbid_Direct_Override.md");
+        fs::write(&uc_path, uc_content)?;
+
+        let issues = vec![TrackerIssue {
+            number: 624,
+            title: "Use Case 01: UC AC 01 Rustc E0453 Forbid Direct Override".to_string(),
+            state: "OPEN".to_string(),
+            labels: vec![TrackerLabel::String("use-case".to_string())],
+            body: None,
+            url: Some("https://github.com/gintatkinson/DEAP01-spec-core/issues/624".to_string()),
+        }];
+
+        let tracker = OfflineTracker::with_issues(issues);
+        let options = ReconcileOptions {
+            workspace_root: temp_dir.clone(),
+            offline: false,
+            dry_run: false,
+            provider: "offline".to_string(),
+            sync_bodies: true,
+            repo: Some("gintatkinson/DEAP01-spec-core".to_string()),
+            default_branch: Some("main".to_string()),
+        };
+
+        let summary = run_reconciliation(&tracker, &options)?;
+        assert_eq!(summary.remote_issues_synced, 1);
+
+        let synced_issues = tracker.fetch_all_issues()?;
+        let synced_uc = synced_issues
+            .iter()
+            .find(|i| i.number == 624)
+            .ok_or("expected issue #624 in tracker")?;
+        assert_eq!(
+            synced_uc.title,
+            "Use Case 01: Rustc E0453 Forbid Direct Override"
+        );
+
+        let body = synced_uc
+            .body
+            .as_ref()
+            .ok_or("expected projected body for issue #624")?;
+        assert!(
+            body.contains("[Feature 01: [BP 01 Check 34] Compiler](https://github.com/gintatkinson/DEAP01-spec-core/blob/main/docs/features/FEAT-01-Compiler.md)"),
+            "Expected nested-bracket link to be rewritten to GitHub blob URL, got:\n{}",
+            body
+        );
+        assert!(
+            !body.contains("../features/FEAT-01-Compiler.md"),
+            "Expected relative link to be eliminated from projected body"
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
         Ok(())

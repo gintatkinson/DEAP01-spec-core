@@ -966,33 +966,9 @@ fn format_canonical_checklist_item(
         fname.strip_suffix(".md").unwrap_or(fname)
     };
 
-    let clean_repo = crate::clean_repo_name(repo_slug);
-    let branch = if default_branch.trim().is_empty() {
-        "main"
-    } else {
-        default_branch.trim()
-    };
-
-    let base_doc_path = if spec.rel_path.starts_with("docs/") {
-        spec.rel_path.clone()
-    } else {
-        format!("docs/{}", spec.rel_path)
-    };
-    let path_norm = spec.path.to_string_lossy().replace('\\', "/");
-    let doc_path = if path_norm.contains(".pipeline/upstream/")
-        && !base_doc_path.starts_with(".pipeline/upstream/")
-    {
-        format!(".pipeline/upstream/{}", base_doc_path)
-    } else {
-        base_doc_path
-    };
-
-    let link = if !clean_repo.is_empty() {
-        format!("https://github.com/{}/blob/{}/{}", clean_repo, branch, doc_path)
-    } else {
-        let stripped = spec.rel_path.strip_prefix("docs/").unwrap_or(&spec.rel_path);
-        format!("../{}", stripped)
-    };
+    let _ = (repo_slug, default_branch);
+    let stripped = spec.rel_path.strip_prefix("docs/").unwrap_or(&spec.rel_path);
+    let link = format!("../{}", stripped);
 
     let clause_suffix = if let Some(clauses) = spec.frontmatter.raw_fields.get("clauses") {
         format!(" ({})", clauses)
@@ -1099,7 +1075,7 @@ fn reconcile_or_inject_section(
 ) -> String {
     if let Some(heading_pos) = content.find(heading) {
         let after_heading_pos = heading_pos + heading.len();
-        let rest = &content[after_heading_pos..];
+        let rest = content.get(after_heading_pos..).unwrap_or("");
 
         // Find end of section
         let mut section_len = rest.len();
@@ -1111,8 +1087,8 @@ fn reconcile_or_inject_section(
             }
         }
 
-        let section_body = &rest[..section_len];
-        let after_section = &rest[section_len..];
+        let section_body = rest.get(..section_len).unwrap_or(rest);
+        let after_section = rest.get(section_len..).unwrap_or("");
 
         let mut lines: Vec<String> = Vec::new();
         let is_placeholder_or_empty = section_body.trim().is_empty()
@@ -1136,7 +1112,7 @@ fn reconcile_or_inject_section(
                 lines.push(item.clone());
             }
         } else {
-            // Keep existing non-placeholder lines
+            let mut emitted = std::collections::BTreeSet::new();
             for line in section_body.lines() {
                 let trimmed = line.trim();
                 if trimmed.is_empty()
@@ -1146,16 +1122,33 @@ fn reconcile_or_inject_section(
                 {
                     continue;
                 }
-                lines.push(line.to_string());
+                let matched_idx = specs
+                    .iter()
+                    .enumerate()
+                    .find(|(_, spec)| contains_spec_reference(trimmed, spec))
+                    .map(|(idx, _)| idx);
+
+                if let Some(idx) = matched_idx {
+                    if emitted.insert(idx) {
+                        if let Some(canonical) = new_items.get(idx) {
+                            let is_checked =
+                                trimmed.starts_with("- [x]") || trimmed.starts_with("- [X]");
+                            if is_checked && canonical.starts_with("- [ ] ") {
+                                lines.push(format!("- [x] {}", canonical.get(6..).unwrap_or("")));
+                            } else {
+                                lines.push(canonical.clone());
+                            }
+                        }
+                    }
+                } else if !trimmed.starts_with("- [") {
+                    lines.push(line.to_string());
+                }
             }
 
             // Append any missing child items
             for (idx, item) in new_items.iter().enumerate() {
-                if let Some(spec) = specs.get(idx) {
-                    let already_present = lines.iter().any(|l| contains_spec_reference(l, spec));
-                    if !already_present {
-                        lines.push(item.clone());
-                    }
+                if emitted.insert(idx) {
+                    lines.push(item.clone());
                 }
             }
         }
@@ -1167,7 +1160,13 @@ fn reconcile_or_inject_section(
             new_body.push('\n');
         }
 
-        format!("{}{}{}{}", &content[..after_heading_pos], new_body, if after_section.starts_with('\n') { "" } else { "\n" }, after_section)
+        format!(
+            "{}{}{}{}",
+            content.get(..after_heading_pos).unwrap_or(content),
+            new_body,
+            if after_section.starts_with('\n') { "" } else { "\n" },
+            after_section
+        )
     } else {
         content.to_string()
     }
@@ -1565,6 +1564,32 @@ mod tests {
         assert_eq!(idempotent_multi, cleaned_multi);
     }
 
+    /// Verifies hierarchy synthesis emits workspace-relative links while tracker projection emits repository URLs.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_448_synthesize_and_reconcile_hierarchy_and_tracker_link_projection` in `crates/reconcile-backlog/src/checklist.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_issue_448_synthesize_and_reconcile_hierarchy_and_tracker_link_projection` within `RECONCILE-BACKLOG-CHECKLIST`.
+    ///
+    /// ## 3. Preconditions
+    /// - Parent Epic and Feature specifications and child Feature, Use Case, and User Story specifications are populated with issue metadata.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts that `synthesize_and_reconcile_hierarchy` writes workspace-relative markdown links for local files and `project_body_for_tracker` translates relative links to repository blob URLs.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over specification slice length.
+    /// - Space Complexity: O(N) bounded auxiliary memory for test fixtures.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `synthesize_and_reconcile_hierarchy` and `project_body_for_tracker`.
+    /// - State: Maintains consistent state invariants across hierarchy synthesis without partial mutation.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `RECONCILE-BACKLOG-CHECKLIST`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-HIERARCHY-RELATIVE-LINKS] | SysML v2: TestCaseDef(test_issue_448_synthesize_and_reconcile_hierarchy_and_tracker_link_projection)
     #[test]
     fn test_issue_448_synthesize_and_reconcile_hierarchy_and_tracker_link_projection() {
         use crate::frontmatter::SpecFrontmatter;
@@ -1688,12 +1713,12 @@ Subsystem composition.
         );
 
         assert!(reconciled_epic.contains("## 2. Requirements & Checklist"), "Epic must synthesize ## 2. Requirements & Checklist");
-        assert!(reconciled_epic.contains("- [x] #10 - [Feature 01: [ConOps] Radar Tracker](https://github.com/org/repo/blob/main/docs/features/FEAT-01-Tracker.md)"), "Epic checklist must canonically format child feature with [x] when issue is resolved");
+        assert!(reconciled_epic.contains("- [x] #10 - [Feature 01: [ConOps] Radar Tracker](../features/FEAT-01-Tracker.md)"), "Epic checklist must canonically format child feature with [x] and relative link when issue is resolved");
         assert!(reconciled_epic.contains("### Associated Use Cases & User Stories"), "Epic must synthesize Associated Use Cases & User Stories");
         assert!(reconciled_epic.contains("#### Associated Use Cases"), "Epic must synthesize Associated Use Cases");
-        assert!(reconciled_epic.contains("- [ ] #20 - [Use Case 01: Process Radar Tracks](https://github.com/org/repo/blob/main/docs/use-cases/UC-01-ProcessRadarTracks.md)"));
+        assert!(reconciled_epic.contains("- [ ] #20 - [Use Case 01: Process Radar Tracks](../use-cases/UC-01-ProcessRadarTracks.md)"));
         assert!(reconciled_epic.contains("#### Associated User Stories"), "Epic must synthesize Associated User Stories");
-        assert!(reconciled_epic.contains("- [ ] #30 - [User Story 01: Ingest Radar Telemetry](https://github.com/org/repo/blob/main/docs/user-stories/US-01-IngestRadarTelemetry.md)"));
+        assert!(reconciled_epic.contains("- [ ] #30 - [User Story 01: Ingest Radar Telemetry](../user-stories/US-01-IngestRadarTelemetry.md)"));
 
         // Test Feature hierarchy synthesis:
         let reconciled_feat = synthesize_and_reconcile_hierarchy(
@@ -1705,8 +1730,8 @@ Subsystem composition.
         );
 
         assert!(!reconciled_feat.contains("To be populated"), "Feature must replace placeholder blocks");
-        assert!(reconciled_feat.contains("- [ ] #20 - [Use Case 01: Process Radar Tracks](https://github.com/org/repo/blob/main/docs/use-cases/UC-01-ProcessRadarTracks.md)"));
-        assert!(reconciled_feat.contains("- [ ] #30 - [User Story 01: Ingest Radar Telemetry](https://github.com/org/repo/blob/main/docs/user-stories/US-01-IngestRadarTelemetry.md)"));
+        assert!(reconciled_feat.contains("- [ ] #20 - [Use Case 01: Process Radar Tracks](../use-cases/UC-01-ProcessRadarTracks.md)"));
+        assert!(reconciled_feat.contains("- [ ] #30 - [User Story 01: Ingest Radar Telemetry](../user-stories/US-01-IngestRadarTelemetry.md)"));
 
         // Test project_body_for_tracker:
         let mut path_to_issue = std::collections::BTreeMap::new();
@@ -1723,6 +1748,101 @@ Subsystem composition.
 
         assert!(!projected.contains("](#10)"), "Projected body must NOT contain broken intra-page anchor link [Title](#10)!");
         assert!(projected.contains("- [ ] #10 - [Feature 01: [ConOps] Radar Tracker](https://github.com/org/repo/blob/main/docs/features/FEAT-01-Tracker.md)"), "Projected body must translate markdown link to canonical repo blob URL with issue prefix, found:\n{}", projected);
+    }
+
+    /// Verifies that stale renamed checklist lines are replaced in-place with canonical relative links and dead lines are dropped.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_reconcile_or_inject_section_replaces_stale_renamed_checklist_lines` in `crates/reconcile-backlog/src/checklist.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_reconcile_or_inject_section_replaces_stale_renamed_checklist_lines` within `RECONCILE-BACKLOG-CHECKLIST`.
+    ///
+    /// ## 3. Preconditions
+    /// - Feature specification contains a stale checklist line referencing `#20` with an obsolete filename/URL and a dead checklist line `#999`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts that `synthesize_and_reconcile_hierarchy` replaces `#20` in-place with its canonical relative link while preserving `[x]` and drops `#999`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over section line count and child specification slice length.
+    /// - Space Complexity: O(N) bounded auxiliary memory for reconciled section output.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `synthesize_and_reconcile_hierarchy`.
+    /// - State: Maintains consistent state invariants across section reconciliation without partial mutation.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `RECONCILE-BACKLOG-CHECKLIST`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-REPLACE-STALE-LINES] | SysML v2: TestCaseDef(test_reconcile_or_inject_section_replaces_stale_renamed_checklist_lines)
+    #[test]
+    fn test_reconcile_or_inject_section_replaces_stale_renamed_checklist_lines() {
+        use crate::frontmatter::SpecFrontmatter;
+        use crate::LoadedSpec;
+        use std::path::PathBuf;
+
+        let feat = LoadedSpec {
+            path: PathBuf::from("docs/features/FEAT-01-Tracker.md"),
+            rel_path: "docs/features/FEAT-01-Tracker.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Feature 01: [ConOps] Radar Tracker".to_string(),
+                spec_type: "feature".to_string(),
+                issue_id: Some(10),
+                subsystem: Some("Radar".to_string()),
+                ..Default::default()
+            },
+            content: r#"# Feature 01: [ConOps] Radar Tracker
+
+### Associated Use Cases & User Stories
+#### Associated Use Cases
+- [x] #20 - [Use Case 01: UC AC 01 Old Name](https://github.com/org/repo/blob/main/.pipeline/upstream/docs/use-cases/UC-01-UC_AC_01_Old.md)
+- [ ] #999 - [Removed Spec](../use-cases/UC-99-Dead.md)
+
+#### Associated User Stories
+- None allocated (structural subsystem component)
+"#.to_string(),
+        };
+
+        let uc = LoadedSpec {
+            path: PathBuf::from("docs/use-cases/UC-01-ProcessRadarTracks.md"),
+            rel_path: "docs/use-cases/UC-01-ProcessRadarTracks.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Use Case 01: Process Radar Tracks".to_string(),
+                spec_type: "use_case".to_string(),
+                issue_id: Some(20),
+                subsystem: Some("Radar".to_string()),
+                ..Default::default()
+            },
+            content: "# Use Case 01: Process Radar Tracks\n".to_string(),
+        };
+
+        let issue_index = crate::tracker::IssueIndex::default();
+        let all_specs = vec![feat.clone(), uc];
+
+        let reconciled_feat = synthesize_and_reconcile_hierarchy(
+            &feat,
+            &all_specs,
+            "org/repo",
+            "main",
+            &issue_index,
+        );
+
+        assert!(
+            reconciled_feat.contains("- [x] #20 - [Use Case 01: Process Radar Tracks](../use-cases/UC-01-ProcessRadarTracks.md)"),
+            "Reconciled feature must replace stale #20 line with canonical relative link while preserving [x], got:\n{}",
+            reconciled_feat
+        );
+        assert!(
+            !reconciled_feat.contains("UC_AC_01_Old"),
+            "Reconciled feature must not retain stale filename, got:\n{}",
+            reconciled_feat
+        );
+        assert!(
+            !reconciled_feat.contains("#999"),
+            "Reconciled feature must drop dead checklist item #999, got:\n{}",
+            reconciled_feat
+        );
     }
 
     #[test]

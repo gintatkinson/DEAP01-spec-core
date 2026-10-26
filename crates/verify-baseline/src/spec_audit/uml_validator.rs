@@ -508,6 +508,22 @@ impl SysmlSymbolIndex {
         }
 
         for trans in &state.transitions {
+            if let Some(ref t_name) = trans.name {
+                let ident = extract_ident(t_name);
+                if !ident.is_empty() {
+                    self.action_names.insert(ident.to_string());
+                }
+            }
+            if let Some(ref src) = trans.source {
+                if src != "Initial" && src != "Terminal" && src != "[*]" && !src.is_empty() {
+                    self.state_names.insert(src.clone());
+                }
+            }
+            if let Some(ref tgt) = trans.target {
+                if tgt != "Initial" && tgt != "Terminal" && tgt != "[*]" && !tgt.is_empty() {
+                    self.state_names.insert(tgt.clone());
+                }
+            }
             if let Some(ref act) = trans.effect {
                 let ident = extract_ident(act);
                 if !ident.is_empty() {
@@ -2894,5 +2910,102 @@ ExecuteAction
         assert_eq!(findings_ghost.len(), 1);
         assert_eq!(findings_ghost[0].rule_id, "user-story-test-case-not-in-ast");
         assert!(findings_ghost[0].message.contains("TC_Ghost"));
+    }
+
+    /// Verifies state machine transition name, trigger, and state symbol indexing and state diagram validation.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_index_state_registers_transition_names_triggers_and_states` in `crates/verify-baseline/src/spec_audit/uml_validator.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_index_state_registers_transition_names_triggers_and_states` (test declaration #25) within `SPEC-AUDIT-UML-VALIDATOR`.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked within a valid test execution context for `test_index_state_registers_transition_names_triggers_and_states` in `SPEC-AUDIT-UML-VALIDATOR`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<(), Box<dyn std::error::Error>>` from `test_index_state_registers_transition_names_triggers_and_states` with deterministic post-execution state.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over fixture state transitions in `test_index_state_registers_transition_names_triggers_and_states`.
+    /// - Space Complexity: O(1) bounded auxiliary memory for `test_index_state_registers_transition_names_triggers_and_states`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `test_index_state_registers_transition_names_triggers_and_states` (`Result<(), Box<dyn std::error::Error>>`).
+    /// - State: Maintains consistent state invariants across `test_index_state_registers_transition_names_triggers_and_states` without partial mutation on error.
+    /// - Action: Executes `test_index_state_registers_transition_names_triggers_and_states` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_index_state_registers_transition_names_triggers_and_states` (`SPEC-AUDIT-UML-VALIDATOR`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SPEC-AUDIT-UML-VALIDATOR-TEST-INDEX-STATE-TRANSITION-NAMES] | SysML v2: TestCaseDef(test_index_state_registers_transition_names_triggers_and_states)
+    #[test]
+    fn test_index_state_registers_transition_names_triggers_and_states(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut model = SysmlModel::default();
+        model.parts.push(PartDef {
+            name: "ParserEngine".to_string(),
+            states: vec![StateDef {
+                name: "ParserLifecycle".to_string(),
+                sub_states: vec![
+                    StateDef {
+                        name: "Uninitialized".to_string(),
+                        ..Default::default()
+                    },
+                    StateDef {
+                        name: "Active".to_string(),
+                        ..Default::default()
+                    },
+                ],
+                transitions: vec![deap_core::sysml_ast::TransitionDef {
+                    name: Some("Uninitialized_to_Active_on_parse_token".to_string()),
+                    source: Some("Uninitialized".to_string()),
+                    target: Some("Active".to_string()),
+                    trigger: Some("parse_token".to_string()),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+
+        let index = SysmlSymbolIndex::from_model(&model);
+        assert!(index.state_names.contains("Uninitialized"));
+        assert!(index.state_names.contains("Active"));
+        assert!(index.action_names.contains("parse_token"));
+        assert!(index
+            .action_names
+            .contains("Uninitialized_to_Active_on_parse_token"));
+
+        let state_diag = StateDiagramAst {
+            states: vec![
+                StateDefAst {
+                    id: "Uninitialized".to_string(),
+                    label: None,
+                    is_composite: false,
+                    sub_states: Vec::new(),
+                    line: 1,
+                },
+                StateDefAst {
+                    id: "Active".to_string(),
+                    label: None,
+                    is_composite: false,
+                    sub_states: Vec::new(),
+                    line: 2,
+                },
+            ],
+            transitions: vec![StateTransitionAst {
+                source: "Uninitialized".to_string(),
+                target: "Active".to_string(),
+                event: Some("parse_token".to_string()),
+                guard: None,
+                action: Some("Uninitialized_to_Active_on_parse_token".to_string()),
+                raw_label: Some("parse_token / Uninitialized_to_Active_on_parse_token".to_string()),
+                line: 3,
+            }],
+            notes: Vec::new(),
+        };
+
+        assert!(validate_state_diagram(&state_diag, &index).is_ok());
+        Ok(())
     }
 }

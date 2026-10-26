@@ -7,7 +7,7 @@
 | **Interface Type** | Physical / Structural / Internal Bus |
 | **Schema Containers** | `BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint::AntiGamingTestBodyAuditor` |
 | **Generation Mode** | subagent |
-| **Specification Source** | [schema/subsystems/b_p_02_check_34_a_s_t_purity_fail_closed_i_o_and_anti_gaming_test_gate_blueprint/architecture.sysml](../../schema/subsystems/b_p_02_check_34_a_s_t_purity_fail_closed_i_o_and_anti_gaming_test_gate_blueprint/architecture.sysml) |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
 # Feature 08: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] AntiGamingTestBodyAuditor
 
@@ -16,8 +16,8 @@
 ```mermaid
 classDiagram
     class AntiGamingTestBodyAuditor {
-        +String type
         +Integer quantity
+        +String type
     }
 ```
 
@@ -37,20 +37,20 @@ classDiagram
       "type": "string",
       "enum": ["nominal", "degraded", "fault"]
     },
-    "type": {
-      "type": "string",
-      "description": "Subsystem attribute type"
-    },
     "quantity": {
       "type": "integer",
       "description": "Subsystem attribute quantity"
+    },
+    "type": {
+      "type": "string",
+      "description": "Subsystem attribute type"
     }
   },
   "required": [
     "part",
     "status",
-    "type",
-    "quantity"
+    "quantity",
+    "type"
   ],
   "additionalProperties": false
 }
@@ -81,8 +81,7 @@ Presentation interface binding and diagnostic event routing for AntiGamingTestBo
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:
-- Subsystem Requirements: `schema/subsystems/b_p_02_check_34_a_s_t_purity_fail_closed_i_o_and_anti_gaming_test_gate_blueprint/requirements.sysml`
-- Subsystem Architecture: `schema/subsystems/b_p_02_check_34_a_s_t_purity_fail_closed_i_o_and_anti_gaming_test_gate_blueprint/architecture.sysml`
+- System Architecture Model: `schema/model.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process
 
 Component behavior and interface definitions derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 15288.

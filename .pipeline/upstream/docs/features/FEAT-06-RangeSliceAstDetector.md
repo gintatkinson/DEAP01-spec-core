@@ -7,7 +7,7 @@
 | **Interface Type** | Physical / Structural / Internal Bus |
 | **Schema Containers** | `BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint::RangeSliceAstDetector` |
 | **Generation Mode** | subagent |
-| **Specification Source** | [schema/subsystems/b_p_02_check_34_a_s_t_purity_fail_closed_i_o_and_anti_gaming_test_gate_blueprint/architecture.sysml](../../schema/subsystems/b_p_02_check_34_a_s_t_purity_fail_closed_i_o_and_anti_gaming_test_gate_blueprint/architecture.sysml) |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
 # Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] RangeSliceAstDetector
 
@@ -16,8 +16,8 @@
 ```mermaid
 classDiagram
     class RangeSliceAstDetector {
-        +String type
         +Integer quantity
+        +String type
     }
 ```
 
@@ -37,20 +37,20 @@ classDiagram
       "type": "string",
       "enum": ["nominal", "degraded", "fault"]
     },
-    "type": {
-      "type": "string",
-      "description": "Subsystem attribute type"
-    },
     "quantity": {
       "type": "integer",
       "description": "Subsystem attribute quantity"
+    },
+    "type": {
+      "type": "string",
+      "description": "Subsystem attribute type"
     }
   },
   "required": [
     "part",
     "status",
-    "type",
-    "quantity"
+    "quantity",
+    "type"
   ],
   "additionalProperties": false
 }
@@ -77,14 +77,23 @@ Presentation interface binding and diagnostic event routing for RangeSliceAstDet
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #629 - [Use Case 06: UC AC 01 General Direct Range Slice Indexing Rejection](https://github.com/gintatkinson/DEAP01-spec-core/blob/main/.pipeline/upstream/docs/use-cases/UC-06-UC_AC_01_General_Direct_Range_Slice_Indexing_Rejection.md)
-- [ ] #630 - [Use Case 07: UC AC 02 Fail Closed Filesystem and Walk Dir Enforcement](https://github.com/gintatkinson/DEAP01-spec-core/blob/main/.pipeline/upstream/docs/use-cases/UC-07-UC_AC_02_Fail_Closed_Filesystem_and_WalkDir_Enforcement.md)
-- [ ] #631 - [Use Case 08: UC AC 03 Anti Gaming Test Body AST Enforcement](https://github.com/gintatkinson/DEAP01-spec-core/blob/main/.pipeline/upstream/docs/use-cases/UC-08-UC_AC_03_Anti_Gaming_Test_Body_AST_Enforcement.md)
-- [ ] #632 - [Use Case 09: UC AC 04 SSOT Cryptographic and Lexer Deduplication](https://github.com/gintatkinson/DEAP01-spec-core/blob/main/.pipeline/upstream/docs/use-cases/UC-09-UC_AC_04_SSOT_Cryptographic_and_Lexer_Deduplication.md)
-- [ ] #633 - [Use Case 10: UC AC 05 Deterministic Dogfood Ingestion into Canonical Sys ML v2](https://github.com/gintatkinson/DEAP01-spec-core/blob/main/.pipeline/upstream/docs/use-cases/UC-10-UC_AC_05_Deterministic_Dogfood_Ingestion_into_Canonical_SysML_v2.md)
+- [ ] #629 - [Use Case 06: General Direct Range Slice Indexing Rejection](../use-cases/UC-06-General_Direct_Range_Slice_Indexing_Rejection.md)
+- [ ] #630 - [Use Case 07: Fail Closed Filesystem and Walk Dir Enforcement](../use-cases/UC-07-Fail_Closed_Filesystem_and_WalkDir_Enforcement.md)
+- [ ] #631 - [Use Case 08: Anti Gaming Test Body AST Enforcement](../use-cases/UC-08-Anti_Gaming_Test_Body_AST_Enforcement.md)
+- [ ] #632 - [Use Case 09: SSOT Cryptographic and Lexer Deduplication](../use-cases/UC-09-SSOT_Cryptographic_and_Lexer_Deduplication.md)
+- [ ] #633 - [Use Case 10: Deterministic Dogfood Ingestion into Canonical Sys ML v2](../use-cases/UC-10-Deterministic_Dogfood_Ingestion_into_Canonical_SysML_v2.md)
 
 #### Associated User Stories
-- None allocated (structural subsystem component)
+- [ ] #567 - [User Story 06: check compiler ast purity](../user-stories/US-06-check_compiler_ast_purity.md)
+- [ ] #568 - [User Story 07: mask literals and comments](../user-stories/US-07-mask_literals_and_comments.md)
+- [ ] #569 - [User Story 08: Masked](../user-stories/US-08-Masked.md)
+- [ ] #570 - [User Story 09: contains direct range slice](../user-stories/US-09-contains_direct_range_slice.md)
+- [ ] #571 - [User Story 10: audit fail closed io patterns](../user-stories/US-10-audit_fail_closed_io_patterns.md)
+- [ ] #572 - [User Story 11: audit test integrity and anti gaming](../user-stories/US-11-audit_test_integrity_and_anti_gaming.md)
+- [ ] #573 - [User Story 12: C PURITY 03](../user-stories/US-12-C_PURITY_03.md)
+- [ ] #574 - [User Story 13: audit ssot symbol deduplication](../user-stories/US-13-audit_ssot_symbol_deduplication.md)
+- [ ] #575 - [User Story 14: C PURITY 04](../user-stories/US-14-C_PURITY_04.md)
+- [ ] #576 - [User Story 15: Sorted](../user-stories/US-15-Sorted.md)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given nominal RangeSliceAstDetector domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
@@ -94,8 +103,7 @@ Presentation interface binding and diagnostic event routing for RangeSliceAstDet
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:
-- Subsystem Requirements: `schema/subsystems/b_p_02_check_34_a_s_t_purity_fail_closed_i_o_and_anti_gaming_test_gate_blueprint/requirements.sysml`
-- Subsystem Architecture: `schema/subsystems/b_p_02_check_34_a_s_t_purity_fail_closed_i_o_and_anti_gaming_test_gate_blueprint/architecture.sysml`
+- System Architecture Model: `schema/model.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process
 
 Component behavior and interface definitions derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 15288.

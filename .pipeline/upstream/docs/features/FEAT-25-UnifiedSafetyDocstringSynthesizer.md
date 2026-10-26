@@ -7,7 +7,7 @@
 | **Interface Type** | Physical / Structural / Internal Bus |
 | **Schema Containers** | `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint::UnifiedSafetyDocstringSynthesizer` |
 | **Generation Mode** | subagent |
-| **Specification Source** | [schema/subsystems/b_p_05_unified_a_s_t_safety_docstring_synthesizer_and_check_36_verification_blueprint/architecture.sysml](../../schema/subsystems/b_p_05_unified_a_s_t_safety_docstring_synthesizer_and_check_36_verification_blueprint/architecture.sysml) |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
 # Feature 25: [BP 05 Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint] UnifiedSafetyDocstringSynthesizer
 
@@ -136,8 +136,7 @@ Presentation interface binding and diagnostic event routing for UnifiedSafetyDoc
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:
-- Subsystem Requirements: `schema/subsystems/b_p_05_unified_a_s_t_safety_docstring_synthesizer_and_check_36_verification_blueprint/requirements.sysml`
-- Subsystem Architecture: `schema/subsystems/b_p_05_unified_a_s_t_safety_docstring_synthesizer_and_check_36_verification_blueprint/architecture.sysml`
+- System Architecture Model: `schema/model.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process
 
 Component behavior and interface definitions derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 15288.

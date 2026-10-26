@@ -7,7 +7,7 @@
 | **Interface Type** | Physical / Structural / Internal Bus |
 | **Schema Containers** | `BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint::MilStd881eWbsExporter` |
 | **Generation Mode** | subagent |
-| **Specification Source** | [schema/subsystems/b_p_04_deterministic_specification_i_c_d_and_w_b_s_forward_compiler_blueprint/architecture.sysml](../../schema/subsystems/b_p_04_deterministic_specification_i_c_d_and_w_b_s_forward_compiler_blueprint/architecture.sysml) |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
 # Feature 20: [BP 04 Deterministic Specification ICD and WBS Forward Compiler Blueprint] MilStd881eWbsExporter
 
@@ -101,8 +101,7 @@ Presentation interface binding and diagnostic event routing for MilStd881eWbsExp
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:
-- Subsystem Requirements: `schema/subsystems/b_p_04_deterministic_specification_i_c_d_and_w_b_s_forward_compiler_blueprint/requirements.sysml`
-- Subsystem Architecture: `schema/subsystems/b_p_04_deterministic_specification_i_c_d_and_w_b_s_forward_compiler_blueprint/architecture.sysml`
+- System Architecture Model: `schema/model.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process
 
 Component behavior and interface definitions derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 15288.

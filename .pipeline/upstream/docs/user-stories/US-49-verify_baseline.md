@@ -7,7 +7,7 @@
 | **SysML Interaction** | `BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_SequenceInteraction` |
 | **SysML Test Case** | `Test_verify_baseline` |
 | **Generation Mode** | subagent |
-| **Specification Source** | [schema/subsystems/b_p_06_deterministic_static_5_pillar_code_auditor_and_defect_dossier_synthesizer_blueprint/behavior.sysml](../../schema/subsystems/b_p_06_deterministic_static_5_pillar_code_auditor_and_defect_dossier_synthesizer_blueprint/behavior.sysml) |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
 # User Story 49: verify baseline
 
@@ -17,28 +17,26 @@
 sequenceDiagram
     autonumber
     actor Operator
-    participant Operator_Or_CI_Pipeline
-    participant verify_baseline_audit_code
-    Operator->>Operator_Or_CI_Pipeline: verify_baseline()
-    Operator_Or_CI_Pipeline->>verify_baseline_audit_code: verify_baseline()
-    verify_baseline_audit_code-->>Operator_Or_CI_Pipeline: parse_rust_source_ast
-    Operator_Or_CI_Pipeline-->>Operator: StatusReport
+    participant ClosedLoopDefectPublisherGate
+    participant DeterministicDossierSynthesizer
+    Operator->>ClosedLoopDefectPublisherGate: verify_baseline()
+    ClosedLoopDefectPublisherGate->>DeterministicDossierSynthesizer: verify_baseline()
+    DeterministicDossierSynthesizer-->>ClosedLoopDefectPublisherGate: parse_rust_source_ast
+    ClosedLoopDefectPublisherGate-->>Operator: StatusReport
 ```
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-US-49-01: Given operational environment initialized, When verify_baseline executes, Then verify_baseline_audit_code processes the AST within defined latency envelope.
+- [ ] AC-US-49-01: Given operational environment initialized, When verify_baseline executes, Then DeterministicDossierSynthesizer processes the AST within defined latency envelope.
 - [ ] AC-US-49-02: Given formal constraints, When semantic validator executes, Then asserts invariant satisfaction.
 - [ ] AC-US-49-03: Given exceptional conditions, When error recovery activates, Then graceful recovery occurs without data loss.
 
 ## Required Features
-- [ ] #655 - [Feature 01: [BP 01 Compiler Enforced Forbid Lint Gate and Zero Suppression AST Architecture Blueprint] CompilerLintEnforcementGate](../features/FEAT-01-CompilerLintEnforcementGate.md)
-- [ ] [Feature 26: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] verify_baseline_audit_code](../features/FEAT-26-verify_baseline_audit_code.md)
+- [ ] #680 - [Feature 26: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] ClosedLoopDefectPublisherGate](../features/FEAT-26-ClosedLoopDefectPublisherGate.md)
+- [ ] #681 - [Feature 27: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] DeterministicDossierSynthesizer](../features/FEAT-27-DeterministicDossierSynthesizer.md)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:
-- Subsystem Behavior Specification: `schema/subsystems/b_p_06_deterministic_static_5_pillar_code_auditor_and_defect_dossier_synthesizer_blueprint/behavior.sysml`
-- ConOps Operational Activities: `schema/conops/activities.sysml`
 - System Architecture Model: `schema/model.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
 
-Authoritative user story flows and interaction lifelines derive from `schema/subsystems/b_p_06_deterministic_static_5_pillar_code_auditor_and_defect_dossier_synthesizer_blueprint/behavior.sysml` pursuant to ISO/IEC/IEEE 29148.
+Authoritative user story flows and interaction lifelines derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 29148.

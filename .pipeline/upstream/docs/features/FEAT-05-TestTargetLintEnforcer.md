@@ -7,7 +7,7 @@
 | **Interface Type** | Physical / Structural / Internal Bus |
 | **Schema Containers** | `BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint::TestTargetLintEnforcer` |
 | **Generation Mode** | subagent |
-| **Specification Source** | [schema/subsystems/b_p_01_compiler_enforced_forbid_lint_gate_and_zero_suppression_a_s_t_architecture_blueprint/architecture.sysml](../../schema/subsystems/b_p_01_compiler_enforced_forbid_lint_gate_and_zero_suppression_a_s_t_architecture_blueprint/architecture.sysml) |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
 # Feature 05: [BP 01 Compiler Enforced Forbid Lint Gate and Zero Suppression AST Architecture Blueprint] TestTargetLintEnforcer
 
@@ -95,8 +95,7 @@ Presentation interface binding and diagnostic event routing for TestTargetLintEn
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:
-- Subsystem Requirements: `schema/subsystems/b_p_01_compiler_enforced_forbid_lint_gate_and_zero_suppression_a_s_t_architecture_blueprint/requirements.sysml`
-- Subsystem Architecture: `schema/subsystems/b_p_01_compiler_enforced_forbid_lint_gate_and_zero_suppression_a_s_t_architecture_blueprint/architecture.sysml`
+- System Architecture Model: `schema/model.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process
 
 Component behavior and interface definitions derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 15288.

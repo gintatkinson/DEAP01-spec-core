@@ -14,20 +14,20 @@
 Subsystem package for BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint
 
 ## 2. Requirements & Checklist
-- [ ] #665 - [Feature 11: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] NativeSigilAndLifetimeLexer](../features/FEAT-11-NativeSigilAndLifetimeLexer.md) (b_p_03_sys_m_l_v2_a_s_t_bijective_roundtrip_and_token_stream_parser_gate_blueprint.sysml)
-- [ ] #666 - [Feature 12: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] FailClosedRecursiveDescentParser](../features/FEAT-12-FailClosedRecursiveDescentParser.md) (b_p_03_sys_m_l_v2_a_s_t_bijective_roundtrip_and_token_stream_parser_gate_blueprint.sysml)
-- [ ] #667 - [Feature 13: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] BijectiveSysmlSerializer](../features/FEAT-13-BijectiveSysmlSerializer.md) (b_p_03_sys_m_l_v2_a_s_t_bijective_roundtrip_and_token_stream_parser_gate_blueprint.sysml)
-- [ ] #668 - [Feature 14: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] CompilerRoundtripVerificationGate](../features/FEAT-14-CompilerRoundtripVerificationGate.md) (b_p_03_sys_m_l_v2_a_s_t_bijective_roundtrip_and_token_stream_parser_gate_blueprint.sysml)
-- [ ] #669 - [Feature 15: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] SysmlBijectiveRoundtripCompilerGate](../features/FEAT-15-SysmlBijectiveRoundtripCompilerGate.md) (assert_span_offset_drift_bytes_range, assert_silent_skip_branch_count_range, assert_dropped_ast_field_count_range, assert_roundtrip_ast_mismatch_count_range)
+- [ ] #665 - [Feature 11: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] NativeSigilAndLifetimeLexer](../features/FEAT-11-NativeSigilAndLifetimeLexer.md)
+- [ ] #666 - [Feature 12: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] FailClosedRecursiveDescentParser](../features/FEAT-12-FailClosedRecursiveDescentParser.md)
+- [ ] #667 - [Feature 13: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] BijectiveSysmlSerializer](../features/FEAT-13-BijectiveSysmlSerializer.md)
+- [ ] #668 - [Feature 14: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] CompilerRoundtripVerificationGate](../features/FEAT-14-CompilerRoundtripVerificationGate.md)
+- [ ] #669 - [Feature 15: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] SysmlBijectiveRoundtripCompilerGate](../features/FEAT-15-SysmlBijectiveRoundtripCompilerGate.md)
 
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #634 - [Use Case 11: UC AC 01 Native Lexer Sigil and Lifetime Tokenization](../use-cases/UC-11-UC_AC_01_Native_Lexer_Sigil_and_Lifetime_Tokenization.md)
-- [ ] #635 - [Use Case 12: UC AC 02 Fail Closed Inner Block and Composite Type Parsing](../use-cases/UC-12-UC_AC_02_Fail_Closed_Inner_Block_and_Composite_Type_Parsing.md)
-- [ ] #636 - [Use Case 13: UC AC 03 Token Stream State Transition Parsing and Recursive MBD Synthesis](../use-cases/UC-13-UC_AC_03_Token_Stream_State_Transition_Parsing_and_Recursive_MBD_Synthesis.md)
-- [ ] #637 - [Use Case 14: UC AC 04 Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate](../use-cases/UC-14-UC_AC_04_Lossless_to_sysml_Serialization_and_Fail_Closed_Bijective_Roundtrip_Gate.md)
-- [ ] #638 - [Use Case 15: UC AC 05 Dogfood Markdown to Sys ML Ingestion and Baseline Verification](../use-cases/UC-15-UC_AC_05_Dogfood_Markdown_to_SysML_Ingestion_and_Baseline_Verification.md)
+- [ ] #634 - [Use Case 11: Native Lexer Sigil and Lifetime Tokenization](../use-cases/UC-11-Native_Lexer_Sigil_and_Lifetime_Tokenization.md)
+- [ ] #635 - [Use Case 12: Fail Closed Inner Block and Composite Type Parsing](../use-cases/UC-12-Fail_Closed_Inner_Block_and_Composite_Type_Parsing.md)
+- [ ] #636 - [Use Case 13: Token Stream State Transition Parsing and Recursive MBD Synthesis](../use-cases/UC-13-Token_Stream_State_Transition_Parsing_and_Recursive_MBD_Synthesis.md)
+- [ ] #637 - [Use Case 14: Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate](../use-cases/UC-14-Lossless_to_sysml_Serialization_and_Fail_Closed_Bijective_Roundtrip_Gate.md)
+- [ ] #638 - [Use Case 15: Dogfood Markdown to Sys ML Ingestion and Baseline Verification](../use-cases/UC-15-Dogfood_Markdown_to_SysML_Ingestion_and_Baseline_Verification.md)
 
 #### Associated User Stories
 - [ ] #577 - [User Story 16: scan all](../user-stories/US-16-scan_all.md)
@@ -52,8 +52,6 @@ Safety-critical invariant satisfaction, formal trace matrix closure, and zero ha
 
 ## 6. Source References
 - System Architecture Model: `schema/model.sysml`
-- Subsystem Specification Model: `schema/subsystems/b_p_03_sys_m_l_v2_a_s_t_bijective_roundtrip_and_token_stream_parser_gate_blueprint/architecture.sysml`
-- Subsystem Requirements Model: `schema/subsystems/b_p_03_sys_m_l_v2_a_s_t_bijective_roundtrip_and_token_stream_parser_gate_blueprint/requirements.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process
 
 Subsystem architectural composition and formal invariants derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 15288.
@@ -98,12 +96,18 @@ classDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_BlueprintInitialization
-    BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_BlueprintInitialization --> NativeSigilAndLifetimeLexerReady : configure_b_p_03_sys_m_l_v2_a_s_t_bijective_roundtrip_and_token_stream_parser_gate_blueprint
-    NativeSigilAndLifetimeLexerReady --> scan_allActive : dispatch_b_p_03_sys_m_l_v2_a_s_t_bijective_roundtrip_and_token_stream_parser_gate_blueprint
-    scan_allActive --> BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_BlueprintVerification : validate_invariants
-    BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_BlueprintVerification --> BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_BlueprintNominalComplete : invariants_satisfied
-    BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_BlueprintVerification --> BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_BlueprintSafeFallback : constraint_violation
-    BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_BlueprintNominalComplete --> [*]
-    BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_BlueprintSafeFallback --> [*]
+    [*] --> LexicalScanning
+    LexicalScanning --> RecursiveDescentParsing : zeroDriftTokenStream
+    LexicalScanning --> RejectedE0100 : lexicalSpanError
+    RecursiveDescentParsing --> CanonicalSerialization : packageDefConstructed
+    RecursiveDescentParsing --> RejectedE0200 : unexpectedInnerBlockToken
+    CanonicalSerialization --> RoundtripReparsing : sysmlTextEmitted
+    RoundtripReparsing --> AstStructuralEqualityCheck : reparsedPackageDef
+    RoundtripReparsing --> RejectedE0400 : reparseSyntaxFailure
+    AstStructuralEqualityCheck --> VerifiedBijectiveAst : astOrigEqualsAstReparsed
+    AstStructuralEqualityCheck --> RejectedE0400 : structuralAstDiffDetected
+    RejectedE0100 --> [*]
+    RejectedE0200 --> [*]
+    RejectedE0400 --> [*]
+    VerifiedBijectiveAst --> [*]
 ```

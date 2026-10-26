@@ -4400,6 +4400,7 @@ pub fn parse_state_defs(content: &str) -> Vec<StateDef> {
         let mut entry_action = None;
         let mut do_action = None;
         let mut exit_action = None;
+        let mut transitions = Vec::new();
         let sub_states = if let Some(body) = body_str {
             for line in body.lines() {
                 let trimmed = line.trim();
@@ -4412,6 +4413,120 @@ pub fn parse_state_defs(content: &str) -> Vec<StateDef> {
                 } else if trimmed.starts_with("exit") && is_word_boundary_after(trimmed, 4) {
                     let act = trimmed.get(4..).unwrap_or("").trim().trim_end_matches(';').trim();
                     exit_action = Some(act.to_string());
+                } else if trimmed.starts_with("transition") && is_word_boundary_after(trimmed, 10) {
+                    let raw_trans =
+                        trimmed.get(10..).unwrap_or("").trim().trim_end_matches(';').trim();
+                    if !raw_trans.is_empty() {
+                        if raw_trans.starts_with("first ") || raw_trans.contains(" first ") {
+                            let (t_name, after_first) = if raw_trans.starts_with("first ") {
+                                (None, raw_trans.get(6..).unwrap_or("").trim())
+                            } else if let Some((before_first, rest_first)) =
+                                raw_trans.split_once(" first ")
+                            {
+                                let n = before_first.trim();
+                                (
+                                    if n.is_empty() {
+                                        None
+                                    } else {
+                                        Some(n.to_string())
+                                    },
+                                    rest_first.trim(),
+                                )
+                            } else {
+                                (None, "")
+                            };
+                            let (before_then, tgt_str) =
+                                if let Some((b_then, a_then)) = after_first.split_once(" then ") {
+                                    (b_then.trim(), a_then.trim())
+                                } else {
+                                    (after_first, "")
+                                };
+                            let (src_str, trig_str) =
+                                if let Some((b_acc, a_acc)) = before_then.split_once(" accept ") {
+                                    (b_acc.trim(), a_acc.trim())
+                                } else {
+                                    (before_then, "")
+                                };
+                            let source = if src_str.is_empty() {
+                                None
+                            } else {
+                                Some(src_str.to_string())
+                            };
+                            let target = if tgt_str.is_empty() {
+                                None
+                            } else {
+                                Some(tgt_str.to_string())
+                            };
+                            let trigger = if trig_str.is_empty() {
+                                None
+                            } else {
+                                Some(trig_str.to_string())
+                            };
+                            transitions.push(TransitionDef {
+                                name: t_name,
+                                source,
+                                target,
+                                trigger,
+                                guard: None,
+                                effect: None,
+                                doc: None,
+                            });
+                        } else {
+                            let t_name = raw_trans.to_string();
+                            let (source, target, trigger) =
+                                if let Some(to_idx) = raw_trans.find("_to_") {
+                                    let src_part = raw_trans.get(..to_idx).unwrap_or("").trim();
+                                    let after_to = raw_trans.get(to_idx + 4..).unwrap_or("").trim();
+                                    if let Some(on_idx) = after_to.find("_on_") {
+                                        let tgt_part = after_to.get(..on_idx).unwrap_or("").trim();
+                                        let trig_part =
+                                            after_to.get(on_idx + 4..).unwrap_or("").trim();
+                                        (
+                                            if src_part.is_empty() {
+                                                None
+                                            } else {
+                                                Some(src_part.to_string())
+                                            },
+                                            if tgt_part.is_empty() {
+                                                None
+                                            } else {
+                                                Some(tgt_part.to_string())
+                                            },
+                                            if trig_part.is_empty() {
+                                                None
+                                            } else {
+                                                Some(trig_part.to_string())
+                                            },
+                                        )
+                                    } else {
+                                        (
+                                            if src_part.is_empty() {
+                                                None
+                                            } else {
+                                                Some(src_part.to_string())
+                                            },
+                                            if after_to.is_empty() {
+                                                None
+                                            } else {
+                                                Some(after_to.to_string())
+                                            },
+                                            None,
+                                        )
+                                    }
+                                } else {
+                                    (None, None, None)
+                                };
+                            transitions.push(TransitionDef {
+                                name: Some(t_name),
+                                source,
+                                target,
+                                trigger,
+                                guard: None,
+                                effect: None,
+                                doc: None,
+                            });
+                        }
+                    }
                 }
             }
             parse_state_defs(body)
@@ -4425,7 +4540,7 @@ pub fn parse_state_defs(content: &str) -> Vec<StateDef> {
             entry_action,
             do_action,
             exit_action,
-            transitions: Vec::new(),
+            transitions,
             sub_states,
         });
     }
@@ -9292,6 +9407,81 @@ package FlightPkg {
             "Did not expect glossary term INSDriftTerm in extracted parts: {:?}",
             md_parts
         );
+    }
+
+    /// Verifies that `parse_state_defs` roundtrips both nested `sub_states` and `transitions`
+    /// with deterministic `(name, source, target, trigger)` extraction.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C behavioral state machine
+    /// AST extraction mandates for `parse_state_defs` in `crates/deap-core/src/sysml_ast.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Parses top-level `StateDef` (`BP_01_LifecycleState`) with exact nested `sub_states`
+    ///   (`Uninitialized`, `Active`) and `transitions` (`Initial_to_Uninitialized`,
+    ///   `Uninitialized_to_Active_on_parse_token`, `Active_to_Terminal`).
+    /// - Recovers `source`, `target`, and optional `trigger` fields from canonical `_to_` and
+    ///   `_on_` transition naming conventions without data loss.
+    ///
+    /// ## 3. Preconditions
+    /// - `src` is a valid UTF-8 SysML v2 `state def` block containing sub-states and transitions.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts 1 top-level `StateDef`, 2 `sub_states`, and 3 `transitions` with exact fields.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$ over fixed test fixture. Space Complexity: $O(1)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Propagates missing element assertions via `Result::Err` with zero `.unwrap()` or `.expect()`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-STATE-DEFS-TRANSITIONS]
+    #[test]
+    fn test_parse_state_defs_roundtrips_sub_states_and_transitions(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let src = r#"
+state def BP_01_LifecycleState {
+    state Uninitialized;
+    state Active;
+    transition Initial_to_Uninitialized;
+    transition Uninitialized_to_Active_on_parse_token;
+    transition Active_to_Terminal;
+}
+"#;
+        let states = parse_state_defs(src);
+        assert_eq!(states.len(), 1);
+        let st = states.first().ok_or("missing top-level StateDef")?;
+        assert_eq!(st.name, "BP_01_LifecycleState");
+        assert_eq!(st.sub_states.len(), 2);
+        let sub0 = st.sub_states.first().ok_or("missing sub_state 0")?;
+        let sub1 = st.sub_states.get(1).ok_or("missing sub_state 1")?;
+        assert_eq!(sub0.name, "Uninitialized");
+        assert_eq!(sub1.name, "Active");
+
+        assert_eq!(st.transitions.len(), 3);
+        let tr0 = st.transitions.first().ok_or("missing transition 0")?;
+        assert_eq!(tr0.name.as_deref(), Some("Initial_to_Uninitialized"));
+        assert_eq!(tr0.source.as_deref(), Some("Initial"));
+        assert_eq!(tr0.target.as_deref(), Some("Uninitialized"));
+        assert_eq!(tr0.trigger.as_deref(), None);
+
+        let tr1 = st.transitions.get(1).ok_or("missing transition 1")?;
+        assert_eq!(
+            tr1.name.as_deref(),
+            Some("Uninitialized_to_Active_on_parse_token")
+        );
+        assert_eq!(tr1.source.as_deref(), Some("Uninitialized"));
+        assert_eq!(tr1.target.as_deref(), Some("Active"));
+        assert_eq!(tr1.trigger.as_deref(), Some("parse_token"));
+
+        let tr2 = st.transitions.get(2).ok_or("missing transition 2")?;
+        assert_eq!(tr2.name.as_deref(), Some("Active_to_Terminal"));
+        assert_eq!(tr2.source.as_deref(), Some("Active"));
+        assert_eq!(tr2.target.as_deref(), Some("Terminal"));
+        assert_eq!(tr2.trigger.as_deref(), None);
+
+        Ok(())
     }
 }
 

@@ -198,23 +198,48 @@ fn to_display_name(s: &str) -> String {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYNC-FORWARD-STRIP-USE-CASE-PREFIX] | SysML v2: ActionDef(strip_use_case_prefix)
 fn strip_use_case_prefix(name: &str) -> &str {
-    let s = name.trim();
-    if s.len() >= 2 && s[..2].eq_ignore_ascii_case("uc") {
-        let rest = &s[2..];
-        let rest = rest.strip_prefix('_').or_else(|| rest.strip_prefix('-')).unwrap_or(rest);
+    let mut cur = name.trim();
+    for _ in 0..4 {
+        let has_prefix = cur.get(..2).is_some_and(|p| {
+            p.eq_ignore_ascii_case("uc")
+                || p.eq_ignore_ascii_case("us")
+                || p.eq_ignore_ascii_case("ac")
+        });
+        if !has_prefix {
+            break;
+        }
+        let after_prefix = cur.get(2..).unwrap_or("");
+        let mut rest = after_prefix
+            .strip_prefix('_')
+            .or_else(|| after_prefix.strip_prefix('-'))
+            .unwrap_or(after_prefix);
+        if rest.get(..2).is_some_and(|p| p.eq_ignore_ascii_case("ac")) {
+            let after_ac = rest.get(2..).unwrap_or("");
+            if after_ac.starts_with('_')
+                || after_ac.starts_with('-')
+                || after_ac.chars().next().is_some_and(|c| c.is_ascii_digit())
+            {
+                rest = after_ac
+                    .strip_prefix('_')
+                    .or_else(|| after_ac.strip_prefix('-'))
+                    .unwrap_or(after_ac);
+            }
+        }
         let digit_count = rest.chars().take_while(|c| c.is_ascii_digit()).count();
         if digit_count > 0 {
-            let after_digits = &rest[digit_count..];
+            let after_digits = rest.get(digit_count..).unwrap_or("");
             let clean = after_digits
                 .strip_prefix('_')
                 .or_else(|| after_digits.strip_prefix('-'))
                 .unwrap_or(after_digits);
             if !clean.is_empty() {
-                return clean;
+                cur = clean;
+                continue;
             }
         }
+        break;
     }
-    s
+    cur
 }
 
 /// Extracts the date from an existing file if present, preserving historical spec dates,
@@ -831,30 +856,76 @@ fn generate_epic_statechart(p: &PackageDef) -> String {
         let mut target_states = BTreeSet::new();
 
         for trans in &st_def.transitions {
+            if let (Some(raw_src), Some(raw_tgt)) =
+                (trans.source.as_deref(), trans.target.as_deref())
+            {
+                if !raw_src.is_empty() && !raw_tgt.is_empty() {
+                    let src = if raw_src == "Initial" || raw_src == "entry" || raw_src == "[*]" {
+                        "[*]"
+                    } else {
+                        raw_src
+                    };
+                    let tgt = if raw_tgt == "Terminal" || raw_tgt == "exit" || raw_tgt == "[*]" {
+                        "[*]"
+                    } else {
+                        raw_tgt
+                    };
+                    if src == "[*]" {
+                        lines.push(format!("    [*] --> {}", tgt));
+                        if tgt != "[*]" {
+                            target_states.insert(tgt.to_string());
+                        }
+                    } else if tgt == "[*]" {
+                        lines.push(format!("    {} --> [*]", src));
+                        source_states.insert(src.to_string());
+                    } else {
+                        if let Some(trig) = trans.trigger.as_deref().filter(|s| !s.is_empty()) {
+                            lines.push(format!("    {} --> {} : {}", src, tgt, trig));
+                        } else {
+                            lines.push(format!("    {} --> {}", src, tgt));
+                        }
+                        source_states.insert(src.to_string());
+                        target_states.insert(tgt.to_string());
+                    }
+                    continue;
+                }
+            }
             let t_name = trans.name.as_deref().unwrap_or("");
             if let Some(first_idx) = t_name.find("first ") {
-                let after_first = &t_name[first_idx + 6..];
+                let after_first = t_name.get(first_idx + 6..).unwrap_or("");
                 let src_candidate = after_first.split_whitespace().next().unwrap_or("");
                 if let Some(then_idx) = after_first.find("then ") {
-                    let after_then = &after_first[then_idx + 5..];
+                    let after_then = after_first.get(then_idx + 5..).unwrap_or("");
                     let tgt_candidate = after_then.split_whitespace().next().unwrap_or("");
                     if !src_candidate.is_empty() && !tgt_candidate.is_empty() {
-                        let src = if src_candidate == "entry" { "[*]" } else { src_candidate };
-                        let tgt = tgt_candidate;
+                        let src = if src_candidate == "entry" || src_candidate == "Initial" {
+                            "[*]"
+                        } else {
+                            src_candidate
+                        };
+                        let tgt = if tgt_candidate == "exit" || tgt_candidate == "Terminal" {
+                            "[*]"
+                        } else {
+                            tgt_candidate
+                        };
                         lines.push(format!("    {} --> {}", src, tgt));
                         if src != "[*]" {
                             source_states.insert(src.to_string());
                         }
-                        target_states.insert(tgt.to_string());
+                        if tgt != "[*]" {
+                            target_states.insert(tgt.to_string());
+                        }
                     }
                 }
             }
         }
 
         // Add terminal transition for any target state that is not a source state
-        for tgt in &target_states {
-            if !source_states.contains(tgt) {
-                lines.push(format!("    {} --> [*]", tgt));
+        if !lines.iter().any(|l| l.ends_with("--> [*]")) {
+            for tgt in &target_states {
+                if !source_states.contains(tgt) {
+                    lines.push(format!("    {} --> [*]", tgt));
+                }
             }
         }
 
@@ -1011,58 +1082,58 @@ fn generate_epic_class_diagram(p: &PackageDef, primary_engine: &str, is_root: bo
             } else {
                 lines.push(format!("    class {}", root_label));
             }
-        } else {
-            lines.push(format!("    class {}", root_label));
-        }
-        for subpart in &p.part_defs {
-            if subpart.name != root_label {
-                let has_sub_members = !subpart.ports.is_empty()
-                    || !subpart.attributes.is_empty()
-                    || !subpart.operations.is_empty()
-                    || !subpart.actions.is_empty();
-                if has_sub_members {
-                    lines.push(format!("    class {} {{", subpart.name));
-                    for port in &subpart.ports {
-                        let dir_prefix = if port.direction == "in" {
-                            "in"
-                        } else if port.direction == "out" {
-                            "out"
-                        } else {
-                            "inout"
-                        };
-                        let p_type = if port.type_name.is_empty() { "Port" } else { &port.type_name };
-                        lines.push(format!("        +{} {} ({})", p_type, port.name, dir_prefix));
-                    }
-                    for attr in &subpart.attributes {
-                        let a_type = if attr.type_name.is_empty() { "String" } else { &attr.type_name };
-                        lines.push(format!("        +{} {}", a_type, attr.name));
-                    }
-                    let mut emitted_ops = BTreeSet::new();
-                    for op in &subpart.operations {
-                        let ret = op.return_type.as_deref().unwrap_or("void");
-                        if emitted_ops.insert(op.name.as_str()) {
-                            lines.push(format!("        +{}() {}", op.name, ret));
+            for subpart in &p.part_defs {
+                if subpart.name != root_label {
+                    let has_sub_members = !subpart.ports.is_empty()
+                        || !subpart.attributes.is_empty()
+                        || !subpart.operations.is_empty()
+                        || !subpart.actions.is_empty();
+                    if has_sub_members {
+                        lines.push(format!("    class {} {{", subpart.name));
+                        for port in &subpart.ports {
+                            let dir_prefix = if port.direction == "in" {
+                                "in"
+                            } else if port.direction == "out" {
+                                "out"
+                            } else {
+                                "inout"
+                            };
+                            let p_type = if port.type_name.is_empty() { "Port" } else { &port.type_name };
+                            lines.push(format!("        +{} {} ({})", p_type, port.name, dir_prefix));
                         }
-                    }
-                    for act in &subpart.actions {
-                        if emitted_ops.insert(act.name.as_str()) {
-                            lines.push(format!("        +{}() void", act.name));
+                        for attr in &subpart.attributes {
+                            let a_type = if attr.type_name.is_empty() { "String" } else { &attr.type_name };
+                            lines.push(format!("        +{} {}", a_type, attr.name));
                         }
+                        let mut emitted_ops = BTreeSet::new();
+                        for op in &subpart.operations {
+                            let ret = op.return_type.as_deref().unwrap_or("void");
+                            if emitted_ops.insert(op.name.as_str()) {
+                                lines.push(format!("        +{}() {}", op.name, ret));
+                            }
+                        }
+                        for act in &subpart.actions {
+                            if emitted_ops.insert(act.name.as_str()) {
+                                lines.push(format!("        +{}() void", act.name));
+                            }
+                        }
+                        lines.push("    }".to_string());
+                    } else {
+                        lines.push(format!("    class {}", subpart.name));
                     }
-                    lines.push("    }".to_string());
-                } else {
-                    lines.push(format!("    class {}", subpart.name));
+                    lines.push(format!("    {} --> {} : contains", root_label, subpart.name));
                 }
-                lines.push(format!("    {} --> {} : contains", root_label, subpart.name));
             }
+            return lines.join("\n");
         }
-        return lines.join("\n");
     }
 
-    let parent_label = p.parent_package.as_deref().map(sanitize_id).unwrap_or_default();
-    if !parent_label.is_empty() {
-        lines.push(format!("    class {}", parent_label));
-    }
+    let parent_label = p
+        .parent_package
+        .as_deref()
+        .map(sanitize_id)
+        .filter(|lbl| p.part_defs.iter().any(|pt| pt.name == *lbl))
+        .unwrap_or_default();
 
     for part in &p.part_defs {
         let has_members = !part.ports.is_empty()
@@ -1104,17 +1175,21 @@ fn generate_epic_class_diagram(p: &PackageDef, primary_engine: &str, is_root: bo
         }
     }
 
-    if !parent_label.is_empty() && !primary_engine.is_empty() {
+    let has_primary = p.part_defs.iter().any(|pt| pt.name == primary_engine);
+
+    if !parent_label.is_empty() && has_primary && parent_label != primary_engine {
         lines.push(format!("    {} --> {} : contains", parent_label, primary_engine));
     }
 
     for part in &p.part_defs {
-        if part.name != primary_engine && !primary_engine.is_empty() {
+        if part.name != primary_engine && has_primary {
             lines.push(format!("    {} --> {} : coordinates", primary_engine, part.name));
         }
         for subpart in &part.parts {
             let target_type = subpart.type_name.as_deref().unwrap_or(&subpart.name);
-            lines.push(format!("    {} --> {} : {}", part.name, target_type, subpart.name));
+            if p.part_defs.iter().any(|pt| pt.name == target_type) {
+                lines.push(format!("    {} --> {} : {}", part.name, target_type, subpart.name));
+            }
         }
     }
 
@@ -1483,7 +1558,7 @@ pub fn forward_sync_sysml_to_specs(
         };
 
         for (a_idx, action_def) in p.action_defs.iter().enumerate() {
-            let action_name = action_def.name.clone();
+            let action_name = strip_use_case_prefix(&action_def.name).to_string();
             let default_engine_name = p
                 .part_defs
                 .iter()
@@ -1514,6 +1589,30 @@ pub fn forward_sync_sysml_to_specs(
                 }
             }
 
+            if !p.part_defs.iter().any(|pt| pt.name == caller_engine) {
+                caller_engine = p
+                    .part_defs
+                    .first()
+                    .map(|pt| pt.name.clone())
+                    .unwrap_or_else(|| default_engine_name.clone());
+            }
+            if !p.part_defs.iter().any(|pt| pt.name == target_engine) {
+                target_engine = p
+                    .part_defs
+                    .get(1)
+                    .or_else(|| p.part_defs.first())
+                    .map(|pt| pt.name.clone())
+                    .unwrap_or_else(|| default_engine_name.clone());
+            }
+            if caller_engine == target_engine && p.part_defs.len() >= 2 {
+                target_engine = p
+                    .part_defs
+                    .iter()
+                    .find(|pt| pt.name != caller_engine)
+                    .map(|pt| pt.name.clone())
+                    .unwrap_or(target_engine);
+            }
+
             let default_engine_feat_num = part_contexts
                 .iter()
                 .position(|ctx| ctx.pkg_name == p.name && ctx.part.name == default_engine_name)
@@ -1530,7 +1629,8 @@ pub fn forward_sync_sysml_to_specs(
 
             let caller_feat_num = part_contexts
                 .iter()
-                .position(|ctx| ctx.part.name == caller_engine)
+                .position(|ctx| ctx.pkg_name == p.name && ctx.part.name == caller_engine)
+                .or_else(|| part_contexts.iter().position(|ctx| ctx.part.name == caller_engine))
                 .map(|pos| pos + 1);
 
             let s_num = story_metas.len() + 1;
@@ -1548,6 +1648,25 @@ pub fn forward_sync_sysml_to_specs(
                 s_num,
             });
         }
+    }
+
+    let mut action_title_counts: BTreeMap<String, usize> = BTreeMap::new();
+    for s in &story_metas {
+        let key = to_display_name(&s.action_name).to_ascii_lowercase();
+        let count = action_title_counts.entry(key).or_insert(0);
+        *count += 1;
+    }
+    let mut story_display_titles: BTreeMap<usize, String> = BTreeMap::new();
+    for s in &story_metas {
+        let base_display = to_display_name(&s.action_name);
+        let key = base_display.to_ascii_lowercase();
+        let count = action_title_counts.get(&key).copied().unwrap_or(0);
+        let display_title = if count > 1 {
+            format!("[{}] {}", s.caller_engine, base_display)
+        } else {
+            base_display
+        };
+        story_display_titles.insert(s.s_num, display_title);
     }
 
     /// Executes deterministic struct `UseCaseMeta` within `crates/compile-sysml/src/sync/forward.rs`.
@@ -1654,6 +1773,13 @@ pub fn forward_sync_sysml_to_specs(
             });
         }
     }
+
+    let schema_base = target_out_dir
+        .parent()
+        .unwrap_or(&target_out_dir)
+        .join("schema");
+    let has_modular_schema =
+        schema_base.join("subsystems").exists() && schema_base.join("conops").exists();
 
     // 1. Epics (EPIC-*.md) dynamically lowered from PackageDef nodes
     for (idx, p) in ordered_packages.iter().enumerate() {
@@ -1764,9 +1890,13 @@ pub fn forward_sync_sysml_to_specs(
             let us_slug = sanitize_id(&s_m.action_name);
             let us_path = format!("user-stories/US-{:02}-{}.md", s_m.s_num, us_slug);
             let us_issue = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &us_path));
+            let us_display_title = story_display_titles
+                .get(&s_m.s_num)
+                .cloned()
+                .unwrap_or_else(|| to_display_name(&s_m.action_name));
             assoc_us.push(format!(
                 "- [ ] {} - [User Story {:02}: {}](../user-stories/US-{:02}-{}.md)",
-                us_issue, s_m.s_num, to_display_name(&s_m.action_name), s_m.s_num, us_slug
+                us_issue, s_m.s_num, us_display_title, s_m.s_num, us_slug
             ));
         }
 
@@ -1786,7 +1916,13 @@ pub fn forward_sync_sysml_to_specs(
             .clone()
             .unwrap_or_else(|| format!("Subsystem specification for {} establishing architectural layout, mathematical invariants, and verification criteria.", subsys_display));
 
-        let source_refs = if is_root {
+        let source_refs = if !has_modular_schema {
+            r#"- System Architecture Model: `schema/model.sysml`
+- Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process
+
+Subsystem architectural composition and formal invariants derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 15288."#
+                .to_string()
+        } else if is_root {
             r#"- Schema SSOT Architecture: `schema/model.sysml`
 - ConOps Operational Activities: `schema/conops/activities.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process
@@ -1904,7 +2040,11 @@ Safety-critical invariant satisfaction, formal trace matrix closure, and zero ha
 
         let bdd_criteria = generate_feature_bdd(ctx.part, &matching_reqs);
 
-        let source_refs = if ctx.subsys_dir == "conops" {
+        let source_refs = if !has_modular_schema {
+            r#"- System Architecture Model: `schema/model.sysml`
+- Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process"#
+                .to_string()
+        } else if ctx.subsys_dir == "conops" {
             r#"- ConOps Operational Actors: `schema/conops/actors.sysml`
 - ConOps Operational Activities: `schema/conops/activities.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations"#
@@ -1942,10 +2082,10 @@ Safety-critical invariant satisfaction, formal trace matrix closure, and zero ha
 
         let interface_type = "Physical / Structural / Internal Bus";
         let schema_container = format!("{}::{}", ctx.pkg_name, part_name);
-        let spec_source = if ctx.subsys_dir == "conops" {
-            "[schema/conops/actors.sysml](../../schema/conops/actors.sysml)".to_string()
-        } else if ctx.subsys_dir == "architecture" {
+        let spec_source = if !has_modular_schema || ctx.subsys_dir == "architecture" {
             "[schema/model.sysml](../../schema/model.sysml)".to_string()
+        } else if ctx.subsys_dir == "conops" {
+            "[schema/conops/actors.sysml](../../schema/conops/actors.sysml)".to_string()
         } else {
             format!("[schema/subsystems/{subsys_dir}/architecture.sysml](../../schema/subsystems/{subsys_dir}/architecture.sysml)", subsys_dir = ctx.subsys_dir)
         };
@@ -2026,7 +2166,11 @@ Component behavior and interface definitions derive from `schema/model.sysml` pu
         let rel_path = format!("user-stories/US-{:02}-{}.md", s_num, story_slug);
         let _us_date = resolve_date(&target_out_dir, &rel_path, today_iso);
         let us_issue_id = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &rel_path));
-        let title = format!("User Story {:02}: {}", s_num, to_display_name(&s_meta.action_name));
+        let us_display_title = story_display_titles
+            .get(&s_num)
+            .cloned()
+            .unwrap_or_else(|| to_display_name(&s_meta.action_name));
+        let title = format!("User Story {:02}: {}", s_num, us_display_title);
 
         let action_name = &s_meta.action_name;
         let engine_name = &s_meta.engine_name;
@@ -2055,8 +2199,18 @@ Component behavior and interface definitions derive from `schema/model.sysml` pu
             .next()
             .unwrap_or_else(|| "Operator".to_string());
 
-        let seq_diagram = format!(
-            r#"sequenceDiagram
+        let seq_diagram = if caller_engine == engine_name {
+            format!(
+                r#"sequenceDiagram
+    autonumber
+    actor {default_actor}
+    participant {engine_name}
+    {default_actor}->>{engine_name}: {action_name}()
+    {engine_name}-->>{default_actor}: {reply_msg}"#
+            )
+        } else {
+            format!(
+                r#"sequenceDiagram
     autonumber
     actor {default_actor}
     participant {caller_engine}
@@ -2065,25 +2219,31 @@ Component behavior and interface definitions derive from `schema/model.sysml` pu
     {caller_engine}->>{engine_name}: {action_name}()
     {engine_name}-->>{caller_engine}: {reply_msg}
     {caller_engine}-->>{default_actor}: StatusReport"#
-        );
+            )
+        };
 
         let mut req_features_list = Vec::new();
-        if let Some(first_ctx) = part_contexts.first() {
+        if let Some(c_num) = s_meta.caller_feat_num {
+            let c_subsys = part_contexts
+                .get(c_num.saturating_sub(1))
+                .map(|c| c.subsys_display.as_str())
+                .unwrap_or(subsys_display.as_str());
             req_features_list.push(format!(
-                "- [ ] [Feature 01: [{}] {}](../features/FEAT-01-{}.md)",
-                first_ctx.subsys_display, first_ctx.part.name, first_ctx.part.name
+                "- [ ] [Feature {:02}: [{}] {}](../features/FEAT-{:02}-{}.md)",
+                c_num, c_subsys, caller_engine, c_num, caller_engine
             ));
         }
-        if let Some(c_num) = s_meta.caller_feat_num {
-            if c_num != 1 {
-                let c_subsys = part_contexts.get(c_num - 1).map(|c| c.subsys_display.as_str()).unwrap_or("Architecture");
-                req_features_list.push(format!(
-                    "- [ ] [Feature {:02}: [{}] {}](../features/FEAT-{:02}-{}.md)",
-                    c_num, c_subsys, caller_engine, c_num, caller_engine
-                ));
-            }
+        if Some(engine_feat_num) != s_meta.caller_feat_num {
+            let e_subsys = part_contexts
+                .get(engine_feat_num.saturating_sub(1))
+                .map(|c| c.subsys_display.as_str())
+                .unwrap_or(subsys_display.as_str());
+            req_features_list.push(format!(
+                "- [ ] [Feature {:02}: [{}] {}](../features/FEAT-{:02}-{}.md)",
+                engine_feat_num, e_subsys, engine_name, engine_feat_num, engine_name
+            ));
         }
-        if caller_engine != engine_name && engine_feat_num != 1 && Some(engine_feat_num) != s_meta.caller_feat_num {
+        if req_features_list.is_empty() {
             req_features_list.push(format!(
                 "- [ ] [Feature {:02}: [{}] {}](../features/FEAT-{:02}-{}.md)",
                 engine_feat_num, subsys_display, engine_name, engine_feat_num, engine_name
@@ -2097,7 +2257,7 @@ Component behavior and interface definitions derive from `schema/model.sysml` pu
                 .position(|p| p.name == s_meta.pkg_name)
                 .map(|idx| idx + 1)
                 .unwrap_or(2);
-            if ep_idx == 2 {
+            if s_meta.pkg_name == "ConOps" {
                 "[EPIC-02-ConOps](../epics/EPIC-02-ConOps.md)".to_string()
             } else {
                 format!(
@@ -2107,7 +2267,9 @@ Component behavior and interface definitions derive from `schema/model.sysml` pu
             }
         };
 
-        let spec_source = if subsys_dir == "conops" {
+        let spec_source = if !has_modular_schema {
+            "[schema/model.sysml](../../schema/model.sysml)".to_string()
+        } else if subsys_dir == "conops" {
             "[schema/conops/activities.sysml](../../schema/conops/activities.sysml)".to_string()
         } else {
             format!(
@@ -2116,7 +2278,13 @@ Component behavior and interface definitions derive from `schema/model.sysml` pu
             )
         };
 
-        let source_refs = if subsys_dir == "conops" {
+        let source_refs = if !has_modular_schema {
+            r#"- System Architecture Model: `schema/model.sysml`
+- Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
+
+Authoritative user story flows and interaction lifelines derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 29148."#
+                .to_string()
+        } else if subsys_dir == "conops" {
             r#"- ConOps Operational Activities: `schema/conops/activities.sysml`
 - System Architecture Model: `schema/model.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
@@ -2327,7 +2495,10 @@ Operational concept definitions and system sequence interaction models:
         let us_row = if let Some(story) = matching_story {
             let us_link_num = story.s_num;
             let us_slug = sanitize_id(&story.action_name);
-            let us_display = to_display_name(&story.action_name);
+            let us_display = story_display_titles
+                .get(&us_link_num)
+                .cloned()
+                .unwrap_or_else(|| to_display_name(&story.action_name));
             let us_issue = format_issue_id_cell(resolve_existing_issue_id(
                 &target_out_dir,
                 &format!("user-stories/US-{:02}-{}.md", us_link_num, us_slug),
@@ -2355,7 +2526,9 @@ Operational concept definitions and system sequence interaction models:
         let clean_title_display = to_display_name(clean_name);
         let uc_diagram = generate_use_case_diagram(&primary_actor, subject, &clean_title_display, &resolved_scenario_steps);
 
-        let spec_source = if uc_m.subsys_dir == "conops" {
+        let spec_source = if !has_modular_schema {
+            "[schema/model.sysml](../../schema/model.sysml)".to_string()
+        } else if uc_m.subsys_dir == "conops" {
             "[schema/conops/activities.sysml](../../schema/conops/activities.sysml)".to_string()
         } else {
             format!(
@@ -2364,7 +2537,13 @@ Operational concept definitions and system sequence interaction models:
             )
         };
 
-        let source_refs = if uc_m.subsys_dir == "conops" {
+        let source_refs = if !has_modular_schema {
+            r#"- System Architecture Model: `schema/model.sysml`
+- Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
+
+Operational use case realization and traceability links derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 29148."#
+                .to_string()
+        } else if uc_m.subsys_dir == "conops" {
             r#"- ConOps Operational Activities: `schema/conops/activities.sysml`
 - System Architecture Model: `schema/model.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
@@ -2920,6 +3099,29 @@ mod tests {
         Ok(())
     }
 
+    /// Verifies `strip_use_case_prefix` safely strips simple and composite prefixes (`UC_AC_01_`, `UC_01_`, `UC-02-`, `UC03_`) using `.get(..)` bounds-checked slicing.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_strip_use_case_prefix_variations` in `crates/compile-sysml/src/sync/forward.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves non-numeric use case prefixes (`UC_Alpha_Workflow`) while stripping iterative numeric prefixes up to 4 levels.
+    ///
+    /// ## 3. Preconditions
+    /// - Static string slices representing use case identifier variations.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts exact stripped suffixes for single and composite prefixes.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over string length.
+    /// - Space Complexity: O(1) zero heap allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Uses `.get(..)` bounds-checked slicing without panicking on short or non-ASCII inputs.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-FORWARD-STRIP-USE-CASE-PREFIX] | SysML v2: VerificationCaseDef(test_strip_use_case_prefix_variations)
     #[test]
     fn test_strip_use_case_prefix_variations() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(
@@ -2934,6 +3136,11 @@ mod tests {
             strip_use_case_prefix("UC03_Node_Arena_Memory_Management_Workflow"),
             "Node_Arena_Memory_Management_Workflow"
         );
+        assert_eq!(
+            strip_use_case_prefix("UC_AC_01_Rustc_E0453_Forbid_Direct_Override"),
+            "Rustc_E0453_Forbid_Direct_Override"
+        );
+        assert_eq!(strip_use_case_prefix("UC_01_Login"), "Login");
         assert_eq!(
             strip_use_case_prefix("UC_Alpha_Workflow"),
             "UC_Alpha_Workflow"
@@ -2965,6 +3172,30 @@ mod tests {
         Ok(())
     }
 
+    /// Verifies `generate_epic_statechart` (both structured `source`/`target` and legacy `first ... then ...` transitions)
+    /// and `generate_epic_class_diagram` (ensuring zero phantom package classes when `parent_package` or `root_label` is not in `part_defs`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_epic_statechart_and_class_diagram_generation` in `crates/compile-sysml/src/sync/forward.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Every class emitted in `generate_epic_class_diagram` corresponds 1:1 to a declared `PartDef` in `p.part_defs`.
+    ///
+    /// ## 3. Preconditions
+    /// - Synthetic `PackageDef` with `StateDef` transitions and `PartDef` entries.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts valid Mermaid `stateDiagram-v2` and `classDiagram` outputs without phantom package classes.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over package state and part definitions.
+    /// - Space Complexity: O(N) bounded diagram buffer.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Uses `.get(..)` bounds-checked slicing and filters out undeclared parent/root package labels.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-FORWARD-GENERATE-EPIC-STATECHART, REQ-SYNC-FORWARD-GENERATE-EPIC-CLASS-DIAGRAM] | SysML v2: VerificationCaseDef(test_epic_statechart_and_class_diagram_generation)
     #[test]
     fn test_epic_statechart_and_class_diagram_generation() -> Result<(), Box<dyn std::error::Error>> {
         use deap_core::sysml_ast::{AttributeDef, PortDef, StateDef, TransitionDef};
@@ -3022,11 +3253,38 @@ mod tests {
         assert!(class_diag.contains("class StateMachineSolverEngine {"));
         assert!(class_diag.contains("+ASTStreamPort stream_in (in)"));
         assert!(class_diag.contains("+Integer recursion_depth"));
-        assert!(class_diag.contains("SystemModel --> StateMachineSolverEngine : contains"));
+        assert!(!class_diag.contains("SystemModel"), "Undeclared parent_package must not be emitted as phantom class");
         assert!(class_diag.contains("StateMachineSolverEngine --> StateHierarchyFlattener : coordinates"));
         Ok(())
     }
 
+    /// Verifies User Story subsystem Parent Epic linkage, declared `PartDef` lifeline binding,
+    /// and dynamic `Specification Source` selection based on modular vs single-file schema presence.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_user_story_subsystem_parent_epic_and_dynamic_spec_source` in `crates/compile-sysml/src/sync/forward.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves bijective lifeline-to-`PartDef` trace closure and accurate `Specification Source` binding for generated User Stories.
+    ///
+    /// ## 3. Preconditions
+    /// - Synthetic `PackageDef` hierarchy contains declared subsystem `PartDef`, `ActionDef`, and `InteractionDef` nodes.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts generated User Story binds sequence lifelines to declared `PartDef`s, strips composite action prefixes, and selects `schema/model.sysml` when modular schema directories are absent.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over fixture AST dimension.
+    /// - Space Complexity: O(N) bounded auxiliary memory for generated markdown map.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates forward-sync output map lookup (`Result<(), Box<dyn std::error::Error>>`).
+    /// - State: Executes purely in-memory (`dry_run: true`) without mutating workspace files.
+    /// - Action: Executes forward-sync deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds heap allocations to synthetic test fixture capacity.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS] | SysML v2: VerificationCaseDef(test_user_story_subsystem_parent_epic_and_dynamic_spec_source)
     #[test]
     fn test_user_story_subsystem_parent_epic_and_dynamic_spec_source() -> Result<(), Box<dyn std::error::Error>> {
         use deap_core::sysml_ast::{ActionDef, InteractionDef};
@@ -3039,6 +3297,10 @@ mod tests {
             name: "SpatioTemporalStateSolvers".to_string(),
             ..Default::default()
         };
+        sub.part_defs.push(PartDef {
+            name: "GrammarLoweringEngine".to_string(),
+            ..Default::default()
+        });
         sub.part_defs.push(PartDef {
             name: "StateMachineSolverEngine".to_string(),
             ..Default::default()
@@ -3077,8 +3339,12 @@ mod tests {
             .ok_or("expected value is absent")?;
 
         assert!(
-            us.contains("[schema/subsystems/spatio_temporal_state_solvers/behavior.sysml]"),
-            "Specification Source must bind to behavior.sysml"
+            us.contains("[schema/model.sysml](../../schema/model.sysml)"),
+            "Specification Source must bind to schema/model.sysml when modular schema dirs are absent"
+        );
+        assert!(
+            us.contains("[EPIC-02-SpatioTemporalStateSolvers](../epics/EPIC-02-SpatioTemporalStateSolvers.md)"),
+            "Parent Epic must bind to EPIC-02-SpatioTemporalStateSolvers instead of EPIC-02-ConOps"
         );
         assert!(
             us.contains("GrammarLoweringEngine->>StateMachineSolverEngine: SolveStateDynamicsAction()"),
