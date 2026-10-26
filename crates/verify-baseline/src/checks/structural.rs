@@ -1889,12 +1889,13 @@ pub fn check_blueprint_grounding(repo_root: &Path) -> Result<(), Vec<String>> {
         .join("docs")
         .join("architecture")
         .join("blueprints");
-    if !blueprints_dir.is_dir() && !is_upstream_compiler(repo_root) {
+    let designs_dir = repo_root.join("docs").join("designs");
+    if !blueprints_dir.is_dir() && !designs_dir.is_dir() && !is_upstream_compiler(repo_root) {
         return Ok(());
     }
 
     let mut violations = Vec::new();
-    if !blueprints_dir.is_dir() {
+    if is_upstream_compiler(repo_root) && !blueprints_dir.is_dir() {
         violations.push(
             "Missing docs/architecture/blueprints directory in upstream specification compiler repository."
                 .to_string(),
@@ -1902,51 +1903,87 @@ pub fn check_blueprint_grounding(repo_root: &Path) -> Result<(), Vec<String>> {
         return Err(violations);
     }
 
-    for bp in CanonicalArchitectureBlueprint::ALL {
-        if !is_upstream_compiler(repo_root)
-            && matches!(
-                bp,
-                CanonicalArchitectureBlueprint::SysmlSsotBidirectionalSynchronizationArchitecture
-            )
-        {
-            continue;
-        }
-        let bp_path = blueprints_dir.join(bp.as_str());
-        if !bp_path.is_file() {
-            violations.push(format!(
-                "Missing canonical architecture blueprint: docs/architecture/blueprints/{}",
-                bp.as_str()
-            ));
-        }
-    }
-
     let mut md_files = Vec::new();
-    match fs::read_dir(&blueprints_dir) {
-        Ok(entries) => {
-            for entry_res in entries {
-                match entry_res {
-                    Ok(entry) => {
-                        let path = entry.path();
-                        if path.is_file()
-                            && path.extension().map(|ext| ext == "md").unwrap_or(false)
-                        {
-                            md_files.push(path);
+
+    if blueprints_dir.is_dir() {
+        for bp in CanonicalArchitectureBlueprint::ALL {
+            if !is_upstream_compiler(repo_root)
+                && matches!(
+                    bp,
+                    CanonicalArchitectureBlueprint::SysmlSsotBidirectionalSynchronizationArchitecture
+                )
+            {
+                continue;
+            }
+            let bp_path = blueprints_dir.join(bp.as_str());
+            if !bp_path.is_file() {
+                violations.push(format!(
+                    "Missing canonical architecture blueprint: docs/architecture/blueprints/{}",
+                    bp.as_str()
+                ));
+            }
+        }
+
+        match fs::read_dir(&blueprints_dir) {
+            Ok(entries) => {
+                for entry_res in entries {
+                    match entry_res {
+                        Ok(entry) => {
+                            let path = entry.path();
+                            if path.is_file()
+                                && path.extension().map(|ext| ext == "md").unwrap_or(false)
+                            {
+                                md_files.push(path);
+                            }
                         }
-                    }
-                    Err(err) => {
-                        violations.push(format!(
-                            "docs/architecture/blueprints: directory entry read error: {}",
-                            err
-                        ));
+                        Err(err) => {
+                            violations.push(format!(
+                                "docs/architecture/blueprints: directory entry read error: {}",
+                                err
+                            ));
+                        }
                     }
                 }
             }
+            Err(err) => {
+                violations.push(format!(
+                    "docs/architecture/blueprints: unable to read directory: {}",
+                    err
+                ));
+            }
         }
-        Err(err) => {
-            violations.push(format!(
-                "docs/architecture/blueprints: unable to read directory: {}",
-                err
-            ));
+    }
+
+    if designs_dir.is_dir() {
+        match fs::read_dir(&designs_dir) {
+            Ok(entries) => {
+                for entry_res in entries {
+                    match entry_res {
+                        Ok(entry) => {
+                            let path = entry.path();
+                            let is_blueprint_md = path.is_file()
+                                && path.extension().map(|ext| ext == "md").unwrap_or(false)
+                                && path
+                                    .file_name()
+                                    .and_then(|name| name.to_str())
+                                    .map(|name| name.starts_with("blueprint-"))
+                                    .unwrap_or(false);
+                            if is_blueprint_md {
+                                md_files.push(path);
+                            }
+                        }
+                        Err(err) => {
+                            violations.push(format!(
+                                "docs/designs: directory entry read error: {}",
+                                err
+                            ));
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                violations.push(format!("docs/designs: unable to read directory: {}", err));
+            }
         }
     }
 
@@ -2012,10 +2049,12 @@ fn scan_blueprint_markdown_file(
         }
     };
 
+    let is_design_blueprint = rel.starts_with("docs/designs/");
+
     for (idx, line) in content.lines().enumerate() {
         let line_no = idx.saturating_add(1);
 
-        if line.contains('\u{2014}') {
+        if !is_design_blueprint && line.contains('\u{2014}') {
             violations.push(format!(
                 "{}:{}: forbidden Unicode em dash (\\u2014) in architecture blueprint",
                 rel, line_no
@@ -2434,7 +2473,9 @@ fn check_blueprint_line_crates_paths(
             continue;
         }
 
-        if !repo_root.join(cleaned).exists() {
+        let is_design_proposed_path = rel_file.starts_with("docs/designs/")
+            && repo_root.join("crates").join(crate_name).is_dir();
+        if !is_design_proposed_path && !repo_root.join(cleaned).exists() {
             violations.push(format!(
                 "{}:{}: non-existent workspace path '{}' referenced in architecture blueprint",
                 rel_file, line_no, cleaned
@@ -3478,6 +3519,85 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             res.is_ok(),
             "Check 33 must exclude machine-generated .digest.json sidecars (refs #532), got: {:?}",
             res.err()
+        );
+    }
+
+    /// Verifies that Check 37 scans downstream `docs/designs/blueprint-*.md` files for grounding violations.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 37 (Architecture Blueprint Grounding &
+    /// Completeness Gate) scope boundaries (`REQ-CHECK-37-BLUEPRINT-GROUNDING`, refs #533). Ensures
+    /// engineering design blueprints generated under `docs/designs/blueprint-*.md` are audited for
+    /// fictional crate paths, retired tool references, and Unicode em dashes even when
+    /// `docs/architecture/blueprints/` is absent in a downstream workspace.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - When `docs/designs/blueprint-01-core.md` references an ungrounded crate path
+    ///   (`crates/deap-parser/src/lib.rs`) in a downstream workspace without `docs/architecture/blueprints`,
+    ///   `check_blueprint_grounding` returns `Err` citing `docs/designs/blueprint-01-core.md`.
+    /// - When `docs/designs/blueprint-01-core.md` contains only valid grounded content,
+    ///   `check_blueprint_grounding` returns `Ok(())`.
+    ///
+    /// ## 3. Preconditions
+    /// Temporary test directory is writable and isolated, with no `.pipeline/upstream` marker.
+    ///
+    /// ## 4. Postconditions
+    /// Asserts both fail-closed rejection on ungrounded crate references in `docs/designs/blueprint-*.md`
+    /// and clean acceptance once remediated.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) bounded fixture file count and size. Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Panics if `check_blueprint_grounding` silently skips `docs/designs/blueprint-01-core.md` or
+    /// rejects a clean downstream design blueprint.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-37-BLUEPRINT-GROUNDING].
+    #[test]
+    fn test_check_37_scans_docs_designs_blueprints() {
+        let tmp = TempDir::new("c37_docs_designs_blueprints");
+        let designs_dir = tmp.path.join("docs").join("designs");
+        fs::create_dir_all(&designs_dir).unwrap();
+
+        let bp_file = designs_dir.join("blueprint-01-core.md");
+        {
+            let mut f = File::create(&bp_file).unwrap();
+            writeln!(
+                f,
+                "# Design Blueprint 01\nGrounded in `crates/deap-parser/src/lib.rs`."
+            )
+            .unwrap();
+        }
+
+        let err_res = check_blueprint_grounding(&tmp.path);
+        assert!(
+            err_res.is_err(),
+            "Check 37 must scan docs/designs/blueprint-*.md even when docs/architecture/blueprints is absent (refs #533)"
+        );
+        let errs = err_res.unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("docs/designs/blueprint-01-core.md")
+                    && e.contains("deap-parser")),
+            "Expected grounding error on docs/designs/blueprint-01-core.md for deap-parser, got: {:?}",
+            errs
+        );
+
+        {
+            let mut f = File::create(&bp_file).unwrap();
+            writeln!(
+                f,
+                "# Design Blueprint 01\nPure domain design specification without ungrounded crate paths."
+            )
+            .unwrap();
+        }
+
+        let clean_res = check_blueprint_grounding(&tmp.path);
+        assert!(
+            clean_res.is_ok(),
+            "Valid docs/designs/blueprint-01-core.md must pass Check 37: {:?}",
+            clean_res.err()
         );
     }
 }
