@@ -5752,6 +5752,89 @@ pub fn strip_sysml_comments(content: &str) -> String {
     out
 }
 
+/// Strips all line comments (`// ...`), block comments (`/* ... */`, including `doc /* ... */`),
+/// and double-quoted string literals (`"..."`) from a SysML source string while preserving newlines.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C. Prevents documentation prose and string literals
+/// containing keywords like `"part "` from polluting line-level structural token scans.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Every newline (`\n`) in `input` is preserved in the output.
+/// - All `/* ... */` blocks (including `doc /* ... */`), `// ...` comments, and `"..."` string bodies
+///   are replaced with whitespace.
+///
+/// ## 3. Preconditions
+/// - `input` is a valid UTF-8 source slice.
+///
+/// ## 4. Postconditions
+/// - Returns a newly allocated `String` free of comments and string literal contents.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ single-pass character scan. Space Complexity: $O(N)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Unclosed block comments or string literals terminate cleanly at end-of-input without panicking.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-AST-SSOT-PARITY/STRIP-ALL-COMMENTS-AND-STRINGS]
+fn strip_all_block_comments_and_strings(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    let mut in_str = false;
+    let mut in_escape = false;
+    while let Some(c) = chars.next() {
+        if in_str {
+            if c == '\n' {
+                out.push('\n');
+            } else {
+                out.push(' ');
+            }
+            if in_escape {
+                in_escape = false;
+            } else if c == '\\' {
+                in_escape = true;
+            } else if c == '"' {
+                in_str = false;
+            }
+            continue;
+        }
+        if c == '"' {
+            in_str = true;
+            out.push(' ');
+            continue;
+        }
+        if c == '/' {
+            if let Some(&'/') = chars.peek() {
+                chars.next();
+                for next_c in chars.by_ref() {
+                    if next_c == '\n' {
+                        out.push('\n');
+                        break;
+                    }
+                }
+            } else if let Some(&'*') = chars.peek() {
+                chars.next();
+                out.push(' ');
+                while let Some(next_c) = chars.next() {
+                    if next_c == '\n' {
+                        out.push('\n');
+                    }
+                    if next_c == '*' && chars.peek() == Some(&'/') {
+                        chars.next();
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// Checks if a string is a valid identifier for a subsystem, component, or part.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -6176,6 +6259,18 @@ impl UnifiedSchemaModelExtractor {
         let mut part_names = BTreeSet::new();
         for fp in file_paths {
             let p = fp.as_ref();
+            let fname_lower = p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            if fname_lower == "digest.json"
+                || fname_lower.ends_with(".digest.json")
+                || fname_lower.ends_with("-digest.json")
+                || fname_lower.ends_with("_digest.json")
+            {
+                continue;
+            }
             if let Ok(content) = std::fs::read_to_string(p) {
                 let ext = p
                     .extension()
@@ -6227,27 +6322,63 @@ impl UnifiedSchemaModelExtractor {
                     part_names.insert(p.name);
                 }
             }
-            // Fallback token scan for `part def <Ident>` or `part <Ident> :>`
-            for line in clean.lines() {
-                let trimmed = line.trim();
-                if let Some(pos) = trimmed.find("part ") {
-                    let rest = trimmed.get(pos + 5..).unwrap_or("").trim_start();
-                    let rest = rest.strip_prefix("def ").unwrap_or(rest).trim_start();
-                    let ident: String = rest
-                        .chars()
-                        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-                        .collect();
-                    if !ident.is_empty() && ident != "def" && is_valid_subsystem_identifier(&ident) {
-                        part_names.insert(ident);
+            let comment_free = strip_all_block_comments_and_strings(&clean);
+            // Fallback token scan for `part def <Ident>` or `part <Ident> :>` / `:` / `{` / `[` / `;`
+            for line in comment_free.lines() {
+                let mut stmt = line.trim();
+                for kw in ["public ", "private ", "protected ", "abstract "] {
+                    if let Some(rest) = stmt.strip_prefix(kw) {
+                        stmt = rest.trim_start();
+                    }
+                }
+                if let Some(after_part) = stmt.strip_prefix("part ") {
+                    let after_part = after_part.trim_start();
+                    if let Some(after_def) = after_part.strip_prefix("def ") {
+                        let ident: String = after_def
+                            .trim_start()
+                            .chars()
+                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                            .collect();
+                        if !ident.is_empty() && ident != "def" && is_valid_subsystem_identifier(&ident) {
+                            part_names.insert(ident);
+                        }
+                    } else {
+                        let ident: String = after_part
+                            .chars()
+                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                            .collect();
+                        let remainder = after_part.get(ident.len()..).unwrap_or("").trim_start();
+                        let is_part_usage = remainder.starts_with(':')
+                            || remainder.starts_with('{')
+                            || remainder.starts_with('[')
+                            || remainder.starts_with(';');
+                        if is_part_usage
+                            && !ident.is_empty()
+                            && ident != "def"
+                            && is_valid_subsystem_identifier(&ident)
+                        {
+                            part_names.insert(ident);
+                        }
                     }
                 }
             }
-        } else if norm_ext == ".yaml" || norm_ext == ".yml" || norm_ext == ".json" {
+        } else if norm_ext == ".json" {
+            if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(content) {
+                let is_schema_digest = json_val.as_object().is_some_and(|m| {
+                    m.contains_key("format_version")
+                        && m.contains_key("source_hash")
+                        && !m.contains_key("schema_nodes")
+                });
+                if !is_schema_digest {
+                    Self::extract_parts_from_json(&json_val, &mut part_names);
+                }
+            }
+        } else if norm_ext == ".yaml" || norm_ext == ".yml" {
             // Check structured JSON if parseable
             if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(content) {
                 Self::extract_parts_from_json(&json_val, &mut part_names);
             }
-            // Pure string/line scan for YAML and JSON component/subsystem keys
+            // Pure string/line scan for YAML component/subsystem keys
             Self::extract_parts_from_yaml_lines(content, &mut part_names);
         } else if norm_ext == ".md" || norm_ext == ".markdown" {
             let mut in_table = false;
@@ -9017,6 +9148,89 @@ package SystemModel_SSOT {
             !discovered_names.contains(&"digest.json".to_string()),
             "Did not expect digest.json in discovered: {:?}",
             discovered_names
+        );
+    }
+
+    /// Regression test for Issue #551: ensures `extract_subsystem_parts_from_text` ignores
+    /// English prose containing `"part "` inside `doc /* ... */` blocks and ignores
+    /// `SchemaDigest` JSON sidecars.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Prevents phantom subsystem pollution
+    /// from SysML documentation comments and `SchemaDigest` sidecar JSON payloads.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Only genuine SysML `part def <Ident>` and `part <Ident> :` / `{` / `[` / `;` declarations
+    ///   outside comments and string literals are extracted.
+    /// - `SchemaDigest` JSON documents (`format_version` + `source_hash` without `schema_nodes`)
+    ///   produce zero extracted subsystem identifiers.
+    ///
+    /// ## 3. Preconditions & Input Domain
+    /// - `sysml_src` contains `doc /* ... */` prose with `"part "` substrings alongside valid
+    ///   `part def` and `part` usage statements.
+    /// - `digest_json` is a serialized `SchemaDigest` JSON payload.
+    ///
+    /// ## 4. Postconditions & State Mutation Contract
+    /// - Pure in-memory verification with zero filesystem side effects.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Asserts exact inclusion and exclusion invariants on deterministic `BTreeSet<String>` outputs.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
+    #[test]
+    fn test_issue_551_extract_subsystem_parts_ignores_doc_prose_and_schema_digest() {
+        let sysml_src = r#"
+package FlightPkg {
+    doc /* This module is part Boundaries of the counterpart TelemetryBus and part Hierarchy. */
+    part def FlightDirector {
+        part actuator_unit : ActuatorNode;
+    }
+}
+"#;
+        let sysml_parts =
+            UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".sysml", sysml_src);
+        assert!(
+            sysml_parts.contains("FlightDirector"),
+            "Expected FlightDirector in extracted parts: {:?}",
+            sysml_parts
+        );
+        assert!(
+            sysml_parts.contains("actuator_unit"),
+            "Expected actuator_unit in extracted parts: {:?}",
+            sysml_parts
+        );
+        assert!(
+            !sysml_parts.contains("Boundaries"),
+            "Did not expect doc prose word Boundaries in extracted parts: {:?}",
+            sysml_parts
+        );
+        assert!(
+            !sysml_parts.contains("TelemetryBus"),
+            "Did not expect counterpart substring TelemetryBus in extracted parts: {:?}",
+            sysml_parts
+        );
+        assert!(
+            !sysml_parts.contains("Hierarchy"),
+            "Did not expect doc prose word Hierarchy in extracted parts: {:?}",
+            sysml_parts
+        );
+
+        let digest_json = r#"{
+  "format_version": "1.0",
+  "source_hash": "deadbeef",
+  "parts": [{"name": "DigestGhostPart"}],
+  "modules": [{"name": "DigestGhostModule"}]
+}"#;
+        let json_parts =
+            UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".json", digest_json);
+        assert!(
+            json_parts.is_empty(),
+            "Expected SchemaDigest JSON to yield empty parts set, got: {:?}",
+            json_parts
         );
     }
 }
