@@ -338,18 +338,10 @@ impl SchemaDigest {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-DIGEST-SCHEMADIGEST-WRITE-TO-FILE] | SysML v2: ActionDef(SchemaDigest::write_to_file)
     pub fn write_to_file(&self, path: &Path) -> Result<(), io::Error> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
         let json_text = serde_json::to_string_pretty(self)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
-        let tmp_path = path.with_extension("tmp");
-        fs::write(&tmp_path, json_text)?;
-        fs::rename(&tmp_path, path)?;
-
-        Ok(())
+        write_atomic(path, &json_text)
     }
 }
 
@@ -512,15 +504,39 @@ pub fn count_structural_elements(pkg: &PackageDef) -> usize {
 pub fn compute_file_manifest(files: &[PathBuf]) -> Vec<FileDigestEntry> {
     let mut manifest = Vec::new();
     let cwd = std::env::current_dir().ok();
+    let common_root: Option<PathBuf> = files.first().and_then(|first| {
+        let first_parent = first.parent()?;
+        first_parent
+            .ancestors()
+            .find(|anc| files.iter().all(|f| f.starts_with(anc)))
+            .map(Path::to_path_buf)
+    });
 
     for p in files {
         let rel_p = p.strip_prefix(".").unwrap_or(p);
-        let rel_p = if let Some(ref cwd_path) = cwd {
-            rel_p.strip_prefix(cwd_path).unwrap_or(rel_p)
-        } else {
+        let rel_p = if !rel_p.is_absolute() {
             rel_p
+        } else if let Some(stripped) = cwd.as_ref().and_then(|cwd_path| rel_p.strip_prefix(cwd_path).ok()) {
+            stripped
+        } else if let Some(schema_ws_root) = rel_p
+            .ancestors()
+            .find(|anc| {
+                anc.file_name()
+                    .is_some_and(|n| n == "schema" || n == "docs" || n == ".pipeline")
+            })
+            .and_then(Path::parent)
+        {
+            rel_p.strip_prefix(schema_ws_root).unwrap_or(rel_p)
+        } else if let Some(ref root) = common_root {
+            rel_p
+                .strip_prefix(root)
+                .ok()
+                .filter(|s| !s.as_os_str().is_empty())
+                .unwrap_or(rel_p)
+        } else {
+            rel_p.file_name().map(Path::new).unwrap_or(rel_p)
         };
-        let path = rel_p.to_string_lossy().to_string();
+        let path = rel_p.to_string_lossy().replace('\\', "/");
 
         let bytes = fs::metadata(p).map(|m| m.len()).unwrap_or(0);
 
@@ -609,12 +625,28 @@ pub fn write_digest_atomic(path: &Path, digest: &SchemaDigest) -> Result<(), io:
 /// Realises: [REQ-SEMANTIC-DIGEST-WRITE-ATOMIC] | SysML v2: ActionDef(write_atomic)
 pub fn write_atomic(path: &Path, content: &str) -> Result<(), io::Error> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
     }
-    let tmp_path = path.with_extension("tmp");
-    fs::write(&tmp_path, content)?;
-    fs::rename(&tmp_path, path)?;
-    Ok(())
+    let file_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("artifact");
+    let pid = std::process::id();
+    let tmp_name = format!(".{file_name}.tmp.{pid}");
+    let tmp_path = path.with_file_name(tmp_name);
+    let write_res = (|| -> Result<(), io::Error> {
+        let mut file = fs::File::create(&tmp_path)?;
+        io::Write::write_all(&mut file, content.as_bytes())?;
+        file.sync_all()?;
+        fs::rename(&tmp_path, path)?;
+        Ok(())
+    })();
+    if write_res.is_err() {
+        let _ = fs::remove_file(&tmp_path);
+    }
+    write_res
 }
 
 
@@ -1392,14 +1424,14 @@ mod tests {
         assert_eq!(manifest.len(), 2);
 
         // Entry 1 verification
-        assert_eq!(manifest.first().ok_or("missing first element of manifest")?.path, file1.to_string_lossy().to_string());
+        assert_eq!(manifest.first().ok_or("missing first element of manifest")?.path, "subsystem_a.sysml");
         assert_eq!(manifest.first().ok_or("missing first element of manifest")?.sha256, compute_sha256(content1.as_bytes()));
         assert_eq!(manifest.first().ok_or("missing first element of manifest")?.bytes, content1.len() as u64);
         assert_eq!(manifest.first().ok_or("missing first element of manifest")?.lines, content1.lines().count());
         assert_eq!(manifest.first().ok_or("missing first element of manifest")?.entities, 2); // ComponentA and mass
 
         // Entry 2 verification
-        assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.path, file2.to_string_lossy().to_string());
+        assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.path, "subsystem_b.sysml");
         assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.sha256, compute_sha256(content2.as_bytes()));
         assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.bytes, content2.len() as u64);
         assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.lines, content2.lines().count());
@@ -1480,5 +1512,137 @@ mod tests {
             !src.contains(k0_token),
             "compile-sysml/src/semantic/digest.rs must delegate SHA-256 compression to deap_core::digest without duplicating K constants"
         );
+    }
+
+    /// Verifies `ARCH-06`: `compute_file_manifest` produces deterministic relative path keys
+    /// regardless of whether the input files reside in an external temporary directory or relative path.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_arch_06_compute_file_manifest_deterministic_relative_paths` in `crates/compile-sysml/src/semantic/digest.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves referential transparency of `FileDigestEntry::path` across distinct host temporary directories.
+    ///
+    /// ## 3. Preconditions
+    /// - Host temporary directory is writable.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<(), Box<dyn std::error::Error>>` after asserting identical relative manifest paths across distinct directories.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) over two synthetic temporary directories.
+    /// - Space Complexity: O(1) bounded auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Cleans up both temporary directories prior to returning.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SEMANTIC-DIGEST-COMPUTE-FILE-MANIFEST] | SysML v2: TestCaseDef(test_arch_06_compute_file_manifest_deterministic_relative_paths)
+    #[test]
+    fn test_arch_06_compute_file_manifest_deterministic_relative_paths() -> Result<(), Box<dyn std::error::Error>> {
+        let pid = std::process::id();
+        let dir_a = std::env::temp_dir().join(format!("deap_arch06_manifest_a_{pid}"));
+        let dir_b = std::env::temp_dir().join(format!("deap_arch06_manifest_b_{pid}"));
+        let _ = fs::remove_dir_all(&dir_a);
+        let _ = fs::remove_dir_all(&dir_b);
+
+        let schema_a = dir_a.join("schema");
+        let schema_b = dir_b.join("schema");
+        fs::create_dir_all(&schema_a)?;
+        fs::create_dir_all(&schema_b)?;
+
+        let content = "package DeterministicPkg {\n    part def UnitA;\n}\n";
+        let file_a = schema_a.join("unit_a.sysml");
+        let file_b = schema_b.join("unit_a.sysml");
+        fs::write(&file_a, content)?;
+        fs::write(&file_b, content)?;
+
+        let manifest_a = compute_file_manifest(&[file_a]);
+        let manifest_b = compute_file_manifest(&[file_b]);
+
+        let _ = fs::remove_dir_all(&dir_a);
+        let _ = fs::remove_dir_all(&dir_b);
+
+        assert_eq!(manifest_a, manifest_b, "Manifests from distinct temp roots must be identical");
+        let entry = manifest_a.first().ok_or("missing manifest entry")?;
+        assert!(
+            !Path::new(&entry.path).is_absolute(),
+            "Manifest path must be relative, got: {}",
+            entry.path
+        );
+        assert_eq!(entry.path, "schema/unit_a.sysml");
+        Ok(())
+    }
+
+    /// Verifies `ARCH-04`: `write_atomic` uses a PID-scoped sibling temporary file (`.{file_name}.tmp.{pid}`),
+    /// flushes with `sync_all`, leaves zero leftover `.tmp` files on success or failure, and `SchemaDigest::write_to_file` delegates to `write_atomic`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_arch_04_write_atomic_pid_scoped_temp_and_cleanup` in `crates/compile-sysml/src/semantic/digest.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves crash-consistent atomic file persistence without `.with_extension("tmp")` collisions.
+    ///
+    /// ## 3. Preconditions
+    /// - Host temporary directory is writable.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts clean atomic write, zero leftover temp files on rename failure, and delegation from `SchemaDigest::write_to_file`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over small test payloads.
+    /// - Space Complexity: O(1) bounded auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Cleans up temporary test directory before returning.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SEMANTIC-DIGEST-WRITE-ATOMIC, REQ-SEMANTIC-DIGEST-SCHEMADIGEST-WRITE-TO-FILE] | SysML v2: TestCaseDef(test_arch_04_write_atomic_pid_scoped_temp_and_cleanup)
+    #[test]
+    fn test_arch_04_write_atomic_pid_scoped_temp_and_cleanup() -> Result<(), Box<dyn std::error::Error>> {
+        let pid = std::process::id();
+        let tmp_dir = std::env::temp_dir().join(format!("deap_arch04_write_atomic_{pid}"));
+        let _ = fs::remove_dir_all(&tmp_dir);
+        fs::create_dir_all(&tmp_dir)?;
+
+        // 1. Verify write_atomic preserves sibling files with `.tmp` extension (which `.with_extension("tmp")` clobbered)
+        let unrelated_tmp = tmp_dir.join("model.tmp");
+        fs::write(&unrelated_tmp, "preserve-me")?;
+        let target_file = tmp_dir.join("model.sysml");
+        write_atomic(&target_file, "package AtomicPkg {}\n")?;
+        assert_eq!(fs::read_to_string(&target_file)?, "package AtomicPkg {}\n");
+        assert_eq!(
+            fs::read_to_string(&unrelated_tmp)?,
+            "preserve-me",
+            "write_atomic must use .{{file_name}}.tmp.{{pid}} and never clobber sibling .tmp files"
+        );
+
+        // 2. Verify cleanup of .{file_name}.tmp.{pid} when rename fails (target is an existing non-empty directory)
+        let dir_target = tmp_dir.join("dir_target.sysml");
+        fs::create_dir_all(dir_target.join("nested"))?;
+        let err_res = write_atomic(&dir_target, "should fail rename");
+        assert!(err_res.is_err(), "Renaming a file over a non-empty directory must fail");
+        let expected_tmp = tmp_dir.join(format!(".dir_target.sysml.tmp.{pid}"));
+        assert!(
+            !expected_tmp.exists(),
+            "Failed write_atomic must clean up temporary file {}",
+            expected_tmp.display()
+        );
+
+        // 3. Verify SchemaDigest::write_to_file also preserves sibling .tmp files by delegating to write_atomic
+        let digest_unrelated_tmp = tmp_dir.join("schema-digest.tmp");
+        fs::write(&digest_unrelated_tmp, "preserve-digest-tmp")?;
+        let digest_target = tmp_dir.join("schema-digest.json");
+        let digest = SchemaDigest::default();
+        digest.write_to_file(&digest_target)?;
+        assert!(digest_target.is_file());
+        assert_eq!(
+            fs::read_to_string(&digest_unrelated_tmp)?,
+            "preserve-digest-tmp",
+            "SchemaDigest::write_to_file must delegate to write_atomic and not overwrite schema-digest.tmp"
+        );
+
+        let _ = fs::remove_dir_all(&tmp_dir);
+        Ok(())
     }
 }

@@ -253,6 +253,41 @@ pub fn reverse_sync_specs_to_sysml(
     base_pkg: Option<&PackageDef>,
     opts: &ReverseSyncOptions,
 ) -> Result<(PackageDef, SchemaDigest), String> {
+    reverse_sync_specs_to_sysml_with_dry_run(base_pkg, opts, false)
+}
+
+/// Synchronizes Markdown specifications into a SysML v2 AST package and cryptographic digest,
+/// optionally suppressing disk writes when `dry_run` is `true`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `reverse_sync_specs_to_sysml_with_dry_run` in `crates/compile-sysml/src/sync/reverse.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - AST SSOT Parity Invariant: Structural part definitions present in multi-file subsystem schemas
+///   are located via `pkg.find_part_mut` and updated in-place without generating root-level duplicate definitions.
+/// - Atomic Persistence Invariant (`ARCH-04`): When `dry_run` is `false`, emits `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` via `write_atomic` and `write_digest_atomic`. When `dry_run` is `true`, performs zero disk writes.
+///
+/// ## 3. Preconditions
+/// - `opts.docs_dir` must point to an accessible directory containing markdown specifications.
+/// - If `opts.allow_overwrite` is false, `opts.output_path` must not collide with `opts.schema_path`.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok((PackageDef, SchemaDigest))` on success.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N_{files} \cdot S_{file} + V_{ast})$ where $N_{files}$ is the count of scanned markdown files.
+/// - Space Complexity: $O(V_{ast})$ proportional to AST entity count.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Returns descriptive `Err(String)` if filesystem operations fail or invalid paths are supplied.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-SYNC-REVERSE/ENGINE-SYNC] | SysML v2: ActionDef(reverse_sync_specs_to_sysml_with_dry_run)
+pub fn reverse_sync_specs_to_sysml_with_dry_run(
+    base_pkg: Option<&PackageDef>,
+    opts: &ReverseSyncOptions,
+    dry_run: bool,
+) -> Result<(PackageDef, SchemaDigest), String> {
     if !opts.docs_dir.exists() {
         return Err(format!("Docs directory does not exist: {}", opts.docs_dir.display()));
     }
@@ -546,27 +581,73 @@ pub fn reverse_sync_specs_to_sysml(
     // Serialize to SysML
     let sysml_code = to_sysml(&pkg);
 
-    // Write schema atomically
-    if let Some(parent) = opts.output_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| {
-            format!("Failed to create directory '{}': {}", parent.display(), e)
-        })?;
+    // When !dry_run, write schema atomically before computing file_manifest so self-referential
+    // schema_path reflects updated content.
+    if !dry_run {
+        if let Some(parent) = opts.output_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                format!("Failed to create directory '{}': {}", parent.display(), e)
+            })?;
+        }
+        write_atomic(&opts.output_path, &sysml_code).map_err(|e| e.to_string())?;
     }
-    write_atomic(&opts.output_path, &sysml_code).map_err(|e| e.to_string())?;
 
-    // Compute and write digest
+    // Compute digest and collect manifest files across schema_dir and docs/designs/
     let mut digest = generate_digest(&pkg, &sysml_code);
+    let mut manifest_files: Vec<PathBuf> = Vec::new();
     let schema_dir = opts
         .schema_path
         .as_deref()
         .unwrap_or_else(|| std::path::Path::new("schema"));
     if schema_dir.is_dir() {
-        let files = crate::parser::grammar::discover_sysml_files(schema_dir);
-        if !files.is_empty() {
-            let manifest = crate::semantic::digest::compute_file_manifest(&files);
-            digest = digest.with_file_manifest(manifest);
+        manifest_files.extend(crate::parser::grammar::discover_sysml_files(schema_dir));
+    } else if schema_dir.is_file() {
+        manifest_files.push(schema_dir.to_path_buf());
+    }
+
+    let designs_dir = opts.docs_dir.join("designs");
+    if designs_dir.is_dir() {
+        for design_sysml in crate::parser::grammar::discover_sysml_files(&designs_dir) {
+            if !dry_run {
+                let design_src = fs::read_to_string(&design_sysml).map_err(|e| {
+                    format!(
+                        "Failed to read design SysML file '{}': {}",
+                        design_sysml.display(),
+                        e
+                    )
+                })?;
+                let design_pkg = crate::parse_sysml(&design_src).map_err(|e| e.to_string())?;
+                let single_manifest = crate::semantic::digest::compute_file_manifest(
+                    std::slice::from_ref(&design_sysml),
+                );
+                let bp_digest =
+                    generate_digest(&design_pkg, &design_src).with_file_manifest(single_manifest);
+                if let Some(stem) = design_sysml.file_stem().and_then(|s| s.to_str()) {
+                    let sidecar_path = designs_dir.join(format!("{stem}.digest.json"));
+                    write_digest_atomic(&sidecar_path, &bp_digest).map_err(|e| e.to_string())?;
+                }
+            }
+            manifest_files.push(design_sysml);
         }
     }
+
+    manifest_files.sort();
+    manifest_files.dedup();
+    if !manifest_files.is_empty() {
+        let manifest = crate::semantic::digest::compute_file_manifest(&manifest_files);
+        digest = digest.with_file_manifest(manifest);
+    }
+
+    if dry_run {
+        println!(
+            "[SysML v2 Reverse-Sync] [DRY RUN] Would merge specifications from '{}' -> '{}' (SHA-256: {})",
+            opts.docs_dir.display(),
+            opts.output_path.display(),
+            digest.sha256
+        );
+        return Ok((pkg, digest));
+    }
+
     write_digest_atomic(&opts.digest_path, &digest).map_err(|e| e.to_string())?;
 
     println!(
@@ -894,16 +975,157 @@ part: CoreSubsystem
             allow_overwrite: true,
         };
 
-        let (pkg_dry, _) = reverse_sync_specs_to_sysml_with_dry_run(None, &opts, true)?;
+        let base_pkg = PackageDef {
+            name: "TestSys".to_string(),
+            part_defs: vec![PartDef {
+                name: "CoreController".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let (pkg_dry, _) = reverse_sync_specs_to_sysml_with_dry_run(Some(&base_pkg), &opts, true)?;
         assert_eq!(pkg_dry.part_defs.len(), 1);
         assert!(!schema_path.exists(), "Dry-run must not write output_path");
         assert!(!digest_path.exists(), "Dry-run must not write digest_path");
 
-        let (_pkg_live, _) = reverse_sync_specs_to_sysml_with_dry_run(None, &opts, false)?;
+        let (_pkg_live, _) = reverse_sync_specs_to_sysml_with_dry_run(Some(&base_pkg), &opts, false)?;
         assert!(schema_path.exists(), "Non-dry-run must atomically write output_path");
         assert!(digest_path.exists(), "Non-dry-run must atomically write digest_path");
 
         let _ = fs::remove_dir_all(&tmp_dir);
+        Ok(())
+    }
+
+    /// Verifies that `reverse_sync_specs_to_sysml` includes `docs/designs/*.sysml` in `digest.file_manifest`
+    /// and atomically refreshes sidecar `docs/designs/*.digest.json` files.
+    ///
+    /// # Objective
+    /// Regression test for GitHub Issue #536 ensuring `reverse_sync_specs_to_sysml` discovers `.sysml`
+    /// files under `docs/designs/`, includes them in the unified `file_manifest`, and updates stale
+    /// sidecar `.digest.json` files on disk.
+    ///
+    /// # Intention
+    /// Prevent stale blueprint sidecar digests and incomplete `file_manifest` arrays after reverse-sync.
+    ///
+    /// # Logic
+    /// 1. Create a temporary workspace containing `docs/designs/blueprint-01-core.sysml` and a stale
+    ///    `docs/designs/blueprint-01-core.digest.json`.
+    /// 2. Execute `reverse_sync_specs_to_sysml`.
+    /// 3. Assert that `digest.file_manifest` contains `"docs/designs/blueprint-01-core.sysml"` and that
+    ///    `docs/designs/blueprint-01-core.digest.json` has an updated SHA-256 and `file_manifest`.
+    ///
+    /// # Parameters
+    /// - None (self-contained unit test fixture).
+    ///
+    /// # Returns
+    /// - `Result<(), Box<dyn std::error::Error>>` indicating test pass or failure.
+    ///
+    /// # Errors
+    /// - Returns `Err` if temporary directory creation, file I/O, or reverse-sync fails.
+    ///
+    /// # Safety
+    /// - Pure safe Rust operating on an isolated temporary directory; no `unsafe` blocks.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_reverse_sync_includes_docs_designs_sysml_in_manifest_and_updates_sidecar_digests` in `crates/compile-sysml/src/sync/reverse.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Ensures `file_manifest` covers `docs/designs/*.sysml` and sidecar `.digest.json` digests remain synchronized.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary workspace directory is writable.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `digest.file_manifest` contains `"docs/designs/blueprint-01-core.sysml"` and `docs/designs/blueprint-01-core.digest.json` is refreshed.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over synthetic fixture.
+    /// - Space Complexity: O(N) bounded memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Removes temporary directory on test completion prior to assertions.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-REVERSE-REVERSE-SYNC-SPECS-TO-SYSML] | SysML v2: VerificationCaseDef(test_reverse_sync_includes_docs_designs_sysml_in_manifest_and_updates_sidecar_digests)
+    #[test]
+    fn test_reverse_sync_includes_docs_designs_sysml_in_manifest_and_updates_sidecar_digests(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let tmp_dir = std::env::temp_dir().join(format!(
+            "deap_test_reverse_sync_designs_manifest_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&tmp_dir);
+
+        let designs_dir = tmp_dir.join("docs").join("designs");
+        let pipeline_dir = tmp_dir.join(".pipeline");
+        fs::create_dir_all(&designs_dir).map_err(|e| e.to_string())?;
+        fs::create_dir_all(&pipeline_dir).map_err(|e| e.to_string())?;
+
+        let bp_sysml_path = designs_dir.join("blueprint-01-core.sysml");
+        fs::write(
+            &bp_sysml_path,
+            "package BlueprintCore {\n    part def CoreEngine {}\n}\n",
+        )
+        .map_err(|e| e.to_string())?;
+
+        let bp_digest_path = designs_dir.join("blueprint-01-core.digest.json");
+        fs::write(
+            &bp_digest_path,
+            "{\n  \"sha256\": \"stale\",\n  \"file_manifest\": []\n}\n",
+        )
+        .map_err(|e| e.to_string())?;
+
+        let schema_path = pipeline_dir.join("schema.sysml");
+        fs::write(&schema_path, "package TestSys {\n    part def CoreController {}\n}\n")
+            .map_err(|e| e.to_string())?;
+        let digest_path = pipeline_dir.join("schema_digest.json");
+
+        let base_pkg = PackageDef {
+            name: "TestSys".to_string(),
+            part_defs: vec![PartDef {
+                name: "CoreController".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let opts = ReverseSyncOptions {
+            docs_dir: tmp_dir.join("docs"),
+            schema_path: Some(schema_path.clone()),
+            output_path: schema_path,
+            digest_path,
+            allow_overwrite: true,
+        };
+
+        let (_pkg, digest) = reverse_sync_specs_to_sysml(Some(&base_pkg), &opts)?;
+        let sidecar_raw = fs::read_to_string(&bp_digest_path).map_err(|e| e.to_string())?;
+        let _ = fs::remove_dir_all(&tmp_dir);
+
+        assert!(
+            digest
+                .file_manifest
+                .iter()
+                .any(|entry| entry.path == "docs/designs/blueprint-01-core.sysml"),
+            "Expected digest.file_manifest to contain 'docs/designs/blueprint-01-core.sysml', got: {:?}",
+            digest.file_manifest
+        );
+
+        let sidecar_digest: SchemaDigest =
+            serde_json::from_str(&sidecar_raw).map_err(|e| e.to_string())?;
+        assert_ne!(
+            sidecar_digest.sha256, "stale",
+            "Expected docs/designs/blueprint-01-core.digest.json sha256 to be updated from 'stale'"
+        );
+        assert!(
+            sidecar_digest
+                .file_manifest
+                .iter()
+                .any(|entry| entry.path == "docs/designs/blueprint-01-core.sysml"),
+            "Expected sidecar file_manifest to contain 'docs/designs/blueprint-01-core.sysml', got: {:?}",
+            sidecar_digest.file_manifest
+        );
+
         Ok(())
     }
 }
