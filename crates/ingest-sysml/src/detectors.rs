@@ -294,29 +294,37 @@ fn discover_markdown_files(search_dir: &Path) -> Vec<PathBuf> {
 
 /// Discovers specification files or target directories adhering to deterministic search precedence.
 ///
+/// # Purpose
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `discover_schema_targets` in `crates/ingest-sysml/src/detectors.rs`.
 ///
+/// # Invariants
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves deterministic state conservation and referential transparency for fn `discover_schema_targets` (declaration #4) within `INGEST-SYSML-DETECTORS`.
+/// - When `path_opt` is `None`, searches `schema` first and falls back to `docs/designs` if `schema` contains no ingestible files.
 ///
+/// # Inputs
 /// ## 3. Preconditions
 /// - `path_opt: Option<&Path>` must satisfy domain and type-safety constraints prior to invoking `discover_schema_targets`.
 /// - `format_hint: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `discover_schema_targets`.
 ///
+/// # Outputs
 /// ## 4. Postconditions
 /// - Returns `Result<(String, Vec<PathBuf>), String>` from `discover_schema_targets` with deterministic post-execution state.
 ///
+/// # Complexity
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N(path_opt)) bounded over input/member dimension of `discover_schema_targets`.
 /// - Space Complexity: O(N(path_opt)) bounded auxiliary memory for `discover_schema_targets`.
 ///
+/// # Failure Modes
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Validates boundary inputs and types for `discover_schema_targets` (`Result<(String, Vec<PathBuf>), String>`).
 /// - State: Maintains consistent state invariants across `discover_schema_targets` without partial mutation on error.
 /// - Action: Executes `discover_schema_targets` deterministically with zero unbounded recursion or blocking.
 /// - Resource: Bounds stack and heap allocations within `discover_schema_targets` (`INGEST-SYSML-DETECTORS`).
 ///
+/// # Verification
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0001/discover_schema_targets] | SysML v2: ActionDef(discover_schema_targets)
 pub fn discover_schema_targets(
@@ -331,8 +339,8 @@ pub fn discover_schema_targets(
     if let Some(p) = path_opt {
         if p.is_file() {
             let fmt = if is_explicit {
-                let hint = normalized_hint.unwrap();
-                match hint.as_str() {
+                let hint = normalized_hint.as_deref().unwrap_or_default();
+                match hint {
                     "markdown" | "md" => "markdown".to_string(),
                     "sysml" => "sysml".to_string(),
                     "yang" => "yang".to_string(),
@@ -349,20 +357,72 @@ pub fn discover_schema_targets(
             };
             return Ok((fmt, vec![p.to_path_buf()]));
         }
+        return discover_schema_targets_in_dir(p, normalized_hint.as_deref(), is_explicit);
     }
 
-    let search_dir = path_opt
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("schema"));
+    let mut last_result = ("unknown".to_string(), Vec::new());
+    for candidate in [Path::new("schema"), Path::new("docs/designs")] {
+        let (fmt, files) = discover_schema_targets_in_dir(
+            candidate,
+            normalized_hint.as_deref(),
+            is_explicit,
+        )?;
+        if !files.is_empty() {
+            return Ok((fmt, files));
+        }
+        last_result = (fmt, files);
+    }
+    Ok(last_result)
+}
 
+/// Scans a single target directory for specification files adhering to explicit format hints or auto-discovery precedence.
+///
+/// # Purpose
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `discover_schema_targets_in_dir` in `crates/ingest-sysml/src/detectors.rs`.
+///
+/// # Invariants
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `discover_schema_targets_in_dir` within `INGEST-SYSML-DETECTORS`.
+/// - Returns lexicographically sorted file vectors across both explicit format hints and auto-discovery branches.
+///
+/// # Inputs
+/// ## 3. Preconditions
+/// - `search_dir: &Path` is a candidate specification directory path.
+/// - `normalized_hint: Option<&str>` is an optional lowercase format hint; `is_explicit: bool` indicates whether an explicit non-auto format hint was supplied.
+///
+/// # Outputs
+/// ## 4. Postconditions
+/// - Returns `Result<(String, Vec<PathBuf>), String>` containing the canonical format identifier and discovered file list under `search_dir`.
+///
+/// # Complexity
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(F \log F)$ over visited directory entries $F$ in `search_dir`.
+/// - Space Complexity: $O(F)$ bounded auxiliary memory for discovered paths.
+///
+/// # Failure Modes
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `discover_schema_targets_in_dir` (`Result<(String, Vec<PathBuf>), String>`).
+/// - State: Non-existent `search_dir` yields `Ok(("unknown", Vec::new()))` without error or partial mutation.
+/// - Action: Executes deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `discover_schema_targets_in_dir` (`INGEST-SYSML-DETECTORS`).
+///
+/// # Verification
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0001/discover_schema_targets] | SysML v2: ActionDef(discover_schema_targets_in_dir)
+fn discover_schema_targets_in_dir(
+    search_dir: &Path,
+    normalized_hint: Option<&str>,
+    is_explicit: bool,
+) -> Result<(String, Vec<PathBuf>), String> {
     if !search_dir.exists() {
         return Ok(("unknown".to_string(), Vec::new()));
     }
 
     // Branch A: Explicit format hint specified by caller
     if is_explicit {
-        let hint = normalized_hint.unwrap();
-        let canonical_fmt = match hint.as_str() {
+        let hint = normalized_hint.unwrap_or_default();
+        let canonical_fmt = match hint {
             "markdown" | "md" => "markdown",
             "sysml" => "sysml",
             "yang" => "yang",
@@ -375,7 +435,7 @@ pub fn discover_schema_targets(
         };
 
         if canonical_fmt == "markdown" {
-            let files = discover_markdown_files(&search_dir);
+            let files = discover_markdown_files(search_dir);
             return Ok(("markdown".to_string(), files));
         }
 
@@ -392,7 +452,7 @@ pub fn discover_schema_targets(
 
         let mut matching_files = Vec::new();
         for ext in exts {
-            matching_files.extend(find_files_with_ext(&search_dir, ext));
+            matching_files.extend(find_files_with_ext(search_dir, ext));
         }
         matching_files.retain(|p| p.file_name().and_then(|s| s.to_str()) != Some("README.md"));
 
@@ -412,7 +472,7 @@ pub fn discover_schema_targets(
 
     // Branch B: Auto-discovery precedence
     // 1. Check for native .sysml models (excluding generated output files like model.sysml)
-    let sysml_files = find_files_with_ext(&search_dir, "sysml");
+    let sysml_files = find_files_with_ext(search_dir, "sysml");
     let (mut non_output_sysml, mut output_sysml): (Vec<_>, Vec<_>) =
         sysml_files.into_iter().partition(|p| !is_output_sysml(p));
 
@@ -422,7 +482,7 @@ pub fn discover_schema_targets(
     }
 
     // 2. Check for markdown specifications in schema/extracted/*.md or schema/*.md
-    let md_files = discover_markdown_files(&search_dir);
+    let md_files = discover_markdown_files(search_dir);
     if !md_files.is_empty() {
         return Ok(("markdown".to_string(), md_files));
     }
@@ -439,7 +499,7 @@ pub fn discover_schema_targets(
     ];
 
     for (ext, fmt) in format_exts {
-        let mut other_files = find_files_with_ext(&search_dir, ext);
+        let mut other_files = find_files_with_ext(search_dir, ext);
         if !other_files.is_empty() {
             other_files.sort();
             return Ok((fmt.to_string(), other_files));
@@ -595,10 +655,13 @@ mod tests {
     fn get_schema_dir() -> PathBuf {
         let p = Path::new("schema");
         if p.exists() {
-            p.to_path_buf()
-        } else {
-            Path::new("../../schema").to_path_buf()
+            return p.to_path_buf();
         }
+        let parent_p = Path::new("../../schema");
+        if parent_p.exists() {
+            return parent_p.to_path_buf();
+        }
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schema")
     }
 
     #[test]
@@ -1094,6 +1157,84 @@ mod tests {
 
         let discovered = discover_schema_targets(Some(&guard.0), Some("auto"))?;
         assert_eq!(discovered, ("markdown".to_string(), vec![bp1_md]));
+        Ok(())
+    }
+
+    /// Verifies that `discover_schema_targets(None, Some("auto"))` falls back to `docs/designs` when `schema/` contains no ingestible files and prioritizes `schema/` when populated.
+    ///
+    /// # Purpose
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_discover_schema_targets_falls_back_to_docs_designs_when_schema_empty`.
+    ///
+    /// # Invariants
+    /// ## 2. Invariants & Mathematical Properties
+    /// - When `path_opt` is `None` and `schema/` is empty (e.g., only `.gitkeep`), `discover_schema_targets` falls back deterministically to `docs/designs`.
+    /// - When `schema/` contains ingestible schema files, `schema/` takes strict precedence over `docs/designs`.
+    ///
+    /// # Inputs
+    /// ## 3. Preconditions
+    /// - Writable system temporary directory exists and process working directory can be restored after discovery calls.
+    ///
+    /// # Outputs
+    /// ## 4. Postconditions
+    /// - `res_fallback` equals `Ok(("markdown", vec![PathBuf::from("docs/designs/blueprint-01-core.md")]))` and `res_priority` equals `Ok(("markdown", vec![PathBuf::from("schema/REQ-0001.md")]))`.
+    ///
+    /// # Complexity
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(F \log F)$ over candidate directory entries $F$. Space Complexity: $O(F)$.
+    ///
+    /// # Failure Modes
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Restores original process working directory prior to assertions and cleans up temporary directory via `TempDirGuard`.
+    ///
+    /// # Verification
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0001/discover_schema_targets]
+    #[test]
+    fn test_discover_schema_targets_falls_back_to_docs_designs_when_schema_empty(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            ".deap_default_fallback_designs_{}_{}",
+            std::process::id(),
+            nanos
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let guard = TempDirGuard(root.clone());
+
+        let schema_dir = guard.0.join("schema");
+        let designs_dir = guard.0.join("docs").join("designs");
+        fs::create_dir_all(&schema_dir)?;
+        fs::create_dir_all(&designs_dir)?;
+        fs::write(schema_dir.join(".gitkeep"), "")?;
+        fs::write(
+            designs_dir.join("blueprint-01-core.md"),
+            "# Blueprint 01 Core\n",
+        )?;
+
+        let orig_cwd = std::env::current_dir()?;
+        std::env::set_current_dir(&guard.0)?;
+        let res_fallback = discover_schema_targets(None, Some("auto"));
+        fs::write(schema_dir.join("REQ-0001.md"), "# Requirement 0001\n")?;
+        let res_priority = discover_schema_targets(None, Some("auto"));
+        std::env::set_current_dir(&orig_cwd)?;
+
+        assert_eq!(
+            res_fallback,
+            Ok((
+                "markdown".to_string(),
+                vec![PathBuf::from("docs/designs/blueprint-01-core.md")]
+            ))
+        );
+        assert_eq!(
+            res_priority,
+            Ok((
+                "markdown".to_string(),
+                vec![PathBuf::from("schema/REQ-0001.md")]
+            ))
+        );
         Ok(())
     }
 }
