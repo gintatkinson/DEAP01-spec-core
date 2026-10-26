@@ -4342,13 +4342,16 @@ fn compare_scoped_defs<T: PartialEq>(
 
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ECSS-E-ST-40C software engineering verification requirements.
-/// Guarantees bit-for-bit SSOT parity between the modular multi-file schema tree (`schema/**/*.sysml`)
-/// and the consolidated single-file execution schema (`.pipeline/schema.sysml`), preventing drift.
+/// Guarantees bit-for-bit SSOT parity between the modular multi-file schema tree (`schema/**/*.sysml`
+/// and `docs/designs/*.sysml`) and the consolidated single-file execution schema (`.pipeline/schema.sysml`),
+/// as well as companion digest sidecar presence (`docs/designs/*.digest.json`), preventing drift.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - AST Parity Invariant: Every scope-qualified SysML v2 declaration across all 10 AST kinds
 ///   (part, port, action, requirement, constraint, state, calc, connection, test case, attribute)
-///   in `schema/**/*.sysml` must be structurally isomorphic to `.pipeline/schema.sysml`.
+///   in `schema/**/*.sysml` and `docs/designs/*.sysml` must be structurally isomorphic to `.pipeline/schema.sysml`.
+/// - Design Digest Sidecar Invariant: Every non-empty `docs/designs/<stem>.sysml` file must have a
+///   non-empty companion `docs/designs/<stem>.digest.json` sidecar on disk.
 /// - Monotonic Scope Invariant: Names are qualified by enclosing package path hierarchy, eliminating
 ///   unqualified map key collisions across sibling or nested packages.
 ///
@@ -4357,20 +4360,21 @@ fn compare_scoped_defs<T: PartialEq>(
 ///
 /// ## 4. Postconditions
 /// Returns `Ok(ParityOutcome::DualSchemaIdentical)` when AST definitions are structurally identical.
-/// Returns `Ok(ParityOutcome::DualSchemaSingleOrClean)` if dual schema is not configured.
-/// Returns `Err(Vec<String>)` with specific structural divergence diagnostics on schema drift.
+/// Returns `Ok(ParityOutcome::DualSchemaSingleOrClean)` if dual schema is not configured and all design sidecars exist.
+/// Returns `Err(Vec<String>)` with specific structural divergence or missing sidecar diagnostics.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// Time Complexity: O(A) where A is total AST node count.
 /// Space Complexity: O(A) in BTreeMap.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// Fails closed on any structural or attribute difference.
+/// Fails closed on any missing digest sidecar, structural divergence, or attribute difference.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-DUAL-SCHEMA-SSOT-PARITY].
 pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, Vec<String>> {
     let schema_dir = repo_root.join("schema");
+    let designs_dir = repo_root.join("docs").join("designs");
     let pipeline_schema = repo_root.join(".pipeline").join("schema.sysml");
 
     let mut schema_sysml_files = Vec::new();
@@ -4383,6 +4387,37 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
                     && fs::metadata(p).map(|m| m.len() > 0).unwrap_or(false)
             })
             .collect();
+    }
+
+    if designs_dir.is_dir() {
+        let mut design_sysml_files: Vec<PathBuf> =
+            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[&designs_dir])
+                .into_iter()
+                .filter(|p| {
+                    p.extension().is_some_and(|ext| ext == "sysml")
+                        && fs::metadata(p).map(|m| m.len() > 0).unwrap_or(false)
+                })
+                .collect();
+        design_sysml_files.sort();
+
+        let mut sidecar_errors = Vec::new();
+        for design_sysml in &design_sysml_files {
+            let digest_path = design_sysml.with_extension("digest.json");
+            let has_valid_digest = digest_path.is_file()
+                && fs::metadata(&digest_path).map(|m| m.len() > 0).unwrap_or(false);
+            if !has_valid_digest {
+                sidecar_errors.push(format!(
+                    "Check 31 failed: Missing or empty companion digest sidecar {} for design schema {}",
+                    digest_path.display(),
+                    design_sysml.display()
+                ));
+            }
+        }
+        if !sidecar_errors.is_empty() {
+            return Err(sidecar_errors);
+        }
+
+        schema_sysml_files.extend(design_sysml_files);
     }
 
     let has_pipeline_schema = pipeline_schema.is_file()
@@ -5648,6 +5683,128 @@ flowchart TD
             "Combined architectural text must strip 'package alpha_realization', got: {}",
             combined_text
         );
+        Ok(())
+    }
+
+    /// # Objective
+    /// Verify that `check_dual_schema_ssot_parity` (Check 31) discovers `docs/designs/*.sysml`,
+    /// validates the presence and non-emptiness of each companion `docs/designs/*.digest.json` sidecar,
+    /// and verifies structural AST parity against `.pipeline/schema.sysml` when present.
+    ///
+    /// # Intention
+    /// Prevent silent SSOT drift or missing digest sidecars when design blueprints emit
+    /// `docs/designs/*.sysml` and `docs/designs/*.digest.json` files (Issue #539).
+    ///
+    /// # Logic
+    /// 1. Creates `docs/designs/blueprint-01-alpha.sysml` without `docs/designs/blueprint-01-alpha.digest.json`
+    ///    and asserts `check_dual_schema_ssot_parity` returns `Err` mentioning `Missing or empty companion digest sidecar`.
+    /// 2. Creates a non-empty `docs/designs/blueprint-01-alpha.digest.json` while `.pipeline/schema.sysml`
+    ///    is absent and asserts `Ok(ParityOutcome::DualSchemaSingleOrClean)`.
+    /// 3. Creates `.pipeline/schema.sysml` with a diverging AST (`part def DivergentEngine`) and asserts
+    ///    `check_dual_schema_ssot_parity` returns `Err` detecting the AST drift.
+    /// 4. Updates `.pipeline/schema.sysml` to match `docs/designs/blueprint-01-alpha.sysml` (`part def AlphaEngine`)
+    ///    and asserts `Ok(ParityOutcome::DualSchemaIdentical)`.
+    ///
+    /// # Parameters
+    /// None.
+    ///
+    /// # Returns
+    /// `Result<(), Box<dyn std::error::Error>>` indicating test execution success.
+    ///
+    /// # Errors
+    /// Returns an error if temporary directory or fixture file creation fails.
+    ///
+    /// # Safety
+    /// Operates strictly within an isolated temporary directory that is cleaned up on drop.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ISO 26262 ASIL D verification requirements for Issue #539.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Every `docs/designs/<stem>.sysml` file must have a non-empty `docs/designs/<stem>.digest.json` sidecar.
+    /// - When `.pipeline/schema.sysml` is present, the union of `schema/**/*.sysml` and `docs/designs/*.sysml`
+    ///   must be structurally isomorphic to `.pipeline/schema.sysml`.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary filesystem is writable.
+    ///
+    /// ## 4. Postconditions
+    /// - Confirms deterministic failure on missing sidecar and AST divergence, and deterministic success
+    ///   on clean single-schema or identical dual-schema configurations.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded fixture file count.
+    /// - Space Complexity: O(1) bounded fixture payload size.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Propagates any filesystem setup failure via `Result`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-DUAL-SCHEMA-SSOT-PARITY]
+    #[test]
+    fn test_check_31_dual_schema_ssot_parity_validates_docs_designs_sysml_and_sidecars() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("issue_539_check_31_docs_designs")?;
+        let schema_dir = tmp.path.join("schema");
+        fs::create_dir_all(&schema_dir)?;
+        fs::write(schema_dir.join(".gitkeep"), "")?;
+
+        let designs_dir = tmp.path.join("docs").join("designs");
+        fs::create_dir_all(&designs_dir)?;
+        fs::write(
+            designs_dir.join("blueprint-01-alpha.sysml"),
+            "package Alpha { part def AlphaEngine; }\n",
+        )?;
+
+        // Case 1: Missing companion .digest.json sidecar must fail Check 31
+        let res_missing_sidecar = check_dual_schema_ssot_parity(&tmp.path);
+        assert!(
+            res_missing_sidecar.is_err(),
+            "Check 31 must fail when docs/designs/blueprint-01-alpha.digest.json sidecar is missing"
+        );
+        let sidecar_errs = res_missing_sidecar.err().unwrap_or_default().join("\n");
+        assert!(
+            sidecar_errs.contains("Missing or empty companion digest sidecar"),
+            "Expected missing sidecar error diagnostic, got: {}",
+            sidecar_errs
+        );
+
+        // Case 2: Companion .digest.json sidecar present and non-empty, .pipeline/schema.sysml absent -> DualSchemaSingleOrClean
+        fs::write(
+            designs_dir.join("blueprint-01-alpha.digest.json"),
+            "{\"blueprint_id\":\"blueprint-01-alpha\"}\n",
+        )?;
+        let res_single_clean = check_dual_schema_ssot_parity(&tmp.path);
+        assert_eq!(
+            res_single_clean,
+            Ok(ParityOutcome::DualSchemaSingleOrClean),
+            "Check 31 must return Ok(DualSchemaSingleOrClean) when .digest.json sidecars are valid and .pipeline/schema.sysml is absent"
+        );
+
+        // Case 3: .pipeline/schema.sysml present with diverging AST -> Err
+        let pipeline_dir = tmp.path.join(".pipeline");
+        fs::create_dir_all(&pipeline_dir)?;
+        fs::write(
+            pipeline_dir.join("schema.sysml"),
+            "package Alpha { part def DivergentEngine; }\n",
+        )?;
+        let res_divergent = check_dual_schema_ssot_parity(&tmp.path);
+        assert!(
+            res_divergent.is_err(),
+            "Check 31 must fail when .pipeline/schema.sysml diverges from docs/designs/blueprint-01-alpha.sysml"
+        );
+
+        // Case 4: .pipeline/schema.sysml matches docs/designs/blueprint-01-alpha.sysml -> DualSchemaIdentical
+        fs::write(
+            pipeline_dir.join("schema.sysml"),
+            "package Alpha { part def AlphaEngine; }\n",
+        )?;
+        let res_identical = check_dual_schema_ssot_parity(&tmp.path);
+        assert_eq!(
+            res_identical,
+            Ok(ParityOutcome::DualSchemaIdentical),
+            "Check 31 must return Ok(DualSchemaIdentical) when .pipeline/schema.sysml matches docs/designs/blueprint-01-alpha.sysml"
+        );
+
         Ok(())
     }
 }
