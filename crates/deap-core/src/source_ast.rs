@@ -2319,7 +2319,7 @@ fn parse_rust_impl_header(code: &str) -> Option<String> {
 /// Rust declarations enforced by Check 36 (`audit_rust_source_docstrings`).
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Strips visibility (`pub`, `pub(crate)`, `pub(super)`, `pub(in ...)`) and qualifiers (`const`, `async`, `unsafe`).
+/// - Strips visibility (`pub`, `pub(crate)`, `pub(super)`, `pub(in ...)`) and qualifiers (`const`, `async`, `unsafe`, `extern`).
 /// - Matches `struct `, `enum `, `trait `, and `fn ` declarations followed by a valid identifier.
 ///
 /// ## 3. Preconditions
@@ -2365,20 +2365,40 @@ pub fn classify_rust_item_line_ast(code: &str) -> Option<(SourceItemKind, String
         let name = extract_leading_ast_ident(rest.trim_start())?;
         return Some((SourceItemKind::Enum, name));
     }
-    if let Some(rest) = after_vis.strip_prefix("trait ") {
+    let after_trait_qual = after_vis
+        .strip_prefix("unsafe ")
+        .map_or(after_vis, str::trim_start);
+    if let Some(rest) = after_trait_qual.strip_prefix("trait ") {
         let name = extract_leading_ast_ident(rest.trim_start())?;
         return Some((SourceItemKind::Trait, name));
     }
 
-    let after_qual = if let Some(rest) = after_vis.strip_prefix("const async ") {
-        rest.trim_start()
-    } else if let Some(rest) = after_vis.strip_prefix("async ") {
-        rest.trim_start()
-    } else if let Some(rest) = after_vis.strip_prefix("const ") {
-        rest.trim_start()
-    } else {
-        after_vis
-    };
+    let mut after_qual = after_vis;
+    loop {
+        if let Some(rest) = after_qual.strip_prefix("const ") {
+            after_qual = rest.trim_start();
+        } else if let Some(rest) = after_qual.strip_prefix("async ") {
+            after_qual = rest.trim_start();
+        } else if let Some(rest) = after_qual.strip_prefix("unsafe ") {
+            after_qual = rest.trim_start();
+        } else if let Some(rest) = after_qual.strip_prefix("extern") {
+            if !rest.starts_with(' ') && !rest.starts_with('"') {
+                break;
+            }
+            let trimmed = rest.trim_start();
+            if let Some(after_quote) = trimmed.strip_prefix('"') {
+                if let Some((_, after_abi)) = after_quote.split_once('"') {
+                    after_qual = after_abi.trim_start();
+                } else {
+                    break;
+                }
+            } else {
+                after_qual = trimmed;
+            }
+        } else {
+            break;
+        }
+    }
 
     if let Some(rest) = after_qual.strip_prefix("fn ") {
         let name = extract_leading_ast_ident(rest.trim_start())?;
@@ -5462,5 +5482,95 @@ impl ComponentAlpha {
                 "Expected Err containing 'unclosed block comment', got {other:?}"
             )),
         }
+    }
+
+    /// Verifies that `classify_rust_item_line_ast` and `parse_rust_source_ast` extract `unsafe trait`, `unsafe fn`, and `extern "<ABI>" fn` declarations (`#556`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_issue_556_classify_rust_item_line_ast_extracts_unsafe_and_extern_items`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `unsafe trait` declarations (with or without visibility modifiers) are classified as `SourceItemKind::Trait`.
+    /// - `unsafe fn`, `const unsafe fn`, `async unsafe fn`, `extern "<ABI>" fn`, `unsafe extern "<ABI>" fn`, and `extern fn` declarations are classified as `SourceItemKind::Function`.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory Rust item declaration lines and source fixtures containing `unsafe` and `extern` qualifiers.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when all `unsafe` and `extern` traits and functions are deterministically classified and extracted.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over fixture line length.
+    /// - Space Complexity: O(I) for extracted identifiers and AST items.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), String>` on classification mismatch.
+    /// - State: Stateless in-memory test.
+    /// - Action: Zero panics, unwraps, or expectations.
+    /// - Resource: Bounded stack and heap fixture strings.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-CLASSIFY-RUST-ITEM-AST]
+    #[test]
+    fn test_issue_556_classify_rust_item_line_ast_extracts_unsafe_and_extern_items() -> Result<(), String> {
+        let cases = [
+            ("pub unsafe trait Sendable {", SourceItemKind::Trait, "Sendable"),
+            ("unsafe trait RawMarker {", SourceItemKind::Trait, "RawMarker"),
+            ("pub unsafe fn raw_ptr_read() {", SourceItemKind::Function, "raw_ptr_read"),
+            ("unsafe fn internal_unchecked() {", SourceItemKind::Function, "internal_unchecked"),
+            ("pub const unsafe fn const_unchecked() {", SourceItemKind::Function, "const_unchecked"),
+            ("pub async unsafe fn async_unchecked() {", SourceItemKind::Function, "async_unchecked"),
+            ("pub extern \"C\" fn c_abi_entry() {", SourceItemKind::Function, "c_abi_entry"),
+            (
+                "pub unsafe extern \"C\" fn unsafe_c_abi_entry() {",
+                SourceItemKind::Function,
+                "unsafe_c_abi_entry",
+            ),
+            (
+                "pub const unsafe extern \"C\" fn const_unsafe_c_fn() {",
+                SourceItemKind::Function,
+                "const_unsafe_c_fn",
+            ),
+            ("extern fn default_abi_fn() {", SourceItemKind::Function, "default_abi_fn"),
+        ];
+
+        for (line, expected_kind, expected_name) in cases {
+            let actual = classify_rust_item_line_ast(line);
+            let expected = Some((expected_kind, expected_name.to_string()));
+            if actual != expected {
+                return Err(format!(
+                    "Expected {expected:?} for line '{line}', got {actual:?}"
+                ));
+            }
+        }
+
+        let src = concat!(
+            "pub unsafe trait HardwareBus {\n",
+            "    unsafe fn transfer(&self);\n",
+            "}\n",
+            "pub unsafe fn write_mmio_reg(addr: usize, val: u32) {\n",
+            "    let _ = (addr, val);\n",
+            "}\n",
+            "pub unsafe extern \"C\" fn ffi_dispatch_irq(irq: u32) {\n",
+            "    let _ = irq;\n",
+            "}\n",
+        );
+        let items = parse_rust_source_ast(src, "issue_556.rs")?;
+        let summary: Vec<(SourceItemKind, &str)> = items
+            .iter()
+            .map(|item| (item.kind, item.name.as_str()))
+            .collect();
+        let expected_summary = vec![
+            (SourceItemKind::Trait, "HardwareBus"),
+            (SourceItemKind::Method, "transfer"),
+            (SourceItemKind::Function, "write_mmio_reg"),
+            (SourceItemKind::Function, "ffi_dispatch_irq"),
+        ];
+        if summary != expected_summary {
+            return Err(format!(
+                "Expected {expected_summary:?}, got {summary:?}"
+            ));
+        }
+        Ok(())
     }
 }
