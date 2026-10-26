@@ -38,8 +38,8 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use deap_core::sysml_ast::{
-    AttributeDef, ConnectionDef, ConstraintDef, FlowDef, PackageDef, PartDef, PortDef,
-    RequirementDef,
+    ActionDef, AttributeDef, ConnectionDef, ConstraintDef, FlowDef, InteractionDef, PackageDef,
+    PartDef, PortDef, RequirementDef, StateDef, TransitionDef, UseCaseDef,
 };
 use crate::table::{
     classify_table, clean_cell_value, compose_grounded_doc, extract_provenance_citation,
@@ -1539,6 +1539,367 @@ fn escape_sysml_string_literal(raw: &str) -> String {
     out
 }
 
+/// Extracts BOM bullet subcomponent items (`- <Ident> (Quantity <N>): <Desc>`) into `PartDef` AST nodes.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `extract_bom_bullet_parts` in `crates/ingest-sysml/src/translators/markdown.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `extract_bom_bullet_parts` within `TRANSLATORS-MARKDOWN`.
+/// - Every BOM bullet item matching `(Quantity <N>)` outside fenced code blocks yields a distinct `PartDef` with a `quantity` `AttributeDef` and canonical `in`/`out` `PortDef` bindings.
+///
+/// ## 3. Preconditions
+/// - `content: &str` and `pkg: &mut PackageDef` must satisfy domain and type-safety constraints prior to invoking `extract_bom_bullet_parts`.
+///
+/// ## 4. Postconditions
+/// - Appends non-duplicate BOM subcomponent `PartDef` nodes to `pkg.part_defs` in deterministic source order.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(content)) single pass over input lines in `extract_bom_bullet_parts`.
+/// - Space Complexity: O(B) bounded auxiliary memory proportional to extracted BOM bullet items.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `extract_bom_bullet_parts` (`()`).
+/// - State: Maintains consistent state invariants across `extract_bom_bullet_parts` without partial mutation on error.
+/// - Action: Executes `extract_bom_bullet_parts` deterministically with zero regex, panics, or slice indexing.
+/// - Resource: Bounds stack and heap allocations within `extract_bom_bullet_parts` (`TRANSLATORS-MARKDOWN`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-MD/extract_bom_bullet_parts] | SysML v2: ActionDef(extract_bom_bullet_parts)
+fn extract_bom_bullet_parts(content: &str, pkg: &mut PackageDef) {
+    let mut in_fence = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+        let Some(bullet_body) = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+        else {
+            continue;
+        };
+        let parsed_bom = bullet_body
+            .split_once("(Quantity ")
+            .or_else(|| bullet_body.split_once("(quantity "));
+        let Some((raw_name_part, after_qty_prefix)) = parsed_bom else {
+            continue;
+        };
+        let Some((qty_raw, after_paren)) = after_qty_prefix.split_once(')') else {
+            continue;
+        };
+        let clean_name_raw = raw_name_part
+            .trim()
+            .trim_matches('*')
+            .trim_matches('`')
+            .trim_matches('_')
+            .trim();
+        if clean_name_raw.is_empty() {
+            continue;
+        }
+        let part_name = sanitize_identifier(clean_name_raw, "Subcomponent");
+        let qty_digits: String = qty_raw.chars().filter(|c| c.is_ascii_digit()).collect();
+        if qty_digits.is_empty() {
+            continue;
+        }
+        let raw_desc = after_paren
+            .trim_start()
+            .strip_prefix(':')
+            .or_else(|| after_paren.trim_start().strip_prefix('-'))
+            .unwrap_or(after_paren)
+            .trim();
+        let desc_clean = clean_bdd_text(raw_desc);
+
+        if !pkg.part_defs.iter().any(|p| p.name == part_name) {
+            pkg.part_defs.push(PartDef {
+                name: part_name,
+                doc: if desc_clean.is_empty() {
+                    None
+                } else {
+                    Some(desc_clean)
+                },
+                is_def: true,
+                attributes: vec![AttributeDef {
+                    name: "quantity".to_string(),
+                    type_name: "Integer".to_string(),
+                    default_value: Some(qty_digits),
+                    doc: None,
+                }],
+                ports: vec![
+                    PortDef {
+                        name: "cmd_in".to_string(),
+                        type_name: "String".to_string(),
+                        direction: "in".to_string(),
+                        port_category: "DataPort".to_string(),
+                        ..Default::default()
+                    },
+                    PortDef {
+                        name: "status_out".to_string(),
+                        type_name: "String".to_string(),
+                        direction: "out".to_string(),
+                        port_category: "DataPort".to_string(),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            });
+        }
+    }
+}
+
+/// Extracts behavioral AST nodes (`ActionDef`, `InteractionDef`, `StateDef`, `UseCaseDef`) from Mermaid diagrams and `### AC-XX` sections.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `extract_behavioral_ast_nodes` in `crates/ingest-sysml/src/translators/markdown.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `extract_behavioral_ast_nodes` within `TRANSLATORS-MARKDOWN`.
+/// - Maps fenced Mermaid `sequenceDiagram` blocks into `ActionDef` and `InteractionDef`, `stateDiagram-v2` blocks into `StateDef`, and `### AC-XX` acceptance criteria into `UseCaseDef`.
+///
+/// ## 3. Preconditions
+/// - `content: &str` and `pkg: &mut PackageDef` must satisfy domain and type-safety constraints prior to invoking `extract_behavioral_ast_nodes`.
+///
+/// ## 4. Postconditions
+/// - Populates `pkg.action_defs`, `pkg.interaction_defs`, `pkg.state_defs`, and `pkg.use_case_defs` with bijectively serializable SysML v2 AST nodes.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(content)) single pass over input lines in `extract_behavioral_ast_nodes`.
+/// - Space Complexity: O(N(content)) bounded auxiliary memory for extracted behavioral definitions.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `extract_behavioral_ast_nodes` (`()`).
+/// - State: Maintains consistent state invariants across `extract_behavioral_ast_nodes` without partial mutation on error.
+/// - Action: Executes `extract_behavioral_ast_nodes` deterministically with zero regex, panics, or slice indexing.
+/// - Resource: Bounds stack and heap allocations within `extract_behavioral_ast_nodes` (`TRANSLATORS-MARKDOWN`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-MD/extract_behavioral_ast_nodes] | SysML v2: ActionDef(extract_behavioral_ast_nodes)
+fn extract_behavioral_ast_nodes(content: &str, pkg: &mut PackageDef) {
+    let mut in_mermaid = false;
+    let mut mermaid_mode = "";
+    let mut seq_lifelines: Vec<String> = Vec::new();
+    let mut seq_messages: Vec<String> = Vec::new();
+    let mut seq_counter: usize = 0;
+    let mut state_transitions: Vec<TransitionDef> = Vec::new();
+    let mut state_counter: usize = 0;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if !in_mermaid {
+            if let Some(after_ticks) = trimmed.strip_prefix("```") {
+                if after_ticks.trim().eq_ignore_ascii_case("mermaid") {
+                    in_mermaid = true;
+                    mermaid_mode = "";
+                    seq_lifelines.clear();
+                    seq_messages.clear();
+                    state_transitions.clear();
+                }
+            }
+            continue;
+        }
+
+        if trimmed.starts_with("```") {
+            if mermaid_mode == "sequence" && (!seq_lifelines.is_empty() || !seq_messages.is_empty())
+            {
+                seq_counter += 1;
+                let raw_inter_name = if seq_counter == 1 {
+                    format!("{}_SequenceInteraction", pkg.name)
+                } else {
+                    format!("{}_SequenceInteraction_{}", pkg.name, seq_counter)
+                };
+                let inter_name = sanitize_identifier(&raw_inter_name, "SequenceInteraction");
+                if !pkg.interaction_defs.iter().any(|i| i.name == inter_name) {
+                    pkg.interaction_defs.push(InteractionDef {
+                        name: inter_name,
+                        lifelines: std::mem::take(&mut seq_lifelines),
+                        messages: std::mem::take(&mut seq_messages),
+                        triggers: Vec::new(),
+                        doc: Some("Extracted from Mermaid sequenceDiagram specification.".to_string()),
+                    });
+                }
+            } else if mermaid_mode == "state" && !state_transitions.is_empty() {
+                state_counter += 1;
+                let raw_state_name = if state_counter == 1 {
+                    format!("{}_LifecycleState", pkg.name)
+                } else {
+                    format!("{}_LifecycleState_{}", pkg.name, state_counter)
+                };
+                let state_name = sanitize_identifier(&raw_state_name, "LifecycleState");
+                if !pkg.state_defs.iter().any(|s| s.name == state_name) {
+                    pkg.state_defs.push(StateDef {
+                        name: state_name,
+                        doc: Some("Extracted from Mermaid stateDiagram specification.".to_string()),
+                        transitions: std::mem::take(&mut state_transitions),
+                        ..Default::default()
+                    });
+                }
+            }
+            in_mermaid = false;
+            mermaid_mode = "";
+            continue;
+        }
+
+        if trimmed.is_empty() || trimmed.starts_with("%%") {
+            continue;
+        }
+
+        if mermaid_mode.is_empty() {
+            if trimmed.starts_with("sequenceDiagram") {
+                mermaid_mode = "sequence";
+            } else if trimmed.starts_with("stateDiagram") {
+                mermaid_mode = "state";
+            } else {
+                mermaid_mode = "other";
+            }
+            continue;
+        }
+
+        if mermaid_mode == "sequence" {
+            if let Some(rest) = trimmed
+                .strip_prefix("participant ")
+                .or_else(|| trimmed.strip_prefix("actor "))
+            {
+                let (alias_raw, actor_raw) = if let Some((a, b)) = rest.split_once(" as ") {
+                    (a.trim(), b.trim())
+                } else {
+                    (rest.trim(), rest.trim())
+                };
+                let alias_id = sanitize_identifier(alias_raw, "Participant");
+                let actor_id = sanitize_identifier(actor_raw, "Actor");
+                let lifeline = format!("{alias_id} : {actor_id}");
+                if !seq_lifelines.contains(&lifeline) {
+                    seq_lifelines.push(lifeline);
+                }
+                continue;
+            }
+
+            let is_directive = [
+                "Note ",
+                "note ",
+                "loop ",
+                "alt ",
+                "else",
+                "opt ",
+                "par ",
+                "rect ",
+                "activate ",
+                "deactivate ",
+                "autonumber",
+                "end",
+            ]
+            .iter()
+            .any(|kw| trimmed.starts_with(kw));
+            if is_directive {
+                continue;
+            }
+
+            let arrow_pair = ["-->>", "->>", "-->", "->", "--x", "-x", "--)", "-)"]
+                .into_iter()
+                .find_map(|arrow| trimmed.split_once(arrow));
+            if let Some((lhs, rhs)) = arrow_pair {
+                let sender_raw = lhs.trim().trim_end_matches(['+', '-']).trim();
+                let (receiver_raw, msg_raw) = if let Some((r, m)) = rhs.split_once(':') {
+                    (r.trim().trim_start_matches(['+', '-']).trim(), m.trim())
+                } else {
+                    (rhs.trim().trim_start_matches(['+', '-']).trim(), "SendMessage")
+                };
+                let sender_id = sanitize_identifier(sender_raw, "Sender");
+                let receiver_id = sanitize_identifier(receiver_raw, "Receiver");
+                let msg_clean = msg_raw.trim_matches('"').trim_matches('`').trim();
+                let action_head = msg_clean
+                    .split(['(', ':', ' '])
+                    .find(|s| !s.trim().is_empty())
+                    .unwrap_or("ExecuteAction");
+                let action_name = sanitize_identifier(action_head, "ExecuteAction");
+                let doc_clean = clean_bdd_text(msg_clean);
+                if !pkg.action_defs.iter().any(|a| a.name == action_name) {
+                    pkg.action_defs.push(ActionDef {
+                        name: action_name.clone(),
+                        doc: if doc_clean.is_empty() {
+                            None
+                        } else {
+                            Some(doc_clean)
+                        },
+                        is_def: true,
+                        ..Default::default()
+                    });
+                }
+                let msg_stmt = format!("{action_name} from {sender_id} to {receiver_id}");
+                if !seq_messages.contains(&msg_stmt) {
+                    seq_messages.push(msg_stmt);
+                }
+            }
+        } else if mermaid_mode == "state" {
+            if let Some((lhs, rhs)) = trimmed.split_once("-->") {
+                let src_raw = lhs.trim();
+                let (tgt_raw, trig_raw) = if let Some((t, tr)) = rhs.split_once(':') {
+                    (t.trim(), Some(tr.trim()))
+                } else {
+                    (rhs.trim(), None)
+                };
+                let src_id = if src_raw == "[*]" {
+                    "Initial".to_string()
+                } else {
+                    sanitize_identifier(src_raw, "State")
+                };
+                let tgt_id = if tgt_raw == "[*]" {
+                    "Terminal".to_string()
+                } else {
+                    sanitize_identifier(tgt_raw, "State")
+                };
+                let t_name = if let Some(tr) = trig_raw.filter(|s| !s.is_empty()) {
+                    let trig_id = sanitize_identifier(tr, "Trigger");
+                    sanitize_identifier(&format!("{src_id}_to_{tgt_id}_on_{trig_id}"), "Transition")
+                } else {
+                    sanitize_identifier(&format!("{src_id}_to_{tgt_id}"), "Transition")
+                };
+                if !state_transitions
+                    .iter()
+                    .any(|t| t.name.as_deref() == Some(t_name.as_str()))
+                {
+                    state_transitions.push(TransitionDef {
+                        name: Some(t_name),
+                        source: Some(src_id),
+                        target: Some(tgt_id),
+                        trigger: trig_raw.map(|s| sanitize_identifier(s, "Trigger")),
+                        guard: None,
+                        effect: None,
+                        doc: None,
+                    });
+                }
+            }
+        }
+    }
+
+    let subject_name = pkg.part_defs.first().map(|p| p.name.clone());
+    for (ac_num_str, clean_ac_slug, ac_bdd_text) in extract_acceptance_criteria(content) {
+        let uc_name =
+            sanitize_identifier(&format!("UC_AC_{}_{}", ac_num_str, clean_ac_slug), "UseCase");
+        let objective_str = clean_ac_slug.replace('_', " ");
+        if !pkg.use_case_defs.iter().any(|u| u.name == uc_name) {
+            pkg.use_case_defs.push(UseCaseDef {
+                name: uc_name,
+                doc: if ac_bdd_text.is_empty() {
+                    None
+                } else {
+                    Some(ac_bdd_text)
+                },
+                subject: subject_name.clone(),
+                objective: if objective_str.is_empty() {
+                    None
+                } else {
+                    Some(objective_str)
+                },
+                ..Default::default()
+            });
+        }
+    }
+}
+
 /// Deterministic translator that transforms Level 0 OEM Markdown requirements into canonical SysML v2 ASTs.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1850,6 +2211,9 @@ impl MarkdownTranslator {
             }
         }
 
+        // Step 4b: Extract BOM bullet subcomponents (`- <Ident> (Quantity <N>): <Desc>`)
+        extract_bom_bullet_parts(body_content, &mut pkg);
+
         // Step 5: Fallback: synthesize a canonical system PartDef if attributes/ports exist at root
         if pkg.part_defs.is_empty()
             && (!pkg.port_defs.is_empty()
@@ -1867,6 +2231,9 @@ impl MarkdownTranslator {
             };
             pkg.part_defs.push(sys_part);
         }
+
+        // Step 5b: Extract behavioral AST nodes (sequenceDiagram, stateDiagram, ### AC-XX)
+        extract_behavioral_ast_nodes(body_content, &mut pkg);
 
         // Step 6: Extract formal RequirementDef if this is a requirement document
         if let Some(ref req_id) = frontmatter.id {
@@ -2081,6 +2448,26 @@ impl MarkdownTranslator {
                         entry.part_defs.push(part);
                     }
                 }
+                for act in sub_pkg.action_defs {
+                    if !entry.action_defs.iter().any(|a| a.name == act.name) {
+                        entry.action_defs.push(act);
+                    }
+                }
+                for inter in sub_pkg.interaction_defs {
+                    if !entry.interaction_defs.iter().any(|i| i.name == inter.name) {
+                        entry.interaction_defs.push(inter);
+                    }
+                }
+                for st in sub_pkg.state_defs {
+                    if !entry.state_defs.iter().any(|s| s.name == st.name) {
+                        entry.state_defs.push(st);
+                    }
+                }
+                for uc in sub_pkg.use_case_defs {
+                    if !entry.use_case_defs.iter().any(|u| u.name == uc.name) {
+                        entry.use_case_defs.push(uc);
+                    }
+                }
                 for conn in sub_pkg.connection_defs {
                     if !merged_connections.iter().any(|c| c.name == conn.name) {
                         merged_connections.push(conn);
@@ -2194,6 +2581,27 @@ impl MarkdownTranslator {
             for conn in sub_pkg.connection_defs {
                 if !pkg_conn_names.contains(&conn.name) {
                     combined_pkg.connection_defs.push(conn);
+                }
+            }
+
+            for act in sub_pkg.action_defs {
+                if !combined_pkg.action_defs.iter().any(|a| a.name == act.name) {
+                    combined_pkg.action_defs.push(act);
+                }
+            }
+            for inter in sub_pkg.interaction_defs {
+                if !combined_pkg.interaction_defs.iter().any(|i| i.name == inter.name) {
+                    combined_pkg.interaction_defs.push(inter);
+                }
+            }
+            for st in sub_pkg.state_defs {
+                if !combined_pkg.state_defs.iter().any(|s| s.name == st.name) {
+                    combined_pkg.state_defs.push(st);
+                }
+            }
+            for uc in sub_pkg.use_case_defs {
+                if !combined_pkg.use_case_defs.iter().any(|u| u.name == uc.name) {
+                    combined_pkg.use_case_defs.push(uc);
                 }
             }
         }

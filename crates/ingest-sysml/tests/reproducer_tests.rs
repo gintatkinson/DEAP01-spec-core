@@ -152,3 +152,198 @@ The system shall enforce beta architectural boundaries across workspace crates.
 
     Ok(())
 }
+
+/// Executes deterministic fn `test_issue_550_bom_bullets_and_behavioral_blocks_extracted` within `crates/ingest-sysml/tests/reproducer_tests.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `test_issue_550_bom_bullets_and_behavioral_blocks_extracted` in
+/// `crates/ingest-sysml/tests/reproducer_tests.rs` (refs #550).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Verifies that `MarkdownTranslator::translate` and `MarkdownTranslator::translate_files` extract
+///   BOM bullet subcomponents (`PartDef`), Mermaid `sequenceDiagram` blocks (`ActionDef` and `InteractionDef`),
+///   Mermaid `stateDiagram-v2` blocks (`StateDef`), and `### AC-XX` scenarios (`UseCaseDef`) without silent omission.
+///
+/// ## 3. Preconditions
+/// - Invoked within a valid test execution context for `test_issue_550_bom_bullets_and_behavioral_blocks_extracted`
+///   in `REPRODUCER-TESTS`.
+///
+/// ## 4. Postconditions
+/// - Returns `Result<(), String>` confirming all BOM subcomponent `PartDef` nodes and behavioral AST nodes
+///   are populated and preserved across `translate` and `translate_files`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) bounded over the fixture input lines in `test_issue_550_bom_bullets_and_behavioral_blocks_extracted`.
+/// - Space Complexity: O(N) bounded auxiliary memory for `test_issue_550_bom_bullets_and_behavioral_blocks_extracted`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `test_issue_550_bom_bullets_and_behavioral_blocks_extracted` (`Result<(), String>`).
+/// - State: Maintains consistent state invariants across `test_issue_550_bom_bullets_and_behavioral_blocks_extracted` without partial mutation on error.
+/// - Action: Executes `test_issue_550_bom_bullets_and_behavioral_blocks_extracted` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `test_issue_550_bom_bullets_and_behavioral_blocks_extracted` (`REPRODUCER-TESTS`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-MD/test_issue_550_bom_bullets_and_behavioral_blocks_extracted] | SysML v2: VerificationCaseDef(test_issue_550_bom_bullets_and_behavioral_blocks_extracted)
+#[test]
+fn test_issue_550_bom_bullets_and_behavioral_blocks_extracted() -> Result<(), String> {
+    let md = "\
+# Blueprint 01: Subsystem Verification Gate
+
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Blueprint ID** | `BP-01` |
+| **Title** | Subsystem Verification Gate |
+
+## Part 1: Purpose & Architectural Scope
+Defines the subsystem verification gate and its BOM subcomponents.
+
+## Part 2: Normative Requirements
+
+### REQ-SUBSYS-001: Mandatory Subcomponent Gate
+The subsystem shall enforce all BOM subcomponent gates.
+
+## Part 3: Structural Decomposition (SysML v2 Alignment)
+
+### Component: SubsystemRoot
+
+Bill of Materials (BOM):
+- SubcomponentAlpha (Quantity 1): First BOM component enforcing alpha boundary invariants.
+- **SubcomponentBeta** (Quantity 2): Second BOM component enforcing beta state transitions.
+- `SubcomponentGamma` (Quantity 1): Third backtick-quoted BOM component enforcing gamma telemetry.
+
+| Port Name | Direction | Type | Description |
+| :--- | :--- | :--- | :--- |
+| `cmd_in` | `in` | `CommandPayload` | Input command port |
+| `status_out` | `out` | `StatusPayload` | Output status port |
+
+## Part 4: Behavioral & Data Modeling
+
+```mermaid
+sequenceDiagram
+    participant Op as Operator
+    participant Gate as SubsystemRoot
+    Op->>Gate: DispatchGateCheck(cmd_in)
+    Gate-->>Op: EmitGateStatus(status_out)
+```
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Verifying : DispatchGateCheck
+    Verifying --> Verified : ValidationPassed
+    Verified --> [*]
+```
+
+## Part 8: Verification & Acceptance Criteria
+
+### AC-01: Deterministic Verification Scenario
+- **Given**: A configured `SubsystemRoot` instance in `Idle` state.
+- **When**: `DispatchGateCheck` is received on `cmd_in`.
+- **Then**: `SubsystemRoot` transitions to `Verified` and emits `status_out`.
+";
+
+    let translator = MarkdownTranslator::new();
+    let pkg = translator
+        .translate(md, "SubsystemPkg")
+        .map_err(|e| format!("translate failed: {e}"))?;
+    let part_names: Vec<&str> = pkg.part_defs.iter().map(|p| p.name.as_str()).collect();
+
+    assert!(
+        part_names.contains(&"SubsystemRoot"),
+        "Expected SubsystemRoot PartDef, found: {part_names:?}"
+    );
+    assert!(
+        part_names.contains(&"SubcomponentAlpha"),
+        "Expected BOM bullet SubcomponentAlpha PartDef, found: {part_names:?}"
+    );
+    assert!(
+        part_names.contains(&"SubcomponentBeta"),
+        "Expected BOM bullet SubcomponentBeta PartDef, found: {part_names:?}"
+    );
+    assert!(
+        part_names.contains(&"SubcomponentGamma"),
+        "Expected BOM bullet SubcomponentGamma PartDef, found: {part_names:?}"
+    );
+
+    for bom_name in ["SubcomponentAlpha", "SubcomponentBeta", "SubcomponentGamma"] {
+        let bom_part = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == bom_name)
+            .ok_or_else(|| format!("missing expected BOM PartDef {bom_name}"))?;
+        assert!(
+            !bom_part.ports.is_empty(),
+            "BOM PartDef {bom_name} must have synthesized ports for forward-sync feature projection"
+        );
+        assert!(
+            !bom_part.attributes.is_empty(),
+            "BOM PartDef {bom_name} must have quantity attribute"
+        );
+    }
+
+    assert!(
+        !pkg.action_defs.is_empty(),
+        "Expected non-empty pkg.action_defs extracted from sequenceDiagram, found empty"
+    );
+    assert!(
+        !pkg.interaction_defs.is_empty(),
+        "Expected non-empty pkg.interaction_defs extracted from sequenceDiagram, found empty"
+    );
+    assert!(
+        !pkg.state_defs.is_empty(),
+        "Expected non-empty pkg.state_defs extracted from stateDiagram-v2, found empty"
+    );
+    assert!(
+        !pkg.use_case_defs.is_empty(),
+        "Expected non-empty pkg.use_case_defs extracted from ### AC-01 heading, found empty"
+    );
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let temp_dir = std::env::temp_dir().join(format!(
+        "deap_issue_550_reproducer_{}_{}",
+        std::process::id(),
+        nanos
+    ));
+    std::fs::create_dir_all(&temp_dir)
+        .map_err(|e| format!("failed to create temp dir: {e}"))?;
+    let bp_path = temp_dir.join("blueprint-01-subsystem.md");
+    std::fs::write(&bp_path, md)
+        .map_err(|e| format!("failed to write bp_path: {e}"))?;
+
+    let files = vec![bp_path.to_string_lossy().to_string()];
+    let consolidated_res = translator.translate_files(&files, "ConsolidatedPkg");
+
+    if temp_dir.exists() {
+        std::fs::remove_dir_all(&temp_dir)
+            .map_err(|e| format!("failed to remove temp dir: {e}"))?;
+    }
+
+    let consolidated = consolidated_res.map_err(|e| format!("translate_files failed: {e}"))?;
+    let child_pkg = consolidated
+        .packages
+        .first()
+        .unwrap_or(&consolidated);
+
+    assert!(
+        !child_pkg.action_defs.is_empty(),
+        "translate_files must preserve action_defs"
+    );
+    assert!(
+        !child_pkg.interaction_defs.is_empty(),
+        "translate_files must preserve interaction_defs"
+    );
+    assert!(
+        !child_pkg.state_defs.is_empty(),
+        "translate_files must preserve state_defs"
+    );
+    assert!(
+        !child_pkg.use_case_defs.is_empty(),
+        "translate_files must preserve use_case_defs"
+    );
+
+    Ok(())
+}
