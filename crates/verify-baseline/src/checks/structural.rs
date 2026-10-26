@@ -257,7 +257,7 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
         }
     }
 
-    // 2. Enforce zero concrete modeling files (.sysml) in upstream blueprints
+    // 2. Enforce zero concrete modeling files (.sysml or .digest.json) in upstream blueprints
     let blueprints_dir = repo_root.join("docs").join("architecture").join("blueprints");
     if blueprints_dir.is_dir() {
         for entry_res in WalkDir::new(&blueprints_dir)
@@ -277,7 +277,8 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
             };
             if entry.file_type().is_file() {
                 let fname = entry.file_name().to_string_lossy();
-                if fname.to_lowercase().ends_with(".sysml") {
+                let fname_lower = fname.to_lowercase();
+                if fname_lower.ends_with(".sysml") || fname_lower.ends_with(".digest.json") {
                     let rel = entry
                         .path()
                         .strip_prefix(repo_root)
@@ -309,14 +310,20 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
             };
             if entry.file_type().is_file() {
                 let fname = entry.file_name().to_string_lossy();
-                if fname.to_lowercase().ends_with(".sysml") {
-                    let is_valid_triplet = if fname.starts_with("blueprint-") {
-                        if let Some(stem) = fname.strip_suffix(".sysml") {
-                            let sysml_non_empty = entry
-                                .metadata()
+                let fname_lower = fname.to_lowercase();
+                if fname_lower.ends_with(".sysml") || fname_lower.ends_with(".digest.json") {
+                    let stem_opt = if fname_lower.ends_with(".sysml") {
+                        fname.get(..fname.len().saturating_sub(".sysml".len()))
+                    } else {
+                        fname.get(..fname.len().saturating_sub(".digest.json".len()))
+                    };
+                    let is_valid_triplet = if let Some(stem) = stem_opt {
+                        if stem.starts_with("blueprint-") && stem.len() > "blueprint-".len() {
+                            let parent_opt = entry.path().parent();
+                            let sysml_non_empty = parent_opt
+                                .and_then(|p| p.join(format!("{stem}.sysml")).metadata().ok())
                                 .map(|m| m.len() > 0)
                                 .unwrap_or(false);
-                            let parent_opt = entry.path().parent();
                             let md_non_empty = parent_opt
                                 .and_then(|p| p.join(format!("{stem}.md")).metadata().ok())
                                 .map(|m| m.len() > 0)
@@ -2561,6 +2568,92 @@ mod tests {
                 e.contains("Upstream blueprint contains SysML model: docs/designs/blueprint-99-orphan.sysml")
             }),
             "Expected docs/designs/blueprint-99-orphan.sysml violation, got: {:?}",
+            errs_orphan
+        );
+    }
+
+    /// Regression test for Check 18 scanning `docs/architecture/blueprints/` and `docs/designs/`
+    /// for ungrounded `.digest.json` model sidecars (refs #531).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C configuration management controls for
+    /// `test_check_18_upstream_digest_json_sidecar_violations`. Verifies that Check 18
+    /// (`verify_upstream_blueprint_domain_cleanliness`) rejects `.digest.json` sidecar files in
+    /// `docs/architecture/blueprints/` and ungrounded or orphan `.digest.json` sidecar files in
+    /// `docs/designs/`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Any `.digest.json` file in `docs/architecture/blueprints/` fails closed with
+    ///   `"Upstream blueprint contains SysML model: docs/architecture/blueprints/<file>"`.
+    /// - Any `.digest.json` file in `docs/designs/` not matching `blueprint-*.digest.json` fails closed.
+    /// - Any `blueprint-*.digest.json` in `docs/designs/` lacking non-empty sibling `.md` and `.sysml`
+    ///   files fails closed.
+    ///
+    /// ## 3. Preconditions
+    /// Temporary upstream repository directory (`tmp.path`) with `.pipeline/upstream` present.
+    ///
+    /// ## 4. Postconditions
+    /// Asserts `Err` on `.digest.json` sidecars in `docs/architecture/blueprints/` and ungrounded or
+    /// orphan `.digest.json` sidecars in `docs/designs/`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) bounded fixture file count. Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Panics if `verify_upstream_blueprint_domain_cleanliness` permits ungrounded or orphan `.digest.json` sidecars.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-18-UPSTREAM-BLUEPRINT-CLEANLINESS].
+    #[test]
+    fn test_check_18_upstream_digest_json_sidecar_violations() {
+        let tmp = TempDir::new("c18_digest_json");
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+        let bp_dir = tmp.path.join("docs/architecture/blueprints");
+        let designs_dir = tmp.path.join("docs/designs");
+        fs::create_dir_all(&bp_dir).unwrap();
+        fs::create_dir_all(&designs_dir).unwrap();
+
+        // 1. .digest.json inside docs/architecture/blueprints/ -> Err
+        let bp_digest = bp_dir.join("blueprint-01.digest.json");
+        fs::write(&bp_digest, "{}\n").unwrap();
+        let res_bp = verify_upstream_blueprint_domain_cleanliness(&tmp.path);
+        assert!(res_bp.is_err());
+        let errs_bp = res_bp.unwrap_err();
+        assert!(
+            errs_bp.iter().any(|e| {
+                e.contains("Upstream blueprint contains SysML model: docs/architecture/blueprints/blueprint-01.digest.json")
+            }),
+            "Expected docs/architecture/blueprints/blueprint-01.digest.json violation, got: {:?}",
+            errs_bp
+        );
+        fs::remove_file(&bp_digest).unwrap();
+
+        // 2. Ungrounded domain.digest.json in docs/designs/ -> Err
+        let domain_digest = designs_dir.join("domain.digest.json");
+        fs::write(&domain_digest, "{}\n").unwrap();
+        let res_domain = verify_upstream_blueprint_domain_cleanliness(&tmp.path);
+        assert!(res_domain.is_err());
+        let errs_domain = res_domain.unwrap_err();
+        assert!(
+            errs_domain.iter().any(|e| {
+                e.contains("Upstream blueprint contains SysML model: docs/designs/domain.digest.json")
+            }),
+            "Expected docs/designs/domain.digest.json violation, got: {:?}",
+            errs_domain
+        );
+        fs::remove_file(&domain_digest).unwrap();
+
+        // 3. Orphan blueprint-99-orphan.digest.json without .md and .sysml companions -> Err
+        let orphan_digest = designs_dir.join("blueprint-99-orphan.digest.json");
+        fs::write(&orphan_digest, "{}\n").unwrap();
+        let res_orphan = verify_upstream_blueprint_domain_cleanliness(&tmp.path);
+        assert!(res_orphan.is_err());
+        let errs_orphan = res_orphan.unwrap_err();
+        assert!(
+            errs_orphan.iter().any(|e| {
+                e.contains("Upstream blueprint contains SysML model: docs/designs/blueprint-99-orphan.digest.json")
+            }),
+            "Expected docs/designs/blueprint-99-orphan.digest.json violation, got: {:?}",
             errs_orphan
         );
     }
