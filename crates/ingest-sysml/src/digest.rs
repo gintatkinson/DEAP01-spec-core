@@ -351,6 +351,13 @@ pub fn parse_input_file(file_path: &Path) -> Result<(DigestFileEntry, Vec<u8>), 
 pub fn generate_input_digest(input_path: &Path) -> Result<InputDigestData, String> {
     let mut input_files = Vec::new();
 
+    if !input_path.exists() {
+        return Err(format!(
+            "Input path does not exist: '{}'",
+            input_path.display()
+        ));
+    }
+
     if input_path.is_file() {
         input_files.push(input_path.to_path_buf());
     } else if input_path.is_dir() {
@@ -376,6 +383,11 @@ pub fn generate_input_digest(input_path: &Path) -> Result<InputDigestData, Strin
                 }
             }
         }
+    } else {
+        return Err(format!(
+            "Input path is neither a regular file nor a directory: '{}'",
+            input_path.display()
+        ));
     }
 
     if input_files.is_empty() {
@@ -571,9 +583,12 @@ mod tests {
         );
 
         let src = include_str!("digest.rs");
+        let prod_src = src.split("#[cfg(test)]").next().unwrap_or(src);
         let unwrap_token = concat!(".un", "wrap(");
         let expect_token = concat!(".ex", "pect(");
         let k0_token = concat!("0x428a", "2f98");
+        let h0_token = concat!("0x6a09", "e667");
+        let flatten_token = concat!(".flat", "ten()");
         assert!(
             !src.contains(unwrap_token),
             "ingest-sysml/src/digest.rs must contain zero unwrap calls"
@@ -583,8 +598,12 @@ mod tests {
             "ingest-sysml/src/digest.rs must contain zero expect calls"
         );
         assert!(
-            !src.contains(k0_token),
-            "ingest-sysml/src/digest.rs must delegate SHA-256 compression to deap_core::digest without duplicating K constants"
+            !prod_src.contains(k0_token) && !prod_src.contains(h0_token),
+            "ingest-sysml/src/digest.rs must delegate SHA-256 compression to deap_core::digest without duplicating K or H0 constants"
+        );
+        assert!(
+            !prod_src.contains(flatten_token),
+            "ingest-sysml/src/digest.rs production code must not silently swallow errors via .flatten()"
         );
     }
 
@@ -636,10 +655,11 @@ mod tests {
         assert!(detected.contains(&"truncated content".to_string()));
     }
 
-    /// Verifies `parse_input_file` against `schema/REQ-0001.md` when present on disk.
+    /// Verifies `parse_input_file`, `compute_multi_file_sha256`, and `generate_input_digest` fail-closed semantics.
     ///
     /// # Summary
-    /// Executes unit verification for `parse_input_file` without unwrap calls.
+    /// Executes unit verification for `parse_input_file`, `compute_multi_file_sha256`, and `generate_input_digest`
+    /// using an isolated temporary directory without unwrap or expect calls.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// # Safety
@@ -647,25 +667,28 @@ mod tests {
     ///
     /// ## 2. Invariants & Mathematical Properties
     /// - Preserves deterministic state conservation and referential transparency for fn `test_parse_input_file_req1` (declaration #12) within `INGEST-SYSML-DIGEST`.
+    /// - Verifies `parse_input_file` extracts line counts, SHA-256 digest, and structural section markers from a synthesized Markdown specification file.
+    /// - Verifies `compute_multi_file_sha256` computes combined SHA-256 and line count across multiple files and returns `Err` when a path does not exist.
+    /// - Verifies `generate_input_digest` fails closed with `Err` when given a non-existent input path rather than returning an empty-file SHA-256 digest.
     ///
     /// ## 3. Preconditions
     /// # Parameters
-    /// - No runtime parameters; conditionally inspects `schema/REQ-0001.md` if present.
+    /// - No runtime parameters; creates an isolated temporary directory under `std::env::temp_dir()`.
     ///
     /// ## 4. Postconditions
     /// # Returns
-    /// - Returns `()` after validating line counts, SHA-256 digest presence, and section markers.
+    /// - Returns `Result<(), String>` after validating `parse_input_file`, `compute_multi_file_sha256`, and `generate_input_digest` and removing the temporary directory.
     ///
     /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N) bounded over input file size in `test_parse_input_file_req1`.
+    /// - Time Complexity: O(N) bounded over synthesized temporary input file bytes in `test_parse_input_file_req1`.
     /// - Space Complexity: O(N) bounded auxiliary memory for `test_parse_input_file_req1`.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
     /// # Errors
-    /// - Infallible test assertion harness.
+    /// - Propagates any unexpected I/O error via `Result::Err`.
     /// # Panics
-    /// - Panics only if `parse_input_file` returns `Err` on an existing `schema/REQ-0001.md`.
-    /// - Interface: Validates boundary inputs and types for `test_parse_input_file_req1` (`()`).
+    /// - Zero unwrap or expect calls.
+    /// - Interface: Validates boundary inputs and types for `test_parse_input_file_req1` (`Result<(), String>`).
     /// - State: Maintains consistent state invariants across `test_parse_input_file_req1` without partial mutation on error.
     /// - Action: Executes `test_parse_input_file_req1` deterministically with zero unbounded recursion or blocking.
     /// - Resource: Bounds stack and heap allocations within `test_parse_input_file_req1` (`INGEST-SYSML-DIGEST`).
@@ -674,17 +697,55 @@ mod tests {
     /// # Realises
     /// Realises: [REQ-INGEST-SYSML-DIGEST-TEST-PARSE-INPUT-FILE] | SysML v2: TestCaseDef(test_parse_input_file_req1)
     #[test]
-    fn test_parse_input_file_req1() {
-        let p = Path::new("schema/REQ-0001.md");
-        if p.exists() {
-            let res = parse_input_file(p);
-            assert!(res.is_ok());
-            if let Ok((entry, _)) = res {
-                assert!(entry.total_lines > 0);
-                assert!(!entry.sha256.is_empty());
-                assert!(entry.structural_section_markers.iter().any(|m| m.contains("1. Normative Statement")));
-            }
+    fn test_parse_input_file_req1() -> Result<(), String> {
+        let tmp_dir = std::env::temp_dir().join(format!(
+            "deap_ingest_sysml_req1_test_{}",
+            std::process::id()
+        ));
+        if tmp_dir.exists() {
+            fs::remove_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
         }
+        fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+
+        let req_file = tmp_dir.join("REQ-0001.md");
+        let content_1 = "# 1. Normative Statement\n## 1.1 Scope\nSystem shall verify digest.\n";
+        fs::write(&req_file, content_1).map_err(|e| e.to_string())?;
+
+        let second_file = tmp_dir.join("REQ-0002.md");
+        let content_2 = "# 2. Secondary Requirement\nSystem shall validate multi-file hash.\n";
+        fs::write(&second_file, content_2).map_err(|e| e.to_string())?;
+
+        let (entry, raw_bytes) = parse_input_file(&req_file)?;
+        assert_eq!(entry.total_lines, 3);
+        assert_eq!(entry.sha256, compute_sha256(content_1.as_bytes()));
+        assert_eq!(raw_bytes, content_1.as_bytes());
+        assert!(entry
+            .structural_section_markers
+            .iter()
+            .any(|m| m.contains("1. Normative Statement")));
+
+        let (combined_hash, combined_lines) =
+            compute_multi_file_sha256(&[req_file.clone(), second_file.clone()])?;
+        let mut expected_combined = Vec::new();
+        expected_combined.extend_from_slice(content_1.as_bytes());
+        expected_combined.extend_from_slice(content_2.as_bytes());
+        assert_eq!(combined_hash, compute_sha256(&expected_combined));
+        assert_eq!(combined_lines, 5);
+
+        let missing_path = tmp_dir.join("DOES_NOT_EXIST.md");
+        assert!(
+            compute_multi_file_sha256(&[missing_path.clone()]).is_err(),
+            "compute_multi_file_sha256 must return Err for non-existent file"
+        );
+        let missing_digest_res = generate_input_digest(&missing_path);
+
+        fs::remove_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+
+        assert!(
+            missing_digest_res.is_err(),
+            "generate_input_digest must fail closed with Err on non-existent input path"
+        );
+        Ok(())
     }
 
     /// Verifies that `generate_input_digest` fails closed with `Err` when `WalkDir` encounters an

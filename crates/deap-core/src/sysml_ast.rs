@@ -6313,6 +6313,9 @@ impl UnifiedSchemaModelExtractor {
                 continue;
             }
             for entry_res in WalkDir::new(p).into_iter().filter_entry(|e| {
+                if e.depth() == 0 {
+                    return true;
+                }
                 let name = e.file_name().to_string_lossy();
                 !name.starts_with('.') && !name.starts_with('#')
             }) {
@@ -7080,38 +7083,6 @@ impl SysmlModel {
     }
 }
 
-/// Computes a pure-Rust FIPS 180-4 SHA-256 lowercase hexadecimal digest of `bytes`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and FIPS 180-4 cryptographic hashing standards (`compute_sha256_hex`).
-/// Provides deterministic content-addressable hashing for `IncrementalAstCache` and `CotAuditRecord` without external crates.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Produces a 64-character lowercase ASCII hexadecimal string for any input byte slice.
-/// - Satisfies NIST FIPS 180-4 test vectors (e.g., `compute_sha256_hex(b"abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"`).
-///
-/// ## 3. Preconditions
-/// - `bytes: &[u8]` is a valid byte slice of arbitrary length.
-///
-/// ## 4. Postconditions
-/// - Returns a 64-byte `String` containing only `'0'..='9'` and `'a'..='f'`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(B)$ where $B$ is the number of 512-bit (64-byte) padded blocks.
-/// - Space Complexity: $O(B)$ for the padded message buffer plus 64-word message schedule.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Uses `.get(..)` and `.get_mut(..)` bounds-checked access exclusively (zero slice indexing).
-/// - State: Pure function with local 32-bit state registers `h0..h7`.
-/// - Action: Wrapping 32-bit arithmetic prevents integer overflow panics in debug and release profiles.
-/// - Resource: Bounded memory proportional to input length.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SHA256-HEX]
-fn compute_sha256_hex(bytes: &[u8]) -> String {
-    crate::digest::compute_sha256(bytes)
-}
-
 /// Content-addressable SHA-256 incremental cache for parsed `SysmlModel` AST trees under `.pipeline/cache/ast/`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -7198,13 +7169,13 @@ impl IncrementalAstCache {
     /// ## 6. Failure Modes & Fault Tolerance
     /// - Interface: Handles empty and arbitrarily large UTF-8 strings safely.
     /// - State: Pure function.
-    /// - Action: Delegates to `compute_sha256_hex`.
+    /// - Action: Delegates to `crate::digest::compute_sha256`.
     /// - Resource: Bounded by `sysml_source.len()`.
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-AST-CACHE-DIGEST]
     pub fn compute_digest(sysml_source: &str) -> String {
-        compute_sha256_hex(sysml_source.as_bytes())
+        crate::digest::compute_sha256(sysml_source.as_bytes())
     }
 
     /// Loads a cached `SysmlModel` by SHA-256 digest if present on disk, or parses `sysml_source` and populates the cache.
@@ -8678,6 +8649,8 @@ package SystemModel_SSOT {
         let needle_fm_e = [".filter_map(", "|e|", " e.ok())"].concat();
         let needle_lower_slice1 = [".to_lowercase()", "["].concat();
         let needle_lower_slice2 = [".to_ascii_lowercase()", "["].concat();
+        let sha_k0 = ["0x428a", "2f98"].concat();
+        let sha_h0 = ["0x6a09", "e667"].concat();
 
         let s1 = "## 1. Safety Intent & Regulatory Scope";
         let s2 = "## 2. Invariants & Mathematical Properties";
@@ -8735,6 +8708,9 @@ package SystemModel_SSOT {
                 || ((code.contains("lower[") || code.contains("_lower[")) && code.contains(".."))
             {
                 violations.push(format!("line {}: cross-string UTF-8 byte-slice hazard", line_no));
+            }
+            if code.contains(&sha_k0) || code.contains(&sha_h0) {
+                violations.push(format!("line {}: duplicate SHA-256 constant", line_no));
             }
             if code.starts_with("pub fn ")
                 || code.starts_with("fn ")
@@ -9009,7 +8985,7 @@ package SystemModel_SSOT {
         assert!(was_hit_second, "Second call must be a cache hit");
         assert_eq!(model_miss, model_hit);
 
-        let _ = std::fs::remove_dir_all(&tmp_root);
+        std::fs::remove_dir_all(&tmp_root).map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -9077,7 +9053,7 @@ package SystemModel_SSOT {
         assert!(json_str.contains("STEP-01"));
         assert!(json_str.contains("PersistedPkg::PersistentNode"));
 
-        let _ = std::fs::remove_dir_all(&tmp_root);
+        std::fs::remove_dir_all(&tmp_root).map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -9105,12 +9081,12 @@ package SystemModel_SSOT {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/DISCOVER-SCHEMA-FILES]
     #[test]
-    fn test_issue_549_discover_schema_files_excludes_digest_json_sidecars() {
+    fn test_issue_549_discover_schema_files_excludes_digest_json_sidecars() -> Result<(), String> {
         let tmp_dir = std::env::temp_dir().join(format!(
             "deap_core_issue_549_test_{}",
             uuid::Uuid::new_v4()
         ));
-        std::fs::create_dir_all(&tmp_dir).expect("create temp dir");
+        std::fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
         let files = [
             "blueprint-01-alpha.sysml",
             "blueprint-01-alpha.digest.json",
@@ -9120,12 +9096,12 @@ package SystemModel_SSOT {
             "valid_schema.json",
         ];
         for fname in &files {
-            std::fs::write(tmp_dir.join(fname), "{}").expect("write test file");
+            std::fs::write(tmp_dir.join(fname), "{}").map_err(|e| e.to_string())?;
         }
 
         let discovered =
             UnifiedSchemaModelExtractor::discover_schema_files(std::slice::from_ref(&tmp_dir));
-        let _ = std::fs::remove_dir_all(&tmp_dir);
+        std::fs::remove_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
 
         let discovered_names: Vec<String> = discovered
             .iter()
@@ -9162,6 +9138,7 @@ package SystemModel_SSOT {
             "Did not expect digest.json in discovered: {:?}",
             discovered_names
         );
+        Ok(())
     }
 
     /// Regression test for Issue #551: ensures `extract_subsystem_parts_from_text` ignores
@@ -9386,21 +9363,21 @@ state def BP_01_LifecycleState {
         Ok(())
     }
 
-    /// Verifies that `compute_sha256_hex` delegates to `crate::digest::compute_sha256` and that
-    /// `sysml_ast.rs` contains no duplicate manual SHA-256 compression table (Issue #494).
+    /// Verifies that `IncrementalAstCache::compute_digest` delegates to `crate::digest::compute_sha256` and that
+    /// `sysml_ast.rs` contains no duplicate manual SHA-256 compression table (Issue #494, #503).
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C cryptographic
-    /// digest SSOT mandates for `compute_sha256_hex` in `crates/deap-core/src/sysml_ast.rs`.
+    /// digest SSOT mandates for `IncrementalAstCache::compute_digest` in `crates/deap-core/src/sysml_ast.rs`.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - `compute_sha256_hex(b)` produces identical digests to `crate::digest::compute_sha256(b)` across
-    ///   empty, single-block, and multi-block FIPS 180-4 test payloads.
+    /// - `IncrementalAstCache::compute_digest(s)` produces identical digests to `crate::digest::compute_sha256(s.as_bytes())`
+    ///   across empty, single-block, 56-byte boundary, and multi-block FIPS 180-4 test payloads.
     /// - Production code in `sysml_ast.rs` prior to `#[cfg(test)]` contains zero duplicate SHA-256
-    ///   round constants (`0x428a2f98`).
+    ///   constants (`0x428a2f98`, `0x6a09e667`).
     ///
     /// ## 3. Preconditions
-    /// - Static byte slice fixtures and compile-time `include_str!("sysml_ast.rs")` source inspection.
+    /// - Static string slice fixtures and compile-time `include_str!("sysml_ast.rs")` source inspection.
     ///
     /// ## 4. Postconditions
     /// - Asserts bitwise hex equality and single-point SHA-256 implementation delegation.
@@ -9413,18 +9390,19 @@ state def BP_01_LifecycleState {
     /// - Propagates assertion failures via `Result::Err` with zero unwrap or expect calls.
     ///
     /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SYSML-AST-SHA256-HEX] | Issue: #494
+    /// Realises: [REQ-SYSML-AST-CACHE-DIGEST] | Issue: #494, #503
     #[test]
     fn test_issue_494_compute_sha256_hex_delegates_to_canonical_digest(
     ) -> Result<(), Box<dyn std::error::Error>> {
         for sample in [
-            b"".as_slice(),
-            b"abc".as_slice(),
-            b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq".as_slice(),
+            "",
+            "abc",
+            "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+            "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
         ] {
             assert_eq!(
-                compute_sha256_hex(sample),
-                crate::digest::compute_sha256(sample)
+                IncrementalAstCache::compute_digest(sample),
+                crate::digest::compute_sha256(sample.as_bytes())
             );
         }
 
@@ -9434,9 +9412,86 @@ state def BP_01_LifecycleState {
             .next()
             .ok_or("missing production section in sysml_ast.rs")?;
         let k0_token = concat!("0x428a", "2f98");
+        let h0_token = concat!("0x6a09", "e667");
         assert!(
-            !prod_src.contains(k0_token),
-            "Expected compute_sha256_hex in sysml_ast.rs to delegate to crate::digest::compute_sha256 without duplicating SHA-256 round constants"
+            !prod_src.contains(k0_token) && !prod_src.contains(h0_token),
+            "Expected IncrementalAstCache::compute_digest in sysml_ast.rs to delegate to crate::digest::compute_sha256 without duplicating SHA-256 constants"
+        );
+        Ok(())
+    }
+
+    /// Regression test verifying `UnifiedSchemaModelExtractor::discover_schema_files` preserves
+    /// depth-0 dot-prefixed root directories while filtering hidden dot-prefixed entries at depth >= 1 (Issue #503).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C schema discovery
+    /// mandates for `UnifiedSchemaModelExtractor::discover_schema_files` in `crates/deap-core/src/sysml_ast.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - A depth-0 root directory whose final path component starts with `.` (e.g., `.dot_root_*`) is not
+    ///   pruned by `filter_entry`, allowing its valid `.sysml` children to be discovered.
+    /// - Hidden files or subdirectories at depth >= 1 (`.hidden.sysml`, `.hidden_dir/nested.sysml`) remain
+    ///   strictly excluded.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary directory in `std::env::temp_dir()` with a dot-prefixed folder name containing both
+    ///   visible and hidden `.sysml` fixtures.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `visible.sysml` is discovered, `.hidden.sysml` and `.hidden_dir/nested.sysml` are excluded,
+    ///   and the temporary directory is removed via `std::fs::remove_dir_all`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$ over bounded temporary fixture. Space Complexity: $O(1)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Propagates all I/O and assertion failures via `Result<(), String>` with zero unwrap or expect calls.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/DISCOVER-SCHEMA-FILES] | Issue: #503
+    #[test]
+    fn test_issue_503_discover_schema_files_preserves_depth_zero_dot_root() -> Result<(), String> {
+        let tmp_dir = std::env::temp_dir().join(format!(
+            ".deap_core_issue_503_dot_root_{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+        let visible_file = tmp_dir.join("visible.sysml");
+        let hidden_file = tmp_dir.join(".hidden.sysml");
+        let hidden_subdir = tmp_dir.join(".hidden_dir");
+        std::fs::create_dir_all(&hidden_subdir).map_err(|e| e.to_string())?;
+        let hidden_nested = hidden_subdir.join("nested.sysml");
+
+        std::fs::write(&visible_file, "package VisiblePkg { part def NodeA; }")
+            .map_err(|e| e.to_string())?;
+        std::fs::write(&hidden_file, "package HiddenPkg { part def NodeB; }")
+            .map_err(|e| e.to_string())?;
+        std::fs::write(&hidden_nested, "package HiddenNestedPkg { part def NodeC; }")
+            .map_err(|e| e.to_string())?;
+
+        let discovered =
+            UnifiedSchemaModelExtractor::discover_schema_files(std::slice::from_ref(&tmp_dir));
+        std::fs::remove_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+
+        let discovered_names: Vec<String> = discovered
+            .iter()
+            .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(String::from))
+            .collect();
+
+        assert!(
+            discovered_names.contains(&"visible.sysml".to_string()),
+            "Expected visible.sysml inside depth-0 dot-prefixed root to be discovered, got: {:?}",
+            discovered_names
+        );
+        assert!(
+            !discovered_names.contains(&".hidden.sysml".to_string()),
+            "Did not expect depth-1 .hidden.sysml in discovered: {:?}",
+            discovered_names
+        );
+        assert!(
+            !discovered_names.contains(&"nested.sysml".to_string()),
+            "Did not expect depth-2 nested.sysml inside .hidden_dir in discovered: {:?}",
+            discovered_names
         );
         Ok(())
     }
