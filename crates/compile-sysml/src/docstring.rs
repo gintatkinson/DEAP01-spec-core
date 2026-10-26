@@ -779,22 +779,20 @@ pub fn inject_rust_file_docstrings(
                         && is_compliant_docblock(&current_doc, check_uniqueness, &mut seen_docblocks);
 
                     if is_valid {
-                        if owner_name.is_none() {
-                            let (schema_req_opt, _) =
-                                resolve_schema_context(schema_model, None, &item_name);
-                            if let Some(schema_req) = schema_req_opt {
-                                let existing_reqs =
-                                    extract_realises_ids_from_doc_lines(&current_doc);
-                                if !existing_reqs.is_empty()
-                                    && !existing_reqs
-                                        .iter()
-                                        .any(|r| schema_identifiers_match(r, &schema_req))
-                                {
-                                    return Err(format!(
-                                        "Conflicting unforced docstring in '{}' for '{}': existing Realises {:?} conflicts with schema requirement '{}' (use --force to overwrite)",
-                                        file_rel, item_name, existing_reqs, schema_req
-                                    ));
-                                }
+                        let (schema_req_opt, _) =
+                            resolve_schema_context(schema_model, owner_name, &item_name);
+                        if let Some(schema_req) = schema_req_opt {
+                            let existing_reqs =
+                                extract_realises_ids_from_doc_lines(&current_doc);
+                            if !existing_reqs.is_empty()
+                                && !existing_reqs
+                                    .iter()
+                                    .any(|r| schema_identifiers_match(r, &schema_req))
+                            {
+                                return Err(format!(
+                                    "Conflicting unforced docstring in '{}' for '{}': existing Realises {:?} conflicts with schema requirement '{}' (use --force to overwrite)",
+                                    file_rel, item_name, existing_reqs, schema_req
+                                ));
                             }
                         }
                     } else {
@@ -1073,7 +1071,27 @@ pub fn inject_dart_file_docstrings(
                         let is_valid = !force
                             && is_compliant_docblock(&current_doc, true, &mut seen_docblocks);
 
-                        if !is_valid {
+                        if is_valid {
+                            let (schema_req_opt, _) = resolve_schema_context(
+                                schema_model,
+                                Some(cls_name.as_str()),
+                                &member_name,
+                            );
+                            if let Some(schema_req) = schema_req_opt {
+                                let existing_reqs =
+                                    extract_realises_ids_from_doc_lines(&current_doc);
+                                if !existing_reqs.is_empty()
+                                    && !existing_reqs
+                                        .iter()
+                                        .any(|r| schema_identifiers_match(r, &schema_req))
+                                {
+                                    return Err(format!(
+                                        "Conflicting unforced docstring in '{}' for '{}': existing Realises {:?} conflicts with schema requirement '{}' (use --force to overwrite)",
+                                        file_rel, member_name, existing_reqs, schema_req
+                                    ));
+                                }
+                            }
+                        } else {
                             for &doc_idx in &pending_doc_indices {
                                 if let Some(slot) = removed_line_flags.get_mut(doc_idx) {
                                     *slot = true;
@@ -2064,6 +2082,13 @@ fn resolve_schema_context(
         Some(trimmed.to_string())
     };
 
+    let normalize_alnum = |s: &str| -> String {
+        s.chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .map(|c| c.to_ascii_lowercase())
+            .collect()
+    };
+
     let extract_doc_req = |doc: &str| -> Option<String> {
         let doc_lines: Vec<String> = doc.lines().map(|l| l.to_string()).collect();
         let reqs = extract_realises_ids_from_doc_lines(&doc_lines);
@@ -2076,6 +2101,25 @@ fn resolve_schema_context(
                 if !first_tok.is_empty() {
                     return resolve_req_token(first_tok);
                 }
+            }
+        }
+        let mut rest = doc;
+        while let Some(open_idx) = rest.find('[') {
+            let after_open = rest.get(open_idx.saturating_add(1)..).unwrap_or("");
+            if let Some(close_idx) = after_open.find(']') {
+                let inside = after_open.get(..close_idx).unwrap_or("").trim();
+                for token in inside.split(',') {
+                    let tok = token.trim();
+                    let upper = tok.to_ascii_uppercase();
+                    if upper.starts_with("REQ-") || upper.starts_with("REQ_") {
+                        if let Some(resolved) = resolve_req_token(tok) {
+                            return Some(resolved);
+                        }
+                    }
+                }
+                rest = after_open.get(close_idx.saturating_add(1)..).unwrap_or("");
+            } else {
+                break;
             }
         }
         None
@@ -2133,6 +2177,34 @@ fn resolve_schema_context(
 
     let mut matched_req: Option<String> = None;
     let mut matched_constraint: Option<String> = None;
+    let norm_ident = normalize_alnum(item_name);
+    let item_is_other_part = all_parts
+        .iter()
+        .any(|p| schema_identifiers_match(&p.name, item_name));
+
+    let req_matches_member = |r: &deap_core::sysml_ast::RequirementDef, member_ident: &str| -> bool {
+        if schema_identifiers_match(&r.name, member_ident)
+            || schema_identifiers_match(&r.req_id, member_ident)
+            || r.satisfied_by
+                .iter()
+                .any(|s| schema_identifiers_match(s, member_ident))
+        {
+            return true;
+        }
+        if !item_is_other_part && norm_ident.len() >= 4 {
+            let nr = normalize_alnum(&r.name);
+            let nreq = normalize_alnum(&r.req_id);
+            let r_upper = r.name.to_ascii_uppercase();
+            let id_upper = r.req_id.to_ascii_uppercase();
+            let looks_like_action_req = r_upper.starts_with("REQ")
+                || id_upper.starts_with("REQ")
+                || nr.contains(&norm_ident);
+            if looks_like_action_req && (nr.contains(&norm_ident) || nreq.contains(&norm_ident)) {
+                return true;
+            }
+        }
+        false
+    };
 
     if let Some(owner) = owner_name {
         if let Some(owner_part) = all_parts
@@ -2141,7 +2213,6 @@ fn resolve_schema_context(
             .find(|p| schema_identifiers_match(&p.name, owner))
         {
             let (p_req, p_const) = extract_part_req_and_constraint(owner_part);
-            matched_req = p_req;
             matched_constraint = p_const;
 
             if let Some(act) = owner_part
@@ -2167,6 +2238,95 @@ fn resolve_schema_context(
                         matched_constraint = Some(formatted);
                     }
                 }
+            }
+
+            if matched_req.is_none() {
+                if let Some(req_def) = owner_part
+                    .requirements
+                    .iter()
+                    .find(|r| req_matches_member(r, item_name))
+                {
+                    let id = if !req_def.req_id.is_empty() {
+                        req_def.req_id.clone()
+                    } else {
+                        req_def.name.clone()
+                    };
+                    if !id.is_empty() {
+                        matched_req = Some(id);
+                    }
+                }
+            }
+
+            if matched_req.is_none() {
+                for pkg in &all_pkgs {
+                    if let Some(req_def) = pkg
+                        .requirement_defs
+                        .iter()
+                        .find(|r| req_matches_member(r, item_name))
+                    {
+                        let id = if !req_def.req_id.is_empty() {
+                            req_def.req_id.clone()
+                        } else {
+                            req_def.name.clone()
+                        };
+                        if !id.is_empty() {
+                            matched_req = Some(id);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if matched_req.is_none() {
+                for pkg in &all_pkgs {
+                    if let Some(act) = pkg
+                        .action_defs
+                        .iter()
+                        .find(|a| schema_identifiers_match(&a.name, item_name))
+                    {
+                        if let Some(ref doc) = act.doc {
+                            matched_req = extract_doc_req(doc);
+                        }
+                        if matched_req.is_none() {
+                            if let Some(req_def) = pkg
+                                .requirement_defs
+                                .iter()
+                                .find(|r| req_matches_member(r, &act.name))
+                            {
+                                let id = if !req_def.req_id.is_empty() {
+                                    req_def.req_id.clone()
+                                } else {
+                                    req_def.name.clone()
+                                };
+                                if !id.is_empty() {
+                                    matched_req = Some(id);
+                                }
+                            }
+                        }
+                        if matched_constraint.is_none() {
+                            if let Some(act_c) = pkg
+                                .constraint_defs
+                                .iter()
+                                .find(|c| constraint_matches_action(&c.name, &act.name))
+                            {
+                                if let Some(formatted) =
+                                    format_constraint(&act_c.name, &act_c.expression)
+                                {
+                                    matched_constraint = Some(formatted);
+                                }
+                            } else if let Some(step_expr) = act.steps.first() {
+                                if let Some(formatted) = format_constraint(&act.name, step_expr) {
+                                    matched_constraint = Some(formatted);
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if matched_req.is_none() {
+                matched_req = p_req;
             }
         }
     } else if let Some(part) = all_parts
@@ -3127,6 +3287,235 @@ mod tests {
             constraint_str.contains("dt > 0.0"),
             "Expected invariant_compute_trajectory_0 constraint to resolve for compute_trajectory, got: {:?}",
             constraint_str
+        );
+    }
+
+    /// Verifies method-level `Realises:` conflict detection in Rust/Dart and action-specific requirement precedence over parent `PartDef` requirements (refs #560).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 bidirectional traceability verification
+    /// (`test_issue_560_method_realises_conflict_and_action_req_precedence`).
+    /// Ensures method-level docstrings with stale `Realises:` tags are flagged as conflicts when `force == false`
+    /// and ensures action-specific requirements are not shadowed by parent `PartDef` requirements.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `resolve_schema_context(Some(&model), Some("FlightController"), "compute_thrust")` resolves the action-specific
+    ///   requirement `REQ-ACTION` rather than the parent `PartDef` requirement `REQ-PARENT`.
+    /// - `resolve_schema_context(Some(&model), Some("FlightController"), "adjust_pitch")` resolves matching package
+    ///   `RequirementDef` `REQ-ACTION-ADJUST-PITCH` before falling back to `REQ-PARENT`.
+    /// - `resolve_schema_context(Some(&model), Some("FlightController"), "helper_step")` falls back to `REQ-PARENT`
+    ///   when no action-specific requirement exists.
+    /// - `inject_rust_file_docstrings` and `inject_dart_file_docstrings` reject conflicting method-level `Realises:` tags when `force == false`.
+    ///
+    /// ## 3. Preconditions
+    /// - `PackageDef` contains `PartDef("FlightController")` satisfying `REQ-PARENT`, action `compute_thrust` with `[REQ-ACTION]`,
+    ///   and `RequirementDef("REQ_ACTION_ADJUST_PITCH")`.
+    /// - Rust `impl FlightController` and Dart `class FlightController` fixtures carry compliant 7-section method docstrings with stale `Realises: [REQ-STALE-999]`.
+    ///
+    /// ## 4. Postconditions
+    /// - Action-specific requirement queries return `Some("REQ-ACTION")` and `Some("REQ-ACTION-ADJUST-PITCH")`; unmapped method fallback returns `Some("REQ-PARENT")`.
+    /// - Unforced Rust and Dart docstring injection calls return `Err` referencing the method identifier and expected schema requirement ID.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over the in-memory schema model and source fixture lines.
+    /// - Space Complexity: O(N) for temporary line buffers during docstring scanning.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Asserts deterministic `Err` conflict reporting on mismatched method `Realises:` tags.
+    /// - State: Pure in-memory fixture evaluation with zero persistent state mutation.
+    /// - Action: Rejects silent preservation of stale requirement tags on `impl` and class methods.
+    /// - Resource: Zero filesystem I/O.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-ISSUE-560-METHOD-REALISES-CONFLICT-AND-ACTION-PRECEDENCE-TEST]
+    #[test]
+    fn test_issue_560_method_realises_conflict_and_action_req_precedence() {
+        let model = PackageDef {
+            name: "FlightControlPkg".to_string(),
+            part_defs: vec![PartDef {
+                name: "FlightController".to_string(),
+                is_def: true,
+                satisfied_requirements: vec!["REQ-PARENT".to_string()],
+                actions: vec![
+                    ActionDef {
+                        name: "compute_thrust".to_string(),
+                        doc: Some("Computes thrust command [REQ-ACTION]".to_string()),
+                        is_def: false,
+                        ..Default::default()
+                    },
+                    ActionDef {
+                        name: "adjust_pitch".to_string(),
+                        doc: None,
+                        is_def: false,
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            }],
+            action_defs: vec![ActionDef {
+                name: "stabilize_yaw".to_string(),
+                doc: Some("Realises: [REQ-ACTION-YAW]".to_string()),
+                is_def: true,
+                ..Default::default()
+            }],
+            requirement_defs: vec![
+                RequirementDef {
+                    name: "REQ_PARENT".to_string(),
+                    req_id: "REQ-PARENT".to_string(),
+                    ..Default::default()
+                },
+                RequirementDef {
+                    name: "REQ_ACTION".to_string(),
+                    req_id: "REQ-ACTION".to_string(),
+                    ..Default::default()
+                },
+                RequirementDef {
+                    name: "REQ_ACTION_ADJUST_PITCH".to_string(),
+                    req_id: "REQ-ACTION-ADJUST-PITCH".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        // (a) Action-specific requirement precedence vs parent PartDef fallback
+        let (thrust_req, _) =
+            resolve_schema_context(Some(&model), Some("FlightController"), "compute_thrust");
+        assert_eq!(
+            thrust_req,
+            Some("REQ-ACTION".to_string()),
+            "Action doc [REQ-ACTION] on owner_part.actions must take precedence over parent PartDef REQ-PARENT"
+        );
+
+        let (pitch_req, _) =
+            resolve_schema_context(Some(&model), Some("FlightController"), "adjust_pitch");
+        assert_eq!(
+            pitch_req,
+            Some("REQ-ACTION-ADJUST-PITCH".to_string()),
+            "Action matching RequirementDef REQ_ACTION_ADJUST_PITCH must take precedence over parent PartDef REQ-PARENT"
+        );
+
+        let (yaw_req, _) =
+            resolve_schema_context(Some(&model), Some("FlightController"), "stabilize_yaw");
+        assert_eq!(
+            yaw_req,
+            Some("REQ-ACTION-YAW".to_string()),
+            "Action matching pkg.action_defs stabilize_yaw must take precedence over parent PartDef REQ-PARENT"
+        );
+
+        let (helper_req, _) =
+            resolve_schema_context(Some(&model), Some("FlightController"), "helper_step");
+        assert_eq!(
+            helper_req,
+            Some("REQ-PARENT".to_string()),
+            "Method without an action-specific requirement must fall back to parent PartDef REQ-PARENT"
+        );
+
+        // (b) Rust impl method with compliant 7-section docstring but conflicting Realises tag
+        let rust_src = concat!(
+            "/// Flight controller classifier.\n",
+            "/// ## 1. Safety Intent & Regulatory Scope\n",
+            "/// Struct FlightController safety scope.\n",
+            "/// ## 2. Invariants & Mathematical Properties\n",
+            "/// Struct FlightController invariants.\n",
+            "/// ## 3. Preconditions\n",
+            "/// Struct FlightController preconditions.\n",
+            "/// ## 4. Postconditions\n",
+            "/// Struct FlightController postconditions.\n",
+            "/// ## 5. Algorithmic Complexity Bounds\n",
+            "/// Time: O(1), Space: O(1).\n",
+            "/// ## 6. Failure Modes & Fault Tolerance\n",
+            "/// Deterministic struct layout.\n",
+            "/// ## 7. Realization & Traceability\n",
+            "/// Realises: [REQ-PARENT]\n",
+            "pub struct FlightController;\n\n",
+            "impl FlightController {\n",
+            "    /// Computes thrust output.\n",
+            "    /// ## 1. Safety Intent & Regulatory Scope\n",
+            "    /// Method FlightController::compute_thrust safety scope.\n",
+            "    /// ## 2. Invariants & Mathematical Properties\n",
+            "    /// Method FlightController::compute_thrust invariants.\n",
+            "    /// ## 3. Preconditions\n",
+            "    /// Method FlightController::compute_thrust preconditions.\n",
+            "    /// ## 4. Postconditions\n",
+            "    /// Method FlightController::compute_thrust postconditions.\n",
+            "    /// ## 5. Algorithmic Complexity Bounds\n",
+            "    /// Time: O(1), Space: O(1) for compute_thrust.\n",
+            "    /// ## 6. Failure Modes & Fault Tolerance\n",
+            "    /// Deterministic method execution for compute_thrust.\n",
+            "    /// ## 7. Realization & Traceability\n",
+            "    /// Realises: [REQ-STALE-999]\n",
+            "    pub fn compute_thrust(&self) -> f64 {\n",
+            "        1.0\n",
+            "    }\n",
+            "}\n"
+        );
+        let rust_res = inject_rust_file_docstrings(
+            rust_src,
+            "crates/flight/src/controller.rs",
+            Some(&model),
+            false,
+        );
+        let rust_err = rust_res.expect_err(
+            "Expected inject_rust_file_docstrings (force=false) to detect conflicting Realises on impl method compute_thrust",
+        );
+        assert!(
+            rust_err.contains("compute_thrust") && rust_err.contains("REQ-ACTION"),
+            "Expected Rust conflict error to reference 'compute_thrust' and 'REQ-ACTION', got: {}",
+            rust_err
+        );
+
+        // (c) Dart class method at brace_depth == 1 with compliant 7-section docstring but conflicting Realises tag
+        let dart_src = concat!(
+            "/// Flight controller Dart class.\n",
+            "/// ## 1. Safety Intent & Regulatory Scope\n",
+            "/// Class FlightController safety scope.\n",
+            "/// ## 2. Invariants & Mathematical Properties\n",
+            "/// Class FlightController invariants.\n",
+            "/// ## 3. Preconditions\n",
+            "/// Class FlightController preconditions.\n",
+            "/// ## 4. Postconditions\n",
+            "/// Class FlightController postconditions.\n",
+            "/// ## 5. Algorithmic Complexity Bounds\n",
+            "/// Time: O(1), Space: O(1).\n",
+            "/// ## 6. Failure Modes & Fault Tolerance\n",
+            "/// Deterministic class layout.\n",
+            "/// ## 7. Realization & Traceability\n",
+            "/// Realises: [REQ-PARENT]\n",
+            "class FlightController {\n",
+            "  /// Computes thrust output in Dart.\n",
+            "  /// ## 1. Safety Intent & Regulatory Scope\n",
+            "  /// Method FlightController.computeThrust safety scope.\n",
+            "  /// ## 2. Invariants & Mathematical Properties\n",
+            "  /// Method FlightController.computeThrust invariants.\n",
+            "  /// ## 3. Preconditions\n",
+            "  /// Method FlightController.computeThrust preconditions.\n",
+            "  /// ## 4. Postconditions\n",
+            "  /// Method FlightController.computeThrust postconditions.\n",
+            "  /// ## 5. Algorithmic Complexity Bounds\n",
+            "  /// Time: O(1), Space: O(1) for computeThrust.\n",
+            "  /// ## 6. Failure Modes & Fault Tolerance\n",
+            "  /// Deterministic method execution for computeThrust.\n",
+            "  /// ## 7. Realization & Traceability\n",
+            "  /// Realises: [REQ-STALE-999]\n",
+            "  double computeThrust() {\n",
+            "    return 1.0;\n",
+            "  }\n",
+            "}\n"
+        );
+        let dart_res = inject_dart_file_docstrings(
+            dart_src,
+            "lib/flight_controller.dart",
+            Some(&model),
+            false,
+        );
+        let dart_err = dart_res.expect_err(
+            "Expected inject_dart_file_docstrings (force=false) to detect conflicting Realises on class method computeThrust",
+        );
+        assert!(
+            dart_err.contains("computeThrust") && dart_err.contains("REQ-ACTION"),
+            "Expected Dart conflict error to reference 'computeThrust' and 'REQ-ACTION', got: {}",
+            dart_err
         );
     }
 }
