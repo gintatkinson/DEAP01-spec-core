@@ -4442,10 +4442,7 @@ fn has_matching_interpolation_brace_before_quote(
                 return has_unescaped_closing_quote(bytes, i.saturating_add(1), quote);
             }
         } else if b == quote {
-            if bytes.get(i.saturating_add(1)) == Some(&b';') {
-                return false;
-            }
-            inner_quote = Some(b);
+            return false;
         } else if b == b'"' || b == b'\'' {
             inner_quote = Some(b);
         }
@@ -5309,6 +5306,23 @@ class PathFormatter {
             return Err(format!("Unexpected stripped_raw line: {stripped_raw}"));
         }
 
+        let stripped_raw_quote = strip_line_comment_preserving_strings(
+            r##"let q = r#"quote " // not a comment"#; // comment"##,
+        );
+        if stripped_raw_quote != r##"let q = r#"quote " // not a comment"#; "## {
+            return Err(format!(
+                "Unexpected stripped_raw_quote line: {stripped_raw_quote}"
+            ));
+        }
+
+        let stripped_raw_backslash =
+            strip_line_comment_preserving_strings(r##"let p = r#"C:\"#; // comment"##);
+        if stripped_raw_backslash != r##"let p = r#"C:\"#; "## {
+            return Err(format!(
+                "Unexpected stripped_raw_backslash line: {stripped_raw_backslash}"
+            ));
+        }
+
         let mut brace_depth: usize = 0;
         let mut paren_depth: usize = 0;
         update_ast_delimiter_depths(
@@ -5333,6 +5347,61 @@ class PathFormatter {
             return Err(format!(
                 "Unexpected interp depths: brace={brace_depth_interp}, paren={paren_depth_interp}"
             ));
+        }
+
+        let mut brace_depth_starts_with: usize = 0;
+        let mut paren_depth_starts_with: usize = 0;
+        update_ast_delimiter_depths(
+            "if s.starts_with(\"${\") {",
+            &mut brace_depth_starts_with,
+            &mut paren_depth_starts_with,
+        );
+        if brace_depth_starts_with != 1 || paren_depth_starts_with != 0 {
+            return Err(format!(
+                "Unexpected starts_with depths: brace={brace_depth_starts_with}, paren={paren_depth_starts_with}"
+            ));
+        }
+
+        let mut brace_depth_starts_with_pair: usize = 0;
+        let mut paren_depth_starts_with_pair: usize = 0;
+        update_ast_delimiter_depths(
+            "if s.starts_with(\"${\") && other == \"}\" {",
+            &mut brace_depth_starts_with_pair,
+            &mut paren_depth_starts_with_pair,
+        );
+        if brace_depth_starts_with_pair != 1 || paren_depth_starts_with_pair != 0 {
+            return Err(format!(
+                "Unexpected starts_with_pair depths: brace={brace_depth_starts_with_pair}, paren={paren_depth_starts_with_pair}"
+            ));
+        }
+
+        let dollar_brace_rust = r#"pub fn check_token(s: &str, other: &str) -> bool {
+    if s.starts_with("${") && other == "}" {
+        return true;
+    }
+    false
+}
+
+pub struct AfterDollarBrace {
+    pub ok: bool,
+}
+
+pub fn after_dollar_brace() -> bool {
+    true
+}
+"#;
+        let parsed_items = parse_rust_source_ast(dollar_brace_rust, "src/dollar_brace.rs")?;
+        if !parsed_items
+            .iter()
+            .any(|item| item.kind == SourceItemKind::Struct && item.name == "AfterDollarBrace")
+        {
+            return Err("Expected AfterDollarBrace struct after ${ literal".to_string());
+        }
+        if !parsed_items
+            .iter()
+            .any(|item| item.kind == SourceItemKind::Function && item.name == "after_dollar_brace")
+        {
+            return Err("Expected after_dollar_brace function after ${ literal".to_string());
         }
 
         let mut brace_depth_raw: usize = 0;
