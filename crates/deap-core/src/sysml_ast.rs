@@ -7109,105 +7109,7 @@ impl SysmlModel {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SHA256-HEX]
 fn compute_sha256_hex(bytes: &[u8]) -> String {
-    const K: [u32; 64] = [
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
-        0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
-        0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
-        0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
-        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
-        0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
-        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
-        0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
-        0xc67178f2,
-    ];
-
-    let mut h0: u32 = 0x6a09e667;
-    let mut h1: u32 = 0xbb67ae85;
-    let mut h2: u32 = 0x3c6ef372;
-    let mut h3: u32 = 0xa54ff53a;
-    let mut h4: u32 = 0x510e527f;
-    let mut h5: u32 = 0x9b05688c;
-    let mut h6: u32 = 0x1f83d9ab;
-    let mut h7: u32 = 0x5be0cd19;
-
-    let bit_len = (bytes.len() as u64).wrapping_mul(8);
-    let mut msg = bytes.to_vec();
-    msg.push(0x80);
-    while (msg.len() % 64) != 56 {
-        msg.push(0x00);
-    }
-    msg.extend_from_slice(&bit_len.to_be_bytes());
-
-    for chunk in msg.as_chunks::<64>().0 {
-        let mut w = [0u32; 64];
-        for (i, word_bytes) in chunk.as_chunks::<4>().0.iter().enumerate() {
-            if let Some(slot) = w.get_mut(i) {
-                *slot = u32::from_be_bytes(*word_bytes);
-            }
-        }
-        for i in 16..64 {
-            let w_i_15 = w.get(i - 15).copied().unwrap_or(0);
-            let w_i_2 = w.get(i - 2).copied().unwrap_or(0);
-            let w_i_16 = w.get(i - 16).copied().unwrap_or(0);
-            let w_i_7 = w.get(i - 7).copied().unwrap_or(0);
-            let s0 = w_i_15.rotate_right(7) ^ w_i_15.rotate_right(18) ^ (w_i_15 >> 3);
-            let s1 = w_i_2.rotate_right(17) ^ w_i_2.rotate_right(19) ^ (w_i_2 >> 10);
-            if let Some(slot) = w.get_mut(i) {
-                *slot = w_i_16
-                    .wrapping_add(s0)
-                    .wrapping_add(w_i_7)
-                    .wrapping_add(s1);
-            }
-        }
-
-        let mut a = h0;
-        let mut b = h1;
-        let mut c = h2;
-        let mut d = h3;
-        let mut e = h4;
-        let mut f = h5;
-        let mut g = h6;
-        let mut h = h7;
-
-        for i in 0..64 {
-            let k_i = K.get(i).copied().unwrap_or(0);
-            let w_i = w.get(i).copied().unwrap_or(0);
-            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let ch = (e & f) ^ ((!e) & g);
-            let temp1 = h
-                .wrapping_add(s1)
-                .wrapping_add(ch)
-                .wrapping_add(k_i)
-                .wrapping_add(w_i);
-            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
-            let maj = (a & b) ^ (a & c) ^ (b & c);
-            let temp2 = s0.wrapping_add(maj);
-
-            h = g;
-            g = f;
-            f = e;
-            e = d.wrapping_add(temp1);
-            d = c;
-            c = b;
-            b = a;
-            a = temp1.wrapping_add(temp2);
-        }
-
-        h0 = h0.wrapping_add(a);
-        h1 = h1.wrapping_add(b);
-        h2 = h2.wrapping_add(c);
-        h3 = h3.wrapping_add(d);
-        h4 = h4.wrapping_add(e);
-        h5 = h5.wrapping_add(f);
-        h6 = h6.wrapping_add(g);
-        h7 = h7.wrapping_add(h);
-    }
-
-    format!(
-        "{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}",
-        h0, h1, h2, h3, h4, h5, h6, h7
-    )
+    crate::digest::compute_sha256(bytes)
 }
 
 /// Content-addressable SHA-256 incremental cache for parsed `SysmlModel` AST trees under `.pipeline/cache/ast/`.
@@ -9483,5 +9385,61 @@ state def BP_01_LifecycleState {
 
         Ok(())
     }
+
+    /// Verifies that `compute_sha256_hex` delegates to `crate::digest::compute_sha256` and that
+    /// `sysml_ast.rs` contains no duplicate manual SHA-256 compression table (Issue #494).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C cryptographic
+    /// digest SSOT mandates for `compute_sha256_hex` in `crates/deap-core/src/sysml_ast.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `compute_sha256_hex(b)` produces identical digests to `crate::digest::compute_sha256(b)` across
+    ///   empty, single-block, and multi-block FIPS 180-4 test payloads.
+    /// - Production code in `sysml_ast.rs` prior to `#[cfg(test)]` contains zero duplicate SHA-256
+    ///   round constants (`0x428a2f98`).
+    ///
+    /// ## 3. Preconditions
+    /// - Static byte slice fixtures and compile-time `include_str!("sysml_ast.rs")` source inspection.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts bitwise hex equality and single-point SHA-256 implementation delegation.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$ over bounded test vectors and compile-time source string.
+    /// - Space Complexity: $O(1)$ auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Propagates assertion failures via `Result::Err` with zero unwrap or expect calls.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SHA256-HEX] | Issue: #494
+    #[test]
+    fn test_issue_494_compute_sha256_hex_delegates_to_canonical_digest(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for sample in [
+            b"".as_slice(),
+            b"abc".as_slice(),
+            b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq".as_slice(),
+        ] {
+            assert_eq!(
+                compute_sha256_hex(sample),
+                crate::digest::compute_sha256(sample)
+            );
+        }
+
+        let src = include_str!("sysml_ast.rs");
+        let prod_src = src
+            .split("#[cfg(test)]")
+            .next()
+            .ok_or("missing production section in sysml_ast.rs")?;
+        let k0_token = concat!("0x428a", "2f98");
+        assert!(
+            !prod_src.contains(k0_token),
+            "Expected compute_sha256_hex in sysml_ast.rs to delegate to crate::digest::compute_sha256 without duplicating SHA-256 round constants"
+        );
+        Ok(())
+    }
 }
+
 

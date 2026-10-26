@@ -354,11 +354,14 @@ pub fn generate_input_digest(input_path: &Path) -> Result<InputDigestData, Strin
     if input_path.is_file() {
         input_files.push(input_path.to_path_buf());
     } else if input_path.is_dir() {
-        for e in walkdir::WalkDir::new(input_path)
-            .sort_by_file_name()
-            .into_iter()
-            .flatten()
-        {
+        for entry_res in walkdir::WalkDir::new(input_path).sort_by_file_name() {
+            let e = entry_res.map_err(|err| {
+                format!(
+                    "Directory traversal error while computing input digest for '{}': {}",
+                    input_path.display(),
+                    err
+                )
+            })?;
             let p = e.path();
             if p.is_file() {
                 let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
@@ -681,6 +684,90 @@ mod tests {
                 assert!(!entry.sha256.is_empty());
                 assert!(entry.structural_section_markers.iter().any(|m| m.contains("1. Normative Statement")));
             }
+        }
+    }
+
+    /// Verifies that `generate_input_digest` fails closed with `Err` when `WalkDir` encounters an
+    /// unreadable subdirectory rather than silently omitting files via `.flatten()` (Issue #494).
+    ///
+    /// # Summary
+    /// Executes negative fault-injection verification for `generate_input_digest` on an unreadable subdirectory.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// # Safety
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C fail-closed
+    /// directory traversal mandates for fn `test_issue_494_generate_input_digest_fails_closed_on_unreadable_subdir`
+    /// in `crates/ingest-sysml/src/digest.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Any `walkdir::Error` encountered while traversing `input_path` aborts digest computation
+    ///   with a descriptive `Err(String)` containing `"Directory traversal error"`.
+    ///
+    /// ## 3. Preconditions
+    /// # Parameters
+    /// - Creates an isolated temporary directory containing a valid `.md` file and a `chmod 000`
+    ///   subdirectory on Unix targets.
+    ///
+    /// ## 4. Postconditions
+    /// # Returns
+    /// - Returns `Result<(), Box<dyn std::error::Error>>` after restoring directory permissions and
+    ///   cleaning up the temporary fixture.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over a 2-node temporary filesystem fixture.
+    /// - Space Complexity: O(1) bounded auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// # Errors
+    /// - Propagates unexpected setup or assertion failures via `Result::Err`.
+    /// # Panics
+    /// - Zero unwrap or expect calls.
+    /// - Interface: Validates boundary inputs and types for `test_issue_494_generate_input_digest_fails_closed_on_unreadable_subdir`.
+    /// - State: Restores `0o755` permissions before removing the temporary directory.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Cleans up temporary directory on completion.
+    ///
+    /// ## 7. Realization & Traceability
+    /// # Realises
+    /// Realises: [REQ-0001/generate_input_digest] | SysML v2: TestCaseDef(test_issue_494_generate_input_digest_fails_closed_on_unreadable_subdir)
+    #[cfg(unix)]
+    #[test]
+    fn test_issue_494_generate_input_digest_fails_closed_on_unreadable_subdir(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp_root = std::env::temp_dir().join(format!(
+            "deap_issue_494_walkdir_fail_closed_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&tmp_root);
+        fs::create_dir_all(&tmp_root)?;
+        fs::write(tmp_root.join("visible.md"), "# Section 1\nBody\n")?;
+
+        let locked_dir = tmp_root.join("locked_subdir");
+        fs::create_dir_all(&locked_dir)?;
+        fs::write(locked_dir.join("hidden.md"), "# Section 2\nHidden\n")?;
+        fs::set_permissions(&locked_dir, fs::Permissions::from_mode(0o000))?;
+
+        let result = generate_input_digest(&tmp_root);
+
+        let _ = fs::set_permissions(&locked_dir, fs::Permissions::from_mode(0o755));
+        let _ = fs::remove_dir_all(&tmp_root);
+
+        match result {
+            Err(err_msg) => {
+                assert!(
+                    err_msg.contains("Directory traversal error"),
+                    "Expected 'Directory traversal error' in Err message, got: {}",
+                    err_msg
+                );
+                Ok(())
+            }
+            Ok(digest) => Err(format!(
+                "Expected generate_input_digest to fail closed on unreadable subdir, but got Ok with sha256={}",
+                digest.sha256
+            )
+            .into()),
         }
     }
 }
