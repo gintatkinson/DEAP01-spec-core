@@ -2,7 +2,7 @@
   "sha256": "f47057609fed05a26950c77b170336c0af4ed0fcbfb261d84eda3d26495935b3",
   "total_lines": 1,
   "node_counts": {
-    "action_defs": 0,
+    "action_defs": 8,
     "attribute_defs": 20,
     "calc_defs": 0,
     "capability_defs": 0,
@@ -12,10 +12,10 @@
     "groupings": 0,
     "hazard_defs": 0,
     "identities": 0,
-    "interaction_defs": 0,
+    "interaction_defs": 1,
     "item_defs": 0,
     "leaves": 20,
-    "lists": 0,
+    "lists": 8,
     "operation_defs": 0,
     "packages": 1,
     "part_defs": 5,
@@ -25,16 +25,23 @@
     "state_defs": 0,
     "test_case_defs": 0,
     "typedefs": 0,
-    "use_case_defs": 0
+    "use_case_defs": 5
   },
   "schema_nodes": [
+    "BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
+    "BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction",
     "Blueprint_ID",
     "Check36AstCompletenessVerifier",
     "Check36VerificationReportPort",
+    "Emit",
     "EnrichedSourceOutputPort",
     "Generation_Mode",
-    "REQ_0605_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
+    "REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
     "Requirement_ID",
+    "Resolve",
+    "Return",
+    "Run",
+    "Scan",
     "ScopedSchemaContextResolver",
     "SevenSectionDocstringGenerator",
     "SourceCodeFileInputPort",
@@ -43,10 +50,17 @@
     "SysmlSchemaTraceabilityPort",
     "Target_Crates",
     "Title",
+    "Tokenize",
     "Tracked_Issues",
+    "UC_AC_01_Unified_Rust_and_Dart_Lexical_State_Machine_Without_Magic_Offsets",
+    "UC_AC_02_Strict_Schema_Context_Resolution_and_Recursive_Part_Traversal",
+    "UC_AC_03_Scoped_mod_tests_Brace_Tracking_unsafe_extern_Classification_and_Arrow_Aware_impl_Headers",
+    "UC_AC_04_Bit_for_Bit_Idempotency_and_Fail_Closed_Check_34_Per_Function_Normalized_Body_Uniqueness",
+    "UC_AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0605",
     "UnifiedRustDartLexicalScanner",
     "UnifiedSafetyDocstringSynthesizer",
-    "Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
+    "Verify_item",
+    "Write",
     "assert_docstring_idempotency_diff_bytes_range",
     "assert_false_attribution_count_range",
     "assert_lexer_duplication_count_range",
@@ -58,9 +72,110 @@
     "quantity",
     "type"
   ],
-  "operational_activities": [],
+  "operational_activities": [
+    {
+      "id": "OA-01",
+      "name": "Run",
+      "doc": "Run compile-sysml --inject-safety-docstrings <DIR>",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-02",
+      "name": "Scan",
+      "doc": "Scan source lines via RustDartLexState and ScopedItemScannerState",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-03",
+      "name": "Return",
+      "doc": "Return declaration items, owner_name, params, fields, invariants",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-04",
+      "name": "Resolve",
+      "doc": "Resolve schema context via collect_all_parts without .first() fallback",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-05",
+      "name": "Write",
+      "doc": "Write 7-section docstrings atomically with 0 diff on second pass",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-06",
+      "name": "Tokenize",
+      "doc": "Tokenize .rs and .dart files using shared deap-core lexical state",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-07",
+      "name": "Verify_item",
+      "doc": "Verify 7 sections, non-empty Realises tag, and unique normalized body",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-08",
+      "name": "Emit",
+      "doc": "Emit canonical SysML v2 AST for REQ-0605 and SHA-256 digest",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    }
+  ],
   "operational_exchanges": [],
-  "operational_scenarios": [],
+  "operational_scenarios": [
+    {
+      "id": "SCN-01",
+      "name": "UC_AC_01_Unified_Rust_and_Dart_Lexical_State_Machine_Without_Magic_Offsets",
+      "actor": "",
+      "objective": "\"Unified Rust and Dart Lexical State Machine Without Magic Offsets\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-02",
+      "name": "UC_AC_02_Strict_Schema_Context_Resolution_and_Recursive_Part_Traversal",
+      "actor": "",
+      "objective": "\"Strict Schema Context Resolution and Recursive Part Traversal\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-03",
+      "name": "UC_AC_03_Scoped_mod_tests_Brace_Tracking_unsafe_extern_Classification_and_Arrow_Aware_impl_Headers",
+      "actor": "",
+      "objective": "\"Scoped mod tests Brace Tracking unsafe extern Classification and Arrow Aware impl Headers\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-04",
+      "name": "UC_AC_04_Bit_for_Bit_Idempotency_and_Fail_Closed_Check_34_Per_Function_Normalized_Body_Uniqueness",
+      "actor": "",
+      "objective": "\"Bit for Bit Idempotency and Fail Closed Check 34 Per Function Normalized Body Uniqueness\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-05",
+      "name": "UC_AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0605",
+      "actor": "",
+      "objective": "\"Dogfood Ingestion and SysML v2 Compilation of REQ 0605\"",
+      "steps": []
+    }
+  ],
   "operational_nodes": [
     {
       "name": "UnifiedRustDartLexicalScanner",

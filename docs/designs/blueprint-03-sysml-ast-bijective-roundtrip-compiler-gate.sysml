@@ -1,5 +1,5 @@
 doc /* Translated from Level 0 OEM Markdown specification */
-package SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint {
+package BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint {
     attribute Blueprint_ID : String = "BP-03";
     attribute Requirement_ID : String = "REQ-0603";
     attribute Title : String = "SysML v2 AST Bijective Roundtrip and Token-Stream Parser Gate Blueprint (DEAP-BP-DET-03)";
@@ -8,8 +8,28 @@ package SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint 
     attribute Tracked_Issues : String = "#493, #495, #496, #497, #504, #505, #509";
     attribute Generation_Mode : String = "subagent";
     attribute Specification_Source : String = "crates/compile-sysml/src/parser/grammar.rs:182-335 / crates/compile-sysml/src/semantic/serializer.rs:250-820 / #493";
+    doc /* scan_all(raw_sysml_source) */
+    action def scan_all;
+    doc /* Vec of Token with zero span drift */
+    action def Vec;
+    doc /* parse_package_or_file(tokens) */
+    action def parse_package_or_file;
+    doc /* parse_type_expr and parse_transition_decl_tokens */
+    action def parse_type_expr;
+    doc /* Canonical PackageDef AST (ast_orig) */
+    action def Canonical;
+    doc /* verify_bijective_ast_roundtrip(ast_orig) */
+    action def verify_bijective_ast_roundtrip;
+    doc /* ast_orig.to_sysml(0) */
+    action def ast_orig_to_sysml;
+    doc /* Reparsed token stream */
+    action def Reparsed;
+    doc /* Assert ast_orig equals ast_reparsed */
+    action def Assert_item;
+    doc /* Ok or Err(E0400 Structural AST Diff) */
+    action def Ok;
     doc /* UUIDv5:  | Complexity: Class P | Standard: IEEE 29148-2018 / RFC 2119 | Diagnostics: E0100 */
-    requirement def REQ_0603_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint {
+    requirement def REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint {
         id = "REQ-0603";
         text = "The Digital Engineering Agent Platform (DEAP) compiler pipeline (DEAP-BP-DET-03, subsystem SysmlBijectiveRoundtripCompilerGate, deterministic UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c3, complexity class Class P, diagnostic code bindings E0100, E0200, E0300, E0400, governed by ISO/IEC/IEEE";
         attribute uuidv5 : String = "";
@@ -34,10 +54,74 @@ package SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint 
         verify by AC_05_Dogfood_Markdown_to_SysML_Ingestion_and_Baseline_Verification;
         satisfy by NativeSigilAndLifetimeLexer;
     }
+    doc /* Extracted from Mermaid stateDiagram specification. */
+    state def BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_LifecycleState {
+        transition Initial_to_LexicalScanning;
+        transition LexicalScanning_to_RecursiveDescentParsing_on_zeroDriftTokenStream;
+        transition LexicalScanning_to_RejectedE0100_on_lexicalSpanError;
+        transition RecursiveDescentParsing_to_CanonicalSerialization_on_packageDefConstructed;
+        transition RecursiveDescentParsing_to_RejectedE0200_on_unexpectedInnerBlockToken;
+        transition CanonicalSerialization_to_RoundtripReparsing_on_sysmlTextEmitted;
+        transition RoundtripReparsing_to_AstStructuralEqualityCheck_on_reparsedPackageDef;
+        transition RoundtripReparsing_to_RejectedE0400_on_reparseSyntaxFailure;
+        transition AstStructuralEqualityCheck_to_VerifiedBijectiveAst_on_astOrigEqualsAstReparsed;
+        transition AstStructuralEqualityCheck_to_RejectedE0400_on_structuralAstDiffDetected;
+        transition RejectedE0100_to_Terminal;
+        transition RejectedE0200_to_Terminal;
+        transition RejectedE0400_to_Terminal;
+        transition VerifiedBijectiveAst_to_Terminal;
+    }
+    doc /* - **Given**: A SysML v2 model containing reference type sigils (&), optionality sigils (?), lifetime annotations ('a), qualified paths (::), and logical && expressions (#495). - **When**: Scanner::scan_all tokenizes the raw source buffer without invoking normalize_type_sigils. - **Then**: The lexer emits TokenKind::Ampersand, TokenKind::Question, TokenKind::Lifetime, TokenKind::DoubleColon, and TokenKind::AmpAmp with exact 1:1 byte and column offsets (span_offset_drift_bytes == 0). */
+    use case def UC_AC_01_Native_Lexer_Sigil_and_Lifetime_Tokenization {
+        subject NativeSigilAndLifetimeLexer;
+        objective "Native Lexer Sigil and Lifetime Tokenization";
+    }
+    doc /* - **Given**: Any of the 12 SysML v2 inner declaration blocks (port, action, requirement, state, connection, use case, item, hazard, risk, test case, capability, interaction) containing either composite parameter types (Result<PackageDef, ParseError>, &'a [Token]) or an invalid inner statement (#504). - **When**: SysmlParser parses the declaration block. - **Then**: Valid composite types are preserved verbatim via parse_type_expr() and any unrecognized statement fails closed and is rejected with Err(ParseError) reporting diagnostic code E0200 (silent_skip_branch_count == 0). */
+    use case def UC_AC_02_Fail_Closed_Inner_Block_and_Composite_Type_Parsing {
+        subject NativeSigilAndLifetimeLexer;
+        objective "Fail Closed Inner Block and Composite Type Parsing";
+    }
+    doc /* - **Given**: A hierarchical state def containing anonymous and named transition statements (first S1 accept trig if grd do eff then S2;) and nested composite sub_states with their own transitions and doc blocks (#496, #509). - **When**: parse_state_decl and the MBD .sfx synthesizer execute. - **Then**: Transitions are parsed directly from the token stream without fabricating {s}_to_{t} names (name: None preserved when unnamed), sub-state doc blocks attach to their target StateDef or TransitionDef, and MBD .sfx synthesis recursively emits transitions across all nesting depths. */
+    use case def UC_AC_03_Token_Stream_State_Transition_Parsing_and_Recursive_MBD_Synthesis {
+        subject NativeSigilAndLifetimeLexer;
+        objective "Token Stream State Transition Parsing and Recursive MBD Synthesis";
+    }
+    doc /* - **Given**: A populated PackageDef AST containing StateDef transitions (source, trigger, guard, effect, target, doc), PortDef / HazardDef / RiskDef attributes, and UseCaseDef / ConnectionDef / RequirementDef / ActionDef blocks (#493, #497, #505), or a mutated AST with a simulated field divergence. - **When**: verify_bijective_ast_roundtrip(&pkg) executes during compile-sysml. - **Then**: pkg.to_sysml(0) emits valid un-double-quoted SysML v2 text, SysmlParser::parse_source(&pkg.to_sysml(0), &pkg.name) returns a PackageDef structurally equal to pkg (roundtrip_ast_mismatch_count == 0), and any. */
+    use case def UC_AC_04_Lossless_to_sysml_Serialization_and_Fail_Closed_Bijective_Roundtrip_Gate {
+        subject NativeSigilAndLifetimeLexer;
+        objective "Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate";
+    }
+    doc /* - **Given**: This blueprint document docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md (**REQ-0603**). - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md --dry-run is executed. - **Then**: verify-baseline check-blueprint passes all 12 mechanical gates, extracts SysmlBijectiveRoundtripCompilerGate with all 4 BOM parts, 4 interface ports, 4 attributes, 4 parametric constraints (C-RT-01..C-RT-04), and REQ_0603 requirement definitions, persists. */
+    use case def UC_AC_05_Dogfood_Markdown_to_SysML_Ingestion_and_Baseline_Verification {
+        subject NativeSigilAndLifetimeLexer;
+        objective "Dogfood Markdown to SysML Ingestion and Baseline Verification";
+    }
+    doc /* Extracted from Mermaid sequenceDiagram specification. */
+    interaction def BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_SequenceInteraction {
+        lifeline CLI : Compiler_CLI_Caller;
+        lifeline Scan : NativeSigilAndLifetimeLexer;
+        lifeline Parse : FailClosedRecursiveDescentParser;
+        lifeline Ser : BijectiveSysmlSerializer;
+        lifeline Gate : CompilerRoundtripVerificationGate;
+        message scan_all from CLI to Scan;
+        message Vec from Scan to CLI;
+        message parse_package_or_file from CLI to Parse;
+        message parse_type_expr from Parse to Parse;
+        message Canonical from Parse to CLI;
+        message verify_bijective_ast_roundtrip from CLI to Gate;
+        message ast_orig_to_sysml from Gate to Ser;
+        message Canonical from Ser to Gate;
+        message scan_all from Gate to Scan;
+        message Reparsed from Scan to Gate;
+        message parse_package_or_file from Gate to Parse;
+        message Reparsed from Parse to Gate;
+        message Assert_item from Gate to Gate;
+        message Ok from Gate to CLI;
+    }
     doc /* Zero-rewrite scanner emitting native `Ampersand`, `Question`, `Lifetime`, and `DoubleColon` tokens with exact byte spans */
     part def NativeSigilAndLifetimeLexer {
-        attribute quantity : Integer = 1;
         attribute type : String = "Subcomponent";
+        attribute quantity : Integer = 1;
     }
     doc /* Strict token-stream parser for all 12 inner declaration blocks, composite type expressions, and nested state transitions */
     part def FailClosedRecursiveDescentParser {
@@ -46,8 +130,8 @@ package SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint 
     }
     doc /* Canonical `SysmlSerializable::to_sysml` formatter preserving 100% of `PackageDef` AST fields without double-quoting */
     part def BijectiveSysmlSerializer {
-        attribute quantity : Integer = 1;
         attribute type : String = "Subcomponent";
+        attribute quantity : Integer = 1;
     }
     doc /* Built-in compiler verification stage asserting `parse_sysml(to_sysml(ast)) == ast` on every `compile-sysml` run */
     part def CompilerRoundtripVerificationGate {

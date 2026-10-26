@@ -1187,13 +1187,18 @@ impl<'a> SysmlParser<'a> {
                 let f_doc = self.take_doc_comment();
                 if self.check(&TokenKind::Attribute) {
                     let attr = self.parse_attribute_decl(f_doc)?;
+                    let clean_val = attr
+                        .default_value
+                        .unwrap_or_default()
+                        .trim()
+                        .trim_matches('"')
+                        .to_string();
                     if attr.name == "protocol_family" {
-                        port.protocol_family = attr.default_value.unwrap_or_default();
+                        port.protocol_family = clean_val;
                     } else if attr.name == "port_category" {
-                        port.port_category = attr.default_value.unwrap_or_default();
+                        port.port_category = clean_val;
                     } else {
-                        port.electrical_attributes
-                            .insert(attr.name, attr.default_value.unwrap_or_default());
+                        port.electrical_attributes.insert(attr.name, clean_val);
                     }
                 } else if self.check(&TokenKind::Flow) || self.check(&TokenKind::In) || self.check(&TokenKind::Out) {
                     let mut flow_dir = "out".to_string();
@@ -5713,6 +5718,56 @@ package StateMachinePkg {
         let _ = fs::remove_dir_all(&temp_dir);
 
         assert_eq!(discovered, vec![valid_sysml]);
+        Ok(())
+    }
+
+    /// Verifies that `PortDef` `protocol_family`, `port_category`, and `electrical_attributes` strip outer string quotes on parse and round-trip idempotently through `to_sysml`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_port_def_protocol_family_bijective_roundtrip` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves bijective roundtrip parity `parse_source(pkg.to_sysml(0)) == pkg` for `PortDef` attributes.
+    ///
+    /// ## 3. Preconditions
+    /// - Input SysML v2 fixture contains a `port` with `protocol_family` and `port_category` string attributes.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts unquoted `protocol_family` storage and bit-identical re-serialization.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over fixture token stream length.
+    /// - Space Complexity: O(N) for constructed `PackageDef` AST.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates any `ParseError` via `Result`.
+    /// - State: Prevents nested `""...""` quote accumulation across compile passes.
+    /// - Action: Executes deterministically in memory.
+    /// - Resource: Bounded test fixture allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-PORT-PROTOCOL-ROUNDTRIP] | SysML v2: TestCaseDef(test_port_def_protocol_family_bijective_roundtrip)
+    #[test]
+    fn test_port_def_protocol_family_bijective_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::semantic::serializer::SysmlSerializable;
+        let src = r#"package PortRoundtripPkg {
+    part def Controller {
+        port inout BusPort : String {
+            attribute protocol_family : String = "FilesystemUTF8";
+            attribute port_category : String = "ControlPort";
+        }
+    }
+}
+"#;
+        let pkg1 = SysmlParser::parse_source(src, "PortRoundtripPkg")?;
+        let part1 = pkg1.part_defs.first().ok_or("missing Controller")?;
+        let port1 = part1.ports.first().ok_or("missing BusPort")?;
+        assert_eq!(port1.protocol_family, "FilesystemUTF8");
+        assert_eq!(port1.port_category, "ControlPort");
+
+        let serialized = pkg1.to_sysml(0);
+        let pkg2 = SysmlParser::parse_source(&serialized, "PortRoundtripPkg")?;
+        assert_eq!(pkg1, pkg2);
         Ok(())
     }
 }

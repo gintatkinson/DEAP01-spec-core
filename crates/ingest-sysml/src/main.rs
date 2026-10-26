@@ -483,7 +483,15 @@ pub fn run_ingestion_with_code(args: CliArgs) -> Result<(), (IngestExitCode, Str
 
         // Step 3: Dispatch translation based on format and file cardinality
         if fmt == "markdown" && (disc_files.len() > 1 || is_dir) {
-            let def_name = if is_dir {
+            let all_blueprints = !disc_files.is_empty()
+                && disc_files.iter().all(|p| {
+                    p.file_name()
+                        .and_then(|s| s.to_str())
+                        .is_some_and(|n| n.starts_with("blueprint-"))
+                });
+            let def_name = if all_blueprints {
+                "SysML_Model"
+            } else if is_dir {
                 args.schema
                     .as_ref()
                     .and_then(|p| p.file_name())

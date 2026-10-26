@@ -2,7 +2,7 @@
   "sha256": "35a1ed686e8e2b4b1df37316dc98af4014d221bbace3564703f9f962d02bb28f",
   "total_lines": 1,
   "node_counts": {
-    "action_defs": 0,
+    "action_defs": 15,
     "attribute_defs": 20,
     "calc_defs": 0,
     "capability_defs": 0,
@@ -12,42 +12,63 @@
     "groupings": 0,
     "hazard_defs": 0,
     "identities": 0,
-    "interaction_defs": 0,
+    "interaction_defs": 1,
     "item_defs": 0,
     "leaves": 20,
-    "lists": 0,
+    "lists": 15,
     "operation_defs": 0,
     "packages": 1,
     "part_defs": 5,
     "port_defs": 12,
     "requirement_defs": 1,
     "risk_defs": 0,
-    "state_defs": 0,
+    "state_defs": 1,
     "test_case_defs": 0,
     "typedefs": 0,
-    "use_case_defs": 0
+    "use_case_defs": 5
   },
   "schema_nodes": [
     "AgileSpecForwardProjector",
+    "BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint",
+    "BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_LifecycleState",
+    "BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_SequenceInteraction",
     "BidirectionalBacklogReconciler",
+    "Bind",
+    "Bit_identical",
     "Blueprint_ID",
     "DeterministicSpecIcdWbsForwardCompiler",
-    "Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint",
+    "Emit",
+    "Epics",
     "Generation_Mode",
+    "ICD_01",
     "IcdMatrixArtifactPort",
     "LogicalIcdMatrixCompiler",
     "MarkdownSpecSuiteOutputPort",
+    "Merge",
     "MilStd881eWbsExporter",
-    "REQ_0604_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint",
+    "Parse",
+    "Project",
+    "REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint",
+    "Reconcile",
     "Requirement_ID",
+    "Resolve",
     "Specification_Source",
     "Status",
+    "Synthesize",
     "SysmlPackageAstInputPort",
     "Target_Crates",
     "Title",
     "Tracked_Issues",
+    "UC_AC_01_Deterministic_Multi_Story_Use_Case_and_ConOps_Parent_Epic_Projection",
+    "UC_AC_02_Deterministic_Logical_ICD_Matrix_and_Signal_Dictionary_Synthesis",
+    "UC_AC_03_Deterministic_MIL_STD_881E_WBS_and_Enterprise_Export_Synthesis",
+    "UC_AC_04_Fail_Closed_Stateful_HTML_Comment_Frontmatter_Guard_and_Parent_Inclusive_Checklist_Reconciliation",
+    "UC_AC_05_Fail_Closed_Subpackage_Scoped_Reverse_Sync_and_Dogfood_Blueprint_Ingestion_Parity",
+    "WBS_01_03",
     "WbsEnterpriseExportPort",
+    "Zero",
     "ast_node_coverage_percent",
+    "compile_sysml",
     "forward_reverse_drift_count",
     "icdMarkdownOutPort",
     "interconnectAstInPort",
@@ -60,6 +81,7 @@
     "packageAstInPort",
     "parentInclusiveEpics",
     "preserveTypedActionParams",
+    "reconcile_backlog",
     "specDocsInOutPort",
     "specMarkdownOutPort",
     "subpackageSyncOutPort",
@@ -68,9 +90,166 @@
     "wbsAstMetadataInPort",
     "wbsHierarchyDepth"
   ],
-  "operational_activities": [],
+  "operational_activities": [
+    {
+      "id": "OA-01",
+      "name": "compile_sysml",
+      "doc": "compile-sysml --forward-sync docs",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-02",
+      "name": "Resolve",
+      "doc": "Resolve Parent Epic by pkg_name == ConOps",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-03",
+      "name": "Bind",
+      "doc": "Bind all package stories to Use Case matrices",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-04",
+      "name": "Emit",
+      "doc": "Emit symmetric ActionDef signatures and E1-E5 Mermaid",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-05",
+      "name": "Epics",
+      "doc": "Epics, Features, Stories, and Use Cases written",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-06",
+      "name": "Project",
+      "doc": "Project NxN ConnectionDef matrix and FlowDef signals",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-07",
+      "name": "ICD_01",
+      "doc": "ICD_01 and ICD_02 written deterministically",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-08",
+      "name": "Synthesize",
+      "doc": "Synthesize MIL-STD-881E tree and CSV/JSON exports",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-09",
+      "name": "WBS_01_03",
+      "doc": "WBS_01..03 and enterprise exports written",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-10",
+      "name": "reconcile_backlog",
+      "doc": "reconcile-backlog reconcile --docs-dir docs",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-11",
+      "name": "Parse",
+      "doc": "Parse CommonMark tables with in_html_comment guard",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-12",
+      "name": "Reconcile",
+      "doc": "Reconcile checklists with parent-inclusive epic count",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-13",
+      "name": "Zero",
+      "doc": "Zero unpopulated placeholders or spoofed IDs",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-14",
+      "name": "Merge",
+      "doc": "Merge extracted entities into owning subpackages",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-15",
+      "name": "Bit_identical",
+      "doc": "Bit-identical SysML v2 AST and SHA-256 digest",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    }
+  ],
   "operational_exchanges": [],
-  "operational_scenarios": [],
+  "operational_scenarios": [
+    {
+      "id": "SCN-01",
+      "name": "UC_AC_01_Deterministic_Multi_Story_Use_Case_and_ConOps_Parent_Epic_Projection",
+      "actor": "",
+      "objective": "\"Deterministic Multi Story Use Case and ConOps Parent Epic Projection\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-02",
+      "name": "UC_AC_02_Deterministic_Logical_ICD_Matrix_and_Signal_Dictionary_Synthesis",
+      "actor": "",
+      "objective": "\"Deterministic Logical ICD Matrix and Signal Dictionary Synthesis\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-03",
+      "name": "UC_AC_03_Deterministic_MIL_STD_881E_WBS_and_Enterprise_Export_Synthesis",
+      "actor": "",
+      "objective": "\"Deterministic MIL STD 881E WBS and Enterprise Export Synthesis\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-04",
+      "name": "UC_AC_04_Fail_Closed_Stateful_HTML_Comment_Frontmatter_Guard_and_Parent_Inclusive_Checklist_Reconciliation",
+      "actor": "",
+      "objective": "\"Fail Closed Stateful HTML Comment Frontmatter Guard and Parent Inclusive Checklist Reconciliation\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-05",
+      "name": "UC_AC_05_Fail_Closed_Subpackage_Scoped_Reverse_Sync_and_Dogfood_Blueprint_Ingestion_Parity",
+      "actor": "",
+      "objective": "\"Fail Closed Subpackage Scoped Reverse Sync and Dogfood Blueprint Ingestion Parity\"",
+      "steps": []
+    }
+  ],
   "operational_nodes": [
     {
       "name": "AgileSpecForwardProjector",

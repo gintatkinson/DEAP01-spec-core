@@ -1833,6 +1833,108 @@ fn tempfile_named() -> Result<TempFileNamed, String> {
     })
 }
 
+/// Extracts the numeric specification ordinal from a title prefix when present.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `extract_spec_ordinal` in `crates/reconcile-backlog/src/tracker.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `extract_spec_ordinal` within `RECONCILE-BACKLOG-TRACKER`.
+///
+/// ## 3. Preconditions
+/// - `title: &str` must satisfy domain and type-safety constraints prior to invoking `extract_spec_ordinal`.
+///
+/// ## 4. Postconditions
+/// - Returns `Option<u64>` from `extract_spec_ordinal` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(title)) bounded over input/member dimension of `extract_spec_ordinal`.
+/// - Space Complexity: O(N(title)) bounded auxiliary memory for `extract_spec_ordinal`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `extract_spec_ordinal` (`Option<u64>`).
+/// - State: Maintains consistent state invariants across `extract_spec_ordinal` without partial mutation on error.
+/// - Action: Executes `extract_spec_ordinal` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `extract_spec_ordinal` (`RECONCILE-BACKLOG-TRACKER`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-EXTRACT-SPEC-ORDINAL] | SysML v2: ActionDef(extract_spec_ordinal)
+fn extract_spec_ordinal(title: &str) -> Option<u64> {
+    let lower = title.trim().to_ascii_lowercase();
+    let prefixes = [
+        "epic",
+        "feature",
+        "feat",
+        "user story",
+        "user_story",
+        "user-story",
+        "us",
+        "use case",
+        "use_case",
+        "use-case",
+        "uc",
+    ];
+    for prefix in prefixes {
+        if let Some(after_prefix) = lower.strip_prefix(prefix) {
+            let trimmed = after_prefix.trim_start_matches([' ', '_', '-']);
+            let digit_str: String = trimmed
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if !digit_str.is_empty() {
+                let after_digits = trimmed.trim_start_matches(|c: char| c.is_ascii_digit());
+                if after_digits.is_empty()
+                    || after_digits.starts_with(':')
+                    || after_digits.starts_with(' ')
+                    || after_digits.starts_with('_')
+                    || after_digits.starts_with('-')
+                {
+                    if let Ok(num) = digit_str.parse::<u64>() {
+                        return Some(num);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Checks whether two specification titles have compatible numeric ordinals when both specify an ordinal.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `ordinal_compatible` in `crates/reconcile-backlog/src/tracker.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `ordinal_compatible` within `RECONCILE-BACKLOG-TRACKER`.
+///
+/// ## 3. Preconditions
+/// - `query_title: &str` and `candidate_title: &str` must satisfy domain and type-safety constraints prior to invoking `ordinal_compatible`.
+///
+/// ## 4. Postconditions
+/// - Returns `bool` from `ordinal_compatible` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(query_title) + N(candidate_title)) bounded over input/member dimension of `ordinal_compatible`.
+/// - Space Complexity: O(N(query_title) + N(candidate_title)) bounded auxiliary memory for `ordinal_compatible`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `ordinal_compatible` (`bool`).
+/// - State: Maintains consistent state invariants across `ordinal_compatible` without partial mutation on error.
+/// - Action: Executes `ordinal_compatible` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `ordinal_compatible` (`RECONCILE-BACKLOG-TRACKER`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-ORDINAL-COMPATIBLE] | SysML v2: ActionDef(ordinal_compatible)
+fn ordinal_compatible(query_title: &str, candidate_title: &str) -> bool {
+    match (
+        extract_spec_ordinal(query_title),
+        extract_spec_ordinal(candidate_title),
+    ) {
+        (Some(a), Some(b)) => a == b,
+        _ => true,
+    }
+}
+
 /// Indexes issues by number and normalized title.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -2002,35 +2104,49 @@ impl IssueIndex {
                 return Some(issue);
             }
         }
+        let trimmed_title = title.trim();
+        if !trimmed_title.is_empty() {
+            for issue in self.by_number.values() {
+                if issue.title.trim().eq_ignore_ascii_case(trimmed_title) {
+                    return Some(issue);
+                }
+            }
+        }
         let norm = normalize_title(title);
         if let Some(st) = spec_type {
             let canonical = canonicalize_spec_type(st);
             if let Some(issue) = self.by_type_and_title.get(&(canonical, norm.clone())) {
-                return Some(issue);
+                if ordinal_compatible(title, &issue.title) {
+                    return Some(issue);
+                }
             }
         }
         if let Some(inferred) = infer_spec_type_from_title(title) {
             if let Some(issue) = self.by_type_and_title.get(&(inferred, norm.clone())) {
-                return Some(issue);
+                if ordinal_compatible(title, &issue.title) {
+                    return Some(issue);
+                }
             }
         }
         if let Some(issue) = self.by_normalized_title.get(&norm) {
-            let target_type = spec_type
-                .map(canonicalize_spec_type)
-                .or_else(|| infer_spec_type_from_title(title));
-            if let Some(tt) = target_type {
-                let matches_type = issue
-                    .labels
-                    .iter()
-                    .any(|l| canonicalize_spec_type(l.name()) == tt)
-                    || infer_spec_type_from_title(&issue.title).as_deref() == Some(&tt);
-                let has_any_type = !issue.labels.is_empty()
-                    || infer_spec_type_from_title(&issue.title).is_some();
-                if matches_type || !has_any_type {
+            if ordinal_compatible(title, &issue.title) {
+                let target_type = spec_type
+                    .map(canonicalize_spec_type)
+                    .or_else(|| infer_spec_type_from_title(title));
+                if let Some(tt) = target_type {
+                    let matches_type = issue
+                        .labels
+                        .iter()
+                        .any(|l| canonicalize_spec_type(l.name()) == tt)
+                        || infer_spec_type_from_title(&issue.title).as_deref() == Some(&tt);
+                    let has_any_type = !issue.labels.is_empty()
+                        || infer_spec_type_from_title(&issue.title).is_some();
+                    if matches_type || !has_any_type {
+                        return Some(issue);
+                    }
+                } else {
                     return Some(issue);
                 }
-            } else {
-                return Some(issue);
             }
         }
         None
@@ -2376,6 +2492,68 @@ mod tests {
         }"#;
         let issue_null_body: TrackerIssue = serde_json::from_str(json_null_body).unwrap();
         assert_eq!(issue_null_body.body, None);
+    }
+
+    #[test]
+    fn test_issue_index_prevents_ordinal_collision_on_short_titles() {
+        let mut idx = IssueIndex::build(vec![
+            TrackerIssue {
+                number: 104,
+                title: "User Story 04: Emit".to_string(),
+                state: "OPEN".to_string(),
+                labels: vec![TrackerLabel::String("user-story".to_string())],
+                body: None,
+                url: None,
+            },
+            TrackerIssue {
+                number: 201,
+                title: "[ConOps] Human Engineer Interface".to_string(),
+                state: "OPEN".to_string(),
+                labels: vec![TrackerLabel::String("feature".to_string())],
+                body: None,
+                url: None,
+            },
+        ]);
+
+        assert_eq!(
+            idx.find_issue_for_type(None, Some("user-story"), "User Story 04: Emit")
+                .map(|i| i.number),
+            Some(104)
+        );
+        assert_eq!(
+            idx.find_issue_for_type(None, Some("user-story"), "User Story 29: Emit"),
+            None,
+            "Distinct User Story ordinal must not collide with US-04 on short verb title"
+        );
+        assert_eq!(
+            idx.find_issue_for_type(
+                None,
+                Some("feature"),
+                "Feature 01: [ConOps] Human Engineer Interface"
+            )
+            .map(|i| i.number),
+            Some(201),
+            "Unnumbered tracker title must still match numbered spec title"
+        );
+
+        idx.insert_issue(TrackerIssue {
+            number: 129,
+            title: "User Story 29: Emit".to_string(),
+            state: "OPEN".to_string(),
+            labels: vec![TrackerLabel::String("user-story".to_string())],
+            body: None,
+            url: None,
+        });
+        assert_eq!(
+            idx.find_issue_for_type(None, Some("user-story"), "User Story 04: Emit")
+                .map(|i| i.number),
+            Some(104)
+        );
+        assert_eq!(
+            idx.find_issue_for_type(None, Some("user-story"), "User Story 29: Emit")
+                .map(|i| i.number),
+            Some(129)
+        );
     }
 }
 

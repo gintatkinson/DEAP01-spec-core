@@ -2,7 +2,7 @@
   "sha256": "b7b8eedc9f686de02a2123f4e3e776e30d62054441b3a7461cc23a0d5f522748",
   "total_lines": 1,
   "node_counts": {
-    "action_defs": 0,
+    "action_defs": 10,
     "attribute_defs": 20,
     "calc_defs": 0,
     "capability_defs": 0,
@@ -12,55 +12,189 @@
     "groupings": 0,
     "hazard_defs": 0,
     "identities": 0,
-    "interaction_defs": 0,
+    "interaction_defs": 1,
     "item_defs": 0,
     "leaves": 20,
-    "lists": 0,
+    "lists": 10,
     "operation_defs": 0,
     "packages": 1,
     "part_defs": 5,
     "port_defs": 4,
     "requirement_defs": 1,
     "risk_defs": 0,
-    "state_defs": 0,
+    "state_defs": 1,
     "test_case_defs": 0,
     "typedefs": 0,
-    "use_case_defs": 0
+    "use_case_defs": 5
   },
   "schema_nodes": [
+    "Assert_item",
+    "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
+    "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_LifecycleState",
+    "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_SequenceInteraction",
     "BijectiveDiffDiagnosticPort",
     "BijectiveSysmlSerializer",
     "Blueprint_ID",
+    "Canonical",
     "CompilerRoundtripVerificationGate",
     "FailClosedRecursiveDescentParser",
     "Generation_Mode",
     "NativeSigilAndLifetimeLexer",
-    "REQ_0603_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
+    "Ok",
+    "REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
     "RawSysmlSourceInputPort",
+    "Reparsed",
     "Requirement_ID",
     "SerializedSysmlOutputPort",
     "Specification_Source",
     "Status",
-    "SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
     "SysmlBijectiveRoundtripCompilerGate",
     "Target_Crates",
     "Title",
     "TokenStreamChannelPort",
     "Tracked_Issues",
+    "UC_AC_01_Native_Lexer_Sigil_and_Lifetime_Tokenization",
+    "UC_AC_02_Fail_Closed_Inner_Block_and_Composite_Type_Parsing",
+    "UC_AC_03_Token_Stream_State_Transition_Parsing_and_Recursive_MBD_Synthesis",
+    "UC_AC_04_Lossless_to_sysml_Serialization_and_Fail_Closed_Bijective_Roundtrip_Gate",
+    "UC_AC_05_Dogfood_Markdown_to_SysML_Ingestion_and_Baseline_Verification",
+    "Vec",
     "assert_dropped_ast_field_count_range",
     "assert_roundtrip_ast_mismatch_count_range",
     "assert_silent_skip_branch_count_range",
     "assert_span_offset_drift_bytes_range",
+    "ast_orig_to_sysml",
     "dropped_ast_field_count",
+    "parse_package_or_file",
+    "parse_type_expr",
     "quantity",
     "roundtrip_ast_mismatch_count",
+    "scan_all",
     "silent_skip_branch_count",
     "span_offset_drift_bytes",
-    "type"
+    "type",
+    "verify_bijective_ast_roundtrip"
   ],
-  "operational_activities": [],
+  "operational_activities": [
+    {
+      "id": "OA-01",
+      "name": "scan_all",
+      "doc": "scan_all(raw_sysml_source)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-02",
+      "name": "Vec",
+      "doc": "Vec of Token with zero span drift",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-03",
+      "name": "parse_package_or_file",
+      "doc": "parse_package_or_file(tokens)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-04",
+      "name": "parse_type_expr",
+      "doc": "parse_type_expr and parse_transition_decl_tokens",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-05",
+      "name": "Canonical",
+      "doc": "Canonical PackageDef AST (ast_orig)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-06",
+      "name": "verify_bijective_ast_roundtrip",
+      "doc": "verify_bijective_ast_roundtrip(ast_orig)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-07",
+      "name": "ast_orig_to_sysml",
+      "doc": "ast_orig.to_sysml(0)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-08",
+      "name": "Reparsed",
+      "doc": "Reparsed token stream",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-09",
+      "name": "Assert_item",
+      "doc": "Assert ast_orig equals ast_reparsed",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-10",
+      "name": "Ok",
+      "doc": "Ok or Err(E0400 Structural AST Diff)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    }
+  ],
   "operational_exchanges": [],
-  "operational_scenarios": [],
+  "operational_scenarios": [
+    {
+      "id": "SCN-01",
+      "name": "UC_AC_01_Native_Lexer_Sigil_and_Lifetime_Tokenization",
+      "actor": "",
+      "objective": "\"Native Lexer Sigil and Lifetime Tokenization\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-02",
+      "name": "UC_AC_02_Fail_Closed_Inner_Block_and_Composite_Type_Parsing",
+      "actor": "",
+      "objective": "\"Fail Closed Inner Block and Composite Type Parsing\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-03",
+      "name": "UC_AC_03_Token_Stream_State_Transition_Parsing_and_Recursive_MBD_Synthesis",
+      "actor": "",
+      "objective": "\"Token Stream State Transition Parsing and Recursive MBD Synthesis\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-04",
+      "name": "UC_AC_04_Lossless_to_sysml_Serialization_and_Fail_Closed_Bijective_Roundtrip_Gate",
+      "actor": "",
+      "objective": "\"Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-05",
+      "name": "UC_AC_05_Dogfood_Markdown_to_SysML_Ingestion_and_Baseline_Verification",
+      "actor": "",
+      "objective": "\"Dogfood Markdown to SysML Ingestion and Baseline Verification\"",
+      "steps": []
+    }
+  ],
   "operational_nodes": [
     {
       "name": "NativeSigilAndLifetimeLexer",

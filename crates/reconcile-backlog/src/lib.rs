@@ -426,7 +426,14 @@ pub fn run_reconciliation<T: TrackerClient>(
                     upstream_prefix,
                     &spec_path_to_issue,
                 );
-                tracker.update_issue_body(issue_id, &projected_body)?;
+                let already_up_to_date = issue_index
+                    .by_number
+                    .get(&issue_id)
+                    .and_then(|i| i.body.as_deref())
+                    .is_some_and(|b| b.trim_end() == projected_body.trim_end());
+                if !already_up_to_date {
+                    tracker.update_issue_body(issue_id, &projected_body)?;
+                }
                 summary.remote_issues_synced += 1;
             }
         }
@@ -580,6 +587,13 @@ fn backpatch_spec_references_in_content(
                         updated_line = updated_line.replace(&needle, &replacement);
                     }
                 }
+                let direct_link = format!("{}[", prefix);
+                if updated_line.trim_start().starts_with(&direct_link)
+                    && !updated_line.contains("(#")
+                {
+                    let replacement = format!("{}{} - [", prefix, issue_token);
+                    updated_line = updated_line.replacen(&direct_link, &replacement, 1);
+                }
             }
             let trimmed = updated_line.trim();
             if trimmed.starts_with('|') && trimmed.ends_with('|') {
@@ -650,6 +664,7 @@ fn register_unallocated_specs_bottom_up<T: TrackerClient>(
 ) -> Result<(usize, usize), String> {
     let mut frontmatters_updated = 0usize;
     let mut checklists_backpatched = 0usize;
+    let mut ensured_labels = std::collections::BTreeSet::new();
     let tiers: &[&[&str]] = &[&["use-case", "user-story"], &["feature"], &["epic"]];
     let repo_opt = if repo_slug.trim().is_empty() {
         options.repo.as_deref()
@@ -697,7 +712,9 @@ fn register_unallocated_specs_bottom_up<T: TrackerClient>(
                 }
                 Some(existing_num)
             } else if current_issue_id.is_none() && !options.dry_run {
-                tracker.ensure_label_exists(&canonical_type, options.repo.as_deref())?;
+                if ensured_labels.insert(canonical_type.clone()) {
+                    tracker.ensure_label_exists(&canonical_type, repo_opt)?;
+                }
                 let path_map = build_spec_path_to_issue_map(specs);
                 let projected_body = match specs.get(idx) {
                     Some(spec) => project_body_for_tracker_with_prefix(
@@ -713,7 +730,7 @@ fn register_unallocated_specs_bottom_up<T: TrackerClient>(
                     &title,
                     &projected_body,
                     &canonical_type,
-                    options.repo.as_deref(),
+                    repo_opt,
                 )?;
                 if let Some(spec) = specs.get_mut(idx) {
                     spec.content = update_frontmatter_issue_id(&spec.content, new_num);

@@ -11,7 +11,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use chrono::Utc;
 use deap_core::sysml_ast::{PackageDef, PartDef, RequirementDef, UseCaseDef};
 use walkdir::WalkDir;
 
@@ -1314,7 +1313,7 @@ pub fn forward_sync_sysml_to_specs(
         .unwrap_or_else(|| opts.docs_dir.clone());
 
     let mut generated_files = BTreeMap::new();
-    let today_iso = Utc::now().format("%Y-%m-%d").to_string();
+    let today_iso = "1970-01-01";
 
     let all_packages = pkg.get_all_packages();
     let mut all_requirements = Vec::new();
@@ -1684,7 +1683,7 @@ pub fn forward_sync_sysml_to_specs(
             )
         };
 
-        let _epic_date = resolve_date(&target_out_dir, &rel_path, &today_iso);
+        let _epic_date = resolve_date(&target_out_dir, &rel_path, today_iso);
         let epic_issue_id = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &rel_path));
 
         let subsys_display = if is_root {
@@ -1886,7 +1885,7 @@ Safety-critical invariant satisfaction, formal trace matrix closure, and zero ha
         let f_num = idx + 1;
         let part_name = &ctx.part.name;
         let rel_path = format!("features/FEAT-{:02}-{}.md", f_num, part_name);
-        let _feat_date = resolve_date(&target_out_dir, &rel_path, &today_iso);
+        let _feat_date = resolve_date(&target_out_dir, &rel_path, today_iso);
         let feat_issue_id = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &rel_path));
         let title = format!("Feature {:02}: [{}] {}", f_num, ctx.subsys_display, part_name);
 
@@ -2025,7 +2024,7 @@ Component behavior and interface definitions derive from `schema/model.sysml` pu
         let s_num = s_meta.s_num;
         let story_slug = sanitize_id(&s_meta.action_name);
         let rel_path = format!("user-stories/US-{:02}-{}.md", s_num, story_slug);
-        let _us_date = resolve_date(&target_out_dir, &rel_path, &today_iso);
+        let _us_date = resolve_date(&target_out_dir, &rel_path, today_iso);
         let us_issue_id = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &rel_path));
         let title = format!("User Story {:02}: {}", s_num, to_display_name(&s_meta.action_name));
 
@@ -2189,7 +2188,7 @@ Operational concept definitions and system sequence interaction models:
         let clean_name = strip_use_case_prefix(&uc_m.uc.name);
         let uc_slug = sanitize_id(clean_name);
         let rel_path = format!("use-cases/UC-{:02}-{}.md", u_num, uc_slug);
-        let _uc_date = resolve_date(&target_out_dir, &rel_path, &today_iso);
+        let _uc_date = resolve_date(&target_out_dir, &rel_path, today_iso);
         let uc_issue_id = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &rel_path));
         let title = format!("Use Case {:02}: {}", u_num, to_display_name(clean_name));
 
@@ -3485,6 +3484,62 @@ mod tests {
             "Forward-synced Epic markdown must preserve reverse-synced action in classDiagram"
         );
 
+        Ok(())
+    }
+
+    /// Verifies `ARCH-06`: `forward_sync_sysml_to_specs` contains zero wall-clock timestamp calls
+    /// and produces 100% deterministic output across invocations.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_arch_06_forward_sync_zero_wall_clock_timestamps` in `crates/compile-sysml/src/sync/forward.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Guarantees referential transparency of forward synchronization by banning wall-clock timestamp invocations.
+    ///
+    /// ## 3. Preconditions
+    /// - Synthetic `PackageDef` is valid in memory.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts repeated invocations of `forward_sync_sysml_to_specs` are bitwise identical and `forward.rs` contains zero wall-clock timestamp calls.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over synthetic model and source text check.
+    /// - Space Complexity: O(N) bounded output map.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Pure in-memory verification with `dry_run: true`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS] | SysML v2: VerificationCaseDef(test_arch_06_forward_sync_zero_wall_clock_timestamps)
+    #[test]
+    fn test_arch_06_forward_sync_zero_wall_clock_timestamps() -> Result<(), Box<dyn std::error::Error>> {
+        let mut pkg = PackageDef {
+            name: "DeterministicSystem".to_string(),
+            ..Default::default()
+        };
+        pkg.part_defs.push(PartDef {
+            name: "DeterministicController".to_string(),
+            ..Default::default()
+        });
+
+        let opts = ForwardSyncOptions {
+            schema_path: PathBuf::from("schema/test.sysml"),
+            docs_dir: PathBuf::from("docs"),
+            out_dir: None,
+            dry_run: true,
+            force: true,
+        };
+
+        let run1 = forward_sync_sysml_to_specs(&pkg, &opts)?;
+        let run2 = forward_sync_sysml_to_specs(&pkg, &opts)?;
+        assert_eq!(run1, run2, "Forward sync outputs must be 100% deterministic across runs");
+
+        let src = include_str!("forward.rs");
+        let utc_now_token = concat!("Utc::", "now");
+        assert!(
+            !src.contains(utc_now_token),
+            "forward.rs must not invoke wall-clock time"
+        );
         Ok(())
     }
 }

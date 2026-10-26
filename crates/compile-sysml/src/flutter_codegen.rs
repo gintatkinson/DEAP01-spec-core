@@ -327,6 +327,45 @@ pub struct TopologyNode {
     pub updated_at: i64,
 }
 
+/// Escapes single-quoted Dart string literals by escaping `\`, `'`, and `$`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D code generation standards.
+/// Prevents Dart string interpolation injection (`$`) and syntax errors (`'`, `\`) in generated
+/// SQLite seeds, typed models, and UI contract tests.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Pure total function over UTF-8 strings: maps `\` to `\\`, `'` to `\'`, and `$` to `\$` while
+///   preserving all other Unicode scalar values verbatim.
+///
+/// ## 3. Preconditions
+/// - `s` is any valid UTF-8 string slice.
+///
+/// ## 4. Postconditions
+/// - Returns an owned `String` safe for embedding inside a single-quoted Dart literal `'...'`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ single linear pass where $N$ is `s.len()`.
+/// - Space Complexity: $O(N)$ bounded output buffer allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function: never panics or fails on any input string.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FLUTTER-ESCAPE-DART-SINGLE-QUOTED]
+pub fn escape_dart_single_quoted(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str(r"\\"),
+            '\'' => out.push_str(r"\'"),
+            '$' => out.push_str(r"\$"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
 /// Computes a deterministic 64-bit cryptographic schema hash from input text sources.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -820,7 +859,8 @@ pub fn generate_domain_seed_dart(
         let display = format_display_name(&part.name);
         out.push_str(&format!(
             "    batch.rawInsert(\n      'INSERT OR REPLACE INTO type_definitions (type_name, display_name, icon_symbol) VALUES (?, ?, ?)',\n      ['{}', '{}', 'layers'],\n    );\n",
-            part.name, display
+            escape_dart_single_quoted(&part.name),
+            escape_dart_single_quoted(&display)
         ));
     }
 
@@ -849,13 +889,20 @@ pub fn generate_domain_seed_dart(
                 None => "null".to_string(),
             };
             let default_str = match &attr.default_value {
-                Some(d) => format!("'{}'", d),
+                Some(d) => format!("'{}'", escape_dart_single_quoted(d)),
                 None => "null".to_string(),
             };
 
             out.push_str(&format!(
                 "    batch.rawInsert(\n      '''INSERT OR REPLACE INTO type_attributes \n         (type_name, key, label, field_type, section_label, section_order, is_required, min_value, max_value, default_value) \n         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',\n      ['{}', '{}', '{}', '{}', 'General', {}, 1, {}, {}, {}],\n    );\n",
-                part.name, attr.name, label, field_type, order, min_str, max_str, default_str
+                escape_dart_single_quoted(&part.name),
+                escape_dart_single_quoted(&attr.name),
+                escape_dart_single_quoted(&label),
+                escape_dart_single_quoted(field_type),
+                order,
+                min_str,
+                max_str,
+                default_str
             ));
         }
     }
@@ -867,7 +914,9 @@ pub fn generate_domain_seed_dart(
             let label = format_display_name(&child.name);
             out.push_str(&format!(
                 "    batch.rawInsert(\n      'INSERT OR REPLACE INTO type_relations (parent_type, relation_name, child_type, display_label) VALUES (?, ?, ?, ?)',\n      ['{}', 'contains', '{}', '{}'],\n    );\n",
-                part.name, child.name, label
+                escape_dart_single_quoted(&part.name),
+                escape_dart_single_quoted(&child.name),
+                escape_dart_single_quoted(&label)
             ));
         }
     }
@@ -876,34 +925,43 @@ pub fn generate_domain_seed_dart(
     out.push_str("\n    // 4. Seed instances\n");
     for node in nodes {
         let parent_arg = match &node.parent_id {
-            Some(p) => format!("'{}'", p),
+            Some(p) => format!("'{}'", escape_dart_single_quoted(p)),
             None => "null".to_string(),
         };
         out.push_str(&format!(
             "    batch.rawInsert(\n      'INSERT OR REPLACE INTO instances (id, type_name, label, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',\n      ['{}', '{}', '{}', {}, {}, {}],\n    );\n",
-            node.id, node.type_name, node.label, parent_arg, node.created_at, node.updated_at
+            escape_dart_single_quoted(&node.id),
+            escape_dart_single_quoted(&node.type_name),
+            escape_dart_single_quoted(&node.label),
+            parent_arg,
+            node.created_at,
+            node.updated_at
         ));
     }
 
     // 5. Seed properties (EAV)
     out.push_str("\n    // 5. Seed properties\n");
     for node in nodes {
+        let node_id_esc = escape_dart_single_quoted(&node.id);
         for (k, v) in &node.properties {
+            let key_esc = escape_dart_single_quoted(k);
             if let Some(num) = v.as_f64() {
                 out.push_str(&format!(
                     "    batch.rawInsert(\n      'INSERT OR REPLACE INTO properties (instance_id, key, value_text, value_num, value_type) VALUES (?, ?, ?, ?, ?)',\n      ['{}', '{}', null, {}, 'double'],\n    );\n",
-                    node.id, k, num
+                    node_id_esc, key_esc, num
                 ));
             } else if let Some(b) = v.as_bool() {
                 let num_val = if b { 1.0 } else { 0.0 };
                 out.push_str(&format!(
                     "    batch.rawInsert(\n      'INSERT OR REPLACE INTO properties (instance_id, key, value_text, value_num, value_type) VALUES (?, ?, ?, ?, ?)',\n      ['{}', '{}', '{}', {}, 'bool'],\n    );\n",
-                    node.id, k, b, num_val
+                    node_id_esc, key_esc, b, num_val
                 ));
             } else if let Some(s) = v.as_str() {
                 out.push_str(&format!(
                     "    batch.rawInsert(\n      'INSERT OR REPLACE INTO properties (instance_id, key, value_text, value_num, value_type) VALUES (?, ?, ?, ?, ?)',\n      ['{}', '{}', '{}', null, 'text'],\n    );\n",
-                    node.id, k, s
+                    node_id_esc,
+                    key_esc,
+                    escape_dart_single_quoted(s)
                 ));
             }
         }
@@ -965,6 +1023,7 @@ pub fn generate_schema_models_dart(
         for attr in &part.attributes {
             let camel_attr = to_camel_case(&attr.name);
             let pascal_attr = to_pascal_case(&attr.name);
+            let attr_name_esc = escape_dart_single_quoted(&attr.name);
 
             if attr.type_name == "Real" || attr.type_name == "Float" || attr.type_name == "Double" {
                 let default_val = attr
@@ -973,7 +1032,7 @@ pub fn generate_schema_models_dart(
                     .unwrap_or("0.0");
                 out.push_str(&format!(
                     "  double get {} => _record.getPropertyDouble('{}') ?? {};\n",
-                    camel_attr, attr.name, default_val
+                    camel_attr, attr_name_esc, default_val
                 ));
 
                 let (min_opt, max_opt) = extract_bounds_from_doc(attr.doc.as_deref());
@@ -987,19 +1046,21 @@ pub fn generate_schema_models_dart(
                 let default_val = attr.default_value.as_deref().unwrap_or("0");
                 out.push_str(&format!(
                     "  int get {} => _record.getPropertyInt('{}') ?? {};\n",
-                    camel_attr, attr.name, default_val
+                    camel_attr, attr_name_esc, default_val
                 ));
             } else if attr.type_name == "Boolean" || attr.type_name == "Bool" {
                 let default_val = attr.default_value.as_deref().unwrap_or("false");
                 out.push_str(&format!(
                     "  bool get {} => _record.getPropertyBool('{}') ?? {};\n",
-                    camel_attr, attr.name, default_val
+                    camel_attr, attr_name_esc, default_val
                 ));
             } else {
                 let default_val = attr.default_value.as_deref().unwrap_or("");
                 out.push_str(&format!(
                     "  String get {} => _record.getPropertyString('{}') ?? '{}';\n",
-                    camel_attr, attr.name, default_val
+                    camel_attr,
+                    attr_name_esc,
+                    escape_dart_single_quoted(default_val)
                 ));
             }
         }
@@ -1013,7 +1074,8 @@ pub fn generate_schema_models_dart(
         let camel_id = to_camel_case(&node.id);
         out.push_str(&format!(
             "  static const String {} = '{}';\n",
-            camel_id, node.id
+            camel_id,
+            escape_dart_single_quoted(&node.id)
         ));
     }
     out.push_str("}\n\n");
@@ -1302,9 +1364,10 @@ pub fn generate_ui_contract_test_dart(
     out.push_str("          assertTactileHitTargetSize(const Rect.fromLTWH(100, 100, 48, 48));\n\n");
     out.push_str("          // Invariant 5: Exhaustive topology entity tester.tap SQLite transitions\n");
     for node in nodes {
+        let node_id_esc = escape_dart_single_quoted(&node.id);
         out.push_str(&format!(
             "          // Tap row for entity: {}\n          // await tester.tap(find.byKey(SchemaWidgetKeys.entityRow('{}')));\n          // expect(find.byKey(SchemaWidgetKeys.entityInspector('{}')), findsOneWidget);\n",
-            node.id, node.id, node.id
+            node.id, node_id_esc, node_id_esc
         ));
     }
     out.push_str("          expect(SchemaWidgetKeys.entityRow('{}'), isNotNull);\n");
@@ -1360,15 +1423,33 @@ pub fn emit_flutter_contracts(
         out_dir.to_path_buf()
     };
 
-    // 2. Parse or resolve topology nodes
+    // 2. Parse or resolve topology nodes (fail closed on read errors when candidate exists)
+    let mut resolved_topology_str = String::new();
     let nodes = match topology_json {
-        Some(json_str) => parse_topology_json(json_str)?,
+        Some(json_str) => {
+            resolved_topology_str = json_str.to_string();
+            parse_topology_json(json_str)?
+        }
         None => {
-            // Check if assets/topology_data.json exists on disk
-            let disk_topology = base_dir.join("assets").join("topology_data.json");
-            if disk_topology.is_file() {
-                let content = fs::read_to_string(&disk_topology)?;
-                parse_topology_json(&content)?
+            let candidates = [
+                base_dir.join("assets").join("topology_data.json"),
+                out_dir.join("assets").join("topology_data.json"),
+                out_dir
+                    .join("app_flutter")
+                    .join("assets")
+                    .join("topology_data.json"),
+            ];
+            let mut found_disk_nodes = None;
+            for candidate in &candidates {
+                if candidate.exists() {
+                    let content = fs::read_to_string(candidate)?;
+                    resolved_topology_str = content.clone();
+                    found_disk_nodes = Some(parse_topology_json(&content)?);
+                    break;
+                }
+            }
+            if let Some(disk_nodes) = found_disk_nodes {
+                disk_nodes
             } else {
                 // Synthesize from model.parts
                 let mut synth_nodes = Vec::new();
@@ -1389,10 +1470,11 @@ pub fn emit_flutter_contracts(
         }
     };
 
-    // 3. Compute deterministic schema hash
-    let topology_str = topology_json.unwrap_or("");
-    let schema_str = model.package_name.as_deref().unwrap_or("SysmlModel");
-    let schema_hash = compute_schema_hash(schema_str, topology_str);
+    // 3. Compute deterministic schema hash over full serialized SysmlModel AST and topology payload
+    let schema_str = serde_json::to_string(model).map_err(|e| {
+        FlutterCodegenError::InvalidModel(format!("Failed to serialize SysmlModel for hash: {e}"))
+    })?;
+    let schema_hash = compute_schema_hash(&schema_str, &resolved_topology_str);
 
     // 4. Target file paths
     let seed_path = base_dir.join("lib").join("data").join("seeds").join("generated_domain_seed.g.dart");
@@ -1421,10 +1503,10 @@ pub fn emit_flutter_contracts(
     let ui_test_content = generate_ui_contract_test_dart(model, &nodes);
 
     // 7. Write files to disk atomically
-    fs::write(&seed_path, seed_content)?;
-    fs::write(&models_path, models_content)?;
-    fs::write(&solver_bridge_path, solver_bridge_content)?;
-    fs::write(&ui_contract_test_path, ui_test_content)?;
+    crate::semantic::digest::write_atomic(&seed_path, &seed_content)?;
+    crate::semantic::digest::write_atomic(&models_path, &models_content)?;
+    crate::semantic::digest::write_atomic(&solver_bridge_path, &solver_bridge_content)?;
+    crate::semantic::digest::write_atomic(&ui_contract_test_path, &ui_test_content)?;
 
     Ok(FlutterContractReport {
         seed_path,
@@ -1673,5 +1755,95 @@ mod tests {
         assert!(src.contains("//! ## 7. Realization & Traceability"));
         assert!(src.contains("/// ## 1. Safety Intent & Regulatory Scope"));
         assert!(src.contains("/// Realises: [REQ-EMIT-FLUTTER-CONTRACTS]"));
+    }
+
+    #[test]
+    fn test_arch_02_emit_flutter_contracts_schema_hash_binds_full_ast() {
+        let tmp_a = ScopedTempDir::new("hash_a");
+        let tmp_b = ScopedTempDir::new("hash_b");
+
+        let model_a = build_test_sysml_model();
+        let mut model_b = build_test_sysml_model();
+        if let Some(part) = model_b.parts.first_mut() {
+            if let Some(attr) = part.attributes.first_mut() {
+                attr.doc = Some("inv: safety_radius_meters in [100.0, 5000.0]".to_string());
+            }
+        }
+        assert_eq!(model_a.package_name, model_b.package_name);
+
+        let report_a = emit_flutter_contracts(&tmp_a.path, &model_a, Some(TEST_TOPOLOGY_JSON))
+            .expect("emit_flutter_contracts A must succeed");
+        let report_b = emit_flutter_contracts(&tmp_b.path, &model_b, Some(TEST_TOPOLOGY_JSON))
+            .expect("emit_flutter_contracts B must succeed");
+
+        assert_ne!(
+            report_a.schema_hash, report_b.schema_hash,
+            "DEAP_SCHEMA_HASH must change when a PartDef attribute or constraint changes even if package_name is identical"
+        );
+    }
+
+    #[test]
+    fn test_arch_06_escape_dart_single_quoted_and_codegen_literals() {
+        assert_eq!(escape_dart_single_quoted(r"a'b\c$d"), r"a\'b\\c\$d");
+
+        let mut model = build_test_sysml_model();
+        if let Some(part) = model.parts.first_mut() {
+            part.attributes.push(AttributeDef {
+                name: r"rate's_key\$1".to_string(),
+                type_name: "String".to_string(),
+                default_value: Some(r"val'1\$x".to_string()),
+                doc: None,
+            });
+        }
+        let mut node = TopologyNode {
+            id: r"ID'1\$A".to_string(),
+            type_name: "DefenseUnit".to_string(),
+            label: r"Label's \ $Cost".to_string(),
+            parent_id: Some(r"PARENT'1\$B".to_string()),
+            properties: BTreeMap::new(),
+            created_at: 100,
+            updated_at: 200,
+        };
+        node.properties.insert(
+            r"prop'key\$".to_string(),
+            serde_json::Value::String(r"prop'val\$".to_string()),
+        );
+        let nodes = vec![node];
+
+        let seed_dart = generate_domain_seed_dart(&model, &nodes, 0x1234);
+        assert!(
+            seed_dart.contains(r"ID\'1\\\$A"),
+            "seed_dart must escape ', \\, and $ in node id:\n{}",
+            seed_dart
+        );
+        assert!(
+            seed_dart.contains(r"Label\'s \\ \$Cost"),
+            "seed_dart must escape ', \\, and $ in node label:\n{}",
+            seed_dart
+        );
+        assert!(
+            seed_dart.contains(r"prop\'val\\\$"),
+            "seed_dart must escape ', \\, and $ in property string value:\n{}",
+            seed_dart
+        );
+
+        let models_dart = generate_schema_models_dart(&model, &nodes, 0x1234);
+        assert!(
+            models_dart.contains(r"ID\'1\\\$A"),
+            "models_dart must escape ', \\, and $ in SchemaEntityIds:\n{}",
+            models_dart
+        );
+        assert!(
+            models_dart.contains(r"val\'1\\\$x"),
+            "models_dart must escape ', \\, and $ in string default value:\n{}",
+            models_dart
+        );
+
+        let ui_test_dart = generate_ui_contract_test_dart(&model, &nodes);
+        assert!(
+            ui_test_dart.contains(r"SchemaWidgetKeys.entityRow('ID\'1\\\$A')"),
+            "ui_test_dart must escape ', \\, and $ in entityRow key:\n{}",
+            ui_test_dart
+        );
     }
 }

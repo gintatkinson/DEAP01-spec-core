@@ -297,20 +297,69 @@ pub fn generate_fmeca_matrix(
 
     let mut rows = Vec::new();
     let all_parts = pkg.get_all_parts();
-    let is_part_negated = |name: &str| -> bool {
-        pkg.is_component_negated(name) || deap_core::sysml_ast::is_component_negated(name, &pkg_sysml)
-    };
+    let mut negated_parts = std::collections::BTreeSet::new();
+    let sysml_bytes = pkg_sysml.as_bytes();
+    let mut byte_idx = 0;
+    while byte_idx < sysml_bytes.len() {
+        if sysml_bytes.get(byte_idx) == Some(&b'!') {
+            let mut start = byte_idx + 1;
+            while start < sysml_bytes.len()
+                && sysml_bytes.get(start).is_some_and(u8::is_ascii_whitespace)
+            {
+                start += 1;
+            }
+            if sysml_bytes
+                .get(start)
+                .is_some_and(|b| b.is_ascii_alphabetic() || *b == b'_')
+            {
+                let mut end = start + 1;
+                while end < sysml_bytes.len()
+                    && sysml_bytes
+                        .get(end)
+                        .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_')
+                {
+                    end += 1;
+                }
+                if let Some(ident) = pkg_sysml.get(start..end) {
+                    negated_parts.insert(ident.to_string());
+                }
+                byte_idx = end;
+                continue;
+            }
+        }
+        byte_idx += 1;
+    }
+
+    let mut negated_stems: std::collections::BTreeSet<String> =
+        pkg.extract_negated_components().into_iter().collect();
+    negated_stems.extend(deap_core::sysml_ast::extract_negated_components(&pkg_sysml));
+    for part in &all_parts {
+        let comp_clean: String = part
+            .name
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect::<String>()
+            .to_ascii_lowercase();
+        if !comp_clean.is_empty()
+            && negated_stems.iter().any(|stem| {
+                comp_clean.contains(stem.as_str())
+                    || deap_core::sysml_ast::component_matches(&part.name, stem)
+            })
+        {
+            negated_parts.insert(part.name.clone());
+        }
+    }
 
     let mut filtered_parts: Vec<&deap_core::sysml_ast::PartDef> = all_parts
         .iter()
         .filter(|p| !p.name.starts_with('_'))
-        .filter(|p| !is_part_negated(&p.name))
+        .filter(|p| !negated_parts.contains(&p.name))
         .collect();
 
     if filtered_parts.is_empty() {
         filtered_parts = all_parts
             .iter()
-            .filter(|p| !is_part_negated(&p.name))
+            .filter(|p| !negated_parts.contains(&p.name))
             .collect();
     }
 
@@ -636,6 +685,34 @@ mod tests {
         let components: Vec<_> = rows.iter().map(|r| r.component.as_str()).collect();
         assert!(components.contains(&"PrimaryComputeSubsystem"));
         assert!(!components.contains(&"AuxiliaryBackupUnit"), "Negated AuxiliaryBackupUnit must NOT be present in FMECA rows");
+        Ok(())
+    }
+
+    #[test]
+    fn test_arch_07_fmeca_matrix_precomputes_bang_negated_components_in_btreeset() -> Result<(), Box<dyn std::error::Error>> {
+        let mut pkg = PackageDef::default();
+        pkg.part_defs.push(PartDef {
+            name: "PrimaryComputeSubsystem".to_string(),
+            ..Default::default()
+        });
+        pkg.part_defs.push(PartDef {
+            name: "AuxiliaryBackupUnit".to_string(),
+            ..Default::default()
+        });
+        pkg.constraint_defs.push(deap_core::sysml_ast::ConstraintDef {
+            name: "ExcludeBackupUnit".to_string(),
+            expression: "!AuxiliaryBackupUnit".to_string(),
+            is_assertion: true,
+            ..Default::default()
+        });
+
+        let rows = generate_fmeca_matrix(&pkg, None);
+        let components: Vec<_> = rows.iter().map(|r| r.component.as_str()).collect();
+        assert!(components.contains(&"PrimaryComputeSubsystem"));
+        assert!(
+            !components.contains(&"AuxiliaryBackupUnit"),
+            "Direct !AuxiliaryBackupUnit negation must be precomputed into BTreeSet and excluded from FMECA matrix"
+        );
         Ok(())
     }
 }

@@ -973,10 +973,18 @@ fn format_canonical_checklist_item(
         default_branch.trim()
     };
 
-    let doc_path = if spec.rel_path.starts_with("docs/") {
+    let base_doc_path = if spec.rel_path.starts_with("docs/") {
         spec.rel_path.clone()
     } else {
         format!("docs/{}", spec.rel_path)
+    };
+    let path_norm = spec.path.to_string_lossy().replace('\\', "/");
+    let doc_path = if path_norm.contains(".pipeline/upstream/")
+        && !base_doc_path.starts_with(".pipeline/upstream/")
+    {
+        format!(".pipeline/upstream/{}", base_doc_path)
+    } else {
+        base_doc_path
     };
 
     let link = if !clean_repo.is_empty() {

@@ -2,48 +2,65 @@
   "sha256": "ec193d63edefd741f6f98dc0137b41894faf5785a961b552b755f5c3ee670ab5",
   "total_lines": 1,
   "node_counts": {
-    "action_defs": 0,
-    "attribute_defs": 17,
+    "action_defs": 5,
+    "attribute_defs": 21,
     "calc_defs": 0,
     "capability_defs": 0,
     "connection_defs": 0,
     "constraint_defs": 0,
-    "containers": 1,
+    "containers": 5,
     "groupings": 0,
     "hazard_defs": 0,
     "identities": 0,
-    "interaction_defs": 0,
+    "interaction_defs": 1,
     "item_defs": 0,
-    "leaves": 17,
-    "lists": 0,
+    "leaves": 21,
+    "lists": 5,
     "operation_defs": 0,
     "packages": 1,
-    "part_defs": 1,
-    "port_defs": 4,
+    "part_defs": 5,
+    "port_defs": 12,
     "requirement_defs": 1,
     "risk_defs": 0,
-    "state_defs": 0,
+    "state_defs": 1,
     "test_case_defs": 0,
     "typedefs": 0,
-    "use_case_defs": 0
+    "use_case_defs": 5
   },
   "schema_nodes": [
+    "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
+    "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_LifecycleState",
+    "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_SequenceInteraction",
     "BaselineGateVerdictPort",
     "Blueprint_ID",
     "CargoManifestInputPort",
+    "ClippyAttributeAstScanner",
     "CompilerDiagnosticOutputPort",
     "CompilerLintEnforcementGate",
-    "Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
+    "CrateRootAttributeSanitizer",
+    "Emit",
+    "Execute",
     "Generation_Mode",
-    "REQ_0601_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
+    "REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
+    "Read",
     "Requirement_ID",
+    "Return",
+    "Run",
     "RustSourceTokenStreamPort",
     "Specification_Source",
     "Status",
     "Target_Crates",
+    "TestTargetLintEnforcer",
     "Title",
     "Tracked_Issues",
+    "UC_AC_01_Rustc_E0453_Hard_Rejection_of_Inner_and_Outer_Clippy_Allow_Attributes",
+    "UC_AC_02_Check_34_Multi_Line_Whitespace_Insensitive_Suppression_Rejection",
+    "UC_AC_03_Unconditional_Test_Target_Enforcement_Without_Conditional_Exemption",
+    "UC_AC_04_Semantic_Type_Alias_Replacement_for_Type_Complexity",
+    "UC_AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0601",
+    "WorkspaceManifestForbidGate",
     "allowed_suppression_count",
+    "cmd_in",
     "crates_enforced_count",
     "forbid_disallowed_types",
     "forbid_expect_used",
@@ -51,16 +68,119 @@
     "forbid_panic",
     "forbid_rule_coverage",
     "forbid_type_complexity",
-    "forbid_unwrap_used"
+    "forbid_unwrap_used",
+    "quantity",
+    "status_out"
   ],
-  "operational_activities": [],
+  "operational_activities": [
+    {
+      "id": "OA-01",
+      "name": "Execute",
+      "doc": "Execute cargo clippy --workspace --all-targets",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-02",
+      "name": "Read",
+      "doc": "Read [workspace.lints.clippy] forbid table",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-03",
+      "name": "Return",
+      "doc": "Return forbid rules for unwrap, expect, panic, indexing",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-04",
+      "name": "Emit",
+      "doc": "Emit E0453 hard error if any allow(clippy::) exists",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-05",
+      "name": "Run",
+      "doc": "Run scan_clippy_allow_tokens on all crates/ ** / *.rs",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    }
+  ],
   "operational_exchanges": [],
-  "operational_scenarios": [],
+  "operational_scenarios": [
+    {
+      "id": "SCN-01",
+      "name": "UC_AC_01_Rustc_E0453_Hard_Rejection_of_Inner_and_Outer_Clippy_Allow_Attributes",
+      "actor": "",
+      "objective": "\"Rustc E0453 Hard Rejection of Inner and Outer Clippy Allow Attributes\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-02",
+      "name": "UC_AC_02_Check_34_Multi_Line_Whitespace_Insensitive_Suppression_Rejection",
+      "actor": "",
+      "objective": "\"Check 34 Multi Line Whitespace Insensitive Suppression Rejection\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-03",
+      "name": "UC_AC_03_Unconditional_Test_Target_Enforcement_Without_Conditional_Exemption",
+      "actor": "",
+      "objective": "\"Unconditional Test Target Enforcement Without Conditional Exemption\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-04",
+      "name": "UC_AC_04_Semantic_Type_Alias_Replacement_for_Type_Complexity",
+      "actor": "",
+      "objective": "\"Semantic Type Alias Replacement for Type Complexity\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-05",
+      "name": "UC_AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0601",
+      "actor": "",
+      "objective": "\"Dogfood Ingestion and SysML v2 Compilation of REQ 0601\"",
+      "steps": []
+    }
+  ],
   "operational_nodes": [
     {
       "name": "CompilerLintEnforcementGate",
       "node_type": "Part",
       "doc": "Configures `clippy::unwrap_used = \"forbid\"` across the workspace [unit: flag]",
+      "allocated_activities": []
+    },
+    {
+      "name": "WorkspaceManifestForbidGate",
+      "node_type": "Part",
+      "doc": "Enforces forbid lint levels in root Cargo.toml and workspace = true inheritance across all member crates.",
+      "allocated_activities": []
+    },
+    {
+      "name": "ClippyAttributeAstScanner",
+      "node_type": "Part",
+      "doc": "Zero-regex multi-line token-stream scanner in Check 34 rejecting allow(clippy:: attribute sequences.",
+      "allocated_activities": []
+    },
+    {
+      "name": "CrateRootAttributeSanitizer",
+      "node_type": "Part",
+      "doc": "Strips crate-level #![allow(clippy::...)] headers and replaces complex tuples with named structs or type aliases.",
+      "allocated_activities": []
+    },
+    {
+      "name": "TestTargetLintEnforcer",
+      "node_type": "Part",
+      "doc": "Enforces identical forbid lint discipline across unit tests (#[cfg(test)]) and integration tests (tests/ *.rs).",
       "allocated_activities": []
     }
   ],

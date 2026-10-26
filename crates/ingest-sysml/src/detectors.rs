@@ -200,7 +200,7 @@ pub fn detect_format(schema_path: &str, content: &str) -> Result<String, String>
 /// Realises: [REQ-INGEST-SYSML-DETECTORS-IS-OUTPUT-SYSML] | SysML v2: ActionDef(is_output_sysml)
 fn is_output_sysml(p: &Path) -> bool {
     if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
-        name == "model.sysml" || name == "schema.sysml"
+        name == "model.sysml" || name == "schema.sysml" || p.with_extension("md").is_file()
     } else {
         false
     }
@@ -250,6 +250,18 @@ fn discover_markdown_files(search_dir: &Path) -> Vec<PathBuf> {
     let mut root_md = find_files_with_ext(search_dir, "md");
     root_md.retain(|p| p.file_name().and_then(|s| s.to_str()) != Some("README.md"));
     root_md.sort();
+    let blueprint_md: Vec<PathBuf> = root_md
+        .iter()
+        .filter(|p| {
+            p.file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|name| name.starts_with("blueprint-"))
+        })
+        .cloned()
+        .collect();
+    if !blueprint_md.is_empty() {
+        return blueprint_md;
+    }
     root_md
 }
 
@@ -802,6 +814,68 @@ mod tests {
 
         let found = find_files_with_ext(&guard.0, "md");
         assert_eq!(found, vec![blueprint_md]);
+        Ok(())
+    }
+
+    /// Verifies that `discover_schema_targets` prioritizes canonical `blueprint-*.md` files over co-located `.sysml` sidecars and legacy `feat-*-solution.md` design notes.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_discover_schema_targets_prefers_blueprint_md_over_sidecar_sysml_and_legacy_designs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Co-located `<stem>.sysml` files paired with `<stem>.md` are classified as generated output sidecars (`is_output_sysml`).
+    /// - When canonical `blueprint-*.md` files exist in a directory, `discover_markdown_files` excludes non-blueprint design notes (`feat-*-solution.md`, `*-blueprint.md`).
+    ///
+    /// ## 3. Preconditions
+    /// - Writable system temporary directory exists.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts both `auto` and `markdown` discovery modes return `"markdown"` and the sorted vector of `blueprint-*.md` files only.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(F \log F)$ over fixture entries. Space Complexity: $O(F)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Cleans up temporary directory via `TempDirGuard`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-INGEST-SYSML-DETECTORS-DISCOVER-MARKDOWN-FILES]
+    #[test]
+    fn test_discover_schema_targets_prefers_blueprint_md_over_sidecar_sysml_and_legacy_designs(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            ".deap_blueprint_discovery_{}_{}",
+            std::process::id(),
+            nanos
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let guard = TempDirGuard(root.clone());
+
+        let designs_dir = guard.0.join("docs").join("designs");
+        fs::create_dir_all(&designs_dir)?;
+
+        let bp1_md = designs_dir.join("blueprint-01-lint.md");
+        let bp2_md = designs_dir.join("blueprint-02-purity.md");
+        let bp1_sysml = designs_dir.join("blueprint-01-lint.sysml");
+        let legacy_feat = designs_dir.join("feat-41-solution.md");
+        let legacy_bp = designs_dir.join("old-architecture-blueprint.md");
+
+        fs::write(&bp1_md, "# Blueprint 01\n")?;
+        fs::write(&bp2_md, "# Blueprint 02\n")?;
+        fs::write(&bp1_sysml, "package StaleSidecar {}\n")?;
+        fs::write(&legacy_feat, "# Legacy Solution\n")?;
+        fs::write(&legacy_bp, "# Legacy Blueprint\n")?;
+
+        let (auto_fmt, auto_files) = discover_schema_targets(Some(&designs_dir), Some("auto"))?;
+        assert_eq!(auto_fmt, "markdown");
+        assert_eq!(auto_files, vec![bp1_md.clone(), bp2_md.clone()]);
+
+        let (md_fmt, md_files) = discover_schema_targets(Some(&designs_dir), Some("markdown"))?;
+        assert_eq!(md_fmt, "markdown");
+        assert_eq!(md_files, vec![bp1_md, bp2_md]);
         Ok(())
     }
 }

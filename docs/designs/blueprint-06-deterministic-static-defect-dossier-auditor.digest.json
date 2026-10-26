@@ -2,7 +2,7 @@
   "sha256": "758df5ab43b18b798a5ebea6895b57c1ce3450be13817f353cc409cb774b22e6",
   "total_lines": 1,
   "node_counts": {
-    "action_defs": 0,
+    "action_defs": 14,
     "attribute_defs": 31,
     "calc_defs": 0,
     "capability_defs": 0,
@@ -12,38 +12,48 @@
     "groupings": 0,
     "hazard_defs": 0,
     "identities": 0,
-    "interaction_defs": 0,
+    "interaction_defs": 1,
     "item_defs": 0,
     "leaves": 31,
-    "lists": 0,
+    "lists": 14,
     "operation_defs": 0,
     "packages": 1,
     "part_defs": 5,
     "port_defs": 12,
     "requirement_defs": 1,
     "risk_defs": 0,
-    "state_defs": 0,
+    "state_defs": 1,
     "test_case_defs": 0,
     "typedefs": 0,
-    "use_case_defs": 0
+    "use_case_defs": 6
   },
   "schema_nodes": [
+    "BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
+    "BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_LifecycleState",
+    "BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_SequenceInteraction",
     "Blueprint_ID",
+    "CLOSED_LOOP",
     "ClosedLoopDefectPublisherGate",
     "ClosedLoopTrackerPublishPort",
+    "Compliant",
+    "Created",
     "DefectDossierArtifactPort",
+    "Deterministic",
     "DeterministicDossierSynthesizer",
     "DeterministicStaticDefectAuditor",
-    "Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
     "Dossier_Construction",
     "End_to_End_Execution_Time",
+    "Execute",
+    "Exit_item",
     "FivePillarStaticAstAnalyzer",
     "Generation_Mode",
     "GitHubIssueSsotQueryPort",
+    "Line_exact",
+    "Live",
     "MermaidUmlDiagramGenerator",
     "Mermaid_Diagram_Synthesis",
     "Pillar_Rule_Evaluation",
-    "REQ_0606_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
+    "REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
     "Requirement_ID",
     "Schema_Validation_Gate",
     "Source_Parsing_Engine",
@@ -54,6 +64,12 @@
     "Target_Crates",
     "Title",
     "Tracked_Issues",
+    "UC_AC_01_Static_Five_Pillar_AST_Defect_Detection",
+    "UC_AC_02_Deterministic_Seven_Section_Dossier_and_Mermaid_Synthesis",
+    "UC_AC_03_Idempotent_Local_and_Remote_SSOT_Deduplication",
+    "UC_AC_04_Closed_Loop_GitHub_SSOT_Publishing_and_Byte_Parity_Verification",
+    "UC_AC_05_Fail_Closed_Rejection_on_Malformed_Dossier_Schema_Ephemeral_Paths_or_Payload_Divergence",
+    "UC_AC_06_Dogfood_SysML_v2_Markdown_Ingestion_and_Blueprint_Gate_Conformance",
     "activePillarCount",
     "assert_auditor_subagent_count_range",
     "assert_closed_loop_mismatch_bytes_range",
@@ -66,22 +82,184 @@
     "dossierCandidateInPort",
     "dossierMarkdownOutPort",
     "dossier_schema_check_count",
+    "evaluate_source_file_pillars",
     "findingInPort",
     "findingStreamOutPort",
     "forbidSemicolons",
+    "gh",
     "mandatorySectionCount",
     "mermaidBlockOutPort",
+    "parse_rust_source_ast",
     "pillar_coverage_count",
     "requireByteParity",
+    "run_check_defect",
     "schemaGateCount",
+    "synthesize_defect_dossier_markdown",
     "umlSpecInPort",
     "verifiedReceiptOutPort",
+    "verify_baseline",
     "whysChainDepth",
     "zeroRegexMode"
   ],
-  "operational_activities": [],
+  "operational_activities": [
+    {
+      "id": "OA-01",
+      "name": "verify_baseline",
+      "doc": "verify-baseline audit-code --path crates/ --publish",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-02",
+      "name": "parse_rust_source_ast",
+      "doc": "parse_rust_source_ast and parse_dart_source_ast",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-03",
+      "name": "Deterministic",
+      "doc": "Deterministic Vec of SourceAstItem nodes",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-04",
+      "name": "evaluate_source_file_pillars",
+      "doc": "evaluate_source_file_pillars across 5 pillars",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-05",
+      "name": "Line_exact",
+      "doc": "Line-exact AuditFinding records",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-06",
+      "name": "synthesize_defect_dossier_markdown",
+      "doc": "synthesize_defect_dossier_markdown(finding)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-07",
+      "name": "Compliant",
+      "doc": "Compliant 7-section DEFECT-SLUG.md payload",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-08",
+      "name": "run_check_defect",
+      "doc": "run_check_defect(DefectDossierArgs)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-09",
+      "name": "Execute",
+      "doc": "Execute 12-check validate_defect_dossier gate",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-10",
+      "name": "gh",
+      "doc": "gh issue create or gh issue edit with body-file",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-11",
+      "name": "Created",
+      "doc": "Created or updated GitHub Issue URL",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-12",
+      "name": "Live",
+      "doc": "Live remote payload for byte-for-byte comparison",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-13",
+      "name": "CLOSED_LOOP",
+      "doc": "CLOSED-LOOP VERIFIED receipt (0 mismatch bytes)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-14",
+      "name": "Exit_item",
+      "doc": "Exit code 0 with verified issue URLs",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    }
+  ],
   "operational_exchanges": [],
-  "operational_scenarios": [],
+  "operational_scenarios": [
+    {
+      "id": "SCN-01",
+      "name": "UC_AC_01_Static_Five_Pillar_AST_Defect_Detection",
+      "actor": "",
+      "objective": "\"Static Five Pillar AST Defect Detection\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-02",
+      "name": "UC_AC_02_Deterministic_Seven_Section_Dossier_and_Mermaid_Synthesis",
+      "actor": "",
+      "objective": "\"Deterministic Seven Section Dossier and Mermaid Synthesis\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-03",
+      "name": "UC_AC_03_Idempotent_Local_and_Remote_SSOT_Deduplication",
+      "actor": "",
+      "objective": "\"Idempotent Local and Remote SSOT Deduplication\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-04",
+      "name": "UC_AC_04_Closed_Loop_GitHub_SSOT_Publishing_and_Byte_Parity_Verification",
+      "actor": "",
+      "objective": "\"Closed Loop GitHub SSOT Publishing and Byte Parity Verification\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-05",
+      "name": "UC_AC_05_Fail_Closed_Rejection_on_Malformed_Dossier_Schema_Ephemeral_Paths_or_Payload_Divergence",
+      "actor": "",
+      "objective": "\"Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-06",
+      "name": "UC_AC_06_Dogfood_SysML_v2_Markdown_Ingestion_and_Blueprint_Gate_Conformance",
+      "actor": "",
+      "objective": "\"Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance\"",
+      "steps": []
+    }
+  ],
   "operational_nodes": [
     {
       "name": "ClosedLoopDefectPublisherGate",

@@ -1,5 +1,5 @@
 doc /* Translated from Level 0 OEM Markdown specification */
-package Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint {
+package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint {
     attribute Blueprint_ID : String = "BP-04";
     attribute Requirement_ID : String = "REQ-0604";
     attribute Title : String = "Deterministic Specification, ICD, and WBS Forward Compiler Blueprint";
@@ -8,8 +8,38 @@ package Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint {
     attribute Tracked_Issues : String = "#497, #506, #507";
     attribute Generation_Mode : String = "subagent";
     attribute Specification_Source : String = "crates/compile-sysml/src/sync/forward.rs:1585-2078 / #507";
+    doc /* compile-sysml --forward-sync docs */
+    action def compile_sysml;
+    doc /* Resolve Parent Epic by pkg_name == ConOps */
+    action def Resolve;
+    doc /* Bind all package stories to Use Case matrices */
+    action def Bind;
+    doc /* Emit symmetric ActionDef signatures and E1-E5 Mermaid */
+    action def Emit;
+    doc /* Epics, Features, Stories, and Use Cases written */
+    action def Epics;
+    doc /* Project NxN ConnectionDef matrix and FlowDef signals */
+    action def Project;
+    doc /* ICD_01 and ICD_02 written deterministically */
+    action def ICD_01;
+    doc /* Synthesize MIL-STD-881E tree and CSV/JSON exports */
+    action def Synthesize;
+    doc /* WBS_01..03 and enterprise exports written */
+    action def WBS_01_03;
+    doc /* reconcile-backlog reconcile --docs-dir docs */
+    action def reconcile_backlog;
+    doc /* Parse CommonMark tables with in_html_comment guard */
+    action def Parse;
+    doc /* Reconcile checklists with parent-inclusive epic count */
+    action def Reconcile;
+    doc /* Zero unpopulated placeholders or spoofed IDs */
+    action def Zero;
+    doc /* Merge extracted entities into owning subpackages */
+    action def Merge;
+    doc /* Bit-identical SysML v2 AST and SHA-256 digest */
+    action def Bit_identical;
     doc /* UUIDv5:  | Complexity: Class P | Standard: IEEE 29148-2018 / RFC 2119 | Diagnostics: E0100 */
-    requirement def REQ_0604_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint {
+    requirement def REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint {
         id = "REQ-0604";
         text = "The Digital Engineering Agent Platform (DEAP) compiler pipeline SHALL deterministically project all Agile functional specifications (docs/epics/, docs/features/, docs/user-stories/, docs/use-cases/), Logical Interface Control Documents (docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md,";
         attribute uuidv5 : String = "";
@@ -33,6 +63,72 @@ package Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint {
         verify by AC_04_Fail_Closed_Stateful_HTML_Comment_Frontmatter_Guard_and_Parent_Inclusive_Checklist_Reconciliation;
         verify by AC_05_Fail_Closed_Subpackage_Scoped_Reverse_Sync_and_Dogfood_Blueprint_Ingestion_Parity;
         satisfy by AgileSpecForwardProjector;
+    }
+    doc /* Extracted from Mermaid stateDiagram specification. */
+    state def BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_LifecycleState {
+        transition Initial_to_AstLoaded;
+        transition AstLoaded_to_ForwardProjected_on_forwardSyncSpecs;
+        transition ForwardProjected_to_IcdSynthesized_on_emitLogicalIcd;
+        transition IcdSynthesized_to_WbsExported_on_emitMilStd881eWbs;
+        transition WbsExported_to_BacklogReconciled_on_reconcileBacklog;
+        transition BacklogReconciled_to_ReverseSynced_on_reverseSyncToSubpackages;
+        transition BacklogReconciled_to_Rejected_on_htmlCommentSpoofOrCardinalityError;
+        transition ReverseSynced_to_VerifiedRoundtrip_on_sha256DigestParityZero;
+        transition ReverseSynced_to_Rejected_on_rootAstPollutionOrDriftDetected;
+        transition Rejected_to_Terminal;
+        transition VerifiedRoundtrip_to_Terminal;
+    }
+    doc /* Diagnostic: E0100). */
+    use case def UC_AC_01_Deterministic_Multi_Story_Use_Case_and_ConOps_Parent_Epic_Projection {
+        subject AgileSpecForwardProjector;
+        objective "Deterministic Multi Story Use Case and ConOps Parent Epic Projection";
+    }
+    doc /* Diagnostic: E0200). */
+    use case def UC_AC_02_Deterministic_Logical_ICD_Matrix_and_Signal_Dictionary_Synthesis {
+        subject AgileSpecForwardProjector;
+        objective "Deterministic Logical ICD Matrix and Signal Dictionary Synthesis";
+    }
+    doc /* Diagnostic: E0300). */
+    use case def UC_AC_03_Deterministic_MIL_STD_881E_WBS_and_Enterprise_Export_Synthesis {
+        subject AgileSpecForwardProjector;
+        objective "Deterministic MIL STD 881E WBS and Enterprise Export Synthesis";
+    }
+    doc /* Diagnostic: E0300). */
+    use case def UC_AC_04_Fail_Closed_Stateful_HTML_Comment_Frontmatter_Guard_and_Parent_Inclusive_Checklist_Reconciliation {
+        subject AgileSpecForwardProjector;
+        objective "Fail Closed Stateful HTML Comment Frontmatter Guard and Parent Inclusive Checklist Reconciliation";
+    }
+    doc /* Diagnostic: E0400). */
+    use case def UC_AC_05_Fail_Closed_Subpackage_Scoped_Reverse_Sync_and_Dogfood_Blueprint_Ingestion_Parity {
+        subject AgileSpecForwardProjector;
+        objective "Fail Closed Subpackage Scoped Reverse Sync and Dogfood Blueprint Ingestion Parity";
+    }
+    doc /* Extracted from Mermaid sequenceDiagram specification. */
+    interaction def BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_SequenceInteraction {
+        lifeline CLI : Operator_Or_CI_Runner;
+        lifeline Fwd : compile_sysml_Forward;
+        lifeline Icd : LogicalIcdMatrixCompiler;
+        lifeline Wbs : MilStd881eWbsExporter;
+        lifeline Rec : reconcile_backlog_Tool;
+        lifeline Rev : compile_sysml_Reverse;
+        message compile_sysml from CLI to Fwd;
+        message Resolve from Fwd to Fwd;
+        message Bind from Fwd to Fwd;
+        message Emit from Fwd to Fwd;
+        message Epics from Fwd to CLI;
+        message compile_sysml from CLI to Icd;
+        message Project from Icd to Icd;
+        message ICD_01 from Icd to CLI;
+        message compile_sysml from CLI to Wbs;
+        message Synthesize from Wbs to Wbs;
+        message WBS_01_03 from Wbs to CLI;
+        message reconcile_backlog from CLI to Rec;
+        message Parse from Rec to Rec;
+        message Reconcile from Rec to Rec;
+        message Zero from Rec to CLI;
+        message compile_sysml from CLI to Rev;
+        message Merge from Rev to Rev;
+        message Bit_identical from Rev to CLI;
     }
     doc /* Maximum deterministic execution bound for `--forward-sync` across all package subtrees. [unit: ms] */
     part def AgileSpecForwardProjector {

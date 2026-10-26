@@ -3289,7 +3289,10 @@ impl MarkdownTranslator {
                 "Port".to_string()
             };
 
-            let protocol = protocol_col.and_then(|c| row.get(c)).map_or("", |v| v.trim()).to_string();
+            let protocol = protocol_col
+                .and_then(|c| row.get(c))
+                .map_or("", |v| v.trim().trim_matches('`').trim())
+                .to_string();
             let cit = extract_provenance_citation(row, headers);
             let raw_desc = doc_col.and_then(|c| row.get(c)).map_or("", |v| v.trim());
             let doc = compose_grounded_doc(raw_desc, &cit, "");

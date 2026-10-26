@@ -40,7 +40,9 @@
     )
 )]
 
+pub mod cli;
 pub mod docstring;
+pub mod driver;
 pub mod flutter_codegen;
 pub mod lexer;
 pub mod parser;
@@ -49,11 +51,13 @@ pub mod semantic;
 pub mod stpa;
 pub mod sync;
 
+pub use cli::*;
 pub use deap_core::sysml_ast::*;
 pub use docstring::{
     inject_dart_file_docstrings, inject_rust_file_docstrings, run_docstring_injection,
     run_extract_source, DocstringExitCode, DocstringInjectionOptions, DocstringInjectionReport,
 };
+pub use driver::*;
 pub use flutter_codegen::{
     emit_flutter_contracts, FlutterCodegenError, FlutterContractOptions, FlutterContractReport,
 };
@@ -178,6 +182,174 @@ fn collect_model_parts_recursive(parts: &[PartDef], out: &mut Vec<PartDef>) {
     }
 }
 
+/// Escapes single-quoted MATLAB string literals by doubling apostrophes (`'` -> `''`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Prevents MATLAB syntax injection and malformed `Simulink.BusElement` script generation when
+/// SysML v2 identifiers, types, or electrical attributes contain single quotes under DO-178C Level A
+/// and DO-330 TQL-4 code generation standards.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Pure total function over UTF-8 strings: every ASCII apostrophe `'\''` is mapped to `"''"` while
+///   all other Unicode scalar values are preserved verbatim.
+///
+/// ## 3. Preconditions
+/// - `s` is any valid UTF-8 string slice.
+///
+/// ## 4. Postconditions
+/// - Returns an owned `String` safe for interpolation inside a single-quoted MATLAB string literal.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time complexity: $O(N)$ single linear pass where $N$ is `s.len()`.
+/// - Space complexity: $O(N)$ bounded output buffer allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function: never panics or fails on any input string.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-ESCAPE-MATLAB]
+pub fn escape_matlab_single_quoted(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        if ch == '\'' {
+            out.push_str("''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+/// Iteratively flattens all nested subpackages in `root` into a single `PackageDef` in pre-order.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Eliminates unbounded call-stack recursion when collapsing arbitrary-depth SysML v2 package
+/// hierarchies (`d >= 2`) under DO-178C Level A and DO-330 TQL-4 bounded-resource mandates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Zero recursion: uses an explicit `Vec<PackageDef>` LIFO stack reversed per child list to
+///   preserve deterministic pre-order declaration sequence.
+/// - Propagates package-level `item_defs` onto `part.item_defs` so `SysmlModel` projections retain
+///   all `ItemDef` nodes across nested packages.
+///
+/// ## 3. Preconditions
+/// - `root` is a valid `PackageDef` AST node.
+///
+/// ## 4. Postconditions
+/// - Returns `root` with `root.packages.is_empty()` and all descendant definitions merged in-order.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time complexity: $O(P + E)$ where $P$ is package count and $E$ is total AST definition count.
+/// - Space complexity: $O(P + E)$ heap memory for the iterative work stack.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function over owned AST vectors; cannot overflow the call stack or panic.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-FLATTEN-ITERATIVE]
+fn flatten_package_tree_iterative(mut root: deap_core::sysml_ast::PackageDef) -> deap_core::sysml_ast::PackageDef {
+    let mut stack: Vec<deap_core::sysml_ast::PackageDef> = std::mem::take(&mut root.packages);
+    stack.reverse();
+    while let Some(mut sub) = stack.pop() {
+        let children = std::mem::take(&mut sub.packages);
+        for child in children.into_iter().rev() {
+            stack.push(child);
+        }
+        merge_package_defs(&mut root, sub);
+    }
+    if !root.item_defs.is_empty() {
+        for part in &mut root.part_defs {
+            for item in &root.item_defs {
+                if !part.item_defs.iter().any(|existing| existing.name == item.name) {
+                    part.item_defs.push(item.clone());
+                }
+            }
+        }
+    }
+    root
+}
+
+/// Flattens a hierarchical `PackageDef` tree into a consolidated `SysmlModel` using an iterative stack.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Guarantees that multi-level nested SysML v2 package hierarchies (`d >= 2`) retain 100% of their
+/// `PartDef`, `PortDef`, `ItemDef`, and `RequirementDef` declarations when projected into `SysmlModel`
+/// for MBD synthesis, Flutter contract codegen, and subsystem slicing under DO-178C Level A and DO-330 TQL-4.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Zero-recursion traversal: uses an explicit iterative `Vec<PackageDef>` work stack so stack space
+///   is $O(1)$ on the call stack regardless of package nesting depth $d$.
+/// - When `target_pkg` matches a subpackage at any depth, flattens that subpackage's entire subtree
+///   while preserving cross-package `requirement_defs`, `port_defs`, and `item_defs`.
+/// - When `target_pkg` is `None` (or matches a part rather than a subpackage), flattens all nested
+///   subpackages across all depths into the root package in pre-order.
+///
+/// ## 3. Preconditions
+/// - `pkg` is a parsed `PackageDef` root; `target_pkg` is an optional package or part slice target.
+///
+/// ## 4. Postconditions
+/// - Returns a consolidated `deap_core::sysml_ast::SysmlModel` containing all flattened AST definitions.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time complexity: $O(P + E)$ where $P$ is total package count and $E$ is total AST element count.
+/// - Space complexity: $O(P + E)$ heap memory for the iterative work stack and consolidated model.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function over `PackageDef` with zero recursion and zero panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-FLATTEN-MODEL]
+pub fn flatten_package_to_model(
+    pkg: deap_core::sysml_ast::PackageDef,
+    target_pkg: Option<&str>,
+) -> deap_core::sysml_ast::SysmlModel {
+    if let Some(target) = target_pkg {
+        let mut matched_sub: Option<deap_core::sysml_ast::PackageDef> = None;
+        let mut search_stack: Vec<&deap_core::sysml_ast::PackageDef> =
+            pkg.packages.iter().rev().collect();
+        while let Some(curr) = search_stack.pop() {
+            if curr.name == target || curr.name.eq_ignore_ascii_case(target) {
+                matched_sub = Some(curr.clone());
+                break;
+            }
+            for child in curr.packages.iter().rev() {
+                search_stack.push(child);
+            }
+        }
+        if let Some(sub_pkg) = matched_sub {
+            let mut target_flat = flatten_package_tree_iterative(sub_pkg);
+            let all_flat = flatten_package_tree_iterative(pkg);
+            for req in all_flat.requirement_defs {
+                if !target_flat
+                    .requirement_defs
+                    .iter()
+                    .any(|r| r.name == req.name && r.req_id == req.req_id)
+                {
+                    target_flat.requirement_defs.push(req);
+                }
+            }
+            for port in all_flat.port_defs {
+                if !target_flat.port_defs.iter().any(|p| p.name == port.name) {
+                    target_flat.port_defs.push(port);
+                }
+            }
+            for item in all_flat.item_defs {
+                if !target_flat.item_defs.iter().any(|i| i.name == item.name) {
+                    target_flat.item_defs.push(item.clone());
+                }
+                for part in &mut target_flat.part_defs {
+                    if !part.item_defs.iter().any(|i| i.name == item.name) {
+                        part.item_defs.push(item.clone());
+                    }
+                }
+            }
+            return deap_core::sysml_ast::SysmlModel::from(target_flat);
+        }
+    }
+    let flat_root = flatten_package_tree_iterative(pkg);
+    deap_core::sysml_ast::SysmlModel::from(flat_root)
+}
+
 /// Escapes reserved XML characters (`&`, `<`, `>`, `"`, `'`) into predefined XML entities.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -239,9 +411,9 @@ pub fn escape_xml(s: &str) -> String {
 /// - Returns a populated `MbdExportBundle` containing all four grounded artifact strings.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time complexity: $O(R \cdot P + S + B)$ where $R$ is requirement count, $P$ is part count,
+/// - Time complexity: $O((R + P) \log(R + P) + S + B)$ where $R$ is requirement count, $P$ is part count,
 ///   $S$ is state/transition count, and $B$ is port/attribute bus element count.
-/// - Space complexity: $O(R + S + P + B)$ for the synthesized output buffers.
+/// - Space complexity: $O(R + S + P + B)$ for the synthesized output buffers and `BTreeSet` indices.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Total function: handles empty models or missing optional fields gracefully without panicking.
@@ -254,12 +426,30 @@ pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExp
     let mut all_parts = Vec::new();
     collect_model_parts_recursive(&model.parts, &mut all_parts);
 
-    let mut all_reqs: Vec<RequirementDef> = model.requirements.clone();
+    let mut all_reqs: Vec<RequirementDef> = Vec::with_capacity(model.requirements.len());
+    let mut seen_reqs: std::collections::BTreeSet<(String, String)> =
+        std::collections::BTreeSet::new();
+    for req in &model.requirements {
+        if seen_reqs.insert((req.name.clone(), req.req_id.clone())) {
+            all_reqs.push(req.clone());
+        }
+    }
     for part in &all_parts {
         for req in &part.requirements {
-            if !all_reqs.iter().any(|r| r.name == req.name && r.req_id == req.req_id) {
+            if seen_reqs.insert((req.name.clone(), req.req_id.clone())) {
                 all_reqs.push(req.clone());
             }
+        }
+    }
+
+    let mut req_to_parts: std::collections::BTreeMap<&str, Vec<(usize, &str)>> =
+        std::collections::BTreeMap::new();
+    for (part_idx, part) in all_parts.iter().enumerate() {
+        for sat in &part.satisfied_requirements {
+            req_to_parts
+                .entry(sat.as_str())
+                .or_default()
+                .push((part_idx, part.name.as_str()));
         }
     }
 
@@ -279,15 +469,29 @@ pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExp
         } else {
             req.doc.as_deref().unwrap_or("")
         };
-        let mut satisfied_by: Vec<String> = req.satisfied_by.clone();
-        for part in &all_parts {
-            if part
-                .satisfied_requirements
-                .iter()
-                .any(|s| s == id_str || s == &req.name)
-                && !satisfied_by.contains(&part.name)
-            {
-                satisfied_by.push(part.name.clone());
+        let mut satisfied_by: Vec<String> = Vec::with_capacity(req.satisfied_by.len());
+        let mut satisfied_seen: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
+        for existing in &req.satisfied_by {
+            if satisfied_seen.insert(existing.clone()) {
+                satisfied_by.push(existing.clone());
+            }
+        }
+        let mut matched_parts: std::collections::BTreeMap<usize, &str> =
+            std::collections::BTreeMap::new();
+        if let Some(entries) = req_to_parts.get(id_str) {
+            for &(idx, p_name) in entries {
+                matched_parts.insert(idx, p_name);
+            }
+        }
+        if let Some(entries) = req_to_parts.get(req.name.as_str()) {
+            for &(idx, p_name) in entries {
+                matched_parts.insert(idx, p_name);
+            }
+        }
+        for p_name in matched_parts.into_values() {
+            if satisfied_seen.insert(p_name.to_string()) {
+                satisfied_by.push(p_name.to_string());
             }
         }
         let id_xml = escape_xml(id_str);
@@ -364,17 +568,23 @@ pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExp
         ));
         simulink_bus_m.push_str(&format!(
             "  Simulink.BusElement('Name', '{}', 'DataType', '{}', 'Direction', '{}');\n",
-            port_def.name, port_def.type_name, port_def.direction
+            escape_matlab_single_quoted(&port_def.name),
+            escape_matlab_single_quoted(&port_def.type_name),
+            escape_matlab_single_quoted(&port_def.direction)
         ));
         for flow in &port_def.item_flows {
             simulink_bus_m.push_str(&format!(
                 "  Simulink.BusElement('Name', '{}', 'DataType', '{}', 'Direction', '{}');\n",
-                flow.name, flow.item_type, flow.direction
+                escape_matlab_single_quoted(&flow.name),
+                escape_matlab_single_quoted(&flow.item_type),
+                escape_matlab_single_quoted(&flow.direction)
             ));
         }
         for (elec_k, elec_v) in &port_def.electrical_attributes {
             simulink_bus_m.push_str(&format!(
-                "  Simulink.BusElement('Name', '{elec_k}', 'DataType', '{elec_v}');\n"
+                "  Simulink.BusElement('Name', '{}', 'DataType', '{}');\n",
+                escape_matlab_single_quoted(elec_k),
+                escape_matlab_single_quoted(elec_v)
             ));
         }
         simulink_bus_m.push_str("];\n");
@@ -387,7 +597,8 @@ pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExp
         for attr in &part.attributes {
             simulink_bus_m.push_str(&format!(
                 "  Simulink.BusElement('Name', '{}', 'DataType', '{}');\n",
-                attr.name, attr.type_name
+                escape_matlab_single_quoted(&attr.name),
+                escape_matlab_single_quoted(&attr.type_name)
             ));
         }
         for port in &part.ports {
@@ -397,8 +608,10 @@ pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExp
                 port.type_name.as_str()
             };
             simulink_bus_m.push_str(&format!(
-                "  Simulink.BusElement('Name', '{}', 'DataType', '{port_ty}', 'Direction', '{}');\n",
-                port.name, port.direction
+                "  Simulink.BusElement('Name', '{}', 'DataType', '{}', 'Direction', '{}');\n",
+                escape_matlab_single_quoted(&port.name),
+                escape_matlab_single_quoted(port_ty),
+                escape_matlab_single_quoted(&port.direction)
             ));
         }
         simulink_bus_m.push_str("];\n");
@@ -408,8 +621,10 @@ pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExp
         .iter()
         .map(|part| deap_core::sysml_ast::TypeDescriptor::from_part_def(pkg_name, part))
         .collect();
-    let layer_contracts_json =
-        serde_json::to_string_pretty(&descriptors).unwrap_or_else(|_| "[]".to_string());
+    let layer_contracts_json = match serde_json::to_string_pretty(&descriptors) {
+        Ok(json) => json,
+        Err(_) => String::from("[]"),
+    };
 
     MbdExportBundle {
         slreq_xml,
@@ -426,23 +641,23 @@ pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExp
 /// `.m`, and `layer_contracts.json`) under DO-330 TQL-4 tool qualification constraints.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Writes exactly four files in deterministic order: `requirements.slreqx`,
+/// - Writes exactly four files atomically in deterministic order: `requirements.slreqx`,
 ///   `stateflow_chart.sfx`, `simulink_bus.m`, and `layer_contracts.json`.
-/// - Propagates all I/O failures explicitly via `Result<Vec<PathBuf>, String>` with zero silent drops.
+/// - Propagates all serialization and I/O failures explicitly via `Result<Vec<PathBuf>, String>` with zero silent drops.
 ///
 /// ## 3. Preconditions
 /// - `model` is a valid `SysmlModel` reference; `out_dir` is a writable target directory path.
 ///
 /// ## 4. Postconditions
 /// - Returns `Ok(Vec<PathBuf>)` containing the 4 written file paths upon success, or `Err(String)`
-///   describing any directory creation or file write error.
+///   describing any directory creation, serialization, or atomic file write error.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time complexity: $O(N)$ where $N$ is the total byte size of the synthesized MBD bundle.
 /// - Space complexity: $O(N)$ in-memory buffer allocation prior to flush.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Filesystem permission or I/O errors return descriptive `Err(String)` diagnostics.
+/// - Filesystem permission, serialization, or I/O errors return descriptive `Err(String)` diagnostics.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-EXPORT-MBD]
@@ -456,10 +671,21 @@ pub fn export_mbd_artifacts(
             out_dir.display()
         )
     })?;
-    let bundle = synthesize_mbd_bundle(model);
+    let pkg_name = model.package_name.as_deref().unwrap_or("SysML_Model");
+    let mut all_parts = Vec::new();
+    collect_model_parts_recursive(&model.parts, &mut all_parts);
+    let descriptors: Vec<deap_core::sysml_ast::TypeDescriptor> = all_parts
+        .iter()
+        .map(|part| deap_core::sysml_ast::TypeDescriptor::from_part_def(pkg_name, part))
+        .collect();
+    let layer_contracts_json = serde_json::to_string_pretty(&descriptors)
+        .map_err(|e| format!("Failed to serialize MBD TypeDescriptor contracts to JSON: {e}"))?;
+
+    let mut bundle = synthesize_mbd_bundle(model);
+    bundle.layer_contracts_json = layer_contracts_json;
 
     let slreq_path = out_dir.join("requirements.slreqx");
-    std::fs::write(&slreq_path, &bundle.slreq_xml).map_err(|e| {
+    crate::semantic::digest::write_atomic(&slreq_path, &bundle.slreq_xml).map_err(|e| {
         format!(
             "Failed to write MBD requirements artifact '{}': {e}",
             slreq_path.display()
@@ -467,7 +693,7 @@ pub fn export_mbd_artifacts(
     })?;
 
     let sfx_path = out_dir.join("stateflow_chart.sfx");
-    std::fs::write(&sfx_path, &bundle.stateflow_sfx).map_err(|e| {
+    crate::semantic::digest::write_atomic(&sfx_path, &bundle.stateflow_sfx).map_err(|e| {
         format!(
             "Failed to write MBD Stateflow artifact '{}': {e}",
             sfx_path.display()
@@ -475,7 +701,7 @@ pub fn export_mbd_artifacts(
     })?;
 
     let bus_path = out_dir.join("simulink_bus.m");
-    std::fs::write(&bus_path, &bundle.simulink_bus_m).map_err(|e| {
+    crate::semantic::digest::write_atomic(&bus_path, &bundle.simulink_bus_m).map_err(|e| {
         format!(
             "Failed to write MBD Simulink bus artifact '{}': {e}",
             bus_path.display()
@@ -483,12 +709,14 @@ pub fn export_mbd_artifacts(
     })?;
 
     let contracts_path = out_dir.join("layer_contracts.json");
-    std::fs::write(&contracts_path, &bundle.layer_contracts_json).map_err(|e| {
-        format!(
-            "Failed to write MBD layer contracts artifact '{}': {e}",
-            contracts_path.display()
-        )
-    })?;
+    crate::semantic::digest::write_atomic(&contracts_path, &bundle.layer_contracts_json).map_err(
+        |e| {
+            format!(
+                "Failed to write MBD layer contracts artifact '{}': {e}",
+                contracts_path.display()
+            )
+        },
+    )?;
 
     Ok(vec![slreq_path, sfx_path, bus_path, contracts_path])
 }
@@ -524,6 +752,29 @@ mod tests {
         assert!(src.contains("/// ## 7. Realization & Traceability"));
         assert!(src.contains("/// Realises: [REQ-COMPILER-SYSML-PARSE]"));
         assert!(src.contains("/// Realises: [REQ-COMPILER-SYSML-ESCAPE-XML]"));
+
+        for (name, file_src) in [
+            ("src/cli.rs", include_str!("cli.rs")),
+            ("src/driver.rs", include_str!("driver.rs")),
+            ("src/main.rs", include_str!("main.rs")),
+        ] {
+            assert!(
+                file_src.contains("//! ## 1. Safety Intent & Regulatory Scope"),
+                "{name} must contain module section 1"
+            );
+            assert!(
+                file_src.contains("//! ## 7. Realization & Traceability"),
+                "{name} must contain module section 7"
+            );
+            assert!(
+                file_src.contains("/// ## 1. Safety Intent & Regulatory Scope"),
+                "{name} must contain item section 1"
+            );
+            assert!(
+                file_src.contains("/// ## 7. Realization & Traceability"),
+                "{name} must contain item section 7"
+            );
+        }
 
         let parsed = parse_sysml("package Demo {}");
         assert!(parsed.is_ok());
@@ -750,6 +1001,235 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    /// Verifies that `flatten_package_to_model` flattens 3-level nested package hierarchies (`Root -> SubA -> SubB -> SubC`)
+    /// at depth $d \ge 2$ using an iterative stack both when `target_pkg` is `None` and when `target_pkg` selects `SubA`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D verification mandates
+    /// for deep package hierarchy flattening (`ARCH-03`) in `crates/compile-sysml/src/lib.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves `part_defs`, `port_defs`, `item_defs`, and `requirement_defs` declared at depth $d \ge 2$ (`SubB`, `SubC`).
+    /// - Preserves cross-package `requirement_defs`, `port_defs`, and `item_defs` when `target_pkg` selects `SubA`.
+    ///
+    /// ## 3. Preconditions
+    /// - A 4-package nested tree (`Root -> SubA -> SubB -> SubC`) is constructed in memory.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts all nested and cross-package definitions are present in the returned `SysmlModel`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(P + E) over packages and AST elements.
+    /// - Space Complexity: O(P + E) for the flattened model.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Pure in-memory AST verification.
+    /// - State: Stateless deterministic test.
+    /// - Action: Executes with zero recursion.
+    /// - Resource: Bounded memory allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-COMPILER-SYSML-TEST-ARCH-03-FLATTEN-DEEP]
+    #[test]
+    fn test_arch_03_flatten_package_to_model_deep_hierarchy() -> Result<(), Box<dyn std::error::Error>> {
+        let src = r#"
+            package Root {
+                port def RootPort;
+                item def RootItem {
+                    attribute version : Integer;
+                }
+                requirement def RootReq {
+                    id = "REQ-ROOT-01";
+                    text = "Root level requirement.";
+                }
+                part def RootPart;
+
+                package SubA {
+                    part def PartA;
+                    port def PortA;
+
+                    package SubB {
+                        part def PartB;
+                        requirement def ReqB {
+                            id = "REQ-B-01";
+                            text = "Depth 2 requirement.";
+                        }
+
+                        package SubC {
+                            part def PartC {
+                                item def PartCInnerItem;
+                            }
+                            port def PortC;
+                            item def ItemC {
+                                attribute payload : Real;
+                            }
+                            requirement def ReqC {
+                                id = "REQ-C-01";
+                                text = "Depth 3 requirement.";
+                            }
+                        }
+                    }
+                }
+            }
+        "#;
+        let pkg = parse_sysml(src)?;
+
+        // Case 1: target_pkg is None -> flattens Root, SubA, SubB (d=2), and SubC (d=3)
+        let model_all = flatten_package_to_model(pkg.clone(), None);
+        assert_eq!(model_all.package_name.as_deref(), Some("Root"));
+        assert!(model_all.parts.iter().any(|p| p.name == "RootPart"));
+        assert!(model_all.parts.iter().any(|p| p.name == "PartA"));
+        assert!(
+            model_all.parts.iter().any(|p| p.name == "PartB"),
+            "Depth-2 PartB must be flattened when target_pkg is None"
+        );
+        assert!(
+            model_all.parts.iter().any(|p| p.name == "PartC"),
+            "Depth-3 PartC must be flattened when target_pkg is None"
+        );
+        assert!(model_all.ports.iter().any(|p| p.name == "RootPort"));
+        assert!(model_all.ports.iter().any(|p| p.name == "PortA"));
+        assert!(
+            model_all.ports.iter().any(|p| p.name == "PortC"),
+            "Depth-3 PortC must be flattened when target_pkg is None"
+        );
+        assert!(model_all.requirements.iter().any(|r| r.name == "RootReq"));
+        assert!(
+            model_all.requirements.iter().any(|r| r.name == "ReqB"),
+            "Depth-2 ReqB must be flattened when target_pkg is None"
+        );
+        assert!(
+            model_all.requirements.iter().any(|r| r.name == "ReqC"),
+            "Depth-3 ReqC must be flattened when target_pkg is None"
+        );
+        assert!(
+            model_all
+                .parts
+                .iter()
+                .flat_map(|p| &p.item_defs)
+                .any(|i| i.name == "ItemC"),
+            "Depth-3 ItemC must be preserved when target_pkg is None"
+        );
+        assert!(
+            model_all
+                .parts
+                .iter()
+                .flat_map(|p| &p.item_defs)
+                .any(|i| i.name == "RootItem"),
+            "RootItem must be preserved when target_pkg is None"
+        );
+
+        // Case 2: target_pkg selects SubA -> flattens SubA->SubB->SubC and preserves cross-package reqs, ports, items
+        let model_suba = flatten_package_to_model(pkg, Some("SubA"));
+        assert_eq!(model_suba.package_name.as_deref(), Some("SubA"));
+        assert!(!model_suba.parts.iter().any(|p| p.name == "RootPart"));
+        assert!(model_suba.parts.iter().any(|p| p.name == "PartA"));
+        assert!(
+            model_suba.parts.iter().any(|p| p.name == "PartB"),
+            "Depth-2 PartB under SubA must be flattened when target_pkg selects SubA"
+        );
+        assert!(
+            model_suba.parts.iter().any(|p| p.name == "PartC"),
+            "Depth-3 PartC under SubA must be flattened when target_pkg selects SubA"
+        );
+        assert!(
+            model_suba.ports.iter().any(|p| p.name == "PortC"),
+            "Depth-3 PortC under SubA must be flattened when target_pkg selects SubA"
+        );
+        assert!(
+            model_suba.ports.iter().any(|p| p.name == "RootPort"),
+            "Cross-package RootPort must be preserved when target_pkg selects SubA"
+        );
+        assert!(
+            model_suba.requirements.iter().any(|r| r.name == "ReqB"),
+            "Depth-2 ReqB under SubA must be flattened when target_pkg selects SubA"
+        );
+        assert!(
+            model_suba.requirements.iter().any(|r| r.name == "ReqC"),
+            "Depth-3 ReqC under SubA must be flattened when target_pkg selects SubA"
+        );
+        assert!(
+            model_suba.requirements.iter().any(|r| r.name == "RootReq"),
+            "Cross-package RootReq must be preserved when target_pkg selects SubA"
+        );
+        assert!(
+            model_suba
+                .parts
+                .iter()
+                .flat_map(|p| &p.item_defs)
+                .any(|i| i.name == "ItemC"),
+            "Depth-3 ItemC under SubA must be preserved when target_pkg selects SubA"
+        );
+        assert!(
+            model_suba
+                .parts
+                .iter()
+                .flat_map(|p| &p.item_defs)
+                .any(|i| i.name == "RootItem"),
+            "Cross-package RootItem must be preserved when target_pkg selects SubA"
+        );
+
+        Ok(())
+    }
+
+    /// Verifies that `escape_matlab_single_quoted` doubles single quotes and `synthesize_mbd_bundle`
+    /// properly escapes single quotes in MATLAB `.m` bus literals (`ARCH-06`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D verification mandates
+    /// for MATLAB codegen escaping (`ARCH-06`) in `crates/compile-sysml/src/lib.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `escape_matlab_single_quoted("Controller's_State")` equals `"Controller''s_State"`.
+    /// - `synthesize_mbd_bundle` escapes single quotes across port, attribute, and flow literals in `simulink_bus_m`.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory `SysmlModel` contains attributes and ports with single quotes.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `simulink_bus_m` contains doubled single quotes inside MATLAB string literals.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over input string length.
+    /// - Space Complexity: O(N) for synthesized output.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Pure in-memory string assertions.
+    /// - State: Side-effect free unit test.
+    /// - Action: Deterministic execution.
+    /// - Resource: Bounded memory allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-COMPILER-SYSML-TEST-ARCH-06-MATLAB-ESCAPING]
+    #[test]
+    fn test_arch_06_escape_matlab_single_quoted_and_mbd_bus_literals() {
+        assert_eq!(
+            escape_matlab_single_quoted("Controller's_State"),
+            "Controller''s_State"
+        );
+
+        let mut model = deap_core::sysml_ast::SysmlModel::default();
+        model.package_name = Some("CtrlPkg".to_string());
+        let mut part = PartDef::default();
+        part.name = "PrimaryController".to_string();
+        part.attributes.push(AttributeDef {
+            name: "Controller's_State".to_string(),
+            type_name: "Real's_Type".to_string(),
+            default_value: None,
+            doc: None,
+        });
+        model.parts.push(part);
+
+        let bundle = synthesize_mbd_bundle(&model);
+        assert!(
+            bundle
+                .simulink_bus_m
+                .contains("Simulink.BusElement('Name', 'Controller''s_State', 'DataType', 'Real''s_Type');"),
+            "simulink_bus_m must escape single quotes in MATLAB string literals:\n{}",
+            bundle.simulink_bus_m
+        );
     }
 }
 

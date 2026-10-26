@@ -662,7 +662,8 @@ pub fn emit_safety_suite(
     let artifacts = transpile_safety_suite(pkg, scoring_config);
     for (filename, content) in artifacts {
         let dest = out_dir.join(&filename);
-        write_atomic(&dest, &content).map_err(|e| e.to_string())?;
+        write_atomic(&dest, &content)
+            .map_err(|e| format!("Failed to write safety artifact '{}': {}", dest.display(), e))?;
     }
 
     Ok(())
@@ -2063,6 +2064,65 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
         assert!(stpa.contains("FMECA Criticality Matrix") || stpa.contains("FMECA"), "STPA_MATRIX.md must contain Pillar 7 (FMECA Criticality Matrix)");
         assert!(stpa.contains("Regulatory Objectives") || stpa.contains("SORA SAIL"), "STPA_MATRIX.md must contain Pillar 8 (Regulatory Objectives & Risk Mitigations)");
         assert!(stpa.contains("ASTM F3269-17") || stpa.contains("Stateflow"), "STPA_MATRIX.md must contain ASTM F3269-17 RTA / Stateflow hooks");
+        Ok(())
+    }
+
+    /// Verifies `ARCH-04`: `emit_safety_suite` delegates persistence to `write_atomic`
+    /// and leaves zero `.tmp.*` files in the output directory.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_arch_04_emit_safety_suite_writes_atomically` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Ensures all 10 safety artifacts are persisted via atomic temp-then-rename with zero leftover temporary files.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary output directory is writable.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts all 10 safety artifacts exist on disk and zero `.tmp.` files remain.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over emitted artifacts.
+    /// - Space Complexity: O(N) bounded memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Cleans up temporary directory after verification.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-STPA-SAFETY-SUITE-EMIT-SAFETY-SUITE] | SysML v2: VerificationCaseDef(test_arch_04_emit_safety_suite_writes_atomically)
+    #[test]
+    fn test_arch_04_emit_safety_suite_writes_atomically() -> Result<(), Box<dyn std::error::Error>> {
+        let mut pkg = PackageDef {
+            name: "AtomicSafetyPkg".to_string(),
+            ..Default::default()
+        };
+        pkg.part_defs.push(PartDef {
+            name: "SafetyController".to_string(),
+            ..Default::default()
+        });
+
+        let out_dir = std::env::temp_dir().join(format!(
+            "deap_test_emit_safety_suite_atomic_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&out_dir);
+        emit_safety_suite(&pkg, &out_dir, None)?;
+
+        let mut count = 0usize;
+        for entry in fs::read_dir(&out_dir).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let fname = entry.file_name().to_string_lossy().to_string();
+            assert!(
+                !fname.contains(".tmp."),
+                "No temporary file may remain after emit_safety_suite: {}",
+                fname
+            );
+            count += 1;
+        }
+        assert!(count >= 10, "emit_safety_suite must write all safety suite artifacts");
+
+        let _ = fs::remove_dir_all(&out_dir);
         Ok(())
     }
 }
