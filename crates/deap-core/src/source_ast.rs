@@ -1200,6 +1200,7 @@ pub fn parse_rust_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
     let mut active_struct_idx: Option<usize> = None;
     let mut active_enum_idx: Option<usize> = None;
     let mut active_impl_owner: Option<String> = None;
+    let mut pending_impl_header: Option<String> = None;
     let mut active_fn_idx: Option<usize> = None;
     let mut pending_sig_fn_idx: Option<usize> = None;
     let mut pending_sig_text = String::new();
@@ -1280,9 +1281,25 @@ pub fn parse_rust_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
 
         if paren_depth == 0 {
             if brace_depth == 0 {
-                if let Some(impl_target) = parse_rust_impl_header(code) {
-                    active_impl_owner = Some(impl_target);
-                    current_doc.clear();
+                let after_unsafe = code.strip_prefix("unsafe ").unwrap_or(code).trim_start();
+                let starts_impl = after_unsafe == "impl"
+                    || after_unsafe.starts_with("impl<")
+                    || after_unsafe.starts_with("impl ");
+                if pending_impl_header.is_some() || starts_impl {
+                    let mut combined_impl = pending_impl_header.take().unwrap_or_default();
+                    if !combined_impl.is_empty() {
+                        combined_impl.push(' ');
+                    }
+                    combined_impl.push_str(code);
+                    if code.contains('{') || code.contains(';') || code.contains('}') {
+                        if let Some(impl_target) = parse_rust_impl_header(&combined_impl) {
+                            active_impl_owner = Some(impl_target);
+                        }
+                        cfg_test_pending = false;
+                        current_doc.clear();
+                    } else {
+                        pending_impl_header = Some(combined_impl);
+                    }
                 } else if let Some((kind, name)) = classify_rust_item_line_ast(code) {
                     if cfg_test_pending {
                         cfg_test_pending = false;
@@ -1443,7 +1460,10 @@ pub fn parse_rust_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
         if brace_depth == 0 {
             active_struct_idx = None;
             active_enum_idx = None;
-            active_impl_owner = None;
+            if active_impl_owner.is_some() {
+                active_impl_owner = None;
+                pending_impl_header = None;
+            }
             active_fn_idx = None;
         } else if brace_depth == 1 && active_impl_owner.is_some() {
             active_fn_idx = None;
@@ -2331,19 +2351,25 @@ pub fn summary_from_doc_lines(doc_lines: &[String]) -> Option<String> {
 /// Realises: [REQ-FEAT-42-PARSE-RUST-IMPL-HEADER]
 fn parse_rust_impl_header(code: &str) -> Option<String> {
     let after_unsafe = code.strip_prefix("unsafe ").unwrap_or(code).trim_start();
-    let rest = if let Some(r) = after_unsafe.strip_prefix("impl<") {
+    let rest = if let Some(r) = after_unsafe
+        .strip_prefix("impl")
+        .map(str::trim_start)
+        .and_then(|s| s.strip_prefix('<'))
+    {
         let mut depth: usize = 1;
         let mut end_idx: Option<usize> = None;
+        let mut prev_ch: Option<char> = None;
         for (i, ch) in r.char_indices() {
             if ch == '<' {
                 depth = depth.saturating_add(1);
-            } else if ch == '>' {
+            } else if ch == '>' && prev_ch != Some('-') {
                 depth = depth.saturating_sub(1);
                 if depth == 0 {
                     end_idx = Some(i.saturating_add(1));
                     break;
                 }
             }
+            prev_ch = Some(ch);
         }
         r.get(end_idx?..).unwrap_or("").trim_start()
     } else {
@@ -2355,10 +2381,44 @@ fn parse_rust_impl_header(code: &str) -> Option<String> {
     }
 
     let before_brace = rest.split_once('{').map(|(b, _)| b.trim()).unwrap_or(rest);
-    let target_part = if let Some((_, after_for)) = before_brace.split_once(" for ") {
-        after_for.trim()
-    } else {
-        before_brace
+    let without_where = before_brace
+        .split_once(" where ")
+        .map(|(before, _)| before.trim())
+        .unwrap_or_else(|| {
+            before_brace
+                .strip_suffix(" where")
+                .map(str::trim)
+                .unwrap_or(before_brace)
+        });
+
+    let mut angle_depth: usize = 0;
+    let mut paren_depth: usize = 0;
+    let mut prev_ch: Option<char> = None;
+    let mut top_level_for_end: Option<usize> = None;
+    for (i, ch) in without_where.char_indices() {
+        if angle_depth == 0
+            && paren_depth == 0
+            && without_where
+                .get(i..)
+                .map(|s| s.starts_with(" for "))
+                .unwrap_or(false)
+        {
+            top_level_for_end = Some(i.saturating_add(" for ".len()));
+            break;
+        }
+        match ch {
+            '<' => angle_depth = angle_depth.saturating_add(1),
+            '>' if prev_ch != Some('-') => angle_depth = angle_depth.saturating_sub(1),
+            '(' => paren_depth = paren_depth.saturating_add(1),
+            ')' => paren_depth = paren_depth.saturating_sub(1),
+            _ => {}
+        }
+        prev_ch = Some(ch);
+    }
+
+    let target_part = match top_level_for_end {
+        Some(idx) => without_where.get(idx..).unwrap_or("").trim(),
+        None => without_where,
     };
     let target_clean = target_part.trim_start_matches('&').trim_start_matches("mut ").trim();
     extract_leading_ast_ident(target_clean)
@@ -5717,6 +5777,105 @@ impl ComponentAlpha {
                 panel.doc
             ));
         }
+        Ok(())
+    }
+
+    /// Verifies that `parse_rust_source_ast` and `parse_rust_impl_header` accurately classify methods inside multi-line `impl` blocks, `impl<F: Fn(...) -> Ret>` arrow bounds, and `where` clauses containing HRTB `for<'a>` bounds (`#558`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_issue_558_multiline_impl_headers_and_fn_arrow_bounds`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Multi-line `impl` and `unsafe impl` headers accumulate across lines until `{` is reached before `parse_rust_impl_header` resolves `active_impl_owner`.
+    /// - Return-type arrows `->` inside `Fn(...) -> ...` or `fn(...) -> ...` generic bounds do not prematurely decrement `<...>` generic depth.
+    /// - Top-level `where` clauses (including `for<'a>` higher-ranked trait bounds) are stripped prior to splitting on top-level `" for "`.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory Rust source fixture containing multi-line `impl` blocks, `Fn(u32) -> bool` bounds in `impl<...>`, and trait `impl` headers with `where for<'a>` bounds.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when all methods inside those `impl` blocks are classified as `SourceItemKind::Method` with `owner_name == Some("TelemetryProcessor")` and lowered onto `TelemetryProcessor`'s `PartDef.actions`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(L) over source lines and header length L.
+    /// - Space Complexity: O(I) for extracted AST items and lowered package definitions.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), String>` with diagnostic details on classification or owner mismatch.
+    /// - State: Stateless in-memory test.
+    /// - Action: Zero panics, unwraps, or expectations.
+    /// - Resource: Bounded stack and heap fixture strings.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-PARSE-RUST-IMPL-HEADER]
+    #[test]
+    fn test_issue_558_multiline_impl_headers_and_fn_arrow_bounds() -> Result<(), String> {
+        let src = concat!(
+            "pub struct TelemetryProcessor<F> {\n",
+            "    pub filter: F,\n",
+            "}\n",
+            "\n",
+            "impl<F: Fn(u32) -> bool> TelemetryProcessor<F> {\n",
+            "    pub fn eval_inline(&self, sample: u32) -> bool {\n",
+            "        (self.filter)(sample)\n",
+            "    }\n",
+            "}\n",
+            "\n",
+            "impl<F>\n",
+            "    TelemetryProcessor<F>\n",
+            "where\n",
+            "    F: Fn(u32) -> bool,\n",
+            "    for<'a> &'a F: Send,\n",
+            "{\n",
+            "    pub fn eval_multiline(&self, sample: u32) -> bool {\n",
+            "        (self.filter)(sample)\n",
+            "    }\n",
+            "}\n",
+            "\n",
+            "unsafe impl<F>\n",
+            "    Send for TelemetryProcessor<F>\n",
+            "where\n",
+            "    for<'a> &'a F: Sync,\n",
+            "{\n",
+            "    fn verify_send(&self) {}\n",
+            "}\n",
+        );
+
+        let ast = parse_rust_source_ast(src, "issue_558.rs")?;
+        for method_name in ["eval_inline", "eval_multiline", "verify_send"] {
+            let item = ast
+                .iter()
+                .find(|i| i.name == method_name)
+                .ok_or_else(|| format!("Expected AST item '{method_name}' to be extracted"))?;
+            if item.kind != SourceItemKind::Method {
+                return Err(format!(
+                    "Expected '{method_name}' to have kind Method, got {:?}",
+                    item.kind
+                ));
+            }
+            if item.owner_name.as_deref() != Some("TelemetryProcessor") {
+                return Err(format!(
+                    "Expected '{method_name}' to have owner_name Some(\"TelemetryProcessor\"), got {:?}",
+                    item.owner_name
+                ));
+            }
+        }
+
+        let pkg = lower_source_ast_to_package(&ast, "TelemetryPkg");
+        let proc_part = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "TelemetryProcessor")
+            .ok_or_else(|| "Expected TelemetryProcessor PartDef".to_string())?;
+        for method_name in ["eval_inline", "eval_multiline", "verify_send"] {
+            if !proc_part.actions.iter().any(|a| a.name == method_name) {
+                return Err(format!(
+                    "Expected TelemetryProcessor.actions to contain '{method_name}', got {:?}",
+                    proc_part.actions
+                ));
+            }
+        }
+
         Ok(())
     }
 }
