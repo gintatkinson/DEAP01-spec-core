@@ -296,6 +296,7 @@ fn clean_normative_text(raw: &str) -> String {
     let text = strip_latex_math_commands(&text, Some(&["mathbf", "mathcal", "text", "oint"]));
     let text = text.replace('\\', "");
     let mut cleaned = collapse_whitespace(&text);
+    cleaned = cleaned.replace("*/", "* /").replace("/*", "/ *");
     cleaned = cleaned.replace('"', "\\\"");
 
     if cleaned.len() > 300 {
@@ -346,9 +347,17 @@ fn clean_normative_text(raw: &str) -> String {
 fn extract_normative_statement(content: &str) -> String {
     let mut found_heading = false;
     let mut statement_lines = Vec::new();
+    let mut in_fence = false;
 
     for line in content.lines() {
         let trimmed = line.trim();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
         if trimmed.starts_with("## 1. Normative Statement") || trimmed.starts_with("## 1.") {
             found_heading = true;
             continue;
@@ -410,6 +419,8 @@ fn clean_meta_val(val: &str) -> String {
     let s = s.replace('$', "");
     let s = strip_latex_math_commands(&s, Some(&["mathbf", "mathcal", "text"]));
     collapse_whitespace(&s)
+        .replace("*/", "* /")
+        .replace("/*", "/ *")
 }
 
 /// Executes deterministic fn `extract_req_metadata` within `crates/ingest-sysml/src/translators/markdown.rs`.
@@ -447,9 +458,17 @@ fn extract_req_metadata(
     let mut complexity = String::new();
     let mut standard = String::new();
     let mut diagnostics = String::new();
+    let mut in_fence = false;
 
     for line in content.lines() {
         let trimmed = line.trim();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
         if trimmed.starts_with("## ") {
             break;
         }
@@ -522,6 +541,7 @@ fn clean_bdd_text(raw: &str) -> String {
     let text = strip_latex_math_commands(&text, None);
     let text = text.replace('\\', "");
     let mut cleaned = collapse_whitespace(&text);
+    cleaned = cleaned.replace("*/", "* /").replace("/*", "/ *");
     cleaned = cleaned.replace('"', "\\\"");
     cleaned
 }
@@ -679,14 +699,20 @@ fn extract_acceptance_criteria(content: &str) -> Vec<(String, String, String)> {
             let mut then = String::new();
             let mut diag = String::new();
             let mut fallback_lines = Vec::new();
+            let mut inner_in_fence = false;
 
             while i < n {
-                let cur_line = lines[i].trim();
-                if cur_line.starts_with('#')
-                    || cur_line.starts_with("---")
-                    || cur_line.starts_with("```")
-                    || cur_line.starts_with("~~~")
-                {
+                let cur_line = lines.get(i).map_or("", |l| l.trim());
+                if cur_line.starts_with("```") || cur_line.starts_with("~~~") {
+                    inner_in_fence = !inner_in_fence;
+                    i += 1;
+                    continue;
+                }
+                if inner_in_fence {
+                    i += 1;
+                    continue;
+                }
+                if cur_line.starts_with('#') || cur_line.starts_with("---") {
                     break;
                 }
                 if !cur_line.is_empty() {
@@ -973,65 +999,48 @@ fn clean_math_doc(raw: &str) -> String {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-INGEST-MD/extract_formal_invariants] | SysML v2: ActionDef(extract_formal_invariants)
 pub fn extract_formal_invariants(content: &str, req_num: &str) -> Vec<ConstraintDef> {
-    let mut section_slices: Vec<&str> = Vec::new();
-    if let Some(start_pos) = content
-        .find("## 2. Formal Invariant")
-        .or_else(|| content.find("## 2."))
-    {
-        let after_start = content.get(start_pos..).unwrap_or("");
-        if let Some(newline_pos) = after_start.find('\n') {
-            let body = after_start.get(newline_pos + 1..).unwrap_or("");
-            let mut end_pos = body.len();
-            for marker in &[
-                "\n## ",
-                "\n## 3.",
-                "\n## 3",
-                "\n---\n\n## 3",
-                "\n---\r\n\r\n## 3",
-                "\n---",
-            ] {
-                if let Some(p) = body.find(marker) {
-                    if p < end_pos {
-                        end_pos = p;
+    let mut section_line_blocks: Vec<Vec<&str>> = Vec::new();
+    for prefixes in [
+        &["## 2. Formal Invariant", "## 2."][..],
+        &["## 4. Formal", "## 4. Mathematical", "## 4. Safety"][..],
+    ] {
+        let mut in_fence = false;
+        let mut in_sec = false;
+        let mut collected: Vec<&str> = Vec::new();
+        for raw_line in content.lines() {
+            let t = raw_line.trim();
+            if t.starts_with("```") || t.starts_with("~~~") {
+                in_fence = !in_fence;
+                if in_sec {
+                    collected.push(raw_line);
+                }
+                continue;
+            }
+            if !in_fence {
+                if !in_sec {
+                    if prefixes.iter().any(|p| t.starts_with(p)) {
+                        in_sec = true;
+                        continue;
                     }
+                } else if t.starts_with("## ") || t.starts_with("---") {
+                    break;
                 }
             }
-            section_slices.push(body.get(..end_pos).unwrap_or(body));
+            if in_sec {
+                collected.push(raw_line);
+            }
         }
-    }
-    if let Some(start_pos) = content
-        .find("## 4. Formal")
-        .or_else(|| content.find("## 4. Mathematical"))
-        .or_else(|| content.find("## 4. Safety"))
-    {
-        let after_start = content.get(start_pos..).unwrap_or("");
-        if let Some(newline_pos) = after_start.find('\n') {
-            let body = after_start.get(newline_pos + 1..).unwrap_or("");
-            let mut end_pos = body.len();
-            for marker in &[
-                "\n## ",
-                "\n## 5.",
-                "\n## 5",
-                "\n---\n\n## 5",
-                "\n---\r\n\r\n## 5",
-                "\n---",
-            ] {
-                if let Some(p) = body.find(marker) {
-                    if p < end_pos {
-                        end_pos = p;
-                    }
-                }
-            }
-            section_slices.push(body.get(..end_pos).unwrap_or(body));
+        if !collected.is_empty() {
+            section_line_blocks.push(collected);
         }
     }
 
     let mut invariants = Vec::new();
-    for sec_content in section_slices {
-        let lines: Vec<&str> = sec_content.lines().collect();
+    for lines in section_line_blocks {
         let mut i = 0;
         let n = lines.len();
         let mut pending_title: Option<String> = None;
+        let mut in_code_fence = false;
 
         while i < n {
             let Some(raw_line) = lines.get(i).copied() else {
@@ -1039,6 +1048,20 @@ pub fn extract_formal_invariants(content: &str, req_num: &str) -> Vec<Constraint
             };
             let line = raw_line.trim();
             if line.is_empty() {
+                i += 1;
+                continue;
+            }
+            if in_code_fence {
+                if line.starts_with("```") || line.starts_with("~~~") {
+                    in_code_fence = false;
+                }
+                i += 1;
+                continue;
+            }
+            if (line.starts_with("```") && !line.starts_with("```math"))
+                || line.starts_with("~~~")
+            {
+                in_code_fence = true;
                 i += 1;
                 continue;
             }
@@ -1537,6 +1560,38 @@ fn escape_sysml_string_literal(raw: &str) -> String {
     }
     out.push('"');
     out
+}
+
+/// Composes a grounded SysML docstring and sanitizes lexical comment delimiters (`/*` and `*/`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `compose_sanitized_doc` in `crates/ingest-sysml/src/translators/markdown.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic doc composition via `compose_grounded_doc` while neutralizing `/*` and `*/` substrings so emitted `doc /* ... */` blocks remain lexically closed.
+///
+/// ## 3. Preconditions
+/// - `desc: &str`, `citation: &str`, and `unit: &str` are valid UTF-8 slices.
+///
+/// ## 4. Postconditions
+/// - Returns a `String` guaranteed not to contain raw `/*` or `*/` sequences.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) bounded over the combined length of `desc`, `citation`, and `unit`.
+/// - Space Complexity: O(N) bounded heap allocation for the sanitized docstring.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total function over `(&str, &str, &str)`.
+/// - State: Pure stateless transformation.
+/// - Action: Zero panics, regexes, or slice indexing.
+/// - Resource: Bounded string allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-TRANSLATORS-MARKDOWN-COMPOSE-SANITIZED-DOC] | SysML v2: ActionDef(compose_sanitized_doc)
+fn compose_sanitized_doc(desc: &str, citation: &str, unit: &str) -> String {
+    compose_grounded_doc(desc, citation, unit)
+        .replace("*/", "* /")
+        .replace("/*", "/ *")
 }
 
 /// Extracts BOM bullet subcomponent items (`- <Ident> (Quantity <N>): <Desc>`) into `PartDef` AST nodes.
@@ -3358,7 +3413,11 @@ impl MarkdownTranslator {
                 secs.push(ParsedSection {
                     header: sec_hdr.clone(),
                     component_target: comp_tgt.clone(),
-                    section_doc: sec_doc.join(" ").trim().to_string(),
+                    section_doc: sec_doc
+                        .join(" ")
+                        .trim()
+                        .replace("*/", "* /")
+                        .replace("/*", "/ *"),
                     tables: tbls.clone(),
                 });
             }
@@ -3825,7 +3884,7 @@ impl MarkdownTranslator {
                 let attr_name = sanitize_identifier(col, "attr");
                 if ["description", "doc", "function", "notes"].contains(&col.as_str()) {
                     desc_found = true;
-                    let part_doc = compose_grounded_doc(val.trim(), &row_citation, "");
+                    let part_doc = compose_sanitized_doc(val.trim(), &row_citation, "");
                     if part.doc.is_none() {
                         part.doc = Some(part_doc);
                     }
@@ -3854,7 +3913,7 @@ impl MarkdownTranslator {
                     ("String".to_string(), escape_sysml_string_literal(val))
                 };
 
-                let doc_str = compose_grounded_doc("", &row_citation, &eff_unit);
+                let doc_str = compose_sanitized_doc("", &row_citation, &eff_unit);
                 if !part.attributes.iter().any(|a| a.name == attr_name) {
                     part.attributes.push(AttributeDef {
                         name: attr_name,
@@ -3866,7 +3925,7 @@ impl MarkdownTranslator {
             }
 
             if !desc_found && !row_citation.is_empty() && part.doc.is_none() {
-                part.doc = Some(compose_grounded_doc("", &row_citation, ""));
+                part.doc = Some(compose_sanitized_doc("", &row_citation, ""));
             }
         }
     }
@@ -3984,26 +4043,24 @@ impl MarkdownTranslator {
         let def_val = if raw_def.is_empty() {
             None
         } else if type_name == "Integer" {
-            Some(
-                int_val
-                    .map(|v| v.to_string())
-                    .unwrap_or_else(|| escape_sysml_string_literal(raw_def)),
-            )
+            int_val
+                .map(|v| v.to_string())
+                .or_else(|| raw_def.parse::<i64>().ok().map(|v| v.to_string()))
         } else if type_name == "Real" {
-            Some(
-                num_val
-                    .map(|v| v.to_string())
-                    .unwrap_or_else(|| escape_sysml_string_literal(raw_def)),
-            )
-        } else if type_name == "Boolean"
-            && (raw_def.eq_ignore_ascii_case("true") || raw_def.eq_ignore_ascii_case("false"))
-        {
-            Some(raw_def.to_ascii_lowercase())
+            num_val
+                .map(|v| v.to_string())
+                .or_else(|| raw_def.parse::<f64>().ok().map(|v| v.to_string()))
+        } else if type_name == "Boolean" {
+            if raw_def.eq_ignore_ascii_case("true") || raw_def.eq_ignore_ascii_case("false") {
+                Some(raw_def.to_ascii_lowercase())
+            } else {
+                None
+            }
         } else {
             Some(escape_sysml_string_literal(raw_def))
         };
 
-        let doc_str = compose_grounded_doc(raw_desc, row_citation, &eff_unit);
+        let doc_str = compose_sanitized_doc(raw_desc, row_citation, &eff_unit);
         if !part.attributes.iter().any(|a| a.name == attr_name) {
             part.attributes.push(AttributeDef {
                 name: attr_name,
@@ -4298,7 +4355,7 @@ impl MarkdownTranslator {
                 .to_string();
             let cit = extract_provenance_citation(row, headers);
             let raw_desc = doc_col.and_then(|c| row.get(c)).map_or("", |v| v.trim());
-            let doc = compose_grounded_doc(raw_desc, &cit, "");
+            let doc = compose_sanitized_doc(raw_desc, &cit, "");
 
             let rate_hz = rate_col.and_then(|c| row.get(c)).and_then(|v| {
                 let (r_val, _, _) = parse_numeric_with_unit(v);
@@ -4317,7 +4374,7 @@ impl MarkdownTranslator {
             let mut item_flows = Vec::new();
             if rate_hz.is_some() || !eff_unit.is_empty() || val_range.is_some() || (type_name != "Port" && direction != "inout") {
                 let flow_name = format!("{}_flow", port_name);
-                let flow_doc = compose_grounded_doc(raw_desc, &cit, &eff_unit);
+                let flow_doc = compose_sanitized_doc(raw_desc, &cit, &eff_unit);
                 item_flows.push(FlowDef {
                     name: flow_name,
                     direction: if direction != "inout" {
@@ -4368,7 +4425,7 @@ impl MarkdownTranslator {
                     .map_or("", |v| v.trim().trim_matches(['`', '*', ' ']));
                 if !src_val.is_empty() && !tgt_val.is_empty() {
                     let conn_name = format!("conn_{}", port_name);
-                    let conn_doc = compose_grounded_doc(raw_desc, &cit, "");
+                    let conn_doc = compose_sanitized_doc(raw_desc, &cit, "");
                     let latency_ms = latency_col.and_then(|c| {
                         let raw_lat = row.get(c)?;
                         let col_u = unit_map.get(c).map(String::as_str).unwrap_or("");
@@ -4559,7 +4616,7 @@ impl MarkdownTranslator {
                 } else {
                     format!("assert_{}_range", param_name)
                 };
-                let con_doc = compose_grounded_doc(raw_desc, &cit, &eff_unit);
+                let con_doc = compose_sanitized_doc(raw_desc, &cit, &eff_unit);
                 let constraint_def = ConstraintDef {
                     name: con_name.clone(),
                     expression,
@@ -4600,6 +4657,11 @@ impl MarkdownTranslator {
                         | "i8"
                 ) {
                     "Integer".to_string()
+                } else if matches!(
+                    low.as_str(),
+                    "real" | "float" | "float32" | "float64" | "double" | "f64" | "f32"
+                ) {
+                    "Real".to_string()
                 } else if matches!(low.as_str(), "bool" | "boolean") {
                     "Boolean".to_string()
                 } else if matches!(low.as_str(), "str" | "string") {
@@ -4616,10 +4678,21 @@ impl MarkdownTranslator {
                 .map_or("", |v| v.trim().trim_matches('`').trim());
             let def_val = if !raw_def.is_empty() {
                 let (num_v, _, int_v) = parse_numeric_with_unit(raw_def);
-                if let Some(i_val) = int_v.filter(|_| type_name == "Integer") {
-                    Some(i_val.to_string())
-                } else if let Some(n_v) = num_v {
-                    Some(n_v.to_string())
+                if type_name == "Integer" {
+                    int_v
+                        .map(|v| v.to_string())
+                        .or_else(|| raw_def.parse::<i64>().ok().map(|v| v.to_string()))
+                } else if type_name == "Real" {
+                    num_v
+                        .map(|v| v.to_string())
+                        .or_else(|| raw_def.parse::<f64>().ok().map(|v| v.to_string()))
+                } else if type_name == "Boolean" {
+                    if raw_def.eq_ignore_ascii_case("true") || raw_def.eq_ignore_ascii_case("false")
+                    {
+                        Some(raw_def.to_ascii_lowercase())
+                    } else {
+                        None
+                    }
                 } else {
                     Some(escape_sysml_string_literal(raw_def))
                 }
@@ -4627,7 +4700,7 @@ impl MarkdownTranslator {
                 None
             };
 
-            let attr_doc = compose_grounded_doc(raw_desc, &cit, &eff_unit);
+            let attr_doc = compose_sanitized_doc(raw_desc, &cit, &eff_unit);
             let attr_def = AttributeDef {
                 name: param_name.clone(),
                 type_name,
@@ -4698,17 +4771,22 @@ impl MarkdownTranslator {
         let type_col = headers
             .iter()
             .find(|h| ["type", "data_type", "attribute_type", "value_type"].contains(&h.as_str()));
-        let def_col = headers
-            .iter()
-            .find(|h| ["default", "default_value", "value", "initial_value", "nominal"].contains(&h.as_str()));
-
-        let v_col = if type_col.is_some() && def_col.is_some() {
-            def_col.unwrap_or(k_col)
-        } else if let Some(second) = headers.get(1) {
-            second
-        } else {
-            k_col
-        };
+        let def_col = headers.iter().find(|h| {
+            [
+                "default",
+                "default_bound",
+                "default_value",
+                "bound",
+                "bounds",
+                "value",
+                "nominal",
+                "initial_value",
+                "limit",
+                "range",
+                "valid_range",
+            ]
+            .contains(&h.as_str())
+        });
 
         let mut d_col: Option<&String> = headers
             .iter()
@@ -4717,12 +4795,22 @@ impl MarkdownTranslator {
             .iter()
             .find(|h| ["unit", "units", "engineering_units"].contains(&h.as_str()));
 
+        let v_col: Option<&String> = def_col.or_else(|| {
+            headers.iter().skip(1).find(|h| {
+                Some(*h) != type_col
+                    && Some(*h) != unit_col
+                    && Some(*h) != d_col
+                    && !PROVENANCE_COLUMNS.contains(&h.as_str())
+            })
+        });
+
         if d_col.is_none() {
             for h in headers.iter().skip(2) {
                 if !PROVENANCE_COLUMNS.contains(&h.as_str())
                     && Some(h) != unit_col
                     && Some(h) != type_col
                     && Some(h) != def_col
+                    && Some(h) != v_col
                 {
                     d_col = Some(h);
                     break;
@@ -4732,7 +4820,7 @@ impl MarkdownTranslator {
 
         for row in &table.rows {
             let raw_k = row.get(k_col).map_or("", |v| v.trim());
-            let raw_v = row.get(v_col).map_or("", |v| v.trim());
+            let raw_v = v_col.and_then(|c| row.get(c)).map_or("", |v| v.trim());
             if raw_k.is_empty() {
                 continue;
             }
@@ -4803,20 +4891,30 @@ impl MarkdownTranslator {
                         clean_v.parse::<i64>().ok().map(|v| v.to_string())
                     };
                     ("Integer".to_string(), i_str)
-                } else if matches!(low.as_str(), "real" | "float" | "double" | "f64" | "f32") {
+                } else if matches!(
+                    low.as_str(),
+                    "real" | "float" | "float32" | "float64" | "double" | "f64" | "f32"
+                ) {
                     let r_str = if let Some(n_val) = num_v {
                         Some(n_val.to_string())
                     } else {
                         clean_v.parse::<f64>().ok().map(|v| v.to_string())
                     };
                     ("Real".to_string(), r_str)
-                } else {
+                } else if matches!(low.as_str(), "str" | "string") {
                     let s_val = if !clean_v.is_empty() {
                         Some(escape_sysml_string_literal(clean_v))
                     } else {
                         None
                     };
                     ("String".to_string(), s_val)
+                } else {
+                    let s_val = if !clean_v.is_empty() {
+                        Some(escape_sysml_string_literal(clean_v))
+                    } else {
+                        None
+                    };
+                    (sanitize_identifier(explicit_type, "String"), s_val)
                 }
             } else if let Some(i_val) = int_v {
                 if !clean_v.contains('.') {
@@ -4834,7 +4932,7 @@ impl MarkdownTranslator {
                 ("String".to_string(), None)
             };
 
-            let eff_doc = compose_grounded_doc(raw_desc, &cit, &unit);
+            let eff_doc = compose_sanitized_doc(raw_desc, &cit, &unit);
             let attr_def = AttributeDef {
                 name: attr_name.clone(),
                 type_name,
@@ -5637,6 +5735,244 @@ All safety invariants verified.
         assert!(
             tc_names.iter().any(|t| t.contains("TC_M2M_01")),
             "missing TC_M2M_01 in {tc_names:?}"
+        );
+
+        Ok(())
+    }
+
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_524_doc_sanitization_property_table_columns_and_fenced_code_scanners` in `crates/ingest-sysml/src/translators/markdown.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Verifies Issue #524 fixes: (1) lexical comment delimiter (`/*`, `*/`) sanitization across doc/text builders; (2) property table column resolution (`Default / Bound`, `float32`/`float64`, custom types, and `None` default on non-parseable numeric/boolean bounds across BOM/constraints/properties); and (3) fence-aware scanning in `extract_normative_statement`, `extract_req_metadata`, `extract_acceptance_criteria`, and `extract_formal_invariants`.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked with synthetic Markdown inputs exercising comment delimiters, multi-column property/BOM/constraint tables, and fenced code blocks.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when all three defect classes are resolved without regression.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over the synthetic Markdown fixtures.
+    /// - Space Complexity: O(1) bounded auxiliary test memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates assertion failures via `Result<(), String>`.
+    /// - State: Isolated in-memory AST structures.
+    /// - Action: Zero `.unwrap()`, `.expect()`, or slice indexing.
+    /// - Resource: Zero filesystem side effects.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-INGEST-MD/test_issue_524_doc_sanitization_property_table_columns_and_fenced_code_scanners] | SysML v2: VerificationCaseDef(test_issue_524_doc_sanitization_property_table_columns_and_fenced_code_scanners)
+    #[test]
+    fn test_issue_524_doc_sanitization_property_table_columns_and_fenced_code_scanners() -> Result<(), String> {
+        // Fix 1: Sanitize /* and */ across text & doc builders
+        let norm_cleaned = clean_normative_text("The system /* block */ shall sanitize */ tokens.");
+        assert!(!norm_cleaned.contains("/*") && !norm_cleaned.contains("*/"));
+        assert!(norm_cleaned.contains("/ *") && norm_cleaned.contains("* /"));
+
+        let bdd_cleaned = clean_bdd_text("Given /* state */ when trigger */ then active");
+        assert!(!bdd_cleaned.contains("/*") && !bdd_cleaned.contains("*/"));
+        assert!(bdd_cleaned.contains("/ *") && bdd_cleaned.contains("* /"));
+
+        // Fix 2 & Fix 1 on tables and section docs
+        let table_md = r#"# SyntheticSystem
+
+## Component: ModuleAlpha
+Section prose with /* comment delimiter */ inside doc.
+
+| Property | Type | Default / Bound | Description |
+| :--- | :--- | :--- | :--- |
+| `prop_count` | `Integer` | `42` | Count /* doc */ |
+| `prop_ratio` | `float32` | `3.5` | Ratio value |
+| `prop_label` | `string` | `alpha_label` | Label text |
+| `prop_mode` | `CustomModeType` | `MODE_A` | Custom typed property |
+| `prop_unbounded` | `Integer` | `>= 10` | Non-literal bound |
+
+## Bill of Materials
+| Component | Attribute | Type | Default / Bound | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `ModuleBeta` | `max_items` | `Integer` | `<= 100` | Bounded /* item */ |
+| `ModuleBeta` | `gain_factor` | `Real` | `TBD` | Unresolved real default |
+| `ModuleBeta` | `flag_enabled` | `Boolean` | `N/A` | Unresolved boolean default |
+
+## System Parameters
+| Constraint Name | Parameter | Type | Default | Min | Max | Unit | Description |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `RateBound` | `cycle_rate` | `Integer` | `TBD` | `1` | `10` | `Hz` | Cycle /* constraint */ |
+"#;
+        let translator = MarkdownTranslator::new();
+        let pkg = translator.translate(table_md, "SyntheticSystem")?;
+
+        let mod_alpha = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "ModuleAlpha")
+            .ok_or_else(|| "missing ModuleAlpha".to_string())?;
+        let alpha_doc = mod_alpha.doc.as_deref().unwrap_or("");
+        assert!(
+            !alpha_doc.contains("/*") && !alpha_doc.contains("*/"),
+            "ModuleAlpha section_doc still contains raw comment delimiters: {alpha_doc}"
+        );
+
+        let prop_count = mod_alpha
+            .attributes
+            .iter()
+            .find(|a| a.name == "prop_count")
+            .ok_or_else(|| "missing prop_count".to_string())?;
+        assert_eq!(prop_count.type_name, "Integer");
+        assert_eq!(prop_count.default_value.as_deref(), Some("42"));
+        let pc_doc = prop_count.doc.as_deref().unwrap_or("");
+        assert!(!pc_doc.contains("/*") && !pc_doc.contains("*/"));
+
+        let prop_ratio = mod_alpha
+            .attributes
+            .iter()
+            .find(|a| a.name == "prop_ratio")
+            .ok_or_else(|| "missing prop_ratio".to_string())?;
+        assert_eq!(prop_ratio.type_name, "Real");
+        assert_eq!(prop_ratio.default_value.as_deref(), Some("3.5"));
+
+        let prop_label = mod_alpha
+            .attributes
+            .iter()
+            .find(|a| a.name == "prop_label")
+            .ok_or_else(|| "missing prop_label".to_string())?;
+        assert_eq!(prop_label.type_name, "String");
+        assert_eq!(prop_label.default_value.as_deref(), Some("\"alpha_label\""));
+
+        let prop_mode = mod_alpha
+            .attributes
+            .iter()
+            .find(|a| a.name == "prop_mode")
+            .ok_or_else(|| "missing prop_mode".to_string())?;
+        assert_eq!(prop_mode.type_name, "CustomModeType");
+        assert_eq!(prop_mode.default_value.as_deref(), Some("\"MODE_A\""));
+
+        let prop_unbounded = mod_alpha
+            .attributes
+            .iter()
+            .find(|a| a.name == "prop_unbounded")
+            .ok_or_else(|| "missing prop_unbounded".to_string())?;
+        assert_eq!(prop_unbounded.type_name, "Integer");
+        assert_eq!(prop_unbounded.default_value, None);
+
+        let mod_beta = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "ModuleBeta")
+            .ok_or_else(|| "missing ModuleBeta".to_string())?;
+        let max_items = mod_beta
+            .attributes
+            .iter()
+            .find(|a| a.name == "max_items")
+            .ok_or_else(|| "missing max_items".to_string())?;
+        assert_eq!(max_items.type_name, "Integer");
+        assert_eq!(max_items.default_value, None);
+        assert!(!max_items.doc.as_deref().unwrap_or("").contains("/*"));
+
+        let gain_factor = mod_beta
+            .attributes
+            .iter()
+            .find(|a| a.name == "gain_factor")
+            .ok_or_else(|| "missing gain_factor".to_string())?;
+        assert_eq!(gain_factor.type_name, "Real");
+        assert_eq!(gain_factor.default_value, None);
+
+        let flag_enabled = mod_beta
+            .attributes
+            .iter()
+            .find(|a| a.name == "flag_enabled")
+            .ok_or_else(|| "missing flag_enabled".to_string())?;
+        assert_eq!(flag_enabled.type_name, "Boolean");
+        assert_eq!(flag_enabled.default_value, None);
+
+        let cycle_attr = pkg
+            .attribute_defs
+            .iter()
+            .find(|a| a.name == "cycle_rate")
+            .ok_or_else(|| "missing cycle_rate attribute".to_string())?;
+        assert_eq!(cycle_attr.type_name, "Integer");
+        assert_eq!(cycle_attr.default_value, None);
+        assert!(!cycle_attr.doc.as_deref().unwrap_or("").contains("/*"));
+
+        // Fix 3: Fenced code block tracking in auxiliary scanners
+        let fenced_req_md = r#"---
+id: REQ-0524
+title: "Fence Aware Scanner Verification"
+subsystem: "Subsystem Alpha"
+uuidv5: 00000000-0000-0000-0000-000000000524
+---
+
+# REQ-0524
+
+```markdown
+| Complexity Class | Fake Complexity |
+| Governing Standard | Fake Standard |
+```
+
+| Field | Value |
+| :--- | :--- |
+| Complexity Class | Class NP-Hard |
+| Governing Standard | ISO-15288 |
+
+## 1. Normative Statement
+```text
+## Fake Heading Inside Fence
+| fake | table |
+```
+The system shall ignore fenced blocks when scanning normative statements.
+
+## 2. Formal Invariant
+```rust
+### Fake Invariant Inside Code:
+## 3. Fake Section Boundary Inside Code
+```
+
+### Real Determinism Invariant:
+```math
+x \ge 0
+```
+
+## 3. Acceptance Criteria
+### AC-01: Fenced Criteria Handling
+```yaml
+# comment inside fence
+Given: fake fenced given
+```
+- Given: valid initial state
+- When: valid transition occurs
+- Then: valid output state is observed
+"#;
+        let fm = Frontmatter {
+            id: Some("REQ-0524".to_string()),
+            title: Some("Fence Aware Scanner Verification".to_string()),
+            subsystem: Some("Subsystem Alpha".to_string()),
+            uuidv5: Some("00000000-0000-0000-0000-000000000524".to_string()),
+        };
+        let (_, complexity, standard, _) = extract_req_metadata(fenced_req_md, &fm);
+        assert_eq!(complexity, "Class NP-Hard");
+        assert_eq!(standard, "ISO-15288");
+
+        let norm_stmt = extract_normative_statement(fenced_req_md);
+        assert_eq!(
+            norm_stmt,
+            "The system shall ignore fenced blocks when scanning normative statements."
+        );
+
+        let acs = extract_acceptance_criteria(fenced_req_md);
+        let first_ac = acs.first().ok_or_else(|| "missing AC-01".to_string())?;
+        assert!(
+            first_ac.2.contains("Given: valid initial state"),
+            "unexpected AC BDD text: {}",
+            first_ac.2
+        );
+
+        let invs = extract_formal_invariants(fenced_req_md, "0524");
+        let first_inv = invs.first().ok_or_else(|| "missing formal invariant".to_string())?;
+        assert_eq!(
+            first_inv.name,
+            "Invariant_REQ_0524_Real_Determinism_Invariant"
         );
 
         Ok(())
