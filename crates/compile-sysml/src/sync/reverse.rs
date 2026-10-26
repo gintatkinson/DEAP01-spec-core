@@ -298,9 +298,18 @@ pub fn reverse_sync_specs_to_sysml(
 
             let (fm, body) = parse_frontmatter(&content);
             let doc_type = fm.get("type").map(|s| s.as_str()).unwrap_or("");
+            let rel_subdir = path
+                .strip_prefix(&opts.docs_dir)
+                .ok()
+                .and_then(|rel| {
+                    let mut comps = rel.components();
+                    let first = comps.next()?.as_os_str().to_str()?;
+                    comps.next().map(|_| first)
+                })
+                .unwrap_or("");
 
             match doc_type {
-                "epic" => {
+                "epic" if rel_subdir == "epics" => {
                     let title = fm.get("title").cloned().unwrap_or_else(|| {
                         path.file_stem().unwrap_or_default().to_string_lossy().to_string()
                     });
@@ -314,7 +323,7 @@ pub fn reverse_sync_specs_to_sysml(
                         ..Default::default()
                     });
                 }
-                "feature" => {
+                "feature" if rel_subdir == "features" => {
                     let part_name = fm
                         .get("part")
                         .or_else(|| fm.get("part_def"))
@@ -380,7 +389,7 @@ pub fn reverse_sync_specs_to_sysml(
                         }
                     }
                 }
-                "user-story" => {
+                "user-story" if rel_subdir == "user-stories" => {
                     let inter_name = fm
                         .get("interaction")
                         .or_else(|| fm.get("interaction_def"))
@@ -411,7 +420,7 @@ pub fn reverse_sync_specs_to_sysml(
                         triggers: vec!["OperationalTrigger".to_string()],
                     });
                 }
-                "use-case" => {
+                "use-case" if rel_subdir == "use-cases" => {
                     let uc_name = fm
                         .get("use_case")
                         .or_else(|| fm.get("use_case_def"))
@@ -572,5 +581,107 @@ part: CoreSubsystem
         assert_eq!(fm.get("type").map(|s| s.as_str()), Some("feature"));
         assert_eq!(fm.get("part").map(|s| s.as_str()), Some("CoreSubsystem"));
         assert!(body.contains("# Content"));
+    }
+
+    /// Regression test for Issue #534 verifying that non-Agile documents under `docs/designs/`
+    /// with 2-column Markdown tables containing `| Type | feature |` do not pollute `.pipeline/schema.sysml`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+    /// for fn `test_reverse_sync_ignores_docs_designs_type_tables` in `crates/compile-sysml/src/sync/reverse.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Subdirectory Scoping Invariant: Only markdown files directly under canonical Agile specification
+    ///   subdirectories (`epics/`, `features/`, `user-stories/`, `use-cases/`) are synthesized into AST definitions.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary workspace directory is writable on the host filesystem.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `CoreController` is preserved and `Blueprint01Arch` is absent from `.pipeline/schema.sysml`
+    ///   and the returned `PackageDef`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over the 2 fixture markdown files.
+    /// - Space Complexity: O(1) bounded auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates `ReverseSyncOptions` boundary paths.
+    /// - State: Cleans up temporary test directory before returning.
+    /// - Action: Executes deterministically without network or external dependencies.
+    /// - Resource: Bounded temporary filesystem usage under `std::env::temp_dir()`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-SYNC-REVERSE/SUBDIR-SCOPING] | SysML v2: VerificationCase(test_reverse_sync_ignores_docs_designs_type_tables)
+    #[test]
+    fn test_reverse_sync_ignores_docs_designs_type_tables() -> Result<(), String> {
+        let tmp_dir = std::env::temp_dir().join(format!(
+            "deap_issue_534_rev_sync_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&tmp_dir);
+
+        let pipeline_dir = tmp_dir.join(".pipeline");
+        let designs_dir = tmp_dir.join("docs").join("designs");
+        let features_dir = tmp_dir.join("docs").join("features");
+        fs::create_dir_all(&pipeline_dir).map_err(|e| e.to_string())?;
+        fs::create_dir_all(&designs_dir).map_err(|e| e.to_string())?;
+        fs::create_dir_all(&features_dir).map_err(|e| e.to_string())?;
+
+        let schema_path = pipeline_dir.join("schema.sysml");
+        let digest_path = pipeline_dir.join("schema-digest.json");
+        fs::write(
+            &schema_path,
+            "package TestSys {\n    part def CoreController;\n}\n",
+        )
+        .map_err(|e| e.to_string())?;
+
+        fs::write(
+            designs_dir.join("blueprint-01-arch.md"),
+            "# Blueprint 01\n\n| Attribute | Value |\n| :--- | :--- |\n| Type | feature |\n",
+        )
+        .map_err(|e| e.to_string())?;
+
+        fs::write(
+            features_dir.join("fea-01.md"),
+            "---\ntitle: \"Feature 01: CoreController\"\ntype: feature\npart: CoreController\n---\n\n# Feature 01\n\n- `+computeControl() : void`\n",
+        )
+        .map_err(|e| e.to_string())?;
+
+        let base_pkg = PackageDef {
+            name: "TestSys".to_string(),
+            part_defs: vec![PartDef {
+                name: "CoreController".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let opts = ReverseSyncOptions {
+            docs_dir: tmp_dir.join("docs"),
+            schema_path: Some(schema_path.clone()),
+            output_path: schema_path.clone(),
+            digest_path,
+            allow_overwrite: true,
+        };
+
+        let (pkg, _) = reverse_sync_specs_to_sysml(Some(&base_pkg), &opts)?;
+        let emitted_sysml = fs::read_to_string(&schema_path).map_err(|e| e.to_string())?;
+        let _ = fs::remove_dir_all(&tmp_dir);
+
+        assert!(
+            !pkg.part_defs.iter().any(|p| p.name == "Blueprint01Arch"),
+            "docs/designs/blueprint-01-arch.md must not synthesize PartDef Blueprint01Arch"
+        );
+        assert!(
+            !emitted_sysml.contains("Blueprint01Arch"),
+            "Emitted .pipeline/schema.sysml must not contain Blueprint01Arch, got:\n{}",
+            emitted_sysml
+        );
+        assert!(
+            pkg.part_defs.iter().any(|p| p.name == "CoreController"),
+            "Canonical docs/features/fea-01.md part CoreController must be preserved"
+        );
+        Ok(())
     }
 }
