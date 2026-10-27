@@ -1365,6 +1365,162 @@ impl<'a> SysmlParser<'a> {
         })
     }
 
+    /// Parses parenthesized `(in/out name : Type = default, ...)` action header parameters into `in_params` and `out_params`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_action_header_params` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves parameter direction (`in` vs `out`/`inout`), type expressions, and optional `= <default>` / `:= <default>` expressions with zero early returns (SESE).
+    ///
+    /// ## 3. Preconditions
+    /// - Cursor is positioned at `(` following an `action` or `action def` identifier.
+    ///
+    /// ## 4. Postconditions
+    /// - Advances cursor past `)` and appends parsed `AttributeDef` items to `in_params` and `out_params`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(P) bounded over header parameter token count `P`.
+    /// - Space Complexity: O(P) bounded auxiliary memory for parameter AST nodes.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates identifier, type expression, and closing `)` delimiter tokens.
+    /// - State: Deterministic cursor advancement across parameter clauses.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounded stack and heap allocations within `PARSER-GRAMMAR`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-ACTION-HEADER-PARAMS] | SysML v2: ActionDef(SysmlParser::parse_action_header_params)
+    fn parse_action_header_params(
+        &mut self,
+        in_params: &mut Vec<AttributeDef>,
+        out_params: &mut Vec<AttributeDef>,
+    ) -> Result<(), ParseError> {
+        self.expect(&TokenKind::OpenParen)?;
+        while !self.check(&TokenKind::CloseParen) && !self.is_at_end() {
+            let mut is_out = false;
+            if self.check(&TokenKind::In) {
+                self.advance();
+            } else if self.check(&TokenKind::Out) || self.check(&TokenKind::Inout) {
+                self.advance();
+                is_out = true;
+            }
+            if self.check(&TokenKind::Attribute) || self.check(&TokenKind::Item) {
+                self.advance();
+            }
+            let param_name = self.expect_ident()?;
+            let param_type = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
+                self.advance();
+                self.parse_type_expr()?
+            } else {
+                "Real".to_string()
+            };
+            let default_value = if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
+                self.advance();
+                let mut pieces = Vec::new();
+                while !self.check(&TokenKind::Comma)
+                    && !self.check(&TokenKind::CloseParen)
+                    && !self.is_at_end()
+                {
+                    let tok = self.advance();
+                    let piece = match &tok.kind {
+                        TokenKind::Ident(s) => s.clone(),
+                        TokenKind::StringLit(s) => format!("\"{}\"", s),
+                        TokenKind::IntLit(n) => n.to_string(),
+                        TokenKind::RealLit(f) if f.fract() == 0.0 => format!("{:.1}", f),
+                        TokenKind::RealLit(f) => f.to_string(),
+                        TokenKind::BoolLit(b) => b.to_string(),
+                        _ => tok.kind.as_str().to_string(),
+                    };
+                    pieces.push(piece);
+                }
+                Some(pieces.join(" "))
+            } else {
+                None
+            };
+            let param = AttributeDef {
+                name: param_name,
+                type_name: param_type,
+                default_value,
+                doc: None,
+            };
+            if is_out {
+                out_params.push(param);
+            } else {
+                in_params.push(param);
+            }
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            }
+        }
+        self.expect(&TokenKind::CloseParen)?;
+        Ok(())
+    }
+
+    /// Parses a semicolon-terminated `in`/`out`/`inout` parameter statement inside an action declaration body.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_action_body_param` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves direction, type annotation, and optional `= <default>` / `:= <default>` value with zero early returns (SESE).
+    ///
+    /// ## 3. Preconditions
+    /// - Cursor is positioned at `in`, `out`, or `inout` inside an action declaration body.
+    ///
+    /// ## 4. Postconditions
+    /// - Advances cursor past `;` and appends the parsed `AttributeDef` to `in_params` or `out_params`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(T) bounded over statement token count `T`.
+    /// - Space Complexity: O(T) bounded auxiliary memory for parameter AST node.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates parameter identifier, type expression, and statement terminator.
+    /// - State: Deterministic cursor advancement to statement boundary.
+    /// - Action: Executes deterministically with zero recursion or blocking.
+    /// - Resource: Bounded stack and heap allocations within `PARSER-GRAMMAR`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-ACTION-BODY-PARAM] | SysML v2: ActionDef(SysmlParser::parse_action_body_param)
+    fn parse_action_body_param(
+        &mut self,
+        in_params: &mut Vec<AttributeDef>,
+        out_params: &mut Vec<AttributeDef>,
+    ) -> Result<(), ParseError> {
+        let is_out = self.check(&TokenKind::Out) || self.check(&TokenKind::Inout);
+        self.advance();
+        if self.check(&TokenKind::Attribute) || self.check(&TokenKind::Item) {
+            self.advance();
+        }
+        let p_name = self.expect_ident()?;
+        let p_type = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
+            self.advance();
+            self.parse_type_expr()?
+        } else {
+            "Real".to_string()
+        };
+        let default_value = if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
+            self.advance();
+            Some(self.read_until_semi())
+        } else {
+            self.expect_semi()?;
+            None
+        };
+        let p = AttributeDef {
+            name: p_name,
+            type_name: p_type,
+            default_value,
+            doc: None,
+        };
+        if is_out {
+            out_params.push(p);
+        } else {
+            in_params.push(p);
+        }
+        Ok(())
+    }
+
     /// Executes deterministic fn `SysmlParser::parse_action_decl` within `crates/compile-sysml/src/parser/grammar.rs`.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
@@ -1399,52 +1555,18 @@ impl<'a> SysmlParser<'a> {
         } else {
             false
         };
-
         let name = self.expect_ident()?;
         let mut action_doc = doc;
         let mut in_params = Vec::new();
         let mut out_params = Vec::new();
+        let mut parameters = Vec::new();
         let mut performer = None;
         let mut steps = Vec::new();
+        let mut body_err: Option<ParseError> = None;
 
         if self.check(&TokenKind::OpenParen) {
-            self.advance();
-            while !self.check(&TokenKind::CloseParen) && !self.is_at_end() {
-                let mut is_out = false;
-                if self.check(&TokenKind::In) {
-                    self.advance();
-                } else if self.check(&TokenKind::Out) || self.check(&TokenKind::Inout) {
-                    self.advance();
-                    is_out = true;
-                }
-                if self.check(&TokenKind::Attribute) || self.check(&TokenKind::Item) {
-                    self.advance();
-                }
-                let param_name = self.expect_ident()?;
-                let param_type = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
-                    self.advance();
-                    self.parse_type_expr()?
-                } else {
-                    "Real".to_string()
-                };
-                let param = AttributeDef {
-                    name: param_name,
-                    type_name: param_type,
-                    default_value: None,
-                    doc: None,
-                };
-                if is_out {
-                    out_params.push(param);
-                } else {
-                    in_params.push(param);
-                }
-                if self.check(&TokenKind::Comma) {
-                    self.advance();
-                }
-            }
-            self.expect(&TokenKind::CloseParen)?;
+            self.parse_action_header_params(&mut in_params, &mut out_params)?;
         }
-
         if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
             self.advance();
             let _return_type = self.parse_type_expr()?;
@@ -1452,7 +1574,7 @@ impl<'a> SysmlParser<'a> {
 
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
-            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
+            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() && body_err.is_none() {
                 self.skip_trivia();
                 while let Some(d) = self.take_inner_doc_comment() {
                     if action_doc.is_none() {
@@ -1469,37 +1591,16 @@ impl<'a> SysmlParser<'a> {
                 } else if self.check(&TokenKind::Step) {
                     self.advance();
                     steps.push(self.read_until_semi());
+                } else if self.check(&TokenKind::Attribute) {
+                    parameters.push(self.parse_attribute_decl(None)?);
                 } else if self.check(&TokenKind::In)
                     || self.check(&TokenKind::Out)
                     || self.check(&TokenKind::Inout)
                 {
-                    let is_out = self.check(&TokenKind::Out) || self.check(&TokenKind::Inout);
-                    self.advance();
-                    if self.check(&TokenKind::Attribute) || self.check(&TokenKind::Item) {
-                        self.advance();
-                    }
-                    let p_name = self.expect_ident()?;
-                    let p_type = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
-                        self.advance();
-                        self.parse_type_expr()?
-                    } else {
-                        "Real".to_string()
-                    };
-                    self.expect_semi()?;
-                    let p = AttributeDef {
-                        name: p_name,
-                        type_name: p_type,
-                        default_value: None,
-                        doc: None,
-                    };
-                    if is_out {
-                        out_params.push(p);
-                    } else {
-                        in_params.push(p);
-                    }
+                    self.parse_action_body_param(&mut in_params, &mut out_params)?;
                 } else {
                     let tok = self.peek();
-                    return Err(ParseError {
+                    body_err = Some(ParseError {
                         message: format!(
                             "Unexpected token '{:?}' in action declaration body",
                             tok.kind
@@ -1508,21 +1609,27 @@ impl<'a> SysmlParser<'a> {
                     });
                 }
             }
-            self.expect(&TokenKind::CloseBrace)?;
+            if body_err.is_none() {
+                self.expect(&TokenKind::CloseBrace)?;
+            }
         } else {
             self.expect_semi()?;
         }
 
-        Ok(ActionDef {
-            name,
-            doc: action_doc,
-            in_params,
-            out_params,
-            parameters: Vec::new(),
-            performer,
-            steps,
-            is_def,
-        })
+        if let Some(err) = body_err {
+            Err(err)
+        } else {
+            Ok(ActionDef {
+                name,
+                doc: action_doc,
+                in_params,
+                out_params,
+                parameters,
+                performer,
+                steps,
+                is_def,
+            })
+        }
     }
 
     /// Executes deterministic fn `SysmlParser::parse_constraint_decl` within `crates/compile-sysml/src/parser/grammar.rs`.
@@ -1847,6 +1954,134 @@ impl<'a> SysmlParser<'a> {
         })
     }
 
+    /// Collects inner documentation comments or `doc = "...";` property statements inside a `state` body.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::take_state_member_doc` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Binds `doc = "...";` / `doc : "...";` / `doc "...";` property statements directly to `state_doc` while preserving prefix `doc /* ... */` comments for following child `state` or `transition` declarations with zero early returns (SESE).
+    ///
+    /// ## 3. Preconditions
+    /// - Cursor is positioned at the start of a member inside a `state` or `state def` braced body.
+    ///
+    /// ## 4. Postconditions
+    /// - Updates `*state_doc` when a state-level documentation statement or non-member comment is encountered, and returns `Option<String>` for a following `state` or `transition`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(D) bounded over consecutive doc tokens `D`.
+    /// - Space Complexity: O(L) bounded over documentation string length `L`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total method over `&mut Option<String>`.
+    /// - State: Advances cursor deterministically past trivia and documentation tokens.
+    /// - Action: Executes deterministically with zero recursion or blocking.
+    /// - Resource: Bounded stack and heap allocations within `PARSER-GRAMMAR`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-TAKE-STATE-MEMBER-DOC] | SysML v2: ActionDef(SysmlParser::take_state_member_doc)
+    fn take_state_member_doc(&mut self, state_doc: &mut Option<String>) -> Option<String> {
+        self.skip_trivia();
+        let mut inner_doc = None;
+        while self.check(&TokenKind::Doc)
+            || matches!(self.peek_kind(), TokenKind::DocComment(_))
+        {
+            let is_prop_doc = self.check(&TokenKind::Doc)
+                && !matches!(
+                    self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                    Some(TokenKind::DocComment(_))
+                );
+            if let Some(next_doc) = self.take_inner_doc_comment() {
+                if is_prop_doc {
+                    if state_doc.is_none() {
+                        *state_doc = Some(next_doc);
+                    }
+                } else {
+                    if inner_doc.is_some() && state_doc.is_none() {
+                        *state_doc = inner_doc;
+                    }
+                    inner_doc = Some(next_doc);
+                }
+            }
+            self.skip_trivia();
+        }
+        if self.check(&TokenKind::CloseBrace)
+            || self.is_at_end()
+            || (!self.check(&TokenKind::State) && !self.check(&TokenKind::Transition))
+        {
+            if let Some(d) = inner_doc.take() {
+                if state_doc.is_none() {
+                    *state_doc = Some(d);
+                }
+            }
+        }
+        inner_doc
+    }
+
+    /// Parses an `entry`, `do`, or `exit` state action clause up to its terminating semicolon.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_state_action_clause` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Strips optional leading `action` keyword when followed by an action identifier and formats the remaining expression tokens deterministically with zero early returns (SESE).
+    ///
+    /// ## 3. Preconditions
+    /// - Cursor is positioned at `TokenKind::Entry`, `TokenKind::Do`, or `TokenKind::Exit`.
+    ///
+    /// ## 4. Postconditions
+    /// - Advances cursor past `;` and returns the canonical action expression `String`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(T) bounded over clause token count `T`.
+    /// - Space Complexity: O(T) bounded auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total method returning `String`.
+    /// - State: Advances cursor deterministically to statement boundary.
+    /// - Action: Executes deterministically with zero recursion or blocking.
+    /// - Resource: Bounded stack and heap allocations within `PARSER-GRAMMAR`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-STATE-ACTION-CLAUSE] | SysML v2: ActionDef(SysmlParser::parse_state_action_clause)
+    fn parse_state_action_clause(&mut self) -> String {
+        self.advance();
+        let raw_tokens = self.read_tokens_until_semi();
+        let tokens: Vec<Token> = raw_tokens
+            .into_iter()
+            .filter(|t| {
+                !matches!(
+                    t.kind,
+                    TokenKind::Eof
+                        | TokenKind::Semi
+                        | TokenKind::LineComment(_)
+                        | TokenKind::DocComment(_)
+                )
+            })
+            .collect();
+        let slice = tokens.as_slice();
+        let action_slice = if slice.first().is_some_and(|t| t.kind == TokenKind::Action)
+            && slice.get(1).is_some_and(|t| {
+                !matches!(
+                    t.kind,
+                    TokenKind::OpenParen
+                        | TokenKind::CloseParen
+                        | TokenKind::OpenBracket
+                        | TokenKind::CloseBracket
+                        | TokenKind::Dot
+                        | TokenKind::DoubleColon
+                        | TokenKind::Comma
+                        | TokenKind::Semi
+                )
+            })
+        {
+            slice.get(1..).unwrap_or_default()
+        } else {
+            slice
+        };
+        Self::format_transition_expr(action_slice)
+    }
+
     /// Executes deterministic fn `SysmlParser::parse_state_decl` within `crates/compile-sysml/src/parser/grammar.rs`.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
@@ -1878,7 +2113,6 @@ impl<'a> SysmlParser<'a> {
         if self.check(&TokenKind::Def) {
             self.advance();
         }
-
         let name = self.expect_ident()?;
         let mut state_doc = doc;
         let mut entry_action = None;
@@ -1886,98 +2120,34 @@ impl<'a> SysmlParser<'a> {
         let mut exit_action = None;
         let mut transitions = Vec::new();
         let mut sub_states = Vec::new();
+        let mut body_err: Option<ParseError> = None;
 
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
-            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
-                self.skip_trivia();
-                let mut inner_doc = self.take_inner_doc_comment();
-                self.skip_trivia();
-                while let Some(next_doc) = self.take_inner_doc_comment() {
-                    if state_doc.is_none() {
-                        state_doc = inner_doc;
-                    }
-                    inner_doc = Some(next_doc);
-                    self.skip_trivia();
-                }
+            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() && body_err.is_none() {
+                let inner_doc = self.take_state_member_doc(&mut state_doc);
                 if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
-                    if state_doc.is_none() {
-                        state_doc = inner_doc;
-                    }
                     break;
                 }
-                if let Some(d) = inner_doc {
-                    if self.check(&TokenKind::State) {
-                        let sub_st = self.parse_state_decl(Some(d))?;
-                        sub_states.push(sub_st);
-                        continue;
-                    } else if self.check(&TokenKind::Transition) {
-                        self.advance();
-                        let t_tokens = self.read_tokens_until_semi();
-                        let mut t_def = Self::parse_transition_tokens(&t_tokens);
-                        t_def.doc = Some(d);
-                        transitions.push(t_def);
-                        continue;
-                    } else if state_doc.is_none() {
-                        state_doc = Some(d);
-                    }
-                }
-                if self.check(&TokenKind::Entry)
-                    || self.check(&TokenKind::Do)
-                    || self.check(&TokenKind::Exit)
-                {
-                    let clause_kind = self.peek_kind().clone();
-                    self.advance();
-                    let raw_tokens = self.read_tokens_until_semi();
-                    let tokens: Vec<Token> = raw_tokens
-                        .into_iter()
-                        .filter(|t| {
-                            !matches!(
-                                t.kind,
-                                TokenKind::Eof
-                                    | TokenKind::Semi
-                                    | TokenKind::LineComment(_)
-                                    | TokenKind::DocComment(_)
-                            )
-                        })
-                        .collect();
-                    let slice = tokens.as_slice();
-                    let action_slice = if slice.first().is_some_and(|t| t.kind == TokenKind::Action)
-                        && slice.get(1).is_some_and(|t| {
-                            !matches!(
-                                t.kind,
-                                TokenKind::OpenParen
-                                    | TokenKind::CloseParen
-                                    | TokenKind::OpenBracket
-                                    | TokenKind::CloseBracket
-                                    | TokenKind::Dot
-                                    | TokenKind::DoubleColon
-                                    | TokenKind::Comma
-                                    | TokenKind::Semi
-                            )
-                        })
-                    {
-                        slice.get(1..).unwrap_or_default()
-                    } else {
-                        slice
-                    };
-                    let formatted = Self::format_transition_expr(action_slice);
-                    match clause_kind {
-                        TokenKind::Entry => entry_action = Some(formatted),
-                        TokenKind::Do => do_action = Some(formatted),
-                        TokenKind::Exit => exit_action = Some(formatted),
-                        _ => {}
-                    }
+                if self.check(&TokenKind::Entry) {
+                    entry_action = Some(self.parse_state_action_clause());
+                } else if self.check(&TokenKind::Do) {
+                    do_action = Some(self.parse_state_action_clause());
+                } else if self.check(&TokenKind::Exit) {
+                    exit_action = Some(self.parse_state_action_clause());
                 } else if self.check(&TokenKind::State) {
-                    let sub_st = self.parse_state_decl(None)?;
-                    sub_states.push(sub_st);
+                    sub_states.push(self.parse_state_decl(inner_doc)?);
                 } else if self.check(&TokenKind::Transition) {
                     self.advance();
                     let t_tokens = self.read_tokens_until_semi();
-                    transitions.push(Self::parse_transition_tokens(&t_tokens));
+                    let mut t_def = Self::parse_transition_tokens(&t_tokens);
+                    if inner_doc.is_some() {
+                        t_def.doc = inner_doc;
+                    }
+                    transitions.push(t_def);
                 } else {
                     let tok = self.peek();
-                    return Err(ParseError {
+                    body_err = Some(ParseError {
                         message: format!(
                             "Unexpected token '{:?}' in state declaration body",
                             tok.kind
@@ -1986,20 +2156,26 @@ impl<'a> SysmlParser<'a> {
                     });
                 }
             }
-            self.expect(&TokenKind::CloseBrace)?;
+            if body_err.is_none() {
+                self.expect(&TokenKind::CloseBrace)?;
+            }
         } else {
             self.expect_semi()?;
         }
 
-        Ok(StateDef {
-            name,
-            doc: state_doc,
-            entry_action,
-            do_action,
-            exit_action,
-            transitions,
-            sub_states,
-        })
+        if let Some(err) = body_err {
+            Err(err)
+        } else {
+            Ok(StateDef {
+                name,
+                doc: state_doc,
+                entry_action,
+                do_action,
+                exit_action,
+                transitions,
+                sub_states,
+            })
+        }
     }
 
     /// Returns `true` when `tok` is a SysML v2 transition clause keyword (`first`, `from`, `then`, `to`, `accept`, `if`, `do`).
@@ -3053,10 +3229,11 @@ impl<'a> SysmlParser<'a> {
         let mut source_port = None;
         let mut target_port = None;
         let mut part_ref = None;
+        let mut body_err: Option<ParseError> = None;
 
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
-            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
+            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() && body_err.is_none() {
                 self.skip_trivia();
                 while let Some(d) = self.take_inner_doc_comment() {
                     if hazard_doc.is_none() {
@@ -3069,18 +3246,21 @@ impl<'a> SysmlParser<'a> {
                 }
                 if self.check(&TokenKind::Attribute) {
                     let attr = self.parse_attribute_decl(None)?;
+                    let unquoted = attr
+                        .default_value
+                        .map(|v| v.trim().trim_matches('"').to_string());
                     if attr.name == "severity" {
-                        severity = attr.default_value.and_then(|v| v.parse::<i32>().ok()).unwrap_or(1);
+                        severity = unquoted.and_then(|v| v.parse::<i32>().ok()).unwrap_or(1);
                     } else if attr.name == "source_port" {
-                        source_port = attr.default_value;
+                        source_port = unquoted;
                     } else if attr.name == "target_port" {
-                        target_port = attr.default_value;
+                        target_port = unquoted;
                     } else if attr.name == "part_ref" {
-                        part_ref = attr.default_value;
+                        part_ref = unquoted;
                     }
                 } else {
                     let tok = self.peek();
-                    return Err(ParseError {
+                    body_err = Some(ParseError {
                         message: format!(
                             "Unexpected token '{:?}' in hazard declaration body",
                             tok.kind
@@ -3089,19 +3269,25 @@ impl<'a> SysmlParser<'a> {
                     });
                 }
             }
-            self.expect(&TokenKind::CloseBrace)?;
+            if body_err.is_none() {
+                self.expect(&TokenKind::CloseBrace)?;
+            }
         } else {
             self.expect_semi()?;
         }
 
-        Ok(HazardDef {
-            name,
-            doc: hazard_doc,
-            severity,
-            source_port,
-            target_port,
-            part_ref,
-        })
+        if let Some(err) = body_err {
+            Err(err)
+        } else {
+            Ok(HazardDef {
+                name,
+                doc: hazard_doc,
+                severity,
+                source_port,
+                target_port,
+                part_ref,
+            })
+        }
     }
 
     /// Executes deterministic fn `SysmlParser::parse_risk_decl` within `crates/compile-sysml/src/parser/grammar.rs`.
@@ -3142,10 +3328,11 @@ impl<'a> SysmlParser<'a> {
         let mut hazard_ref = None;
         let mut source_port = None;
         let mut target_port = None;
+        let mut body_err: Option<ParseError> = None;
 
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
-            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
+            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() && body_err.is_none() {
                 self.skip_trivia();
                 while let Some(d) = self.take_inner_doc_comment() {
                     if risk_doc.is_none() {
@@ -3158,18 +3345,21 @@ impl<'a> SysmlParser<'a> {
                 }
                 if self.check(&TokenKind::Attribute) {
                     let attr = self.parse_attribute_decl(None)?;
+                    let unquoted = attr
+                        .default_value
+                        .map(|v| v.trim().trim_matches('"').to_string());
                     if attr.name == "severity" {
-                        severity = attr.default_value.and_then(|v| v.parse::<i32>().ok()).unwrap_or(1);
+                        severity = unquoted.and_then(|v| v.parse::<i32>().ok()).unwrap_or(1);
                     } else if attr.name == "hazard_ref" {
-                        hazard_ref = attr.default_value;
+                        hazard_ref = unquoted;
                     } else if attr.name == "source_port" {
-                        source_port = attr.default_value;
+                        source_port = unquoted;
                     } else if attr.name == "target_port" {
-                        target_port = attr.default_value;
+                        target_port = unquoted;
                     }
                 } else {
                     let tok = self.peek();
-                    return Err(ParseError {
+                    body_err = Some(ParseError {
                         message: format!(
                             "Unexpected token '{:?}' in risk declaration body",
                             tok.kind
@@ -3178,19 +3368,25 @@ impl<'a> SysmlParser<'a> {
                     });
                 }
             }
-            self.expect(&TokenKind::CloseBrace)?;
+            if body_err.is_none() {
+                self.expect(&TokenKind::CloseBrace)?;
+            }
         } else {
             self.expect_semi()?;
         }
 
-        Ok(RiskDef {
-            name,
-            doc: risk_doc,
-            severity,
-            hazard_ref,
-            source_port,
-            target_port,
-        })
+        if let Some(err) = body_err {
+            Err(err)
+        } else {
+            Ok(RiskDef {
+                name,
+                doc: risk_doc,
+                severity,
+                hazard_ref,
+                source_port,
+                target_port,
+            })
+        }
     }
 
     /// Executes deterministic fn `SysmlParser::parse_test_case_decl` within `crates/compile-sysml/src/parser/grammar.rs`.

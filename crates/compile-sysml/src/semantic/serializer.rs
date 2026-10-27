@@ -141,6 +141,70 @@ pub fn to_sysml<T: SysmlSerializable>(item: &T) -> String {
     item.to_sysml(0)
 }
 
+/// Strips leading/trailing whitespace and enclosing double-quote delimiters (`"`) from a string slice.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_enclosing_quotes` in `crates/compile-sysml/src/semantic/serializer.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Idempotently normalizes `"\"val\""` and `"val"` to `"val"` with zero early returns (SESE), preventing `""...""` double-quote corruption during AST serialization.
+///
+/// ## 3. Preconditions
+/// - `val: &str` is a valid UTF-8 string slice.
+///
+/// ## 4. Postconditions
+/// - Returns a borrowed `&str` slice with outer whitespace and `"` characters removed.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) bounded over string byte length `L`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total function over `&str` with zero panics.
+/// - State: Pure read-only slice transformation.
+/// - Action: Executes deterministically in constant stack space.
+/// - Resource: Zero heap allocations within `SEMANTIC-SERIALIZER`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SEMANTIC-SERIALIZER-STRIP-ENCLOSING-QUOTES] | SysML v2: ActionDef(strip_enclosing_quotes)
+fn strip_enclosing_quotes(val: &str) -> &str {
+    val.trim().trim_matches('"')
+}
+
+/// Formats an `f64` real literal for SysML v2 output without truncating non-zero fractional digits.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `format_real_literal` in `crates/compile-sysml/src/semantic/serializer.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Emits `"{:.1}"` when `val.fract() == 0.0` so integer-valued reals retain a `.0` suffix, and `val.to_string()` otherwise so multi-digit fractions (e.g. `0.25`) round-trip losslessly.
+///
+/// ## 3. Preconditions
+/// - `val: f64` is a finite floating-point attribute value.
+///
+/// ## 4. Postconditions
+/// - Returns a canonical SysML v2 `Real` literal `String` with zero early returns (SESE).
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) bounded float formatting.
+/// - Space Complexity: O(1) bounded string allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total function over `f64`.
+/// - State: Pure stateless formatting.
+/// - Action: Executes deterministically with zero recursion or blocking.
+/// - Resource: Bounded single-string heap allocation within `SEMANTIC-SERIALIZER`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SEMANTIC-SERIALIZER-FORMAT-REAL-LITERAL] | SysML v2: ActionDef(format_real_literal)
+fn format_real_literal(val: f64) -> String {
+    if val.fract() == 0.0 {
+        format!("{:.1}", val)
+    } else {
+        val.to_string()
+    }
+}
+
 
 impl SysmlSerializable for AttributeDef {
     /// Executes deterministic fn `AttributeDef::to_sysml` within `crates/compile-sysml/src/semantic/serializer.rs`.
@@ -295,13 +359,26 @@ impl SysmlSerializable for PortDef {
                 lines.push(format!("{}port {}{}{} : {} {{", pad, dir, conj, self.name, self.type_name));
             }
             if !self.protocol_family.is_empty() {
-                lines.push(format!("{}    attribute protocol_family : String = \"{}\";", pad, self.protocol_family));
+                lines.push(format!(
+                    "{}    attribute protocol_family : String = \"{}\";",
+                    pad,
+                    strip_enclosing_quotes(&self.protocol_family)
+                ));
             }
             if !self.port_category.is_empty() && self.port_category != "DataPort" {
-                lines.push(format!("{}    attribute port_category : String = \"{}\";", pad, self.port_category));
+                lines.push(format!(
+                    "{}    attribute port_category : String = \"{}\";",
+                    pad,
+                    strip_enclosing_quotes(&self.port_category)
+                ));
             }
             for (k, v) in &self.electrical_attributes {
-                lines.push(format!("{}    attribute {} = \"{}\";", pad, k, v));
+                lines.push(format!(
+                    "{}    attribute {} = \"{}\";",
+                    pad,
+                    k,
+                    strip_enclosing_quotes(v)
+                ));
             }
             for flow in &self.item_flows {
                 lines.push(flow.to_sysml(indent + 4));
@@ -350,10 +427,20 @@ impl SysmlSerializable for ActionDef {
         let doc = format_doc_comment(&self.doc, indent);
         let mut param_strs = Vec::new();
         for p in &self.in_params {
-            param_strs.push(format!("in {} : {}", p.name, p.type_name));
+            let def_val = p
+                .default_value
+                .as_ref()
+                .map(|v| format!(" = {}", v))
+                .unwrap_or_default();
+            param_strs.push(format!("in {} : {}{}", p.name, p.type_name, def_val));
         }
         for p in &self.out_params {
-            param_strs.push(format!("out {} : {}", p.name, p.type_name));
+            let def_val = p
+                .default_value
+                .as_ref()
+                .map(|v| format!(" = {}", v))
+                .unwrap_or_default();
+            param_strs.push(format!("out {} : {}{}", p.name, p.type_name, def_val));
         }
         let params_header = if param_strs.is_empty() {
             String::new()
@@ -362,7 +449,9 @@ impl SysmlSerializable for ActionDef {
         };
 
         let kw = if self.is_def { "action def" } else { "action" };
-        let has_body = self.performer.is_some() || !self.steps.is_empty();
+        let has_body = self.performer.is_some()
+            || !self.steps.is_empty()
+            || !self.parameters.is_empty();
 
         if has_body {
             let mut lines = Vec::new();
@@ -370,6 +459,9 @@ impl SysmlSerializable for ActionDef {
                 lines.push(doc.trim_end().to_string());
             }
             lines.push(format!("{}{} {}{} {{", pad, kw, self.name, params_header));
+            for attr in &self.parameters {
+                lines.push(attr.to_sysml(indent + 4));
+            }
             if let Some(perf) = &self.performer {
                 lines.push(format!("{}    perform {};", pad, perf));
             }
@@ -681,25 +773,37 @@ impl SysmlSerializable for ConnectionDef {
 fn append_connection_metadata_lines(conn: &ConnectionDef, pad: &str, lines: &mut Vec<String>) {
     let inferred_source = conn.source_port.split_once('.').map(|(owner, _)| owner);
     if conn.source_part.as_deref() != inferred_source {
-        let sp = conn.source_part.as_deref().unwrap_or("");
+        let sp = strip_enclosing_quotes(conn.source_part.as_deref().unwrap_or(""));
         lines.push(format!("{}    attribute source_part : String = \"{}\";", pad, sp));
     }
     let inferred_target = conn.target_port.split_once('.').map(|(owner, _)| owner);
     if conn.target_part.as_deref() != inferred_target {
-        let tp = conn.target_part.as_deref().unwrap_or("");
+        let tp = strip_enclosing_quotes(conn.target_part.as_deref().unwrap_or(""));
         lines.push(format!("{}    attribute target_part : String = \"{}\";", pad, tp));
     }
     if let Some(flow_ref) = &conn.item_flow_ref {
-        lines.push(format!("{}    attribute item_flow_ref : String = \"{}\";", pad, flow_ref));
+        lines.push(format!(
+            "{}    attribute item_flow_ref : String = \"{}\";",
+            pad,
+            strip_enclosing_quotes(flow_ref)
+        ));
     }
     if conn.severity != 1 {
         lines.push(format!("{}    attribute severity : Integer = {};", pad, conn.severity));
     }
     if let Some(proto) = &conn.protocol {
-        lines.push(format!("{}    attribute protocol : String = \"{}\";", pad, proto));
+        lines.push(format!(
+            "{}    attribute protocol : String = \"{}\";",
+            pad,
+            strip_enclosing_quotes(proto)
+        ));
     }
     if let Some(lat) = conn.latency_ms {
-        lines.push(format!("{}    attribute latency_ms : Real = {:.1};", pad, lat));
+        lines.push(format!(
+            "{}    attribute latency_ms : Real = {};",
+            pad,
+            format_real_literal(lat)
+        ));
     }
 }
 
@@ -782,8 +886,26 @@ impl SysmlSerializable for HazardDef {
         }
         lines.push(format!("{}hazard def {} {{", pad, self.name));
         lines.push(format!("{}    attribute severity : Integer = {};", pad, self.severity));
+        if let Some(sp) = &self.source_port {
+            lines.push(format!(
+                "{}    attribute source_port : String = \"{}\";",
+                pad,
+                strip_enclosing_quotes(sp)
+            ));
+        }
+        if let Some(tp) = &self.target_port {
+            lines.push(format!(
+                "{}    attribute target_port : String = \"{}\";",
+                pad,
+                strip_enclosing_quotes(tp)
+            ));
+        }
         if let Some(p) = &self.part_ref {
-            lines.push(format!("{}    attribute part_ref : String = \"{}\";", pad, p));
+            lines.push(format!(
+                "{}    attribute part_ref : String = \"{}\";",
+                pad,
+                strip_enclosing_quotes(p)
+            ));
         }
         lines.push(format!("{}}}", pad));
         lines.join("\n")
@@ -827,7 +949,25 @@ impl SysmlSerializable for RiskDef {
         lines.push(format!("{}risk def {} {{", pad, self.name));
         lines.push(format!("{}    attribute severity : Integer = {};", pad, self.severity));
         if let Some(h) = &self.hazard_ref {
-            lines.push(format!("{}    attribute hazard_ref : String = \"{}\";", pad, h));
+            lines.push(format!(
+                "{}    attribute hazard_ref : String = \"{}\";",
+                pad,
+                strip_enclosing_quotes(h)
+            ));
+        }
+        if let Some(sp) = &self.source_port {
+            lines.push(format!(
+                "{}    attribute source_port : String = \"{}\";",
+                pad,
+                strip_enclosing_quotes(sp)
+            ));
+        }
+        if let Some(tp) = &self.target_port {
+            lines.push(format!(
+                "{}    attribute target_port : String = \"{}\";",
+                pad,
+                strip_enclosing_quotes(tp)
+            ));
         }
         lines.push(format!("{}}}", pad));
         lines.join("\n")
@@ -1658,6 +1798,32 @@ mod tests {
         assert!(sysml.contains("    satisfy by TestEngine;"));
     }
 
+    /// Verifies that `RequirementDef::to_sysml` serializes and round-trips `assumes`, `requires`, `derived_from`, and `derives` clauses (Issue #505).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_serialize_requirement_def_with_assumes_requires_derived_from` in `crates/compile-sysml/src/semantic/serializer.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic round-trip serialization of requirement traceability clauses (`assume`, `require`, `derived from`, `derives`, `verify by`, `satisfy by`).
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked within a valid test execution context for `test_serialize_requirement_def_with_assumes_requires_derived_from`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts emitted SysML text contains all expected clauses and reparses to an identical `PackageDef`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over requirement AST size.
+    /// - Space Complexity: O(N) bounded auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `RequirementDef`.
+    /// - State: Maintains consistent state invariants without partial mutation.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `SEMANTIC-SERIALIZER`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SEMANTIC-SERIALIZER-REQUIREMENTDEF-TO-SYSML] | SysML v2: TestCaseDef(test_serialize_requirement_def_with_assumes_requires_derived_from)
     #[test]
     fn test_serialize_requirement_def_with_assumes_requires_derived_from() {
         let req = RequirementDef {
@@ -1667,15 +1833,27 @@ mod tests {
             assumes: vec!["ValidInput".to_string()],
             requires: vec!["Invariant_Alpha".to_string(), "Invariant_Beta".to_string()],
             derived_from: vec!["REQ_0031_Parent".to_string()],
+            derives: vec!["REQ_0033_Child".to_string()],
             verified_by: vec!["AC_01".to_string()],
             satisfied_by: vec!["SubsystemEngine".to_string()],
             ..Default::default()
         };
-        let sysml = req.to_sysml(0);
-        assert!(sysml.contains("    assume ValidInput;"));
-        assert!(sysml.contains("    require Invariant_Alpha;"));
-        assert!(sysml.contains("    require Invariant_Beta;"));
-        assert!(sysml.contains("    derived from REQ_0031_Parent;"));
+        let pkg = PackageDef {
+            name: "ReqTracePkg".to_string(),
+            requirement_defs: vec![req],
+            ..Default::default()
+        };
+        let sysml = pkg.to_sysml(0);
+        assert!(sysml.contains("        assume ValidInput;"));
+        assert!(sysml.contains("        require Invariant_Alpha;"));
+        assert!(sysml.contains("        require Invariant_Beta;"));
+        assert!(sysml.contains("        derived from REQ_0031_Parent;"));
+        assert!(sysml.contains("        derives REQ_0033_Child;"));
+        let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&sysml, "ReqTracePkg") {
+            Ok(p) => p,
+            Err(e) => panic!("reparse failed: {}", e),
+        };
+        assert_eq!(reparsed, pkg);
     }
 
     #[test]
@@ -1818,18 +1996,23 @@ mod tests {
     #[test]
     fn test_serialize_state_def_sub_states_roundtrip() {
         let src = "\
+doc /* Flight state machine package */
 package FlightStateMachine {
     state def FlightMode {
         entry initFlight;
         do monitorFlight;
         exit shutdownFlight;
+        doc = \"Root flight mode state machine\";
+        doc /* Ground idle leaf state */
         state GroundIdle;
+        doc /* Airborne composite state */
         state def Airborne {
             entry engageAutopilot;
             do trackWaypoints;
             exit disengageAutopilot;
             state Climb;
             state Cruise;
+            doc /* Climb to cruise transition */
             transition Climb_to_Cruise first Climb accept AltitudeReached if climbComplete do levelOff then Cruise;
         }
         transition GroundIdle_to_Airborne first GroundIdle then Airborne;
@@ -1841,7 +2024,14 @@ package FlightStateMachine {
         };
         assert_eq!(parsed.state_defs.len(), 1);
         if let Some(root_state) = parsed.state_defs.first() {
+            assert_eq!(root_state.doc.as_deref(), Some("Root flight mode state machine"));
             assert_eq!(root_state.sub_states.len(), 2);
+            assert_eq!(root_state.sub_states[0].doc.as_deref(), Some("Ground idle leaf state"));
+            assert_eq!(root_state.sub_states[1].doc.as_deref(), Some("Airborne composite state"));
+            assert_eq!(
+                root_state.sub_states[1].transitions[0].doc.as_deref(),
+                Some("Climb to cruise transition")
+            );
         }
 
         let serialized = parsed.to_sysml(0);
@@ -1876,11 +2066,7 @@ package FlightStateMachine {
             ..Default::default()
         };
         let empty_serialized = empty_transition_state.to_sysml(0);
-        assert!(
-            empty_serialized.contains("    transition;"),
-            "empty transition clause must emit 'transition;', got:\n{}",
-            empty_serialized
-        );
+        assert!(empty_serialized.contains("    transition;"));
         assert!(!empty_serialized.contains("transition transition;"));
     }
 
@@ -2151,6 +2337,96 @@ package MissionUseCases {
         let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&serialized, "MissionUseCases") {
             Ok(p) => p,
             Err(e) => panic!("reparse failed: {}", e),
+        };
+        assert_eq!(reparsed, parsed);
+    }
+
+    /// Verifies lossless round-trip serialization for `HazardDef`, `RiskDef`, `ActionDef`, `ConnectionDef`, `PortDef`, and `StateDef` inner `doc` statements (Issue #505).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_505_hazard_risk_action_connection_state_roundtrip` in `crates/compile-sysml/src/semantic/serializer.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Enforces `parse(serialize(ast)) == ast` across `HazardDef`/`RiskDef` port endpoints, `ActionDef` parameter defaults and body attributes, `ConnectionDef::latency_ms` precision, quote normalization, and `StateDef` property `doc = "...";` binding.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked within a valid test execution context for `test_issue_505_hazard_risk_action_connection_state_roundtrip`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts zero `""...""` double-quote corruption, zero field loss, exact `latency_ms` fractional preservation, and bijective AST equality after re-parsing.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over package source and AST size.
+    /// - Space Complexity: O(N) bounded auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types across `PackageDef` and `SysmlParser::parse_source`.
+    /// - State: Maintains consistent state invariants without partial mutation.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `SEMANTIC-SERIALIZER`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SEMANTIC-SERIALIZER-ROUNDTRIP-505] | SysML v2: TestCaseDef(test_issue_505_hazard_risk_action_connection_state_roundtrip)
+    #[test]
+    fn test_issue_505_hazard_risk_action_connection_state_roundtrip() {
+        let src = "\
+package Roundtrip505 {
+    port def BusPort {
+        attribute protocol_family : String = \"CAN_FD\";
+        attribute voltage = \"5V\";
+    }
+    action def ComputeControl(in setpoint : Real = 10.0, out command : Real = 0.0) {
+        attribute gain : Real = 0.25;
+        perform ControlLoop;
+        step ApplyPid;
+    }
+    connection def SensorLink {
+        connect Sensor.outPort to Controller.inPort;
+        attribute source_part : String = \"SensorNode\";
+        attribute target_part : String = \"ControlNode\";
+        attribute item_flow_ref : String = \"TelemetryFrame\";
+        attribute severity : Integer = 3;
+        attribute protocol : String = \"SPI\";
+        attribute latency_ms : Real = 0.25;
+    }
+    hazard def HZ_Overcurrent {
+        attribute severity : Integer = 4;
+        attribute source_port : String = \"Bus.pwrOut\";
+        attribute target_port : String = \"Actuator.pwrIn\";
+        attribute part_ref : String = \"PowerStage\";
+    }
+    risk def RSK_Overcurrent {
+        attribute severity : Integer = 3;
+        attribute hazard_ref : String = \"HZ_Overcurrent\";
+        attribute source_port : String = \"Bus.pwrOut\";
+        attribute target_port : String = \"Actuator.pwrIn\";
+    }
+    state def SupervisorState {
+        doc = \"Supervisor state property doc\";
+        state ActiveSubState;
+    }
+}";
+        let parsed = match crate::parser::grammar::SysmlParser::parse_source(src, "Roundtrip505") {
+            Ok(p) => p,
+            Err(e) => panic!("initial parse failed: {}", e),
+        };
+        assert_eq!(parsed.action_defs[0].in_params[0].default_value.as_deref(), Some("10.0"));
+        assert_eq!(parsed.action_defs[0].out_params[0].default_value.as_deref(), Some("0.0"));
+        assert_eq!(parsed.action_defs[0].parameters.len(), 1);
+        assert_eq!(parsed.connection_defs[0].latency_ms, Some(0.25));
+        assert_eq!(parsed.hazard_defs[0].source_port.as_deref(), Some("Bus.pwrOut"));
+        assert_eq!(parsed.hazard_defs[0].target_port.as_deref(), Some("Actuator.pwrIn"));
+        assert_eq!(parsed.risk_defs[0].source_port.as_deref(), Some("Bus.pwrOut"));
+        assert_eq!(parsed.risk_defs[0].target_port.as_deref(), Some("Actuator.pwrIn"));
+        assert_eq!(parsed.state_defs[0].doc.as_deref(), Some("Supervisor state property doc"));
+        assert_eq!(parsed.state_defs[0].sub_states[0].doc, None);
+
+        let serialized = parsed.to_sysml(0);
+        assert!(!serialized.contains("\"\""));
+        assert!(serialized.contains("attribute latency_ms : Real = 0.25;"));
+        let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&serialized, "Roundtrip505") {
+            Ok(p) => p,
+            Err(e) => panic!("reparse failed: {}\n---\n{}", e, serialized),
         };
         assert_eq!(reparsed, parsed);
     }
