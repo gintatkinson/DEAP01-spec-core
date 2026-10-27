@@ -40,7 +40,6 @@ use std::process;
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-MAIN], [DO-330-TQL-4-CLI]
 fn main() {
-    let cli = Cli::parse();
-    let exit_code = execute_cli(cli);
+    let exit_code = compile_sysml::sync::forward::run_cli_with_emit_flags(|| execute_cli(Cli::parse()));
     process::exit(exit_code);
 }
