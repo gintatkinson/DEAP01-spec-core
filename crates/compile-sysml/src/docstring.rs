@@ -1034,9 +1034,15 @@ pub fn inject_rust_file_docstrings(
                             let existing_reqs =
                                 extract_realises_ids_from_doc_lines(&current_doc);
                             if !existing_reqs.is_empty()
-                                && !existing_reqs
-                                    .iter()
-                                    .any(|r| schema_identifiers_match(r, &schema_req))
+                                && !schema_req
+                                    .split(',')
+                                    .map(str::trim)
+                                    .filter(|s| !s.is_empty())
+                                    .all(|sr| {
+                                        existing_reqs
+                                            .iter()
+                                            .any(|r| schema_identifiers_match(r, sr))
+                                    })
                             {
                                 return Err(DocstringError::UnforcedConflict(format!(
                                     "Conflicting unforced docstring in '{}' for '{}': existing Realises {:?} conflicts with schema requirement '{}' (use --force to overwrite)",
@@ -1270,9 +1276,15 @@ pub fn inject_dart_file_docstrings(
                         if let Some(schema_req) = schema_req_opt {
                             let existing_reqs = extract_realises_ids_from_doc_lines(&current_doc);
                             if !existing_reqs.is_empty()
-                                && !existing_reqs
-                                    .iter()
-                                    .any(|r| schema_identifiers_match(r, &schema_req))
+                                && !schema_req
+                                    .split(',')
+                                    .map(str::trim)
+                                    .filter(|s| !s.is_empty())
+                                    .all(|sr| {
+                                        existing_reqs
+                                            .iter()
+                                            .any(|r| schema_identifiers_match(r, sr))
+                                    })
                             {
                                 return Err(DocstringError::UnforcedConflict(format!(
                                     "Conflicting unforced docstring in '{}' for '{}': existing Realises {:?} conflicts with schema requirement '{}' (use --force to overwrite)",
@@ -1287,13 +1299,8 @@ pub fn inject_dart_file_docstrings(
                             }
                         }
                         let indent = leading_whitespace(raw_line);
-                        let (params, return_type) = if kind.is_callable() {
-                            let sig_code =
-                                deap_core::source_ast::collect_dart_callable_signature(&raw_lines, idx);
-                            parse_dart_callable_signature(&sig_code, &item_name)
-                        } else {
-                            (Vec::new(), None)
-                        };
+                        let (params, return_type, fields_or_variants, invariants) =
+                            inspect_dart_item_details(&raw_lines, idx, kind, &item_name);
                         let ctx = ItemSynthesisContext {
                             file_rel,
                             module_tag: &module_tag,
@@ -1305,8 +1312,8 @@ pub fn inject_dart_file_docstrings(
                             existing_doc: &current_doc,
                             params,
                             return_type,
-                            fields_or_variants: Vec::new(),
-                            invariants: Vec::new(),
+                            fields_or_variants,
+                            invariants,
                             schema_model,
                         };
                         let new_doc = synthesize_7_section_docstring(&ctx, &mut seen_docblocks);
@@ -1356,9 +1363,15 @@ pub fn inject_dart_file_docstrings(
                                 let existing_reqs =
                                     extract_realises_ids_from_doc_lines(&current_doc);
                                 if !existing_reqs.is_empty()
-                                    && !existing_reqs
-                                        .iter()
-                                        .any(|r| schema_identifiers_match(r, &schema_req))
+                                    && !schema_req
+                                        .split(',')
+                                        .map(str::trim)
+                                        .filter(|s| !s.is_empty())
+                                        .all(|sr| {
+                                            existing_reqs
+                                                .iter()
+                                                .any(|r| schema_identifiers_match(r, sr))
+                                        })
                                 {
                                     return Err(DocstringError::UnforcedConflict(format!(
                                         "Conflicting unforced docstring in '{}' for '{}': existing Realises {:?} conflicts with schema requirement '{}' (use --force to overwrite)",
@@ -1373,10 +1386,13 @@ pub fn inject_dart_file_docstrings(
                                 }
                             }
                             let indent = leading_whitespace(raw_line);
-                            let sig_code =
-                                deap_core::source_ast::collect_dart_callable_signature(&raw_lines, idx);
-                            let (params, return_type) =
-                                parse_dart_callable_signature(&sig_code, &member_name);
+                            let (params, return_type, fields_or_variants, invariants) =
+                                inspect_dart_item_details(
+                                    &raw_lines,
+                                    idx,
+                                    member_kind,
+                                    &member_name,
+                                );
                             let ctx = ItemSynthesisContext {
                                 file_rel,
                                 module_tag: &module_tag,
@@ -1388,8 +1404,8 @@ pub fn inject_dart_file_docstrings(
                                 existing_doc: &current_doc,
                                 params,
                                 return_type,
-                                fields_or_variants: Vec::new(),
-                                invariants: Vec::new(),
+                                fields_or_variants,
+                                invariants,
                                 schema_model,
                             };
                             let new_doc = synthesize_7_section_docstring(&ctx, &mut seen_docblocks);
@@ -1890,9 +1906,17 @@ fn synthesize_7_section_docstring(
     // Build Section 7 (Realization & Traceability)
     let existing_reqs = extract_realises_ids_from_doc_lines(ctx.existing_doc);
     let req_tag = if let Some(s_req) = schema_req_id {
-        if existing_reqs
-            .iter()
-            .any(|r| schema_identifiers_match(r, &s_req))
+        let schema_reqs: Vec<&str> = s_req
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !schema_reqs.is_empty()
+            && schema_reqs.iter().all(|sr| {
+                existing_reqs
+                    .iter()
+                    .any(|r| schema_identifiers_match(r, sr))
+            })
         {
             existing_reqs
                 .iter()
@@ -1900,7 +1924,11 @@ fn synthesize_7_section_docstring(
                 .collect::<Vec<String>>()
                 .join(", ")
         } else {
-            format!("[{}]", s_req)
+            schema_reqs
+                .iter()
+                .map(|sr| format!("[{}]", sr))
+                .collect::<Vec<String>>()
+                .join(", ")
         }
     } else if !existing_reqs.is_empty() {
         existing_reqs
@@ -2039,8 +2067,11 @@ fn inspect_rust_item_details(
                             .or_else(|| inline_stmt.strip_prefix("debug_assert!("))
                         {
                             if let Some(clean_cond) = extract_balanced_rust_assert_cond(rest) {
-                                if !clean_cond.is_empty() && invariants.len() < 3 {
-                                    invariants.push(clean_cond.replace('"', "'"));
+                                let formatted_cond = clean_cond.replace('"', "'");
+                                if !formatted_cond.is_empty()
+                                    && !invariants.contains(&formatted_cond)
+                                {
+                                    invariants.push(formatted_cond);
                                 }
                             }
                         }
@@ -2066,8 +2097,9 @@ fn inspect_rust_item_details(
                         .or_else(|| t.strip_prefix("debug_assert!("))
                     {
                         if let Some(clean_cond) = extract_balanced_rust_assert_cond(rest) {
-                            if !clean_cond.is_empty() && invariants.len() < 3 {
-                                invariants.push(clean_cond.replace('"', "'"));
+                            let formatted_cond = clean_cond.replace('"', "'");
+                            if !formatted_cond.is_empty() && !invariants.contains(&formatted_cond) {
+                                invariants.push(formatted_cond);
                             }
                         }
                     }
@@ -2115,22 +2147,24 @@ fn inspect_rust_item_details(
                         if let Some((fname, ftype)) = after_vis.split_once(':') {
                             if let Some(id) = extract_leading_ast_ident(fname.trim()) {
                                 let clean_t = ftype.trim().trim_end_matches(',').trim();
-                                if fields_or_variants.len() < 5 {
-                                    fields_or_variants.push(format!("{}: {}", id, clean_t));
+                                let entry = format!("{}: {}", id, clean_t);
+                                if !fields_or_variants.contains(&entry) {
+                                    fields_or_variants.push(entry);
                                 }
                             }
                         }
                     } else if kind == SourceItemKind::Enum {
                         if let Some(v) = extract_leading_ast_ident(t) {
-                            if fields_or_variants.len() < 6 {
+                            if !fields_or_variants.contains(&v) {
                                 fields_or_variants.push(v);
                             }
                         }
                     } else if kind == SourceItemKind::Trait {
                         if let Some((_, fn_rest)) = t.split_once("fn ") {
                             if let Some(m) = extract_leading_ast_ident(fn_rest.trim()) {
-                                if fields_or_variants.len() < 6 {
-                                    fields_or_variants.push(format!("fn {}", m));
+                                let entry = format!("fn {}", m);
+                                if !fields_or_variants.contains(&entry) {
+                                    fields_or_variants.push(entry);
                                 }
                             }
                         }
@@ -2138,6 +2172,229 @@ fn inspect_rust_item_details(
                 }
 
                 if (saw_open_brace && brace_depth <= 0) || (!saw_open_brace && t.ends_with(';')) {
+                    break;
+                }
+            }
+        }
+    }
+
+    (params, return_type, fields_or_variants, invariants)
+}
+
+/// Inspects lines starting at `start_idx` in `raw_lines` to extract Dart callable signatures, `assert(...)` invariants, class/mixin/extension fields, or enum variants.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and FEAT-42 Section 3.2 AST attribute interpolation (`inspect_dart_item_details`).
+/// Extracts formal parameters, return types, class/mixin/extension fields, enum variants, and callable
+/// `assert(...)` expressions so synthesized Dart docstrings reflect the item's concrete AST structure.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Scans `raw_lines` starting at `start_idx` using `.get(..)` and balanced delimiter tracking (`update_ast_delimiter_depths`) without arbitrary count caps or panicking indexing.
+/// - Deduplicates extracted `fields_or_variants` and `invariants` in declaration order.
+///
+/// ## 3. Preconditions
+/// - `raw_lines: &[&str]` is the full line slice of the Dart source file.
+/// - `start_idx: usize` is the 0-based index of the item declaration line.
+/// - `kind: SourceItemKind` and `item_name: &str` identify the classified Dart AST item at `start_idx`.
+///
+/// ## 4. Postconditions
+/// - Returns `(params, return_type, fields_or_variants, invariants)` for `ItemSynthesisContext`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(B) where B is the number of lines spanned by the target Dart AST item in `raw_lines`.
+/// - Space Complexity: O(P + F + I) where P is parameter count, F is field/variant count, and I is invariant count.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Safely bounds lookahead at item termination (`item_brace_depth == 0` or `;`) and EOF via `.get(..)`.
+/// - State: Pure read-only lookahead over `raw_lines`.
+/// - Action: Never panics or unwraps.
+/// - Resource: Bounded vectors proportional to item members.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-INSPECT-DART-ITEM-DETAILS]
+fn inspect_dart_item_details(
+    raw_lines: &[&str],
+    start_idx: usize,
+    kind: SourceItemKind,
+    item_name: &str,
+) -> (Vec<SourceParam>, Option<String>, Vec<String>, Vec<String>) {
+    let mut params = Vec::new();
+    let mut return_type = None;
+    let mut fields_or_variants = Vec::new();
+    let mut invariants = Vec::new();
+
+    if kind.is_callable() {
+        let sig_code = deap_core::source_ast::collect_dart_callable_signature(raw_lines, start_idx);
+        let (p, r) = parse_dart_callable_signature(&sig_code, item_name);
+        params = p;
+        return_type = r;
+
+        let mut item_brace_depth: usize = 0;
+        let mut item_paren_depth: usize = 0;
+        let mut saw_open_brace = false;
+        if let Some(window) = raw_lines.get(start_idx..) {
+            for &raw_line in window {
+                let t = strip_line_comment_preserving_strings(raw_line.trim());
+                let mut search_slice = t;
+                while let Some(pos) = search_slice.find("assert(") {
+                    let after_assert = search_slice.get(pos.saturating_add(7)..).unwrap_or("");
+                    if let Some(cond) = extract_balanced_rust_assert_cond(after_assert) {
+                        let clean = cond.replace('"', "'");
+                        if !clean.is_empty() && !invariants.contains(&clean) {
+                            invariants.push(clean);
+                        }
+                    }
+                    search_slice = after_assert;
+                }
+                update_ast_delimiter_depths(t, &mut item_brace_depth, &mut item_paren_depth);
+                if item_paren_depth == 0 && (item_brace_depth > 0 || t.contains('}')) {
+                    saw_open_brace = true;
+                }
+                if (saw_open_brace && item_brace_depth == 0 && item_paren_depth == 0)
+                    || (!saw_open_brace && item_paren_depth == 0 && t.ends_with(';'))
+                {
+                    break;
+                }
+            }
+        }
+    } else if kind == SourceItemKind::Enum {
+        let mut item_brace_depth: usize = 0;
+        let mut item_paren_depth: usize = 0;
+        let mut saw_open_brace = false;
+        let mut enum_variants_done = false;
+        if let Some(window) = raw_lines.get(start_idx..) {
+            for &raw_line in window {
+                let t = strip_line_comment_preserving_strings(raw_line.trim());
+                let depth_before = item_brace_depth;
+                let paren_before = item_paren_depth;
+                if (depth_before == 1 || (depth_before == 0 && t.contains('{')))
+                    && !enum_variants_done
+                {
+                    let segment = if depth_before == 0 {
+                        t.split_once('{').map(|(_, a)| a).unwrap_or("")
+                    } else {
+                        t
+                    };
+                    let cut_idx = match (segment.find(';'), segment.find('}')) {
+                        (Some(s), Some(b)) => Some(s.min(b)),
+                        (Some(s), None) => Some(s),
+                        (None, Some(b)) => Some(b),
+                        (None, None) => None,
+                    };
+                    let variant_part = match cut_idx {
+                        Some(idx) => {
+                            enum_variants_done = true;
+                            segment.get(..idx).unwrap_or("")
+                        }
+                        None => segment,
+                    };
+                    let mut local_paren = paren_before;
+                    for token in variant_part.split(',') {
+                        if local_paren == 0 {
+                            let clean_tok = strip_leading_dart_annotations(token.trim()).trim();
+                            if !clean_tok.is_empty() && !clean_tok.starts_with("//") {
+                                if let Some(v) = extract_leading_ast_ident(clean_tok) {
+                                    if !fields_or_variants.contains(&v) {
+                                        fields_or_variants.push(v);
+                                    }
+                                }
+                            }
+                        }
+                        let mut dummy_brace = 0usize;
+                        update_ast_delimiter_depths(token, &mut dummy_brace, &mut local_paren);
+                    }
+                }
+                update_ast_delimiter_depths(t, &mut item_brace_depth, &mut item_paren_depth);
+                if item_brace_depth > 0 || t.contains('{') {
+                    saw_open_brace = true;
+                }
+                if (saw_open_brace && item_brace_depth == 0)
+                    || (!saw_open_brace && t.ends_with(';'))
+                {
+                    break;
+                }
+            }
+        }
+    } else if kind == SourceItemKind::Class
+        || kind == SourceItemKind::Mixin
+        || kind == SourceItemKind::Extension
+    {
+        let mut item_brace_depth: usize = 0;
+        let mut item_paren_depth: usize = 0;
+        let mut saw_open_brace = false;
+        if let Some(window) = raw_lines.get(start_idx..) {
+            for &raw_line in window {
+                let raw_t = strip_line_comment_preserving_strings(raw_line.trim());
+                let t = strip_leading_dart_annotations(raw_t).trim();
+                let depth_before = item_brace_depth;
+                let paren_before = item_paren_depth;
+                update_ast_delimiter_depths(raw_t, &mut item_brace_depth, &mut item_paren_depth);
+                if item_brace_depth > 0 || raw_t.contains('{') {
+                    saw_open_brace = true;
+                }
+                if depth_before == 1
+                    && paren_before == 0
+                    && !t.is_empty()
+                    && !t.starts_with('}')
+                    && !t.starts_with("//")
+                    && t.ends_with(';')
+                    && classify_dart_member_ast(t, item_name).is_none()
+                {
+                    let without_semi = t.trim_end_matches(';').trim();
+                    let decl_head = without_semi
+                        .split_once('=')
+                        .map(|(b, _)| b.trim())
+                        .unwrap_or(without_semi);
+                    if !decl_head.is_empty()
+                        && !decl_head.contains('(')
+                        && !decl_head.contains('{')
+                    {
+                        let mut clean_decl = decl_head;
+                        loop {
+                            let next = clean_decl
+                                .strip_prefix("static ")
+                                .or_else(|| clean_decl.strip_prefix("late "))
+                                .or_else(|| clean_decl.strip_prefix("final "))
+                                .or_else(|| clean_decl.strip_prefix("const "))
+                                .or_else(|| clean_decl.strip_prefix("covariant "))
+                                .or_else(|| clean_decl.strip_prefix("external "))
+                                .map(str::trim_start);
+                            if let Some(stripped) = next {
+                                clean_decl = stripped;
+                            } else {
+                                break;
+                            }
+                        }
+                        if let Some(stripped_var) = clean_decl.strip_prefix("var ") {
+                            if let Some(fname) = extract_leading_ast_ident(stripped_var.trim()) {
+                                let entry = format!("{}: dynamic", fname);
+                                if !fields_or_variants.contains(&entry) {
+                                    fields_or_variants.push(entry);
+                                }
+                            }
+                        } else if let Some((ftype_raw, fname_raw)) =
+                            clean_decl.rsplit_once(char::is_whitespace)
+                        {
+                            let ftype = ftype_raw.trim();
+                            if let Some(fname) = extract_leading_ast_ident(fname_raw.trim()) {
+                                if !ftype.is_empty() {
+                                    let entry = format!("{}: {}", fname, ftype);
+                                    if !fields_or_variants.contains(&entry) {
+                                        fields_or_variants.push(entry);
+                                    }
+                                }
+                            }
+                        } else if let Some(fname) = extract_leading_ast_ident(clean_decl) {
+                            let entry = format!("{}: dynamic", fname);
+                            if !fields_or_variants.contains(&entry) {
+                                fields_or_variants.push(entry);
+                            }
+                        }
+                    }
+                }
+                if (saw_open_brace && item_brace_depth == 0)
+                    || (!saw_open_brace && raw_t.ends_with(';'))
+                {
                     break;
                 }
             }
@@ -2500,17 +2757,44 @@ fn resolve_schema_context(
             .collect()
     };
 
+    let push_unique_req = |reqs: &mut Vec<String>, token: String| {
+        let trimmed = token.trim();
+        if !trimmed.is_empty()
+            && !reqs
+                .iter()
+                .any(|existing| schema_identifiers_match(existing, trimmed))
+        {
+            reqs.push(trimmed.to_string());
+        }
+    };
+
+    let push_unique_constraint = |constraints: &mut Vec<String>, expr: String| {
+        let trimmed = expr.trim();
+        if !trimmed.is_empty() && !constraints.iter().any(|existing| existing == trimmed) {
+            constraints.push(trimmed.to_string());
+        }
+    };
+
     let extract_doc_req = |doc: &str| -> Option<String> {
+        let mut collected = Vec::new();
         let doc_lines: Vec<String> = doc.lines().map(|l| l.to_string()).collect();
-        let reqs = extract_realises_ids_from_doc_lines(&doc_lines);
-        if let Some(first_req) = reqs.first() {
-            return resolve_req_token(first_req);
+        for req in extract_realises_ids_from_doc_lines(&doc_lines) {
+            if let Some(resolved) = resolve_req_token(&req) {
+                push_unique_req(&mut collected, resolved);
+            }
+        }
+        if !collected.is_empty() {
+            return Some(collected.join(", "));
         }
         if let Some((_, after_prefix)) = doc.split_once("Realises: [") {
             if let Some((inside, _)) = after_prefix.split_once(']') {
-                let first_tok = inside.split(',').next().unwrap_or(inside).trim();
-                if !first_tok.is_empty() {
-                    return resolve_req_token(first_tok);
+                for tok in inside.split(',') {
+                    let clean_tok = tok.trim().trim_start_matches('[').trim_end_matches(']').trim();
+                    if !clean_tok.is_empty() {
+                        if let Some(resolved) = resolve_req_token(clean_tok) {
+                            push_unique_req(&mut collected, resolved);
+                        }
+                    }
                 }
             }
         }
@@ -2524,7 +2808,7 @@ fn resolve_schema_context(
                     let upper = tok.to_ascii_uppercase();
                     if upper.starts_with("REQ-") || upper.starts_with("REQ_") {
                         if let Some(resolved) = resolve_req_token(tok) {
-                            return Some(resolved);
+                            push_unique_req(&mut collected, resolved);
                         }
                     }
                 }
@@ -2533,55 +2817,71 @@ fn resolve_schema_context(
                 break;
             }
         }
-        None
+        if collected.is_empty() {
+            None
+        } else {
+            Some(collected.join(", "))
+        }
     };
 
     let extract_part_req_and_constraint =
         |part: &deap_core::sysml_ast::PartDef| -> (Option<String>, Option<String>) {
-            let req = part
-                .satisfied_requirements
-                .first()
-                .and_then(|r| resolve_req_token(r))
-                .or_else(|| {
-                    part.requirements.first().and_then(|r| {
-                        if !r.req_id.is_empty() {
-                            Some(r.req_id.clone())
-                        } else if !r.name.is_empty() {
-                            Some(r.name.clone())
-                        } else {
-                            None
-                        }
-                    })
-                })
-                .or_else(|| {
-                    part.safety_realises
-                        .first()
-                        .and_then(|r| resolve_req_token(r))
-                })
-                .or_else(|| {
-                    all_pkgs
+            let mut part_reqs = Vec::new();
+            for r in &part.satisfied_requirements {
+                if let Some(resolved) = resolve_req_token(r) {
+                    push_unique_req(&mut part_reqs, resolved);
+                }
+            }
+            for r in &part.requirements {
+                let id = if !r.req_id.is_empty() {
+                    r.req_id.as_str()
+                } else {
+                    r.name.as_str()
+                };
+                if let Some(resolved) = resolve_req_token(id) {
+                    push_unique_req(&mut part_reqs, resolved);
+                }
+            }
+            for r in &part.safety_realises {
+                if let Some(resolved) = resolve_req_token(r) {
+                    push_unique_req(&mut part_reqs, resolved);
+                }
+            }
+            for pkg in &all_pkgs {
+                for req in &pkg.requirement_defs {
+                    if req
+                        .satisfied_by
                         .iter()
-                        .flat_map(|p| p.requirement_defs.iter())
-                        .find(|req| {
-                            req.satisfied_by
-                                .iter()
-                                .any(|s| schema_identifiers_match(s, &part.name))
-                        })
-                        .and_then(|req| {
-                            if !req.req_id.is_empty() {
-                                Some(req.req_id.clone())
-                            } else if !req.name.is_empty() {
-                                Some(req.name.clone())
-                            } else {
-                                None
-                            }
-                        })
-                });
+                        .any(|s| schema_identifiers_match(s, &part.name))
+                    {
+                        let id = if !req.req_id.is_empty() {
+                            req.req_id.clone()
+                        } else {
+                            req.name.clone()
+                        };
+                        if !id.is_empty() {
+                            push_unique_req(&mut part_reqs, id);
+                        }
+                    }
+                }
+            }
+            let req = if part_reqs.is_empty() {
+                None
+            } else {
+                Some(part_reqs.join(", "))
+            };
 
-            let constraint = part
-                .constraints
-                .first()
-                .and_then(|c| format_constraint(&c.name, &c.expression));
+            let mut part_constraints = Vec::new();
+            for c in &part.constraints {
+                if let Some(formatted) = format_constraint(&c.name, &c.expression) {
+                    push_unique_constraint(&mut part_constraints, formatted);
+                }
+            }
+            let constraint = if part_constraints.is_empty() {
+                None
+            } else {
+                Some(part_constraints.join("; "))
+            };
 
             (req, constraint)
         };
@@ -2684,26 +2984,37 @@ fn resolve_schema_context(
                         matched_req = Some(a_req);
                     }
                 }
-                if let Some(act_c) = owner_part
+                let mut act_constraints = Vec::new();
+                for act_c in owner_part
                     .constraints
                     .iter()
-                    .find(|c| constraint_matches_action(&c.name, &act.name))
+                    .filter(|c| constraint_matches_action(&c.name, &act.name))
                 {
                     if let Some(formatted) = format_constraint(&act_c.name, &act_c.expression) {
-                        matched_constraint = Some(formatted);
+                        push_unique_constraint(&mut act_constraints, formatted);
                     }
-                } else if let Some(step_expr) = act.steps.first() {
-                    if let Some(formatted) = format_constraint(&act.name, step_expr) {
-                        matched_constraint = Some(formatted);
+                }
+                if !act_constraints.is_empty() {
+                    matched_constraint = Some(act_constraints.join("; "));
+                } else if !act.steps.is_empty() {
+                    let mut step_constraints = Vec::new();
+                    for step_expr in &act.steps {
+                        if let Some(formatted) = format_constraint(&act.name, step_expr) {
+                            push_unique_constraint(&mut step_constraints, formatted);
+                        }
+                    }
+                    if !step_constraints.is_empty() {
+                        matched_constraint = Some(step_constraints.join("; "));
                     }
                 }
             }
 
             if matched_req.is_none() {
-                if let Some(req_def) = owner_part
+                let mut member_reqs = Vec::new();
+                for req_def in owner_part
                     .requirements
                     .iter()
-                    .find(|r| req_matches_member(r, item_name))
+                    .filter(|r| req_matches_member(r, item_name))
                 {
                     let id = if !req_def.req_id.is_empty() {
                         req_def.req_id.clone()
@@ -2711,17 +3022,21 @@ fn resolve_schema_context(
                         req_def.name.clone()
                     };
                     if !id.is_empty() {
-                        matched_req = Some(id);
+                        push_unique_req(&mut member_reqs, id);
                     }
+                }
+                if !member_reqs.is_empty() {
+                    matched_req = Some(member_reqs.join(", "));
                 }
             }
 
             if matched_req.is_none() {
+                let mut pkg_member_reqs = Vec::new();
                 for pkg in &all_pkgs {
-                    if let Some(req_def) = pkg
+                    for req_def in pkg
                         .requirement_defs
                         .iter()
-                        .find(|r| req_matches_member(r, item_name))
+                        .filter(|r| req_matches_member(r, item_name))
                     {
                         let id = if !req_def.req_id.is_empty() {
                             req_def.req_id.clone()
@@ -2729,10 +3044,12 @@ fn resolve_schema_context(
                             req_def.name.clone()
                         };
                         if !id.is_empty() {
-                            matched_req = Some(id);
-                            break;
+                            push_unique_req(&mut pkg_member_reqs, id);
                         }
                     }
+                }
+                if !pkg_member_reqs.is_empty() {
+                    matched_req = Some(pkg_member_reqs.join(", "));
                 }
             }
 
@@ -2747,10 +3064,11 @@ fn resolve_schema_context(
                             matched_req = extract_doc_req(doc);
                         }
                         if matched_req.is_none() {
-                            if let Some(req_def) = pkg
+                            let mut act_reqs = Vec::new();
+                            for req_def in pkg
                                 .requirement_defs
                                 .iter()
-                                .find(|r| req_matches_member(r, &act.name))
+                                .filter(|r| req_matches_member(r, &act.name))
                             {
                                 let id = if !req_def.req_id.is_empty() {
                                     req_def.req_id.clone()
@@ -2758,23 +3076,37 @@ fn resolve_schema_context(
                                     req_def.name.clone()
                                 };
                                 if !id.is_empty() {
-                                    matched_req = Some(id);
+                                    push_unique_req(&mut act_reqs, id);
                                 }
+                            }
+                            if !act_reqs.is_empty() {
+                                matched_req = Some(act_reqs.join(", "));
                             }
                         }
                         if matched_constraint.is_none() {
-                            if let Some(act_c) = pkg.constraint_defs.iter().find(|c| {
+                            let mut act_constraints = Vec::new();
+                            for act_c in pkg.constraint_defs.iter().filter(|c| {
                                 !constraint_belongs_to_other_part(c)
                                     && constraint_matches_action(&c.name, &act.name)
                             }) {
                                 if let Some(formatted) =
                                     format_constraint(&act_c.name, &act_c.expression)
                                 {
-                                    matched_constraint = Some(formatted);
+                                    push_unique_constraint(&mut act_constraints, formatted);
                                 }
-                            } else if let Some(step_expr) = act.steps.first() {
-                                if let Some(formatted) = format_constraint(&act.name, step_expr) {
-                                    matched_constraint = Some(formatted);
+                            }
+                            if !act_constraints.is_empty() {
+                                matched_constraint = Some(act_constraints.join("; "));
+                            } else if !act.steps.is_empty() {
+                                let mut step_constraints = Vec::new();
+                                for step_expr in &act.steps {
+                                    if let Some(formatted) = format_constraint(&act.name, step_expr)
+                                    {
+                                        push_unique_constraint(&mut step_constraints, formatted);
+                                    }
+                                }
+                                if !step_constraints.is_empty() {
+                                    matched_constraint = Some(step_constraints.join("; "));
                                 }
                             }
                         }
@@ -2806,10 +3138,11 @@ fn resolve_schema_context(
                     matched_req = extract_doc_req(doc);
                 }
                 if matched_req.is_none() {
-                    if let Some(req_def) = pkg
+                    let mut act_reqs = Vec::new();
+                    for req_def in pkg
                         .requirement_defs
                         .iter()
-                        .find(|r| req_matches_member(r, &act.name))
+                        .filter(|r| req_matches_member(r, &act.name))
                     {
                         let id = if !req_def.req_id.is_empty() {
                             req_def.req_id.clone()
@@ -2817,20 +3150,33 @@ fn resolve_schema_context(
                             req_def.name.clone()
                         };
                         if !id.is_empty() {
-                            matched_req = Some(id);
+                            push_unique_req(&mut act_reqs, id);
                         }
                     }
+                    if !act_reqs.is_empty() {
+                        matched_req = Some(act_reqs.join(", "));
+                    }
                 }
-                if let Some(act_c) = pkg.constraint_defs.iter().find(|c| {
+                let mut act_constraints = Vec::new();
+                for act_c in pkg.constraint_defs.iter().filter(|c| {
                     !constraint_belongs_to_other_part(c)
                         && constraint_matches_action(&c.name, &act.name)
                 }) {
                     if let Some(formatted) = format_constraint(&act_c.name, &act_c.expression) {
-                        matched_constraint = Some(formatted);
+                        push_unique_constraint(&mut act_constraints, formatted);
                     }
-                } else if let Some(step_expr) = act.steps.first() {
-                    if let Some(formatted) = format_constraint(&act.name, step_expr) {
-                        matched_constraint = Some(formatted);
+                }
+                if !act_constraints.is_empty() {
+                    matched_constraint = Some(act_constraints.join("; "));
+                } else if !act.steps.is_empty() {
+                    let mut step_constraints = Vec::new();
+                    for step_expr in &act.steps {
+                        if let Some(formatted) = format_constraint(&act.name, step_expr) {
+                            push_unique_constraint(&mut step_constraints, formatted);
+                        }
+                    }
+                    if !step_constraints.is_empty() {
+                        matched_constraint = Some(step_constraints.join("; "));
                     }
                 }
                 break;
@@ -2841,8 +3187,9 @@ fn resolve_schema_context(
     let target_ident = owner_name.unwrap_or(item_name);
 
     if matched_req.is_none() {
+        let mut fallback_reqs = Vec::new();
         for pkg in &all_pkgs {
-            if let Some(req_def) = pkg.requirement_defs.iter().find(|r| {
+            for req_def in pkg.requirement_defs.iter().filter(|r| {
                 !req_belongs_to_other_part(r)
                     && (schema_identifiers_match(&r.name, target_ident)
                         || schema_identifiers_match(&r.req_id, target_ident)
@@ -2858,26 +3205,31 @@ fn resolve_schema_context(
                     req_def.name.clone()
                 };
                 if !id.is_empty() {
-                    matched_req = Some(id);
-                    break;
+                    push_unique_req(&mut fallback_reqs, id);
                 }
             }
+        }
+        if !fallback_reqs.is_empty() {
+            matched_req = Some(fallback_reqs.join(", "));
         }
     }
 
     if matched_constraint.is_none() {
+        let mut fallback_constraints = Vec::new();
         for pkg in &all_pkgs {
-            if let Some(c_def) = pkg.constraint_defs.iter().find(|c| {
+            for c_def in pkg.constraint_defs.iter().filter(|c| {
                 !constraint_belongs_to_other_part(c)
                     && (schema_identifiers_match(&c.name, target_ident)
                         || schema_identifiers_match(&c.name, item_name)
                         || constraint_matches_action(&c.name, item_name))
             }) {
                 if let Some(formatted) = format_constraint(&c_def.name, &c_def.expression) {
-                    matched_constraint = Some(formatted);
-                    break;
+                    push_unique_constraint(&mut fallback_constraints, formatted);
                 }
             }
+        }
+        if !fallback_constraints.is_empty() {
+            matched_constraint = Some(fallback_constraints.join("; "));
         }
     }
 

@@ -884,3 +884,259 @@ pub struct AutopilotController {
     fs::remove_dir_all(&dir).map_err(|e| format!("Failed to cleanup temp dir: {}", e))?;
     Ok(())
 }
+
+/// Verifies multi-requirement/constraint schema aggregation, Dart AST detail inspection, and unbounded Rust item detail extraction (Issue #520).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C traceability and
+/// structural completeness requirements (`test_issue_520_multi_req_constraint_aggregation_dart_details_and_rust_unbounded_items`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `resolve_schema_context` aggregates all satisfied requirements (joined with `", "`) and all constraints (joined with `"; "`) within the winning specificity tier.
+/// - `inject_dart_file_docstrings` populates `fields_or_variants` for Dart classes/mixins/enums and `invariants` from callable `assert(...)` statements.
+/// - `inspect_rust_item_details` extracts all `assert!` invariants (>3), struct fields (>5), enum variants (>6), and trait methods (>6) without arbitrary count caps.
+///
+/// ## 3. Preconditions
+/// - `parse_sysml`, `inject_rust_file_docstrings`, and `inject_dart_file_docstrings` are available in-memory.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(())` when all three sub-defects of Issue #520 are verified and second-pass idempotency holds.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) in synthetic fixture byte length.
+/// - Space Complexity: O(N) for in-memory enriched buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Propagates all parse and synthesis errors via `Result<(), String>`.
+/// - State: Pure in-memory evaluation with zero filesystem side effects.
+/// - Action: Zero `.unwrap()`, `.expect()`, or panicking operations.
+/// - Resource: Bounded in-memory strings.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ISSUE-520-MULTI-REQ-DART-DETAILS-RUST-UNBOUNDED-TEST]
+#[test]
+fn test_issue_520_multi_req_constraint_aggregation_dart_details_and_rust_unbounded_items()
+-> Result<(), String> {
+    // Sub-Defect A: Multi-requirement and multi-constraint aggregation + partial Realises conflict detection
+    let schema_sysml = r#"
+package CoreVerificationPkg {
+    requirement def ReqAlphaOne {
+        id = "REQ-ALPHA-001";
+        doc /* First alpha requirement */
+    }
+    requirement def ReqAlphaTwo {
+        id = "REQ-ALPHA-002";
+        doc /* Second alpha requirement */
+    }
+    requirement def ReqActOne {
+        id = "REQ-ACT-001";
+        doc /* First action requirement */
+    }
+    requirement def ReqActTwo {
+        id = "REQ-ACT-002";
+        doc /* Second action requirement */
+    }
+    part def AlphaRecord {
+        satisfy requirement ReqAlphaOne;
+        satisfy requirement ReqAlphaTwo;
+        constraint def BoundAlpha {
+            val_a >= 0
+        }
+        constraint def BoundBeta {
+            val_b <= 100
+        }
+        action def evaluate_record {
+            doc /* Realises: [REQ-ACT-001], [REQ-ACT-002] */
+            in val_a: Integer;
+            in val_b: Integer;
+        }
+        constraint def invariant_evaluate_record_0 {
+            val_a > 0
+        }
+        constraint def invariant_evaluate_record_1 {
+            val_b < 100
+        }
+    }
+}
+"#;
+    let schema_model =
+        parse_sysml(schema_sysml).map_err(|e| format!("Failed to parse schema_sysml: {e}"))?;
+
+    let rust_alpha_src = r#"pub struct AlphaRecord {
+    pub val_a: i64,
+    pub val_b: i64,
+}
+
+impl AlphaRecord {
+    pub fn evaluate_record(&self, val_a: i64, val_b: i64) -> bool {
+        val_a > 0 && val_b < 100
+    }
+}
+"#;
+    let (rust_alpha_enriched, alpha_count) = inject_rust_file_docstrings(
+        rust_alpha_src,
+        "crates/core_module/src/alpha.rs",
+        Some(&schema_model),
+        false,
+    )
+    .map_err(|e| e.into_message())?;
+    assert_eq!(alpha_count, 2);
+    assert!(
+        rust_alpha_enriched.contains("Realises: [REQ-ALPHA-001], [REQ-ALPHA-002] | SysML v2: PartDef(AlphaRecord)"),
+        "Expected AlphaRecord to aggregate both satisfied requirements, got:\n{rust_alpha_enriched}"
+    );
+    assert!(
+        rust_alpha_enriched.contains("BoundAlpha (val_a >= 0); BoundBeta (val_b <= 100)"),
+        "Expected AlphaRecord to aggregate both part constraints, got:\n{rust_alpha_enriched}"
+    );
+    assert!(
+        rust_alpha_enriched.contains("Realises: [REQ-ACT-001], [REQ-ACT-002] | SysML v2: ActionDef(AlphaRecord::evaluate_record)"),
+        "Expected evaluate_record to aggregate both action doc requirements with tier precedence over parent part, got:\n{rust_alpha_enriched}"
+    );
+    assert!(
+        rust_alpha_enriched.contains("invariant_evaluate_record_0 (val_a > 0); invariant_evaluate_record_1 (val_b < 100)"),
+        "Expected evaluate_record to aggregate both action-matched constraints, got:\n{rust_alpha_enriched}"
+    );
+
+    // Partial Realises in unforced mode must be flagged as a conflict because REQ-ALPHA-002 is missing
+    let partial_rust = rust_alpha_enriched.replace(
+        "Realises: [REQ-ALPHA-001], [REQ-ALPHA-002]",
+        "Realises: [REQ-ALPHA-001]",
+    );
+    let partial_res = inject_rust_file_docstrings(
+        &partial_rust,
+        "crates/core_module/src/alpha.rs",
+        Some(&schema_model),
+        false,
+    );
+    if partial_res.is_ok() {
+        return Err(
+            "Expected unforced docstring missing second schema requirement REQ-ALPHA-002 to return UnforcedConflict"
+                .to_string(),
+        );
+    }
+
+    // Sub-Defect B: Dart fields, enum variants, and callable assert(...) invariants
+    let dart_src = r#"class BetaController {
+  final double gainAlpha;
+  late int stepCount = 0;
+
+  BetaController(this.gainAlpha);
+
+  double computeStep(double inputVal) {
+    assert(inputVal >= 0.0);
+    assert(stepCount >= 0, "non-negative step count");
+    return inputVal * gainAlpha;
+  }
+}
+
+enum GammaState {
+  idle,
+  active,
+  completed,
+  faulted,
+  suspended,
+  archived,
+  terminated,
+}
+"#;
+    let (dart_enriched, dart_count) = inject_dart_file_docstrings(
+        dart_src,
+        "lib/beta_controller.dart",
+        None,
+        false,
+    )
+    .map_err(|e| e.into_message())?;
+    assert!(dart_count >= 4);
+    assert!(
+        dart_enriched.contains("gainAlpha: double, stepCount: int"),
+        "Expected BetaController docstring to interpolate Dart class fields, got:\n{dart_enriched}"
+    );
+    assert!(
+        dart_enriched.contains("inputVal >= 0.0 && stepCount >= 0"),
+        "Expected computeStep docstring to interpolate Dart assert(...) conditions, got:\n{dart_enriched}"
+    );
+    assert!(
+        dart_enriched.contains("idle, active, completed, faulted, suspended, archived, terminated"),
+        "Expected GammaState docstring to interpolate all 7 Dart enum variants, got:\n{dart_enriched}"
+    );
+    let (dart_second, dart_second_count) = inject_dart_file_docstrings(
+        &dart_enriched,
+        "lib/beta_controller.dart",
+        None,
+        false,
+    )
+    .map_err(|e| e.into_message())?;
+    assert_eq!(dart_second_count, 0);
+    assert_eq!(dart_enriched, dart_second);
+
+    // Sub-Defect C: Rust inspect_rust_item_details without arbitrary 3/5/6 element caps
+    let wide_rust_src = r#"pub struct WideRecord {
+    pub field_1: u32,
+    pub field_2: u32,
+    pub field_3: u32,
+    pub field_4: u32,
+    pub field_5: u32,
+    pub field_6: u32,
+    pub field_7: u32,
+}
+
+pub enum WideState {
+    State1,
+    State2,
+    State3,
+    State4,
+    State5,
+    State6,
+    State7,
+    State8,
+}
+
+pub trait WideStageTrait {
+    fn stage_1(&self) -> u32;
+    fn stage_2(&self) -> u32;
+    fn stage_3(&self) -> u32;
+    fn stage_4(&self) -> u32;
+    fn stage_5(&self) -> u32;
+    fn stage_6(&self) -> u32;
+    fn stage_7(&self) -> u32;
+    fn stage_8(&self) -> u32;
+}
+
+pub fn check_five_invariants(val: i32) -> i32 {
+    assert!(val > 1);
+    assert!(val > 2);
+    assert!(val > 3);
+    assert!(val > 4);
+    assert!(val > 5);
+    val
+}
+"#;
+    let (wide_enriched, wide_count) = inject_rust_file_docstrings(
+        wide_rust_src,
+        "crates/core_module/src/wide.rs",
+        None,
+        false,
+    )
+    .map_err(|e| e.into_message())?;
+    assert!(wide_count >= 4);
+    assert!(
+        wide_enriched.contains("field_6: u32, field_7: u32"),
+        "Expected WideRecord docstring to include fields beyond 5, got:\n{wide_enriched}"
+    );
+    assert!(
+        wide_enriched.contains("State7, State8"),
+        "Expected WideState docstring to include variants beyond 6, got:\n{wide_enriched}"
+    );
+    assert!(
+        wide_enriched.contains("fn stage_7, fn stage_8"),
+        "Expected WideStageTrait docstring to include trait methods beyond 6, got:\n{wide_enriched}"
+    );
+    assert!(
+        wide_enriched.contains("val > 4 && val > 5"),
+        "Expected check_five_invariants docstring to include assert! invariants beyond 3, got:\n{wide_enriched}"
+    );
+
+    Ok(())
+}
+
