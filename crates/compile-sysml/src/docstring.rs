@@ -1486,7 +1486,10 @@ fn is_compliant_docblock(
     check_uniqueness: bool,
     seen_docblocks: &mut BTreeSet<String>,
 ) -> bool {
-    if current_doc.is_empty() || any_placeholder_in_doc(current_doc) {
+    if current_doc.is_empty()
+        || any_placeholder_in_doc(current_doc)
+        || has_malformed_prefix_or_hybrid_headers(current_doc)
+    {
         return false;
     }
 
@@ -1514,6 +1517,106 @@ fn is_compliant_docblock(
     }
 
     true
+}
+
+/// Detects doubled doc-comment prefixes, legacy H1 section headers, or duplicate `Realises:` lines in `current_doc`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 36 docstring canonicalization
+/// (`has_malformed_prefix_or_hybrid_headers`).
+/// Ensures hybrid docblocks combining legacy H1 headers, repeated comment markers, or multiple
+/// `Realises:` lines are flagged as non-compliant so `inject_rust_file_docstrings` and
+/// `inject_dart_file_docstrings` re-synthesize them cleanly.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` if any line stripped of its outer `///` or `//!` marker still begins with `///` or `//!`.
+/// - Returns `true` if any line stripped of its outer marker begins with a single-hash H1 header (`# ` but not `## `).
+/// - Returns `true` if more than one line in `current_doc` starts a `Realises:` traceability declaration.
+///
+/// ## 3. Preconditions
+/// - `current_doc: &[String]` contains the contiguous doc-comment lines preceding a source item.
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff `current_doc` exhibits any doubled prefix, H1 header, or duplicate `Realises:` declaration line.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(D) where D is the total byte length of `current_doc`.
+/// - Space Complexity: O(1) constant auxiliary memory.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts empty or non-empty line slices safely.
+/// - State: Pure read-only predicate with zero side effects.
+/// - Action: Uses non-panicking `strip_prefix` and `starts_with` slice checks.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-HAS-MALFORMED-PREFIX-OR-HYBRID-HEADERS]
+fn has_malformed_prefix_or_hybrid_headers(current_doc: &[String]) -> bool {
+    let mut realises_count: usize = 0;
+    for line in current_doc {
+        let trimmed = line.trim();
+        let after_outer = trimmed
+            .strip_prefix("///")
+            .or_else(|| trimmed.strip_prefix("//!"))
+            .unwrap_or(trimmed)
+            .trim_start();
+        if after_outer.starts_with("///") || after_outer.starts_with("//!") {
+            return true;
+        }
+        if after_outer.starts_with("# ") && !after_outer.starts_with("## ") {
+            return true;
+        }
+        if after_outer.starts_with("Realises:") {
+            realises_count = realises_count.saturating_add(1);
+        }
+    }
+    realises_count > 1
+}
+
+/// Formats a single canonical `///` docstring line at `indent`, stripping any accidental leading `///` or `//!` markers from `text`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 36 docstring canonicalization
+/// (`format_normalized_doc_line`).
+/// Prevents `synthesize_7_section_docstring` from emitting doubled doc-comment markers when
+/// `text` originates from pre-existing comment lines.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Repeatedly strips leading `///` and `//!` prefixes and leading whitespace from `text` before formatting.
+/// - Emits `"{indent}///"` when the normalized payload is empty, or `"{indent}/// {clean}"` otherwise.
+///
+/// ## 3. Preconditions
+/// - `indent: &str` is the leading whitespace of the target AST item.
+/// - `text: &str` is the single-line docstring content payload to format.
+///
+/// ## 4. Postconditions
+/// - Returns an owned `String` starting with `"{indent}///"` and guaranteed not to have a secondary `///` or `//!` prefix.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `indent.len() + text.len()`.
+/// - Space Complexity: O(N) for the formatted output `String`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles empty strings and arbitrary repeated comment prefixes gracefully.
+/// - State: Pure string formatting helper.
+/// - Action: Zero panics or direct byte indexing.
+/// - Resource: Single `String` allocation per formatted line.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-FORMAT-NORMALIZED-DOC-LINE]
+fn format_normalized_doc_line(indent: &str, text: &str) -> String {
+    let mut clean = text.trim();
+    while let Some(rest) = clean
+        .strip_prefix("///")
+        .or_else(|| clean.strip_prefix("//!"))
+    {
+        clean = rest.trim_start();
+    }
+    if clean.is_empty() {
+        format!("{indent}///")
+    } else {
+        format!("{indent}/// {clean}")
+    }
 }
 
 /// Normalizes a `///` docblock identically to Check 34 (`structural.rs:827-839`) and Check 36 (`docstring_gate.rs:965-977`).
@@ -1598,7 +1701,6 @@ fn synthesize_7_section_docstring(
     ctx: &ItemSynthesisContext<'_>,
     seen_docblocks: &mut BTreeSet<String>,
 ) -> Vec<String> {
-    let pfx = format!("{}///", ctx.indent);
     let qualified_name = match ctx.owner_name {
         Some(owner) => format!("{}::{}", owner, ctx.item_name),
         None => ctx.item_name.to_string(),
@@ -1655,22 +1757,30 @@ fn synthesize_7_section_docstring(
     let mut sec3_lines = Vec::new();
     if !ctx.params.is_empty() {
         for param in &ctx.params {
-            sec3_lines.push(format!(
-                "{} - `{}: {}` must satisfy domain and type-safety constraints prior to invoking `{}`.",
-                pfx, param.name, param.type_name, qualified_name
+            sec3_lines.push(format_normalized_doc_line(
+                ctx.indent,
+                &format!(
+                    "- `{}: {}` must satisfy domain and type-safety constraints prior to invoking `{}`.",
+                    param.name, param.type_name, qualified_name
+                ),
             ));
         }
     } else if !ctx.fields_or_variants.is_empty() {
-        sec3_lines.push(format!(
-            "{} - Caller supplies well-formed values for `{}` members (`{}`).",
-            pfx,
-            qualified_name,
-            ctx.fields_or_variants.join(", ")
+        sec3_lines.push(format_normalized_doc_line(
+            ctx.indent,
+            &format!(
+                "- Caller supplies well-formed values for `{}` members (`{}`).",
+                qualified_name,
+                ctx.fields_or_variants.join(", ")
+            ),
         ));
     } else {
-        sec3_lines.push(format!(
-            "{} - Invoked within a valid execution context for `{}` in `{}`.",
-            pfx, qualified_name, ctx.module_tag
+        sec3_lines.push(format_normalized_doc_line(
+            ctx.indent,
+            &format!(
+                "- Invoked within a valid execution context for `{}` in `{}`.",
+                qualified_name, ctx.module_tag
+            ),
         ));
     }
 
@@ -1703,31 +1813,49 @@ fn synthesize_7_section_docstring(
     } else {
         format!("K({})", ctx.item_name)
     };
-    let time_line = format!(
-        "{} - Time Complexity: O({}) bounded over input/member dimension of `{}`.",
-        pfx, dim_var, qualified_name
+    let time_line = format_normalized_doc_line(
+        ctx.indent,
+        &format!(
+            "- Time Complexity: O({}) bounded over input/member dimension of `{}`.",
+            dim_var, qualified_name
+        ),
     );
-    let space_line = format!(
-        "{} - Space Complexity: O({}) bounded auxiliary memory for `{}`.",
-        pfx, dim_var, qualified_name
+    let space_line = format_normalized_doc_line(
+        ctx.indent,
+        &format!(
+            "- Space Complexity: O({}) bounded auxiliary memory for `{}`.",
+            dim_var, qualified_name
+        ),
     );
 
     // Build Section 6 (Failure Modes & Fault Tolerance across 4 Universal Failure Dimensions)
-    let fail_interface = format!(
-        "{} - Interface: Validates boundary inputs and types for `{}` (`{}`).",
-        pfx, qualified_name, ret_desc
+    let fail_interface = format_normalized_doc_line(
+        ctx.indent,
+        &format!(
+            "- Interface: Validates boundary inputs and types for `{}` (`{}`).",
+            qualified_name, ret_desc
+        ),
     );
-    let fail_state = format!(
-        "{} - State: Maintains consistent state invariants across `{}` without partial mutation on error.",
-        pfx, qualified_name
+    let fail_state = format_normalized_doc_line(
+        ctx.indent,
+        &format!(
+            "- State: Maintains consistent state invariants across `{}` without partial mutation on error.",
+            qualified_name
+        ),
     );
-    let fail_action = format!(
-        "{} - Action: Executes `{}` deterministically with zero unbounded recursion or blocking.",
-        pfx, qualified_name
+    let fail_action = format_normalized_doc_line(
+        ctx.indent,
+        &format!(
+            "- Action: Executes `{}` deterministically with zero unbounded recursion or blocking.",
+            qualified_name
+        ),
     );
-    let fail_resource = format!(
-        "{} - Resource: Bounds stack and heap allocations within `{}` (`{}`).",
-        pfx, qualified_name, ctx.module_tag
+    let fail_resource = format_normalized_doc_line(
+        ctx.indent,
+        &format!(
+            "- Resource: Bounds stack and heap allocations within `{}` (`{}`).",
+            qualified_name, ctx.module_tag
+        ),
     );
 
     // Build Section 7 (Realization & Traceability)
@@ -1761,36 +1889,46 @@ fn synthesize_7_section_docstring(
         format!("PartDef({})", qualified_name)
     };
 
+    let empty_line = format_normalized_doc_line(ctx.indent, "");
     let mut lines = vec![
-        format!("{} {}", pfx, summary),
-        pfx.to_string(),
-        format!("{} ## 1. Safety Intent & Regulatory Scope", pfx),
-        format!("{} {}", pfx, sec1_body),
-        pfx.to_string(),
-        format!("{} ## 2. Invariants & Mathematical Properties", pfx),
-        format!("{} {}", pfx, sec2_body),
-        pfx.to_string(),
-        format!("{} ## 3. Preconditions", pfx),
+        format_normalized_doc_line(ctx.indent, &summary),
+        empty_line.clone(),
+        format_normalized_doc_line(ctx.indent, "## 1. Safety Intent & Regulatory Scope"),
+        format_normalized_doc_line(ctx.indent, &sec1_body),
+        empty_line.clone(),
+        format_normalized_doc_line(ctx.indent, "## 2. Invariants & Mathematical Properties"),
+        format_normalized_doc_line(ctx.indent, &sec2_body),
+        empty_line.clone(),
+        format_normalized_doc_line(ctx.indent, "## 3. Preconditions"),
     ];
     lines.extend(sec3_lines);
-    lines.push(pfx.to_string());
-    lines.push(format!("{} ## 4. Postconditions", pfx));
-    lines.push(format!("{} {}", pfx, sec4_body));
-    lines.push(pfx.to_string());
-    lines.push(format!("{} ## 5. Algorithmic Complexity Bounds", pfx));
+    lines.push(empty_line.clone());
+    lines.push(format_normalized_doc_line(ctx.indent, "## 4. Postconditions"));
+    lines.push(format_normalized_doc_line(ctx.indent, &sec4_body));
+    lines.push(empty_line.clone());
+    lines.push(format_normalized_doc_line(
+        ctx.indent,
+        "## 5. Algorithmic Complexity Bounds",
+    ));
     lines.push(time_line);
     lines.push(space_line);
-    lines.push(pfx.to_string());
-    lines.push(format!("{} ## 6. Failure Modes & Fault Tolerance", pfx));
+    lines.push(empty_line.clone());
+    lines.push(format_normalized_doc_line(
+        ctx.indent,
+        "## 6. Failure Modes & Fault Tolerance",
+    ));
     lines.push(fail_interface);
     lines.push(fail_state);
     lines.push(fail_action);
     lines.push(fail_resource);
-    lines.push(pfx.to_string());
-    lines.push(format!("{} ## 7. Realization & Traceability", pfx));
-    lines.push(format!(
-        "{} Realises: {} | SysML v2: {}",
-        pfx, req_tag, sysml_elem
+    lines.push(empty_line);
+    lines.push(format_normalized_doc_line(
+        ctx.indent,
+        "## 7. Realization & Traceability",
+    ));
+    lines.push(format_normalized_doc_line(
+        ctx.indent,
+        &format!("Realises: {} | SysML v2: {}", req_tag, sysml_elem),
     ));
 
     // Ensure normalized body is registered and unique in seen_docblocks
@@ -1798,9 +1936,9 @@ fn synthesize_7_section_docstring(
     if !seen_docblocks.insert(normalized) {
         // Disambiguate Section 1 with ordinal index if two items had identical qualified names and signatures
         if let Some(sec1_slot) = lines.get_mut(3) {
-            *sec1_slot = format!(
-                "{} {} (Item ordinal #{}).",
-                pfx, sec1_body, ctx.ordinal_index
+            *sec1_slot = format_normalized_doc_line(
+                ctx.indent,
+                &format!("{} (Item ordinal #{}).", sec1_body, ctx.ordinal_index),
             );
         }
         let renormalized = normalize_docblock_body(&lines);
@@ -1981,30 +2119,6 @@ fn inspect_rust_item_details(
 }
 
 /// Collects all top-level and nested `PartDef` nodes within `pkg` into `out` in pre-order traversal.
-///
-/// /// Realises: [REQ-FEAT-42-COLLECT-ALL-PARTS]
-///
-/// # Summary
-/// Traverses `pkg.part_defs` and all nested `part.parts` hierarchies using an explicit stack,
-/// appending borrowed `&PartDef` references into `out`.
-///
-/// # Preconditions
-/// - `pkg` is a valid borrowed `PackageDef`; `out` is a mutable vector of `&PartDef` references.
-///
-/// # Postconditions
-/// - `out` contains every top-level and nested `PartDef` in `pkg` in deterministic pre-order sequence.
-///
-/// # Invariants
-/// - Uses an explicit `Vec` stack with zero recursion to guarantee bounded stack usage.
-///
-/// # Failure Modes
-/// - Empty `pkg.part_defs` leaves `out` unchanged without error.
-///
-/// # Side Effects
-/// - Appends borrowed `&PartDef` pointers to `out`; performs zero I/O.
-///
-/// # Determinism
-/// - Deterministic pre-order traversal preserving declaration order.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and FEAT-42 Section 3.2 hierarchical part resolution (`collect_all_parts`).
@@ -2758,32 +2872,6 @@ fn schema_identifiers_match(schema_ident: &str, source_ident: &str) -> bool {
 
 /// Extracts the target type identifier from a single-line or multiline Rust `impl` header prefix.
 ///
-/// /// Realises: [REQ-FEAT-42-EXTRACT-IMPL-HEADER-PREFIX]
-///
-/// # Summary
-/// Parses the leading `impl` or `unsafe impl` header line (with or without a trailing `{`) to
-/// extract the target type identifier, ignoring `->` return-type arrows inside `Fn(...) -> Ret`
-/// generic bounds and stripping `where` clauses.
-///
-/// # Preconditions
-/// - `code` is a comment-stripped Rust line at `brace_depth == 0`.
-///
-/// # Postconditions
-/// - Returns `Some(target_type_name)` if `code` starts a Rust `impl` header, or `None` otherwise.
-///
-/// # Invariants
-/// - Ignores `>` characters immediately preceded by `'-'` (`->`) when balancing `impl<...>` generic parameter lists.
-/// - Strips trailing `where ...` clauses and `<Trait> for ` prefixes before extracting the target identifier.
-///
-/// # Failure Modes
-/// - Non-`impl` lines or unclosed `impl<...` generic headers return `None` without panicking.
-///
-/// # Side Effects
-/// - Pure lexical helper; zero I/O or state mutation.
-///
-/// # Determinism
-/// - Deterministic O(N) character scan over `code`.
-///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A method-to-classifier attribution (`extract_rust_impl_header_prefix`).
 /// Supports both single-line `impl<F: Fn(u32) -> bool> Target<F> {` and multiline `impl<T> Target<T>\nwhere ...` blocks.
@@ -2853,29 +2941,6 @@ fn extract_rust_impl_header_prefix(code: &str) -> Option<String> {
 }
 
 /// Extracts the target type identifier from a Rust `impl` header line that opens a block with `{`.
-///
-/// /// Realises: [REQ-FEAT-42-EXTRACT-IMPL-TARGET]
-///
-/// # Summary
-/// Delegates to [`extract_rust_impl_header_prefix`] when `code` contains an opening `{` brace.
-///
-/// # Preconditions
-/// - `code` is a comment-stripped Rust line.
-///
-/// # Postconditions
-/// - Returns `Some(type_name)` when `code` starts an `impl` block containing `{`, or `None`.
-///
-/// # Invariants
-/// - Preserves single-line `impl` block detection while handling `Fn(...) -> Ret` bounds in `impl<...>`.
-///
-/// # Failure Modes
-/// - Returns `None` if `code` lacks `{` or does not begin with `impl` / `unsafe impl`.
-///
-/// # Side Effects
-/// - Pure helper; zero I/O or state mutation.
-///
-/// # Determinism
-/// - Deterministic O(N) inspection of `code`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A method-to-classifier attribution (`extract_rust_impl_target_name`).
@@ -3189,38 +3254,6 @@ mod tests {
     use deap_core::sysml_ast::{ActionDef, ConstraintDef, PartDef, RequirementDef};
 
     /// Verifies that unmatched AST items do not inherit unrelated `pkg.requirement_defs.first()` or `pkg.constraint_defs.first()` bindings (DEFECT-09, refs #498).
-    ///
-    /// Realises: [REQ-DEFECT-09-UNMATCHED-SCHEMA-FALLBACK-TEST]
-    ///
-    /// # Summary
-    /// Validates `resolve_schema_context` and `inject_rust_file_docstrings` against a multi-part,
-    /// multi-requirement `PackageDef` fixture, inline block-comment closures, generic closure-bound
-    /// `impl` blocks, and multiline `impl ... where ... {` blocks.
-    ///
-    /// # Preconditions
-    /// - In-memory `PackageDef` fixture contains `PrimaryController` (`REQ-PC-001`, `ValueLimit`),
-    ///   `SecondaryMonitor` (no top-level reqs, nested `NestedSubunit` with inline `REQ-NS-002`),
-    ///   and `ActionDef("calibrate_element")`.
-    ///
-    /// # Postconditions
-    /// - `PrimaryController` resolves `(Some("REQ-PC-001"), Some("ValueLimit (metric <= 85.0)"))`.
-    /// - `NestedSubunit` resolves `(Some("REQ-NS-002"), None)`.
-    /// - `SecondaryMonitor`, `SecondaryMonitor::primary_controller`, `calibrate_element`, and
-    ///   `unmapped_checksum_helper` resolve `(None, None)`.
-    ///
-    /// # Invariants
-    /// - Unmatched items never fall back to `pkg.requirement_defs.first()` or `pkg.constraint_defs.first()`.
-    /// - `src/docstring.rs` delegates `RustStringScannerState` to `deap_core::source_ast` with zero magic
-    ///   closing-position heuristics or `size_of` workarounds.
-    ///
-    /// # Failure Modes
-    /// - Returns `Err(String)` if any assertion or docstring injection step fails.
-    ///
-    /// # Side Effects
-    /// - Reads `src/docstring.rs` from disk for self-purity verification; mutates zero files.
-    ///
-    /// # Determinism
-    /// - Deterministic in-memory AST and string verification.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D bidirectional traceability
@@ -4396,5 +4429,121 @@ mod tests {
             unit_fields.is_empty(),
             "Expected unit struct `pub struct UnitMarker;` to have zero extracted fields without bleeding into subsequent struct, got: {unit_fields:?}"
         );
+    }
+
+    /// Verifies that `is_compliant_docblock` and `synthesize_7_section_docstring` reject and normalize doubled doc-comment prefixes, legacy H1 headers, and duplicate `Realises:` lines (refs #516).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 36 docstring canonicalization
+    /// (`test_issue_516_rejects_doubled_prefixes_and_hybrid_h1_docblocks`).
+    /// Prevents hybrid docblocks containing repeated `///` or `//!` markers, legacy H1 section headers,
+    /// or duplicate `Realises:` lines from bypassing `inject_rust_file_docstrings(..., false)`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `is_compliant_docblock` returns `false` whenever `has_malformed_prefix_or_hybrid_headers` detects repeated comment markers, single-hash H1 headers (`# `), or `realises_count > 1`.
+    /// - `format_normalized_doc_line` strips accidental leading `///` or `//!` markers from text payloads before prepending the canonical `///` prefix.
+    /// - `crates/compile-sysml/src/docstring.rs` itself contains zero doubled doc-comment prefixes or legacy H1 section headers.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory Rust fixture carries a hybrid docblock combining a doubled-prefix `Realises:` line, legacy H1 headers, and `## 1.`..`## 7.` sections.
+    ///
+    /// ## 4. Postconditions
+    /// - `inject_rust_file_docstrings(..., false)` re-synthesizes the hybrid docblock (`count == 1`), eliminating doubled prefixes, H1 headers, and duplicate `Realises:` lines.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) where N is the fixture and `docstring.rs` source byte length.
+    /// - Space Complexity: O(N) for the in-memory enriched source buffer.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), String>` without `.unwrap()` or `.expect()`.
+    /// - State: Pure in-memory verification with zero filesystem mutations.
+    /// - Action: Verifies both synthetic hybrid fixtures and `src/docstring.rs` self-purity.
+    /// - Resource: Bounded in-memory buffers.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-ISSUE-516-REJECT-HYBRID-DOCBLOCKS]
+    #[test]
+    fn test_issue_516_rejects_doubled_prefixes_and_hybrid_h1_docblocks() -> Result<(), String> {
+        let doubled_outer = concat!("///", " ///");
+        let doubled_inner = concat!("//!", " ///");
+        let legacy_h1_summary = concat!("/// # ", "Summary");
+
+        let hybrid_fixture = format!(
+            concat!(
+                "{} Custom summary with accidental leading marker.\n",
+                "{} Realises: [REQ-HYBRID-516]\n",
+                "///\n",
+                "{}\n",
+                "/// Legacy H1 summary paragraph.\n",
+                "/// ## 1. Safety Intent & Regulatory Scope\n",
+                "/// Conforms to DO-178C Level A for `hybrid_target`.\n",
+                "/// ## 2. Invariants & Mathematical Properties\n",
+                "/// - Deterministic execution for `hybrid_target`.\n",
+                "/// ## 3. Preconditions\n",
+                "/// - Valid input `x: u32`.\n",
+                "/// ## 4. Postconditions\n",
+                "/// - Returns `u32`.\n",
+                "/// ## 5. Algorithmic Complexity Bounds\n",
+                "/// - Time Complexity: O(1).\n",
+                "/// - Space Complexity: O(1).\n",
+                "/// ## 6. Failure Modes & Fault Tolerance\n",
+                "/// - Interface: Safe u32 arithmetic.\n",
+                "/// - State: Stateless.\n",
+                "/// - Action: Pure.\n",
+                "/// - Resource: Zero allocation.\n",
+                "/// ## 7. Realization & Traceability\n",
+                "/// Realises: [REQ-HYBRID-516]\n",
+                "pub fn hybrid_target(x: u32) -> u32 {{\n",
+                "    x.saturating_add(1)\n",
+                "}}\n"
+            ),
+            doubled_outer, doubled_outer, legacy_h1_summary
+        );
+
+        let (enriched, count) = inject_rust_file_docstrings(
+            &hybrid_fixture,
+            "crates/compile-sysml/src/hybrid_sample.rs",
+            None,
+            false,
+        )
+        .map_err(|e| e.into_message())?;
+
+        assert_eq!(
+            count, 1,
+            "Expected hybrid docblock with doubled prefixes and H1 headers to be rejected and re-synthesized (count == 1), got count={count} in:\n{enriched}"
+        );
+        assert!(
+            !enriched.contains(doubled_outer),
+            "Enriched output must not contain doubled outer doc prefix:\n{enriched}"
+        );
+        assert!(
+            !enriched.contains(legacy_h1_summary),
+            "Enriched output must not contain legacy H1 Summary header:\n{enriched}"
+        );
+        assert_eq!(
+            enriched.matches("Realises:").count(),
+            1,
+            "Enriched output must contain exactly one Realises: line:\n{enriched}"
+        );
+
+        let self_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("docstring.rs");
+        let self_src = fs::read_to_string(&self_path)
+            .map_err(|e| format!("Failed to read {}: {e}", self_path.display()))?;
+        assert!(
+            !self_src.contains(doubled_outer),
+            "crates/compile-sysml/src/docstring.rs must not contain doubled outer doc prefixes"
+        );
+        assert!(
+            !self_src.contains(doubled_inner),
+            "crates/compile-sysml/src/docstring.rs must not contain doubled inner doc prefixes"
+        );
+        assert!(
+            !self_src.contains(legacy_h1_summary),
+            "crates/compile-sysml/src/docstring.rs must not contain legacy H1 Summary headers"
+        );
+
+        Ok(())
     }
 }
