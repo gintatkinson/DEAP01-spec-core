@@ -1,202 +1,249 @@
-# Implementation Plan: Upstream Specification & GitHub Backlog Projection Remediation (`#562`..`#690`)
+# Implementation Plan: Continuous Remediation of Remaining Unfixed Defects (#473–#529) via Recursive Debugging Protocol
 
 ## 1. Objective & Scope
 
-Fix all broken relative/projected links, structural/behavioral AST extraction defects, forward-sync diagram/traceability bugs, and missing end-to-end acceptance gates across `.pipeline/upstream/docs/` (`EPIC-01..06`, `FEAT-01..30`, `US-01..62`, `UC-01..31`) and their projected GitHub issues (`#562` through `#690` in `gintatkinson/DEAP01-spec-core`), while strictly preserving the 1-to-1 GitHub issue mapping (`#562`..`#690`) with zero duplicate issues created.
+Execute continuous, end-to-end remediation of all **50 remaining unresolved `bug` issues in `#473`–`#529`** in strict compliance with `.agents/skills/debug-protocol/SKILL.md` and a **Zero-Coordinator-Context-Burn Dispatch Architecture**. Once approved with `PROCEED`, execution runs continuously across all stages in dependency order without stopping between stages unless a gate fails.
 
-### Verified Baseline & Issue Mapping Constraints
-- **GitHub Issue Mapping (`#562`..`#690` -- MUST BE PRESERVED 1-TO-1, ZERO DUPLICATE ISSUES)**:
-  - `US-01`..`US-62` -> `#562`..`#623` (62 issues; preserves the exact 62 `ActionDef` count and package order in `.pipeline/upstream/schema/model.sysml`)
-  - `UC-01`..`UC-31` -> `#624`..`#654` (31 issues)
-  - `FEAT-01`..`FEAT-30` -> `#655`..`#684` (30 issues)
-  - `EPIC-01`..`EPIC-06` -> `#685`..`#690` (6 issues)
-- **Strict Compiler Purity & Safety Header Rules (Check 34 & Check 36)**:
-  - Every new or modified Rust function, struct, enum, trait, or test MUST carry a unique 7-section safety rustdoc header (`## 1. Safety Intent & Regulatory Scope` through `## 7. Realization & Traceability`).
-  - Zero `.unwrap()`, `.expect()`, `panic!()`, `todo!()`, `unimplemented!()`, `unreachable!()`, `as` casts, `Regex::new`, `unsafe`, `process::exit`, `println!`/`eprintln!`/`dbg!`, Unicode box-drawing/em-dashes, or direct string/slice indexing `s[a..b]` / `s[i]` (always use `.get(..)`).
-  - In `crates/deap-core/src/sysml_ast.rs`, `test_sysml_ast_compiler_purity_and_7_section_docstrings` (`lines 8522-8650`) also strictly forbids `&[&str]` slice literals/types and `.filter_map(|...| ... .ok())`.
+### Current Triage of `#473`–`#529` against `HEAD` (`daf6229`)
+- **Already Resolved / Closed / Non-Bug (`#481`, `#482`, `#483`, `#489`, `#490`, `#530`–`#561`)**: Already complete (`status:fixed-resolved`, `CLOSED`, or `feature`).
+- **Already Fixed in `HEAD`, Missing `status:fixed-resolved` Label Only (2 issues — `#479`, `#492`)**:
+  - `#479` (`AGENTS.md`, resolved in `9e1560f` and `b2a08a3`) and `#492` (`crates/deap-core/src/source_ast.rs`, resolved in `0c6b689`, `298d637`, and `2405667`): dispatch a single Step 7 Verification Subagent per issue to post the 3 proofs to GitHub, apply `status:fixed-resolved`, and return a 3-line receipt.
+- **Active Unfixed Defects Requiring Full 8-Step `debug-protocol` Loop (48 issues across Stages 1–8)**:
+  - `#473`–`#478`, `#480`, `#484`–`#488`, `#491`, `#493`–`#529`.
 
 ---
 
-## 2. Fresh-Subagent-Per-Step Dispatch Architecture (14 Atomic Steps -> 14 Fresh Subagents `SA-01`..`SA-14`)
+## 2. Continuous Execution Dependency Order (Stages 0–8)
 
-> [!IMPORTANT]
-> **Strict 1-Step = 1-Fresh-Subagent Guarantee**:
-> - Every single step below (`Step 1` through `Step 14`) spawns a **brand-new, fresh `invoke_subagent` instance** (`SA-01` through `SA-14`) with `TypeName: "self"`, `Model: "inherit"`, `Workspace: "inherit"`, and a self-contained prompt ending in `---GOVERNANCE-END---` and `PROCEED`.
-> - **No subagent is ever reused across steps**, and **no code-edit step ever touches more than 1 target file**.
-> - After each step's subagent returns, the coordinator verifies its completion and confirms subagent termination/reclamation via `manage_subagents(Action: "list")` before dispatching the next step's fresh subagent.
+```mermaid
+flowchart TD
+    subgraph "Phase 1: Foundation & Core AST"
+        S0["Stage 0: Already-Landed Fix Verification (#479, #492)"]
+        S1["Stage 1: Governance, Downstream Guard & Defect Validator<br/>(#473, #474, #480, #488, #525, #526)"]
+        S2["Stage 2: Tier-0 deap-core SHA-256 SSOT & Source Lexer<br/>(#494, #501, #503, #518, #522, #529-A)"]
+    end
 
-| Step | Fresh Subagent ID | Dedicated Role | Single Target File / Atomic Scope |
+    subgraph "Phase 2: Ingestion & Compiler Pipeline"
+        S3["Stage 3: ingest-sysml Translators & Clippy Cleanliness<br/>(#475, #491, #502, #519, #524)"]
+        S4["Stage 4: compile-sysml Parser Grammar & AST Serializer<br/>(#476, #493, #495, #496, #504, #505, #509, #521, #527)"]
+        S5["Stage 5: compile-sysml Forward Sync & ICD/WBS CLI<br/>(#477, #497, #507, #528)"]
+    end
+
+    subgraph "Phase 3: Codegen, Verification Gates & Backlog Sync"
+        S6["Stage 6: Docstring Synthesizer & Check 36 Docstring Gate<br/>(#498, #500, #508, #510..#517, #520, #529-B)"]
+        S7["Stage 7: Flutter/C-ABI Codegen & Checks 38-41 AST Gates<br/>(#484, #485, #486, #487)"]
+        S8["Stage 8: UseCase Parity, reconcile-backlog & Clippy Sweep<br/>(#478, #499, #506, #523)"]
+    end
+
+    S0 --> S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8
+```
+
+---
+
+## 3. Zero-Coordinator-Context-Burn Subagent Dispatching Strategy
+
+### 3.1 Why Flat Dispatching Would Burn Coordinator Context
+If the top-level Coordinator directly dispatched 7 subagents per bug across 48 bugs ($48 \times 7 = 336$ subagent round-trips), read `gh issue view` bodies, and received raw `cargo test` and `git diff` outputs in its own conversation history, the Coordinator would exhaust its context window after 4–5 issues.
+
+### 3.2 Two-Tier Hierarchical Subagent Isolation & Scratch-File Handoff
+
+To ensure the **Coordinator burns near-zero context** (~10 lines of prompt out, ~3 lines of receipt back per issue), we use a **Two-Tier Hierarchical Dispatch Architecture**:
+
+```mermaid
+flowchart TD
+    Coord["Top-Level Coordinator<br/>(Zero File Reads, Zero Issue Reads,<br/>Zero Command Execution)<br/>Sends 10-line prompt -> Receives 3-line receipt"]
+    Ctrl["Per-Issue Protocol Controller Subagent<br/>(TypeName: self, Isolated Context per #ID)<br/>Reads SKILL.md & gh issue view #ID<br/>Orchestrates Steps 1-7 & Scratch Handoffs"]
+    Step1_5["Steps 1-5 Subagents (5x Fresh research Subagents)<br/>1: Repro | 2: Hypothesis | 3: Investigation<br/>4: Evidence | 5: 5-Whys Root Cause<br/>Write details to scratch/issue_#ID_step_N.md"]
+    Step6["Step 6: Fix Subagent (Fresh self Subagent)<br/>RED #[test] -> Fix -> GREEN #[test]<br/>git commit (refs #ID) & git push<br/>gh issue comment root cause + fix"]
+    Step7["Step 7: Verification Subagent (Fresh self Subagent)<br/>1. Repro check | 2. grep FILE_LOCATION<br/>3. cargo test | 4. git diff<br/>Posts raw proofs to GitHub #ID & adds status:fixed-resolved"]
+
+    Coord -->|"1. Dispatch (1 Issue #ID)"| Ctrl
+    Ctrl -->|"Dispatches 1 by 1"| Step1_5
+    Ctrl -->|"Dispatches Step 6"| Step6
+    Ctrl -->|"Dispatches Step 7"| Step7
+    Ctrl -->|"2. Returns 3-Line Receipt Only"| Coord
+```
+
+1. **Top-Level Coordinator Rules (Zero Context Burn)**:
+   - **NEVER** calls `read_file` on repository source files or defect dossiers.
+   - **NEVER** calls `gh issue view <ID>` to load 200-line issue bodies into its own context.
+   - **NEVER** runs `cargo test`, `git diff`, `git commit`, or `git push` during the issue loop.
+   - For each issue `#<ID>` in the serial queue (Section 3.4), the Coordinator invokes **one** `Per-Issue Protocol Controller Subagent` (`TypeName: "self"`, `Role: "Defect #<ID> Debug-Protocol Controller"`), waits for its **3-line completion receipt**, immediately terminates/reclaims it via `manage_subagents` (which automatically garbage-collects all of its child subagents and context), and dispatches the next issue's controller.
+2. **Per-Issue Protocol Controller Subagent (`TypeName: "self"`)**:
+   - Runs in an **isolated conversation context** dedicated to a single issue `#<ID>`.
+   - Reads `.agents/skills/debug-protocol/SKILL.md` and runs `gh issue view <ID>` inside its isolated context.
+   - Sequentially dispatches **7 separate, fresh child subagents (`Step 1` through `Step 7`)** as mandated by `.agents/skills/debug-protocol/SKILL.md`:
+     - **Step 1 (`research`)**: Reproduction Subagent → writes reproduction & scope report to `<scratch_dir>/issue_<ID>_step1.md` and returns a 3-line summary.
+     - **Step 2 (`research`)**: Hypothesis Subagent → reads `step1.md`, writes ranked hypotheses to `<scratch_dir>/issue_<ID>_step2.md`, returns 3-line summary.
+     - **Step 3 (`research`)**: Investigation Subagent → reads `step1..2.md`, traces AST/data flow, writes investigation evidence to `<scratch_dir>/issue_<ID>_step3.md`, returns 3-line summary.
+     - **Step 4 (`research`)**: Evidence Subagent → compiles structured evidence dossier & ruled-out hypotheses into `<scratch_dir>/issue_<ID>_step4.md`, returns 3-line summary.
+     - **Step 5 (`research`)**: Root Cause Subagent → applies 5-Whys, writes exact `file:line` root cause to `<scratch_dir>/issue_<ID>_step5.md`, returns 3-line summary.
+     - **Step 6 (`self`)**: Fix Subagent → reads `step5.md`, writes failing native Rust `#[test]` (RED), applies minimal fix (Check 19/34/36 compliant), verifies test passes (GREEN), stages, commits (`git commit -m "fix(<scope>): ... (refs #<ID>)"`), pushes to `origin/main`, comments root cause + fix on GitHub issue `#<ID>`, and returns commit SHA + 3-line summary.
+     - **Step 7 (`self`)**: Verification Subagent → confirms original reproduction is fixed, greps `FILE_LOCATION`, runs the test suite, checks `git diff` of the fix commit, **posts the full raw terminal output (`grep`, `cargo test`, `git diff`) directly to GitHub issue `#<ID>` via `gh issue comment <ID>`**, applies `status:fixed-resolved` via `gh issue edit <ID> --add-label "status:fixed-resolved"`, and returns only a 3-line verification receipt (`PROOFS: 3/3 PASS | LABEL: status:fixed-resolved | COMMIT: <sha>`) to the controller.
+   - Reclaims its child subagents, deletes `<scratch_dir>/issue_<ID>_step*.md`, and returns **only a 3-line receipt** to the Top-Level Coordinator:
+     ```text
+     ISSUE: #<ID> | STATUS: status:fixed-resolved | COMMIT: <sha>
+     PROOFS: 3/3 posted to GitHub (repro + grep + cargo test + git diff)
+     TARGET: <file_location>
+     ```
+
+### 3.3 Compact Prompt Template Sent by Coordinator (≤ 15 Lines)
+
+```markdown
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER
+Active Skill: .agents/skills/debug-protocol/SKILL.md
+Assigned Defect: Issue #<ID>
+Allowed Target Files: <target_files>
+Scratch Directory: <appDataDir>/brain/<conversation-id>/scratch
+---GOVERNANCE-END---
+
+1. Read `.agents/skills/debug-protocol/SKILL.md` in full and inspect `gh issue view <ID>`.
+2. Execute the full 8-step `debug-protocol` for Issue #<ID> by sequentially dispatching 7 fresh child subagents (Steps 1–5 `research`, Step 6 `self` Fix Subagent, Step 7 `self` Verification Subagent), reclaiming each via `manage_subagents`.
+3. Use `<Scratch Directory>/issue_<ID>_step<1..5>.md` for inter-step handoffs so prompts stay compact.
+4. Ensure Step 6 commits with neutral `(refs #<ID>)`, pushes to `origin/main`, and comments root cause + fix on `#<ID>`.
+5. Ensure Step 7 posts the raw `grep`, `cargo test`, and `git diff` proofs to `#<ID>` and applies `status:fixed-resolved`.
+6. Return ONLY a 3-line receipt (`ISSUE`, `PROOFS`, `TARGET`) to the coordinator. Do NOT paste raw diffs or test logs in your final reply.
+
+PROCEED
+```
+
+### 3.4 Serial Dispatch Queue & Parent/Child Sequencing (50 Remaining Issues)
+
+To prevent git index or file-write contention (`rules/serial-execution.md`), the Coordinator dispatches one `Per-Issue Protocol Controller Subagent` at a time in the exact dependency order below:
+
+| Stage | Serial Issue Dispatch Order (1 Isolated Controller Subagent per Issue) | Target File Boundary | Paired Issues on Same Function |
 | :--- | :--- | :--- | :--- |
-| **Step 1** | `SA-01` (Fresh Context) | `Checklist Relative Link & Stale Line Engineer` | [checklist.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/reconcile-backlog/src/checklist.rs) |
-| **Step 2** | `SA-02` (Fresh Context) | `Tracker Issue Title Sync Engineer` | [tracker.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/reconcile-backlog/src/tracker.rs) |
-| **Step 3** | `SA-03` (Fresh Context) | `Projected Link Bracket & Title Reconciler Engineer` | [lib.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/reconcile-backlog/src/lib.rs) |
-| **Step 4** | `SA-04` (Fresh Context) | `SysML Ingestion Behavioral AST Engineer` | [markdown.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/ingest-sysml/src/translators/markdown.rs) |
-| **Step 5** | `SA-05` (Fresh Context) | `Core SysML AST State Transition Parser Engineer` | [sysml_ast.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/deap-core/src/sysml_ast.rs) |
-| **Step 6** | `SA-06` (Fresh Context) | `Forward-Sync Epic, Feature & Use Case Engineer` | [forward.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/compile-sysml/src/sync/forward.rs) (Epics/Features/Use Cases) |
-| **Step 7** | `SA-07` (Fresh Context) | `Forward-Sync User Story Lifeline & Traceability Engineer` | [forward.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/compile-sysml/src/sync/forward.rs) (User Stories `US-01..62`) |
-| **Step 8** | `SA-08` (Fresh Context) | `Spec Audit Trigger Rules Resolver Engineer` | [mod.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/verify-baseline/src/spec_audit/mod.rs) |
-| **Step 9** | `SA-09` (Fresh Context) | `UML Validator State Transition Indexer Engineer` | [uml_validator.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/verify-baseline/src/spec_audit/uml_validator.rs) |
-| **Step 10** | `SA-10` (Fresh Context) | `End-to-End Upstream Projection Acceptance Test Engineer` | [upstream_projection_acceptance_test.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/compile-sysml/tests/upstream_projection_acceptance_test.rs) |
-| **Step 11** | `SA-11` (Fresh Context) | `Upstream SysML Schema Re-Ingestion Operator` | `.pipeline/upstream/schema/model.sysml` & `model-digest.json` |
-| **Step 12** | `SA-12` (Fresh Context) | `Upstream Specification Forward-Sync & Reconciler Operator` | `.pipeline/upstream/docs/` (`EPIC-01..06`, `FEAT-01..30`, `US-01..62`, `UC-01..31`) |
-| **Step 13** | `SA-13` (Fresh Context) | `Strict Spec Audit & Workspace Verification Operator` | `verify-baseline .pipeline/upstream --spec-only --strict`, `verify-baseline . --no-domain`, `cargo test --workspace` |
-| **Step 14** | `SA-14` (Fresh Context) | `GitHub Issue #562..#690 Projection & Remote Sync Operator` | Live GitHub projection (`#562`..`#690`), live issue audit, commit & `git push origin main` |
+| **Stage 0** | `#479` (Step 7 Verification Subagent only)<br/>`#492` (Step 7 Verification Subagent only) | • `#479`: `AGENTS.md`<br/>• `#492`: `crates/deap-core/src/source_ast.rs` | Already fixed in `b2a08a3` (`#479`) and `2405667` (`#492`) |
+| **Stage 1** | `1.` `#473` → `2.` `#480` → `3.` `#474` → `4.` `#488` → `5.` `#525` → `6.` `#526` | • `#473`: `crates/deap-core/src/rules.rs`<br/>• `#480`, `#474`, `#488`: `crates/verify-baseline/src/defect_dossier.rs`, `crates/verify-baseline/tests/defect_dossier_tests.rs`, `AGENTS.md`, `rules/subagent-dispatch-standards.md`, `skills/adversarial-code-auditor/SKILL.md`<br/>• `#525`, `#526`: `crates/verify-baseline/src/checks/structural.rs`, `Cargo.toml` files | `#480` + `#474`; `#525` + `#526` |
+| **Stage 2** | `7.` `#494` → `8.` `#503` → `9.` `#522` → `10.` `#501` → `11.` `#518` → `12.` `#529` (Part A) | • `#494`, `#503`, `#522`: `crates/deap-core/src/sysml_ast.rs`, `crates/deap-core/src/digest.rs`, `crates/ingest-sysml/src/digest.rs`<br/>• `#501`, `#518`, `#529-A`: `crates/deap-core/src/source_ast.rs` | `#494` + `#503` + `#522`; `#501` + `#518` + `#529-A` |
+| **Stage 3** | `13.` `#475` → `14.` `#524` → `15.` `#502` → `16.` `#519` → `17.` `#491` | • `#475`, `#524`: `crates/ingest-sysml/src/translators/markdown.rs`<br/>• `#502`: `crates/ingest-sysml/src/lib.rs`, `crates/ingest-sysml/src/translators/yang.rs`<br/>• `#519`: `crates/ingest-sysml/src/translators/code.rs`<br/>• `#491`: `crates/ingest-sysml/src/lib.rs`, `crates/ingest-sysml/src/main.rs`, `crates/ingest-sysml/tests/` | `#475` + `#524` |
+| **Stage 4** | `18.` `#495` → `19.` `#521` → `20.` `#496` → `21.` `#509` → `22.` `#504` → `23.` `#527` → `24.` `#476` → `25.` `#493` → `26.` `#505` | • `#495`, `#521`, `#496`, `#509`, `#504`, `#527`: `crates/compile-sysml/src/parser/grammar.rs`, `crates/compile-sysml/src/main.rs`<br/>• `#476`, `#493`, `#505`: `crates/compile-sysml/src/semantic/serializer.rs`, `crates/compile-sysml/src/parser/grammar.rs` | `#495` + `#521`; `#496` + `#509`; `#504` + `#527`; `#476` + `#493` + `#505` |
+| **Stage 5** | `27.` `#477` → `28.` `#497` → `29.` `#507` → `30.` `#528` | • `#477`, `#497`, `#507`, `#528`: `crates/compile-sysml/src/sync/forward.rs`, `crates/compile-sysml/src/main.rs`, `crates/verify-baseline/tests/blueprint_gate_tests.rs` | `#477` + `#497` + `#507` + `#528` |
+| **Stage 6** | `31.` `#511` → `32.` `#515` → `33.` `#513` → `34.` `#512` → `35.` `#514` → `36.` `#516` → `37.` `#498` → `38.` `#510` → `39.` `#520` → `40.` `#500` → `41.` `#508` → `42.` `#517` → `43.` `#529` (Part B) | • `#511`..`#520`, `#498`: `crates/compile-sysml/src/docstring.rs`, `crates/compile-sysml/tests/docstring_injector_tests.rs`<br/>• `#500`, `#508`, `#517`, `#529-B`: `crates/verify-baseline/src/checks/docstring_gate.rs`, `crates/verify-baseline/tests/check_36_docstring_gate_tests.rs`, `crates/verify-baseline/tests/blueprint_gate_tests.rs` | `#498` + `#510` + `#520`; `#500` + `#508` + `#517` + `#529-B` |
+| **Stage 7** | `44.` `#484` → `45.` `#485` → `46.` `#486` → `47.` `#487` | • `#484`–`#487`: `crates/compile-sysml/src/flutter_codegen.rs`, `crates/compile-sysml/tests/flutter_codegen_tests.rs`, `crates/verify-baseline/src/checks/codebase.rs`, `crates/verify-baseline/tests/codebase_checks_tests.rs` | `#484` + `#485`; `#486` + `#487` |
+| **Stage 8** | `48.` `#478` → `49.` `#506` → `50.` `#499` → `51.` `#523` | • `#478`: `crates/verify-baseline/src/checks/parity_gates.rs`<br/>• `#506`: `crates/reconcile-backlog/src/lib.rs`, `crates/reconcile-backlog/src/checklist.rs`, `crates/reconcile-backlog/src/frontmatter.rs`<br/>• `#499`, `#523`: `crates/reconcile-backlog/src/lib.rs`, `crates/assemble-conops/src/lib.rs`, `crates/compile-sysml/src/lib.rs`, `crates/verify-baseline/src/lib.rs` | `#506` + `#522` (`frontmatter.rs`); `#499` + `#523` |
 
 ---
 
-## 3. Detailed Step-by-Step Execution Specification
+## 4. Target Files & Planned Changes Across All Stages
 
-### Step 1 — Fresh Subagent `SA-01`: Fix Local Relative Checklist Links & Stale Line Replacement in `checklist.rs`
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "Checklist Relative Link & Stale Line Engineer")` — brand-new isolated context, terminated immediately after Step 1 completes.
-- **Single Target File**: [checklist.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/reconcile-backlog/src/checklist.rs)
-- **Exact Changes**:
-  1. **Local Checklist Links (`format_canonical_checklist_item` at lines `936-1008`)**:
-     - Remove the branch that emits `https://github.com/{clean_repo}/blob/{branch}/{doc_path}` into local specification files.
-     - Always emit workspace-relative markdown links (`let stripped = spec.rel_path.strip_prefix("docs/").unwrap_or(&spec.rel_path); format!("../{}", stripped)`) when writing local markdown files to disk (`../features/{file_name}`, `../user-stories/{file_name}`, `../use-cases/{file_name}`).
-  2. **Stale Checklist Line Replacement (`reconcile_or_inject_section` at lines `1092-1174`)**:
-     - When reconciling an existing section against `new_items` and `specs`, if an existing checklist line matches `specs.get(idx)` via `contains_spec_reference(trimmed, spec)`, replace the stale line with the updated canonical item from `new_items.get(idx)` (preserving `- [x]` if the existing line started with `- [x]` or `- [X]`), and drop any legacy checklist lines under managed sections (`## Child Features`, `## Linked User Stories`, `## Linked Use Cases`, `## Traceability`) that do not match any active `LoadedSpec`.
-  3. **Unit Tests (TDD RED-GREEN)**:
-     - Add/update unit tests in `crates/reconcile-backlog/src/checklist.rs` (with 7-section safety docstrings) verifying workspace-relative local links and stale renamed checklist line replacement.
+### Stage 0: Already-Landed Fix Verification (`#479`, `#492`)
+- Dispatch Step 7 Verification Subagents for `#479` (`AGENTS.md`, fixed in `9e1560f`/`b2a08a3`) and `#492` (`crates/deap-core/src/source_ast.rs`, fixed in `0c6b689`/`298d637`/`2405667`) to post the three proofs (`grep`, test proof, `git show`) to GitHub, apply `status:fixed-resolved`, and return a 3-line receipt.
 
-### Step 2 — Fresh Subagent `SA-02`: Add `update_issue_title` to `TrackerClient` in `tracker.rs`
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "Tracker Issue Title Sync Engineer")` — brand-new isolated context, terminated immediately after Step 2 completes.
-- **Single Target File**: [tracker.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/reconcile-backlog/src/tracker.rs)
-- **Exact Changes**:
-  1. **Add `update_issue_title` (`lines 449-620, 824-861, 1242-1334, 1950-2250`)**:
-     - Add `fn update_issue_title(&self, issue_number: u64, title: &str) -> Result<(), String>` (with 7-section safety rustdoc headers) to `TrackerClient`, `OfflineTracker`, `GitHubTracker` (executing `gh issue edit <issue_number> --title <title>`), and `GitLabTracker` (`glab issue update <issue_number> --title <title>`).
-  2. **Unit Tests (TDD RED-GREEN)**:
-     - Add unit tests in `crates/reconcile-backlog/src/tracker.rs` verifying `OfflineTracker::update_issue_title` updates the stored issue title in place.
+### Stage 1: Governance, Downstream Test Guard, Defect Dossier Validator & Structural Check 34 Gates (`#473`, `#474`, `#480`, `#488`, `#525`, `#526`)
+- **Target Files**:
+  - `crates/deap-core/src/rules.rs`
+  - `crates/verify-baseline/src/defect_dossier.rs`
+  - `crates/verify-baseline/tests/defect_dossier_tests.rs`
+  - `crates/verify-baseline/src/checks/structural.rs`
+  - `AGENTS.md`
+  - `rules/subagent-dispatch-standards.md`
+  - `skills/adversarial-code-auditor/SKILL.md`
+  - `Cargo.toml`
+  - `crates/deap-core/Cargo.toml`
+  - `crates/ingest-sysml/Cargo.toml`
+  - `crates/compile-sysml/Cargo.toml`
+  - `crates/verify-baseline/Cargo.toml`
+  - `crates/reconcile-backlog/Cargo.toml`
+  - `crates/assemble-conops/Cargo.toml`
+- **Planned Changes**:
+  1. **`#473` (`crates/deap-core/src/rules.rs`)**: Guard `test_canonical_architecture_blueprints_exist_on_disk` with `.pipeline/upstream` existence detection so downstream workspaces skip the upstream-only on-disk check instead of panicking.
+  2. **`#480` & `#474` (`crates/verify-baseline/src/defect_dossier.rs`, `AGENTS.md`, `rules/subagent-dispatch-standards.md`, `skills/adversarial-code-auditor/SKILL.md`, `crates/verify-baseline/tests/defect_dossier_tests.rs`)**: Inject `SSL_CERT_FILE=/etc/ssl/cert.pem` on `gh` subprocesses when `/etc/ssl/cert.pem` is present, align `AGENTS.md` and `rules/subagent-dispatch-standards.md` with single-command `verify-baseline check-defect`, and add regression tests in `defect_dossier_tests.rs`.
+  3. **`#488` (`crates/verify-baseline/src/defect_dossier.rs`, `crates/verify-baseline/tests/defect_dossier_tests.rs`)**: Skip fenced code blocks when extracting `test-target` metadata, enforce Check 19 domain cleanliness and Check 34 zero-regex inside Section 6 code blocks for upstream crates, and verify `test-target` crate paths exist on disk in `UPSTREAM_SPEC_CORE_COMPILER` workspaces.
+  4. **`#525` & `#526` (`crates/verify-baseline/src/checks/structural.rs`, workspace `Cargo.toml` files)**: Configure `[lints.clippy]` in `Cargo.toml` (`deny` on safety lints so `clap_derive` `E0453` is avoided), remove the hardcoded `is_audited` file allowlist in Check 34, enforce `C-PURITY-01..05` fail-closed I/O, and detect multi-line `allow(clippy::...)` blocks.
 
-### Step 3 — Fresh Subagent `SA-03`: Fix Nested Brackets in `rewrite_projected_links` & Wire Title Sync in `lib.rs`
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "Projected Link Bracket & Title Reconciler Engineer")` — brand-new isolated context, terminated immediately after Step 3 completes.
-- **Single Target File**: [lib.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/reconcile-backlog/src/lib.rs)
-- **Exact Changes**:
-  1. **Balanced Brackets in Markdown Link Text (`rewrite_projected_links` at lines `1111-1277`)**:
-     - Ensure `[text](target)` parsing in `rewrite_projected_links` tracks balanced nested square brackets `[...]` (`depth += 1` on `[`, `depth -= 1` on `]`) so link labels containing inner brackets (such as `[Feature 01: [BP 01 ...] Name](../features/FEAT-01-...)`) are rewritten to full GitHub blob URLs when projected to GitHub issues.
-  2. **Wire Title Synchronization in `run_reconciliation` (`lines 420-440`)**:
-     - When `options.sync_bodies && !options.offline && !options.dry_run`, check if `!spec.frontmatter.title.trim().is_empty() && issue.title.trim() != spec.frontmatter.title.trim()` and call `tracker.update_issue_title(issue_id, spec.frontmatter.title.trim())?`.
-  3. **Unit Tests (TDD RED-GREEN)**:
-     - Add unit tests in `crates/reconcile-backlog/src/lib.rs` (with 7-section safety docstrings) verifying nested-bracket link projection and title synchronization during `run_reconciliation`.
+### Stage 2: Tier-0 `deap-core` SHA-256 SSOT & Source AST Lexer (`#494`, `#501`, `#503`, `#518`, `#522`, `#529-A`)
+- **Target Files**:
+  - `crates/deap-core/src/sysml_ast.rs`
+  - `crates/deap-core/src/digest.rs`
+  - `crates/deap-core/src/source_ast.rs`
+  - `crates/ingest-sysml/src/digest.rs`
+- **Planned Changes**:
+  1. **`#494`, `#503` & `#522` (`crates/deap-core/src/sysml_ast.rs`, `crates/deap-core/src/digest.rs`, `crates/ingest-sysml/src/digest.rs`)**: Consolidate the duplicate manual SHA-256 implementation in `sysml_ast.rs` onto `deap_core::digest::sha256_hex`, replace `WalkDir::into_iter().flatten()` with fail-closed I/O error propagation, and replace vacuous `REQ-0001` tests with concrete digest verification assertions.
+  2. **`#501`, `#518` & `#529` (Part A) (`crates/deap-core/src/source_ast.rs`)**: Fix raw string (`r#"..."#`) and nested Dart string interpolation (`"${...}"`) state transitions in `RustDartLexState`, remove hardcoded `"Controller"` suffix heuristics and Dart `String`/`Key` parameter type assumptions, preserve nested generic type arguments without lossy flattening, and expose `RustDartLexState` and `ScopedItemScannerState` (`REQ-0605` `AC-01..AC-02`).
 
-### Step 4 — Fresh Subagent `SA-04`: Fix Blueprint Statechart & Action AST Extraction in `markdown.rs`
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "SysML Ingestion Behavioral AST Engineer")` — brand-new isolated context, terminated immediately after Step 4 completes.
-- **Single Target File**: [markdown.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/ingest-sysml/src/translators/markdown.rs)
-- **Exact Changes**:
-  1. **Populate `sub_states` and `transitions` on Extracted `StateDef`s (`lines 1724-1740, 1836-1875`)**:
-     - In `extract_behavioral_ast_nodes`, collect every unique state identifier (`src_id` and `tgt_id`, excluding `"Initial"` and `"Terminal"`) referenced in the `stateDiagram-v2` block and push a child `StateDef { name: state_id, ..Default::default() }` into `state_def.sub_states` in deterministic order.
-     - Format transition names deterministically as `{src_id}_to_{tgt_id}_on_{trig_id}` when a trigger label is present (or `{src_id}_to_{tgt_id}` when absent), with `source: Some(src_id)`, `target: Some(tgt_id)`, and `trigger: trig_id`.
-  2. **Synthesize a Deterministic Package `StateDef` When a Blueprint Lacks a `stateDiagram-v2` Fence (`lines 1875-1901`)**:
-     - At the end of `extract_behavioral_ast_nodes`, if `pkg.state_defs.is_empty()`, synthesize 1 `StateDef` named `{pkg_name}_LifecycleState` whose `sub_states` (3 distinct states derived from the package's first 3 `part_defs` or `{pkg_name}`) and `transitions` (connecting `Initial` -> state 1 -> state 2 -> state 3 -> `Terminal`, triggered by the package's first `action_defs`) are populated on `pkg.state_defs`, so `BP_02` and `BP_05` have complete, subsystem-distinct `state def` blocks in `.pipeline/upstream/schema/model.sysml`.
-  3. **Preserve Exact 62 `ActionDef` Count & Package Order (`lines 1800-1835`)**:
-     - Strip any leading `US_AC_<digits>_` or `US_<digits>_` prefix from extracted action names while keeping the exact 62 `ActionDef`s across `BP_01..06` in their exact package order (do NOT add extra `ActionDef` items to `pkg.action_defs`).
-  4. **Unit Tests (TDD RED-GREEN)**:
-     - Add unit tests in `crates/ingest-sysml/src/translators/markdown.rs` verifying `sub_states` extraction and fallback `StateDef` synthesis when a blueprint lacks a `stateDiagram-v2` fence.
+### Stage 3: Level-0 Ingestion Engine (`crates/ingest-sysml`) (`#475`, `#491`, `#502`, `#519`, `#524`)
+- **Target Files**:
+  - `crates/ingest-sysml/src/translators/markdown.rs`
+  - `crates/ingest-sysml/src/translators/yang.rs`
+  - `crates/ingest-sysml/src/translators/code.rs`
+  - `crates/ingest-sysml/src/lib.rs`
+  - `crates/ingest-sysml/src/main.rs`
+  - `crates/ingest-sysml/tests/code_ingestion_tests.rs`
+  - `crates/ingest-sysml/tests/code_realization_scoping_tests.rs`
+- **Planned Changes**:
+  1. **`#475` & `#524` (`crates/ingest-sysml/src/translators/markdown.rs`)**: Fix blueprint heading filter, row-per-attribute extraction, constraint naming, interface latency values, `UC-XX` use case extraction, `/*` / `*/` sanitization in `doc` comments, fenced code block state tracking during table scans, and property name/type column ordering.
+  2. **`#502` (`crates/ingest-sysml/src/lib.rs`, `crates/ingest-sysml/src/translators/yang.rs`)**: Fail closed on empty file slices in `MarkdownTranslator::translate_files` and missing files in `YangTranslator::translate_files`.
+  3. **`#519` (`crates/ingest-sysml/src/translators/code.rs`)**: Remove hardcoded Flutter widget substrings and magic `UNMAPPED` checks.
+  4. **`#491` (`crates/ingest-sysml/src/lib.rs`, `main.rs`, tests)**: Remove all blanket `#![allow(clippy::...)]` attributes across `ingest-sysml` and resolve all underlying clippy lints.
 
-### Step 5 — Fresh Subagent `SA-05`: Fix `parse_state_defs` Transition Roundtrip in `sysml_ast.rs`
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "Core SysML AST State Transition Parser Engineer")` — brand-new isolated context, terminated immediately after Step 5 completes.
-- **Single Target File**: [sysml_ast.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/deap-core/src/sysml_ast.rs)
-- **Exact Changes**:
-  1. **Parse `transition` Statements Inside `parse_state_defs` (`lines 4354-4433`)**:
-     - In `parse_state_defs`, alongside `entry`, `do`, and `exit`, parse `transition` statements inside `body`:
-       - Support both `transition <t_name>;` (where `<t_name>` encodes `{source}_to_{target}_on_{trigger}` or `{source}_to_{target}`) and `transition <opt_name> first <src> accept <trig> ... then <tgt>;` / `transition first <src> ... then <tgt>;`.
-       - When `<t_name>` contains `"_to_"`, split on `"_to_"` and optional `"_on_"` using strictly safe `.find(...)` and `.get(...)` slicing (zero `&[&str]` slice literals/types, zero direct `s[a..b]` indexing, zero `.filter_map(... .ok())`) to recover `source: Option<String>`, `target: Option<String>`, and `trigger: Option<String>`, and push `TransitionDef { name: Some(t_name), source, target, trigger, guard: None, effect: None, doc: None }` into `transitions`.
-  2. **Unit Tests (TDD RED-GREEN)**:
-     - Add a unit test in `crates/deap-core/src/sysml_ast.rs` (with a complete 7-section safety docstring) verifying that `parse_state_defs` roundtrips `sub_states` and `transitions` (`source`, `target`, `trigger`) from a `state def` block.
+### Stage 4: `compile-sysml` Parser Grammar & Bijective AST Serializer (`#476`, `#493`, `#495`, `#496`, `#504`, `#505`, `#509`, `#521`, `#527`)
+- **Target Files**:
+  - `crates/compile-sysml/src/parser/grammar.rs`
+  - `crates/compile-sysml/src/semantic/serializer.rs`
+  - `crates/compile-sysml/src/main.rs`
+- **Planned Changes**:
+  1. **`#495` & `#521` (`crates/compile-sysml/src/parser/grammar.rs`)**: Remove the pre-scanner `normalize_type_sigils` raw text rewrite and parse composite type sigils (`&`, `[T]`, `(A, B)`, `<T>`, `::`) directly at the token level without shifting `Span.col` offsets or corrupting expressions.
+  2. **`#496`, `#509` & `#505` (`crates/compile-sysml/src/parser/grammar.rs`, `crates/compile-sysml/src/semantic/serializer.rs`)**: Capture `self.take_doc_comment()` inside `parse_state_decl` for sub-states and transitions, preserve token spacing in `entry`/`do`/`exit` actions, parse transition endpoints without fabricating `{s}_to_{t}` names, and include sub-state transitions in MBD Stateflow `.sfx` export.
+  3. **`#504` & `#527` (`crates/compile-sysml/src/parser/grammar.rs`, `crates/compile-sysml/src/main.rs`)**: Fail closed with structured `ParseError` diagnostics on unknown statements across the 12 inner block parsers, align `ConnectionDef`/`RequirementDef`/`CalcDef` grammar and serializer symmetry, and enforce the bijective AST roundtrip gate in `run_compilation_gate`.
+  4. **`#476`, `#493` & `#505` (`crates/compile-sysml/src/semantic/serializer.rs`)**: Serialize `UseCaseDef::includes` (`include use case ...;`), normalize quotes in `UseCaseDef`/`PortDef`/`HazardDef`/`RiskDef`, serialize `source_port`/`target_port` in `HazardDef`/`RiskDef`, serialize `TransitionDef::doc`, and serialize `severity`, `item_flow_ref`, `derives`, `parameters`, and sub-0.1ms `latency_ms` precision in `ConnectionDef`, `RequirementDef`, and `ActionDef`.
 
-### Step 6 — Fresh Subagent `SA-06`: Fix Epic, Feature & Use Case Forward-Sync Generation in `forward.rs`
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "Forward-Sync Epic, Feature & Use Case Engineer")` — brand-new isolated context, terminated immediately after Step 6 completes.
-- **Single Target File**: [forward.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/compile-sysml/src/sync/forward.rs) (Epics, Features, and Use Cases sections: lines `200-220`, `826-1122`, `1700-1960`, `2330-2390`)
-- **Exact Changes**:
-  1. **Fix Broken `Specification Source` and `Source References` Links (`lines 1789-1810, 1907-1951, 2110-2135, 2358-2383`)**:
-     - Check whether `schema/subsystems` exists on disk relative to the target workspace (`target_out_dir.parent().unwrap_or(&target_out_dir).join("schema/subsystems").exists()` or `target_out_dir.join("schema/subsystems").exists()`); when `schema/subsystems` does not exist on disk (as in `.pipeline/upstream` where `schema/model.sysml` is the single-file SSOT), emit `[schema/model.sysml](../../schema/model.sysml)` for `Specification Source` and reference only `schema/model.sysml` in `Source References` across all Epics, Features, User Stories, and Use Cases.
-  2. **Fix Epic Statechart Generation (`generate_epic_statechart`, `lines 826-940`)**:
-     - Update `generate_epic_statechart` to read `st_def.sub_states` and `st_def.transitions`:
-       - Emit `stateDiagram-v2`, declare every `sub_state.name`, and emit every transition from `st_def.transitions` (`[*] --> {target}` when `source == "Initial"`, `{source} --> [*]` when `target == "Terminal"`, and `{source} --> {target} : {trigger}` otherwise) using only AST-declared `StateDef` and transition trigger symbols.
-  3. **Fix Epic Class Diagram Generation (`generate_epic_class_diagram`, `lines 970-1122`)**:
-     - Never emit `class {p.name}` or `class {parent_label}` when `p.name` / `parent_label` is a package name rather than a declared `PartDef` in `p.part_defs`.
-     - Use ONLY `PartDef` names declared in `p.part_defs` as `class` nodes and relationship endpoints in `generate_epic_class_diagram`.
-  4. **Fix Use Case Anti-Stutter (`strip_use_case_prefix`, `lines 200-218`)**:
-     - Update `strip_use_case_prefix` to iteratively strip composite prefixes (`UC_AC_<digits>_`, `UC_<digits>_`, `AC_<digits>_`, `US_AC_<digits>_`, `US_<digits>_`) in a loop using safe `.get(..)` slicing so `UC_AC_01_Rustc_E0453_...` strips cleanly to `Rustc_E0453_...` (producing `UC-01-Rustc_E0453_...md` and `Use Case 01: Rustc E0453 ...`).
-  5. **Remove Nested Square Brackets from Feature Link Labels (`lines 1724, 1890, 2073, 2081, 2088, 2344`)**:
-     - Sanitize inner `[` and `]` inside Feature link text labels so Markdown link syntax is flat and unambiguous.
+### Stage 5: `compile-sysml` Forward Sync & ICD/WBS CLI (`#477`, `#497`, `#507`, `#528`)
+- **Target Files**:
+  - `crates/compile-sysml/src/sync/forward.rs`
+  - `crates/compile-sysml/src/main.rs`
+  - `crates/verify-baseline/tests/blueprint_gate_tests.rs`
+- **Planned Changes**:
+  1. **`#477`, `#497` & `#507` (`crates/compile-sysml/src/sync/forward.rs`)**: Remove hardcoded `EPIC-02-ConOps` User Story parent links, preserve multi-story Use Case realizations, prevent root AST pollution during forward-to-reverse sync, and project Use Case and User Story specifications without overwriting authored Epic/Feature prose sections.
+  2. **`#528` (`crates/compile-sysml/src/sync/forward.rs`, `crates/compile-sysml/src/main.rs`, `crates/verify-baseline/tests/blueprint_gate_tests.rs`)**: Wire `REQ-0604` `AC-01..AC-05` contracts (`--emit-icd` `LogicalIcdMatrixCompiler`, `--emit-wbs` `MilStd881eWbsExporter`, typed `ActionDef` parameter roundtrip helpers, and `blueprint_gate_tests.rs` verification).
 
-### Step 7 — Fresh Subagent `SA-07`: Fix User Story (`US-01..62`) Forward-Sync Generation in `forward.rs`
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "Forward-Sync User Story Lifeline & Traceability Engineer")` — brand-new isolated context, terminated immediately after Step 7 completes.
-- **Single Target File**: [forward.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/compile-sysml/src/sync/forward.rs) (User Story section: lines `1485-1550`, `2058-2182`)
-- **Exact Changes**:
-  1. **Fix Broken `[EPIC-02-ConOps](../epics/EPIC-02-ConOps.md)` Link on `BP_02` User Stories (`lines 2094-2108`)**:
-     - Replace `if ep_idx == 2` with `if s_meta.pkg_name == "ConOps"` so `BP_02` User Stories (`US-06..15`) link to `[EPIC-02-BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint](../epics/EPIC-02-BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint.md)`.
-  2. **Fix `FEAT-01` Cross-Package Pollution & Lifeline Resolution (`lines 1485-1550, 2058-2092`)**:
-     - In `StoryMeta` construction (`lines 1485-1550`), resolve `caller_engine` and `target_engine` strictly from `p.part_defs` (if an interaction lifeline type is not a declared `PartDef` in `p.part_defs`, fall back to `p.part_defs.first()` and `p.part_defs.get(1).or_else(|| p.part_defs.first())`) so every `participant` in the User Story `sequenceDiagram` is guaranteed to be a declared `PartDef` in `p.part_defs` (`index.part_names`).
-     - In `req_features_list` (`lines 2070-2092`), remove the unconditional `if let Some(first_ctx) = part_contexts.first()` block that injected `FEAT-01` into every User Story across `BP_02..06`. Only link Features belonging to `s_meta.pkg_name`.
-  3. **Fix User Story Anti-Stutter & Issue ID Preservation**:
-     - Strip any leading `US_AC_<digits>_`, `US_<digits>_`, `UC_AC_<digits>_`, or `AC_<digits>_` prefix from action names in `StoryMeta` / `forward.rs`, and ensure `resolve_existing_issue_id` preserves `#562..#623` and `#624..#654` by `US-{s_num:02}-` / `UC-{u_num:02}-` prefix fallback.
+### Stage 6: Docstring Synthesizer (`docstring.rs`) & Check 36 Docstring Gate (`docstring_gate.rs`) (`#498`, `#500`, `#508`, `#510`, `#511`, `#512`, `#513`, `#514`, `#515`, `#516`, `#517`, `#520`, `#529-B`)
+- **Target Files**:
+  - `crates/compile-sysml/src/docstring.rs`
+  - `crates/compile-sysml/tests/docstring_injector_tests.rs`
+  - `crates/verify-baseline/src/checks/docstring_gate.rs`
+  - `crates/verify-baseline/tests/check_36_docstring_gate_tests.rs`
+  - `crates/verify-baseline/tests/blueprint_gate_tests.rs`
+- **Planned Changes**:
+  1. **`#511`, `#513` & `#515` (`crates/compile-sysml/src/docstring.rs`)**: Remove hardcoded workstation path components (`"Users"`, `"jail"`) in `derive_module_req_tag`, remove scanner-evasion `concat` hacks and CWD-dependent self-grep skips, and purge aerospace/military domain strings from `docstring.rs` unit tests.
+  2. **`#512`, `#514` & `#516` (`crates/compile-sysml/src/docstring.rs`)**: Replace string-prefix matching for `DocstringExitCode` (`2` vs `1`) with structured error variants, replace fixed line-count windows in `inspect_rust_item_details` and single-line `parse_rust_impl_header` with token/brace-balanced scanning, and eliminate doubled `Realises:` prefixes and hybrid 14-section docblocks.
+  3. **`#498`, `#510`, `#520` & `#529` (Part B) (`crates/compile-sysml/src/docstring.rs`, `crates/verify-baseline/tests/blueprint_gate_tests.rs`)**: Implement `resolve_schema_context_strict` without `.first()` fallback truncation, fix cross-entity method attribution, populate Dart item details without magic item caps, and add `REQ-0605` contract verification in `blueprint_gate_tests.rs`.
+  4. **`#500`, `#508` & `#517` (`crates/verify-baseline/src/checks/docstring_gate.rs`, `crates/verify-baseline/tests/check_36_docstring_gate_tests.rs`)**: Delegate Rust and Dart lexical scanning to `deap_core::source_ast`, bound the `in_mod_tests` brace depth latch, classify `unsafe fn` and `extern fn`, and complete Check 17/34/36 test assertions.
 
-### Step 8 — Fresh Subagent `SA-08`: Fix Ancestor Fallback Lookup for `rules/behavioral_triggers.json` in `spec_audit/mod.rs`
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "Spec Audit Trigger Rules Resolver Engineer")` — brand-new isolated context, terminated immediately after Step 8 completes.
-- **Single Target File**: [mod.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/verify-baseline/src/spec_audit/mod.rs)
-- **Exact Changes**:
-  1. **Ancestor Directory Fallback for `rules/behavioral_triggers.json` (`lines 872-882`)**:
-     - When `options.repo_root.join("rules/behavioral_triggers.json")` does not exist on disk (such as when `options.repo_root` is `.pipeline/upstream`), walk ancestor directories (`options.repo_root.ancestors()`) to locate `rules/behavioral_triggers.json` before returning an error.
-  2. **Unit Tests (TDD RED-GREEN)**:
-     - Add a unit test in `crates/verify-baseline/src/spec_audit/mod.rs` (with a 7-section safety docstring) verifying nested workspace resolution of `rules/behavioral_triggers.json`.
+### Stage 7: Flutter & C-ABI Codegen (`flutter_codegen.rs`) & Checks 38–41 AST Anti-Fabrication Gates (`codebase.rs`) (`#484`, `#485`, `#486`, `#487`)
+- **Target Files**:
+  - `crates/compile-sysml/src/flutter_codegen.rs`
+  - `crates/compile-sysml/tests/flutter_codegen_tests.rs`
+  - `crates/verify-baseline/src/checks/codebase.rs`
+  - `crates/verify-baseline/tests/codebase_checks_tests.rs`
+- **Planned Changes**:
+  1. **`#484` & `#485` (`crates/compile-sysml/src/flutter_codegen.rs`, `crates/verify-baseline/src/checks/codebase.rs`)**: Synthesize full 6-layer deterministic Rust C-ABI solver bridge, Dart FFI bindings, and deterministic Rust SQLite seed codegen from SysML topology instances, and enforce Check 41 AST parity banning duplicate Dart solver math.
+  2. **`#486` & `#487` (`crates/compile-sysml/src/flutter_codegen.rs`, `crates/verify-baseline/src/checks/codebase.rs`, `crates/verify-baseline/tests/codebase_checks_tests.rs`)**: Harden Check 39 (`check_39_zero_mocking_test_ast_gate`), Check 40 (`check_40_ui_contract_test_completeness_gate`), and Check 38 (`check_38_presentation_anti_hardcoding_ast_gate`) AST scanners and multi-viewport (1080p–6K) UI contract test codegen.
 
-### Step 9 — Fresh Subagent `SA-09`: Index State Transition Names & Triggers in `uml_validator.rs`
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "UML Validator State Transition Indexer Engineer")` — brand-new isolated context, terminated immediately after Step 9 completes.
-- **Single Target File**: [uml_validator.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/verify-baseline/src/spec_audit/uml_validator.rs)
-- **Exact Changes**:
-  1. **Index Transition Symbols in `SysmlSymbolIndex::index_state` (`lines 510-528`)**:
-     - Ensure `index_state` inserts non-empty `trans.name`, `trans.trigger`, and `trans.effect` into `self.action_names` and recurses into `state.sub_states` so statechart transition triggers parsed from `state def` blocks are recognized by `validate_state_diagram`.
-  2. **Unit Tests (TDD RED-GREEN)**:
-     - Add a unit test in `crates/verify-baseline/src/spec_audit/uml_validator.rs` (with a 7-section safety docstring) verifying that a `StateDef` with `sub_states` and `TransitionDef` triggers passes `validate_state_diagram`.
+### Stage 8: UseCase Parity, Backlog Reconciler (`reconcile-backlog`) & Workspace Clippy Sweep (`#478`, `#499`, `#506`, `#523`)
+- **Target Files**:
+  - `crates/verify-baseline/src/checks/parity_gates.rs`
+  - `crates/reconcile-backlog/src/lib.rs`
+  - `crates/reconcile-backlog/src/main.rs`
+  - `crates/reconcile-backlog/src/checklist.rs`
+  - `crates/reconcile-backlog/src/frontmatter.rs`
+  - `crates/assemble-conops/src/lib.rs`
+  - `crates/assemble-conops/src/main.rs`
+  - `crates/compile-sysml/src/lib.rs`
+  - `crates/compile-sysml/src/main.rs`
+  - `crates/verify-baseline/src/lib.rs`
+  - `crates/verify-baseline/src/main.rs`
+- **Planned Changes**:
+  1. **`#478` (`crates/verify-baseline/src/checks/parity_gates.rs`)**: Enforce fail-closed verification when schema `UseCaseDef` nodes lack `docs/use-cases/` specification files in downstream workspaces.
+  2. **`#506` & `#522` (frontmatter portion) (`crates/reconcile-backlog/src/lib.rs`, `checklist.rs`, `frontmatter.rs`)**: Track multi-line HTML comment state (`advance_html_comment_state`) across `frontmatter.rs` and `lib.rs`, fix epic hierarchy inclusive counting (`count_total_epics_inclusive`), and isolate tests.
+  3. **`#499` & `#523` (`crates/reconcile-backlog/src/lib.rs`, `main.rs`, `crates/assemble-conops/src/lib.rs`, `main.rs`, and remaining crate roots)**: Remove all remaining crate-level `#![allow(clippy::...)]` suppressions across `reconcile-backlog`, `assemble-conops`, and workspace crates, fixing all underlying clippy findings.
 
-### Step 10 — Fresh Subagent `SA-10`: Add End-to-End Upstream Projection Acceptance Test in `upstream_projection_acceptance_test.rs`
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "End-to-End Upstream Projection Acceptance Test Engineer")` — brand-new isolated context, terminated immediately after Step 10 completes.
-- **Single Target File**: [upstream_projection_acceptance_test.rs](file:///Users/perkunas/jail/DEAP01-spec-core/crates/compile-sysml/tests/upstream_projection_acceptance_test.rs)
-- **Exact Changes**:
-  1. **End-to-End Acceptance Test (`test_upstream_blueprint_to_spec_and_github_projection_zero_defects`)**:
-     - Create `crates/compile-sysml/tests/upstream_projection_acceptance_test.rs` (with 7-section safety docstrings and zero forbidden tokens) that runs `MarkdownTranslator` on the 6 design blueprints (`docs/designs/blueprint-01..06*.md`) in an isolated RAII temp directory, runs `forward_sync_sysml_to_specs`, runs `run_reconciliation` (offline), runs `run_spec_audit` (`--spec-only --strict` equivalent), and asserts:
-       - Exact counts: 6 Epics, 30 Features, 62 User Stories, 31 Use Cases (129 specs total).
-       - Zero broken relative links in any generated `.md` file (every relative markdown link resolves to an existing file on disk, and zero raw `https://github.com` URLs pollute local markdown files).
-       - `project_body_for_tracker_with_prefix` rewrites relative links into valid `https://github.com/gintatkinson/DEAP01-spec-core/blob/main/.pipeline/upstream/...` URLs whose target files exist on disk.
-       - Zero `spec_audit` findings across all 129 generated specifications.
+---
 
-### Step 11 — Fresh Subagent `SA-11`: Re-Ingest Blueprints into `.pipeline/upstream/schema/model.sysml`
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "Upstream SysML Schema Re-Ingestion Operator")` — brand-new isolated context, terminated immediately after Step 11 completes.
-- **Single Target Scope**: `.pipeline/upstream/schema/model.sysml` and `.pipeline/upstream/schema/model-digest.json`
-- **Execution Sequence**:
-  1. Clean untracked temporary defect scratch files if present (`.pipeline/defects/defect_20261026_134947.*`, `.pipeline/upstream/.pipeline/defects/`).
-  2. Build release binaries: `cargo build --release -p ingest-sysml -p compile-sysml -p reconcile-backlog -p verify-baseline`.
-  3. Re-ingest the 6 design blueprints into `.pipeline/upstream/schema/model.sysml`:
-     `./target/release/ingest-sysml --schema docs/designs --out .pipeline/upstream/schema/model.sysml --digest .pipeline/upstream/schema/model-digest.json`
-  4. Verify that `.pipeline/upstream/schema/model.sysml` contains all 6 packages (`BP_01..06`), 6 `state def` blocks (each with child `state` and `transition` statements), and the exact 62 `action def` blocks in package order.
+## 5. Verification & Completion Gates
 
-### Step 12 — Fresh Subagent `SA-12`: Forward-Sync `.pipeline/upstream/docs/` & Reconcile Offline Checklists
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "Upstream Specification Forward-Sync & Reconciler Operator")` — brand-new isolated context, terminated immediately after Step 12 completes.
-- **Single Target Scope**: `.pipeline/upstream/docs/` (`EPIC-01..06`, `FEAT-01..30`, `US-01..62`, `UC-01..31`, `STPA_MATRIX.md`)
-- **Execution Sequence**:
-  1. Run forward-sync with `--force` so `resolve_existing_issue_id` preserves `#562..#690` across all 129 specs and `clean_stale_specifications` removes the old renamed `UC-*-UC_AC_*` markdown files:
-     `./target/release/compile-sysml --forward-sync --schema .pipeline/upstream/schema/model.sysml --docs .pipeline/upstream/docs --out-dir .pipeline/upstream/docs --force`
-  2. Reconcile local checklists & traceability matrices offline:
-     `./target/release/reconcile-backlog --workspace .pipeline/upstream --offline`
-  3. Verify that all 129 generated specs (`EPIC-01..06` = `#685..#690`, `FEAT-01..30` = `#655..#684`, `US-01..62` = `#562..#623`, `UC-01..31` = `#624..#654`) carry their exact 1-to-1 `Issue ID`, zero stale files remain, and zero local `.md` files contain hardcoded `https://github.com` checklist links.
-
-### Step 13 — Fresh Subagent `SA-13`: Execute Strict Spec Audit & Workspace Baseline Verification Gates
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "Strict Spec Audit & Workspace Verification Operator")` — brand-new isolated context, terminated immediately after Step 13 completes.
-- **Single Target Scope**: Verification gates on `.pipeline/upstream` and root workspace
-- **Execution Sequence**:
-  1. Run the strict specification audit gate on `.pipeline/upstream`:
-     `./target/release/verify-baseline .pipeline/upstream --spec-only --strict` (must exit `0` with `0` errors across all 129 specification files).
-  2. Run the root workspace baseline gate:
-     `./target/release/verify-baseline . --no-domain` (must exit `0` with all 36 checks passing).
-  3. Run the full workspace Rust test suite:
-     `cargo test --workspace` (must exit `0` with zero failures).
-
-### Step 14 — Fresh Subagent `SA-14`: Project Updated Specs to GitHub Issues `#562`..`#690`, Audit Live Issues & Push to `origin/main`
-- **Subagent Dispatch**: `invoke_subagent(TypeName: "self", Model: "inherit", Role: "GitHub Issue #562..#690 Projection & Remote Sync Operator")` — brand-new isolated context, terminated immediately after Step 14 completes.
-- **Single Target Scope**: GitHub issue projection (`#562`..`#690`) and `origin/main` synchronization
-- **Execution Sequence**:
-  1. Project updated titles, bodies, and links to GitHub issues `#562`..`#690`:
-     `./target/release/reconcile-backlog --workspace .pipeline/upstream`
-  2. Empirically audit live GitHub issues (`gh issue view 685`, `gh issue view 655`, `gh issue view 562`, `gh issue view 624`, `gh issue view 567`) to verify that all titles, links, diagrams, and checklists are clean and zero issues above `#690` were created.
-  3. Commit all changes with neutral commit message syntax (avoiding GitHub auto-close keywords for `#562`..`#690`), push to `origin/main`, and verify `git diff origin/main` is empty.
+1. **Zero-Coordinator-Context-Burn Per-Issue Gate**:
+   - Each issue is orchestrated inside an isolated `Per-Issue Protocol Controller Subagent` (`TypeName: "self"`), which spawns the 7 fresh step subagents (`Steps 1–5` `research`, `Step 6` `self` Fix, `Step 7` `self` Verification), uses scratch files for inter-step handoffs, posts all raw proofs (`grep`, `cargo test`, `git diff`) directly to GitHub, applies `status:fixed-resolved`, and returns **only a 3-line receipt** to the Coordinator.
+   - The Coordinator immediately reclaims the controller subagent via `manage_subagents` before dispatching the next issue.
+2. **End-of-Session Final Gate**:
+   - Once all 50 issues carry `status:fixed-resolved`, dispatch a single final verification subagent to run `./target/release/verify-baseline . --no-domain` and verify `git diff origin/main` is empty, returning a 3-line pass receipt.
