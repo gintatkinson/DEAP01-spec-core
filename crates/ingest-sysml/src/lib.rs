@@ -876,18 +876,42 @@ mod tests {
         assert_eq!(pkg.constraint_defs[0].expression, "!exists(Phantom_Entity)");
     }
 
+    struct TempTestDir(std::path::PathBuf);
+
+    impl TempTestDir {
+        fn new(label: &str) -> Self {
+            use std::sync::atomic::{AtomicUsize, Ordering};
+            static COUNTER: AtomicUsize = AtomicUsize::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::SeqCst);
+            let dir = std::env::temp_dir().join(format!(
+                "deap_ingest_test_{}_{}_{}",
+                label,
+                std::process::id(),
+                id
+            ));
+            std::fs::remove_dir_all(&dir).unwrap_or(());
+            std::fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+    }
+
+    impl Drop for TempTestDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
     fn test_batch_translate_multiple_files_synthetic() {
         use std::fs;
         let content1 = "# Package_0\n\n## Classifier_Alpha\nAlpha doc.";
         let content2 = "# Package_0\n\n## Classifier_Beta\nBeta doc.";
 
-        let dir = std::env::temp_dir().join("ingest_test_batch");
-        fs::create_dir_all(&dir).ok();
-        let f1 = dir.join("spec1.md");
-        let f2 = dir.join("spec2.md");
-        fs::write(&f1, content1).ok();
-        fs::write(&f2, content2).ok();
+        let tmp = TempTestDir::new("batch_synthetic");
+        let f1 = tmp.0.join("spec1.md");
+        let f2 = tmp.0.join("spec2.md");
+        fs::write(&f1, content1).unwrap();
+        fs::write(&f2, content2).unwrap();
 
         let translator = translators::markdown::MarkdownTranslator::new();
         let file_paths = vec![f1.to_string_lossy().to_string(), f2.to_string_lossy().to_string()];
@@ -897,10 +921,56 @@ mod tests {
         let p_names: Vec<&str> = pkg.part_defs.iter().map(|p| p.name.as_str()).collect();
         assert!(p_names.contains(&"Classifier_Alpha"));
         assert!(p_names.contains(&"Classifier_Beta"));
+    }
 
-        fs::remove_file(f1).ok();
-        fs::remove_file(f2).ok();
-        fs::remove_dir(dir).ok();
+    #[test]
+    fn test_batch_translators_fail_closed_on_empty_and_mixed_missing_inputs() {
+        use std::fs;
+        let tmp = TempTestDir::new("batch_fail_closed");
+
+        let valid_md_path = tmp.0.join("valid.md");
+        fs::write(&valid_md_path, "# Package_0\n\n## Classifier_Alpha\nAlpha doc.").unwrap();
+        let valid_md = valid_md_path.to_string_lossy().to_string();
+        let missing_md = tmp.0.join("missing.md").to_string_lossy().to_string();
+
+        let md_translator = translators::markdown::MarkdownTranslator::new();
+        assert!(
+            md_translator.translate_files(&[], "Pkg").is_err(),
+            "MarkdownTranslator::translate_files must fail closed on empty slice"
+        );
+        assert!(
+            md_translator
+                .translate_files(&[valid_md, missing_md], "Pkg")
+                .is_err(),
+            "MarkdownTranslator::translate_files must fail closed on mixed valid + missing batch"
+        );
+
+        let valid_yang_path = tmp.0.join("valid.yang");
+        fs::write(
+            &valid_yang_path,
+            "module valid-mod { namespace \"urn:test:valid\"; prefix vm; container root { leaf id { type string; } } }",
+        )
+        .unwrap();
+        let valid_yang = valid_yang_path.to_string_lossy().to_string();
+        let missing_yang = tmp.0.join("missing.yang").to_string_lossy().to_string();
+
+        let yang_translator = translators::yang::YangTranslator::new();
+        assert!(
+            yang_translator.translate_files(&[], "Pkg").is_err(),
+            "YangTranslator::translate_files must fail closed on empty slice"
+        );
+        assert!(
+            yang_translator
+                .translate_files(std::slice::from_ref(&missing_yang), "Pkg")
+                .is_err(),
+            "YangTranslator::translate_files must fail closed on single missing file"
+        );
+        assert!(
+            yang_translator
+                .translate_files(&[valid_yang, missing_yang], "Pkg")
+                .is_err(),
+            "YangTranslator::translate_files must fail closed on mixed valid + missing batch"
+        );
     }
 
     #[test]

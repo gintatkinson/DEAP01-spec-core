@@ -3091,6 +3091,10 @@ impl MarkdownTranslator {
     pub fn translate_files(&self, file_paths: &[String], default_name: &str) -> Result<PackageDef, String> {
         use rayon::prelude::*;
 
+        if file_paths.is_empty() {
+            return Err("Zero Markdown specification files provided to translate_files".to_string());
+        }
+
         // Translate each file concurrently with isolated thread contexts and fail-closed error propagation
         let sub_packages: Vec<PackageDef> = file_paths
             .par_iter()
@@ -5424,7 +5428,20 @@ The Electrical Power subsystem shall maintain bus voltage between 24V and 32V.
     /// Realises: [REQ-SYSML-INGEST-MD/test_defect_02_translate_files_fails_closed_on_missing_or_unreadable_file] | SysML v2: VerificationCaseDef(test_defect_02_translate_files_fails_closed_on_missing_or_unreadable_file)
     #[test]
     fn test_defect_02_translate_files_fails_closed_on_missing_or_unreadable_file() {
+        struct TempDirGuard(std::path::PathBuf);
+        impl Drop for TempDirGuard {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+
         let translator = MarkdownTranslator::new();
+
+        let empty_res = translator.translate_files(&[], "Test_System");
+        assert!(
+            empty_res.is_err(),
+            "MarkdownTranslator::translate_files must fail closed on empty slice, got Ok"
+        );
 
         let missing_path = std::env::temp_dir()
             .join("nonexistent_defect_02_blueprint_491.md")
@@ -5434,6 +5451,22 @@ The Electrical Power subsystem shall maintain bus voltage between 24V and 32V.
         assert!(
             missing_res.is_err(),
             "MarkdownTranslator::translate_files must fail closed on nonexistent path, got Ok"
+        );
+
+        let tmp_dir = TempDirGuard(
+            std::env::temp_dir().join(format!("deap_defect_02_mixed_{}", std::process::id())),
+        );
+        let _ = std::fs::remove_dir_all(&tmp_dir.0);
+        std::fs::create_dir_all(&tmp_dir.0).expect("create temp dir");
+        let valid_file = tmp_dir.0.join("valid_spec.md");
+        std::fs::write(&valid_file, "# Package_0\n\n## Classifier_Alpha\nAlpha doc.")
+            .expect("write valid_spec.md");
+        let valid_path = valid_file.to_string_lossy().to_string();
+        let mixed_res =
+            translator.translate_files(&[valid_path, missing_path.clone()], "Test_System");
+        assert!(
+            mixed_res.is_err(),
+            "MarkdownTranslator::translate_files must fail closed on mixed valid + missing batch, got Ok"
         );
 
         let unreadable_dir_path = std::env::temp_dir().to_string_lossy().to_string();

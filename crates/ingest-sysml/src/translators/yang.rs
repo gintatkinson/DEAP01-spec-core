@@ -1357,12 +1357,16 @@ impl YangTranslator {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-TRANSLATORS-YANG-YANGTRANSLATOR-TRANSLATE-FILES] | SysML v2: ActionDef(YangTranslator::translate_files)
     pub fn translate_files(&self, file_paths: &[String], default_name: &str) -> Result<PackageDef, String> {
+        if file_paths.is_empty() {
+            return Err("Zero valid YANG schema files were loaded".to_string());
+        }
+
         let mut sub_packages = Vec::new();
 
         for fpath in file_paths {
             let path = Path::new(fpath);
             if !path.exists() {
-                continue;
+                return Err(format!("YANG schema file does not exist: '{}'", path.display()));
             }
             let content = fs::read_to_string(path)
                 .map_err(|e| format!("Failed to read schema file '{}': {}", fpath, e))?;
