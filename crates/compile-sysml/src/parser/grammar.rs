@@ -179,33 +179,74 @@ impl<'a> SysmlParser<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-SOURCE] | SysML v2: ActionDef(SysmlParser::parse_source)
     pub fn parse_source(source: &str, default_pkg_name: &str) -> Result<PackageDef, ParseError> {
-        let normalized = Self::normalize_type_sigils(source);
-        let mut scanner = Scanner::new(&normalized);
-        let tokens = scanner.scan_all().map_err(|msg| ParseError {
-            message: msg,
-            span: Span::default(),
-        })?;
+        let tokens = Self::tokenize_source(source)?;
         let mut parser = SysmlParser::new(&tokens);
         parser.parse_package_or_file(default_pkg_name)
     }
 
-    /// Pre-processes standalone reference `&` and optional `?` type sigils outside comments and string literals into single-quoted tokens accepted by `Scanner`.
+    /// Tokenize complete source text into a `Vec<Token>` while preserving exact source byte and column spans for `&` and `?` sigils.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::tokenize_source` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves exact 1-to-1 byte length and `(line, col, start, end)` spans between `source` and every emitted `Token` in `PARSER-GRAMMAR`.
+    ///
+    /// ## 3. Preconditions
+    /// - `source: &str` is a valid UTF-8 source buffer supplied to `SysmlParser::tokenize_source`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<Vec<Token>, ParseError>` with standalone `&` and `?` tokens represented as 1-byte `TokenKind::Ident` tokens and single-quoted `'&'` and `'?'` tokens preserved with 3-byte spans.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) linear in `source.len()`.
+    /// - Space Complexity: O(N) bounded over normalized buffer and token vector.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates lexical scanner errors as `ParseError`.
+    /// - State: Stateless pure tokenization with zero shared mutable state.
+    /// - Action: Executes deterministically in bounded single-pass loops.
+    /// - Resource: Bounded heap allocations proportional to `source.len()`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-TOKENIZE-SOURCE] | SysML v2: ActionDef(SysmlParser::tokenize_source)
+    pub fn tokenize_source(source: &str) -> Result<Vec<Token>, ParseError> {
+        let normalized = Self::normalize_type_sigils(source);
+        let mut scanner = Scanner::new(&normalized);
+        let mut tokens = scanner.scan_all().map_err(|msg| ParseError {
+            message: msg,
+            span: Span::default(),
+        })?;
+        let bytes = source.as_bytes();
+        for tok in &mut tokens {
+            if tok.kind == TokenKind::Comma && tok.span.end.saturating_sub(tok.span.start) == 1 {
+                match bytes.get(tok.span.start).copied() {
+                    Some(b'&') => tok.kind = TokenKind::Ident("&".to_string()),
+                    Some(b'?') => tok.kind = TokenKind::Ident("?".to_string()),
+                    _ => {}
+                }
+            }
+        }
+        Ok(tokens)
+    }
+
+    /// Pre-processes standalone reference `&` and optional `?` type sigils outside comments and string literals into 1-byte `,` placeholders accepted by `Scanner`.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::normalize_type_sigils` in `crates/compile-sysml/src/parser/grammar.rs`.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves line numbers and lexical structure across all comments, string literals, and `&&` logical operators while encoding standalone `&` and `?` tokens for deterministic parsing in `PARSER-GRAMMAR`.
+    /// - Preserves exact 1-to-1 byte length (`out.len() == source.len()`), line numbers, column numbers, and lexical boundaries across all comments, string literals, single-quoted unrestricted identifiers (including backslash escapes), and `&&` logical operators while masking standalone `&` and `?` tokens in `PARSER-GRAMMAR`.
     ///
     /// ## 3. Preconditions
     /// - `source: &str` is a valid UTF-8 source buffer supplied to `SysmlParser::normalize_type_sigils`.
     ///
     /// ## 4. Postconditions
-    /// - Returns `String` containing the lexically normalized SysML v2 source text.
+    /// - Returns `String` of identical byte length containing the lexically normalized SysML v2 source text.
     ///
     /// ## 5. Algorithmic Complexity Bounds
     /// - Time Complexity: O(N) single pass over the characters of `source`.
-    /// - Space Complexity: O(N) bounded output string allocation proportional to `source.len()`.
+    /// - Space Complexity: O(N) bounded output string allocation equal to `source.len()`.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
     /// - Interface: Accepts any UTF-8 string slice without panicking.
@@ -221,7 +262,7 @@ impl<'a> SysmlParser<'a> {
         }
         let chars: Vec<char> = source.chars().collect();
         let len = chars.len();
-        let mut out = String::with_capacity(source.len() + 16);
+        let mut out = String::with_capacity(source.len());
         let mut i = 0usize;
         let mut in_line_comment = false;
         let mut block_comment_depth = 0usize;
@@ -278,7 +319,13 @@ impl<'a> SysmlParser<'a> {
 
             if in_single_quote {
                 out.push(c);
-                if c == '\'' {
+                if c == '\\' {
+                    if let Some(escaped) = next {
+                        out.push(escaped);
+                        i += 2;
+                        continue;
+                    }
+                } else if c == '\'' {
                     in_single_quote = false;
                 }
                 i += 1;
@@ -322,13 +369,13 @@ impl<'a> SysmlParser<'a> {
                     i += 2;
                     continue;
                 }
-                out.push_str("'&'");
+                out.push(',');
                 i += 1;
                 continue;
             }
 
             if c == '?' {
-                out.push_str("'?'");
+                out.push(',');
                 i += 1;
                 continue;
             }
@@ -3372,7 +3419,9 @@ impl<'a> SysmlParser<'a> {
     pub fn parse_identifier(&mut self) -> Result<String, ParseError> {
         let tok = self.peek();
         match &tok.kind {
-            TokenKind::Ident(s) => {
+            TokenKind::Ident(s)
+                if !((s == "&" || s == "?") && tok.span.end.saturating_sub(tok.span.start) == 1) =>
+            {
                 let name = s.clone();
                 self.advance();
                 Ok(name)
@@ -3521,7 +3570,13 @@ impl<'a> SysmlParser<'a> {
         }
 
         // 2. Reference prefixes: &T, &mut T, &const T, &&T
-        let is_single_amp = matches!(self.peek_kind(), TokenKind::Ident(s) if s.trim_matches('\'') == "&");
+        let is_single_amp = matches!(
+            self.peek(),
+            Token {
+                kind: TokenKind::Ident(s),
+                span,
+            } if s == "&" && span.end.saturating_sub(span.start) == 1
+        );
         if is_single_amp || self.check(&TokenKind::AmpAmp) {
             if self.check(&TokenKind::AmpAmp) {
                 self.advance();
@@ -3651,7 +3706,13 @@ impl<'a> SysmlParser<'a> {
                 out.push('[');
                 out.push_str(&suffix);
                 out.push(']');
-            } else if matches!(self.peek_kind(), TokenKind::Ident(s) if s.trim_matches('\'') == "?") {
+            } else if matches!(
+                self.peek(),
+                Token {
+                    kind: TokenKind::Ident(s),
+                    span,
+                } if s == "?" && span.end.saturating_sub(span.start) == 1
+            ) {
                 self.advance();
                 out.push('?');
             } else {
@@ -5792,6 +5853,176 @@ package StateMachinePkg {
         let serialized = pkg1.to_sysml(0);
         let pkg2 = SysmlParser::parse_source(&serialized, "PortRoundtripPkg")?;
         assert_eq!(pkg1, pkg2);
+        Ok(())
+    }
+
+    /// Verifies that `&` and `?` type sigil tokenization preserves exact 1-byte source spans, prevents same-line and cross-line diagnostic span drift, and distinguishes raw sigils from single-quoted unrestricted identifiers `'&'` and `'?'`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_495_type_sigil_tokenization_preserves_spans_and_unrestricted_idents` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Enforces `Span { start, end, line, col }` byte-offset and column invariance across `&` and `?` sigils and preserves the lexical distinction between 1-byte raw sigils and 3-byte `'&'`/`'?'` unrestricted identifiers.
+    ///
+    /// ## 3. Preconditions
+    /// - Input SysML v2 fixtures contain standalone `&` and `?` sigils in type annotations and expressions, escaped single quotes, and single-quoted unrestricted identifiers.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts zero span drift on tokens and `ParseError` diagnostics and confirms valid unrestricted identifiers parse while raw sigils in identifier positions fail closed.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over fixture byte length.
+    /// - Space Complexity: O(N) for token and AST structures.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates `ParseError.span` coordinates on malformed inputs.
+    /// - State: Stateless in-memory verification.
+    /// - Action: Executes deterministically with zero external I/O.
+    /// - Resource: Bounded stack and heap allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-ISSUE-495-SIGIL-SPANS] | SysML v2: TestCaseDef(test_issue_495_type_sigil_tokenization_preserves_spans_and_unrestricted_idents)
+    #[test]
+    fn test_issue_495_type_sigil_tokenization_preserves_spans_and_unrestricted_idents() -> Result<(), Box<dyn std::error::Error>> {
+        // 1. Exact 1-byte token spans and zero drift on same-line and cross-line tokens
+        let src = "package P {\n    attribute r : &T?;\n    attribute x : Integer;\n}\n";
+        let tokens = SysmlParser::tokenize_source(src)?;
+
+        let amp_tok = tokens
+            .iter()
+            .find(|t| t.kind == TokenKind::Ident("&".to_string()))
+            .ok_or("missing '&' token")?;
+        assert_eq!(
+            amp_tok.span,
+            Span {
+                start: 30,
+                end: 31,
+                line: 2,
+                col: 19,
+            },
+            "standalone '&' sigil must have exact 1-byte span"
+        );
+
+        let t_tok = tokens
+            .iter()
+            .find(|t| t.kind == TokenKind::Ident("T".to_string()))
+            .ok_or("missing 'T' token")?;
+        assert_eq!(
+            t_tok.span,
+            Span {
+                start: 31,
+                end: 32,
+                line: 2,
+                col: 20,
+            },
+            "token immediately following '&' must not have shifted column or byte offset"
+        );
+
+        let q_tok = tokens
+            .iter()
+            .find(|t| t.kind == TokenKind::Ident("?".to_string()))
+            .ok_or("missing '?' token")?;
+        assert_eq!(
+            q_tok.span,
+            Span {
+                start: 32,
+                end: 33,
+                line: 2,
+                col: 21,
+            },
+            "standalone '?' sigil must have exact 1-byte span"
+        );
+
+        let x_tok = tokens
+            .iter()
+            .find(|t| t.kind == TokenKind::Ident("x".to_string()))
+            .ok_or("missing 'x' token on line 3")?;
+        assert_eq!(
+            x_tok.span,
+            Span {
+                start: 49,
+                end: 50,
+                line: 3,
+                col: 15,
+            },
+            "tokens on subsequent lines after '&' and '?' must preserve exact byte offsets"
+        );
+
+        // 2. Same-line ParseError span accuracy after '&'
+        let bad_same_line = "package P {\n    part a : &T; part b : <>;\n}\n";
+        let expected_lt_start = bad_same_line.find('<').ok_or("missing '<'")?;
+        let err_same = SysmlParser::parse_source(bad_same_line, "P")
+            .expect_err("empty generic '<>' after '&T' must fail");
+        assert_eq!(
+            err_same.span,
+            Span {
+                start: expected_lt_start,
+                end: expected_lt_start + 1,
+                line: 2,
+                col: 27,
+            },
+            "same-line ParseError after '&' must report unshifted column and byte span"
+        );
+
+        // 3. Cross-line ParseError span accuracy after '&' and '?'
+        let bad_cross_line = "package P {\n    attribute a : &T?;\n    atribute b : Integer;\n}\n";
+        let expected_typo_start = bad_cross_line.find("atribute").ok_or("missing typo")?;
+        let err_cross = SysmlParser::parse_source(bad_cross_line, "P")
+            .expect_err("typo 'atribute' on line 3 must fail");
+        assert_eq!(
+            err_cross.span,
+            Span {
+                start: expected_typo_start,
+                end: expected_typo_start + "atribute".len(),
+                line: 3,
+                col: 5,
+            },
+            "cross-line ParseError after '&' and '?' must report exact byte span"
+        );
+
+        // 4. Unrestricted identifiers '&' and '?' vs raw unquoted sigils in identifier/type positions
+        let quoted_ident_src = "package P {\n    part def '&' {\n        attribute '?' : '&';\n    }\n}\n";
+        let quoted_pkg = SysmlParser::parse_source(quoted_ident_src, "P")?;
+        let quoted_part = quoted_pkg.part_defs.first().ok_or("missing part def '&'")?;
+        assert_eq!(quoted_part.name, "&");
+        let quoted_attr = quoted_part.attributes.first().ok_or("missing attribute '?'")?;
+        assert_eq!(quoted_attr.name, "?");
+        assert_eq!(quoted_attr.type_name, "&");
+
+        assert!(
+            SysmlParser::parse_source("package P { part def &; }", "P").is_err(),
+            "raw unquoted '&' must be rejected as a declaration identifier"
+        );
+        assert!(
+            SysmlParser::parse_source("package P { part def ?; }", "P").is_err(),
+            "raw unquoted '?' must be rejected as a declaration identifier"
+        );
+        assert!(
+            SysmlParser::parse_source("package P { attribute x : ?; }", "P").is_err(),
+            "standalone '?' without a base type must be rejected as a type expression"
+        );
+
+        // 5. '&' and '?' inside expressions and escaped quotes inside unrestricted identifiers
+        let expr_and_escape_src = "package P {\n    part def 'a\\'&b' {\n        attribute mask : Integer = a & b;\n        constraint def C {\n            (x > 0) ? a : b;\n        }\n    }\n}\n";
+        let expr_pkg = SysmlParser::parse_source(expr_and_escape_src, "P")?;
+        let escaped_part = expr_pkg.part_defs.first().ok_or("missing escaped part")?;
+        assert_eq!(escaped_part.name, "a'&b");
+        assert_eq!(
+            escaped_part.attributes.first().and_then(|a| a.default_value.as_deref()),
+            Some("a & b")
+        );
+        assert_eq!(
+            escaped_part.constraints.first().map(|c| c.expression.as_str()),
+            Some("( x > 0 ) ? a : b")
+        );
+
+        let expr_err_src = format!("{}\npackage Bad {{\n    atribute z : Integer;\n}}\n", expr_and_escape_src);
+        let z_typo_start = expr_err_src.find("atribute").ok_or("missing atribute")?;
+        let expr_err = SysmlParser::parse_source(&expr_err_src, "P")
+            .expect_err("expected error on trailing package typo");
+        assert_eq!(expr_err.span.start, z_typo_start);
+        assert_eq!(expr_err.span.end, z_typo_start + "atribute".len());
+
         Ok(())
     }
 }
