@@ -2928,14 +2928,14 @@ mod tests {
     /// `impl` blocks, and multiline `impl ... where ... {` blocks.
     ///
     /// # Preconditions
-    /// - In-memory `PackageDef` fixture contains `PrimaryController` (`REQ-PC-001`, `ThermalLimit`),
+    /// - In-memory `PackageDef` fixture contains `PrimaryController` (`REQ-PC-001`, `ValueLimit`),
     ///   `SecondaryMonitor` (no top-level reqs, nested `NestedSubunit` with inline `REQ-NS-002`),
-    ///   and `ActionDef("calibrate_sensor")`.
+    ///   and `ActionDef("calibrate_element")`.
     ///
     /// # Postconditions
-    /// - `PrimaryController` resolves `(Some("REQ-PC-001"), Some("ThermalLimit (temp <= 85.0)"))`.
+    /// - `PrimaryController` resolves `(Some("REQ-PC-001"), Some("ValueLimit (metric <= 85.0)"))`.
     /// - `NestedSubunit` resolves `(Some("REQ-NS-002"), None)`.
-    /// - `SecondaryMonitor`, `SecondaryMonitor::primary_controller`, `calibrate_sensor`, and
+    /// - `SecondaryMonitor`, `SecondaryMonitor::primary_controller`, `calibrate_element`, and
     ///   `unmapped_checksum_helper` resolve `(None, None)`.
     ///
     /// # Invariants
@@ -2959,12 +2959,12 @@ mod tests {
     ///
     /// ## 2. Invariants & Mathematical Properties
     /// - A schema-mapped `PartDef` (`PrimaryController`) receives its satisfied requirement `REQ-PC-001`
-    ///   and constraint `ThermalLimit (temp <= 85.0)`.
+    ///   and constraint `ValueLimit (metric <= 85.0)`.
     /// - Unmapped classifiers, methods whose name happens to match another part (`SecondaryMonitor::primary_controller`),
-    ///   and unmapped functions (`calibrate_sensor`, `unmapped_checksum_helper`) receive `(None, None)`.
+    ///   and unmapped functions (`calibrate_element`, `unmapped_checksum_helper`) receive `(None, None)`.
     ///
     /// ## 3. Preconditions
-    /// - A populated `PackageDef` containing `PrimaryController`, `SecondaryMonitor`, `REQ-PC-001`, and `ThermalLimit` is supplied.
+    /// - A populated `PackageDef` containing `PrimaryController`, `SecondaryMonitor`, `REQ-PC-001`, and `ValueLimit` is supplied.
     ///
     /// ## 4. Postconditions
     /// - Returns `Ok(())` when matched items bind schema metadata and unmatched items synthesize deterministic module tags.
@@ -2976,18 +2976,18 @@ mod tests {
     /// ## 6. Failure Modes & Fault Tolerance
     /// - Interface: Propagates unexpected synthesis failures via `Result<(), String>`.
     /// - State: Pure in-memory test fixture evaluation.
-    /// - Action: Asserts absence of `REQ-PC-001` and `ThermalLimit` on unmapped items.
+    /// - Action: Asserts absence of `REQ-PC-001` and `ValueLimit` on unmapped items.
     /// - Resource: Zero filesystem writes.
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-DEFECT-09-UNMATCHED-SCHEMA-FALLBACK-TEST]
     #[test]
     fn test_defect_09_unmatched_items_do_not_inherit_first_package_req_or_constraint() -> Result<(), String> {
-        let thermal_constraint = ConstraintDef {
-            name: "ThermalLimit".to_string(),
+        let limit_constraint = ConstraintDef {
+            name: "ValueLimit".to_string(),
             doc: None,
             parameters: Vec::new(),
-            expression: "temp <= 85.0".to_string(),
+            expression: "metric <= 85.0".to_string(),
             is_assertion: false,
             pre_conditions: Vec::new(),
             post_conditions: Vec::new(),
@@ -3006,7 +3006,7 @@ mod tests {
             name: "PrimaryController".to_string(),
             is_def: true,
             satisfied_requirements: vec!["REQ-PC-001".to_string()],
-            constraints: vec![thermal_constraint.clone()],
+            constraints: vec![limit_constraint.clone()],
             ..Default::default()
         };
         let secondary_part = PartDef {
@@ -3016,19 +3016,19 @@ mod tests {
             ..Default::default()
         };
         let pkg = PackageDef {
-            name: "AvionicsPkg".to_string(),
+            name: "CorePackage".to_string(),
             part_defs: vec![primary_part, secondary_part],
             action_defs: vec![ActionDef {
-                name: "calibrate_sensor".to_string(),
+                name: "calibrate_element".to_string(),
                 is_def: true,
                 ..Default::default()
             }],
             requirement_defs: vec![RequirementDef {
-                name: "PrimaryControllerThermalReq".to_string(),
+                name: "PrimaryControllerLimitReq".to_string(),
                 req_id: "REQ-PC-001".to_string(),
                 ..Default::default()
             }],
-            constraint_defs: vec![thermal_constraint],
+            constraint_defs: vec![limit_constraint],
             ..Default::default()
         };
 
@@ -3036,7 +3036,7 @@ mod tests {
             resolve_schema_context(Some(&pkg), None, "PrimaryController"),
             (
                 Some("REQ-PC-001".to_string()),
-                Some("ThermalLimit (temp <= 85.0)".to_string())
+                Some("ValueLimit (metric <= 85.0)".to_string())
             ),
             "PrimaryController must resolve its satisfied requirement and constraint"
         );
@@ -3056,9 +3056,9 @@ mod tests {
             "Method primary_controller on SecondaryMonitor must not match unrelated PartDef PrimaryController"
         );
         assert_eq!(
-            resolve_schema_context(Some(&pkg), None, "calibrate_sensor"),
+            resolve_schema_context(Some(&pkg), None, "calibrate_element"),
             (None, None),
-            "Package action calibrate_sensor without reqs must not inherit pkg.requirement_defs.first()"
+            "Package action calibrate_element without reqs must not inherit pkg.requirement_defs.first()"
         );
         assert_eq!(
             resolve_schema_context(Some(&pkg), None, "unmapped_checksum_helper"),
@@ -3068,28 +3068,28 @@ mod tests {
 
         let src = concat!(
             "pub struct PrimaryController<T> {\n",
-            "    pub temp: T,\n",
+            "    pub metric: T,\n",
             "}\n\n",
             "/* multiline comment start\n",
             "   closing inline before fn */ pub fn post_comment_op(x: u32) -> u32 { x }\n\n",
             "impl<F: Fn(u32) -> bool> PrimaryController<F> {\n",
-            "    pub fn check_fn_bound(&self, v: u32) -> bool { (self.temp)(v) }\n",
+            "    pub fn check_fn_bound(&self, v: u32) -> bool { (self.metric)(v) }\n",
             "}\n\n",
             "impl<T> PrimaryController<T>\n",
             "where\n",
             "    T: Copy,\n",
             "{\n",
-            "    pub fn read_temp(&self) -> T { self.temp }\n",
+            "    pub fn read_metric(&self) -> T { self.metric }\n",
             "}\n\n",
             "pub fn unmapped_checksum_helper(seed: u32) -> u32 {\n",
             "    seed.wrapping_add(1)\n",
             "}\n"
         );
         let (enriched, count) =
-            inject_rust_file_docstrings(src, "crates/telemetry/src/codec.rs", Some(&pkg), false)?;
+            inject_rust_file_docstrings(src, "crates/core_module/src/codec.rs", Some(&pkg), false)?;
         assert_eq!(
             count, 5,
-            "Expected 5 items enriched (struct, post_comment_op, check_fn_bound, read_temp, unmapped_checksum_helper), got {} in:\n{}",
+            "Expected 5 items enriched (struct, post_comment_op, check_fn_bound, read_metric, unmapped_checksum_helper), got {} in:\n{}",
             count, enriched
         );
         assert!(
@@ -3108,12 +3108,12 @@ mod tests {
             enriched
         );
         assert!(
-            enriched.contains("Realises: [REQ-PC-001] | SysML v2: ActionDef(PrimaryController::read_temp)"),
+            enriched.contains("Realises: [REQ-PC-001] | SysML v2: ActionDef(PrimaryController::read_metric)"),
             "Method inside multiline impl<T> PrimaryController<T> where ... must resolve owner PrimaryController:\n{}",
             enriched
         );
         assert!(
-            enriched.contains("Realises: [REQ-TELEMETRY-CODEC-UNMAPPED-CHECKSUM-HELPER] | SysML v2: ActionDef(unmapped_checksum_helper)"),
+            enriched.contains("Realises: [REQ-CORE-MODULE-CODEC-UNMAPPED-CHECKSUM-HELPER] | SysML v2: ActionDef(unmapped_checksum_helper)"),
             "Unmatched function must synthesize deterministic module-scoped REQ tag:\n{}",
             enriched
         );
@@ -3243,11 +3243,11 @@ mod tests {
     ///
     /// ## 3. Preconditions
     /// - A Rust function snippet with an inner `if ready { ... }` block followed by `assert!(x.is_finite() && in_range(x, 0.0, 100.0), "out of range");`.
-    /// - A `PackageDef` containing `ActionDef("compute_trajectory")` with `Realises: [REQ-NAV-TRAJ-01]` and `ConstraintDef("invariant_compute_trajectory_0")`.
+    /// - A `PackageDef` containing `ActionDef("evaluate_transition")` with `Realises: [REQ-SYS-EVAL-01]` and `ConstraintDef("invariant_evaluate_transition_0")`.
     ///
     /// ## 4. Postconditions
     /// - Extracted `invariants` contains `"x.is_finite() && in_range(x, 0.0, 100.0)"`.
-    /// - `resolve_schema_context(Some(&pkg), None, "compute_trajectory")` returns `(Some("REQ-NAV-TRAJ-01"), Some("invariant_compute_trajectory_0 (dt > 0.0)"))`.
+    /// - `resolve_schema_context(Some(&pkg), None, "evaluate_transition")` returns `(Some("REQ-SYS-EVAL-01"), Some("invariant_evaluate_transition_0 (dt > 0.0)"))`.
     ///
     /// ## 5. Algorithmic Complexity Bounds
     /// - Time Complexity: O(N) over the fixture lines and schema elements.
@@ -3283,15 +3283,15 @@ mod tests {
         );
 
         let pkg = PackageDef {
-            name: "NavigationPkg".to_string(),
+            name: "SystemPkg".to_string(),
             action_defs: vec![ActionDef {
-                name: "compute_trajectory".to_string(),
-                doc: Some("Realises: [REQ-NAV-TRAJ-01]".to_string()),
+                name: "evaluate_transition".to_string(),
+                doc: Some("Realises: [REQ-SYS-EVAL-01]".to_string()),
                 is_def: true,
                 ..Default::default()
             }],
             constraint_defs: vec![ConstraintDef {
-                name: "invariant_compute_trajectory_0".to_string(),
+                name: "invariant_evaluate_transition_0".to_string(),
                 doc: None,
                 parameters: Vec::new(),
                 expression: "dt > 0.0".to_string(),
@@ -3303,16 +3303,16 @@ mod tests {
         };
 
         let (matched_req, matched_constraint) =
-            resolve_schema_context(Some(&pkg), None, "compute_trajectory");
+            resolve_schema_context(Some(&pkg), None, "evaluate_transition");
         assert_eq!(
             matched_req,
-            Some("REQ-NAV-TRAJ-01".to_string()),
+            Some("REQ-SYS-EVAL-01".to_string()),
             "Expected top-level ActionDef in pkg.action_defs to resolve Realises requirement"
         );
         let constraint_str = matched_constraint.unwrap_or_default();
         assert!(
             constraint_str.contains("dt > 0.0"),
-            "Expected invariant_compute_trajectory_0 constraint to resolve for compute_trajectory, got: {:?}",
+            "Expected invariant_evaluate_transition_0 constraint to resolve for evaluate_transition, got: {:?}",
             constraint_str
         );
     }
@@ -3326,21 +3326,21 @@ mod tests {
     /// and ensures action-specific requirements are not shadowed by parent `PartDef` requirements.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - `resolve_schema_context(Some(&model), Some("FlightController"), "compute_thrust")` resolves the action-specific
+    /// - `resolve_schema_context(Some(&model), Some("SystemController"), "process_signal")` resolves the action-specific
     ///   requirement `REQ-ACTION` rather than the parent `PartDef` requirement `REQ-PARENT`.
-    /// - `resolve_schema_context(Some(&model), Some("FlightController"), "adjust_pitch")` resolves matching package
-    ///   `RequirementDef` `REQ-ACTION-ADJUST-PITCH` before falling back to `REQ-PARENT`.
-    /// - `resolve_schema_context(Some(&model), Some("FlightController"), "helper_step")` falls back to `REQ-PARENT`
+    /// - `resolve_schema_context(Some(&model), Some("SystemController"), "reconcile_state")` resolves matching package
+    ///   `RequirementDef` `REQ-ACTION-RECONCILE-STATE` before falling back to `REQ-PARENT`.
+    /// - `resolve_schema_context(Some(&model), Some("SystemController"), "helper_step")` falls back to `REQ-PARENT`
     ///   when no action-specific requirement exists.
     /// - `inject_rust_file_docstrings` and `inject_dart_file_docstrings` reject conflicting method-level `Realises:` tags when `force == false`.
     ///
     /// ## 3. Preconditions
-    /// - `PackageDef` contains `PartDef("FlightController")` satisfying `REQ-PARENT`, action `compute_thrust` with `[REQ-ACTION]`,
-    ///   and `RequirementDef("REQ_ACTION_ADJUST_PITCH")`.
-    /// - Rust `impl FlightController` and Dart `class FlightController` fixtures carry compliant 7-section method docstrings with stale `Realises: [REQ-STALE-999]`.
+    /// - `PackageDef` contains `PartDef("SystemController")` satisfying `REQ-PARENT`, action `process_signal` with `[REQ-ACTION]`,
+    ///   and `RequirementDef("REQ_ACTION_RECONCILE_STATE")`.
+    /// - Rust `impl SystemController` and Dart `class SystemController` fixtures carry compliant 7-section method docstrings with stale `Realises: [REQ-STALE-999]`.
     ///
     /// ## 4. Postconditions
-    /// - Action-specific requirement queries return `Some("REQ-ACTION")` and `Some("REQ-ACTION-ADJUST-PITCH")`; unmapped method fallback returns `Some("REQ-PARENT")`.
+    /// - Action-specific requirement queries return `Some("REQ-ACTION")` and `Some("REQ-ACTION-RECONCILE-STATE")`; unmapped method fallback returns `Some("REQ-PARENT")`.
     /// - Unforced Rust and Dart docstring injection calls return `Err` referencing the method identifier and expected schema requirement ID.
     ///
     /// ## 5. Algorithmic Complexity Bounds
@@ -3358,20 +3358,20 @@ mod tests {
     #[test]
     fn test_issue_560_method_realises_conflict_and_action_req_precedence() {
         let model = PackageDef {
-            name: "FlightControlPkg".to_string(),
+            name: "SystemControlPkg".to_string(),
             part_defs: vec![PartDef {
-                name: "FlightController".to_string(),
+                name: "SystemController".to_string(),
                 is_def: true,
                 satisfied_requirements: vec!["REQ-PARENT".to_string()],
                 actions: vec![
                     ActionDef {
-                        name: "compute_thrust".to_string(),
-                        doc: Some("Computes thrust command [REQ-ACTION]".to_string()),
+                        name: "process_signal".to_string(),
+                        doc: Some("Processes signal command [REQ-ACTION]".to_string()),
                         is_def: false,
                         ..Default::default()
                     },
                     ActionDef {
-                        name: "adjust_pitch".to_string(),
+                        name: "reconcile_state".to_string(),
                         doc: None,
                         is_def: false,
                         ..Default::default()
@@ -3380,8 +3380,8 @@ mod tests {
                 ..Default::default()
             }],
             action_defs: vec![ActionDef {
-                name: "stabilize_yaw".to_string(),
-                doc: Some("Realises: [REQ-ACTION-YAW]".to_string()),
+                name: "synchronize_phase".to_string(),
+                doc: Some("Realises: [REQ-ACTION-SYNC]".to_string()),
                 is_def: true,
                 ..Default::default()
             }],
@@ -3397,8 +3397,8 @@ mod tests {
                     ..Default::default()
                 },
                 RequirementDef {
-                    name: "REQ_ACTION_ADJUST_PITCH".to_string(),
-                    req_id: "REQ-ACTION-ADJUST-PITCH".to_string(),
+                    name: "REQ_ACTION_RECONCILE_STATE".to_string(),
+                    req_id: "REQ-ACTION-RECONCILE-STATE".to_string(),
                     ..Default::default()
                 },
             ],
@@ -3406,32 +3406,32 @@ mod tests {
         };
 
         // (a) Action-specific requirement precedence vs parent PartDef fallback
-        let (thrust_req, _) =
-            resolve_schema_context(Some(&model), Some("FlightController"), "compute_thrust");
+        let (signal_req, _) =
+            resolve_schema_context(Some(&model), Some("SystemController"), "process_signal");
         assert_eq!(
-            thrust_req,
+            signal_req,
             Some("REQ-ACTION".to_string()),
             "Action doc [REQ-ACTION] on owner_part.actions must take precedence over parent PartDef REQ-PARENT"
         );
 
-        let (pitch_req, _) =
-            resolve_schema_context(Some(&model), Some("FlightController"), "adjust_pitch");
+        let (reconcile_req, _) =
+            resolve_schema_context(Some(&model), Some("SystemController"), "reconcile_state");
         assert_eq!(
-            pitch_req,
-            Some("REQ-ACTION-ADJUST-PITCH".to_string()),
-            "Action matching RequirementDef REQ_ACTION_ADJUST_PITCH must take precedence over parent PartDef REQ-PARENT"
+            reconcile_req,
+            Some("REQ-ACTION-RECONCILE-STATE".to_string()),
+            "Action matching RequirementDef REQ_ACTION_RECONCILE_STATE must take precedence over parent PartDef REQ-PARENT"
         );
 
-        let (yaw_req, _) =
-            resolve_schema_context(Some(&model), Some("FlightController"), "stabilize_yaw");
+        let (sync_req, _) =
+            resolve_schema_context(Some(&model), Some("SystemController"), "synchronize_phase");
         assert_eq!(
-            yaw_req,
-            Some("REQ-ACTION-YAW".to_string()),
-            "Action matching pkg.action_defs stabilize_yaw must take precedence over parent PartDef REQ-PARENT"
+            sync_req,
+            Some("REQ-ACTION-SYNC".to_string()),
+            "Action matching pkg.action_defs synchronize_phase must take precedence over parent PartDef REQ-PARENT"
         );
 
         let (helper_req, _) =
-            resolve_schema_context(Some(&model), Some("FlightController"), "helper_step");
+            resolve_schema_context(Some(&model), Some("SystemController"), "helper_step");
         assert_eq!(
             helper_req,
             Some("REQ-PARENT".to_string()),
@@ -3440,108 +3440,108 @@ mod tests {
 
         // (b) Rust impl method with compliant 7-section docstring but conflicting Realises tag
         let rust_src = concat!(
-            "/// Flight controller classifier.\n",
+            "/// System controller classifier.\n",
             "/// ## 1. Safety Intent & Regulatory Scope\n",
-            "/// Struct FlightController safety scope.\n",
+            "/// Struct SystemController safety scope.\n",
             "/// ## 2. Invariants & Mathematical Properties\n",
-            "/// Struct FlightController invariants.\n",
+            "/// Struct SystemController invariants.\n",
             "/// ## 3. Preconditions\n",
-            "/// Struct FlightController preconditions.\n",
+            "/// Struct SystemController preconditions.\n",
             "/// ## 4. Postconditions\n",
-            "/// Struct FlightController postconditions.\n",
+            "/// Struct SystemController postconditions.\n",
             "/// ## 5. Algorithmic Complexity Bounds\n",
             "/// Time: O(1), Space: O(1).\n",
             "/// ## 6. Failure Modes & Fault Tolerance\n",
             "/// Deterministic struct layout.\n",
             "/// ## 7. Realization & Traceability\n",
             "/// Realises: [REQ-PARENT]\n",
-            "pub struct FlightController;\n\n",
-            "impl FlightController {\n",
-            "    /// Computes thrust output.\n",
+            "pub struct SystemController;\n\n",
+            "impl SystemController {\n",
+            "    /// Processes signal output.\n",
             "    /// ## 1. Safety Intent & Regulatory Scope\n",
-            "    /// Method FlightController::compute_thrust safety scope.\n",
+            "    /// Method SystemController::process_signal safety scope.\n",
             "    /// ## 2. Invariants & Mathematical Properties\n",
-            "    /// Method FlightController::compute_thrust invariants.\n",
+            "    /// Method SystemController::process_signal invariants.\n",
             "    /// ## 3. Preconditions\n",
-            "    /// Method FlightController::compute_thrust preconditions.\n",
+            "    /// Method SystemController::process_signal preconditions.\n",
             "    /// ## 4. Postconditions\n",
-            "    /// Method FlightController::compute_thrust postconditions.\n",
+            "    /// Method SystemController::process_signal postconditions.\n",
             "    /// ## 5. Algorithmic Complexity Bounds\n",
-            "    /// Time: O(1), Space: O(1) for compute_thrust.\n",
+            "    /// Time: O(1), Space: O(1) for process_signal.\n",
             "    /// ## 6. Failure Modes & Fault Tolerance\n",
-            "    /// Deterministic method execution for compute_thrust.\n",
+            "    /// Deterministic method execution for process_signal.\n",
             "    /// ## 7. Realization & Traceability\n",
             "    /// Realises: [REQ-STALE-999]\n",
-            "    pub fn compute_thrust(&self) -> f64 {\n",
+            "    pub fn process_signal(&self) -> f64 {\n",
             "        1.0\n",
             "    }\n",
             "}\n"
         );
         let rust_res = inject_rust_file_docstrings(
             rust_src,
-            "crates/flight/src/controller.rs",
+            "crates/core_module/src/controller.rs",
             Some(&model),
             false,
         );
         let rust_err = rust_res.expect_err(
-            "Expected inject_rust_file_docstrings (force=false) to detect conflicting Realises on impl method compute_thrust",
+            "Expected inject_rust_file_docstrings (force=false) to detect conflicting Realises on impl method process_signal",
         );
         assert!(
-            rust_err.contains("compute_thrust") && rust_err.contains("REQ-ACTION"),
-            "Expected Rust conflict error to reference 'compute_thrust' and 'REQ-ACTION', got: {}",
+            rust_err.contains("process_signal") && rust_err.contains("REQ-ACTION"),
+            "Expected Rust conflict error to reference 'process_signal' and 'REQ-ACTION', got: {}",
             rust_err
         );
 
         // (c) Dart class method at brace_depth == 1 with compliant 7-section docstring but conflicting Realises tag
         let dart_src = concat!(
-            "/// Flight controller Dart class.\n",
+            "/// System controller Dart class.\n",
             "/// ## 1. Safety Intent & Regulatory Scope\n",
-            "/// Class FlightController safety scope.\n",
+            "/// Class SystemController safety scope.\n",
             "/// ## 2. Invariants & Mathematical Properties\n",
-            "/// Class FlightController invariants.\n",
+            "/// Class SystemController invariants.\n",
             "/// ## 3. Preconditions\n",
-            "/// Class FlightController preconditions.\n",
+            "/// Class SystemController preconditions.\n",
             "/// ## 4. Postconditions\n",
-            "/// Class FlightController postconditions.\n",
+            "/// Class SystemController postconditions.\n",
             "/// ## 5. Algorithmic Complexity Bounds\n",
             "/// Time: O(1), Space: O(1).\n",
             "/// ## 6. Failure Modes & Fault Tolerance\n",
             "/// Deterministic class layout.\n",
             "/// ## 7. Realization & Traceability\n",
             "/// Realises: [REQ-PARENT]\n",
-            "class FlightController {\n",
-            "  /// Computes thrust output in Dart.\n",
+            "class SystemController {\n",
+            "  /// Processes signal output in Dart.\n",
             "  /// ## 1. Safety Intent & Regulatory Scope\n",
-            "  /// Method FlightController.computeThrust safety scope.\n",
+            "  /// Method SystemController.processSignal safety scope.\n",
             "  /// ## 2. Invariants & Mathematical Properties\n",
-            "  /// Method FlightController.computeThrust invariants.\n",
+            "  /// Method SystemController.processSignal invariants.\n",
             "  /// ## 3. Preconditions\n",
-            "  /// Method FlightController.computeThrust preconditions.\n",
+            "  /// Method SystemController.processSignal preconditions.\n",
             "  /// ## 4. Postconditions\n",
-            "  /// Method FlightController.computeThrust postconditions.\n",
+            "  /// Method SystemController.processSignal postconditions.\n",
             "  /// ## 5. Algorithmic Complexity Bounds\n",
-            "  /// Time: O(1), Space: O(1) for computeThrust.\n",
+            "  /// Time: O(1), Space: O(1) for processSignal.\n",
             "  /// ## 6. Failure Modes & Fault Tolerance\n",
-            "  /// Deterministic method execution for computeThrust.\n",
+            "  /// Deterministic method execution for processSignal.\n",
             "  /// ## 7. Realization & Traceability\n",
             "  /// Realises: [REQ-STALE-999]\n",
-            "  double computeThrust() {\n",
+            "  double processSignal() {\n",
             "    return 1.0;\n",
             "  }\n",
             "}\n"
         );
         let dart_res = inject_dart_file_docstrings(
             dart_src,
-            "lib/flight_controller.dart",
+            "lib/system_controller.dart",
             Some(&model),
             false,
         );
         let dart_err = dart_res.expect_err(
-            "Expected inject_dart_file_docstrings (force=false) to detect conflicting Realises on class method computeThrust",
+            "Expected inject_dart_file_docstrings (force=false) to detect conflicting Realises on class method processSignal",
         );
         assert!(
-            dart_err.contains("computeThrust") && dart_err.contains("REQ-ACTION"),
-            "Expected Dart conflict error to reference 'computeThrust' and 'REQ-ACTION', got: {}",
+            dart_err.contains("processSignal") && dart_err.contains("REQ-ACTION"),
+            "Expected Dart conflict error to reference 'processSignal' and 'REQ-ACTION', got: {}",
             dart_err
         );
     }
@@ -3553,13 +3553,13 @@ mod tests {
     ///
     /// ## 2. Invariants & Mathematical Properties
     /// - `inject_dart_file_docstrings` collects the full multi-line Dart callable header before calling `parse_dart_callable_signature`.
-    /// - Synthesized Section 3 (`## 3. Preconditions`) includes the formal parameter identifiers (`targetAltitudeMeters`, `modeCode`, `speedMps`, `ceilingMeters`) declared on continuation lines.
+    /// - Synthesized Section 3 (`## 3. Preconditions`) includes the formal parameter identifiers (`targetThresholdRatio`, `modeCode`, `inputRate`, `maxLimit`) declared on continuation lines.
     ///
     /// ## 3. Preconditions
     /// - In-memory Dart source file containing a class with a multi-line method and a multi-line top-level function without prior docstrings.
     ///
     /// ## 4. Postconditions
-    /// - Asserts that `inject_dart_file_docstrings` succeeds and the enriched Dart output references `targetAltitudeMeters`, `modeCode`, `speedMps`, and `ceilingMeters` inside `///` doc comments.
+    /// - Asserts that `inject_dart_file_docstrings` succeeds and the enriched Dart output references `targetThresholdRatio`, `modeCode`, `inputRate`, and `maxLimit` inside `///` doc comments.
     ///
     /// ## 5. Algorithmic Complexity Bounds
     /// - Time Complexity: O(L) over source lines L.
@@ -3576,11 +3576,11 @@ mod tests {
     #[test]
     fn test_issue_561_inject_dart_docstrings_multiline_callable_params() {
         let dart_src = concat!(
-            "class FlightDirector {\n",
-            "  void engageHold(\n",
-            "    String callsign,\n",
+            "class DispatchCoordinator {\n",
+            "  void scheduleBatch(\n",
+            "    String channelId,\n",
             "    {\n",
-            "      required double targetAltitudeMeters,\n",
+            "      required double targetThresholdRatio,\n",
             "      int modeCode = 1,\n",
             "    }\n",
             "  ) {\n",
@@ -3588,16 +3588,16 @@ mod tests {
             "  }\n",
             "}\n",
             "\n",
-            "bool validateEnvelope(\n",
-            "  double speedMps,\n",
-            "  double ceilingMeters,\n",
+            "bool validateBounds(\n",
+            "  double inputRate,\n",
+            "  double maxLimit,\n",
             ") {\n",
-            "  return speedMps <= ceilingMeters;\n",
+            "  return inputRate <= maxLimit;\n",
             "}\n",
         );
 
         let (enriched, count) =
-            inject_dart_file_docstrings(dart_src, "lib/flight_director.dart", None, false)
+            inject_dart_file_docstrings(dart_src, "lib/dispatch_coordinator.dart", None, false)
                 .expect("inject_dart_file_docstrings should succeed on multi-line Dart callables");
         assert!(count >= 3, "Expected at least 3 enriched Dart items, got {count}");
         let doc_only: String = enriched
@@ -3605,7 +3605,7 @@ mod tests {
             .filter(|l| l.trim_start().starts_with("///"))
             .collect::<Vec<_>>()
             .join("\n");
-        for param_name in ["targetAltitudeMeters", "modeCode", "speedMps", "ceilingMeters"] {
+        for param_name in ["targetThresholdRatio", "modeCode", "inputRate", "maxLimit"] {
             assert!(
                 doc_only.contains(param_name),
                 "Expected synthesized Dart docstrings to mention multi-line parameter '{param_name}', got:\n{doc_only}"
@@ -3672,6 +3672,73 @@ mod tests {
         let forbidden_j = ["\"ja", "il\""].concat();
         if prod_src.contains(&forbidden_u) || prod_src.contains(&forbidden_j) {
             return Err("derive_module_req_tag must not contain hardcoded workstation path literals".to_string());
+        }
+        Ok(())
+    }
+
+    /// Verifies that `src/docstring.rs` contains zero hardcoded domain-specific concepts across production and test fixtures (refs #515).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 19 Pure Schema-Driven Compiler Invariant
+    /// (`test_issue_515_docstring_tests_zero_hardcoded_domain_concepts`).
+    /// Ensures all unit test fixtures in `src/docstring.rs` use abstract MBSE metamodel identifiers.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `src/docstring.rs` contains zero occurrences of prohibited domain-specific vocabulary tokens.
+    /// - All synthetic `PackageDef`, Rust, and Dart test fixtures model abstract system elements (`CorePackage`, `ValueLimit`, `SystemController`, `DispatchCoordinator`).
+    ///
+    /// ## 3. Preconditions
+    /// - `src/docstring.rs` is readable relative to `CARGO_MANIFEST_DIR`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when zero prohibited domain tokens are present in `src/docstring.rs`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N * K) where N is the file byte length and K is the number of prohibited token probes.
+    /// - Space Complexity: O(N) to hold the source buffer in memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Err(String)` naming the offending domain token if any probe matches.
+    /// - State: Read-only self-inspection with zero state mutation.
+    /// - Action: Scans full source text including `#[cfg(test)]` fixtures.
+    /// - Resource: Single bounded file read.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-ISSUE-515-DOCSTRING-ZERO-HARDCODED-DOMAIN-CONCEPTS]
+    #[test]
+    fn test_issue_515_docstring_tests_zero_hardcoded_domain_concepts() -> Result<(), String> {
+        let self_src = fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/docstring.rs"))
+            .map_err(|e| format!("Failed to read src/docstring.rs: {e}"))?;
+        let forbidden_tokens = [
+            concat!("Avionics", "Pkg"),
+            concat!("Thermal", "Limit"),
+            concat!("calibrate_", "sensor"),
+            concat!("PrimaryController", "ThermalReq"),
+            concat!("crates/tele", "metry/"),
+            concat!("REQ-TELE", "METRY-"),
+            concat!("Navigation", "Pkg"),
+            concat!("compute_", "trajectory"),
+            concat!("REQ-NAV-", "TRAJ"),
+            concat!("Flight", "ControlPkg"),
+            concat!("Flight", "Controller"),
+            concat!("compute_", "thrust"),
+            concat!("compute", "Thrust"),
+            concat!("adjust_", "pitch"),
+            concat!("stabilize_", "yaw"),
+            concat!("Flight", "Director"),
+            concat!("engage", "Hold"),
+            concat!("call", "sign"),
+            concat!("targetAltitude", "Meters"),
+            concat!("validate", "Envelope"),
+            concat!("speed", "Mps"),
+            concat!("ceiling", "Meters"),
+        ];
+        for token in forbidden_tokens {
+            if self_src.contains(token) {
+                return Err(format!(
+                    "src/docstring.rs must not contain hardcoded domain concept token: {token}"
+                ));
+            }
         }
         Ok(())
     }
