@@ -594,9 +594,11 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
     let mut violations = Vec::new();
     let mut current_doc: Vec<String> = Vec::new();
     let mut seen_docblocks: BTreeSet<String> = BTreeSet::new();
-    let mut in_multiline_comment = false;
-    let mut in_raw_string_hashes: Option<usize> = None;
-    let mut in_multiline_string = false;
+    let mut lex_state = RustLineLexState {
+        block_comment_depth: 0,
+        raw_string_hashes: None,
+        in_multiline_string: false,
+    };
     let mut in_mod_tests = false;
     let mut cfg_test_pending = false;
     let mut attr_bracket_depth: usize = 0;
@@ -608,8 +610,7 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
         let line_no = idx.saturating_add(1);
         let trimmed = raw_line.trim();
 
-        let started_in_comment_or_string =
-            in_multiline_comment || in_raw_string_hashes.is_some() || in_multiline_string;
+        let started_in_comment_or_string = lex_state.is_in_comment_or_string();
 
         if !started_in_comment_or_string {
             if trimmed.starts_with("//!") {
@@ -638,12 +639,7 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             }
         }
 
-        let scanned = scan_rust_line_preserving_lexical_state(
-            trimmed,
-            &mut in_multiline_comment,
-            &mut in_raw_string_hashes,
-            &mut in_multiline_string,
-        );
+        let scanned = scan_rust_line_preserving_lexical_state(trimmed, &mut lex_state);
         let code = scanned.trim();
 
         if code.is_empty() {
@@ -693,13 +689,16 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
                     cfg_test_pending = false;
                     current_doc.clear();
                 } else {
-                    validate_item_docblock(
-                        &current_doc,
+                    let target = ItemDocTarget {
                         file_rel,
                         line_no,
                         kind,
-                        &item_name,
-                        kind == "fn",
+                        item_name: &item_name,
+                        check_uniqueness: kind == "fn",
+                    };
+                    validate_item_docblock(
+                        &current_doc,
+                        &target,
                         &mut seen_docblocks,
                         &mut violations,
                     );
@@ -722,31 +721,217 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
     }
 }
 
-/// Advances Rust block comment, multi-hash raw string (`r"..."`, `r#"..."#`, `r##"..."##`),
+/// Persistent cross-line lexical state for Rust block comments, raw strings, and multiline strings.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 34/36 lexical state integrity (`RustLineLexState`).
+/// Encapsulates nested block-comment depth (`block_comment_depth`), multi-hash raw string delimiter count
+/// (`raw_string_hashes`), and multiline standard string state (`in_multiline_string`) across lines.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `block_comment_depth` increments on `/*` and saturatingly decrements on `*/`, remaining `> 0`
+///   across arbitrarily nested `/* outer /* inner */ */` Rust block comments.
+/// - `raw_string_hashes == Some(k)` iff a raw string opened with $k$ `#` bytes is still active.
+/// - `in_multiline_string == true` iff an unclosed standard `"..."` literal spans across a newline.
+///
+/// ## 3. Preconditions
+/// - Initialized with `{ block_comment_depth: 0, raw_string_hashes: None, in_multiline_string: false }`
+///   at the start of each Rust source file in `audit_rust_source_docstrings`.
+///
+/// ## 4. Postconditions
+/// - Accurately reports whether a line begins inside an active comment or string via
+///   `RustLineLexState::is_in_comment_or_string`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) state inspection and field updates.
+/// - Space Complexity: O(1) fixed-size stack struct.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Strongly typed value fields without raw boolean pointer tuples.
+/// - State: Updated exclusively by `scan_rust_line_preserving_lexical_state`.
+/// - Action: Saturating arithmetic prevents underflow or overflow on malformed comment delimiters.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-36-RUST-LINE-LEX-STATE]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RustLineLexState {
+    /// Nesting depth of active `/* ... */` Rust block comments (`0` when outside block comments).
+    block_comment_depth: usize,
+    /// Required closing `#` count when inside a `r#"..."#` raw string literal, or `None`.
+    raw_string_hashes: Option<usize>,
+    /// Whether the scanner is currently inside an unclosed standard `"..."` string literal.
+    in_multiline_string: bool,
+}
+
+impl RustLineLexState {
+    /// Returns `true` when the scanner is currently inside a nested block comment, raw string, or multiline string.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A lexical boundary verification (`is_in_comment_or_string`) in `RustLineLexState`.
+    /// Prevents `///` or `//!` prefixes inside open multiline comments or string literals from being
+    /// mistaken for outer or inner item docstrings at line start.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Returns `true` iff `self.block_comment_depth > 0 || self.raw_string_hashes.is_some() || self.in_multiline_string`.
+    ///
+    /// ## 3. Preconditions
+    /// - `self: &RustLineLexState` reflects the lexical state at the end of the preceding source line.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a deterministic boolean predicate without mutating `self`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) constant-time boolean evaluation.
+    /// - Space Complexity: O(1) zero auxiliary stack or heap usage.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Pure read-only borrow `&self`.
+    /// - State: Zero mutation.
+    /// - Action: Infallible scalar comparisons.
+    /// - Resource: Zero dynamic allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-36-RUST-LEX-STATE-ACTIVE]
+    const fn is_in_comment_or_string(&self) -> bool {
+        self.block_comment_depth > 0
+            || self.raw_string_hashes.is_some()
+            || self.in_multiline_string
+    }
+}
+
+/// Consumes a complete Rust character literal (`'c'`, `'\\'`/`'\''`/`'\"'`/`'\n'`/`'\r'`/`'\t'`/`'\0'`,
+/// `'\xHH'`, or `'\u{1..=6 hex}'`) starting at byte index `start` in `line`, returning the byte
+/// index immediately after the closing `'` when valid, or `None` when `'` begins a lifetime (`'a`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 34/36 lexical determinism (`consume_rust_char_literal`).
+/// Eliminates arbitrary magic-number lookahead windows when distinguishing Rust character literals
+/// from lifetime annotations (`'a`, `'static`) on the same line.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Accepts single-char literals `'c'` where `c` is any UTF-8 scalar value except `'` and `\`.
+/// - Accepts simple escape literals `'\\'`, `'\''`, `'\"'`, `'\n'`, `'\r'`, `'\t'`, and `'\0'`.
+/// - Accepts 2-digit ASCII hex escapes `'\xHH'` and braced Unicode scalar escapes `'\u{H..}'` with
+///   1 to 6 hexadecimal digits.
+/// - Returns `None` for lifetimes (`'a`, `'static`) so subsequent quotes on the same line are scanned normally.
+///
+/// ## 3. Preconditions
+/// - `line: &str` is a valid UTF-8 Rust source line.
+/// - `start: usize` is a byte offset in `line` where `line.as_bytes().get(start) == Some(&b'\'')`.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(end_byte_idx)` pointing immediately past the closing `'` of the character literal,
+///   or `None` if `start` does not begin a valid character literal.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) bounded by the grammar of a single Rust character literal.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Uses `.get(..)` exclusively with zero panicking slice or index operations.
+/// - State: Pure function with zero mutable external state.
+/// - Action: Rejects unclosed or non-literal lifetimes cleanly by returning `None`.
+/// - Resource: Zero dynamic memory allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-36-CONSUME-RUST-CHAR-LITERAL]
+fn consume_rust_char_literal(line: &str, start: usize) -> Option<usize> {
+    let bytes = line.as_bytes();
+    if bytes.get(start).copied() != Some(b'\'') {
+        return None;
+    }
+
+    if bytes.get(start.saturating_add(1)).copied() == Some(b'\\') {
+        let esc = bytes.get(start.saturating_add(2)).copied()?;
+        match esc {
+            b'\\' | b'\'' | b'"' | b'n' | b'r' | b't' | b'0' => {
+                let close_idx = start.saturating_add(3);
+                if bytes.get(close_idx).copied() == Some(b'\'') {
+                    return Some(close_idx.saturating_add(1));
+                }
+                None
+            }
+            b'x' => {
+                let h1 = bytes.get(start.saturating_add(3)).copied()?;
+                let h2 = bytes.get(start.saturating_add(4)).copied()?;
+                let close_idx = start.saturating_add(5);
+                if h1.is_ascii_hexdigit()
+                    && h2.is_ascii_hexdigit()
+                    && bytes.get(close_idx).copied() == Some(b'\'')
+                {
+                    return Some(close_idx.saturating_add(1));
+                }
+                None
+            }
+            b'u' => {
+                if bytes.get(start.saturating_add(3)).copied() != Some(b'{') {
+                    return None;
+                }
+                let mut cursor = start.saturating_add(4);
+                let mut hex_digits: usize = 0;
+                while let Some(b) = bytes.get(cursor).copied() {
+                    if b.is_ascii_hexdigit() {
+                        hex_digits = hex_digits.saturating_add(1);
+                        if hex_digits > 6 {
+                            return None;
+                        }
+                        cursor = cursor.saturating_add(1);
+                    } else if b == b'_' && hex_digits > 0 {
+                        cursor = cursor.saturating_add(1);
+                    } else {
+                        break;
+                    }
+                }
+                if hex_digits >= 1
+                    && bytes.get(cursor).copied() == Some(b'}')
+                    && bytes.get(cursor.saturating_add(1)).copied() == Some(b'\'')
+                {
+                    return Some(cursor.saturating_add(2));
+                }
+                None
+            }
+            _ => None,
+        }
+    } else {
+        let inner_ch = line
+            .get(start.saturating_add(1)..)
+            .and_then(|s| s.chars().next())?;
+        if inner_ch != '\'' && inner_ch != '\\' {
+            let close_pos = start.saturating_add(1).saturating_add(inner_ch.len_utf8());
+            if bytes.get(close_pos).copied() == Some(b'\'') {
+                return Some(close_pos.saturating_add(1));
+            }
+        }
+        None
+    }
+}
+
+/// Advances Rust nested block comment, multi-hash raw string (`r"..."`, `r#"..."#`, `r##"..."##`),
 /// and standard multiline string state across a single source line while returning the
 /// non-string, non-comment code slice for item classification and delimiter tracking.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 34/36 lexical boundary soundness (refs #500).
 /// Prevents declaration keywords (`fn`, `struct`), doc comments (`///`), or unbalanced delimiters
-/// inside `r##"..."##` raw strings and multiline `"..."` strings from corrupting Check 36 verification.
+/// inside nested `/* ... */` comments, `r##"..."##` raw strings, and multiline `"..."` strings from
+/// corrupting Check 36 verification.
 ///
 /// ## 2. Invariants & Mathematical Properties
+/// - Nested block comments increment `state.block_comment_depth` on `/*` and decrement on `*/`.
 /// - A raw string opened with `r` followed by $k \ge 0$ `#` bytes and `"` remains open in
-///   `*in_raw_string_hashes = Some(k)` until a closing `"` immediately followed by $k$ `#` bytes is reached.
-/// - A standard string opened with `"` remains open in `*in_multiline_string = true` across lines
+///   `state.raw_string_hashes = Some(k)` until a closing `"` immediately followed by $k$ `#` bytes is reached.
+/// - A standard string opened with `"` remains open in `state.in_multiline_string = true` across lines
 ///   until an unescaped `"` is reached.
-/// - Character literals (`'c'` and `'\...'`) are consumed atomically so `'\"'` or `'{'` never
-///   perturbs string state or delimiter depth.
+/// - Character literals are consumed deterministically via `consume_rust_char_literal`.
 ///
 /// ## 3. Preconditions
 /// - `line: &str` is a valid UTF-8 source line slice.
-/// - `in_block_comment`, `in_raw_string_hashes`, and `in_multiline_string` hold the active lexical
-///   state carried over from the preceding line.
+/// - `state: &mut RustLineLexState` holds the active lexical state carried over from the preceding line.
 ///
 /// ## 4. Postconditions
-/// - Updates `*in_block_comment`, `*in_raw_string_hashes`, and `*in_multiline_string` to their
-///   exact end-of-line lexical states and returns a `String` containing only top-level code tokens.
+/// - Updates `*state` to its exact end-of-line lexical state and returns a `String` containing only
+///   top-level non-comment, non-string code tokens.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N) single-pass traversal where N is `line.len()`.
@@ -754,18 +939,13 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Uses `.get(..)` exclusively with zero panicking slice or index operations.
-/// - State: Mutates only the three caller-supplied lexical state references.
+/// - State: Mutates only the caller-supplied `state: &mut RustLineLexState`.
 /// - Action: Preserves UTF-8 character boundaries at every step via `len_utf8()`.
 /// - Resource: Bounded single-line allocation.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-36-SCAN-RUST-LEXICAL-STATE]
-fn scan_rust_line_preserving_lexical_state(
-    line: &str,
-    in_block_comment: &mut bool,
-    in_raw_string_hashes: &mut Option<usize>,
-    in_multiline_string: &mut bool,
-) -> String {
+fn scan_rust_line_preserving_lexical_state(line: &str, state: &mut RustLineLexState) -> String {
     let bytes = line.as_bytes();
     let len = bytes.len();
     let mut i: usize = 0;
@@ -778,11 +958,16 @@ fn scan_rust_line_preserving_lexical_state(
             .map(|c| c.len_utf8())
             .unwrap_or(1);
 
-        if *in_block_comment {
-            if bytes.get(i).copied() == Some(b'*')
+        if state.block_comment_depth > 0 {
+            if bytes.get(i).copied() == Some(b'/')
+                && bytes.get(i.saturating_add(1)).copied() == Some(b'*')
+            {
+                state.block_comment_depth = state.block_comment_depth.saturating_add(1);
+                i = i.saturating_add(2);
+            } else if bytes.get(i).copied() == Some(b'*')
                 && bytes.get(i.saturating_add(1)).copied() == Some(b'/')
             {
-                *in_block_comment = false;
+                state.block_comment_depth = state.block_comment_depth.saturating_sub(1);
                 i = i.saturating_add(2);
             } else {
                 i = i.saturating_add(step_utf8);
@@ -790,7 +975,7 @@ fn scan_rust_line_preserving_lexical_state(
             continue;
         }
 
-        if let Some(req_hashes) = *in_raw_string_hashes {
+        if let Some(req_hashes) = state.raw_string_hashes {
             if bytes.get(i).copied() == Some(b'"') {
                 let mut h: usize = 0;
                 while h < req_hashes
@@ -802,7 +987,7 @@ fn scan_rust_line_preserving_lexical_state(
                     h = h.saturating_add(1);
                 }
                 if h == req_hashes {
-                    *in_raw_string_hashes = None;
+                    state.raw_string_hashes = None;
                     i = i.saturating_add(1).saturating_add(req_hashes);
                     continue;
                 }
@@ -811,7 +996,7 @@ fn scan_rust_line_preserving_lexical_state(
             continue;
         }
 
-        if *in_multiline_string {
+        if state.in_multiline_string {
             if bytes.get(i).copied() == Some(b'\\') {
                 let next_len = line
                     .get(i.saturating_add(1)..)
@@ -822,7 +1007,7 @@ fn scan_rust_line_preserving_lexical_state(
                 continue;
             }
             if bytes.get(i).copied() == Some(b'"') {
-                *in_multiline_string = false;
+                state.in_multiline_string = false;
             }
             i = i.saturating_add(step_utf8);
             continue;
@@ -836,47 +1021,15 @@ fn scan_rust_line_preserving_lexical_state(
         if bytes.get(i).copied() == Some(b'/')
             && bytes.get(i.saturating_add(1)).copied() == Some(b'*')
         {
-            *in_block_comment = true;
+            state.block_comment_depth = state.block_comment_depth.saturating_add(1);
             i = i.saturating_add(2);
             continue;
         }
 
         if bytes.get(i).copied() == Some(b'\'') {
-            if bytes.get(i.saturating_add(1)).copied() == Some(b'\\') {
-                let escaped_len = line
-                    .get(i.saturating_add(2)..)
-                    .and_then(|s| s.chars().next())
-                    .map(|c| c.len_utf8())
-                    .unwrap_or(0);
-                let mut scan_close = i.saturating_add(2).saturating_add(escaped_len);
-                let limit = i.saturating_add(14).min(len);
-                let mut closed_at: Option<usize> = None;
-                while scan_close < limit {
-                    if bytes.get(scan_close).copied() == Some(b'\'') {
-                        closed_at = Some(scan_close);
-                        break;
-                    }
-                    let c_len = line
-                        .get(scan_close..)
-                        .and_then(|s| s.chars().next())
-                        .map(|c| c.len_utf8())
-                        .unwrap_or(1);
-                    scan_close = scan_close.saturating_add(c_len);
-                }
-                if let Some(close_idx) = closed_at {
-                    i = close_idx.saturating_add(1);
-                    continue;
-                }
-            } else if let Some(inner_ch) =
-                line.get(i.saturating_add(1)..).and_then(|s| s.chars().next())
-            {
-                if inner_ch != '\'' && inner_ch != '\\' {
-                    let close_pos = i.saturating_add(1).saturating_add(inner_ch.len_utf8());
-                    if bytes.get(close_pos).copied() == Some(b'\'') {
-                        i = close_pos.saturating_add(1);
-                        continue;
-                    }
-                }
+            if let Some(next_idx) = consume_rust_char_literal(line, i) {
+                i = next_idx;
+                continue;
             }
         }
 
@@ -910,7 +1063,7 @@ fn scan_rust_line_preserving_lexical_state(
                     .copied()
                     == Some(b'"')
                 {
-                    *in_raw_string_hashes = Some(h);
+                    state.raw_string_hashes = Some(h);
                     i = i.saturating_add(2).saturating_add(h);
                     continue;
                 }
@@ -918,7 +1071,7 @@ fn scan_rust_line_preserving_lexical_state(
         }
 
         if bytes.get(i).copied() == Some(b'"') {
-            *in_multiline_string = true;
+            state.in_multiline_string = true;
             i = i.saturating_add(1);
             continue;
         }
@@ -977,15 +1130,17 @@ enum DartMultilineString {
     },
 }
 
-/// Advances Dart block comments and triple-quoted multiline strings (`'''...'''` / `"""..."""`)
+/// Advances Dart nested block comments (`/* ... */`) and triple-quoted multiline strings (`'''...'''` / `"""..."""`)
 /// across a single source line while preserving single-line code and string tokens.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and Tier 2 Flutter lexical boundary completeness (refs #500).
-/// Prevents interior lines of Dart triple-quoted strings from triggering false-positive Check 36
-/// item classifications, placeholder errors, or delimiter depth drift.
+/// Prevents interior lines of nested Dart block comments and triple-quoted strings from triggering
+/// false-positive Check 36 item classifications, placeholder errors, or delimiter depth drift.
 ///
 /// ## 2. Invariants & Mathematical Properties
+/// - Nested `/* ... */` block comments increment `*block_comment_depth` on `/*` and saturatingly
+///   decrement on `*/`.
 /// - Characters inside `/* ... */` block comments and `'''...'''` / `"""..."""` multiline strings
 ///   are stripped from the returned code line.
 /// - Single-line `'...'` and `"..."` literals are emitted intact so `update_line_delimiter_depths`
@@ -993,10 +1148,10 @@ enum DartMultilineString {
 ///
 /// ## 3. Preconditions
 /// - `line: &str` is a valid UTF-8 Dart source line.
-/// - `in_block_comment` and `in_triple_string` hold the active lexical state from the previous line.
+/// - `block_comment_depth` and `in_triple_string` hold the active lexical state from the previous line.
 ///
 /// ## 4. Postconditions
-/// - Updates `*in_block_comment` and `*in_triple_string` to their end-of-line states and returns
+/// - Updates `*block_comment_depth` and `*in_triple_string` to their end-of-line states and returns
 ///   the non-comment, non-triple-string Dart code slice.
 ///
 /// ## 5. Algorithmic Complexity Bounds
@@ -1005,7 +1160,7 @@ enum DartMultilineString {
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Non-panicking `.get(..)` byte and char accessors throughout.
-/// - State: Mutates only `in_block_comment` and `in_triple_string`.
+/// - State: Mutates only `block_comment_depth` and `in_triple_string`.
 /// - Action: Maintains valid UTF-8 boundaries at every iteration via `len_utf8()`.
 /// - Resource: Bounded single-line buffer allocation.
 ///
@@ -1013,7 +1168,7 @@ enum DartMultilineString {
 /// Realises: [REQ-CHECK-36-SCAN-DART-LEXICAL-STATE]
 fn scan_dart_line_preserving_lexical_state(
     line: &str,
-    in_block_comment: &mut bool,
+    block_comment_depth: &mut usize,
     in_triple_string: &mut Option<DartMultilineString>,
 ) -> String {
     let bytes = line.as_bytes();
@@ -1029,11 +1184,16 @@ fn scan_dart_line_preserving_lexical_state(
             .map(|c| c.len_utf8())
             .unwrap_or(1);
 
-        if *in_block_comment {
-            if bytes.get(i).copied() == Some(b'*')
+        if *block_comment_depth > 0 {
+            if bytes.get(i).copied() == Some(b'/')
+                && bytes.get(i.saturating_add(1)).copied() == Some(b'*')
+            {
+                *block_comment_depth = block_comment_depth.saturating_add(1);
+                i = i.saturating_add(2);
+            } else if bytes.get(i).copied() == Some(b'*')
                 && bytes.get(i.saturating_add(1)).copied() == Some(b'/')
             {
-                *in_block_comment = false;
+                *block_comment_depth = block_comment_depth.saturating_sub(1);
                 i = i.saturating_add(2);
             } else {
                 i = i.saturating_add(step_utf8);
@@ -1101,7 +1261,7 @@ fn scan_dart_line_preserving_lexical_state(
         if bytes.get(i).copied() == Some(b'/')
             && bytes.get(i.saturating_add(1)).copied() == Some(b'*')
         {
-            *in_block_comment = true;
+            *block_comment_depth = block_comment_depth.saturating_add(1);
             i = i.saturating_add(2);
             continue;
         }
@@ -1218,7 +1378,7 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
     let mut violations = Vec::new();
     let mut current_doc: Vec<String> = Vec::new();
     let mut seen_docblocks: BTreeSet<String> = BTreeSet::new();
-    let mut in_multiline_comment = false;
+    let mut block_comment_depth: usize = 0;
     let mut in_triple_string: Option<DartMultilineString> = None;
     let mut brace_depth: usize = 0;
     let mut paren_depth: usize = 0;
@@ -1229,7 +1389,7 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
         let line_no = idx.saturating_add(1);
         let trimmed = raw_line.trim();
 
-        let started_in_comment_or_triple = in_multiline_comment || in_triple_string.is_some();
+        let started_in_comment_or_triple = block_comment_depth > 0 || in_triple_string.is_some();
 
         if !started_in_comment_or_triple && trimmed.starts_with("///") {
             if contains_placeholder_docstring(trimmed) {
@@ -1244,7 +1404,7 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
 
         let scanned = scan_dart_line_preserving_lexical_state(
             trimmed,
-            &mut in_multiline_comment,
+            &mut block_comment_depth,
             &mut in_triple_string,
         );
         let code = strip_line_comment_preserving_strings(&scanned);
@@ -1262,14 +1422,16 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
         if paren_depth == 0 {
             if brace_depth == 0 {
                 if let Some((kind, item_name)) = classify_dart_top_level_item(code) {
-                    let check_uniqueness = kind == "fn";
-                    validate_item_docblock(
-                        &current_doc,
+                    let target = ItemDocTarget {
                         file_rel,
                         line_no,
                         kind,
-                        &item_name,
-                        check_uniqueness,
+                        item_name: &item_name,
+                        check_uniqueness: kind == "fn",
+                    };
+                    validate_item_docblock(
+                        &current_doc,
+                        &target,
                         &mut seen_docblocks,
                         &mut violations,
                     );
@@ -1284,13 +1446,16 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             } else if brace_depth == 1 {
                 if let Some(ref class_name) = active_class_name {
                     if let Some((kind, member_name)) = classify_dart_member_item(code, class_name) {
-                        validate_item_docblock(
-                            &current_doc,
+                        let target = ItemDocTarget {
                             file_rel,
                             line_no,
                             kind,
-                            &member_name,
-                            true,
+                            item_name: &member_name,
+                            check_uniqueness: true,
+                        };
+                        validate_item_docblock(
+                            &current_doc,
+                            &target,
                             &mut seen_docblocks,
                             &mut violations,
                         );
@@ -1323,23 +1488,66 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
     }
 }
 
+/// Descriptor identifying an audited Rust or Dart declaration site for `validate_item_docblock`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34 zero-lint-suppression rules (`ItemDocTarget`).
+/// Bundles the source location (`file_rel`, `line_no`), declaration kind (`kind`), identifier
+/// (`item_name`), and uniqueness requirement (`check_uniqueness`) so `validate_item_docblock`
+/// operates with a small, strongly typed parameter list without `#[allow(clippy::too_many_arguments)]`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `line_no >= 1` is the 1-based line number of the audited declaration in `file_rel`.
+/// - `check_uniqueness` is `true` for callable items (`fn`, `constructor`, `method`) and `false` for types.
+///
+/// ## 3. Preconditions
+/// - Constructed immediately prior to invoking `validate_item_docblock` on a classified item line.
+///
+/// ## 4. Postconditions
+/// - Provides read-only diagnostic metadata to `validate_item_docblock` with zero heap cloning.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) stack construction.
+/// - Space Complexity: O(1) borrowed string references.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Immutable lifetime-bound references `'a`.
+/// - State: Pure read-only descriptor.
+/// - Action: Zero fallible operations.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-36-ITEM-DOC-TARGET]
+struct ItemDocTarget<'a> {
+    /// Workspace-relative file path for diagnostic reporting.
+    file_rel: &'a str,
+    /// 1-based declaration line number.
+    line_no: usize,
+    /// Item classification label (`struct`, `enum`, `trait`, `fn`, `class`, `constructor`, `method`, etc.).
+    kind: &'a str,
+    /// Identifier of the declared item.
+    item_name: &'a str,
+    /// Whether the item's normalized 7-section docstring body must be unique within the file.
+    check_uniqueness: bool,
+}
+
 /// Validates that `current_doc` contains all 7 canonical sections, a non-empty `Realises: [...]` tag,
-/// and (for functions/methods) a unique normalized body within the file.
+/// and (for functions/methods) a unique normalized body within the file for `target`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and Check 34/36 docstring completeness and anti-boilerplate rules.
-/// Enforces that every audited `item_name` of `kind` at `file_rel:line_no` has all 7 `DocstringSection`
+/// Enforces that every audited `target` (`ItemDocTarget`) has all 7 `DocstringSection`
 /// headings, a non-empty requirement realization tag, and non-duplicated content.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Completeness: Every variant in `DocstringSection::ALL` must appear in `current_doc`.
 /// - Traceability: `has_non_empty_realises_tag` must hold on the joined docblock.
-/// - Uniqueness: When `check_uniqueness` is `true`, the normalized body (skipping line 1 and `Realises:`)
+/// - Uniqueness: When `target.check_uniqueness` is `true`, the normalized body (skipping line 1 and `Realises:`)
 ///   must insert cleanly as a new entry in `seen_docblocks`.
 ///
 /// ## 3. Preconditions
-/// - `current_doc: &[String]` holds the contiguous `///` lines preceding the declaration at `line_no`.
-/// - `file_rel`, `kind`, and `item_name` are non-empty diagnostic identifiers.
+/// - `current_doc: &[String]` holds the contiguous `///` lines preceding the declaration at `target.line_no`.
+/// - `target: &ItemDocTarget<'_>` holds the non-empty diagnostic identifiers (`file_rel`, `kind`, `item_name`).
 /// - `seen_docblocks` and `violations` are mutable per-file accumulators.
 ///
 /// ## 4. Postconditions
@@ -1358,21 +1566,16 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-36-VALIDATE-ITEM-DOCBLOCK]
-#[allow(clippy::too_many_arguments)]
 fn validate_item_docblock(
     current_doc: &[String],
-    file_rel: &str,
-    line_no: usize,
-    kind: &str,
-    item_name: &str,
-    check_uniqueness: bool,
+    target: &ItemDocTarget<'_>,
     seen_docblocks: &mut BTreeSet<String>,
     violations: &mut Vec<String>,
 ) {
     if current_doc.is_empty() {
         violations.push(format!(
             "{}:{}: {} '{}' missing mandatory 7-section docstring",
-            file_rel, line_no, kind, item_name
+            target.file_rel, target.line_no, target.kind, target.item_name
         ));
         return;
     }
@@ -1388,10 +1591,10 @@ fn validate_item_docblock(
     if !missing.is_empty() {
         violations.push(format!(
             "{}:{}: {} '{}' missing mandatory 7-section docstring (missing: {})",
-            file_rel,
-            line_no,
-            kind,
-            item_name,
+            target.file_rel,
+            target.line_no,
+            target.kind,
+            target.item_name,
             missing.join(", ")
         ));
     }
@@ -1399,11 +1602,11 @@ fn validate_item_docblock(
     if !has_non_empty_realises_tag(&doc_block) {
         violations.push(format!(
             "{}:{}: {} '{}' missing non-empty 'Realises: [...]' traceability tag",
-            file_rel, line_no, kind, item_name
+            target.file_rel, target.line_no, target.kind, target.item_name
         ));
     }
 
-    if check_uniqueness {
+    if target.check_uniqueness {
         let normalized_doc = current_doc
             .iter()
             .skip(1)
@@ -1420,7 +1623,7 @@ fn validate_item_docblock(
         if !normalized_doc.is_empty() && !seen_docblocks.insert(normalized_doc) {
             violations.push(format!(
                 "{}:{}: {} '{}' has duplicate/boilerplate 7-section docstring body",
-                file_rel, line_no, kind, item_name
+                target.file_rel, target.line_no, target.kind, target.item_name
             ));
         }
     }
@@ -2071,19 +2274,18 @@ pub fn check_endpoint(endpoint: &str) -> bool {
 
 pub fn missing_docs() {}
 "#;
-        match audit_rust_source_docstrings(rust_with_missing_fn, "crates/demo/src/lib.rs") {
-            Ok(count) => panic!(
-                "undocumented function after URL string literal must be flagged, got Ok({})",
-                count
-            ),
-            Err(err) => {
-                assert!(
-                    err.iter().any(|v| v.contains("missing_docs")),
-                    "Expected violation for missing_docs, got: {:?}",
-                    err
-                );
-            }
-        }
+        let res = audit_rust_source_docstrings(rust_with_missing_fn, "crates/demo/src/lib.rs");
+        assert!(
+            res.is_err(),
+            "undocumented function after URL string literal must be flagged, got: {:?}",
+            res
+        );
+        let errs = res.err().unwrap_or_default();
+        assert!(
+            errs.iter().any(|v| v.contains("missing_docs")),
+            "Expected violation for missing_docs, got: {:?}",
+            errs
+        );
 
         let rust_all_documented = r#"/// Documented function with URL string literal containing double slashes.
 ///
@@ -2251,16 +2453,20 @@ pub fn documented_followup() {}
 
         let mut rust_with_undocumented = String::from(rust_source);
         rust_with_undocumented.push_str("\npub fn undocumented_after_raw_string() {}\n");
-        match audit_rust_source_docstrings(&rust_with_undocumented, "crates/demo/src/lib.rs") {
-            Ok(count) => panic!("expected Err for undocumented_after_raw_string, got Ok({})", count),
-            Err(errs) => {
-                assert!(
-                    errs.iter().any(|v| v.contains("undocumented_after_raw_string")),
-                    "expected violation for undocumented_after_raw_string, got: {:?}",
-                    errs
-                );
-            }
-        }
+        let neg_res =
+            audit_rust_source_docstrings(&rust_with_undocumented, "crates/demo/src/lib.rs");
+        assert!(
+            neg_res.is_err(),
+            "expected Err for undocumented_after_raw_string, got: {:?}",
+            neg_res
+        );
+        let errs = neg_res.err().unwrap_or_default();
+        assert!(
+            errs.iter()
+                .any(|v| v.contains("undocumented_after_raw_string")),
+            "expected violation for undocumented_after_raw_string, got: {:?}",
+            errs
+        );
     }
 
     /// Verifies that Check 36 ignores Dart declarations and placeholders inside triple-quoted multiline strings.
@@ -2357,5 +2563,54 @@ pub fn documented_followup() {}
             audit_dart_source_docstrings(dart_source, "app_flutter/lib/demo.dart"),
             Ok(2)
         );
+    }
+
+    /// Verifies `consume_rust_char_literal` and nested block comment tracking in Rust and Dart.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 lexical unit verification (`test_consume_rust_char_literal_and_nested_block_comments`).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `consume_rust_char_literal` consumes ASCII, UTF-8, simple escape, `\xHH`, and `\u{...}` character literals while returning `None` on lifetimes (`'a`).
+    /// - Nested `/* outer /* inner */ still commented */` comments increment and decrement `block_comment_depth` deterministically.
+    ///
+    /// ## 3. Preconditions
+    /// - Deterministic in-memory test inputs for `consume_rust_char_literal` and `scan_rust_line_preserving_lexical_state`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts exact byte end offsets for character literals and zero residual code tokens inside nested block comments.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded test inputs.
+    /// - Space Complexity: O(1) stack state.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Direct invocation of `consume_rust_char_literal` and `scan_rust_line_preserving_lexical_state`.
+    /// - State: Local test state only.
+    /// - Action: Non-panicking `assert_eq!` checks.
+    /// - Resource: Zero filesystem side effects.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-36-CHAR-LITERAL-AND-NESTED-COMMENT-UNIT-TEST]
+    #[test]
+    fn test_consume_rust_char_literal_and_nested_block_comments() {
+        assert_eq!(consume_rust_char_literal("'a'", 0), Some(3));
+        assert_eq!(consume_rust_char_literal("'\\\"'", 0), Some(4));
+        assert_eq!(consume_rust_char_literal("'\\x7F'", 0), Some(6));
+        assert_eq!(consume_rust_char_literal("'\\u{10FFFF}'", 0), Some(12));
+        assert_eq!(consume_rust_char_literal("'a, &'a str", 0), None);
+
+        let mut state = RustLineLexState {
+            block_comment_depth: 0,
+            raw_string_hashes: None,
+            in_multiline_string: false,
+        };
+        let line1 =
+            scan_rust_line_preserving_lexical_state("/* outer /* inner */ pub fn fake() {}", &mut state);
+        assert_eq!(line1.trim(), "");
+        assert_eq!(state.block_comment_depth, 1);
+        let line2 = scan_rust_line_preserving_lexical_state("still commented */ pub fn real() {}", &mut state);
+        assert_eq!(state.block_comment_depth, 0);
+        assert_eq!(line2.trim(), "pub fn real() {}");
     }
 }

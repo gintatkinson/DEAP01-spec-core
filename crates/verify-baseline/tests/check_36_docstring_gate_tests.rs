@@ -1,12 +1,7 @@
 //! Integration tests for Check 36: Per-Item 7-Section Safety Docstring Completeness Gate
 //! across Rust (`crates/**/src/**/*.rs`) and Dart (`app_flutter/lib/**/*.dart`) sources.
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::panic
-)]
 
+use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -21,7 +16,7 @@ struct ScopedTempWorkspace {
 }
 
 impl ScopedTempWorkspace {
-    fn new(prefix: &str) -> Self {
+    fn new(prefix: &str) -> Result<Self, Box<dyn Error>> {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
@@ -32,8 +27,8 @@ impl ScopedTempWorkspace {
             std::process::id(),
             nanos
         ));
-        fs::create_dir_all(&root).expect("create temp workspace");
-        Self { root }
+        fs::create_dir_all(&root)?;
+        Ok(Self { root })
     }
 }
 
@@ -44,7 +39,7 @@ impl Drop for ScopedTempWorkspace {
 }
 
 #[test]
-fn test_check_36_rejects_placeholder_and_missing_docstrings() {
+fn test_check_36_rejects_placeholder_and_missing_docstrings() -> Result<(), Box<dyn Error>> {
     // 1. Reproduce exact Tier 2 defect from DEAP01-cuas-coa-engine:
     // app_flutter/lib/app/app.dart:10-14 where `const MyApp({super.key});` had
     // `/// Member documentation.` and `class MyApp` lacked the 7-section docstring.
@@ -68,7 +63,7 @@ class MyApp extends StatelessWidget {
         dart_res.is_err(),
         "Check 36 must reject Dart file with '/// Member documentation.' and missing 7-section docstrings"
     );
-    let dart_errs = dart_res.unwrap_err().join("\n");
+    let dart_errs = dart_res.err().unwrap_or_default().join("\n");
     assert!(
         dart_errs.contains("Member documentation."),
         "Expected placeholder docstring diagnostic for '/// Member documentation.', got:\n{}",
@@ -99,7 +94,7 @@ pub fn decode_packet(raw: &[u8]) -> Option<SensorPacket> {
         rust_res.is_err(),
         "Check 36 must reject Rust file with '/// Member documentation.' and missing 7-section docstrings"
     );
-    let rust_errs = rust_res.unwrap_err().join("\n");
+    let rust_errs = rust_res.err().unwrap_or_default().join("\n");
     assert!(
         rust_errs.contains("Member documentation."),
         "Expected placeholder docstring diagnostic in Rust source, got:\n{}",
@@ -112,23 +107,25 @@ pub fn decode_packet(raw: &[u8]) -> Option<SensorPacket> {
     );
 
     // 3. Verify end-to-end workspace check_docstring_completeness fails closed on temp workspace
-    let ws = ScopedTempWorkspace::new("placeholder_and_missing");
+    let ws = ScopedTempWorkspace::new("placeholder_and_missing")?;
     let dart_dir = ws.root.join("app_flutter").join("lib").join("app");
-    fs::create_dir_all(&dart_dir).expect("create app_flutter/lib/app");
-    fs::write(dart_dir.join("app.dart"), defective_dart).expect("write app.dart");
+    fs::create_dir_all(&dart_dir)?;
+    fs::write(dart_dir.join("app.dart"), defective_dart)?;
 
     let ws_res = check_docstring_completeness(&ws.root);
     assert!(
         ws_res.is_err(),
         "check_docstring_completeness must fail closed on workspace with defective app.dart"
     );
+    Ok(())
 }
 
 #[test]
-fn test_check_36_rejects_undocumented_rust_items_even_when_lib_rs_has_module_doc() {
-    let ws = ScopedTempWorkspace::new("no_module_exemption");
+fn test_check_36_rejects_undocumented_rust_items_even_when_lib_rs_has_module_doc(
+) -> Result<(), Box<dyn Error>> {
+    let ws = ScopedTempWorkspace::new("no_module_exemption")?;
     let src_dir = ws.root.join("crates").join("sample-crate").join("src");
-    fs::create_dir_all(&src_dir).expect("create crates/sample-crate/src");
+    fs::create_dir_all(&src_dir)?;
 
     // lib.rs has a complete 7-section `//!` module header, followed immediately by an
     // undocumented struct and function, plus a submodule `submod.rs` with undocumented items.
@@ -217,15 +214,15 @@ impl PrivateUndocumentedStruct {
 }
 "#;
 
-    fs::write(src_dir.join("lib.rs"), lib_rs_with_module_doc).expect("write lib.rs");
-    fs::write(src_dir.join("submod.rs"), submod_rs).expect("write submod.rs");
+    fs::write(src_dir.join("lib.rs"), lib_rs_with_module_doc)?;
+    fs::write(src_dir.join("submod.rs"), submod_rs)?;
 
     let res = check_docstring_completeness(&ws.root);
     assert!(
         res.is_err(),
         "Check 36 must NEVER exempt structs, enums, traits, or functions when lib.rs or submodule has //! module doc"
     );
-    let errs = res.unwrap_err().join("\n");
+    let errs = res.err().unwrap_or_default().join("\n");
     for expected_symbol in [
         "UndocumentedInLib",
         "undocumented_lib_fn",
@@ -241,14 +238,16 @@ impl PrivateUndocumentedStruct {
             errs
         );
     }
+    Ok(())
 }
 
 #[test]
-fn test_live_workspace_crates_have_100_percent_per_item_7_section_docstrings() {
+fn test_live_workspace_crates_have_100_percent_per_item_7_section_docstrings(
+) -> Result<(), Box<dyn Error>> {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|p| p.parent())
-        .expect("repo root");
+        .ok_or("failed to resolve repo_root from CARGO_MANIFEST_DIR")?;
 
     // 1. Verify docstring_gate.rs, source_ast.rs, docstring.rs, and code.rs satisfy Check 34 source purity and Check 36 7-section Rustdoc
     for rel_mod in [
@@ -258,7 +257,7 @@ fn test_live_workspace_crates_have_100_percent_per_item_7_section_docstrings() {
         "crates/ingest-sysml/src/translators/code.rs",
     ] {
         let mod_path = repo_root.join(rel_mod);
-        let mod_src = fs::read_to_string(&mod_path).expect("read module source");
+        let mod_src = fs::read_to_string(&mod_path)?;
         let purity_res = audit_source_purity(&mod_src, rel_mod, true);
         assert!(
             purity_res.is_ok(),
@@ -276,7 +275,7 @@ fn test_live_workspace_crates_have_100_percent_per_item_7_section_docstrings() {
     }
 
     let runner_path = repo_root.join("crates/verify-baseline/src/runner.rs");
-    let runner_src = fs::read_to_string(&runner_path).expect("read runner.rs");
+    let runner_src = fs::read_to_string(&runner_path)?;
     let runner_doc_res =
         audit_rust_source_docstrings(&runner_src, "crates/verify-baseline/src/runner.rs");
     assert!(
@@ -303,7 +302,7 @@ fn test_live_workspace_crates_have_100_percent_per_item_7_section_docstrings() {
             true
         }
     }) {
-        let entry = entry_res.expect("walkdir entry");
+        let entry = entry_res?;
         if entry.file_type().is_file()
             && entry
                 .path()
@@ -318,7 +317,7 @@ fn test_live_workspace_crates_have_100_percent_per_item_7_section_docstrings() {
                 .unwrap_or(entry.path())
                 .display()
                 .to_string();
-            let content = fs::read_to_string(entry.path()).expect("read rs file");
+            let content = fs::read_to_string(entry.path())?;
             match audit_rust_source_docstrings(&content, &rel) {
                 Ok(count) => {
                     total_items += count;
@@ -358,6 +357,7 @@ fn test_live_workspace_crates_have_100_percent_per_item_7_section_docstrings() {
         "check_docstring_completeness failed on live workspace: {:?}",
         full_gate.err()
     );
+    Ok(())
 }
 
 #[test]
@@ -556,8 +556,7 @@ class SecondaryService {
 "#;
 
     let res = audit_dart_source_docstrings(valid_dart, "lib/services.dart");
-    assert!(res.is_ok(), "Valid Dart source should pass: {:?}", res.err());
-    assert_eq!(res.unwrap(), 8, "Should classify exactly 8 items");
+    assert_eq!(res, Ok(8), "Should classify exactly 8 items");
 
     // Negative probe: missing docstring on getter
     let missing_getter_doc = valid_dart.replace(
@@ -567,4 +566,90 @@ class SecondaryService {
     let neg_res = audit_dart_source_docstrings(&missing_getter_doc, "lib/services.dart");
     assert!(neg_res.is_err(), "Missing docstring on getter must fail closed");
 }
+
+#[test]
+fn test_check_36_nested_block_comments_and_escaped_char_literals() {
+    let rust_source = concat!(
+        "/* outer block comment\n",
+        "   /* inner nested block comment */\n",
+        "   /// Member documentation.\n",
+        "   pub fn fake_inside_nested_comment() {}\n",
+        "*/\n",
+        "/// Documented function using hex and unicode character escapes alongside lifetimes.\n",
+        "///\n",
+        "/// ## 1. Safety Intent & Regulatory Scope\n",
+        "/// Verifies nested block comments and escaped char literals under DO-178C Level A.\n",
+        "///\n",
+        "/// ## 2. Invariants & Mathematical Properties\n",
+        "/// - Character escapes `\\x7F` and `\\u{10FFFF}` never perturb string or comment state.\n",
+        "///\n",
+        "/// ## 3. Preconditions\n",
+        "/// - Input slice is valid UTF-8.\n",
+        "///\n",
+        "/// ## 4. Postconditions\n",
+        "/// - Returns first matching char.\n",
+        "///\n",
+        "/// ## 5. Algorithmic Complexity Bounds\n",
+        "/// - Time Complexity: O(1).\n",
+        "/// - Space Complexity: O(1).\n",
+        "///\n",
+        "/// ## 6. Failure Modes & Fault Tolerance\n",
+        "/// - Total function with zero panics.\n",
+        "///\n",
+        "/// ## 7. Realization & Traceability\n",
+        "/// Realises: [REQ-CHECK-36-NESTED-BLOCK-COMMENT]\n",
+        "pub fn inspect_char_escapes<'a>(input: &'a str) -> (char, char, &'a str) {\n",
+        "    let del = '\\x7F';\n",
+        "    let max_scalar = '\\u{10FFFF}';\n",
+        "    let quote_ch = '\\\"';\n",
+        "    let _ = quote_ch;\n",
+        "    (del, max_scalar, input)\n",
+        "}\n"
+    );
+
+    assert_eq!(
+        audit_rust_source_docstrings(rust_source, "crates/demo/src/lib.rs"),
+        Ok(1),
+        "Nested Rust block comment must remain active after inner `*/` until outer `*/`"
+    );
+
+    let dart_source = concat!(
+        "/* outer dart block comment\n",
+        "   /* inner nested dart block comment */\n",
+        "   /// Member documentation.\n",
+        "   class FakeDartClassInNestedComment {}\n",
+        "*/\n",
+        "/// Documented Dart function after nested block comment.\n",
+        "///\n",
+        "/// ## 1. Safety Intent & Regulatory Scope\n",
+        "/// Verifies nested Dart block comments under DO-178C Level A.\n",
+        "///\n",
+        "/// ## 2. Invariants & Mathematical Properties\n",
+        "/// - Nested `/* ... */` preserves comment depth.\n",
+        "///\n",
+        "/// ## 3. Preconditions\n",
+        "/// - None.\n",
+        "///\n",
+        "/// ## 4. Postconditions\n",
+        "/// - Completes deterministically.\n",
+        "///\n",
+        "/// ## 5. Algorithmic Complexity Bounds\n",
+        "/// - Time Complexity: O(1).\n",
+        "/// - Space Complexity: O(1).\n",
+        "///\n",
+        "/// ## 6. Failure Modes & Fault Tolerance\n",
+        "/// - Infallible execution.\n",
+        "///\n",
+        "/// ## 7. Realization & Traceability\n",
+        "/// Realises: [REQ-CHECK-36-DART-NESTED-BLOCK-COMMENT]\n",
+        "void realDartFn() {}\n"
+    );
+
+    assert_eq!(
+        audit_dart_source_docstrings(dart_source, "app_flutter/lib/nested.dart"),
+        Ok(1),
+        "Nested Dart block comment must remain active after inner `*/` until outer `*/`"
+    );
+}
+
 
