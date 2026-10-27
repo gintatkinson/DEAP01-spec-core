@@ -498,6 +498,9 @@ impl SysmlSerializable for RequirementDef {
         for d in &self.derived_from {
             lines.push(format!("{}    derived from {};", pad, d));
         }
+        for d in &self.derives {
+            lines.push(format!("{}    derives {};", pad, d));
+        }
         for v in &self.verified_by {
             lines.push(format!("{}    verify by {};", pad, v));
         }
@@ -639,14 +642,60 @@ impl SysmlSerializable for ConnectionDef {
                 lines.push(format!("{}    connect {} to {};", pad, self.source_port, self.target_port));
             }
         }
-        if let Some(proto) = &self.protocol {
-            lines.push(format!("{}    attribute protocol : String = \"{}\";", pad, proto));
-        }
-        if let Some(lat) = self.latency_ms {
-            lines.push(format!("{}    attribute latency_ms : Real = {:.1};", pad, lat));
-        }
+        append_connection_metadata_lines(self, &pad, &mut lines);
         lines.push(format!("{}}}", pad));
         lines.join("\n")
+    }
+}
+
+/// Appends canonical `ConnectionDef` metadata attributes (`source_part`, `target_part`, `item_flow_ref`, `severity`, `protocol`, `latency_ms`) to `lines`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `append_connection_metadata_lines` in `crates/compile-sysml/src/semantic/serializer.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Emits explicit `source_part`/`target_part` only when they diverge from the `.split_once('.')` prefix of `source_port`/`target_port`, and preserves `item_flow_ref`, non-default `severity != 1`, `protocol`, and `latency_ms`.
+///
+/// ## 3. Preconditions
+/// - `conn: &ConnectionDef`, `pad: &str`, and `lines: &mut Vec<String>` must satisfy domain and type-safety constraints.
+///
+/// ## 4. Postconditions
+/// - Appends formatted SysML v2 attribute lines to `lines` with zero early returns (SESE).
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) bounded over connection metadata string lengths.
+/// - Space Complexity: O(L) bounded auxiliary memory for formatted lines.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total function over `&ConnectionDef` and `&mut Vec<String>`.
+/// - State: Appends deterministically to `lines` without partial mutation.
+/// - Action: Executes deterministically with zero recursion or blocking.
+/// - Resource: Bounded stack and heap allocations within `SEMANTIC-SERIALIZER`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SEMANTIC-SERIALIZER-CONNECTIONDEF-TO-SYSML] | SysML v2: ActionDef(append_connection_metadata_lines)
+fn append_connection_metadata_lines(conn: &ConnectionDef, pad: &str, lines: &mut Vec<String>) {
+    let inferred_source = conn.source_port.split_once('.').map(|(owner, _)| owner);
+    if conn.source_part.as_deref() != inferred_source {
+        let sp = conn.source_part.as_deref().unwrap_or("");
+        lines.push(format!("{}    attribute source_part : String = \"{}\";", pad, sp));
+    }
+    let inferred_target = conn.target_port.split_once('.').map(|(owner, _)| owner);
+    if conn.target_part.as_deref() != inferred_target {
+        let tp = conn.target_part.as_deref().unwrap_or("");
+        lines.push(format!("{}    attribute target_part : String = \"{}\";", pad, tp));
+    }
+    if let Some(flow_ref) = &conn.item_flow_ref {
+        lines.push(format!("{}    attribute item_flow_ref : String = \"{}\";", pad, flow_ref));
+    }
+    if conn.severity != 1 {
+        lines.push(format!("{}    attribute severity : Integer = {};", pad, conn.severity));
+    }
+    if let Some(proto) = &conn.protocol {
+        lines.push(format!("{}    attribute protocol : String = \"{}\";", pad, proto));
+    }
+    if let Some(lat) = conn.latency_ms {
+        lines.push(format!("{}    attribute latency_ms : Real = {:.1};", pad, lat));
     }
 }
 

@@ -1768,6 +1768,7 @@ impl<'a> SysmlParser<'a> {
         let mut assumes = Vec::new();
         let mut requires = Vec::new();
         let mut derived_from = Vec::new();
+        let mut derives = Vec::new();
         let mut verified_by = Vec::new();
         let mut satisfied_by = Vec::new();
         let mut attributes = Vec::new();
@@ -1866,6 +1867,12 @@ impl<'a> SysmlParser<'a> {
                         self.advance();
                     }
                     derived_from.push(self.read_until_semi().replace(" :: ", "::"));
+                } else if matches!(self.peek_kind(), TokenKind::Ident(s) if s == "derives") {
+                    self.advance();
+                    if self.check(&TokenKind::Requirement) {
+                        self.advance();
+                    }
+                    derives.push(self.read_until_semi().replace(" :: ", "::"));
                 } else if self.check(&TokenKind::Verify) {
                     self.advance();
                     if self.check(&TokenKind::By) {
@@ -1909,7 +1916,7 @@ impl<'a> SysmlParser<'a> {
             verified_by,
             satisfied_by,
             derived_from,
-            derives: Vec::new(),
+            derives,
             triggers_hazards,
             safety_realises,
             layer,
@@ -2693,20 +2700,29 @@ impl<'a> SysmlParser<'a> {
         }
 
         let name = self.expect_ident()?;
-        let mut source_port = String::new();
-        let mut target_port = String::new();
-        let mut protocol = None;
-        let mut latency_ms = None;
-        let mut severity = 1;
+        let mut conn = ConnectionDef {
+            name,
+            source_port: String::new(),
+            target_port: String::new(),
+            source_part: None,
+            target_part: None,
+            doc,
+            severity: 1,
+            item_flow_ref: None,
+            protocol: None,
+            latency_ms: None,
+            is_flow,
+        };
+        let mut explicit_source_part: Option<Option<String>> = None;
+        let mut explicit_target_part: Option<Option<String>> = None;
 
-        let mut conn_doc = doc;
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
                 while let Some(inner_doc) = self.take_inner_doc_comment() {
-                    if conn_doc.is_none() {
-                        conn_doc = Some(inner_doc);
+                    if conn.doc.is_none() {
+                        conn.doc = Some(inner_doc);
                     }
                     self.skip_trivia();
                 }
@@ -2718,19 +2734,18 @@ impl<'a> SysmlParser<'a> {
                     if self.check(&TokenKind::From) {
                         self.advance();
                     }
-                    source_port = self.expect_ident_or_dotted()?;
+                    conn.source_port = self.expect_ident_or_dotted()?;
                     self.expect(&TokenKind::To)?;
-                    target_port = self.expect_ident_or_dotted()?;
+                    conn.target_port = self.expect_ident_or_dotted()?;
                     self.expect_semi()?;
                 } else if self.check(&TokenKind::Attribute) {
                     let attr = self.parse_attribute_decl(None)?;
-                    if attr.name == "protocol" {
-                        protocol = attr.default_value.map(|v| v.trim_matches('"').to_string());
-                    } else if attr.name == "latency_ms" || attr.name == "latency" {
-                        latency_ms = attr.default_value.and_then(|v| v.parse::<f64>().ok());
-                    } else if attr.name == "severity" {
-                        severity = attr.default_value.and_then(|v| v.parse::<i32>().ok()).unwrap_or(1);
-                    }
+                    Self::apply_connection_attribute(
+                        &mut conn,
+                        &mut explicit_source_part,
+                        &mut explicit_target_part,
+                        attr,
+                    );
                 } else {
                     let tok = self.peek();
                     return Err(ParseError {
@@ -2747,22 +2762,70 @@ impl<'a> SysmlParser<'a> {
             self.expect_semi()?;
         }
 
-        let source_part = source_port.split_once('.').map(|(owner, _)| owner.to_string());
-        let target_part = target_port.split_once('.').map(|(owner, _)| owner.to_string());
+        conn.source_part = explicit_source_part.unwrap_or_else(|| {
+            conn.source_port.split_once('.').map(|(owner, _)| owner.to_string())
+        });
+        conn.target_part = explicit_target_part.unwrap_or_else(|| {
+            conn.target_port.split_once('.').map(|(owner, _)| owner.to_string())
+        });
 
-        Ok(ConnectionDef {
-            name,
-            source_port,
-            target_port,
-            source_part,
-            target_part,
-            doc: conn_doc,
-            severity,
-            item_flow_ref: None,
-            protocol,
-            latency_ms,
-            is_flow,
-        })
+        Ok(conn)
+    }
+
+    /// Applies a parsed `AttributeDef` inside a `connection def` / `flow def` block to `ConnectionDef` fields.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::apply_connection_attribute` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and bijective AST round-trip fidelity for `ConnectionDef` attributes (`protocol`, `latency_ms`, `severity`, `item_flow_ref`, `source_part`, `target_part`).
+    ///
+    /// ## 3. Preconditions
+    /// - `conn: &mut ConnectionDef`, `explicit_source_part`, `explicit_target_part`, and `attr: AttributeDef` must satisfy domain and type-safety constraints.
+    ///
+    /// ## 4. Postconditions
+    /// - Updates `conn` and explicit endpoint part overrides in place with zero early returns (SESE).
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(L) linear in attribute default value length `L`.
+    /// - Space Complexity: O(L) bounded string allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total function over `AttributeDef` inputs.
+    /// - State: Mutates only the targeted `ConnectionDef` metadata field.
+    /// - Action: Executes deterministically with zero blocking or recursion.
+    /// - Resource: Bounded stack and heap allocations within `PARSER-GRAMMAR`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-APPLY-CONNECTION-ATTRIBUTE] | SysML v2: ActionDef(SysmlParser::apply_connection_attribute)
+    fn apply_connection_attribute(
+        conn: &mut ConnectionDef,
+        explicit_source_part: &mut Option<Option<String>>,
+        explicit_target_part: &mut Option<Option<String>>,
+        attr: AttributeDef,
+    ) {
+        let unquoted = attr.default_value.as_ref().map(|v| v.trim_matches('"').to_string());
+        match attr.name.as_str() {
+            "protocol" => conn.protocol = unquoted,
+            "latency_ms" | "latency" => {
+                conn.latency_ms = unquoted.and_then(|v| v.replace(' ', "").parse::<f64>().ok());
+            }
+            "severity" => {
+                conn.severity = unquoted
+                    .and_then(|v| v.replace(' ', "").parse::<i32>().ok())
+                    .unwrap_or(1);
+            }
+            "item_flow_ref" | "item_flow" => {
+                conn.item_flow_ref = unquoted.filter(|v| !v.is_empty());
+            }
+            "source_part" => {
+                *explicit_source_part = Some(unquoted.filter(|v| !v.is_empty()));
+            }
+            "target_part" => {
+                *explicit_target_part = Some(unquoted.filter(|v| !v.is_empty()));
+            }
+            _ => {}
+        }
     }
 
     /// Parse an inline connector statement into a ConnectionDef AST node.
@@ -3829,7 +3892,9 @@ impl<'a> SysmlParser<'a> {
                             let mut parsed_bare_type = false;
                             if return_type.is_none() && !starts_with_call {
                                 if let Ok(rtype) = self.parse_type_expr() {
-                                    if self.check(&TokenKind::Semi) {
+                                    if self.check(&TokenKind::Semi)
+                                        && Self::is_bare_calc_return_type(&rtype, &in_params)
+                                    {
                                         self.advance();
                                         return_type = Some(rtype);
                                         parsed_bare_type = true;
@@ -3872,6 +3937,48 @@ impl<'a> SysmlParser<'a> {
             return_type,
             expression,
         })
+    }
+
+    /// Classifies whether a bare `return <candidate>;` inside a `calc def` body is a type declaration rather than a value expression.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::is_bare_calc_return_type` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Rejects declared `in_params` identifiers, non-empty bracket indexing (`arr[0]`), and lowercase non-primitive identifiers so value expressions remain in `CalcDef::expression`, while preserving composite, UpperCamelCase, and primitive bare return types.
+    ///
+    /// ## 3. Preconditions
+    /// - `rtype: &str` and `in_params: &[AttributeDef]` must satisfy domain and type-safety constraints prior to invoking `SysmlParser::is_bare_calc_return_type`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `bool` from `SysmlParser::is_bare_calc_return_type` with zero side effects and a single exit point (SESE).
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(P + L) bounded over parameter count `P` and candidate type length `L`.
+    /// - Space Complexity: O(1) auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total predicate over borrowed slices.
+    /// - State: Pure read-only evaluation with zero mutation.
+    /// - Action: Executes deterministically with zero recursion or blocking.
+    /// - Resource: Zero heap allocations within `PARSER-GRAMMAR`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-IS-BARE-CALC-RETURN-TYPE] | SysML v2: ActionDef(SysmlParser::is_bare_calc_return_type)
+    fn is_bare_calc_return_type(rtype: &str, in_params: &[AttributeDef]) -> bool {
+        const PRIMITIVES: &[&str] = &[
+            "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128",
+            "isize", "f32", "f64", "bool", "str", "char",
+        ];
+        let trimmed = rtype.trim();
+        let base = trimmed.split('[').next().unwrap_or(trimmed).trim();
+        let is_param = in_params.iter().any(|p| p.name == base);
+        let is_composite = trimmed.starts_with(['&', '*', '(', '[']);
+        let is_indexed = !is_composite && trimmed.contains('[') && !trimmed.ends_with("[]");
+        let is_named_type = base.starts_with(|c: char| c.is_ascii_uppercase())
+            || base.contains("::")
+            || PRIMITIVES.contains(&base);
+        !is_param && !is_indexed && (is_composite || is_named_type)
     }
 
     // --- Helper Methods ---
@@ -7525,6 +7632,81 @@ package Issue504CompositePkg {
         assert_eq!(c4.return_type, None);
         assert_eq!(c4.expression.as_deref(), Some("x + y"));
 
+        Ok(())
+    }
+
+    /// Verifies bijective AST round-trip parity (`parse_source(pkg.to_sysml(0)) == pkg`) across `ConnectionDef`, `RequirementDef::derives`, and `CalcDef` bare return expressions (Issue #527).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_defect_iter3_bijective_roundtrip_connection_requirement_calc_asymmetries` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Enforces `parse_source(pkg.to_sysml(0)) == pkg` for `ConnectionDef` (`item_flow_ref`, `severity`, `source_part`, `target_part`), `RequirementDef` (`derives`), and `CalcDef` (`return input_val;`, `return x;`, `return samples[0];`).
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked within a valid test execution context for `test_defect_iter3_bijective_roundtrip_connection_requirement_calc_asymmetries`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<(), Box<dyn std::error::Error>>` asserting lossless round-trip equality and expression classification.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over fixture token and AST size.
+    /// - Space Complexity: O(N) bounded auxiliary memory for serialized SysML text and reparsed AST.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates any `ParseError` via `Result`.
+    /// - State: Stateless in-memory round-trip verification.
+    /// - Action: Executes deterministically with zero external I/O.
+    /// - Resource: Bounded stack and heap allocations within `PARSER-GRAMMAR`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-ISSUE-527-BIJECTIVE-ROUNDTRIP] | SysML v2: TestCaseDef(test_defect_iter3_bijective_roundtrip_connection_requirement_calc_asymmetries)
+    #[test]
+    fn test_defect_iter3_bijective_roundtrip_connection_requirement_calc_asymmetries(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::semantic::serializer::SysmlSerializable;
+        let src = r#"
+package Issue527BijectivePkg {
+    connection def BusLink {
+        connect nav_out to cmd_in;
+        attribute source_part : String = "FlightComputer";
+        attribute target_part : String = "ActuatorUnit";
+        attribute item_flow_ref : String = "NavigationTelemetry";
+        attribute severity : Integer = 4;
+        attribute protocol : String = "CAN_FD";
+        attribute latency_ms : Real = 2.5;
+    }
+    requirement def REQ_Parent {
+        id = "REQ-527";
+        text = "Parent requirement";
+        derived from REQ_Root;
+        derives REQ_ChildA;
+        derives SubPkg::REQ_ChildB;
+    }
+    calc def PassThrough {
+        in input_val : Real;
+        return input_val;
+    }
+    calc def BareVarAndIndex {
+        in samples : [Real; 4];
+        return x;
+        return samples[0];
+    }
+}
+"#;
+        let pkg = SysmlParser::parse_source(src, "Issue527BijectivePkg")?;
+        assert_eq!(pkg.connection_defs[0].source_part.as_deref(), Some("FlightComputer"));
+        assert_eq!(pkg.connection_defs[0].target_part.as_deref(), Some("ActuatorUnit"));
+        assert_eq!(pkg.connection_defs[0].item_flow_ref.as_deref(), Some("NavigationTelemetry"));
+        assert_eq!(pkg.connection_defs[0].severity, 4);
+        assert_eq!(pkg.requirement_defs[0].derives, vec!["REQ_ChildA", "SubPkg::REQ_ChildB"]);
+        assert_eq!(pkg.calc_defs[0].return_type, None);
+        assert_eq!(pkg.calc_defs[0].expression.as_deref(), Some("input_val"));
+        assert_eq!(pkg.calc_defs[1].return_type, None);
+        assert_eq!(pkg.calc_defs[1].expression.as_deref(), Some("x\nsamples [ 0 ]"));
+        let serialized = pkg.to_sysml(0);
+        let reparsed = SysmlParser::parse_source(&serialized, "Issue527BijectivePkg")?;
+        assert_eq!(reparsed, pkg);
         Ok(())
     }
 }
