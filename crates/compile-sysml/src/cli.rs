@@ -27,7 +27,8 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-COMPILER-SYSML-CLI], [DO-330-TQL-4-CLI]
 
-use clap::Parser;
+use clap::{Arg, ArgAction, ArgMatches, Command};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 /// Command-line argument definition for the `compile-sysml` compiler and synchronization engine.
@@ -38,7 +39,7 @@ use std::path::{Path, PathBuf};
 /// extraction, MBD export, package slicing, Flutter contract emission, and 7-section safety docstring synthesis.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Strongly typed argument binding via `clap::Parser`.
+/// - Strongly typed argument binding via explicit `clap::Command` builder without `clap_derive` lint suppressions.
 /// - Defaults `docs` to `"docs/"`, `out` to `".pipeline/schema.sysml"`, and `digest` to
 ///   `".pipeline/schema-digest.json"`.
 ///
@@ -57,84 +58,63 @@ use std::path::{Path, PathBuf};
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-CLI-ARGS], [DO-330-TQL-4-CLI]
-#[derive(Parser, Debug, Clone)]
-#[command(name = "compile-sysml")]
-#[command(about = "SysML v2 / KerML compiler and specification synchronization engine")]
+#[derive(Debug, Clone)]
 pub struct Cli {
     /// Path to input .sysml file
-    #[arg(value_name = "FILE")]
     pub file: Option<PathBuf>,
 
     /// Path to schema file or directory (default searches schema/*.sysml)
-    #[arg(long, value_name = "SCHEMA_FILE")]
     pub schema: Option<PathBuf>,
 
     /// Run the Pipeline 0 compilation gate: parse, validate semantics, serialize, and emit digest
-    #[arg(long)]
     pub compile: bool,
 
     /// Transpile SysML AST into the 10-pillar STPA safety artifact suite
-    #[arg(long)]
     pub stpa_transpile: bool,
 
     /// Path to STPA markdown file to compile into SysML constraint notation
-    #[arg(long, value_name = "STPA_FILE")]
     pub stpa: Option<PathBuf>,
 
     /// Execute reverse synchronization from markdown specs into SysML SSOT
-    #[arg(long)]
     pub reverse_sync: bool,
 
     /// Execute forward synchronization from SysML SSOT into markdown specs
-    #[arg(long)]
     pub forward_sync: bool,
 
     /// Synthesize and inject 7-section safety docstrings into source files under DIR
-    #[arg(long, value_name = "DIR")]
     pub inject_safety_docstrings: Option<PathBuf>,
 
     /// Extract structural source AST elements from DIR into SysML v2 notation
-    #[arg(long, value_name = "DIR")]
     pub extract_source: Option<PathBuf>,
 
     /// Export grounded MBD verification artifacts (.slreqx, .sfx, .m, layer_contracts.json) to DIR
-    #[arg(long, value_name = "DIR")]
     pub export_mbd: Option<PathBuf>,
 
     /// Slice a target package subsystem AST within a deterministic token budget
-    #[arg(long, value_name = "PACKAGE")]
     pub slice_package: Option<String>,
 
     /// Emit deterministic Flutter and C-ABI contracts (seeds, models, solver bridge, and UI tests)
-    #[arg(long, value_name = "FLUTTER_DIR")]
     pub emit_flutter_contracts: Option<PathBuf>,
 
     /// Path to documentation directory
-    #[arg(long, default_value = "docs/")]
     pub docs: PathBuf,
 
     /// Path to output schema model file
-    #[arg(long, default_value = ".pipeline/schema.sysml")]
     pub out: PathBuf,
 
     /// Path to explicit output directory (for --stpa-transpile or --forward-sync)
-    #[arg(long, value_name = "OUT_DIR")]
     pub out_dir: Option<PathBuf>,
 
     /// Path to output schema digest JSON
-    #[arg(long, default_value = ".pipeline/schema-digest.json")]
     pub digest: PathBuf,
 
     /// Force overwrite of existing files / bypass landing zone guard
-    #[arg(long)]
     pub force: bool,
 
     /// Simulate synchronization without writing changes to disk
-    #[arg(long)]
     pub dry_run: bool,
 
     /// Path to optional FMECA scoring configuration JSON
-    #[arg(long, value_name = "SCORING_CONFIG")]
     pub scoring_config: Option<PathBuf>,
 }
 
@@ -531,21 +511,305 @@ impl Cli {
         }
         Ok(self.into_pipeline_mode())
     }
+
+    /// Constructs the explicit `clap::Command` grammar for `compile-sysml`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and `REQ-0601` compiler forbid-lint governance by
+    /// defining the CLI argument schema without `clap_derive` proc-macro lint-suppression attributes.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves 1-to-1 flag names, value parsers, and default values (`docs/`, `.pipeline/schema.sysml`,
+    ///   `.pipeline/schema-digest.json`) for all 19 `Cli` fields.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked prior to parsing OS or synthetic command-line argument slices.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a configured `clap::Command` ready for `get_matches` or `try_get_matches_from`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$ over the fixed 19-argument schema.
+    /// - Space Complexity: $O(1)$ command builder allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Infallible static schema construction; never panics or performs I/O.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-COMPILER-SYSML-CLI-COMMAND], [DO-330-TQL-4-CLI]
+    fn build_command() -> Command {
+        Command::new("compile-sysml")
+            .about("SysML v2 / KerML compiler and specification synchronization engine")
+            .arg(
+                Arg::new("file")
+                    .value_name("FILE")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Path to input .sysml file"),
+            )
+            .arg(
+                Arg::new("schema")
+                    .long("schema")
+                    .value_name("SCHEMA_FILE")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Path to schema file or directory (default searches schema/*.sysml)"),
+            )
+            .arg(
+                Arg::new("compile")
+                    .long("compile")
+                    .action(ArgAction::SetTrue)
+                    .help("Run the Pipeline 0 compilation gate: parse, validate semantics, serialize, and emit digest"),
+            )
+            .arg(
+                Arg::new("stpa_transpile")
+                    .long("stpa-transpile")
+                    .action(ArgAction::SetTrue)
+                    .help("Transpile SysML AST into the 10-pillar STPA safety artifact suite"),
+            )
+            .arg(
+                Arg::new("stpa")
+                    .long("stpa")
+                    .value_name("STPA_FILE")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Path to STPA markdown file to compile into SysML constraint notation"),
+            )
+            .arg(
+                Arg::new("reverse_sync")
+                    .long("reverse-sync")
+                    .action(ArgAction::SetTrue)
+                    .help("Execute reverse synchronization from markdown specs into SysML SSOT"),
+            )
+            .arg(
+                Arg::new("forward_sync")
+                    .long("forward-sync")
+                    .action(ArgAction::SetTrue)
+                    .help("Execute forward synchronization from SysML SSOT into markdown specs"),
+            )
+            .arg(
+                Arg::new("inject_safety_docstrings")
+                    .long("inject-safety-docstrings")
+                    .value_name("DIR")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Synthesize and inject 7-section safety docstrings into source files under DIR"),
+            )
+            .arg(
+                Arg::new("extract_source")
+                    .long("extract-source")
+                    .value_name("DIR")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Extract structural source AST elements from DIR into SysML v2 notation"),
+            )
+            .arg(
+                Arg::new("export_mbd")
+                    .long("export-mbd")
+                    .value_name("DIR")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Export grounded MBD verification artifacts (.slreqx, .sfx, .m, layer_contracts.json) to DIR"),
+            )
+            .arg(
+                Arg::new("slice_package")
+                    .long("slice-package")
+                    .value_name("PACKAGE")
+                    .action(ArgAction::Set)
+                    .help("Slice a target package subsystem AST within a deterministic token budget"),
+            )
+            .arg(
+                Arg::new("emit_flutter_contracts")
+                    .long("emit-flutter-contracts")
+                    .value_name("FLUTTER_DIR")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Emit deterministic Flutter and C-ABI contracts (seeds, models, solver bridge, and UI tests)"),
+            )
+            .arg(
+                Arg::new("docs")
+                    .long("docs")
+                    .default_value("docs/")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Path to documentation directory"),
+            )
+            .arg(
+                Arg::new("out")
+                    .long("out")
+                    .default_value(".pipeline/schema.sysml")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Path to output schema model file"),
+            )
+            .arg(
+                Arg::new("out_dir")
+                    .long("out-dir")
+                    .value_name("OUT_DIR")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Path to explicit output directory (for --stpa-transpile or --forward-sync)"),
+            )
+            .arg(
+                Arg::new("digest")
+                    .long("digest")
+                    .default_value(".pipeline/schema-digest.json")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Path to output schema digest JSON"),
+            )
+            .arg(
+                Arg::new("force")
+                    .long("force")
+                    .action(ArgAction::SetTrue)
+                    .help("Force overwrite of existing files / bypass landing zone guard"),
+            )
+            .arg(
+                Arg::new("dry_run")
+                    .long("dry-run")
+                    .action(ArgAction::SetTrue)
+                    .help("Simulate synchronization without writing changes to disk"),
+            )
+            .arg(
+                Arg::new("scoring_config")
+                    .long("scoring-config")
+                    .value_name("SCORING_CONFIG")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Path to optional FMECA scoring configuration JSON"),
+            )
+    }
+
+    /// Extracts a strongly-typed `Cli` struct from validated `clap::ArgMatches`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 argument extraction rules with zero panicking
+    /// `.unwrap()` or `.expect()` calls.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Maps every matched CLI option and flag deterministically to its corresponding `Cli` field.
+    ///
+    /// ## 3. Preconditions
+    /// - `matches` was produced by `Self::build_command()`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a populated `Cli` value preserving all user-supplied paths and flags.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$ over the 19 fixed fields.
+    /// - Space Complexity: $O(A)$ for cloned path and string arguments.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Uses `.unwrap_or_else` fallbacks for defaulted fields; never panics.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-COMPILER-SYSML-CLI-MATCHES], [DO-330-TQL-4-CLI]
+    fn from_matches(matches: &ArgMatches) -> Self {
+        Self {
+            file: matches.get_one::<PathBuf>("file").cloned(),
+            schema: matches.get_one::<PathBuf>("schema").cloned(),
+            compile: matches.get_flag("compile"),
+            stpa_transpile: matches.get_flag("stpa_transpile"),
+            stpa: matches.get_one::<PathBuf>("stpa").cloned(),
+            reverse_sync: matches.get_flag("reverse_sync"),
+            forward_sync: matches.get_flag("forward_sync"),
+            inject_safety_docstrings: matches
+                .get_one::<PathBuf>("inject_safety_docstrings")
+                .cloned(),
+            extract_source: matches.get_one::<PathBuf>("extract_source").cloned(),
+            export_mbd: matches.get_one::<PathBuf>("export_mbd").cloned(),
+            slice_package: matches.get_one::<String>("slice_package").cloned(),
+            emit_flutter_contracts: matches
+                .get_one::<PathBuf>("emit_flutter_contracts")
+                .cloned(),
+            docs: matches
+                .get_one::<PathBuf>("docs")
+                .cloned()
+                .unwrap_or_else(|| PathBuf::from("docs/")),
+            out: matches
+                .get_one::<PathBuf>("out")
+                .cloned()
+                .unwrap_or_else(|| PathBuf::from(".pipeline/schema.sysml")),
+            out_dir: matches.get_one::<PathBuf>("out_dir").cloned(),
+            digest: matches
+                .get_one::<PathBuf>("digest")
+                .cloned()
+                .unwrap_or_else(|| PathBuf::from(".pipeline/schema-digest.json")),
+            force: matches.get_flag("force"),
+            dry_run: matches.get_flag("dry_run"),
+            scoring_config: matches.get_one::<PathBuf>("scoring_config").cloned(),
+        }
+    }
+
+    /// Parses process command-line arguments from `std::env::args_os` into `Cli`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 CLI entrypoint parsing.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Equivalent to `clap::Parser::parse` without `clap_derive` lint-suppression macros.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked with host process argument tokens.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a validated `Cli` struct or exits via `clap` diagnostic formatting on invalid syntax.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(A)$ where $A$ is the number of CLI argument tokens.
+    /// - Space Complexity: $O(A)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Invalid CLI syntax triggers `clap` usage output and process termination before pipeline execution.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-COMPILER-SYSML-CLI-PARSE], [DO-330-TQL-4-CLI]
+    pub fn parse() -> Self {
+        let matches = Self::build_command().get_matches();
+        Self::from_matches(&matches)
+    }
+
+    /// Parses an arbitrary iterator of argument tokens into `Cli`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 deterministic CLI parsing for programmatic and
+    /// unit-test callers.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Produces identical `Cli` field bindings as `Self::parse()` for equivalent argument sequences.
+    ///
+    /// ## 3. Preconditions
+    /// - `itr` yields valid argument tokens beginning with the binary name.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a populated `Cli` instance matching the supplied token stream.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(A)$ where $A$ is the number of tokens in `itr`.
+    /// - Space Complexity: $O(A)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - On invalid syntax, exits via `clap::Error::exit` consistent with `clap::Parser::parse_from`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-COMPILER-SYSML-CLI-PARSE-FROM], [DO-330-TQL-4-CLI]
+    pub fn parse_from<I, T>(itr: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<OsString> + Clone,
+    {
+        let matches = Self::build_command().get_matches_from(itr);
+        Self::from_matches(&matches)
+    }
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::panic
-)]
 mod tests {
     use super::*;
     use crate::{flatten_package_to_model, parse_sysml};
 
     #[test]
-    fn test_cli_export_mbd_and_slice_package_flags_and_flatten() {
+    fn test_cli_export_mbd_and_slice_package_flags_and_flatten() -> Result<(), String> {
         let cli = Cli::parse_from(vec![
             "compile-sysml",
             "--export-mbd",
@@ -562,13 +826,12 @@ mod tests {
         let pkg = parse_sysml(
             "package RootPkg { package FlightPkg { part def Autopilot { attribute gain : Real; } } }",
         )
-        .expect("parse nested pkg");
+        .map_err(|e| format!("{e:?}"))?;
         let model = flatten_package_to_model(pkg, Some("FlightPkg"));
         assert_eq!(model.package_name.as_deref(), Some("FlightPkg"));
-        let slice = model
-            .slice_package_subsystem("FlightPkg", 4096)
-            .expect("slice should succeed");
+        let slice = model.slice_package_subsystem("FlightPkg", 4096)?;
         assert_eq!(slice.parts.len(), 1);
+        Ok(())
     }
 
     #[test]
@@ -616,11 +879,12 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-COMPILER-SYSML-CLI-INTO-MODE]
     #[test]
-    fn test_arch_05_cli_into_mode_mutual_exclusivity_and_mapping() {
+    fn test_arch_05_cli_into_mode_mutual_exclusivity_and_mapping() -> Result<(), String> {
         let conflicting = Cli::parse_from(vec!["compile-sysml", "--compile", "--reverse-sync"]);
         let err = conflicting
             .into_mode()
-            .expect_err("conflicting --compile and --reverse-sync must fail");
+            .err()
+            .ok_or("conflicting --compile and --reverse-sync must fail")?;
         assert!(err.contains("Multiple operational mode flags specified"));
 
         let usage_cli = Cli::parse_from(vec!["compile-sysml"]);
@@ -652,5 +916,6 @@ mod tests {
                 dry_run: false,
             })
         );
+        Ok(())
     }
 }

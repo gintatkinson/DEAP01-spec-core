@@ -17,7 +17,7 @@ use crate::spec_audit::markdown_ast::{parse_markdown, MarkdownDoc};
 use crate::spec_audit::uml_validator::SysmlSymbolIndex;
 use crate::spec_audit::{SpecAuditError, SpecAuditFinding};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::path::Path;
 
 /// Individual rule within a behavioral trigger specifying target document type and verification constraints.
@@ -167,7 +167,7 @@ impl BehavioralTrigger {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SPEC-AUDIT-BEHAVIORAL-BEHAVIORALTRIGGER-ACTIVE-NODES-FROM-NORMALIZED-SET] | SysML v2: ActionDef(BehavioralTrigger::active_nodes_from_normalized_set)
-    pub fn active_nodes_from_normalized_set(&self, normalized_symbols: &HashSet<String>) -> Vec<String> {
+    pub fn active_nodes_from_normalized_set(&self, normalized_symbols: &BTreeSet<String>) -> Vec<String> {
         self.trigger_nodes
             .iter()
             .filter(|node| normalized_symbols.contains(&normalize_symbol_name(node)))
@@ -366,15 +366,8 @@ pub fn normalize_symbol_name(name: &str) -> String {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-BEHAVIORAL-COLLECT-NORMALIZED-SYMBOLS] | SysML v2: ActionDef(collect_normalized_symbols)
-pub fn collect_normalized_symbols(index: &SysmlSymbolIndex) -> HashSet<String> {
-    let mut set = HashSet::with_capacity(
-        index.part_names.len()
-            + index.port_names.len()
-            + index.action_names.len()
-            + index.state_names.len()
-            + index.attribute_names.len()
-            + index.classifiers.len(),
-    );
+pub fn collect_normalized_symbols(index: &SysmlSymbolIndex) -> BTreeSet<String> {
+    let mut set = BTreeSet::new();
     for name in &index.part_names {
         set.insert(normalize_symbol_name(name));
     }
@@ -487,15 +480,19 @@ pub fn contains_token_with_word_boundary(content: &str, target: &str) -> bool {
         let before_ok = if abs_pos == 0 {
             true
         } else {
-            let prev_byte = lower_content.as_bytes()[abs_pos - 1];
-            !prev_byte.is_ascii_alphanumeric() && prev_byte != b'_' && prev_byte != b'-'
+            !lower_content
+                .as_bytes()
+                .get(abs_pos - 1)
+                .is_some_and(|&prev_byte| prev_byte.is_ascii_alphanumeric() || prev_byte == b'_' || prev_byte == b'-')
         };
 
         let after_ok = if end_pos >= lower_content.len() {
             true
         } else {
-            let next_byte = lower_content.as_bytes()[end_pos];
-            !next_byte.is_ascii_alphanumeric() && next_byte != b'_' && next_byte != b'-'
+            !lower_content
+                .as_bytes()
+                .get(end_pos)
+                .is_some_and(|&next_byte| next_byte.is_ascii_alphanumeric() || next_byte == b'_' || next_byte == b'-')
         };
 
         if before_ok && after_ok {
@@ -1013,37 +1010,40 @@ mod tests {
     }
 
     #[test]
-    fn test_inactive_trigger_imposes_nothing() {
+    fn test_inactive_trigger_imposes_nothing() -> Result<(), Box<dyn std::error::Error>> {
         let trigger = create_test_trigger();
         let index = SysmlSymbolIndex::new(); // empty index -> inactive trigger
         let specs = Vec::new();
 
-        let findings = validate_behavioral_triggers(&[trigger], &index, &specs).unwrap();
+        let findings = validate_behavioral_triggers(&[trigger], &index, &specs)?;
         assert!(findings.is_empty(), "Inactive trigger should impose nothing");
+        Ok(())
     }
 
     #[test]
-    fn test_active_trigger_missing_coverage_fails() {
+    fn test_active_trigger_missing_coverage_fails() -> Result<(), Box<dyn std::error::Error>> {
         let trigger = create_test_trigger();
         let mut index = SysmlSymbolIndex::new();
         index.part_names.insert("stream-data".to_string()); // arms the trigger!
 
         let specs = Vec::new(); // no specifications present
 
-        let findings = validate_behavioral_triggers(&[trigger], &index, &specs).unwrap();
+        let findings = validate_behavioral_triggers(&[trigger], &index, &specs)?;
         assert_eq!(findings.len(), 2, "Expected 2 findings (one per rule for stream-data)");
         assert_eq!(
-            findings[0].rule_id,
-            "behavioral-trigger-node-must-be-covered-by-a-specification"
+            findings.first().map(|f| f.rule_id.as_str()),
+            Some("behavioral-trigger-node-must-be-covered-by-a-specification")
         );
         assert_eq!(
-            findings[1].rule_id,
-            "behavioral-trigger-node-must-be-covered-by-a-specification"
+            findings.get(1).map(|f| f.rule_id.as_str()),
+            Some("behavioral-trigger-node-must-be-covered-by-a-specification")
         );
+        Ok(())
     }
 
     #[test]
-    fn test_active_trigger_user_story_passes_with_required_mermaid() {
+    fn test_active_trigger_user_story_passes_with_required_mermaid(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let trigger = create_test_trigger();
         let mut index = SysmlSymbolIndex::new();
         index.part_names.insert("stream-data".to_string());
@@ -1069,20 +1069,22 @@ The operator reviews recorded stream-data.
 "#;
 
         let specs = vec![
-            AuditedSpec::from_content("docs/user-stories/us-01.md", "user-story", user_story_content).unwrap(),
-            AuditedSpec::from_content("docs/use-cases/uc-01.md", "use-case", use_case_content).unwrap(),
+            AuditedSpec::from_content("docs/user-stories/us-01.md", "user-story", user_story_content)?,
+            AuditedSpec::from_content("docs/use-cases/uc-01.md", "use-case", use_case_content)?,
         ];
 
-        let findings = validate_behavioral_triggers(&[trigger], &index, &specs).unwrap();
+        let findings = validate_behavioral_triggers(&[trigger], &index, &specs)?;
         assert!(
             findings.is_empty(),
             "Expected 0 findings for passing specs, got: {:?}",
             findings
         );
+        Ok(())
     }
 
     #[test]
-    fn test_active_trigger_fails_when_mermaid_lacks_match_terms() {
+    fn test_active_trigger_fails_when_mermaid_lacks_match_terms(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let trigger = create_test_trigger();
         let mut index = SysmlSymbolIndex::new();
         index.part_names.insert("stream-data".to_string());
@@ -1108,21 +1110,25 @@ The operator reviews recorded stream-data.
 "#;
 
         let specs = vec![
-            AuditedSpec::from_content("docs/user-stories/us-01.md", "user-story", invalid_user_story).unwrap(),
-            AuditedSpec::from_content("docs/use-cases/uc-01.md", "use-case", valid_use_case).unwrap(),
+            AuditedSpec::from_content("docs/user-stories/us-01.md", "user-story", invalid_user_story)?,
+            AuditedSpec::from_content("docs/use-cases/uc-01.md", "use-case", valid_use_case)?,
         ];
 
-        let findings = validate_behavioral_triggers(&[trigger], &index, &specs).unwrap();
+        let findings = validate_behavioral_triggers(&[trigger], &index, &specs)?;
         assert_eq!(findings.len(), 1);
         assert_eq!(
-            findings[0].rule_id,
-            "behavioral-trigger-rule-must-be-satisfied-by-the-specification"
+            findings.first().map(|f| f.rule_id.as_str()),
+            Some("behavioral-trigger-rule-must-be-satisfied-by-the-specification")
         );
-        assert!(findings[0].message.contains("OffThreadHandler"));
+        assert!(findings
+            .first()
+            .is_some_and(|f| f.message.contains("OffThreadHandler")));
+        Ok(())
     }
 
     #[test]
-    fn test_active_trigger_fails_when_use_case_lacks_body_terms() {
+    fn test_active_trigger_fails_when_use_case_lacks_body_terms(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let trigger = create_test_trigger();
         let mut index = SysmlSymbolIndex::new();
         index.part_names.insert("stream-data".to_string());
@@ -1148,17 +1154,20 @@ The operator reviews recorded stream-data.
 "#;
 
         let specs = vec![
-            AuditedSpec::from_content("docs/user-stories/us-01.md", "user-story", valid_user_story).unwrap(),
-            AuditedSpec::from_content("docs/use-cases/uc-01.md", "use-case", invalid_use_case).unwrap(),
+            AuditedSpec::from_content("docs/user-stories/us-01.md", "user-story", valid_user_story)?,
+            AuditedSpec::from_content("docs/use-cases/uc-01.md", "use-case", invalid_use_case)?,
         ];
 
-        let findings = validate_behavioral_triggers(&[trigger], &index, &specs).unwrap();
+        let findings = validate_behavioral_triggers(&[trigger], &index, &specs)?;
         assert_eq!(findings.len(), 1);
         assert_eq!(
-            findings[0].rule_id,
-            "behavioral-trigger-rule-must-be-satisfied-by-the-specification"
+            findings.first().map(|f| f.rule_id.as_str()),
+            Some("behavioral-trigger-rule-must-be-satisfied-by-the-specification")
         );
-        assert!(findings[0].message.contains("temporal context state machine"));
+        assert!(findings
+            .first()
+            .is_some_and(|f| f.message.contains("temporal context state machine")));
+        Ok(())
     }
 
     #[test]

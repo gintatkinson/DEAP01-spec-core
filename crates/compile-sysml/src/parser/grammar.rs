@@ -2320,28 +2320,22 @@ impl<'a> SysmlParser<'a> {
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-TRANSITION-ENDPOINT] | SysML v2: ActionDef(SysmlParser::parse_transition_endpoint)
     fn parse_transition_endpoint(tokens: &[Token], idx: &mut usize) -> Option<String> {
         let mut out = String::new();
-        if let Some(tok) = tokens.get(*idx) {
-            if Self::is_transition_keyword_token(tok) {
-                return None;
-            }
-            if tok.kind == TokenKind::DoubleColon {
-                out.push_str("::");
-                *idx += 1;
-            }
-        } else {
+        let tok = tokens.get(*idx)?;
+        if Self::is_transition_keyword_token(tok) {
             return None;
+        }
+        if tok.kind == TokenKind::DoubleColon {
+            out.push_str("::");
+            *idx += 1;
         }
 
-        if let Some(first_seg) = tokens.get(*idx) {
-            let lex = Self::token_lexeme(first_seg);
-            if lex.is_empty() {
-                return None;
-            }
-            out.push_str(&lex);
-            *idx += 1;
-        } else {
+        let first_seg = tokens.get(*idx)?;
+        let lex = Self::token_lexeme(first_seg);
+        if lex.is_empty() {
             return None;
         }
+        out.push_str(&lex);
+        *idx += 1;
 
         while let Some(sep_tok) = tokens.get(*idx) {
             let sep_str = match sep_tok.kind {
@@ -5883,8 +5877,8 @@ package DEAP_Compiler_System {
             "merge_package_defs must preserve calc_defs from src package"
         );
         assert_eq!(
-            dest.calc_defs[0].name,
-            "ComputeTargetTrajectory"
+            dest.calc_defs.first().map(|c| c.name.as_str()),
+            Some("ComputeTargetTrajectory")
         );
         Ok(())
     }
@@ -6257,7 +6251,7 @@ package CommentVariantsModel {
             let src = format!("package P {{ part def C {{ {} }} }}", stmt);
             let pkg = SysmlParser::parse_source(&src, "P")?;
             assert_eq!(
-                pkg.part_defs[0].satisfied_requirements,
+                pkg.part_defs.first().ok_or("missing part")?.satisfied_requirements,
                 vec![expected_id.to_string()],
                 "Failed to parse satisfy statement with comment between satisfy and requirement: {}",
                 stmt
@@ -6290,7 +6284,7 @@ package CommentVariantsModel {
             let src = format!("package P {{ part def C {{ {} }} }}", stmt);
             let pkg = SysmlParser::parse_source(&src, "P")?;
             assert_eq!(
-                pkg.part_defs[0].satisfied_requirements,
+                pkg.part_defs.first().ok_or("missing part")?.satisfied_requirements,
                 vec![expected_id.to_string()],
                 "Failed to parse satisfy statement with comment between requirement and ID: {}",
                 stmt
@@ -6320,7 +6314,7 @@ package CommentVariantsModel {
             let src = format!("package P {{ part def C {{ {} }} }}", stmt);
             let pkg = SysmlParser::parse_source(&src, "P")?;
             assert_eq!(
-                pkg.part_defs[0].satisfied_requirements,
+                pkg.part_defs.first().ok_or("missing part")?.satisfied_requirements,
                 vec![expected_id.to_string()],
                 "Failed to parse satisfy statement with comments within identifier tokens: {}",
                 stmt
@@ -6348,7 +6342,7 @@ package CommentVariantsModel {
             let src = format!("package P {{ part def C {{ {} }} }}", stmt);
             let pkg = SysmlParser::parse_source(&src, "P")?;
             assert_eq!(
-                pkg.part_defs[0].satisfied_requirements,
+                pkg.part_defs.first().ok_or("missing part")?.satisfied_requirements,
                 vec![expected_id.to_string()],
                 "Failed to parse satisfy statement with comments before terminating semicolon: {}",
                 stmt
@@ -6379,7 +6373,7 @@ package CommentVariantsModel {
             let src = format!("package P {{ part def C {{ {} }} }}", stmt);
             let pkg = SysmlParser::parse_source(&src, "P")?;
             assert_eq!(
-                pkg.part_defs[0].satisfied_requirements,
+                pkg.part_defs.first().ok_or("missing part")?.satisfied_requirements,
                 vec![expected_id.to_string()],
                 "Failed to parse satisfy statement with comments surrounding 'by <Part>' clause: {}",
                 stmt
@@ -6732,27 +6726,32 @@ package CompositeTypesPkg {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-TEST-DEFECT-05-FAIL-CLOSED-CONTAINER] | SysML v2: TestCaseDef(test_defect_05_reject_unknown_container_keywords_fail_closed)
     #[test]
-    fn test_defect_05_reject_unknown_container_keywords_fail_closed() {
+    fn test_defect_05_reject_unknown_container_keywords_fail_closed() -> Result<(), String> {
         let unknown_pkg_stmt = "package BadPkg {\n    atribute typo_attr : Integer;\n}\n";
         let err1 = SysmlParser::parse_source(unknown_pkg_stmt, "BadPkg")
-            .expect_err("unknown package-level keyword 'atribute' must return Err(ParseError)");
+            .err()
+            .ok_or("unknown package-level keyword 'atribute' must return Err(ParseError)")?;
         assert_eq!(err1.span.line, 2, "expected error on line 2, got {:?}", err1);
         assert!(err1.span.col > 0, "expected positive column span, got {:?}", err1);
 
         let unknown_pkg_block = "package BadPkg {\n    enum def UnhandledEnum {\n        attribute a : Integer;\n    }\n}\n";
         let err2 = SysmlParser::parse_source(unknown_pkg_block, "BadPkg")
-            .expect_err("unknown braced block in package scope must return Err(ParseError)");
+            .err()
+            .ok_or("unknown braced block in package scope must return Err(ParseError)")?;
         assert_eq!(err2.span.line, 2, "expected error on line 2, got {:?}", err2);
 
         let unknown_part_stmt = "package BadPartPkg {\n    part def Node {\n        requirment typo_req;\n    }\n}\n";
         let err3 = SysmlParser::parse_source(unknown_part_stmt, "BadPartPkg")
-            .expect_err("unknown part-level keyword 'requirment' must return Err(ParseError)");
+            .err()
+            .ok_or("unknown part-level keyword 'requirment' must return Err(ParseError)")?;
         assert_eq!(err3.span.line, 3, "expected error on line 3, got {:?}", err3);
 
         let unknown_inner_stmt = "package BadInnerPkg {\n    port def P {\n        atribute bad : Integer;\n    }\n}\n";
         let err4 = SysmlParser::parse_source(unknown_inner_stmt, "BadInnerPkg")
-            .expect_err("unknown inner statement in port def must return Err(ParseError)");
+            .err()
+            .ok_or("unknown inner statement in port def must return Err(ParseError)")?;
         assert_eq!(err4.span.line, 3, "expected error on line 3, got {:?}", err4);
+        Ok(())
     }
 
     /// Executes deterministic unit test `test_defect_06_parse_state_transitions_first_then_and_from_to` within `crates/compile-sysml/src/parser/grammar.rs`.
@@ -7036,7 +7035,8 @@ package StateMachinePkg {
         let bad_same_line = "package P {\n    part a : &T; part b : <>;\n}\n";
         let expected_lt_start = bad_same_line.find('<').ok_or("missing '<'")?;
         let err_same = SysmlParser::parse_source(bad_same_line, "P")
-            .expect_err("empty generic '<>' after '&T' must fail");
+            .err()
+            .ok_or("empty generic '<>' after '&T' must fail")?;
         assert_eq!(
             err_same.span,
             Span {
@@ -7052,7 +7052,8 @@ package StateMachinePkg {
         let bad_cross_line = "package P {\n    attribute a : &T?;\n    atribute b : Integer;\n}\n";
         let expected_typo_start = bad_cross_line.find("atribute").ok_or("missing typo")?;
         let err_cross = SysmlParser::parse_source(bad_cross_line, "P")
-            .expect_err("typo 'atribute' on line 3 must fail");
+            .err()
+            .ok_or("typo 'atribute' on line 3 must fail")?;
         assert_eq!(
             err_cross.span,
             Span {
@@ -7103,7 +7104,8 @@ package StateMachinePkg {
         let expr_err_src = format!("{}\npackage Bad {{\n    atribute z : Integer;\n}}\n", expr_and_escape_src);
         let z_typo_start = expr_err_src.find("atribute").ok_or("missing atribute")?;
         let expr_err = SysmlParser::parse_source(&expr_err_src, "P")
-            .expect_err("expected error on trailing package typo");
+            .err()
+            .ok_or("expected error on trailing package typo")?;
         assert_eq!(expr_err.span.start, z_typo_start);
         assert_eq!(expr_err.span.end, z_typo_start + "atribute".len());
 
@@ -7762,15 +7764,18 @@ package Issue527BijectivePkg {
 }
 "#;
         let pkg = SysmlParser::parse_source(src, "Issue527BijectivePkg")?;
-        assert_eq!(pkg.connection_defs[0].source_part.as_deref(), Some("FlightComputer"));
-        assert_eq!(pkg.connection_defs[0].target_part.as_deref(), Some("ActuatorUnit"));
-        assert_eq!(pkg.connection_defs[0].item_flow_ref.as_deref(), Some("NavigationTelemetry"));
-        assert_eq!(pkg.connection_defs[0].severity, 4);
-        assert_eq!(pkg.requirement_defs[0].derives, vec!["REQ_ChildA", "SubPkg::REQ_ChildB"]);
-        assert_eq!(pkg.calc_defs[0].return_type, None);
-        assert_eq!(pkg.calc_defs[0].expression.as_deref(), Some("input_val"));
-        assert_eq!(pkg.calc_defs[1].return_type, None);
-        assert_eq!(pkg.calc_defs[1].expression.as_deref(), Some("x\nsamples [ 0 ]"));
+        let c0 = pkg.connection_defs.first().ok_or("missing c0")?;
+        assert_eq!(c0.source_part.as_deref(), Some("FlightComputer"));
+        assert_eq!(c0.target_part.as_deref(), Some("ActuatorUnit"));
+        assert_eq!(c0.item_flow_ref.as_deref(), Some("NavigationTelemetry"));
+        assert_eq!(c0.severity, 4);
+        assert_eq!(pkg.requirement_defs.first().ok_or("missing r0")?.derives, vec!["REQ_ChildA", "SubPkg::REQ_ChildB"]);
+        let calc0 = pkg.calc_defs.first().ok_or("missing calc0")?;
+        assert_eq!(calc0.return_type, None);
+        assert_eq!(calc0.expression.as_deref(), Some("input_val"));
+        let calc1 = pkg.calc_defs.get(1).ok_or("missing calc1")?;
+        assert_eq!(calc1.return_type, None);
+        assert_eq!(calc1.expression.as_deref(), Some("x\nsamples [ 0 ]"));
         let serialized = pkg.to_sysml(0);
         let reparsed = SysmlParser::parse_source(&serialized, "Issue527BijectivePkg")?;
         assert_eq!(reparsed, pkg);

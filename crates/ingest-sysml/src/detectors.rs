@@ -151,10 +151,10 @@ pub fn detect_format(schema_path: &str, content: &str) -> Result<String, String>
         || content.contains("swagger:")
         || content.contains("\"paths\":")
         || content.contains("paths:");
-    if ext == ".json" || ext == ".yaml" || ext == ".yml" {
-        if content.trim().is_empty() || has_openapi_markers {
-            return Ok("openapi".to_string());
-        }
+    if (ext == ".json" || ext == ".yaml" || ext == ".yml")
+        && (content.trim().is_empty() || has_openapi_markers)
+    {
+        return Ok("openapi".to_string());
     }
     if ext == ".rs" || ext == ".dart" {
         return Ok("code".to_string());
@@ -334,7 +334,7 @@ pub fn discover_schema_targets(
     let normalized_hint = format_hint.map(|h| h.trim().to_ascii_lowercase());
     let is_explicit = normalized_hint
         .as_deref()
-        .map_or(false, |h| !h.is_empty() && h != "auto");
+        .is_some_and(|h| !h.is_empty() && h != "auto");
 
     if let Some(p) = path_opt {
         if p.is_file() {
@@ -609,46 +609,50 @@ mod tests {
 
     #[test]
     fn test_detect_format_by_extension() {
-        assert_eq!(detect_format("schema.md", "").unwrap(), "markdown");
-        assert_eq!(detect_format("model.sysml", "").unwrap(), "sysml");
-        assert_eq!(detect_format("interface.yang", "").unwrap(), "yang");
-        assert_eq!(detect_format("interface.idl", "").unwrap(), "idl");
-        assert_eq!(detect_format("system.arxml", "").unwrap(), "autosar");
-        assert_eq!(detect_format("messages.proto", "").unwrap(), "protobuf");
-        assert_eq!(detect_format("api.json", "").unwrap(), "openapi");
-        assert_eq!(detect_format("api.yaml", "").unwrap(), "openapi");
-        assert_eq!(detect_format("doc.pdf", "").unwrap(), "raw");
+        assert_eq!(detect_format("schema.md", "").as_deref(), Ok("markdown"));
+        assert_eq!(detect_format("model.sysml", "").as_deref(), Ok("sysml"));
+        assert_eq!(detect_format("interface.yang", "").as_deref(), Ok("yang"));
+        assert_eq!(detect_format("interface.idl", "").as_deref(), Ok("idl"));
+        assert_eq!(detect_format("system.arxml", "").as_deref(), Ok("autosar"));
+        assert_eq!(detect_format("messages.proto", "").as_deref(), Ok("protobuf"));
+        assert_eq!(detect_format("api.json", "").as_deref(), Ok("openapi"));
+        assert_eq!(detect_format("api.yaml", "").as_deref(), Ok("openapi"));
+        assert_eq!(detect_format("doc.pdf", "").as_deref(), Ok("raw"));
     }
 
     #[test]
     fn test_detect_format_by_content() {
         assert_eq!(
-            detect_format("unknown_file", "package Package_0 { part def Classifier_Alpha; }").unwrap(),
-            "sysml"
+            detect_format("unknown_file", "package Package_0 { part def Classifier_Alpha; }")
+                .as_deref(),
+            Ok("sysml")
         );
         assert_eq!(
-            detect_format("unknown_file", "module ietf-geo-location { yang-version 1.1; namespace \"urn:ietf\"; prefix geo; }").unwrap(),
-            "yang"
+            detect_format("unknown_file", "module ietf-geo-location { yang-version 1.1; namespace \"urn:ietf\"; prefix geo; }").as_deref(),
+            Ok("yang")
         );
         assert_eq!(
-            detect_format("unknown_file", "module Module_0 { struct Struct_1 { long id; }; };").unwrap(),
-            "idl"
+            detect_format("unknown_file", "module Module_0 { struct Struct_1 { long id; }; };")
+                .as_deref(),
+            Ok("idl")
         );
         assert_eq!(
-            detect_format("unknown_file", "<AUTOSAR><AR-PACKAGE></AR-PACKAGE></AUTOSAR>").unwrap(),
-            "autosar"
+            detect_format("unknown_file", "<AUTOSAR><AR-PACKAGE></AR-PACKAGE></AUTOSAR>")
+                .as_deref(),
+            Ok("autosar")
         );
         assert_eq!(
-            detect_format("unknown_file", "syntax = \"proto3\"; message Msg_0 { int32 val = 1; }").unwrap(),
-            "protobuf"
+            detect_format("unknown_file", "syntax = \"proto3\"; message Msg_0 { int32 val = 1; }")
+                .as_deref(),
+            Ok("protobuf")
         );
         assert_eq!(
-            detect_format("unknown_file", "{\"openapi\": \"3.0.0\", \"paths\": {}}").unwrap(),
-            "openapi"
+            detect_format("unknown_file", "{\"openapi\": \"3.0.0\", \"paths\": {}}").as_deref(),
+            Ok("openapi")
         );
         assert_eq!(
-            detect_format("unknown_file", "| Component | Part Number |\n| --- | --- |\n| Classifier_Alpha | 1 |").unwrap(),
-            "markdown"
+            detect_format("unknown_file", "| Component | Part Number |\n| --- | --- |\n| Classifier_Alpha | 1 |").as_deref(),
+            Ok("markdown")
         );
     }
 
@@ -665,65 +669,61 @@ mod tests {
     }
 
     #[test]
-    fn test_discover_schema_targets_req1() {
+    fn test_discover_schema_targets_req1() -> Result<(), String> {
         let schema_dir = get_schema_dir();
         let path = schema_dir.join("REQ-0001.md");
         if path.exists() {
-            let res = discover_schema_targets(Some(&path), None);
-            assert!(res.is_ok());
-            let (fmt, files) = res.unwrap();
+            let (fmt, files) = discover_schema_targets(Some(&path), None)?;
             assert_eq!(fmt, "markdown");
             assert_eq!(files.len(), 1);
-            assert_eq!(files[0], path);
+            assert_eq!(files.first(), Some(&path));
         }
+        Ok(())
     }
 
     #[test]
-    fn test_discover_schema_targets_with_format_hint_markdown() {
+    fn test_discover_schema_targets_with_format_hint_markdown() -> Result<(), String> {
         let schema_dir = get_schema_dir();
         assert!(schema_dir.exists());
         if !schema_dir.join("REQ-0001.md").exists() {
-            return;
+            return Ok(());
         }
-        let res = discover_schema_targets(Some(&schema_dir), Some("markdown"));
-        assert!(res.is_ok());
-        let (fmt, files) = res.unwrap();
+        let (fmt, files) = discover_schema_targets(Some(&schema_dir), Some("markdown"))?;
         assert_eq!(fmt, "markdown");
         assert_eq!(files.len(), 199);
         assert!(!files.contains(&schema_dir.join("model.sysml")));
+        Ok(())
     }
 
     #[test]
-    fn test_discover_schema_targets_auto_markdown_not_masked_by_model_sysml() {
+    fn test_discover_schema_targets_auto_markdown_not_masked_by_model_sysml() -> Result<(), String> {
         let schema_dir = get_schema_dir();
         assert!(schema_dir.exists());
         if !schema_dir.join("REQ-0001.md").exists() {
-            return;
+            return Ok(());
         }
-        let res = discover_schema_targets(Some(&schema_dir), Some("auto"));
-        assert!(res.is_ok());
-        let (fmt, files) = res.unwrap();
+        let (fmt, files) = discover_schema_targets(Some(&schema_dir), Some("auto"))?;
         assert_eq!(fmt, "markdown");
         assert_eq!(files.len(), 199);
         assert!(!files.contains(&schema_dir.join("model.sysml")));
+        Ok(())
     }
 
     #[test]
-    fn test_discover_schema_targets_explicit_sysml() {
+    fn test_discover_schema_targets_explicit_sysml() -> Result<(), String> {
         let schema_dir = get_schema_dir();
         assert!(schema_dir.exists());
         if !schema_dir.join("model.sysml").exists() {
-            return;
+            return Ok(());
         }
-        let res = discover_schema_targets(Some(&schema_dir), Some("sysml"));
-        assert!(res.is_ok());
-        let (fmt, files) = res.unwrap();
+        let (fmt, files) = discover_schema_targets(Some(&schema_dir), Some("sysml"))?;
         assert_eq!(fmt, "sysml");
         assert!(!files.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_yang_autodiscovery_and_lowering_red_probe() {
+    fn test_yang_autodiscovery_and_lowering_red_probe() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = std::env::temp_dir().join(format!("test_yang_probe_{}", std::process::id()));
         let _ = fs::create_dir_all(&temp_dir);
 
@@ -753,12 +753,11 @@ mod tests {
 }
 "#;
         let yang_file = temp_dir.join("ietf_interfaces.yang");
-        fs::write(&yang_file, yang_source).expect("Failed to write temporary .yang file");
+        fs::write(&yang_file, yang_source)?;
 
         // 1. Content detection probe (without .yang extension):
         // Under legacy defect, content containing "module " was misclassified as "idl".
-        let detected_fmt = detect_format("schema_without_ext", yang_source)
-            .expect("detect_format failed on YANG content");
+        let detected_fmt = detect_format("schema_without_ext", yang_source)?;
         assert_eq!(
             detected_fmt,
             "yang",
@@ -768,8 +767,7 @@ mod tests {
 
         // 2. Directory auto-discovery probe:
         // Under legacy defect, format_exts lacked ("yang", "yang"), returning empty files.
-        let (disc_fmt, files) = discover_schema_targets(Some(&temp_dir), Some("auto"))
-            .expect("discover_schema_targets failed");
+        let (disc_fmt, files) = discover_schema_targets(Some(&temp_dir), Some("auto"))?;
         assert_eq!(
             disc_fmt,
             "yang",
@@ -781,12 +779,11 @@ mod tests {
             1,
             "DEFECT REPRODUCED: Directory auto-discovery found 0 files for .yang schemas"
         );
-        assert_eq!(files[0], yang_file);
+        assert_eq!(files.first(), Some(&yang_file));
 
         // 3. Lowering probe:
         // Under legacy defect, lack of YangTranslator or IDL routing emitted 0 structural elements.
-        let pkg = crate::translate_yang(yang_source, "ietf_interfaces")
-            .expect("translate_yang failed to parse YANG model");
+        let pkg = crate::translate_yang(yang_source, "ietf_interfaces")?;
         assert_eq!(pkg.name, "IetfInterfaces");
         assert!(
             pkg.attribute_defs.iter().any(|a| a.name == "interfaceRef"),
@@ -796,7 +793,11 @@ mod tests {
             pkg.part_defs.iter().any(|p| p.name == "Interfaces"),
             "DEFECT REPRODUCED: Yang lowering missing container PartDef 'Interfaces'"
         );
-        let interfaces_part = pkg.part_defs.iter().find(|p| p.name == "Interfaces").unwrap();
+        let interfaces_part = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "Interfaces")
+            .ok_or("missing Interfaces")?;
         assert!(
             interfaces_part.parts.iter().any(|p| p.name == "interface_val"),
             "DEFECT REPRODUCED: Yang lowering missing list part usage 'interface_val' inside Interfaces"
@@ -808,6 +809,7 @@ mod tests {
 
         // Cleanup
         let _ = fs::remove_dir_all(&temp_dir);
+        Ok(())
     }
 
     /// Self-removing temporary directory guard so fixtures are deleted even when an assertion panics.
@@ -820,7 +822,8 @@ mod tests {
     }
 
     #[test]
-    fn test_find_files_with_ext_recurses_nested_schema_dirs_deterministically() {
+    fn test_find_files_with_ext_recurses_nested_schema_dirs_deterministically(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let root = std::env::temp_dir().join(format!(
             "deap_yang_recursive_discovery_{}",
             std::process::id()
@@ -830,19 +833,19 @@ mod tests {
         let nested = guard.0.join("zeta").join("inner");
         let sibling = guard.0.join("alpha");
         let hidden = guard.0.join(".hidden_dir");
-        fs::create_dir_all(&nested).expect("create nested fixture dir");
-        fs::create_dir_all(&sibling).expect("create sibling fixture dir");
-        fs::create_dir_all(&hidden).expect("create hidden fixture dir");
+        fs::create_dir_all(&nested)?;
+        fs::create_dir_all(&sibling)?;
+        fs::create_dir_all(&hidden)?;
         let module_src = "module sample_module { prefix sm; container RootNode { leaf label { type string; } } }\n";
         let nested_file = nested.join("deep_module.yang");
         let sibling_file = sibling.join("side_module.YANG");
         let top_file = guard.0.join("top_module.yang");
-        fs::write(&nested_file, module_src).expect("write nested yang");
-        fs::write(&sibling_file, module_src).expect("write sibling yang");
-        fs::write(&top_file, module_src).expect("write top yang");
-        fs::write(hidden.join("ignored_module.yang"), module_src).expect("write hidden yang");
-        fs::write(guard.0.join(".dot_module.yang"), module_src).expect("write hidden file");
-        fs::write(nested.join("notes.txt"), "not a schema").expect("write non-schema file");
+        fs::write(&nested_file, module_src)?;
+        fs::write(&sibling_file, module_src)?;
+        fs::write(&top_file, module_src)?;
+        fs::write(hidden.join("ignored_module.yang"), module_src)?;
+        fs::write(guard.0.join(".dot_module.yang"), module_src)?;
+        fs::write(nested.join("notes.txt"), "not a schema")?;
 
         let found = find_files_with_ext(&guard.0, "yang");
         assert!(!found.is_empty(), "fixture guard: recursive discovery found zero .yang files");
@@ -852,16 +855,15 @@ mod tests {
             "expected sorted recursive discovery excluding hidden entries"
         );
 
-        let (fmt, files) = discover_schema_targets(Some(&guard.0), Some("auto"))
-            .expect("discover_schema_targets failed on nested yang fixture");
+        let (fmt, files) = discover_schema_targets(Some(&guard.0), Some("auto"))?;
         assert_eq!(fmt, "yang");
         assert_eq!(files.len(), 3, "auto-discovery must include nested .yang files: {files:?}");
         assert!(files.contains(&nested_file));
 
-        let (hint_fmt, hint_files) = discover_schema_targets(Some(&guard.0), Some("yang"))
-            .expect("discover_schema_targets failed with explicit yang hint");
+        let (hint_fmt, hint_files) = discover_schema_targets(Some(&guard.0), Some("yang"))?;
         assert_eq!(hint_fmt, "yang");
         assert_eq!(hint_files.len(), 3);
+        Ok(())
     }
 
     /// Verifies that `find_files_with_ext` excludes `target/`, `node_modules/`, and generated backlog directories (`features/`, `user-stories/`, `epics/`, `use-cases/`).
@@ -1018,10 +1020,10 @@ mod tests {
         assert!(detect_format("docs/designs/blueprint-01.digest.json", "").is_err());
         assert!(detect_format("digest.json", "").is_err());
         assert!(detect_format("arbitrary.json", r#"{"sha256":"abc","not_openapi":true}"#).is_err());
-        assert_eq!(detect_format("api.json", "").unwrap(), "openapi");
+        assert_eq!(detect_format("api.json", "").as_deref(), Ok("openapi"));
         assert_eq!(
-            detect_format("api.json", r#"{"openapi":"3.0.0","paths":{}}"#).unwrap(),
-            "openapi"
+            detect_format("api.json", r#"{"openapi":"3.0.0","paths":{}}"#).as_deref(),
+            Ok("openapi")
         );
     }
 

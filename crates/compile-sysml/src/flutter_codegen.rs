@@ -1256,20 +1256,21 @@ pub fn generate_schema_models_dart(
     out.push_str("abstract final class SchemaEntityIds {\n");
     let mut seen_camel_ids: BTreeSet<String> = BTreeSet::new();
     for node in nodes {
-        for candidate_id in [Some(node.id.as_str()), node.parent_id.as_deref()] {
-            if let Some(raw_id) = candidate_id {
-                let trimmed_id = raw_id.trim();
-                if trimmed_id.is_empty() {
-                    continue;
-                }
-                let camel_id = to_camel_case(trimmed_id);
-                if !camel_id.is_empty() && seen_camel_ids.insert(camel_id.clone()) {
-                    out.push_str(&format!(
-                        "  static const String {} = '{}';\n",
-                        camel_id,
-                        escape_dart_single_quoted(trimmed_id)
-                    ));
-                }
+        for raw_id in [Some(node.id.as_str()), node.parent_id.as_deref()]
+            .into_iter()
+            .flatten()
+        {
+            let trimmed_id = raw_id.trim();
+            if trimmed_id.is_empty() {
+                continue;
+            }
+            let camel_id = to_camel_case(trimmed_id);
+            if !camel_id.is_empty() && seen_camel_ids.insert(camel_id.clone()) {
+                out.push_str(&format!(
+                    "  static const String {} = '{}';\n",
+                    camel_id,
+                    escape_dart_single_quoted(trimmed_id)
+                ));
             }
         }
     }
@@ -2243,15 +2244,14 @@ mod tests {
     }"#;
 
     #[test]
-    fn test_emit_flutter_contracts_seeds_and_parity() {
+    fn test_emit_flutter_contracts_seeds_and_parity() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = ScopedTempDir::new("seeds");
         let model = build_test_sysml_model();
 
-        let report = emit_flutter_contracts(&tmp.path, &model, Some(TEST_TOPOLOGY_JSON))
-            .expect("emit_flutter_contracts must succeed");
+        let report = emit_flutter_contracts(&tmp.path, &model, Some(TEST_TOPOLOGY_JSON))?;
 
         assert!(report.seed_path.exists(), "generated_domain_seed.g.dart must exist");
-        let seed_content = fs::read_to_string(&report.seed_path).expect("read seed file");
+        let seed_content = fs::read_to_string(&report.seed_path)?;
 
         // 1. Five canonical SQLite tables must be referenced in DDL/DML
         assert!(seed_content.contains("type_definitions"));
@@ -2269,18 +2269,18 @@ mod tests {
         assert!(seed_content.contains("safety_radius_meters"));
         assert!(seed_content.contains("criticality_index"));
         assert_eq!(report.entities_count, 2);
+        Ok(())
     }
 
     #[test]
-    fn test_emit_flutter_contracts_typed_models_and_keys() {
+    fn test_emit_flutter_contracts_typed_models_and_keys() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = ScopedTempDir::new("models");
         let model = build_test_sysml_model();
 
-        let report = emit_flutter_contracts(&tmp.path, &model, Some(TEST_TOPOLOGY_JSON))
-            .expect("emit_flutter_contracts must succeed");
+        let report = emit_flutter_contracts(&tmp.path, &model, Some(TEST_TOPOLOGY_JSON))?;
 
         assert!(report.models_path.exists(), "generated_schema_models.g.dart must exist");
-        let models_content = fs::read_to_string(&report.models_path).expect("read models file");
+        let models_content = fs::read_to_string(&report.models_path)?;
 
         // 1. Dart 3 extension type views
         assert!(models_content.contains("extension type const DefenseUnitView"));
@@ -2303,18 +2303,18 @@ mod tests {
         assert!(models_content.contains("entityPropertyField"));
         assert!(models_content.contains("hudOverlay"));
         assert!(models_content.contains("splitPaneSash"));
+        Ok(())
     }
 
     #[test]
-    fn test_emit_flutter_contracts_solver_bridge_cabi() {
+    fn test_emit_flutter_contracts_solver_bridge_cabi() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = ScopedTempDir::new("bridge");
         let model = build_test_sysml_model();
 
-        let report = emit_flutter_contracts(&tmp.path, &model, Some(TEST_TOPOLOGY_JSON))
-            .expect("emit_flutter_contracts must succeed");
+        let report = emit_flutter_contracts(&tmp.path, &model, Some(TEST_TOPOLOGY_JSON))?;
 
         assert!(report.solver_bridge_path.exists(), "solver_bridge.g.dart must exist");
-        let bridge_content = fs::read_to_string(&report.solver_bridge_path).expect("read bridge file");
+        let bridge_content = fs::read_to_string(&report.solver_bridge_path)?;
 
         // 1. Zero-Trust C-ABI DeapByteBuffer struct
         assert!(bridge_content.contains("final class DeapByteBuffer extends Struct"));
@@ -2335,18 +2335,18 @@ mod tests {
         assert!(bridge_content.contains("class DeapNativeSolverIsolate"));
         assert!(bridge_content.contains("kDeapAbiVersion"));
         assert!(bridge_content.contains("kMaxFfiPayloadBytes"));
+        Ok(())
     }
 
     #[test]
-    fn test_emit_flutter_contracts_ui_spatial_contract_tests() {
+    fn test_emit_flutter_contracts_ui_spatial_contract_tests() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = ScopedTempDir::new("ui_tests");
         let model = build_test_sysml_model();
 
-        let report = emit_flutter_contracts(&tmp.path, &model, Some(TEST_TOPOLOGY_JSON))
-            .expect("emit_flutter_contracts must succeed");
+        let report = emit_flutter_contracts(&tmp.path, &model, Some(TEST_TOPOLOGY_JSON))?;
 
         assert!(report.ui_contract_test_path.exists(), "schema_ui_contract_test.g.dart must exist");
-        let raw_content = fs::read_to_string(&report.ui_contract_test_path).expect("read test file");
+        let raw_content = fs::read_to_string(&report.ui_contract_test_path)?;
         let test_content: String = raw_content
             .lines()
             .map(|l| l.split_once("//").map_or(l, |(code, _)| code))
@@ -2381,6 +2381,7 @@ mod tests {
         // Invariant 5 Lifecycle: tearDownAll SQLite disposal
         assert!(test_content.contains("tearDownAll"));
         assert!(test_content.contains(".close()"));
+        Ok(())
     }
 
     #[test]
@@ -2398,7 +2399,7 @@ mod tests {
     }
 
     #[test]
-    fn test_arch_02_emit_flutter_contracts_schema_hash_binds_full_ast() {
+    fn test_arch_02_emit_flutter_contracts_schema_hash_binds_full_ast() -> Result<(), Box<dyn std::error::Error>> {
         let tmp_a = ScopedTempDir::new("hash_a");
         let tmp_b = ScopedTempDir::new("hash_b");
 
@@ -2411,15 +2412,14 @@ mod tests {
         }
         assert_eq!(model_a.package_name, model_b.package_name);
 
-        let report_a = emit_flutter_contracts(&tmp_a.path, &model_a, Some(TEST_TOPOLOGY_JSON))
-            .expect("emit_flutter_contracts A must succeed");
-        let report_b = emit_flutter_contracts(&tmp_b.path, &model_b, Some(TEST_TOPOLOGY_JSON))
-            .expect("emit_flutter_contracts B must succeed");
+        let report_a = emit_flutter_contracts(&tmp_a.path, &model_a, Some(TEST_TOPOLOGY_JSON))?;
+        let report_b = emit_flutter_contracts(&tmp_b.path, &model_b, Some(TEST_TOPOLOGY_JSON))?;
 
         assert_ne!(
             report_a.schema_hash, report_b.schema_hash,
             "DEAP_SCHEMA_HASH must change when a PartDef attribute or constraint changes even if package_name is identical"
         );
+        Ok(())
     }
 
     #[test]

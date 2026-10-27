@@ -57,8 +57,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-SYSML-INGEST-CLI], [DO-330-TQL-4-INGEST-CLI]
 
-use clap::Parser;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -91,7 +90,7 @@ use ingest_sysml::{
 /// - Format defaults to `"auto"` when omitted by the caller and auto-resolves to `"code"` when `--source` is supplied.
 ///
 /// ## 3. Preconditions
-/// - Supplied CLI flags must be valid UTF-8 strings and OS paths parseable by `clap::Parser`.
+/// - Supplied CLI flags must be valid UTF-8 strings and OS paths parseable by `clap::Command`.
 ///
 /// ## 4. Postconditions
 /// - Produces an immutable [`CliArgs`] configuration record passed directly to [`run_ingestion`].
@@ -105,52 +104,209 @@ use ingest_sysml::{
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-INGEST-CLI/CliArgs], [DO-330-TQL-4-INGEST-CLI]
-#[derive(Parser, Debug)]
-#[command(
-    name = "ingest-sysml",
-    version = "0.1.0",
-    about = "SysML v2 Universal Ingestion Engine"
-)]
+#[derive(Debug)]
 pub struct CliArgs {
     /// Path to root of source code tree for AST extraction (can be combined with --schema for realization scoping)
-    #[arg(long)]
     pub source: Option<PathBuf>,
 
     /// Path to input schema file or directory containing schemas (default: schema/)
-    #[arg(short, long)]
     pub schema: Option<PathBuf>,
 
     /// Optional explicit SysML v2 root package name override for the ingested model
-    #[arg(long)]
     pub package: Option<String>,
 
     /// Schema format specification (auto, code, sysml, idl, openapi, markdown, yang, autosar, protobuf)
-    #[arg(short, long, default_value = "auto")]
     pub format: String,
 
     /// Source language parser selection for code ingestion (auto, dart, rust)
-    #[arg(long, default_value = "auto")]
     pub language: String,
 
     /// Output SysML v2 textual file path
-    #[arg(short, long, default_value = ".pipeline/schema.sysml")]
     pub out: PathBuf,
 
     /// Output schema digest JSON path
-    #[arg(short, long, default_value = ".pipeline/schema-digest.json")]
     pub digest: PathBuf,
 
     /// Comma-separated list of allowed part def names to preserve in closed-world scope
-    #[arg(long)]
     pub allowed_parts: Option<String>,
 
     /// Comma-separated list of entities to assert negative exclusion for (!exists(...))
-    #[arg(long)]
     pub negative_invariants: Option<String>,
 
     /// Populate or validate the SHA-256 incremental AST cache (.pipeline/cache/sysml_ast_cache.json)
-    #[arg(long)]
     pub cache_ast: bool,
+}
+
+impl CliArgs {
+    /// Builds the `clap::Command` specification for `ingest-sysml`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `CliArgs::build_command`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Constructs the command-line grammar explicitly without `clap_derive` macro lint-override emissions (`E0453`).
+    ///
+    /// ## 3. Preconditions
+    /// - None.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a configured `clap::Command` matching all `CliArgs` flags and defaults.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Infallible command construction.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-INGEST-CLI/CliArgs]
+    fn build_command() -> clap::Command {
+        use clap::{Arg, ArgAction, Command};
+        Command::new("ingest-sysml")
+            .version("0.1.0")
+            .about("SysML v2 Universal Ingestion Engine")
+            .arg(
+                Arg::new("source")
+                    .long("source")
+                    .value_parser(clap::value_parser!(PathBuf)),
+            )
+            .arg(
+                Arg::new("schema")
+                    .short('s')
+                    .long("schema")
+                    .value_parser(clap::value_parser!(PathBuf)),
+            )
+            .arg(Arg::new("package").long("package"))
+            .arg(
+                Arg::new("format")
+                    .short('f')
+                    .long("format")
+                    .default_value("auto"),
+            )
+            .arg(Arg::new("language").long("language").default_value("auto"))
+            .arg(
+                Arg::new("out")
+                    .short('o')
+                    .long("out")
+                    .default_value(".pipeline/schema.sysml")
+                    .value_parser(clap::value_parser!(PathBuf)),
+            )
+            .arg(
+                Arg::new("digest")
+                    .short('d')
+                    .long("digest")
+                    .default_value(".pipeline/schema-digest.json")
+                    .value_parser(clap::value_parser!(PathBuf)),
+            )
+            .arg(Arg::new("allowed_parts").long("allowed-parts"))
+            .arg(Arg::new("negative_invariants").long("negative-invariants"))
+            .arg(
+                Arg::new("cache_ast")
+                    .long("cache-ast")
+                    .action(ArgAction::SetTrue),
+            )
+    }
+
+    /// Extracts a [`CliArgs`] configuration struct from parsed `clap::ArgMatches`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `CliArgs::from_matches`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Total extraction over validated `ArgMatches` with deterministic default fallbacks.
+    ///
+    /// ## 3. Preconditions
+    /// - `matches` was produced by [`CliArgs::build_command`].
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a populated [`CliArgs`] struct.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(A)$ over matched arguments. Space Complexity: $O(A)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Uses `.unwrap_or_else` fallbacks; zero panics.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-INGEST-CLI/CliArgs]
+    fn from_matches(mut matches: clap::ArgMatches) -> Self {
+        Self {
+            source: matches.remove_one::<PathBuf>("source"),
+            schema: matches.remove_one::<PathBuf>("schema"),
+            package: matches.remove_one::<String>("package"),
+            format: matches
+                .remove_one::<String>("format")
+                .unwrap_or_else(|| "auto".to_string()),
+            language: matches
+                .remove_one::<String>("language")
+                .unwrap_or_else(|| "auto".to_string()),
+            out: matches
+                .remove_one::<PathBuf>("out")
+                .unwrap_or_else(|| PathBuf::from(".pipeline/schema.sysml")),
+            digest: matches
+                .remove_one::<PathBuf>("digest")
+                .unwrap_or_else(|| PathBuf::from(".pipeline/schema-digest.json")),
+            allowed_parts: matches.remove_one::<String>("allowed_parts"),
+            negative_invariants: matches.remove_one::<String>("negative_invariants"),
+            cache_ast: matches.get_flag("cache_ast"),
+        }
+    }
+
+    /// Parses process command-line arguments into [`CliArgs`].
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `CliArgs::parse`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Delegates to [`CliArgs::build_command`] and [`CliArgs::from_matches`].
+    ///
+    /// ## 3. Preconditions
+    /// - Standard OS argument vector is available.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns parsed [`CliArgs`] or exits via `clap` diagnostic formatting.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(A)$. Space Complexity: $O(A)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Invalid flags exit cleanly via `clap`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-INGEST-CLI/CliArgs]
+    pub fn parse() -> Self {
+        Self::from_matches(Self::build_command().get_matches())
+    }
+
+    /// Parses an explicit iterator of argument strings into [`CliArgs`].
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `CliArgs::parse_from`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Deterministic parsing of synthetic CLI argument sequences.
+    ///
+    /// ## 3. Preconditions
+    /// - `itr` yields valid argument tokens starting with binary name.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns parsed [`CliArgs`].
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(A)$. Space Complexity: $O(A)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Exits or reports via `clap` on invalid flags.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-INGEST-CLI/CliArgs]
+    pub fn parse_from<I, T>(itr: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<std::ffi::OsString> + Clone,
+    {
+        Self::from_matches(Self::build_command().get_matches_from(itr))
+    }
 }
 
 /// Derives a deterministic SysML v2 package identifier for an ingested source directory or explicit override.
@@ -419,7 +575,7 @@ pub fn run_ingestion_with_code(args: CliArgs) -> Result<(), (IngestExitCode, Str
                     )
                 })?
             };
-            let mut schema_parts = HashSet::new();
+            let mut schema_parts = BTreeSet::new();
             collect_declared_part_names(&ref_pkg, &mut schema_parts);
             filter_ast_to_realized_or_allowed(&mut pkg, &schema_parts);
         }
@@ -607,7 +763,7 @@ pub fn run_ingestion_with_code(args: CliArgs) -> Result<(), (IngestExitCode, Str
     }
 
     // Step 4: Apply closed-world AST filtering & negative invariant projection
-    let allowed_set: Option<HashSet<String>> = args.allowed_parts.as_ref().map(|s| {
+    let allowed_set: Option<BTreeSet<String>> = args.allowed_parts.as_ref().map(|s| {
         s.split(',')
             .map(|p| p.trim().to_string())
             .filter(|p| !p.is_empty())

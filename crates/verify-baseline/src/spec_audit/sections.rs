@@ -5,7 +5,7 @@
 
 use crate::spec_audit::markdown_ast::MarkdownDoc;
 use deap_core::rules::CodebaseRules;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
 /// Normalizes heading or pattern text into canonical comparison tokens.
@@ -218,7 +218,7 @@ impl SectionRule {
 #[derive(Debug, Clone)]
 pub struct SectionRules {
     /// Map of specification type key to its required section rules.
-    pub rules: HashMap<String, Vec<SectionRule>>,
+    pub rules: BTreeMap<String, Vec<SectionRule>>,
 }
 
 impl Default for SectionRules {
@@ -281,7 +281,7 @@ impl SectionRules {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SPEC-AUDIT-SECTIONS-SECTIONRULES-DEFAULT-RULES] | SysML v2: ActionDef(SectionRules::default_rules)
     pub fn default_rules() -> Self {
-        let mut rules: HashMap<String, Vec<SectionRule>> = HashMap::new();
+        let mut rules: BTreeMap<String, Vec<SectionRule>> = BTreeMap::new();
 
         // Epics
         let epic_sections = [
@@ -433,12 +433,11 @@ impl SectionRules {
                         let mut parsed_rules = Vec::new();
                         for item in arr {
                             if let Some(pair) = item.as_array() {
-                                if pair.len() >= 2 {
-                                    if let (Some(pat_str), Some(disp_str)) =
-                                        (pair[0].as_str(), pair[1].as_str())
-                                    {
-                                        parsed_rules.push(SectionRule::from_pattern(pat_str, disp_str));
-                                    }
+                                if let (Some(pat_str), Some(disp_str)) = (
+                                    pair.first().and_then(|v| v.as_str()),
+                                    pair.get(1).and_then(|v| v.as_str()),
+                                ) {
+                                    parsed_rules.push(SectionRule::from_pattern(pat_str, disp_str));
                                 }
                             }
                         }
@@ -458,12 +457,11 @@ impl SectionRules {
                         let mut parsed_rules = Vec::new();
                         for item in arr {
                             if let Some(pair) = item.as_array() {
-                                if pair.len() >= 2 {
-                                    if let (Some(pat_str), Some(disp_str)) =
-                                        (pair[0].as_str(), pair[1].as_str())
-                                    {
-                                        parsed_rules.push(SectionRule::from_pattern(pat_str, disp_str));
-                                    }
+                                if let (Some(pat_str), Some(disp_str)) = (
+                                    pair.first().and_then(|v| v.as_str()),
+                                    pair.get(1).and_then(|v| v.as_str()),
+                                ) {
+                                    parsed_rules.push(SectionRule::from_pattern(pat_str, disp_str));
                                 }
                             }
                         }
@@ -521,18 +519,18 @@ impl SectionRules {
 
                 if let Some(iface) = iface_opt {
                     let iface_lower = iface.to_lowercase();
-                    if iface_lower.contains("ui") || iface_lower.contains("gui") {
-                        if self.rules.contains_key("feature_ui") {
-                            return "feature_ui".to_string();
-                        }
-                    } else if iface_lower.contains("api") || iface_lower.contains("mcp") {
-                        if self.rules.contains_key("feature_api") {
-                            return "feature_api".to_string();
-                        }
-                    } else if iface_lower.contains("m2m") || iface_lower.contains("hardware") {
-                        if self.rules.contains_key("feature_m2m") {
-                            return "feature_m2m".to_string();
-                        }
+                    if (iface_lower.contains("ui") || iface_lower.contains("gui"))
+                        && self.rules.contains_key("feature_ui")
+                    {
+                        return "feature_ui".to_string();
+                    } else if (iface_lower.contains("api") || iface_lower.contains("mcp"))
+                        && self.rules.contains_key("feature_api")
+                    {
+                        return "feature_api".to_string();
+                    } else if (iface_lower.contains("m2m") || iface_lower.contains("hardware"))
+                        && self.rules.contains_key("feature_m2m")
+                    {
+                        return "feature_m2m".to_string();
                     }
                     let candidate = format!("feature_{}", iface_lower);
                     if self.rules.contains_key(&candidate) {
@@ -843,19 +841,20 @@ mod tests {
     }
 
     #[test]
-    fn test_epic_missing_sections() {
+    fn test_epic_missing_sections() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Epic Title
 ## 1. Context
 Prose here.
 "#;
-        let doc = parse_markdown(content).unwrap();
+        let doc = parse_markdown(content)?;
         let errors = validate_sections("epic", &doc, "docs/epics/epic-01-test.md");
         assert!(!errors.is_empty(), "Should report missing epic sections");
         assert!(errors.iter().any(|e| e.contains("2. Requirements & Checklist")));
+        Ok(())
     }
 
     #[test]
-    fn test_epic_complete_sections_passes() {
+    fn test_epic_complete_sections_passes() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Epic Complete
 ## 1. Context
 ## 2. Requirements & Checklist
@@ -869,13 +868,14 @@ Prose here.
 ## System-Level UML Class Diagram
 ## System State Machine Diagram
 "#;
-        let doc = parse_markdown(content).unwrap();
+        let doc = parse_markdown(content)?;
         let errors = validate_sections("epic", &doc, "docs/epics/epic-01-complete.md");
         assert!(errors.is_empty(), "Complete epic should have 0 section errors, got: {:?}", errors);
+        Ok(())
     }
 
     #[test]
-    fn test_feature_ui_sections() {
+    fn test_feature_ui_sections() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"| Attribute | Specification Detail |
 | :--- | :--- |
 | **Interface Type** | UI |
@@ -886,13 +886,14 @@ Prose here.
 ### 3. Visual Layout & Arrangement
 ### 4. Interactive Flow & States
 "#;
-        let doc = parse_markdown(content).unwrap();
+        let doc = parse_markdown(content)?;
         let errors = validate_sections("feature", &doc, "docs/features/feat-01-ui.md");
         assert!(errors.is_empty(), "Complete UI feature should have 0 section errors, got: {:?}", errors);
+        Ok(())
     }
 
     #[test]
-    fn test_heading_level_mismatch_fails() {
+    fn test_heading_level_mismatch_fails() -> Result<(), Box<dyn std::error::Error>> {
         // H3 instead of required H2 for "1. Context"
         let content = r#"# Epic Title
 ### 1. Context
@@ -904,16 +905,17 @@ Prose here.
 ## System-Level UML Class Diagram
 ## System State Machine Diagram
 "#;
-        let doc = parse_markdown(content).unwrap();
+        let doc = parse_markdown(content)?;
         let errors = validate_sections("epic", &doc, "docs/epics/epic-01-mismatch.md");
         assert!(
             errors.iter().any(|e| e.contains("1. Context")),
             "H3 should not satisfy H2 requirement for 1. Context"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_anti_boilerplate_gate() {
+    fn test_anti_boilerplate_gate() -> Result<(), Box<dyn std::error::Error>> {
         // Canned fallback strings and underflow steps/exceptions
         let canned_content = r#"# Use Case 01: System Vision
 ## 4. Main Success Scenario
@@ -925,7 +927,7 @@ Prose here.
 ## 5. Alternate and Exception Flows
 - 5a. Syntax error detected: System logs error.
 "#;
-        let doc_canned = parse_markdown(canned_content).unwrap();
+        let doc_canned = parse_markdown(canned_content)?;
         let errors = validate_use_case_anti_boilerplate(&doc_canned, canned_content, "docs/use-cases/uc-01.md");
         assert!(errors.iter().any(|e| e.contains("initiates workflow execution")));
         assert!(errors.iter().any(|e| e.contains("processes structural elements and validates semantic constraints")));
@@ -948,13 +950,15 @@ Prose here.
 - 5c. Malformed configuration flags: Compiler logs invalid argument diagnostics.
 - 5d. File permission error on workspace: Execution halts safely.
 "#;
-        let doc_valid = parse_markdown(valid_content).unwrap();
+        let doc_valid = parse_markdown(valid_content)?;
         let errors_valid = validate_use_case_anti_boilerplate(&doc_valid, valid_content, "docs/use-cases/uc-01.md");
         assert!(errors_valid.is_empty(), "Valid use case should have 0 boilerplate errors: {:?}", errors_valid);
+        Ok(())
     }
 
     #[test]
-    fn test_issue_449_epic_associated_use_cases_and_user_stories_sections_required() {
+    fn test_issue_449_epic_associated_use_cases_and_user_stories_sections_required(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let missing_assoc_content = r#"# Epic Complete
 ## 1. Context
 ## 2. Requirements & Checklist
@@ -965,7 +969,7 @@ Prose here.
 ## System-Level UML Class Diagram
 ## System State Machine Diagram
 "#;
-        let doc = parse_markdown(missing_assoc_content).unwrap();
+        let doc = parse_markdown(missing_assoc_content)?;
         let errors = validate_sections("epic", &doc, "docs/epics/epic-01-missing-assoc.md");
         assert!(
             errors.iter().any(|e| e.contains("Associated Use Cases & User Stories")),
@@ -982,6 +986,7 @@ Prose here.
             "Epic missing '#### Associated User Stories' must produce section validation error, got: {:?}",
             errors
         );
+        Ok(())
     }
 }
 

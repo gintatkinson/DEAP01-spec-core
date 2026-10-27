@@ -337,42 +337,33 @@ impl DossierSeverity {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-CLI-ARGS]
-#[derive(clap::Args, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct DefectDossierArgs {
     /// Path to markdown defect dossier body file
-    #[arg(long = "body-file")]
     pub body_file: Option<PathBuf>,
 
     /// Title of the defect issue (`[AUDIT] [file.ext]: <description>`)
-    #[arg(long = "title")]
     pub title: Option<String>,
 
     /// Repository identifier (`<owner>/<repo>`); auto-resolved from `git remote get-url origin` when omitted
-    #[arg(long = "repo")]
     pub repo: Option<String>,
 
     /// Override label to apply
-    #[arg(long = "label")]
     pub label: Option<String>,
 
     /// Issue tracker provider (github or gitlab)
-    #[arg(long = "provider", default_value = "github")]
     pub provider: String,
 
     /// Validate defect dossier schema without persisting to `.pipeline/defects/` or submitting to remote tracker
-    #[arg(long = "dry-run", alias = "validate-only")]
     pub dry_run: bool,
 
     /// Explicit publication flag (publishing to remote GitHub SSOT and closed-loop verification are active by default whenever `--dry-run` is not passed)
-    #[arg(long = "publish")]
     pub publish: bool,
 
     /// Existing GitHub issue number to overwrite atomically (`gh issue edit`) and verify closed-loop
-    #[arg(long = "issue")]
     pub issue: Option<u64>,
 
     /// Positional body file path
-    #[arg(value_name = "BODY_FILE")]
     pub target: Option<PathBuf>,
 }
 
@@ -876,15 +867,13 @@ fn validate_section_4_uml(
                 ));
             }
         }
-        Some(sev) => {
-            if !has_na_marker && !has_mermaid_fence {
-                errors.push(format!(
-                    "Section 4 for {} severity must contain 'N/A -- ' or a valid ```mermaid diagram (Check 8).",
-                    sev.as_str()
-                ));
-            }
+        Some(sev) if !has_na_marker && !has_mermaid_fence => {
+            errors.push(format!(
+                "Section 4 for {} severity must contain 'N/A -- ' or a valid ```mermaid diagram (Check 8).",
+                sev.as_str()
+            ));
         }
-        None => {}
+        Some(_) | None => {}
     }
 
     if has_mermaid_fence || full_content.contains("```mermaid") {

@@ -98,10 +98,10 @@ mod tests {
             let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
             let path = std::env::temp_dir().join(format!("verify_katex_{}_{}_{}", name, nanos, count));
-            fs::create_dir_all(&path).unwrap();
+            let _ = fs::create_dir_all(&path);
             Self { path }
         }
     }
@@ -113,41 +113,51 @@ mod tests {
     }
 
     #[test]
-    fn test_clean_katex_passes() {
+    fn test_clean_katex_passes() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("clean");
         let md = tmp.path.join("doc.md");
-        let mut f = File::create(md).unwrap();
+        let mut f = File::create(md)?;
         writeln!(
             f,
             "# Title\n\nInline math: $`x = 1`$\n\n$$\n\\begin{{aligned}}\na &= b \\\\\nc &= d\n\\end{{aligned}}\n$$\n"
-        )
-        .unwrap();
+        )?;
 
         assert!(check_latex_katex_syntax(&tmp.path).is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_unbalanced_display_math_fails() {
+    fn test_unbalanced_display_math_fails() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("unbalanced");
         let md = tmp.path.join("doc.md");
-        let mut f = File::create(md).unwrap();
-        writeln!(f, "# Title\n\n$$\nx = 1\n").unwrap();
+        let mut f = File::create(md)?;
+        writeln!(f, "# Title\n\n$$\nx = 1\n")?;
 
         let res = check_latex_katex_syntax(&tmp.path);
         assert!(res.is_err());
-        assert!(res.unwrap_err()[0].contains("Unbalanced $$"));
+        assert!(res
+            .err()
+            .unwrap_or_default()
+            .first()
+            .is_some_and(|e| e.contains("Unbalanced $$")));
+        Ok(())
     }
 
     #[test]
-    fn test_bare_alignment_outside_aligned_fails() {
+    fn test_bare_alignment_outside_aligned_fails() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("bare_amp");
         let md = tmp.path.join("doc.md");
-        let mut f = File::create(md).unwrap();
-        writeln!(f, "$$\nx & y = 1\n$$").unwrap();
+        let mut f = File::create(md)?;
+        writeln!(f, "$$\nx & y = 1\n$$")?;
 
         let res = check_latex_katex_syntax(&tmp.path);
         assert!(res.is_err());
-        assert!(res.unwrap_err()[0].contains("Bare alignment operator '&'"));
+        assert!(res
+            .err()
+            .unwrap_or_default()
+            .first()
+            .is_some_and(|e| e.contains("Bare alignment operator '&'")));
+        Ok(())
     }
 
     /// Verifies that Check 13 fails closed when a subdirectory cannot be traversed by `WalkDir`.
@@ -178,13 +188,13 @@ mod tests {
     /// Realises: [REQ-CHECK-13-FAIL-CLOSED-WALKDIR-TEST]
     #[cfg(unix)]
     #[test]
-    fn test_unreadable_subdir_fails_closed() {
+    fn test_unreadable_subdir_fails_closed() -> Result<(), Box<dyn std::error::Error>> {
         use std::os::unix::fs::PermissionsExt;
 
         let tmp = TempDir::new("unreadable_dir");
         let sub = tmp.path.join("locked_math_docs");
-        fs::create_dir_all(&sub).unwrap();
-        fs::set_permissions(&sub, fs::Permissions::from_mode(0o000)).unwrap();
+        fs::create_dir_all(&sub)?;
+        fs::set_permissions(&sub, fs::Permissions::from_mode(0o000))?;
 
         let res = check_latex_katex_syntax(&tmp.path);
         let _ = fs::set_permissions(&sub, fs::Permissions::from_mode(0o755));
@@ -193,5 +203,6 @@ mod tests {
             res.is_err(),
             "Check 13 must fail closed on unreadable directory, but returned Ok(())"
         );
+        Ok(())
     }
 }

@@ -671,16 +671,16 @@ mod tests {
     }
 
     impl TempDir {
-        fn new(name: &str) -> Self {
+        fn new(name: &str) -> Result<Self, std::io::Error> {
             static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
             let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
             let path = std::env::temp_dir().join(format!("verify_domain_{}_{}_{}", name, nanos, count));
-            fs::create_dir_all(&path).unwrap();
-            Self { path }
+            fs::create_dir_all(&path)?;
+            Ok(Self { path })
         }
     }
 
@@ -711,115 +711,123 @@ mod tests {
     }
 
     #[test]
-    fn test_check_19_downstream_exempt() {
-        let tmp = TempDir::new("c19_downstream");
+    fn test_check_19_downstream_exempt() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_downstream")?;
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_check_19_upstream_clean() {
-        let tmp = TempDir::new("c19_clean");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_check_19_upstream_clean() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_clean")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let src_dir = tmp.path.join("crates/test-crate/src");
-        fs::create_dir_all(&src_dir).unwrap();
-        let mut f = File::create(src_dir.join("lib.rs")).unwrap();
-        writeln!(f, "pub fn compute_hash(val: &[u8]) -> u64 {{ 42 }}").unwrap();
+        fs::create_dir_all(&src_dir)?;
+        let mut f = File::create(src_dir.join("lib.rs"))?;
+        writeln!(f, "pub fn compute_hash(val: &[u8]) -> u64 {{ 42 }}")?;
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_check_19_rejects_unflagged_m1_domain_dict() {
-        let tmp = TempDir::new("c19_m1_reject");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_check_19_rejects_unflagged_m1_domain_dict() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_m1_reject")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let src_dir = tmp.path.join("crates/test-crate/src");
-        fs::create_dir_all(&src_dir).unwrap();
-        let mut f = File::create(src_dir.join("lib.rs")).unwrap();
-        writeln!(f, "pub const FLIGHT_ENVELOPE_MAP: &[(&str, f64)] = &[(\"max_altitude\", 10000.0)];").unwrap();
+        fs::create_dir_all(&src_dir)?;
+        let mut f = File::create(src_dir.join("lib.rs"))?;
+        writeln!(f, "pub const FLIGHT_ENVELOPE_MAP: &[(&str, f64)] = &[(\"max_altitude\", 10000.0)];")?;
         let res = check_domain_agnostic_ast_cleanliness(&tmp.path);
         assert!(res.is_err());
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("domain-metamodel-typing-violation") && e.contains("FLIGHT_ENVELOPE_MAP")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_19_rejects_unvalidated_m1_entity_type() {
-        let tmp = TempDir::new("c19_m1_type");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_check_19_rejects_unvalidated_m1_entity_type() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_m1_type")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let src_dir = tmp.path.join("crates/test-crate/src");
-        fs::create_dir_all(&src_dir).unwrap();
-        let mut f = File::create(src_dir.join("lib.rs")).unwrap();
-        writeln!(f, "let config = (\"metamodel_type\", \"TacticalUAV\");").unwrap();
+        fs::create_dir_all(&src_dir)?;
+        let mut f = File::create(src_dir.join("lib.rs"))?;
+        writeln!(f, "let config = (\"metamodel_type\", \"TacticalUAV\");")?;
         let res = check_domain_agnostic_ast_cleanliness(&tmp.path);
         assert!(res.is_err());
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("domain-metamodel-typing-violation") && e.contains("TacticalUAV")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_19_accepts_valid_m2_metamodel_type() {
-        let tmp = TempDir::new("c19_m2_valid");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_check_19_accepts_valid_m2_metamodel_type() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_m2_valid")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let src_dir = tmp.path.join("crates/test-crate/src");
-        fs::create_dir_all(&src_dir).unwrap();
-        let mut f = File::create(src_dir.join("lib.rs")).unwrap();
-        writeln!(f, "let config = (\"metamodel_type\", \"Component\");").unwrap();
+        fs::create_dir_all(&src_dir)?;
+        let mut f = File::create(src_dir.join("lib.rs"))?;
+        writeln!(f, "let config = (\"metamodel_type\", \"Component\");")?;
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_check_19_template_rejection_of_unmapped_domain_dict() {
-        let tmp = TempDir::new("c19_tmpl_reject");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
-        fs::create_dir_all(tmp.path.join("crates")).unwrap();
+    fn test_check_19_template_rejection_of_unmapped_domain_dict() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_tmpl_reject")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
+        fs::create_dir_all(tmp.path.join("crates"))?;
         let tmpl_dir = tmp.path.join("skills/spec-conops-engineering/resources/units");
-        fs::create_dir_all(&tmpl_dir).unwrap();
-        let mut f = File::create(tmpl_dir.join("01_TEST_UNIT.md")).unwrap();
-        writeln!(f, "# Test Unit\n\nHardcoded payload: FLIGHT_ENVELOPE_MAP").unwrap();
+        fs::create_dir_all(&tmpl_dir)?;
+        let mut f = File::create(tmpl_dir.join("01_TEST_UNIT.md"))?;
+        writeln!(f, "# Test Unit\n\nHardcoded payload: FLIGHT_ENVELOPE_MAP")?;
         let res = check_domain_agnostic_ast_cleanliness(&tmp.path);
         assert!(res.is_err());
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("domain-metamodel-typing-violation") && e.contains("FLIGHT_ENVELOPE_MAP")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_19_template_em_dash_rejection() {
-        let tmp = TempDir::new("c19_tmpl_emdash");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
-        fs::create_dir_all(tmp.path.join("crates")).unwrap();
+    fn test_check_19_template_em_dash_rejection() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_tmpl_emdash")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
+        fs::create_dir_all(tmp.path.join("crates"))?;
         let tmpl_dir = tmp.path.join(".pipeline/templates");
-        fs::create_dir_all(&tmpl_dir).unwrap();
-        let mut f = File::create(tmpl_dir.join("spec.yaml")).unwrap();
-        writeln!(f, "description: Bad em dash \u{2014} here").unwrap();
+        fs::create_dir_all(&tmpl_dir)?;
+        let mut f = File::create(tmpl_dir.join("spec.yaml"))?;
+        writeln!(f, "description: Bad em dash \u{2014} here")?;
         let res = check_domain_agnostic_ast_cleanliness(&tmp.path);
         assert!(res.is_err());
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("Unicode em dash")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_19_rule_empennage_rejection() {
-        let tmp = TempDir::new("c19_rule_empennage");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
-        fs::create_dir_all(tmp.path.join("crates")).unwrap();
+    fn test_check_19_rule_empennage_rejection() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_rule_empennage")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
+        fs::create_dir_all(tmp.path.join("crates"))?;
         let rules_dir = tmp.path.join("rules");
-        fs::create_dir_all(&rules_dir).unwrap();
-        let mut f = File::create(rules_dir.join("test-rule.md")).unwrap();
-        writeln!(f, "# Rule\n\nControl surface: cruciform empennage").unwrap();
+        fs::create_dir_all(&rules_dir)?;
+        let mut f = File::create(rules_dir.join("test-rule.md"))?;
+        writeln!(f, "# Rule\n\nControl surface: cruciform empennage")?;
         let res = check_domain_agnostic_ast_cleanliness(&tmp.path);
         assert!(res.is_err());
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("empennage")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_19_conops_governance_rule_aerospace_decontamination() {
+    fn test_check_19_conops_governance_rule_aerospace_decontamination() -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .expect("repo root");
+            .ok_or("repo root")?;
         let rule_path = repo_root.join("rules/conops-mission-intent-integrity.md");
         assert!(rule_path.is_file(), "rules/conops-mission-intent-integrity.md must exist");
-        let content = fs::read_to_string(&rule_path).unwrap();
+        let content = fs::read_to_string(&rule_path)?;
 
         let forbidden_terms = [
             "civil airborne",
@@ -846,16 +854,18 @@ mod tests {
             "rules/conops-mission-intent-integrity.md contains forbidden aerospace domain concepts: {:?}",
             violations
         );
+        Ok(())
     }
 
     #[test]
-    fn test_check_19_current_repo_passes() {
+    fn test_check_19_current_repo_passes() -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .expect("repo root");
+            .ok_or("repo root")?;
         let res = check_domain_agnostic_ast_cleanliness(repo_root);
         assert!(res.is_ok(), "Current repo failed Check 19: {:?}", res.err());
+        Ok(())
     }
 
     /// Verifies that Check 19 fails closed when a `.rs` file or template file cannot be read as UTF-8.
@@ -885,23 +895,23 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-CHECK-19-FAIL-CLOSED-IO-TEST]
     #[test]
-    fn test_check_19_fails_closed_on_unreadable_non_utf8_files() {
-        let tmp = TempDir::new("c19_fail_closed_io");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_check_19_fails_closed_on_unreadable_non_utf8_files() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_fail_closed_io")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let src_dir = tmp.path.join("crates/test-crate/src");
-        fs::create_dir_all(&src_dir).unwrap();
-        fs::write(src_dir.join("lib.rs"), [0xFF, 0xFE, 0x00, 0x80]).unwrap();
+        fs::create_dir_all(&src_dir)?;
+        fs::write(src_dir.join("lib.rs"), [0xFF, 0xFE, 0x00, 0x80])?;
 
         let rules_dir = tmp.path.join("rules");
-        fs::create_dir_all(&rules_dir).unwrap();
-        fs::write(rules_dir.join("corrupt.md"), [0xFF, 0xFE, 0xFD]).unwrap();
+        fs::create_dir_all(&rules_dir)?;
+        fs::write(rules_dir.join("corrupt.md"), [0xFF, 0xFE, 0xFD])?;
 
         let res = check_domain_agnostic_ast_cleanliness(&tmp.path);
         assert!(
             res.is_err(),
             "Check 19 must fail closed on non-UTF-8 Rust or rule files, but returned Ok(())"
         );
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(
             errs.iter().any(|e| e.contains("lib.rs")),
             "Expected fail-closed diagnostic for lib.rs, got: {:?}",
@@ -912,5 +922,6 @@ mod tests {
             "Expected fail-closed diagnostic for corrupt.md, got: {:?}",
             errs
         );
+        Ok(())
     }
 }

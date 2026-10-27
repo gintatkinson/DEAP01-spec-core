@@ -772,7 +772,7 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_sysml_preserves_custom_safety_and_layer_stereotypes() {
+    fn test_compile_sysml_preserves_custom_safety_and_layer_stereotypes() -> Result<(), String> {
         let src = r#"
             package SafetyPkg {
                 part def FlightController {
@@ -791,8 +791,8 @@ mod tests {
                 }
             }
         "#;
-        let pkg = parse_sysml(src).expect("should parse custom safety stereotypes");
-        let part = pkg.part_defs.first().expect("FlightController should exist");
+        let pkg = parse_sysml(src).map_err(|e| format!("{e:?}"))?;
+        let part = pkg.part_defs.first().ok_or("FlightController should exist")?;
         assert_eq!(
             part.triggers_hazards,
             vec!["H-01".to_string(), "H-02".to_string()]
@@ -803,14 +803,15 @@ mod tests {
         let req = pkg
             .requirement_defs
             .first()
-            .expect("PitchBoundReq should exist");
+            .ok_or("PitchBoundReq should exist")?;
         assert_eq!(req.triggers_hazards, vec!["H-01".to_string()]);
         assert_eq!(req.safety_realises, vec!["SC-01".to_string()]);
         assert_eq!(req.layer.as_deref(), Some("Safety"));
+        Ok(())
     }
 
     #[test]
-    fn test_synthesize_mbd_bundle_and_export_artifacts() {
+    fn test_synthesize_mbd_bundle_and_export_artifacts() -> Result<(), String> {
         let src = r#"
             package AvionicsPkg {
                 port def TelemetryPort {
@@ -838,7 +839,7 @@ mod tests {
                 }
             }
         "#;
-        let pkg = parse_sysml(src).expect("should parse AvionicsPkg");
+        let pkg = parse_sysml(src).map_err(|e| format!("{e:?}"))?;
         let model = deap_core::sysml_ast::SysmlModel::from(pkg);
         let bundle = synthesize_mbd_bundle(&model);
         assert!(bundle.slreq_xml.contains("<slreq:Requirement"));
@@ -859,13 +860,14 @@ mod tests {
             std::process::id()
         ));
         std::fs::remove_dir_all(&tmp_dir).unwrap_or(());
-        let written = export_mbd_artifacts(&model, &tmp_dir).expect("export should succeed");
+        let written = export_mbd_artifacts(&model, &tmp_dir)?;
         assert_eq!(written.len(), 4);
         assert!(tmp_dir.join("requirements.slreqx").is_file());
         assert!(tmp_dir.join("stateflow_chart.sfx").is_file());
         assert!(tmp_dir.join("simulink_bus.m").is_file());
         assert!(tmp_dir.join("layer_contracts.json").is_file());
         std::fs::remove_dir_all(&tmp_dir).unwrap_or(());
+        Ok(())
     }
 
     /// Verifies XML entity escaping and structured transition endpoints in `synthesize_mbd_bundle`.

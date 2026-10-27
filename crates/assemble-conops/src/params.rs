@@ -1,6 +1,6 @@
 //! SysML AST Parameter Binding Engine and template token resolution.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -156,7 +156,7 @@ pub struct SubsystemPart {
     pub mass_kg: Option<f64>,
     pub power_w: Option<f64>,
     pub actions: Vec<String>,
-    pub attributes: HashMap<String, String>,
+    pub attributes: BTreeMap<String, String>,
     pub constraints: Vec<String>,
     pub source_file: String,
     pub source_line: Option<usize>,
@@ -198,7 +198,7 @@ impl Default for SubsystemPart {
             mass_kg: None,
             power_w: None,
             actions: Vec::new(),
-            attributes: HashMap::new(),
+            attributes: BTreeMap::new(),
             constraints: Vec::new(),
             source_file: String::new(),
             source_line: None,
@@ -363,8 +363,8 @@ impl LifecycleType {
 #[derive(Debug, Clone)]
 pub struct SysMLParameterBindingEngine {
     pub workspace_dir: PathBuf,
-    pub parameter_bindings: HashMap<String, String>,
-    pub explicit_keys: HashSet<String>,
+    pub parameter_bindings: BTreeMap<String, String>,
+    pub explicit_keys: BTreeSet<String>,
     pub inferred_system_identifier: Option<String>,
     pub detected_domain: String,
     pub is_non_aircraft: bool,
@@ -433,22 +433,22 @@ fn find_first_package(text: &str) -> Option<&str> {
     let bytes = text.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
-        if let Some(pos) = text[i..].find("package") {
+        if let Some(pos) = text.get(i..).and_then(|s| s.find("package")) {
             let start = i + pos;
             let end = start + 7;
-            let left_ok = start == 0 || !is_ident_char(bytes[start - 1]);
-            let right_ok = end < bytes.len() && bytes[end].is_ascii_whitespace();
+            let left_ok = start == 0 || !bytes.get(start - 1).copied().is_some_and(is_ident_char);
+            let right_ok = bytes.get(end).is_some_and(u8::is_ascii_whitespace);
             if left_ok && right_ok {
                 let mut j = end;
-                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                while bytes.get(j).is_some_and(u8::is_ascii_whitespace) {
                     j += 1;
                 }
                 let ident_start = j;
-                while j < bytes.len() && is_ident_char(bytes[j]) {
+                while bytes.get(j).copied().is_some_and(is_ident_char) {
                     j += 1;
                 }
                 if j > ident_start {
-                    return Some(&text[ident_start..j]);
+                    return text.get(ident_start..j);
                 }
             }
             i = end;
@@ -491,49 +491,52 @@ fn find_all_attributes(text: &str) -> Vec<(&str, &str)> {
     let bytes = text.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
-        if let Some(pos) = text[i..].find("attribute") {
+        if let Some(pos) = text.get(i..).and_then(|s| s.find("attribute")) {
             let start = i + pos;
             let end = start + 9;
-            let left_ok = start == 0 || !is_ident_char(bytes[start - 1]);
-            let right_ok = end < bytes.len() && bytes[end].is_ascii_whitespace();
+            let left_ok = start == 0 || !bytes.get(start - 1).copied().is_some_and(is_ident_char);
+            let right_ok = bytes.get(end).is_some_and(u8::is_ascii_whitespace);
             if left_ok && right_ok {
                 let mut j = end;
-                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                while bytes.get(j).is_some_and(u8::is_ascii_whitespace) {
                     j += 1;
                 }
                 let name_start = j;
-                while j < bytes.len() && is_ident_char(bytes[j]) {
+                while bytes.get(j).copied().is_some_and(is_ident_char) {
                     j += 1;
                 }
                 if j > name_start {
-                    let attr_name = &text[name_start..j];
-                    let mut k = j;
-                    while k < bytes.len() && bytes[k].is_ascii_whitespace() {
-                        k += 1;
-                    }
-                    if k < bytes.len() && bytes[k] == b':' {
-                        k += 1;
-                        while k < bytes.len() && bytes[k].is_ascii_whitespace() {
+                    if let Some(attr_name) = text.get(name_start..j) {
+                        let mut k = j;
+                        while bytes.get(k).is_some_and(u8::is_ascii_whitespace) {
                             k += 1;
                         }
-                        while k < bytes.len() && is_ident_char(bytes[k]) {
+                        if bytes.get(k) == Some(&b':') {
                             k += 1;
+                            while bytes.get(k).is_some_and(u8::is_ascii_whitespace) {
+                                k += 1;
+                            }
+                            while bytes.get(k).copied().is_some_and(is_ident_char) {
+                                k += 1;
+                            }
+                            while bytes.get(k).is_some_and(u8::is_ascii_whitespace) {
+                                k += 1;
+                            }
                         }
-                        while k < bytes.len() && bytes[k].is_ascii_whitespace() {
+                        if bytes.get(k) == Some(&b'=') {
                             k += 1;
-                        }
-                    }
-                    if k < bytes.len() && bytes[k] == b'=' {
-                        k += 1;
-                        let val_start = k;
-                        while k < bytes.len() && bytes[k] != b';' && bytes[k] != b'\n' {
-                            k += 1;
-                        }
-                        if k < bytes.len() && bytes[k] == b';' {
-                            let raw_val = text[val_start..k].trim().trim_matches(['"', '\'']);
-                            results.push((attr_name, raw_val));
-                            i = k + 1;
-                            continue;
+                            let val_start = k;
+                            while bytes.get(k).is_some_and(|&b| b != b';' && b != b'\n') {
+                                k += 1;
+                            }
+                            if bytes.get(k) == Some(&b';') {
+                                if let Some(val_slice) = text.get(val_start..k) {
+                                    let raw_val = val_slice.trim().trim_matches(['"', '\'']);
+                                    results.push((attr_name, raw_val));
+                                    i = k + 1;
+                                    continue;
+                                }
+                            }
                         }
                     }
                 }
@@ -574,10 +577,8 @@ fn find_all_attributes(text: &str) -> Vec<(&str, &str)> {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-FIND-LINE-NUMBER] | SysML v2: ActionDef(find_line_number)
 pub fn find_line_number(content: &str, byte_offset: usize) -> Option<usize> {
-    if byte_offset > content.len() {
-        return None;
-    }
-    let line = content.as_bytes()[..byte_offset]
+    let prefix = content.as_bytes().get(..byte_offset)?;
+    let line = prefix
         .iter()
         .filter(|&&b| b == b'\n')
         .count() + 1;
@@ -612,10 +613,10 @@ pub fn find_line_number(content: &str, byte_offset: usize) -> Option<usize> {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-EXTRACT-DOC-COMMENT-BEFORE] | SysML v2: ActionDef(extract_doc_comment_before)
 fn extract_doc_comment_before(content: &str, pos: usize) -> String {
-    let before = content[..pos].trim_end();
+    let before = content.get(..pos).unwrap_or("").trim_end();
     if let Some(doc_end) = before.strip_suffix("*/") {
         if let Some(start_pos) = doc_end.rfind("/*") {
-            let inner = &doc_end[start_pos + 2..];
+            let inner = doc_end.get(start_pos + 2..).unwrap_or("");
             let inner_trimmed = inner.trim();
             let stripped = inner_trimmed.strip_prefix("doc").unwrap_or(inner_trimmed).trim();
             return stripped.to_string();
@@ -652,8 +653,8 @@ fn extract_doc_comment_before(content: &str, pos: usize) -> String {
 /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-EXTRACT-INNER-DOC] | SysML v2: ActionDef(extract_inner_doc)
 fn extract_inner_doc(body: &str) -> String {
     if let Some(start_pos) = body.find("/*") {
-        if let Some(end_pos) = body[start_pos + 2..].find("*/") {
-            let inner = &body[start_pos + 2..start_pos + 2 + end_pos];
+        if let Some(end_pos) = body.get(start_pos + 2..).and_then(|s| s.find("*/")) {
+            let inner = body.get(start_pos + 2..start_pos + 2 + end_pos).unwrap_or("");
             let inner_trimmed = inner.trim();
             let stripped = inner_trimmed.strip_prefix("doc").unwrap_or(inner_trimmed).trim();
             return stripped.to_string();
@@ -691,7 +692,7 @@ fn extract_inner_doc(body: &str) -> String {
 /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-FIND-MATCHING-BRACE] | SysML v2: ActionDef(find_matching_brace)
 fn find_matching_brace(content: &str, open_pos: usize) -> Option<usize> {
     let bytes = content.as_bytes();
-    if open_pos >= bytes.len() || bytes[open_pos] != b'{' {
+    if bytes.get(open_pos) != Some(&b'{') {
         return None;
     }
     let mut depth = 0;
@@ -700,16 +701,16 @@ fn find_matching_brace(content: &str, open_pos: usize) -> Option<usize> {
     let mut in_line_comment = false;
     let mut in_block_comment = false;
 
-    while i < bytes.len() {
+    while let Some(&b) = bytes.get(i) {
         if in_line_comment {
-            if bytes[i] == b'\n' {
+            if b == b'\n' {
                 in_line_comment = false;
             }
             i += 1;
             continue;
         }
         if in_block_comment {
-            if bytes[i] == b'*' && i + 1 < bytes.len() && bytes[i + 1] == b'/' {
+            if b == b'*' && bytes.get(i + 1) == Some(&b'/') {
                 in_block_comment = false;
                 i += 2;
                 continue;
@@ -718,37 +719,37 @@ fn find_matching_brace(content: &str, open_pos: usize) -> Option<usize> {
             continue;
         }
         if in_str {
-            if bytes[i] == b'\\' {
+            if b == b'\\' {
                 i += 2;
                 continue;
             }
-            if bytes[i] == b'"' {
+            if b == b'"' {
                 in_str = false;
             }
             i += 1;
             continue;
         }
 
-        if bytes[i] == b'"' {
+        if b == b'"' {
             in_str = true;
             i += 1;
             continue;
         }
-        if bytes[i] == b'/' && i + 1 < bytes.len() {
-            if bytes[i + 1] == b'/' {
+        if b == b'/' {
+            if bytes.get(i + 1) == Some(&b'/') {
                 in_line_comment = true;
                 i += 2;
                 continue;
-            } else if bytes[i + 1] == b'*' {
+            } else if bytes.get(i + 1) == Some(&b'*') {
                 in_block_comment = true;
                 i += 2;
                 continue;
             }
         }
 
-        if bytes[i] == b'{' {
+        if b == b'{' {
             depth += 1;
-        } else if bytes[i] == b'}' {
+        } else if b == b'}' {
             depth -= 1;
             if depth == 0 {
                 return Some(i);
@@ -789,19 +790,19 @@ fn check_direction_word(before: &str) -> Option<(&'static str, usize)> {
     let trimmed = before.trim_end();
     if trimmed.ends_with("inout") {
         let start = trimmed.len() - 5;
-        if start == 0 || !is_ident_char(trimmed.as_bytes()[start - 1]) {
+        if start == 0 || !trimmed.as_bytes().get(start - 1).copied().is_some_and(is_ident_char) {
             return Some(("INOUT", start));
         }
     }
     if trimmed.ends_with("out") {
         let start = trimmed.len() - 3;
-        if start == 0 || !is_ident_char(trimmed.as_bytes()[start - 1]) {
+        if start == 0 || !trimmed.as_bytes().get(start - 1).copied().is_some_and(is_ident_char) {
             return Some(("OUT", start));
         }
     }
     if trimmed.ends_with("in") {
         let start = trimmed.len() - 2;
-        if start == 0 || !is_ident_char(trimmed.as_bytes()[start - 1]) {
+        if start == 0 || !trimmed.as_bytes().get(start - 1).copied().is_some_and(is_ident_char) {
             return Some(("IN", start));
         }
     }
@@ -848,16 +849,16 @@ pub fn parse_subsystem_ports_from_body(
     let mut i = 0;
 
     while i < bytes.len() {
-        if let Some(rel_pos) = body[i..].find("port") {
+        if let Some(rel_pos) = body.get(i..).and_then(|s| s.find("port")) {
             let port_idx = i + rel_pos;
-            let left_ok = port_idx == 0 || !is_ident_char(bytes[port_idx - 1]);
-            let right_ok = port_idx + 4 >= bytes.len() || !is_ident_char(bytes[port_idx + 4]);
+            let left_ok = port_idx == 0 || !bytes.get(port_idx - 1).copied().is_some_and(is_ident_char);
+            let right_ok = !bytes.get(port_idx + 4).copied().is_some_and(is_ident_char);
             if !left_ok || !right_ok {
                 i = port_idx + 4;
                 continue;
             }
 
-            let before = &body[..port_idx];
+            let before = body.get(..port_idx).unwrap_or("");
             let mut direction = "INOUT".to_string();
             let mut stmt_offset = port_idx;
             if let Some((dir, start)) = check_direction_word(before) {
@@ -866,64 +867,72 @@ pub fn parse_subsystem_ports_from_body(
             }
 
             let mut curr = port_idx + 4;
-            while curr < bytes.len() && bytes[curr].is_ascii_whitespace() {
+            while bytes.get(curr).is_some_and(u8::is_ascii_whitespace) {
                 curr += 1;
             }
 
-            if body[curr..].starts_with("def") && (curr + 3 >= bytes.len() || !is_ident_char(bytes[curr + 3])) {
+            if body.get(curr..).is_some_and(|s| s.starts_with("def"))
+                && !bytes.get(curr + 3).copied().is_some_and(is_ident_char)
+            {
                 curr += 3;
-                while curr < bytes.len() && bytes[curr].is_ascii_whitespace() {
+                while bytes.get(curr).is_some_and(u8::is_ascii_whitespace) {
                     curr += 1;
                 }
             }
 
             // Postfix direction check if not found prefix
             if direction == "INOUT" {
-                if body[curr..].starts_with("inout") && (curr + 5 >= bytes.len() || !is_ident_char(bytes[curr + 5])) {
+                if body.get(curr..).is_some_and(|s| s.starts_with("inout"))
+                    && !bytes.get(curr + 5).copied().is_some_and(is_ident_char)
+                {
                     direction = "INOUT".to_string();
                     curr += 5;
-                    while curr < bytes.len() && bytes[curr].is_ascii_whitespace() {
+                    while bytes.get(curr).is_some_and(u8::is_ascii_whitespace) {
                         curr += 1;
                     }
-                } else if body[curr..].starts_with("out") && (curr + 3 >= bytes.len() || !is_ident_char(bytes[curr + 3])) {
+                } else if body.get(curr..).is_some_and(|s| s.starts_with("out"))
+                    && !bytes.get(curr + 3).copied().is_some_and(is_ident_char)
+                {
                     direction = "OUT".to_string();
                     curr += 3;
-                    while curr < bytes.len() && bytes[curr].is_ascii_whitespace() {
+                    while bytes.get(curr).is_some_and(u8::is_ascii_whitespace) {
                         curr += 1;
                     }
-                } else if body[curr..].starts_with("in") && (curr + 2 >= bytes.len() || !is_ident_char(bytes[curr + 2])) {
+                } else if body.get(curr..).is_some_and(|s| s.starts_with("in"))
+                    && !bytes.get(curr + 2).copied().is_some_and(is_ident_char)
+                {
                     direction = "IN".to_string();
                     curr += 2;
-                    while curr < bytes.len() && bytes[curr].is_ascii_whitespace() {
+                    while bytes.get(curr).is_some_and(u8::is_ascii_whitespace) {
                         curr += 1;
                     }
                 }
             }
 
             let name_start = curr;
-            while curr < bytes.len() && is_ident_char(bytes[curr]) {
+            while bytes.get(curr).copied().is_some_and(is_ident_char) {
                 curr += 1;
             }
-            let port_name = body[name_start..curr].to_string();
+            let port_name = body.get(name_start..curr).unwrap_or("").to_string();
             if port_name.is_empty() {
                 i = port_idx + 4;
                 continue;
             }
 
-            while curr < bytes.len() && bytes[curr].is_ascii_whitespace() {
+            while bytes.get(curr).is_some_and(u8::is_ascii_whitespace) {
                 curr += 1;
             }
             let mut type_name = "Port".to_string();
-            if curr < bytes.len() && bytes[curr] == b':' {
+            if bytes.get(curr) == Some(&b':') {
                 curr += 1;
-                while curr < bytes.len() && bytes[curr].is_ascii_whitespace() {
+                while bytes.get(curr).is_some_and(u8::is_ascii_whitespace) {
                     curr += 1;
                 }
                 let type_start = curr;
-                while curr < bytes.len() && is_ident_char(bytes[curr]) {
+                while bytes.get(curr).copied().is_some_and(is_ident_char) {
                     curr += 1;
                 }
-                let t = body[type_start..curr].trim().to_string();
+                let t = body.get(type_start..curr).unwrap_or("").trim().to_string();
                 if !t.is_empty() {
                     type_name = t;
                 }
@@ -981,70 +990,69 @@ pub fn extract_subsystem_parts_from_sysml(content: &str, filepath: &str) -> Vec<
     let mut parts = Vec::new();
     let bytes = content.as_bytes();
     let mut i = 0;
-    let mut seen = HashSet::new();
+    let mut seen = BTreeSet::new();
 
     while i < bytes.len() {
-        if let Some(rel_pos) = content[i..].find("part") {
+        if let Some(rel_pos) = content.get(i..).and_then(|s| s.find("part")) {
             let part_pos = i + rel_pos;
-            let left_ok = part_pos == 0 || !is_ident_char(bytes[part_pos - 1]);
-            let right_ok = part_pos + 4 >= bytes.len() || !is_ident_char(bytes[part_pos + 4]);
+            let left_ok = part_pos == 0 || !bytes.get(part_pos - 1).copied().is_some_and(is_ident_char);
+            let right_ok = !bytes.get(part_pos + 4).copied().is_some_and(is_ident_char);
             if !left_ok || !right_ok {
                 i = part_pos + 4;
                 continue;
             }
 
             let mut curr = part_pos + 4;
-            while curr < bytes.len() && bytes[curr].is_ascii_whitespace() {
+            while bytes.get(curr).is_some_and(u8::is_ascii_whitespace) {
                 curr += 1;
             }
 
-            if curr < bytes.len()
-                && content[curr..].starts_with("def")
-                && (curr + 3 >= bytes.len() || !is_ident_char(bytes[curr + 3]))
+            if content.get(curr..).is_some_and(|s| s.starts_with("def"))
+                && !bytes.get(curr + 3).copied().is_some_and(is_ident_char)
             {
                 curr += 3;
-                while curr < bytes.len() && bytes[curr].is_ascii_whitespace() {
+                while bytes.get(curr).is_some_and(u8::is_ascii_whitespace) {
                     curr += 1;
                 }
             }
 
             let name_start = curr;
-            while curr < bytes.len() && is_ident_char(bytes[curr]) {
+            while bytes.get(curr).copied().is_some_and(is_ident_char) {
                 curr += 1;
             }
-            let name = content[name_start..curr].trim().to_string();
+            let name = content.get(name_start..curr).unwrap_or("").trim().to_string();
             if name.is_empty() || name == "def" {
                 i = part_pos + 4;
                 continue;
             }
 
-            while curr < bytes.len() && bytes[curr].is_ascii_whitespace() {
+            while bytes.get(curr).is_some_and(u8::is_ascii_whitespace) {
                 curr += 1;
             }
 
-            if curr < bytes.len() && bytes[curr] == b':' {
+            if bytes.get(curr) == Some(&b':') {
                 curr += 1;
-                while curr < bytes.len() && bytes[curr].is_ascii_whitespace() {
+                while bytes.get(curr).is_some_and(u8::is_ascii_whitespace) {
                     curr += 1;
                 }
-                while curr < bytes.len() && is_ident_char(bytes[curr]) {
+                while bytes.get(curr).copied().is_some_and(is_ident_char) {
                     curr += 1;
                 }
-                while curr < bytes.len() && bytes[curr].is_ascii_whitespace() {
+                while bytes.get(curr).is_some_and(u8::is_ascii_whitespace) {
                     curr += 1;
                 }
             }
 
             let part_line = find_line_number(content, part_pos);
 
-            let (body, next_idx) = if curr < bytes.len() && bytes[curr] == b'{' {
+            let (body, next_idx) = if bytes.get(curr) == Some(&b'{') {
                 let open_pos = curr;
                 if let Some(close_pos) = find_matching_brace(content, open_pos) {
-                    (&content[open_pos + 1..close_pos], close_pos + 1)
+                    (content.get(open_pos + 1..close_pos).unwrap_or(""), close_pos + 1)
                 } else {
-                    (&content[open_pos + 1..], bytes.len())
+                    (content.get(open_pos + 1..).unwrap_or(""), bytes.len())
                 }
-            } else if curr < bytes.len() && bytes[curr] == b';' {
+            } else if bytes.get(curr) == Some(&b';') {
                 ("", curr + 1)
             } else {
                 ("", part_pos + 4)
@@ -1055,7 +1063,7 @@ pub fn extract_subsystem_parts_from_sysml(content: &str, filepath: &str) -> Vec<
                 doc = extract_doc_comment_before(content, part_pos);
             }
 
-            let body_offset = if curr < bytes.len() && bytes[curr] == b'{' {
+            let body_offset = if bytes.get(curr) == Some(&b'{') {
                 curr + 1
             } else {
                 part_pos
@@ -1067,7 +1075,7 @@ pub fn extract_subsystem_parts_from_sysml(content: &str, filepath: &str) -> Vec<
                 Vec::new()
             };
 
-            let mut attributes = HashMap::new();
+            let mut attributes = BTreeMap::new();
             let mut mass_kg = None;
             let mut power_w = None;
             let mut actions = Vec::new();
@@ -1159,7 +1167,7 @@ pub fn extract_subsystem_parts_from_yaml(content: &str, filepath: &str) -> Vec<S
             mass_kg: None,
             power_w: None,
             actions: Vec::new(),
-            attributes: HashMap::new(),
+            attributes: BTreeMap::new(),
             constraints: Vec::new(),
             source_file: filepath.to_string(),
             source_line: line_num,
@@ -1208,7 +1216,7 @@ pub fn extract_subsystem_parts_from_json(content: &str, filepath: &str) -> Vec<S
             mass_kg: None,
             power_w: None,
             actions: Vec::new(),
-            attributes: HashMap::new(),
+            attributes: BTreeMap::new(),
             constraints: Vec::new(),
             source_file: filepath.to_string(),
             source_line: line_num,
@@ -1257,7 +1265,7 @@ pub fn extract_subsystem_parts_from_markdown(content: &str, filepath: &str) -> V
             mass_kg: None,
             power_w: None,
             actions: Vec::new(),
-            attributes: HashMap::new(),
+            attributes: BTreeMap::new(),
             constraints: Vec::new(),
             source_file: filepath.to_string(),
             source_line: line_num,
@@ -1312,7 +1320,7 @@ pub fn extract_subsystem_parts_from_interface_schema(content: &str, filepath: &s
             mass_kg: None,
             power_w: None,
             actions: Vec::new(),
-            attributes: HashMap::new(),
+            attributes: BTreeMap::new(),
             constraints: Vec::new(),
             source_file: filepath.to_string(),
             source_line: line_num,
@@ -1404,26 +1412,25 @@ pub fn extract_subsystem_parts(target: &Path) -> Vec<SubsystemPart> {
 fn extract_numeric_substring(val: &str) -> Option<&str> {
     let bytes = val.as_bytes();
     let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
+    while let Some(&b) = bytes.get(i) {
         let is_sign = (b == b'+' || b == b'-')
-            && i + 1 < bytes.len()
-            && (bytes[i + 1].is_ascii_digit()
-                || (bytes[i + 1] == b'.' && i + 2 < bytes.len() && bytes[i + 2].is_ascii_digit()));
+            && (bytes.get(i + 1).is_some_and(u8::is_ascii_digit)
+                || (bytes.get(i + 1) == Some(&b'.')
+                    && bytes.get(i + 2).is_some_and(u8::is_ascii_digit)));
         let is_digit = b.is_ascii_digit();
-        let is_dot_digit = b == b'.' && i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit();
+        let is_dot_digit = b == b'.' && bytes.get(i + 1).is_some_and(u8::is_ascii_digit);
 
         if is_sign || is_digit || is_dot_digit {
             let start = i;
             let mut j = if is_sign { i + 1 } else { i };
             let mut has_dot = false;
             let mut has_digits = false;
-            while j < bytes.len() {
-                if bytes[j].is_ascii_digit() {
+            while let Some(&bj) = bytes.get(j) {
+                if bj.is_ascii_digit() {
                     has_digits = true;
                     j += 1;
-                } else if bytes[j] == b'.' && !has_dot {
-                    if has_digits || (j + 1 < bytes.len() && bytes[j + 1].is_ascii_digit()) {
+                } else if bj == b'.' && !has_dot {
+                    if has_digits || bytes.get(j + 1).is_some_and(u8::is_ascii_digit) {
                         has_dot = true;
                         j += 1;
                     } else {
@@ -1434,7 +1441,7 @@ fn extract_numeric_substring(val: &str) -> Option<&str> {
                 }
             }
             if has_digits {
-                return Some(&val[start..j]);
+                return val.get(start..j);
             }
         }
         i += 1;
@@ -1479,23 +1486,26 @@ where
     let mut changed = false;
 
     while idx < bytes.len() {
-        if idx + 4 <= bytes.len() && bytes[idx] == b'{' && bytes[idx + 1] == b'{' {
+        if idx + 4 <= bytes.len()
+            && bytes.get(idx) == Some(&b'{')
+            && bytes.get(idx + 1) == Some(&b'{')
+        {
             let start = idx;
             let mut j = idx + 2;
             let mut found_end = None;
             while j + 1 < bytes.len() {
-                if bytes[j] == b'}' && bytes[j + 1] == b'}' {
+                if bytes.get(j) == Some(&b'}') && bytes.get(j + 1) == Some(&b'}') {
                     found_end = Some(j);
                     break;
                 }
-                if bytes[j] == b'\n' {
+                if bytes.get(j) == Some(&b'\n') {
                     break;
                 }
                 j += 1;
             }
 
             if let Some(end_pos) = found_end {
-                let inner = &text[start + 2..end_pos];
+                let inner = text.get(start + 2..end_pos).unwrap_or("");
                 let (key, default_val) = match inner.split_once(':') {
                     Some((k, d)) => (k, Some(d)),
                     None => (inner, None),
@@ -1510,7 +1520,9 @@ where
             }
         }
 
-        let ch = text[idx..].chars().next().unwrap();
+        let Some(ch) = text.get(idx..).and_then(|s| s.chars().next()) else {
+            break;
+        };
         result.push(ch);
         idx += ch.len_utf8();
     }
@@ -1557,15 +1569,23 @@ fn replace_word_case_insensitive(text: &str, target_word: &str, replacement: &st
     let mut search_idx = 0;
 
     while search_idx < lower_text.len() {
-        if let Some(pos) = lower_text[search_idx..].find(&lower_target) {
+        if let Some(pos) = lower_text.get(search_idx..).and_then(|s| s.find(&lower_target)) {
             let start = search_idx + pos;
             let end = start + target_len;
 
-            let left_ok = start == 0 || !(bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_');
-            let right_ok = end == bytes.len() || !(bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_');
+            let left_ok = start == 0
+                || !bytes
+                    .get(start - 1)
+                    .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+            let right_ok = end == bytes.len()
+                || !bytes
+                    .get(end)
+                    .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
 
             if left_ok && right_ok {
-                result.push_str(&text[last_idx..start]);
+                if let Some(prefix) = text.get(last_idx..start) {
+                    result.push_str(prefix);
+                }
                 result.push_str(replacement);
                 last_idx = end;
                 search_idx = end;
@@ -1576,7 +1596,9 @@ fn replace_word_case_insensitive(text: &str, target_word: &str, replacement: &st
             break;
         }
     }
-    result.push_str(&text[last_idx..]);
+    if let Some(tail) = text.get(last_idx..) {
+        result.push_str(tail);
+    }
     result
 }
 
@@ -1615,26 +1637,38 @@ fn replace_altitude_agl(text: &str, replacement: &str) -> String {
     let mut i = 0;
 
     while i < lower.len() {
-        if let Some(pos) = lower[i..].find("agl") {
+        if let Some(pos) = lower.get(i..).and_then(|s| s.find("agl")) {
             let agl_start = i + pos;
             let agl_end = agl_start + 3;
-            let right_ok = agl_end == bytes.len() || !(bytes[agl_end].is_ascii_alphanumeric() || bytes[agl_end] == b'_');
+            let right_ok = agl_end == bytes.len()
+                || !bytes
+                    .get(agl_end)
+                    .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
 
-            if right_ok && agl_start > 0 && bytes[agl_start - 1].is_ascii_whitespace() {
+            if right_ok && agl_start > 0 && bytes.get(agl_start - 1).is_some_and(u8::is_ascii_whitespace) {
                 let mut prev = agl_start - 1;
-                while prev > 0 && bytes[prev].is_ascii_whitespace() {
+                while prev > 0 && bytes.get(prev).is_some_and(u8::is_ascii_whitespace) {
                     prev -= 1;
                 }
                 let prev_end = prev + 1;
                 let mut word_start = prev;
-                while word_start > 0 && (bytes[word_start - 1].is_ascii_alphanumeric() || bytes[word_start - 1] == b'_') {
+                while word_start > 0
+                    && bytes
+                        .get(word_start - 1)
+                        .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_')
+                {
                     word_start -= 1;
                 }
-                let left_ok = word_start == 0 || !(bytes[word_start - 1].is_ascii_alphanumeric() || bytes[word_start - 1] == b'_');
-                let prev_word = &lower[word_start..prev_end];
+                let left_ok = word_start == 0
+                    || !bytes
+                        .get(word_start - 1)
+                        .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+                let prev_word = lower.get(word_start..prev_end).unwrap_or("");
 
                 if left_ok && (prev_word == "altitude" || prev_word == "m") {
-                    result.push_str(&text[last_idx..word_start]);
+                    if let Some(prefix) = text.get(last_idx..word_start) {
+                        result.push_str(prefix);
+                    }
                     result.push_str(replacement);
                     last_idx = agl_end;
                     i = agl_end;
@@ -1646,7 +1680,9 @@ fn replace_altitude_agl(text: &str, replacement: &str) -> String {
             break;
         }
     }
-    result.push_str(&text[last_idx..]);
+    if let Some(tail) = text.get(last_idx..) {
+        result.push_str(tail);
+    }
     result
 }
 
@@ -1685,20 +1721,25 @@ fn replace_astm_f3411(text: &str, replacement: &str) -> String {
     let mut i = 0;
 
     while i < lower.len() {
-        if let Some(pos) = lower[i..].find("astm") {
+        if let Some(pos) = lower.get(i..).and_then(|s| s.find("astm")) {
             let start = i + pos;
             let mut j = start + 4;
-            let left_ok = start == 0 || !(bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_');
+            let left_ok = start == 0
+                || !bytes
+                    .get(start - 1)
+                    .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
             if left_ok {
-                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                while bytes.get(j).is_some_and(u8::is_ascii_whitespace) {
                     j += 1;
                 }
-                if lower[j..].starts_with("f3411") {
+                if lower.get(j..).is_some_and(|s| s.starts_with("f3411")) {
                     j += 5;
-                    if lower[j..].starts_with("-22a") {
+                    if lower.get(j..).is_some_and(|s| s.starts_with("-22a")) {
                         j += 4;
                     }
-                    result.push_str(&text[last_idx..start]);
+                    if let Some(prefix) = text.get(last_idx..start) {
+                        result.push_str(prefix);
+                    }
                     result.push_str(replacement);
                     last_idx = j;
                     i = j;
@@ -1710,7 +1751,9 @@ fn replace_astm_f3411(text: &str, replacement: &str) -> String {
             break;
         }
     }
-    result.push_str(&text[last_idx..]);
+    if let Some(tail) = text.get(last_idx..) {
+        result.push_str(tail);
+    }
     result
 }
 
@@ -1748,17 +1791,19 @@ fn replace_roe_phrase(text: &str) -> String {
     let mut i = 0;
 
     while i < lower.len() {
-        if let Some(pos) = lower[i..].find("rules of engagement") {
+        if let Some(pos) = lower.get(i..).and_then(|s| s.find("rules of engagement")) {
             let start = i + pos;
             let mut end = start + "rules of engagement".len();
             let mut j = end;
-            while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+            while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
                 j += 1;
             }
-            if lower[j..].starts_with("(roe)") {
+            if lower.get(j..).is_some_and(|s| s.starts_with("(roe)")) {
                 end = j + 5;
             }
-            result.push_str(&text[last_idx..start]);
+            if let Some(prefix) = text.get(last_idx..start) {
+                result.push_str(prefix);
+            }
             result.push_str("operational safety interlocks");
             last_idx = end;
             i = end;
@@ -1766,7 +1811,9 @@ fn replace_roe_phrase(text: &str) -> String {
             break;
         }
     }
-    result.push_str(&text[last_idx..]);
+    if let Some(tail) = text.get(last_idx..) {
+        result.push_str(tail);
+    }
     result
 }
 
@@ -1780,7 +1827,7 @@ impl SysMLParameterBindingEngine {
     /// - Preserves deterministic state conservation and referential transparency for fn `SysMLParameterBindingEngine::new` (declaration #31) within `ASSEMBLE-CONOPS-PARAMS`.
     ///
     /// ## 3. Preconditions
-    /// - `parameter_values: Option<HashMap<String, String>>` must satisfy domain and type-safety constraints prior to invoking `SysMLParameterBindingEngine::new`.
+    /// - `parameter_values: Option<BTreeMap<String, String>>` must satisfy domain and type-safety constraints prior to invoking `SysMLParameterBindingEngine::new`.
     /// - `config_path: Option<&Path>` must satisfy domain and type-safety constraints prior to invoking `SysMLParameterBindingEngine::new`.
     /// - `workspace_dir: Option<&Path>` must satisfy domain and type-safety constraints prior to invoking `SysMLParameterBindingEngine::new`.
     /// - `auto_detect: bool` must satisfy domain and type-safety constraints prior to invoking `SysMLParameterBindingEngine::new`.
@@ -1802,7 +1849,7 @@ impl SysMLParameterBindingEngine {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-SYSMLPARAMETERBINDINGENGINE-NEW] | SysML v2: ActionDef(SysMLParameterBindingEngine::new)
     pub fn new(
-        parameter_values: Option<HashMap<String, String>>,
+        parameter_values: Option<BTreeMap<String, String>>,
         config_path: Option<&Path>,
         workspace_dir: Option<&Path>,
         auto_detect: bool,
@@ -1814,8 +1861,8 @@ impl SysMLParameterBindingEngine {
 
         let mut engine = Self {
             workspace_dir: ws.clone(),
-            parameter_bindings: HashMap::new(),
-            explicit_keys: HashSet::new(),
+            parameter_bindings: BTreeMap::new(),
+            explicit_keys: BTreeSet::new(),
             inferred_system_identifier: None,
             detected_domain: domain.unwrap_or("generic").to_string(),
             is_non_aircraft: false,
@@ -2577,9 +2624,9 @@ impl SysMLParameterBindingEngine {
                         .map(|c| c.trim())
                         .filter(|c| !c.is_empty())
                         .collect();
-                    if cells.len() >= 2 {
-                        let k = cells[0].replace(['*', '_', '`'], "").trim().to_string();
-                        let v = cells[1].trim().to_string();
+                    if let (Some(c0), Some(c1)) = (cells.first(), cells.get(1)) {
+                        let k = c0.replace(['*', '_', '`'], "").trim().to_string();
+                        let v = c1.trim().to_string();
                         if !k.is_empty() && !v.is_empty() && !k.starts_with("---") {
                             self.parameter_bindings.insert(k.clone(), v.clone());
                             self.parameter_bindings.insert(k.to_uppercase(), v.clone());
@@ -2626,7 +2673,7 @@ impl SysMLParameterBindingEngine {
             .unwrap_or(val)
             .to_string();
 
-        let mut aliases = HashMap::new();
+        let mut aliases = BTreeMap::new();
 
         if lower.contains("system_identifier")
             || lower.contains("mission_system_name")
@@ -3428,7 +3475,7 @@ impl SysMLParameterBindingEngine {
             .parameter_bindings
             .get("SYSTEM_IDENTIFIER")
             .or_else(|| self.parameter_bindings.get("SYSTEM_NAME"))
-            .or_else(|| self.inferred_system_identifier.as_ref())
+            .or(self.inferred_system_identifier.as_ref())
             .cloned()
             .unwrap_or_else(|| "Autonomous Cyber-Physical System".to_string());
 
@@ -3455,10 +3502,26 @@ impl SysMLParameterBindingEngine {
         });
 
         if !self.parameter_bindings.contains_key("CORE_MISSION_CAPABILITIES") {
-            let c1 = self.parameter_bindings.get("CORE_CAPABILITY_1").unwrap();
-            let c2 = self.parameter_bindings.get("CORE_CAPABILITY_2").unwrap();
-            let c3 = self.parameter_bindings.get("CORE_CAPABILITY_3").unwrap();
-            let c4 = self.parameter_bindings.get("CORE_CAPABILITY_4").unwrap();
+            let c1 = self
+                .parameter_bindings
+                .get("CORE_CAPABILITY_1")
+                .cloned()
+                .unwrap_or_default();
+            let c2 = self
+                .parameter_bindings
+                .get("CORE_CAPABILITY_2")
+                .cloned()
+                .unwrap_or_default();
+            let c3 = self
+                .parameter_bindings
+                .get("CORE_CAPABILITY_3")
+                .cloned()
+                .unwrap_or_default();
+            let c4 = self
+                .parameter_bindings
+                .get("CORE_CAPABILITY_4")
+                .cloned()
+                .unwrap_or_default();
             self.parameter_bindings.insert(
                 "CORE_MISSION_CAPABILITIES".to_string(),
                 format!("  1. {c1}\n  2. {c2}\n  3. {c3}\n  4. {c4}"),
@@ -3666,7 +3729,7 @@ impl SysMLParameterBindingEngine {
         let sys_id = self
             .parameter_bindings
             .get("SYSTEM_IDENTIFIER")
-            .or_else(|| self.inferred_system_identifier.as_ref())
+            .or(self.inferred_system_identifier.as_ref())
             .cloned()
             .unwrap_or_else(|| "AutonomousSystem".to_string());
 
@@ -3729,7 +3792,9 @@ impl SysMLParameterBindingEngine {
             // Rank spacers between consecutive nodes for top-to-bottom layout
             if node_ids.len() > 1 {
                 for i in 0..node_ids.len().saturating_sub(1) {
-                    super_lines.push(format!("        {} ~~~ {}", node_ids[i], node_ids[i + 1]));
+                    if let (Some(n_i), Some(n_next)) = (node_ids.get(i), node_ids.get(i + 1)) {
+                        super_lines.push(format!("        {n_i} ~~~ {n_next}"));
+                    }
                 }
             }
         }
@@ -3760,11 +3825,12 @@ impl SysMLParameterBindingEngine {
         let mut conn_idx = 5;
         if node_ids.len() > 1 {
             for i in 0..node_ids.len().saturating_sub(1) {
-                super_lines.push(format!(
-                    "    {} -->|\"CONN-{:02}: Inter-Subsystem Interface Bus\"| {}",
-                    node_ids[i], conn_idx, node_ids[i + 1]
-                ));
-                conn_idx += 1;
+                if let (Some(n_i), Some(n_next)) = (node_ids.get(i), node_ids.get(i + 1)) {
+                    super_lines.push(format!(
+                        "    {n_i} -->|\"CONN-{conn_idx:02}: Inter-Subsystem Interface Bus\"| {n_next}"
+                    ));
+                    conn_idx += 1;
+                }
             }
         }
         super_lines.push(format!("    SupportEquipment -.->|\"CONN-{:02}: Auxiliary Power & Diagnostics [PORT_SUPP_PWR]\"| {target_node}", conn_idx));
@@ -4024,7 +4090,7 @@ impl SysMLParameterBindingEngine {
         let sys_id = self
             .parameter_bindings
             .get("SYSTEM_IDENTIFIER")
-            .or_else(|| self.inferred_system_identifier.as_ref())
+            .or(self.inferred_system_identifier.as_ref())
             .cloned()
             .unwrap_or_else(|| "AutonomousSystem".to_string());
 
@@ -4373,7 +4439,7 @@ impl SysMLParameterBindingEngine {
             .parameter_bindings
             .get("SYSTEM_IDENTIFIER")
             .or_else(|| self.parameter_bindings.get("SYSTEM_NAME"))
-            .or_else(|| self.inferred_system_identifier.as_ref())
+            .or(self.inferred_system_identifier.as_ref())
             .map(|s| s.as_str())
             .unwrap_or("Autonomous Cyber-Physical System");
 
@@ -4525,7 +4591,7 @@ mod tests {
 
     #[test]
     fn test_parameter_substitution_and_inline_default() {
-        let mut bindings = HashMap::new();
+        let mut bindings = BTreeMap::new();
         bindings.insert("SYSTEM_IDENTIFIER".to_string(), "AutonomousPlatform".to_string());
         let engine = SysMLParameterBindingEngine::new(Some(bindings), None, None, false, None);
 
@@ -4558,7 +4624,7 @@ mod tests {
 
     #[test]
     fn test_interlock_prefix_saf_compatibility() {
-        let mut bindings = HashMap::new();
+        let mut bindings = BTreeMap::new();
         bindings.insert("INTERLOCK_PREFIX".to_string(), "SAF".to_string());
         let engine = SysMLParameterBindingEngine::new(Some(bindings), None, None, false, None);
         assert_eq!(engine.resolve_token("INTERLOCK_PREFIX", None), "SAF");
@@ -4570,7 +4636,7 @@ mod tests {
 
     #[test]
     fn test_mass_and_physics_derivation() {
-        let mut bindings = HashMap::new();
+        let mut bindings = BTreeMap::new();
         bindings.insert("TOTAL_MTOW_KG".to_string(), "100.0".to_string());
         bindings.insert("V_MAX_MPS".to_string(), "20.0".to_string());
         let engine = SysMLParameterBindingEngine::new(Some(bindings), None, None, false, None);
@@ -4592,13 +4658,16 @@ mod tests {
     }
 
     #[test]
-    fn test_super_system_and_subsystem_architecture_synthesis_contract() {
+    fn test_super_system_and_subsystem_architecture_synthesis_contract() -> Result<(), String> {
         let mut engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
         engine.ast_part_names.insert("Avionics".to_string());
         engine.ast_part_names.insert("Actuation".to_string());
         engine._derive_subsystem_architecture();
 
-        let super_arch = engine.parameter_bindings.get("SUPER_SYSTEM_ARCHITECTURE").unwrap();
+        let super_arch = engine
+            .parameter_bindings
+            .get("SUPER_SYSTEM_ARCHITECTURE")
+            .ok_or_else(|| "missing SUPER_SYSTEM_ARCHITECTURE".to_string())?;
         assert!(super_arch.contains("External_Actors"), "Super-system architecture must include External_Actors");
         assert!(super_arch.contains("Supervisory_Segment"), "Super-system architecture must include Supervisory_Segment");
         assert!(super_arch.contains("Support_Segment"), "Super-system architecture must include Support_Segment");
@@ -4607,7 +4676,10 @@ mod tests {
         assert!(super_arch.contains("• PORT-"), "Super-system architecture must include embedded port attributes");
         assert!(!super_arch.contains("Core_Tier"), "Super-system architecture must eliminate nested tier subgraphs per Rule E5 (refs #277)");
 
-        let sub_arch = engine.parameter_bindings.get("SUBSYSTEM_ARCHITECTURE_SECTION").unwrap();
+        let sub_arch = engine
+            .parameter_bindings
+            .get("SUBSYSTEM_ARCHITECTURE_SECTION")
+            .ok_or_else(|| "missing SUBSYSTEM_ARCHITECTURE_SECTION".to_string())?;
         assert!(sub_arch.contains("- **Functional Purpose & Scope:**"), "Subsystem architecture must contain Functional Purpose & Scope");
         assert!(sub_arch.contains("- **Physical & Logical Interface / Port Allocations:**"), "Subsystem architecture must contain Physical & Logical Interface");
         assert!(sub_arch.contains("- **Power, Mass & Resource Envelopes:**"), "Subsystem architecture must contain Power, Mass & Resource Envelopes");
@@ -4616,15 +4688,19 @@ mod tests {
         assert!(sub_arch.contains("- **SSOT Ground Truth Mapping:**"), "Subsystem architecture must contain SSOT Ground Truth Mapping bullet");
         assert!(sub_arch.contains("SysML v2: `part def Avionics`"), "Subsystem architecture must bind AST part def node");
 
-        let seg_matrix = engine.parameter_bindings.get("SEGMENT_ALLOCATION_MATRIX").unwrap();
+        let seg_matrix = engine
+            .parameter_bindings
+            .get("SEGMENT_ALLOCATION_MATRIX")
+            .ok_or_else(|| "missing SEGMENT_ALLOCATION_MATRIX".to_string())?;
         assert!(seg_matrix.contains("SSOT Ground Truth Source & Citation"), "Segment allocation matrix must contain SSOT Ground Truth column");
         assert!(seg_matrix.contains("SysML v2: `part def Avionics`"), "Segment allocation matrix must bind AST part def node");
+        Ok(())
     }
 
     #[test]
-    fn test_issue_248_pure_schema_driven_containment_and_zero_fallback_recovery() {
+    fn test_issue_248_pure_schema_driven_containment_and_zero_fallback_recovery() -> Result<(), Box<dyn std::error::Error>> {
         // 1. Expendable / Zero-Recovery platform must NOT have hardcoded recovery base or RTB transit
-        let mut exp_bindings = HashMap::new();
+        let mut exp_bindings = BTreeMap::new();
         exp_bindings.insert("IS_EXPENDABLE".to_string(), "true".to_string());
         let exp_engine = SysMLParameterBindingEngine::new(Some(exp_bindings), None, None, false, None);
 
@@ -4664,7 +4740,7 @@ mod tests {
         );
 
         // 3. User-supplied parachute AST parameters must be dynamically calculated (not hardcoded 1.5 m/s)
-        let mut chute_bindings = HashMap::new();
+        let mut chute_bindings = BTreeMap::new();
         chute_bindings.insert("TOTAL_MTOW_KG".to_string(), "200.0".to_string());
         chute_bindings.insert("AIR_DENSITY_KGM3".to_string(), "1.2".to_string());
         chute_bindings.insert("S_CANOPY".to_string(), "50.0".to_string());
@@ -4675,23 +4751,23 @@ mod tests {
 
         let v_mit: f64 = chute_engine
             .resolve_token("V_TERMINAL_MITIGATED_MPS", None)
-            .parse()
-            .expect("V_TERMINAL_MITIGATED_MPS must be numeric");
+            .parse()?;
         // v_calc = sqrt(2 * 200 * 9.80665 / (1.2 * 50 * 1.5)) = sqrt(3922.66 / 90) = 6.60 m/s
         assert!(
             (v_mit - 6.60).abs() < 0.1,
             "Mitigated terminal velocity must be dynamically derived from AST parameters: got {v_mit}"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_defect_302_unified_schema_support_in_assemble_conops() {
+    fn test_defect_302_unified_schema_support_in_assemble_conops() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
 
         // 1. YAML schema ingestion
         let yaml_content = "subsystems:\n  - FlightComputer\n  - NavigationUnit\nOPERATIONAL_RANGE_KM: 500\n";
         let temp_yaml = std::env::temp_dir().join("test_schema_302.yaml");
-        std::fs::write(&temp_yaml, yaml_content).unwrap();
+        std::fs::write(&temp_yaml, yaml_content)?;
         let ingested_yaml = engine.ingest_file(&temp_yaml);
         std::fs::remove_file(&temp_yaml).ok();
         assert!(ingested_yaml, "YAML schema ingestion must succeed");
@@ -4702,7 +4778,7 @@ mod tests {
         // 2. Markdown architecture table ingestion
         let md_content = "# Specifications\n\n### 4.3 Subsystem Architecture\n| Subsystem | Function |\n|---|---|\n| GuidanceComputer | Navigation and guidance |\n| SensorPayload | High-res electro-optical |\n";
         let temp_md = std::env::temp_dir().join("test_schema_302.md");
-        std::fs::write(&temp_md, md_content).unwrap();
+        std::fs::write(&temp_md, md_content)?;
         let ingested_md = engine.ingest_file(&temp_md);
         std::fs::remove_file(&temp_md).ok();
         assert!(ingested_md, "Markdown architecture table ingestion must succeed");
@@ -4712,16 +4788,17 @@ mod tests {
         // 3. Protobuf ingestion
         let proto_content = "syntax = \"proto3\";\nservice TelemetryGateway {\n  rpc Stream();\n}\n";
         let temp_proto = std::env::temp_dir().join("test_schema_302.proto");
-        std::fs::write(&temp_proto, proto_content).unwrap();
+        std::fs::write(&temp_proto, proto_content)?;
         let ingested_proto = engine.ingest_file(&temp_proto);
         std::fs::remove_file(&temp_proto).ok();
         assert!(ingested_proto, "Protobuf schema ingestion must succeed");
         assert!(engine.ast_part_names.contains("TelemetryGateway"));
+        Ok(())
     }
 
     #[test]
     fn test_defect_313_zero_weapon_crypto_zeroization_and_abstract_authority_handoff() {
-        let mut exp_bindings = HashMap::new();
+        let mut exp_bindings = BTreeMap::new();
         exp_bindings.insert("IS_EXPENDABLE".to_string(), "true".to_string());
         let exp_engine = SysMLParameterBindingEngine::new(Some(exp_bindings), None, None, false, None);
 
@@ -4753,7 +4830,7 @@ mod tests {
     }
 
     #[test]
-    fn test_defect_316_synthesize_subsystem_architecture_provenance_columns() {
+    fn test_defect_316_synthesize_subsystem_architecture_provenance_columns() -> Result<(), Box<dyn std::error::Error>> {
         let sysml_code = r#"package AutonomousPlatform {
     part def PrimaryOBC {
         doc /* Core onboard computer */
@@ -4763,7 +4840,7 @@ mod tests {
 }
 "#;
         let temp_sysml = std::env::temp_dir().join("test_schema_316.sysml");
-        std::fs::write(&temp_sysml, sysml_code).unwrap();
+        std::fs::write(&temp_sysml, sysml_code)?;
         let mut engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
         engine.ingest_file(&temp_sysml);
         let subsys_sec = engine.resolve_token("SUBSYSTEM_ARCHITECTURE_SECTION", None);
@@ -4795,10 +4872,11 @@ mod tests {
             subsys_sec.contains(&expected_obc),
             "Resource budgets table must contain '{expected_obc}': got:\n{subsys_sec}"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_extract_subsystem_parts_preserves_source_provenance() {
+    fn test_extract_subsystem_parts_preserves_source_provenance() -> Result<(), String> {
         let sysml_code = r#"package AutonomousPlatform {
     part def PrimaryOBC {
         doc /* Core onboard computer */
@@ -4809,24 +4887,27 @@ mod tests {
 "#;
         let parts = extract_subsystem_parts_from_sysml(sysml_code, "schema/Platform.sysml");
         assert_eq!(parts.len(), 1);
-        let obc = &parts[0];
+        let obc = parts.first().ok_or_else(|| "missing obc".to_string())?;
         assert_eq!(obc.name, "PrimaryOBC");
         assert_eq!(obc.source_file, "schema/Platform.sysml");
         assert_eq!(obc.source_line, Some(2));
         assert_eq!(obc.epistemic_tier, "[TIER-1: OEM]");
         assert_eq!(obc.ports.len(), 2);
-        assert_eq!(obc.ports[0].name, "c2_link");
-        assert_eq!(obc.ports[0].direction, "INOUT");
-        assert_eq!(obc.ports[0].source_line, Some(4));
-        assert_eq!(obc.ports[0].epistemic_tier, "[TIER-1: OEM]");
-        assert_eq!(obc.ports[1].name, "actuator_bus");
-        assert_eq!(obc.ports[1].direction, "OUT");
-        assert_eq!(obc.ports[1].source_line, Some(5));
-        assert_eq!(obc.ports[1].epistemic_tier, "[TIER-1: OEM]");
+        let port0 = obc.ports.first().ok_or_else(|| "missing port0".to_string())?;
+        assert_eq!(port0.name, "c2_link");
+        assert_eq!(port0.direction, "INOUT");
+        assert_eq!(port0.source_line, Some(4));
+        assert_eq!(port0.epistemic_tier, "[TIER-1: OEM]");
+        let port1 = obc.ports.get(1).ok_or_else(|| "missing port1".to_string())?;
+        assert_eq!(port1.name, "actuator_bus");
+        assert_eq!(port1.direction, "OUT");
+        assert_eq!(port1.source_line, Some(5));
+        assert_eq!(port1.epistemic_tier, "[TIER-1: OEM]");
+        Ok(())
     }
 
     #[test]
-    fn test_conops_scenarios_synthesize_from_ast_statechart() {
+    fn test_conops_scenarios_synthesize_from_ast_statechart() -> Result<(), Box<dyn std::error::Error>> {
         let sysml_model = r#"package MedicalInfusionPlatform {
     part def InfusionPumpUnit {
         doc /* Core infusion pump subsystem */
@@ -4842,7 +4923,7 @@ mod tests {
 }
 "#;
         let temp_sysml = std::env::temp_dir().join("test_schema_317.sysml");
-        std::fs::write(&temp_sysml, sysml_model).unwrap();
+        std::fs::write(&temp_sysml, sysml_model)?;
         let mut engine = SysMLParameterBindingEngine::new(None, None, None, false, Some("medical"));
         engine.ingest_file(&temp_sysml);
         std::fs::remove_file(&temp_sysml).ok();
@@ -4868,18 +4949,19 @@ mod tests {
         assert!(!substituted.contains("weapons release"));
         assert!(substituted.contains("INT-01"));
         assert!(substituted.contains("high-consequence actuation"));
+        Ok(())
     }
 
     #[test]
-    fn test_cuas_coa_physical_limits_sysml_provenance_and_zero_placeholder_output() {
+    fn test_cuas_coa_physical_limits_sysml_provenance_and_zero_placeholder_output() -> Result<(), Box<dyn std::error::Error>> {
         let temp_root = std::env::temp_dir().join(format!(
             "deap_test_params_provenance_{}",
             std::process::id()
         ));
         let schema_dir = temp_root.join("schema");
         let unit_dir = temp_root.join("docs/conops/units/conops");
-        std::fs::create_dir_all(&schema_dir).unwrap();
-        std::fs::create_dir_all(&unit_dir).unwrap();
+        std::fs::create_dir_all(&schema_dir)?;
+        std::fs::create_dir_all(&unit_dir)?;
 
         let schema_path = schema_dir.join("test_platform.sysml");
         let sysml_content = r#"package AutonomousPlatform {
@@ -4896,7 +4978,7 @@ mod tests {
     }
 }
 "#;
-        std::fs::write(&schema_path, sysml_content).unwrap();
+        std::fs::write(&schema_path, sysml_content)?;
 
         let unit_path = unit_dir.join("01_METADATA_AND_OVERVIEW.md");
         let unit_template = r#"# 1. Metadata and Operational Overview
@@ -4908,7 +4990,7 @@ mod tests {
 
 {{SUBSYSTEM_ARCHITECTURE_SECTION}}
 "#;
-        std::fs::write(&unit_path, unit_template).unwrap();
+        std::fs::write(&unit_path, unit_template)?;
 
         let mut engine = SysMLParameterBindingEngine::new(
             None,
@@ -4932,7 +5014,7 @@ mod tests {
             "AutonomousPlatform"
         );
 
-        let raw_unit = std::fs::read_to_string(&unit_path).unwrap();
+        let raw_unit = std::fs::read_to_string(&unit_path)?;
         let rendered = engine.substitute(&raw_unit);
         std::fs::remove_dir_all(&temp_root).ok();
 
@@ -4948,18 +5030,19 @@ mod tests {
             rendered.contains("[TIER-1: OEM]"),
             "Rendered ConOps unit must preserve [TIER-1: OEM] epistemic provenance tag"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_issue_446_cuas_schema_physical_limits_override_uav_defaults() {
+    fn test_issue_446_cuas_schema_physical_limits_override_uav_defaults() -> Result<(), Box<dyn std::error::Error>> {
         let temp_root = std::env::temp_dir().join(format!(
             "deap_test_issue_446_{}",
             std::process::id()
         ));
         let schema_dir = temp_root.join("schema");
         let unit_dir = temp_root.join("docs/conops/units/conops");
-        std::fs::create_dir_all(&schema_dir).unwrap();
-        std::fs::create_dir_all(&unit_dir).unwrap();
+        std::fs::create_dir_all(&schema_dir)?;
+        std::fs::create_dir_all(&unit_dir)?;
 
         let schema_path = schema_dir.join("cuas_system.sysml");
         let sysml_content = r#"package CuasDefenseSystem {
@@ -4983,7 +5066,7 @@ mod tests {
     }
 }
 "#;
-        std::fs::write(&schema_path, sysml_content).unwrap();
+        std::fs::write(&schema_path, sysml_content)?;
 
         let unit_path = unit_dir.join("01_METADATA_AND_OVERVIEW.md");
         let unit_template = r#"### 1.3.3 Master Physical Limits Table
@@ -4994,7 +5077,7 @@ mod tests {
 | **PL-07** | Maximum Operating Spatial Boundary | d_max | <= {{SPATIAL_LIMIT_MAX_M}} | {{SPATIAL_LIMIT_NOMINAL_M}} | {{SPATIAL_LIMIT_UNIT:m}} | Maximum certified operational boundary limit |
 | **PL-08** | Command & Control (C2) Datalink Range | Range_C2 | >= {{C2_RANGE_MIN_KM}} | {{C2_RANGE_NOMINAL_KM}} | km | Beyond-Line-of-Sight / Line-of-Sight C2 range margin |
 "#;
-        std::fs::write(&unit_path, unit_template).unwrap();
+        std::fs::write(&unit_path, unit_template)?;
 
         let mut engine = SysMLParameterBindingEngine::new(
             None,
@@ -5028,7 +5111,7 @@ mod tests {
         // 4. Invariant: C2 / sensor range must not fall back to "N/A"
         assert_ne!(engine.resolve_token("C2_RANGE_MIN_KM", None), "N/A");
 
-        let raw_unit = std::fs::read_to_string(&unit_path).unwrap();
+        let raw_unit = std::fs::read_to_string(&unit_path)?;
         let rendered = engine.substitute(&raw_unit);
         std::fs::remove_dir_all(&temp_root).ok();
 
@@ -5036,6 +5119,7 @@ mod tests {
         assert!(!rendered.contains("<= 120.0"), "ConOps PL-07 must not contain hardcoded 120.0 m UAV default");
         assert!(!rendered.contains("10.0 x 10.0 x 10.0"), "ConOps PL-03 must not contain degenerate 10.0 x 10.0 x 10.0 m heuristic");
         assert!(!rendered.contains(">= N/A"), "ConOps PL-08 must not contain '>= N/A' range");
+        Ok(())
     }
 }
 

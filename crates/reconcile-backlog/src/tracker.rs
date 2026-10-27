@@ -407,7 +407,7 @@ pub fn normalize_title(title: &str) -> String {
         stripped
     };
 
-    let separators_replaced = working.replace('-', " ").replace('_', " ");
+    let separators_replaced = working.replace(['-', '_'], " ");
     let filtered: String = separators_replaced
         .chars()
         .filter(|c| c.is_alphanumeric() || c.is_whitespace())
@@ -2480,7 +2480,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reopen_issue_strips_resolved_labels_and_persists_comment() {
+    fn test_reopen_issue_strips_resolved_labels_and_persists_comment() -> Result<(), Box<dyn std::error::Error>> {
         let tracker = OfflineTracker::with_issues(vec![
             TrackerIssue {
                 number: 101,
@@ -2515,64 +2515,66 @@ mod tests {
             },
         ]);
 
-        tracker.reopen_issue(101, Some("Audit reopen reason"), None).unwrap();
-        tracker.reopen_issue(102, None, None).unwrap();
-        tracker.reopen_issue(103, Some("Reopen comment 103"), None).unwrap();
+        tracker.reopen_issue(101, Some("Audit reopen reason"), None)?;
+        tracker.reopen_issue(102, None, None)?;
+        tracker.reopen_issue(103, Some("Reopen comment 103"), None)?;
 
-        let issues = tracker.fetch_all_issues().unwrap();
-        let i101 = issues.iter().find(|i| i.number == 101).unwrap();
+        let issues = tracker.fetch_all_issues()?;
+        let i101 = issues.iter().find(|i| i.number == 101).ok_or("missing 101")?;
         assert_eq!(i101.state, "OPEN");
         assert!(!i101.is_resolved(), "Reopened issue 101 must not be resolved");
         assert_eq!(i101.labels.len(), 1);
-        assert_eq!(i101.labels[0].name(), "bug");
-        let body101 = i101.body.as_deref().unwrap();
+        assert_eq!(i101.labels.first().ok_or("missing label")?.name(), "bug");
+        let body101 = i101.body.as_deref().ok_or("missing body 101")?;
         assert!(body101.contains("Original body"));
         assert!(body101.contains("Audit reopen reason"));
 
-        let i102 = issues.iter().find(|i| i.number == 102).unwrap();
+        let i102 = issues.iter().find(|i| i.number == 102).ok_or("missing 102")?;
         assert_eq!(i102.state, "OPEN");
         assert!(!i102.is_resolved(), "Reopened issue 102 must not be resolved");
         assert!(i102.labels.is_empty());
 
-        let i103 = issues.iter().find(|i| i.number == 103).unwrap();
+        let i103 = issues.iter().find(|i| i.number == 103).ok_or("missing 103")?;
         assert_eq!(i103.state, "OPEN");
         assert!(!i103.is_resolved(), "Reopened issue 103 must not be resolved");
         assert!(i103.labels.is_empty());
-        let body103 = i103.body.as_deref().unwrap();
+        let body103 = i103.body.as_deref().ok_or("missing body 103")?;
         assert!(body103.contains("Another body"));
         assert!(body103.contains("Reopen comment 103"));
 
         let err = tracker.reopen_issue(999, None, None);
         assert!(err.is_err());
-        assert!(err.unwrap_err().contains("issue #999 not found"));
+        assert!(err.err().ok_or("expected err")?.contains("issue #999 not found"));
+        Ok(())
     }
 
     #[test]
-    fn test_offline_tracker_error_parity_on_nonexistent_issue() {
+    fn test_offline_tracker_error_parity_on_nonexistent_issue() -> Result<(), Box<dyn std::error::Error>> {
         let tracker = OfflineTracker::new();
         let res_update = tracker.update_issue_body(999, "new body");
         assert!(res_update.is_err(), "update_issue_body on nonexistent issue must fail");
         assert!(
-            res_update.unwrap_err().contains("issue #999 not found"),
+            res_update.err().ok_or("expected err")?.contains("issue #999 not found"),
             "Error message must specify issue #999 not found"
         );
 
         let res_label = tracker.add_label(999, "bug");
         assert!(res_label.is_err(), "add_label on nonexistent issue must fail");
         assert!(
-            res_label.unwrap_err().contains("issue #999 not found"),
+            res_label.err().ok_or("expected err")?.contains("issue #999 not found"),
             "Error message must specify issue #999 not found"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_temp_file_named_raii_drop_cleanup() {
+    fn test_temp_file_named_raii_drop_cleanup() -> Result<(), Box<dyn std::error::Error>> {
         use std::io::Write;
         let path = {
-            let mut temp = tempfile_named().expect("create temp file");
+            let mut temp = tempfile_named()?;
             let path = temp.path.clone();
-            temp.write_all(b"temporary test data").expect("write bytes");
-            temp.flush().expect("flush bytes");
+            temp.write_all(b"temporary test data")?;
+            temp.flush()?;
             assert!(std::path::Path::new(&path).exists(), "Temp file must exist while in scope");
             path
         };
@@ -2580,10 +2582,11 @@ mod tests {
             !std::path::Path::new(&path).exists(),
             "Temp file must be removed when TempFileNamed drops out of scope"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_tracker_issue_deserialization_with_body() {
+    fn test_tracker_issue_deserialization_with_body() -> Result<(), Box<dyn std::error::Error>> {
         let json_with_body = r#"{
             "number": 42,
             "title": "Issue with body",
@@ -2592,7 +2595,7 @@ mod tests {
             "body": "some text",
             "url": "https://github.com/org/repo/issues/42"
         }"#;
-        let issue: TrackerIssue = serde_json::from_str(json_with_body).unwrap();
+        let issue: TrackerIssue = serde_json::from_str(json_with_body)?;
         assert_eq!(issue.body, Some("some text".to_string()));
 
         let json_without_body = r#"{
@@ -2601,7 +2604,7 @@ mod tests {
             "state": "OPEN",
             "labels": []
         }"#;
-        let issue_no_body: TrackerIssue = serde_json::from_str(json_without_body).unwrap();
+        let issue_no_body: TrackerIssue = serde_json::from_str(json_without_body)?;
         assert_eq!(issue_no_body.body, None);
 
         let json_null_body = r#"{
@@ -2611,8 +2614,9 @@ mod tests {
             "labels": [],
             "body": null
         }"#;
-        let issue_null_body: TrackerIssue = serde_json::from_str(json_null_body).unwrap();
+        let issue_null_body: TrackerIssue = serde_json::from_str(json_null_body)?;
         assert_eq!(issue_null_body.body, None);
+        Ok(())
     }
 
     #[test]

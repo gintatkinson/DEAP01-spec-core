@@ -33,35 +33,28 @@ use crate::tracker::{normalize_title, GitHubTracker, IssueIndex, OfflineTracker,
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-CREATEISSUEARGS] | SysML v2: PartDef(CreateIssueArgs)
-#[derive(clap::Args, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct CreateIssueArgs {
     /// Issue body markdown file
-    #[arg(long = "body-file")]
     pub body_file: Option<String>,
 
     /// Label to apply (e.g. epic, feature, user-story, use-case, bug)
-    #[arg(long = "label")]
     pub label: Option<String>,
 
     /// Issue title
-    #[arg(long = "title")]
     pub title: Option<String>,
 
     /// Target repository (e.g. owner/repo)
-    #[arg(long = "repo")]
     pub repo: Option<String>,
 
     /// Optional file containing analysis to post if reopening an existing closed issue
-    #[arg(long = "reopen-with-analysis")]
     pub reopen_with_analysis: Option<String>,
 
     /// Issue tracker provider (e.g. github, offline)
-    #[arg(long = "provider", default_value = "github")]
     pub provider: String,
 
     /// Positional arguments for positional CLI invocation:
     /// <body-file> <label> <title> [repo]
-    #[arg(value_name = "ARGS")]
     pub positional: Vec<String>,
 }
 
@@ -676,9 +669,11 @@ mod tests {
         Ok(())
     }
 
+    type ReopenCall = (u64, Option<String>, Option<String>);
+
     struct SpyTracker {
         inner: OfflineTracker,
-        reopen_calls: std::sync::Mutex<Vec<(u64, Option<String>, Option<String>)>>,
+        reopen_calls: std::sync::Mutex<Vec<ReopenCall>>,
     }
 
     impl SpyTracker {
@@ -712,11 +707,13 @@ mod tests {
         }
 
         fn reopen_issue(&self, issue_number: u64, comment: Option<&str>, repo: Option<&str>) -> Result<(), String> {
-            self.reopen_calls.lock().unwrap().push((
-                issue_number,
-                comment.map(|s| s.to_string()),
-                repo.map(|s| s.to_string()),
-            ));
+            if let Ok(mut g) = self.reopen_calls.lock() {
+                g.push((
+                    issue_number,
+                    comment.map(|s| s.to_string()),
+                    repo.map(|s| s.to_string()),
+                ));
+            }
             self.inner.reopen_issue(issue_number, comment, repo)
         }
     }
@@ -738,7 +735,7 @@ mod tests {
         };
         let res = run_create_issue(&tracker, &params);
         assert!(res.is_err(), "Expected error for unregistered checklist issue #999");
-        let err = res.unwrap_err();
+        let err = res.err().ok_or("expected error")?;
         assert!(err.contains("unresolvable checklist issue reference '#999'"));
         assert!(err.contains("Publish gate blocked"));
         Ok(())
@@ -772,7 +769,7 @@ mod tests {
         let tracker = OfflineTracker::with_issues(vec![existing_feat]);
 
         let params = ResolvedCreateIssueParams {
-            body_file: epic_path.to_str().unwrap().to_string(),
+            body_file: epic_path.to_string_lossy().to_string(),
             label: "epic".to_string(),
             title: "Epic 01: Core Platform".to_string(),
             repo: Some("org/repo".to_string()),
@@ -848,11 +845,12 @@ mod tests {
                 url: "https://github.com/org/repo/issues/10".to_string(),
             }
         );
-        let calls = tracker.reopen_calls.lock().unwrap();
+        let calls = tracker.reopen_calls.lock().map_err(|e| e.to_string())?;
         assert_eq!(calls.len(), 1);
-        assert_eq!(calls[0].0, 10);
-        assert_eq!(calls[0].1.as_deref(), Some("Reopen rationale with details"));
-        assert_eq!(calls[0].2.as_deref(), Some("org/repo"));
+        let c0 = calls.first().ok_or("missing call")?;
+        assert_eq!(c0.0, 10);
+        assert_eq!(c0.1.as_deref(), Some("Reopen rationale with details"));
+        assert_eq!(c0.2.as_deref(), Some("org/repo"));
         drop(calls);
 
         // 2. Open issue idempotency
@@ -944,10 +942,10 @@ mod tests {
                 assert_ne!(number, 10, "Feature must be created as new issue, not collide with Epic #10");
             }
             IssueActionOutcome::AlreadyOpen { number, .. } => {
-                panic!("Feature must NOT be treated as AlreadyOpen due to Epic #10 collision! (got issue #{})", number);
+                return Err(format!("Feature must NOT be treated as AlreadyOpen due to Epic #10 collision! (got issue #{})", number).into());
             }
             IssueActionOutcome::Reopened { number, .. } => {
-                panic!("Feature must NOT be reopened! (got issue #{})", number);
+                return Err(format!("Feature must NOT be reopened! (got issue #{})", number).into());
             }
         }
         Ok(())

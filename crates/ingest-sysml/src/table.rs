@@ -40,7 +40,7 @@
 //! - State transitions in [`parse_markdown_tables`] are strictly monotonic and resilient against
 //!   unclosed tables, empty rows, and malformed Markdown separators.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// SysML v2 reserved keywords that must not be used as bare identifiers in AST generation.
 ///
@@ -153,7 +153,7 @@ pub struct MarkdownTable {
     /// Physical measurement units extracted from respective header columns (e.g. "kg", "Hz").
     pub units: Vec<String>,
     /// Row data records, keyed by normalized column header names.
-    pub rows: Vec<HashMap<String, String>>,
+    pub rows: Vec<BTreeMap<String, String>>,
 }
 
 /// Sanitizes arbitrary text into a valid, deterministic SysML v2 / KerML identifier.
@@ -218,7 +218,7 @@ pub fn sanitize_identifier(text: &str, default_name: &str) -> String {
     }
 
     // Step 5: SysML v2 identifiers must not start with an ASCII digit
-    if clean.chars().next().unwrap().is_ascii_digit() {
+    if clean.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         clean = format!("_{}", clean);
     }
 
@@ -650,18 +650,18 @@ fn split_number_and_unit(s: &str) -> Option<(&str, &str)> {
         return None;
     }
     let mut idx = 0;
-    if bytes[idx] == b'+' || bytes[idx] == b'-' {
+    if matches!(bytes.get(idx), Some(b'+' | b'-')) {
         idx += 1;
     }
     let mut has_digits = false;
-    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+    while bytes.get(idx).is_some_and(|b| b.is_ascii_digit()) {
         has_digits = true;
         idx += 1;
     }
-    if idx < bytes.len() && bytes[idx] == b'.' {
+    if bytes.get(idx) == Some(&b'.') {
         idx += 1;
         let mut has_dec_digits = false;
-        while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+        while bytes.get(idx).is_some_and(|b| b.is_ascii_digit()) {
             has_dec_digits = true;
             idx += 1;
         }
@@ -673,14 +673,14 @@ fn split_number_and_unit(s: &str) -> Option<(&str, &str)> {
     if !has_digits {
         return None;
     }
-    if idx < bytes.len() && (bytes[idx] == b'e' || bytes[idx] == b'E') {
+    if matches!(bytes.get(idx), Some(b'e' | b'E')) {
         let exp_start = idx;
         idx += 1;
-        if idx < bytes.len() && (bytes[idx] == b'+' || bytes[idx] == b'-') {
+        if matches!(bytes.get(idx), Some(b'+' | b'-')) {
             idx += 1;
         }
         let mut has_exp_digits = false;
-        while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+        while bytes.get(idx).is_some_and(|b| b.is_ascii_digit()) {
             has_exp_digits = true;
             idx += 1;
         }
@@ -688,8 +688,8 @@ fn split_number_and_unit(s: &str) -> Option<(&str, &str)> {
             idx = exp_start;
         }
     }
-    let num_part = &s[..idx];
-    let rest = s[idx..].trim_start();
+    let num_part = s.get(..idx)?;
+    let rest = s.get(idx..)?.trim_start();
     let valid_unit = rest.chars().all(|c| {
         c.is_ascii_alphanumeric()
             || c == '_'
@@ -740,9 +740,9 @@ pub fn parse_range_bounds(range_text: &str) -> (Option<f64>, Option<f64>) {
     let clean = clean.trim();
 
     let parts = split_range_parts(clean);
-    if parts.len() >= 2 {
-        let (val1, _, _) = parse_numeric_with_unit(parts[0]);
-        let (val2, _, _) = parse_numeric_with_unit(parts[1]);
+    if let (Some(&p0), Some(&p1)) = (parts.first(), parts.get(1)) {
+        let (val1, _, _) = parse_numeric_with_unit(p0);
+        let (val2, _, _) = parse_numeric_with_unit(p1);
         if let (Some(v1), Some(v2)) = (val1, val2) {
             let min_v = if v1 < v2 { v1 } else { v2 };
             let max_v = if v1 > v2 { v1 } else { v2 };
@@ -785,27 +785,36 @@ fn split_range_parts(s: &str) -> Vec<&str> {
     let s_bytes = s.as_bytes();
     let mut i = 0;
     while i < s.len() {
-        if s_bytes[i] == b',' || s_bytes[i] == b':' {
-            parts.push(s[start..i].trim());
+        let cur = s_bytes.get(i).copied();
+        let rest = s.get(i..).unwrap_or("");
+        if matches!(cur, Some(b',' | b':')) {
+            if let Some(seg) = s.get(start..i) {
+                parts.push(seg.trim());
+            }
             i += 1;
             start = i;
-        } else if s[i..].starts_with("..") {
-            parts.push(s[start..i].trim());
-            i += 2;
-            start = i;
-        } else if s[i..].starts_with("to")
-            && (i == 0 || s_bytes[i - 1].is_ascii_whitespace())
-            && (i + 2 == s.len() || s_bytes[i + 2].is_ascii_whitespace())
+        } else if rest.starts_with("..")
+            || (rest.starts_with("to")
+                && (i == 0
+                    || s_bytes
+                        .get(i.saturating_sub(1))
+                        .is_some_and(|b| b.is_ascii_whitespace()))
+                && (i + 2 == s.len()
+                    || s_bytes
+                        .get(i + 2)
+                        .is_some_and(|b| b.is_ascii_whitespace())))
         {
-            parts.push(s[start..i].trim());
+            if let Some(seg) = s.get(start..i) {
+                parts.push(seg.trim());
+            }
             i += 2;
             start = i;
         } else {
             i += 1;
         }
     }
-    if start < s.len() {
-        parts.push(s[start..].trim());
+    if let Some(seg) = s.get(start..).filter(|seg| !seg.is_empty()) {
+        parts.push(seg.trim());
     }
     parts
 }
@@ -837,7 +846,7 @@ fn split_range_parts(s: &str) -> Vec<&str> {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-INGEST-TABLE/extract_provenance_citation] | SysML v2: ActionDef(extract_provenance_citation)
-pub fn extract_provenance_citation(row: &HashMap<String, String>, headers: &[String]) -> String {
+pub fn extract_provenance_citation(row: &BTreeMap<String, String>, headers: &[String]) -> String {
     for h in headers {
         if PROVENANCE_COLUMNS.contains(&h.as_str()) {
             if let Some(val) = row.get(h) {
@@ -923,7 +932,7 @@ pub fn compose_grounded_doc(description: &str, citation: &str, unit: &str) -> St
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-INGEST-TABLE/classify_table] | SysML v2: ActionDef(classify_table)
 pub fn classify_table(headers: &[String]) -> TableType {
-    let h_set: std::collections::HashSet<&str> = headers.iter().map(|s| s.as_str()).collect();
+    let h_set: BTreeSet<&str> = headers.iter().map(|s| s.as_str()).collect();
 
     // 1. BOM / Component list archetype detection
     let bom_indicators = [
@@ -985,8 +994,10 @@ pub fn classify_table(headers: &[String]) -> TableType {
     }
 
     // 4. Key-Value / Properties archetype detection (2-3 columns, first column specifies property/key)
-    if (headers.len() == 2 || headers.len() == 3) && !headers.is_empty() {
-        let first = &headers[0];
+    if let Some(first) = headers
+        .first()
+        .filter(|_| headers.len() == 2 || headers.len() == 3)
+    {
         if ["property", "parameter", "attribute", "key", "field", "name"]
             .iter()
             .any(|k| first.contains(k))
@@ -1036,7 +1047,7 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
                            raw_h: &mut Vec<String>,
                            norm_h: &mut Vec<String>,
                            u: &mut Vec<String>,
-                           r: &mut Vec<HashMap<String, String>>| {
+                           r: &mut Vec<BTreeMap<String, String>>| {
         if *in_tbl && !raw_h.is_empty() && !r.is_empty() {
             tables.push(MarkdownTable {
                 raw_headers: raw_h.clone(),
@@ -1056,7 +1067,7 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
     let n = lines.len();
 
     while i < n {
-        let line = lines[i].trim();
+        let line = lines.get(i).copied().unwrap_or("").trim();
 
         if line.contains('|') {
             let cells: Vec<String> = line
@@ -1070,7 +1081,7 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
             if is_delimiter && !in_table {
                 // Header was on previous line if available
                 if i > 0 {
-                    let prev_line = lines[i - 1].trim();
+                    let prev_line = lines.get(i - 1).copied().unwrap_or("").trim();
                     if prev_line.contains('|') {
                         let prev_cells: Vec<String> = prev_line
                             .trim_matches('|')
@@ -1094,13 +1105,12 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
                 continue;
             } else if in_table {
                 // Process data row
-                let mut row_dict = HashMap::new();
+                let mut row_dict = BTreeMap::new();
                 for (idx, norm_col) in norm_headers.iter().enumerate() {
-                    let val = if idx < cells.len() {
-                        clean_cell_value(&cells[idx])
-                    } else {
-                        String::new()
-                    };
+                    let val = cells
+                        .get(idx)
+                        .map(|c| clean_cell_value(c))
+                        .unwrap_or_default();
                     row_dict.insert(norm_col.clone(), val);
                 }
                 rows.push(row_dict);
@@ -1108,8 +1118,8 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
                 continue;
             } else {
                 // Forward lookahead: inspect next line to determine if this line is a header
-                if i + 1 < n && lines[i + 1].contains('|') {
-                    let next_line = lines[i + 1].trim();
+                if let Some(raw_next) = lines.get(i + 1).copied().filter(|nl| nl.contains('|')) {
+                    let next_line = raw_next.trim();
                     let next_cells: Vec<String> = next_line
                         .trim_matches('|')
                         .split('|')
@@ -1258,12 +1268,27 @@ mod tests {
         let tables = parse_markdown_tables(&lines);
         assert_eq!(tables.len(), 3);
 
-        assert_eq!(classify_table(&tables[0].normalized_headers), TableType::Properties);
-        assert_eq!(classify_table(&tables[1].normalized_headers), TableType::Bom);
-        assert_eq!(classify_table(&tables[2].normalized_headers), TableType::Ports);
+        assert_eq!(
+            tables.first().map(|t| classify_table(&t.normalized_headers)),
+            Some(TableType::Properties)
+        );
+        assert_eq!(
+            tables.get(1).map(|t| classify_table(&t.normalized_headers)),
+            Some(TableType::Bom)
+        );
+        assert_eq!(
+            tables.get(2).map(|t| classify_table(&t.normalized_headers)),
+            Some(TableType::Ports)
+        );
 
-        let req_id_row = &tables[0].rows[0];
-        assert_eq!(req_id_row.get("metadata_field").unwrap(), "**Requirement ID**");
-        assert_eq!(req_id_row.get("contract_specification").unwrap(), "`REQ-0001`");
+        let req_id_row = tables.first().and_then(|t| t.rows.first());
+        assert_eq!(
+            req_id_row.and_then(|r| r.get("metadata_field").map(String::as_str)),
+            Some("**Requirement ID**")
+        );
+        assert_eq!(
+            req_id_row.and_then(|r| r.get("contract_specification").map(String::as_str)),
+            Some("`REQ-0001`")
+        );
     }
 }

@@ -17,7 +17,7 @@
 //!   nodes map to `PartDef` components, `leaf` and `leaf-list` nodes map to `AttributeDef` entities, and
 //!   `typedef` declarations map to formal SysML data types with boundary constraints (`ConstraintDef`).
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
@@ -343,27 +343,28 @@ enum YangToken {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-TRANSLATORS-YANG-SKIP-WHITESPACE-AND-COMMENTS] | SysML v2: ActionDef(skip_whitespace_and_comments)
 fn skip_whitespace_and_comments(chars: &[char], pos: &mut usize) {
-    while *pos < chars.len() {
-        let ch = chars[*pos];
+    while let Some(&ch) = chars.get(*pos) {
         if ch.is_whitespace() {
             *pos += 1;
-        } else if ch == '/' && *pos + 1 < chars.len() {
-            if chars[*pos + 1] == '/' {
-                *pos += 2;
-                while *pos < chars.len() && chars[*pos] != '\n' {
-                    *pos += 1;
-                }
-            } else if chars[*pos + 1] == '*' {
-                *pos += 2;
-                while *pos + 1 < chars.len() {
-                    if chars[*pos] == '*' && chars[*pos + 1] == '/' {
-                        *pos += 2;
-                        break;
+        } else if ch == '/' {
+            match chars.get(*pos + 1).copied() {
+                Some('/') => {
+                    *pos += 2;
+                    while chars.get(*pos).is_some_and(|&c| c != '\n') {
+                        *pos += 1;
                     }
-                    *pos += 1;
                 }
-            } else {
-                break;
+                Some('*') => {
+                    *pos += 2;
+                    while *pos + 1 < chars.len() {
+                        if chars.get(*pos) == Some(&'*') && chars.get(*pos + 1) == Some(&'/') {
+                            *pos += 2;
+                            break;
+                        }
+                        *pos += 1;
+                    }
+                }
+                _ => break,
             }
         } else {
             break;
@@ -403,14 +404,14 @@ fn scan_quoted_string(chars: &[char], pos: &mut usize, quote_char: char) -> Resu
     *pos += 1; // Consume opening quote
     let mut s = String::new();
 
-    while *pos < chars.len() {
-        let ch = chars[*pos];
+    while let Some(&ch) = chars.get(*pos) {
         if quote_char == '"' && ch == '\\' {
             *pos += 1;
-            if *pos >= chars.len() {
-                return Err("Unterminated escape sequence in double-quoted string".to_string());
-            }
-            match chars[*pos] {
+            let escaped = chars
+                .get(*pos)
+                .copied()
+                .ok_or_else(|| "Unterminated escape sequence in double-quoted string".to_string())?;
+            match escaped {
                 'n' => s.push('\n'),
                 't' => s.push('\t'),
                 'r' => s.push('\r'),
@@ -462,17 +463,19 @@ fn scan_quoted_string(chars: &[char], pos: &mut usize, quote_char: char) -> Resu
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-TRANSLATORS-YANG-SCAN-STRING-LITERAL] | SysML v2: ActionDef(scan_string_literal)
 fn scan_string_literal(chars: &[char], pos: &mut usize) -> Result<String, String> {
-    let quote = chars[*pos];
+    let quote = chars
+        .get(*pos)
+        .copied()
+        .ok_or_else(|| "Unexpected EOF at YANG string literal".to_string())?;
     let mut full = scan_quoted_string(chars, pos, quote)?;
 
     loop {
         let saved_pos = *pos;
         skip_whitespace_and_comments(chars, pos);
-        if *pos < chars.len() && chars[*pos] == '+' {
+        if chars.get(*pos) == Some(&'+') {
             *pos += 1; // Consume '+'
             skip_whitespace_and_comments(chars, pos);
-            if *pos < chars.len() && (chars[*pos] == '"' || chars[*pos] == '\'') {
-                let next_quote = chars[*pos];
+            if let Some(next_quote) = chars.get(*pos).copied().filter(|&q| q == '"' || q == '\'') {
                 let next_part = scan_quoted_string(chars, pos, next_quote)?;
                 full.push_str(&next_part);
                 continue;
@@ -521,11 +524,10 @@ fn tokenize_yang(source: &str) -> Result<Vec<YangToken>, String> {
 
     while pos < chars.len() {
         skip_whitespace_and_comments(&chars, &mut pos);
-        if pos >= chars.len() {
+        let Some(&ch) = chars.get(pos) else {
             break;
-        }
+        };
 
-        let ch = chars[pos];
         match ch {
             '{' => {
                 tokens.push(YangToken::OpenBrace);
@@ -545,8 +547,7 @@ fn tokenize_yang(source: &str) -> Result<Vec<YangToken>, String> {
             }
             _ => {
                 let mut word = String::new();
-                while pos < chars.len() {
-                    let c = chars[pos];
+                while let Some(&c) = chars.get(pos) {
                     if c.is_whitespace()
                         || c == '{'
                         || c == '}'
@@ -556,10 +557,7 @@ fn tokenize_yang(source: &str) -> Result<Vec<YangToken>, String> {
                     {
                         break;
                     }
-                    if c == '/'
-                        && pos + 1 < chars.len()
-                        && (chars[pos + 1] == '/' || chars[pos + 1] == '*')
-                    {
+                    if c == '/' && matches!(chars.get(pos + 1), Some('/' | '*')) {
                         break;
                     }
                     word.push(c);
@@ -942,7 +940,7 @@ fn parse_yang_statements(tokens: &[YangToken]) -> Result<Vec<YangStmt>, String> 
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-TRANSLATORS-YANG-MAP-YANG-TYPE] | SysML v2: ActionDef(map_yang_type)
-fn map_yang_type(raw_type: &str, typedef_map: &HashMap<String, String>) -> String {
+fn map_yang_type(raw_type: &str, typedef_map: &BTreeMap<String, String>) -> String {
     let trimmed = raw_type.trim();
     let unaliased = if let Some(idx) = trimmed.find(':') {
         &trimmed[idx + 1..]
@@ -1151,7 +1149,7 @@ impl YangTranslator {
         }
 
         // 2. Build local typedef resolution map
-        let mut typedef_map: HashMap<String, String> = HashMap::new();
+        let mut typedef_map: BTreeMap<String, String> = BTreeMap::new();
         for stmt in mod_subs {
             if let ("typedef", Some(td_name)) = (stmt.keyword.as_str(), stmt.argument.as_deref()) {
                 let base_type = stmt
@@ -1464,7 +1462,7 @@ impl YangTranslator {
         }
 
         // Detect name collisions among translated packages (e.g. multiple revisions of the same module)
-        let mut name_counts: HashMap<String, usize> = HashMap::new();
+        let mut name_counts: BTreeMap<String, usize> = BTreeMap::new();
         for (_, pkg) in &sub_packages {
             *name_counts.entry(pkg.name.clone()).or_insert(0) += 1;
         }
@@ -1532,7 +1530,7 @@ impl YangTranslator {
 /// Realises: [REQ-TRANSLATORS-YANG-TRANSLATE-CONTAINER-OR-GROUPING] | SysML v2: ActionDef(translate_container_or_grouping)
 fn translate_container_or_grouping(
     stmt: &YangStmt,
-    typedef_map: &HashMap<String, String>,
+    typedef_map: &BTreeMap<String, String>,
     extra_parts: &mut Vec<PartDef>,
 ) -> PartDef {
     let name = stmt.argument.as_deref().unwrap_or("Anonymous");
@@ -1723,7 +1721,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_yang_scanner_and_statement_parsing() {
+    fn test_yang_scanner_and_statement_parsing() -> Result<(), String> {
         let yang_src = r#"
             module test-module {
                 yang-version 1.1;
@@ -1756,13 +1754,12 @@ mod tests {
         "#;
 
         let translator = YangTranslator::new();
-        let pkg = translator.translate(yang_src, "TestModule").unwrap();
+        let pkg = translator.translate(yang_src, "TestModule")?;
         assert_eq!(pkg.name, "TestModule");
         assert!(pkg
             .doc
             .as_deref()
-            .unwrap()
-            .contains("Test module description with concatenation."));
+            .is_some_and(|d| d.contains("Test module description with concatenation.")));
 
         // Check typedef
         assert!(pkg.attribute_defs.iter().any(|a| a.name == "testType"));
@@ -1773,11 +1770,12 @@ mod tests {
             .part_defs
             .iter()
             .find(|p| p.name == "TestContainer")
-            .unwrap();
+            .ok_or("missing TestContainer")?;
         assert!(container.attributes.iter().any(|a| a.name == "id"));
         assert!(container.parts.iter().any(|p| p.name == "a"));
         assert!(container.parts.iter().any(|p| p.name == "b"));
         assert!(container.constraints.iter().any(|c| c.name == "opt_mutex"));
+        Ok(())
     }
 
     /// Neutral YANG fixture exercising leaf-list, string defaults, typedef, container, list,
@@ -1885,10 +1883,8 @@ mod tests {
     }
 
     #[test]
-    fn test_yang_string_defaults_are_quoted_sysml_literals() {
-        let pkg = YangTranslator::new()
-            .translate(ROUND_TRIP_YANG, "SampleModule")
-            .expect("translate fixture");
+    fn test_yang_string_defaults_are_quoted_sysml_literals() -> Result<(), String> {
+        let pkg = YangTranslator::new().translate(ROUND_TRIP_YANG, "SampleModule")?;
 
         let td_attr = pkg.attribute_defs.iter().find(|a| a.name == "timeText");
         assert_eq!(
@@ -1911,7 +1907,7 @@ mod tests {
             .part_defs
             .iter()
             .find(|p| p.name == "SampleRoot")
-            .expect("SampleRoot");
+            .ok_or("missing SampleRoot")?;
         let default_of = |name: &str| {
             root.attributes
                 .iter()
@@ -1934,7 +1930,7 @@ mod tests {
             .part_defs
             .iter()
             .find(|p| p.name == "FirstMode")
-            .expect("FirstMode");
+            .ok_or("missing FirstMode")?;
         let first_value = first_mode
             .attributes
             .iter()
@@ -1948,7 +1944,7 @@ mod tests {
             .action_defs
             .iter()
             .find(|a| a.name == "ResetItem")
-            .expect("ResetItem");
+            .ok_or("missing ResetItem")?;
         let in_default = |name: &str| {
             rpc.in_params
                 .iter()
@@ -1965,13 +1961,12 @@ mod tests {
         assert_eq!(in_default("delay").as_deref(), Some("10"));
         assert_eq!(out_default("outcome").as_deref(), Some("\"ok\""));
         assert_eq!(out_default("done").as_deref(), Some("false"));
+        Ok(())
     }
 
     #[test]
-    fn test_yang_to_sysml_round_trip_parses_and_validates_with_zero_errors() {
-        let pkg = YangTranslator::new()
-            .translate(ROUND_TRIP_YANG, "SampleModule")
-            .expect("translate fixture");
+    fn test_yang_to_sysml_round_trip_parses_and_validates_with_zero_errors() -> Result<(), String> {
+        let pkg = YangTranslator::new().translate(ROUND_TRIP_YANG, "SampleModule")?;
         let sysml_text = compile_sysml::to_sysml(&pkg);
         assert!(
             sysml_text.contains("String[]"),
@@ -2009,7 +2004,7 @@ mod tests {
             .iter()
             .chain(reparsed.packages.iter().flat_map(|p| p.part_defs.iter()))
             .find(|p| p.name == "SampleRoot")
-            .expect("SampleRoot survives round trip");
+            .ok_or("SampleRoot survives round trip")?;
         let tags = root.attributes.iter().find(|a| a.name == "tags");
         assert_eq!(tags.map(|a| a.type_name.as_str()), Some("String[]"));
         let start = root.attributes.iter().find(|a| a.name == "startTime");
@@ -2017,5 +2012,6 @@ mod tests {
             start.and_then(|a| a.default_value.as_deref()),
             Some("\"00:00:00\"")
         );
+        Ok(())
     }
 }

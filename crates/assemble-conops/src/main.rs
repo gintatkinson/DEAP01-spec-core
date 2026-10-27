@@ -43,7 +43,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::Parser;
+use clap::{Arg, ArgAction, Command};
 
 use assemble_conops::assemble_conops;
 
@@ -73,41 +73,102 @@ use assemble_conops::assemble_conops;
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-ASSEMBLE-CONOPS-MAIN-ARGS] | SysML v2: PartDef(Args)
-#[derive(Parser, Debug)]
-#[command(
-    name = "assemble-conops",
-    author = "Gint Atkinson",
-    version = "0.1.0",
-    about = "Deterministic ConOps & Mission Intent Assembly Engine (ISO/IEC/IEEE 29148 / ISO/IEC/IEEE 15288 / OMG UAF)."
-)]
+#[derive(Debug)]
 struct Args {
     /// Target workspace or project directory (optional positional argument).
-    #[arg(value_name = "WORKSPACE")]
     workspace: Option<PathBuf>,
 
     /// Target workspace or project directory.
-    #[arg(long = "workspace")]
     workspace_flag: Option<PathBuf>,
 
     /// Input directory containing 'conops/' and 'mission_intent/' unit markdown directories (default: docs/conops/units).
-    #[arg(long = "input-dir")]
     input_dir: Option<PathBuf>,
 
     /// Output directory where assembled CONOPS.md and MISSION_INTENT.md are written (default: docs/conops).
-    #[arg(long = "output-dir")]
     output_dir: Option<PathBuf>,
 
     /// Verify unit integrity and link resolution without writing output files.
-    #[arg(long = "verify", action = clap::ArgAction::SetTrue)]
     verify: bool,
 
     /// Path to JSON parameter dictionary or schema file (auto-detects .pipeline/schema-digest.json if not specified).
-    #[arg(long = "params")]
     params: Option<PathBuf>,
 
     /// Target operational domain. Auto-detected if not specified.
-    #[arg(long = "domain")]
     domain: Option<String>,
+}
+
+impl Args {
+    /// Parses process command-line arguments into [`Args`] using explicit `clap::Command` builders.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `Args::parse`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Constructs the CLI grammar without `clap_derive` macro lint-override emissions (`E0453`).
+    ///
+    /// ## 3. Preconditions
+    /// - Process environment supplies valid OS argument tokens via `std::env::args_os`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a populated [`Args`] instance.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(A)$ where $A$ is the number of CLI argument tokens.
+    /// - Space Complexity: $O(A)$ for parsed `ArgMatches` and owned [`Args`] fields.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Invalid flags are intercepted by `clap::Command::get_matches`, emitting usage diagnostics and exiting non-zero.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-ASSEMBLE-CONOPS-MAIN-ARGS]
+    fn parse() -> Self {
+        let mut matches = Command::new("assemble-conops")
+            .author("Gint Atkinson")
+            .version("0.1.0")
+            .about("Deterministic ConOps & Mission Intent Assembly Engine (ISO/IEC/IEEE 29148 / ISO/IEC/IEEE 15288 / OMG UAF).")
+            .arg(
+                Arg::new("workspace")
+                    .value_name("WORKSPACE")
+                    .value_parser(clap::value_parser!(PathBuf)),
+            )
+            .arg(
+                Arg::new("workspace_flag")
+                    .long("workspace")
+                    .value_parser(clap::value_parser!(PathBuf)),
+            )
+            .arg(
+                Arg::new("input_dir")
+                    .long("input-dir")
+                    .value_parser(clap::value_parser!(PathBuf)),
+            )
+            .arg(
+                Arg::new("output_dir")
+                    .long("output-dir")
+                    .value_parser(clap::value_parser!(PathBuf)),
+            )
+            .arg(
+                Arg::new("verify")
+                    .long("verify")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("params")
+                    .long("params")
+                    .value_parser(clap::value_parser!(PathBuf)),
+            )
+            .arg(Arg::new("domain").long("domain"))
+            .get_matches();
+
+        Self {
+            workspace: matches.remove_one::<PathBuf>("workspace"),
+            workspace_flag: matches.remove_one::<PathBuf>("workspace_flag"),
+            input_dir: matches.remove_one::<PathBuf>("input_dir"),
+            output_dir: matches.remove_one::<PathBuf>("output_dir"),
+            verify: matches.get_flag("verify"),
+            params: matches.remove_one::<PathBuf>("params"),
+            domain: matches.remove_one::<String>("domain"),
+        }
+    }
 }
 
 /// Inspects whether a candidate filesystem path is a valid ConOps unit root directory.

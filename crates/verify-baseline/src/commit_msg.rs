@@ -32,26 +32,21 @@ use std::process::Command;
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-COMMITMSGARGS] | SysML v2: PartDef(CommitMsgArgs)
-#[derive(clap::Args, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct CommitMsgArgs {
     /// Path to file containing commit message
-    #[arg(long = "msg-file")]
     pub msg_file: Option<PathBuf>,
 
     /// Git revision range to inspect (e.g. origin/main..HEAD)
-    #[arg(long = "range")]
     pub range: Option<String>,
 
     /// Check the latest HEAD commit
-    #[arg(long = "head")]
     pub head: bool,
 
     /// Check raw text directly
-    #[arg(long = "check-text")]
     pub check_text: Option<String>,
 
     /// Positional file or text to check
-    #[arg(value_name = "TARGET")]
     pub target: Option<String>,
 }
 
@@ -124,7 +119,7 @@ const FORBIDDEN_VERBS: &[&str] = &[
 /// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-PARSE-ISSUE-REFERENCE] | SysML v2: ActionDef(parse_issue_reference)
 fn parse_issue_reference(chars: &[char], mut pos: usize) -> Option<(String, usize)> {
     let len = chars.len();
-    while pos < len && chars[pos].is_whitespace() {
+    while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
         pos += 1;
     }
     if pos >= len {
@@ -133,21 +128,33 @@ fn parse_issue_reference(chars: &[char], mut pos: usize) -> Option<(String, usiz
 
     // Check for optional "issue" or "issues" keyword
     let is_issue_keyword = |p: usize| -> Option<usize> {
-        let remaining = len - p;
+        let remaining = len.saturating_sub(p);
         if remaining >= 6 {
-            let s: String = chars[p..p + 6].iter().map(|c| c.to_ascii_lowercase()).collect();
-            if s == "issues" {
-                if p + 6 == len || (!chars[p + 6].is_alphanumeric() && chars[p + 6] != '_') {
-                    return Some(p + 6);
-                }
+            let s: String = chars
+                .get(p..p + 6)
+                .map(|sl| sl.iter().map(|c| c.to_ascii_lowercase()).collect())
+                .unwrap_or_default();
+            if s == "issues"
+                && (p + 6 == len
+                    || chars
+                        .get(p + 6)
+                        .is_some_and(|c| !c.is_alphanumeric() && *c != '_'))
+            {
+                return Some(p + 6);
             }
         }
         if remaining >= 5 {
-            let s: String = chars[p..p + 5].iter().map(|c| c.to_ascii_lowercase()).collect();
-            if s == "issue" {
-                if p + 5 == len || (!chars[p + 5].is_alphanumeric() && chars[p + 5] != '_') {
-                    return Some(p + 5);
-                }
+            let s: String = chars
+                .get(p..p + 5)
+                .map(|sl| sl.iter().map(|c| c.to_ascii_lowercase()).collect())
+                .unwrap_or_default();
+            if s == "issue"
+                && (p + 5 == len
+                    || chars
+                        .get(p + 5)
+                        .is_some_and(|c| !c.is_alphanumeric() && *c != '_'))
+            {
+                return Some(p + 5);
             }
         }
         None
@@ -155,10 +162,10 @@ fn parse_issue_reference(chars: &[char], mut pos: usize) -> Option<(String, usiz
 
     if let Some(after_issue) = is_issue_keyword(pos) {
         pos = after_issue;
-        if pos < len && chars[pos] == ':' {
+        if pos < len && chars.get(pos) == Some(&':') {
             pos += 1;
         }
-        while pos < len && chars[pos].is_whitespace() {
+        while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
             pos += 1;
         }
         if pos >= len {
@@ -167,10 +174,10 @@ fn parse_issue_reference(chars: &[char], mut pos: usize) -> Option<(String, usiz
     }
 
     let mut open_delim = None;
-    if chars[pos] == '(' || chars[pos] == '[' {
-        open_delim = Some(chars[pos]);
+    if chars.get(pos).is_some_and(|&c| c == '(' || c == '[') {
+        open_delim = chars.get(pos).copied();
         pos += 1;
-        while pos < len && chars[pos].is_whitespace() {
+        while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
             pos += 1;
         }
     }
@@ -181,10 +188,10 @@ fn parse_issue_reference(chars: &[char], mut pos: usize) -> Option<(String, usiz
     // Second check for "issue" / "issues" inside delimiter, e.g. "(issue #123)"
     if let Some(after_issue) = is_issue_keyword(pos) {
         pos = after_issue;
-        if pos < len && chars[pos] == ':' {
+        if pos < len && chars.get(pos) == Some(&':') {
             pos += 1;
         }
-        while pos < len && chars[pos].is_whitespace() {
+        while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
             pos += 1;
         }
         if pos >= len {
@@ -195,59 +202,65 @@ fn parse_issue_reference(chars: &[char], mut pos: usize) -> Option<(String, usiz
     let mut issue_id = None;
     let mut next_pos = pos;
 
-    if chars[pos] == '#' {
+    if chars.get(pos) == Some(&'#') {
         pos += 1;
-        while pos < len && chars[pos].is_whitespace() {
+        while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
             pos += 1;
         }
         let digit_start = pos;
-        while pos < len && chars[pos].is_ascii_digit() {
+        while pos < len && chars.get(pos).is_some_and(|c| c.is_ascii_digit()) {
             pos += 1;
         }
         if pos > digit_start {
-            issue_id = Some(chars[digit_start..pos].iter().collect::<String>());
+            issue_id = chars
+                .get(digit_start..pos)
+                .map(|sl| sl.iter().collect::<String>());
             next_pos = pos;
         }
     } else if pos + 3 <= len
-        && (chars[pos].to_ascii_lowercase() == 'g'
-            && chars[pos + 1].to_ascii_lowercase() == 'h'
-            && chars[pos + 2] == '-')
+        && chars.get(pos).is_some_and(|c| c.eq_ignore_ascii_case(&'g'))
+        && chars
+            .get(pos + 1)
+            .is_some_and(|c| c.eq_ignore_ascii_case(&'h'))
+        && chars.get(pos + 2) == Some(&'-')
     {
         pos += 3;
-        while pos < len && chars[pos].is_whitespace() {
+        while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
             pos += 1;
         }
         let digit_start = pos;
-        while pos < len && chars[pos].is_ascii_digit() {
+        while pos < len && chars.get(pos).is_some_and(|c| c.is_ascii_digit()) {
             pos += 1;
         }
         if pos > digit_start {
-            issue_id = Some(chars[digit_start..pos].iter().collect::<String>());
+            issue_id = chars
+                .get(digit_start..pos)
+                .map(|sl| sl.iter().collect::<String>());
             next_pos = pos;
         }
     } else {
         // Check for cross-repo syntax: e.g. "gintatkinson/DEAP01-spec-core#123" or "repo#123"
         let repo_start = pos;
         while pos < len
-            && (chars[pos].is_alphanumeric()
-                || chars[pos] == '-'
-                || chars[pos] == '_'
-                || chars[pos] == '.'
-                || chars[pos] == '/')
+            && chars
+                .get(pos)
+                .is_some_and(|&c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/')
         {
             pos += 1;
         }
-        if pos > repo_start && pos < len && chars[pos] == '#' {
+        if pos > repo_start && pos < len && chars.get(pos) == Some(&'#') {
             pos += 1;
-            while pos < len && chars[pos].is_whitespace() {
+            while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
                 pos += 1;
             }
             let digit_start = pos;
-            while pos < len && chars[pos].is_ascii_digit() {
+            while pos < len && chars.get(pos).is_some_and(|c| c.is_ascii_digit()) {
                 pos += 1;
             }
             if pos > digit_start {
-                issue_id = Some(chars[digit_start..pos].iter().collect::<String>());
+                issue_id = chars
+                    .get(digit_start..pos)
+                    .map(|sl| sl.iter().collect::<String>());
                 next_pos = pos;
             }
         }
@@ -255,12 +268,12 @@ fn parse_issue_reference(chars: &[char], mut pos: usize) -> Option<(String, usiz
 
     if let Some(id) = issue_id {
         let mut final_pos = next_pos;
-        while final_pos < len && chars[final_pos].is_whitespace() {
+        while final_pos < len && chars.get(final_pos).is_some_and(|c| c.is_whitespace()) {
             final_pos += 1;
         }
         if let Some(open) = open_delim {
             let expected_close = if open == '(' { ')' } else { ']' };
-            if final_pos < len && chars[final_pos] == expected_close {
+            if final_pos < len && chars.get(final_pos) == Some(&expected_close) {
                 final_pos += 1;
             }
         }
@@ -304,12 +317,13 @@ pub fn scan_commit_message(text: &str) -> Vec<CommitViolation> {
     let mut i = 0;
     while i < len {
         // Word boundary check: previous character must not be alphanumeric or '_'
-        if i > 0 {
-            let prev = chars[i - 1];
-            if prev.is_alphanumeric() || prev == '_' {
-                i += 1;
-                continue;
-            }
+        if i > 0
+            && chars
+                .get(i - 1)
+                .is_some_and(|&prev| prev.is_alphanumeric() || prev == '_')
+        {
+            i += 1;
+            continue;
         }
 
         // Check if any forbidden verb matches starting at index i
@@ -318,17 +332,17 @@ pub fn scan_commit_message(text: &str) -> Vec<CommitViolation> {
             let v_chars: Vec<char> = verb.chars().collect();
             let v_len = v_chars.len();
             if i + v_len <= len {
-                let matches = chars[i..i + v_len]
-                    .iter()
-                    .zip(v_chars.iter())
-                    .all(|(c1, c2)| c1.to_ascii_lowercase() == *c2);
+                let matches = chars
+                    .get(i..i + v_len)
+                    .is_some_and(|sl| sl.iter().zip(v_chars.iter()).all(|(c1, c2)| c1.to_ascii_lowercase() == *c2));
                 if matches {
                     // Check word boundary after verb: next character must not be alphanumeric or '_'
-                    if i + v_len < len {
-                        let next = chars[i + v_len];
-                        if next.is_alphanumeric() || next == '_' {
-                            continue;
-                        }
+                    if i + v_len < len
+                        && chars
+                            .get(i + v_len)
+                            .is_some_and(|&next| next.is_alphanumeric() || next == '_')
+                    {
+                        continue;
                     }
                     matched_verb = Some((verb, v_len));
                     break;
@@ -339,23 +353,30 @@ pub fn scan_commit_message(text: &str) -> Vec<CommitViolation> {
         if let Some((verb, v_len)) = matched_verb {
             let mut j = i + v_len;
             let mut has_colon = false;
-            if j < len && chars[j] == ':' {
+            if j < len && chars.get(j) == Some(&':') {
                 has_colon = true;
                 j += 1;
             }
 
             let mut whitespace_count = 0;
-            while j < len && chars[j].is_whitespace() {
+            while j < len && chars.get(j).is_some_and(|c| c.is_whitespace()) {
                 whitespace_count += 1;
                 j += 1;
             }
 
             // Either a colon was present, whitespace was present, or an opening delimiter is following
-            let has_delimiter = j < len && (chars[j] == '(' || chars[j] == '[');
+            let has_delimiter = j < len && chars.get(j).is_some_and(|&c| c == '(' || c == '[');
             if has_colon || whitespace_count > 0 || has_delimiter {
                 if let Some((issue_id, next_pos)) = parse_issue_reference(&chars, j) {
-                    let snippet: String = chars[i..next_pos].iter().collect();
-                    let line_number = chars[..i].iter().filter(|&&c| c == '\n').count() + 1;
+                    let snippet: String = chars
+                        .get(i..next_pos)
+                        .map(|sl| sl.iter().collect())
+                        .unwrap_or_default();
+                    let line_number = chars
+                        .get(..i)
+                        .map(|sl| sl.iter().filter(|&&c| c == '\n').count())
+                        .unwrap_or(0)
+                        + 1;
 
                     violations.push(CommitViolation {
                         verb: verb.to_string(),
@@ -368,7 +389,7 @@ pub fn scan_commit_message(text: &str) -> Vec<CommitViolation> {
                     let mut chain_pos = next_pos;
                     while chain_pos < len {
                         let mut p = chain_pos;
-                        while p < len && chars[p].is_whitespace() {
+                        while p < len && chars.get(p).is_some_and(|c| c.is_whitespace()) {
                             p += 1;
                         }
                         if p >= len {
@@ -376,33 +397,46 @@ pub fn scan_commit_message(text: &str) -> Vec<CommitViolation> {
                         }
 
                         let mut has_separator = false;
-                        if chars[p] == ',' {
+                        if chars.get(p) == Some(&',') {
                             has_separator = true;
                             p += 1;
-                            while p < len && chars[p].is_whitespace() {
+                            while p < len && chars.get(p).is_some_and(|c| c.is_whitespace()) {
                                 p += 1;
                             }
                         }
 
                         // Check for optional "and"
                         if p + 3 <= len
-                            && chars[p].to_ascii_lowercase() == 'a'
-                            && chars[p + 1].to_ascii_lowercase() == 'n'
-                            && chars[p + 2].to_ascii_lowercase() == 'd'
+                            && chars.get(p).is_some_and(|c| c.eq_ignore_ascii_case(&'a'))
+                            && chars
+                                .get(p + 1)
+                                .is_some_and(|c| c.eq_ignore_ascii_case(&'n'))
+                            && chars
+                                .get(p + 2)
+                                .is_some_and(|c| c.eq_ignore_ascii_case(&'d'))
+                            && (p + 3 == len
+                                || chars
+                                    .get(p + 3)
+                                    .is_some_and(|c| !c.is_alphanumeric() && *c != '_'))
                         {
-                            if p + 3 == len || (!chars[p + 3].is_alphanumeric() && chars[p + 3] != '_') {
-                                has_separator = true;
-                                p += 3;
-                                while p < len && chars[p].is_whitespace() {
-                                    p += 1;
-                                }
+                            has_separator = true;
+                            p += 3;
+                            while p < len && chars.get(p).is_some_and(|c| c.is_whitespace()) {
+                                p += 1;
                             }
                         }
 
                         if has_separator {
                             if let Some((chain_id, after_chain)) = parse_issue_reference(&chars, p) {
-                                let chain_snippet: String = chars[chain_pos..after_chain].iter().collect();
-                                let chain_line = chars[..chain_pos].iter().filter(|&&c| c == '\n').count() + 1;
+                                let chain_snippet: String = chars
+                                    .get(chain_pos..after_chain)
+                                    .map(|sl| sl.iter().collect())
+                                    .unwrap_or_default();
+                                let chain_line = chars
+                                    .get(..chain_pos)
+                                    .map(|sl| sl.iter().filter(|&&c| c == '\n').count())
+                                    .unwrap_or(0)
+                                    + 1;
                                 violations.push(CommitViolation {
                                     verb: verb.to_string(),
                                     issue_id: chain_id,
@@ -508,6 +542,7 @@ pub fn format_violation_error(context: &str, text: &str, violations: &[CommitVio
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-CHECK-TEXT] | SysML v2: ActionDef(check_text)
+#[allow(clippy::result_unit_err)]
 pub fn check_text(text: &str, context: &str) -> Result<(), ()> {
     let violations = scan_commit_message(text);
     if !violations.is_empty() {
@@ -544,6 +579,7 @@ pub fn check_text(text: &str, context: &str) -> Result<(), ()> {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-CHECK-FILE] | SysML v2: ActionDef(check_file)
+#[allow(clippy::result_unit_err)]
 pub fn check_file(path: &Path) -> Result<(), ()> {
     if !path.is_file() {
         eprintln!("Error: Commit message file does not exist: {}", path.display());
@@ -585,6 +621,7 @@ pub fn check_file(path: &Path) -> Result<(), ()> {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-CHECK-HEAD] | SysML v2: ActionDef(check_head)
+#[allow(clippy::result_unit_err)]
 pub fn check_head() -> Result<(), ()> {
     let output = match Command::new("git")
         .args(["log", "-1", "--pretty=%B"])
@@ -632,6 +669,7 @@ pub fn check_head() -> Result<(), ()> {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-CHECK-RANGE] | SysML v2: ActionDef(check_range)
+#[allow(clippy::result_unit_err)]
 pub fn check_range(rev_range: &str) -> Result<(), ()> {
     let output = match Command::new("git")
         .args(["log", "--format=---COMMIT_SEPARATOR---%n%H%n%B", rev_range])
@@ -705,6 +743,7 @@ pub fn check_range(rev_range: &str) -> Result<(), ()> {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-RUN-CHECK-COMMIT-MSG] | SysML v2: ActionDef(run_check_commit_msg)
+#[allow(clippy::result_unit_err)]
 pub fn run_check_commit_msg(args: &CommitMsgArgs) -> Result<(), ()> {
     if let Some(ref path) = args.msg_file {
         check_file(path)
@@ -789,14 +828,17 @@ mod tests {
                 text
             );
             assert_eq!(
-                violations[0].verb.to_ascii_lowercase(),
-                *expected_verb,
+                violations
+                    .first()
+                    .map(|v| v.verb.to_ascii_lowercase())
+                    .as_deref(),
+                Some(*expected_verb),
                 "Verb mismatch on '{}'",
                 text
             );
             assert_eq!(
-                violations[0].issue_id,
-                *expected_id,
+                violations.first().map(|v| v.issue_id.as_str()),
+                Some(*expected_id),
                 "Issue ID mismatch on '{}'",
                 text
             );
@@ -820,8 +862,17 @@ mod tests {
                 "Failed to detect delimited trigger in '{}'",
                 text
             );
-            assert_eq!(violations[0].verb.to_ascii_lowercase(), *expected_verb);
-            assert_eq!(violations[0].issue_id, *expected_id);
+            assert_eq!(
+                violations
+                    .first()
+                    .map(|v| v.verb.to_ascii_lowercase())
+                    .as_deref(),
+                Some(*expected_verb)
+            );
+            assert_eq!(
+                violations.first().map(|v| v.issue_id.as_str()),
+                Some(*expected_id)
+            );
         }
     }
 
@@ -830,8 +881,14 @@ mod tests {
         let text = "feat: something closes # 123";
         let violations = scan_commit_message(text);
         assert!(!violations.is_empty());
-        assert_eq!(violations[0].verb.to_ascii_lowercase(), "closes");
-        assert_eq!(violations[0].issue_id, "123");
+        assert_eq!(
+            violations
+                .first()
+                .map(|v| v.verb.to_ascii_lowercase())
+                .as_deref(),
+            Some("closes")
+        );
+        assert_eq!(violations.first().map(|v| v.issue_id.as_str()), Some("123"));
     }
 
     #[test]
@@ -854,8 +911,17 @@ mod tests {
                 "Failed to detect shorthand/cross-repo in '{}'",
                 text
             );
-            assert_eq!(violations[0].verb.to_ascii_lowercase(), *expected_verb);
-            assert_eq!(violations[0].issue_id, *expected_id);
+            assert_eq!(
+                violations
+                    .first()
+                    .map(|v| v.verb.to_ascii_lowercase())
+                    .as_deref(),
+                Some(*expected_verb)
+            );
+            assert_eq!(
+                violations.first().map(|v| v.issue_id.as_str()),
+                Some(*expected_id)
+            );
         }
     }
 
@@ -875,8 +941,17 @@ mod tests {
                 "Failed to detect issue-keyword in '{}'",
                 text
             );
-            assert_eq!(violations[0].verb.to_ascii_lowercase(), *expected_verb);
-            assert_eq!(violations[0].issue_id, *expected_id);
+            assert_eq!(
+                violations
+                    .first()
+                    .map(|v| v.verb.to_ascii_lowercase())
+                    .as_deref(),
+                Some(*expected_verb)
+            );
+            assert_eq!(
+                violations.first().map(|v| v.issue_id.as_str()),
+                Some(*expected_id)
+            );
         }
     }
 
@@ -885,27 +960,27 @@ mod tests {
         let msg = "fix(conops): remediate compiler engine (fixes #296, #297, #299, #302)";
         let violations = scan_commit_message(msg);
         assert_eq!(violations.len(), 4, "Expected 4 violations in: {}", msg);
-        assert_eq!(violations[0].issue_id, "296");
-        assert_eq!(violations[1].issue_id, "297");
-        assert_eq!(violations[2].issue_id, "299");
-        assert_eq!(violations[3].issue_id, "302");
+        assert_eq!(violations.first().map(|v| v.issue_id.as_str()), Some("296"));
+        assert_eq!(violations.get(1).map(|v| v.issue_id.as_str()), Some("297"));
+        assert_eq!(violations.get(2).map(|v| v.issue_id.as_str()), Some("299"));
+        assert_eq!(violations.get(3).map(|v| v.issue_id.as_str()), Some("302"));
 
         let msg_and = "feat: resolves #10 and #11";
         let v_and = scan_commit_message(msg_and);
         assert_eq!(v_and.len(), 2, "Expected 2 violations in: {}", msg_and);
-        assert_eq!(v_and[0].issue_id, "10");
-        assert_eq!(v_and[1].issue_id, "11");
+        assert_eq!(v_and.first().map(|v| v.issue_id.as_str()), Some("10"));
+        assert_eq!(v_and.get(1).map(|v| v.issue_id.as_str()), Some("11"));
 
         let msg_oxford = "feat: closes #1, #2, and #3";
         let v_oxford = scan_commit_message(msg_oxford);
         assert_eq!(v_oxford.len(), 3, "Expected 3 violations in: {}", msg_oxford);
-        assert_eq!(v_oxford[0].issue_id, "1");
-        assert_eq!(v_oxford[1].issue_id, "2");
-        assert_eq!(v_oxford[2].issue_id, "3");
+        assert_eq!(v_oxford.first().map(|v| v.issue_id.as_str()), Some("1"));
+        assert_eq!(v_oxford.get(1).map(|v| v.issue_id.as_str()), Some("2"));
+        assert_eq!(v_oxford.get(2).map(|v| v.issue_id.as_str()), Some("3"));
     }
 
     #[test]
-    fn test_check_text_and_check_file() {
+    fn test_check_text_and_check_file() -> Result<(), Box<dyn std::error::Error>> {
         assert!(check_text("feat(core): update pipeline (refs #10)", "test").is_ok());
         assert!(check_text("feat(core): update pipeline (fixes #10)", "test").is_err());
 
@@ -918,16 +993,17 @@ mod tests {
         let valid_path = temp_dir.join(format!("test_commit_valid_{}_{}.txt", pid, now));
         let invalid_path = temp_dir.join(format!("test_commit_invalid_{}_{}.txt", pid, now));
 
-        let mut f1 = std::fs::File::create(&valid_path).unwrap();
-        writeln!(f1, "feat(core): valid neutral citation (refs #42)").unwrap();
+        let mut f1 = std::fs::File::create(&valid_path)?;
+        writeln!(f1, "feat(core): valid neutral citation (refs #42)")?;
 
-        let mut f2 = std::fs::File::create(&invalid_path).unwrap();
-        writeln!(f2, "fix(core): forbidden auto-closing keyword (fixes #42)").unwrap();
+        let mut f2 = std::fs::File::create(&invalid_path)?;
+        writeln!(f2, "fix(core): forbidden auto-closing keyword (fixes #42)")?;
 
         assert!(check_file(&valid_path).is_ok());
         assert!(check_file(&invalid_path).is_err());
 
         let _ = std::fs::remove_file(valid_path);
         let _ = std::fs::remove_file(invalid_path);
+        Ok(())
     }
 }

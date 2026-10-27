@@ -4201,7 +4201,7 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-ISSUE-560-METHOD-REALISES-CONFLICT-AND-ACTION-PRECEDENCE-TEST]
     #[test]
-    fn test_issue_560_method_realises_conflict_and_action_req_precedence() {
+    fn test_issue_560_method_realises_conflict_and_action_req_precedence() -> Result<(), String> {
         let model = PackageDef {
             name: "SystemControlPkg".to_string(),
             part_defs: vec![PartDef {
@@ -4328,9 +4328,9 @@ mod tests {
             Some(&model),
             false,
         );
-        let rust_err = rust_res.expect_err(
+        let rust_err = rust_res.err().ok_or(
             "Expected inject_rust_file_docstrings (force=false) to detect conflicting Realises on impl method process_signal",
-        );
+        )?;
         assert!(
             rust_err.contains("process_signal") && rust_err.contains("REQ-ACTION"),
             "Expected Rust conflict error to reference 'process_signal' and 'REQ-ACTION', got: {}",
@@ -4381,14 +4381,15 @@ mod tests {
             Some(&model),
             false,
         );
-        let dart_err = dart_res.expect_err(
+        let dart_err = dart_res.err().ok_or(
             "Expected inject_dart_file_docstrings (force=false) to detect conflicting Realises on class method processSignal",
-        );
+        )?;
         assert!(
             dart_err.contains("processSignal") && dart_err.contains("REQ-ACTION"),
             "Expected Dart conflict error to reference 'processSignal' and 'REQ-ACTION', got: {}",
             dart_err
         );
+        Ok(())
     }
 
     /// Verifies that `inject_dart_file_docstrings` extracts formal parameter names from multi-line Dart class methods and top-level functions when synthesizing 7-section safety docstrings (`#561`).
@@ -4419,7 +4420,7 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-FEAT-42-INJECT-DART-DOCSTRINGS]
     #[test]
-    fn test_issue_561_inject_dart_docstrings_multiline_callable_params() {
+    fn test_issue_561_inject_dart_docstrings_multiline_callable_params() -> Result<(), String> {
         let dart_src = concat!(
             "class DispatchCoordinator {\n",
             "  void scheduleBatch(\n",
@@ -4443,7 +4444,7 @@ mod tests {
 
         let (enriched, count) =
             inject_dart_file_docstrings(dart_src, "lib/dispatch_coordinator.dart", None, false)
-                .expect("inject_dart_file_docstrings should succeed on multi-line Dart callables");
+                .map_err(|e| e.into_message())?;
         assert!(count >= 3, "Expected at least 3 enriched Dart items, got {count}");
         let doc_only: String = enriched
             .lines()
@@ -4456,6 +4457,7 @@ mod tests {
                 "Expected synthesized Dart docstrings to mention multi-line parameter '{param_name}', got:\n{doc_only}"
             );
         }
+        Ok(())
     }
 
     /// Verifies structural workspace anchor resolution in `derive_module_req_tag` without hardcoded workstation path segments (refs #511).
@@ -4757,7 +4759,8 @@ mod tests {
             None,
             false,
         )
-        .expect_err("Expected unbalanced Rust syntax to return Err(DocstringError::Parse)");
+        .err()
+        .ok_or("Expected unbalanced Rust syntax to return Err(DocstringError::Parse)")?;
         assert!(matches!(rust_parse_err, DocstringError::Parse(_)));
         assert_eq!(rust_parse_err.exit_code(), DocstringExitCode::Error);
 
@@ -4767,7 +4770,8 @@ mod tests {
             None,
             false,
         )
-        .expect_err("Expected unbalanced Dart syntax to return Err(DocstringError::Parse)");
+        .err()
+        .ok_or("Expected unbalanced Dart syntax to return Err(DocstringError::Parse)")?;
         assert!(matches!(dart_parse_err, DocstringError::Parse(_)));
         assert_eq!(dart_parse_err.exit_code(), DocstringExitCode::Error);
 
@@ -4810,7 +4814,8 @@ mod tests {
             Some(&model),
             false,
         )
-        .expect_err("Expected unforced Realises conflict to return Err(DocstringError::UnforcedConflict)");
+        .err()
+        .ok_or("Expected unforced Realises conflict to return Err(DocstringError::UnforcedConflict)")?;
         assert!(matches!(
             rust_conflict_err,
             DocstringError::UnforcedConflict(_)

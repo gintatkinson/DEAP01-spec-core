@@ -516,8 +516,9 @@ pub fn detect_dom_leaks(content: &str, rel_path: &str) -> Vec<SpecAuditFinding> 
                 let is_tag_boundary = if end_pos >= lower.len() {
                     true
                 } else {
-                    let next_b = lower.as_bytes()[end_pos];
-                    next_b == b' ' || next_b == b'>' || next_b == b'/' || next_b == b'\t'
+                    lower.as_bytes().get(end_pos).is_some_and(|&next_b| {
+                        next_b == b' ' || next_b == b'>' || next_b == b'/' || next_b == b'\t'
+                    })
                 };
 
                 if is_tag_boundary {
@@ -575,14 +576,17 @@ pub fn find_pixel_dimensions_in_line(line: &str) -> Vec<String> {
 
     while idx + 1 < len {
         // Look for 'p' or 'P' followed by 'x' or 'X'
-        if (bytes[idx] == b'p' || bytes[idx] == b'P') && (bytes[idx + 1] == b'x' || bytes[idx + 1] == b'X') {
+        let is_p = bytes.get(idx).is_some_and(|&b| b == b'p' || b == b'P');
+        let is_x = bytes.get(idx + 1).is_some_and(|&b| b == b'x' || b == b'X');
+        if is_p && is_x {
             let px_start = idx;
             let px_end = idx + 2;
 
             // Boundary check after 'px': must not be an alphanumeric char or '_'
             let after_ok = if px_end < len {
-                let next_b = bytes[px_end];
-                !next_b.is_ascii_alphanumeric() && next_b != b'_'
+                !bytes
+                    .get(px_end)
+                    .is_some_and(|&next_b| next_b.is_ascii_alphanumeric() || next_b == b'_')
             } else {
                 true
             };
@@ -593,10 +597,16 @@ pub fn find_pixel_dimensions_in_line(line: &str) -> Vec<String> {
                 let mut dot_seen = false;
 
                 while digit_start > 0 {
-                    let prev_b = bytes[digit_start - 1];
+                    let Some(&prev_b) = bytes.get(digit_start - 1) else {
+                        break;
+                    };
                     if prev_b.is_ascii_digit() {
                         digit_start -= 1;
-                    } else if prev_b == b'.' && !dot_seen && digit_start - 1 > 0 && bytes[digit_start - 2].is_ascii_digit() {
+                    } else if prev_b == b'.'
+                        && !dot_seen
+                        && digit_start - 1 > 0
+                        && bytes.get(digit_start - 2).is_some_and(u8::is_ascii_digit)
+                    {
                         dot_seen = true;
                         digit_start -= 1;
                     } else {
@@ -607,15 +617,17 @@ pub fn find_pixel_dimensions_in_line(line: &str) -> Vec<String> {
                 if digit_start < px_start {
                     // Preceding boundary check: character before digits must not be an ASCII letter or '_'
                     let before_ok = if digit_start > 0 {
-                        let b = bytes[digit_start - 1];
-                        !b.is_ascii_alphabetic() && b != b'_'
+                        !bytes
+                            .get(digit_start - 1)
+                            .is_some_and(|&b| b.is_ascii_alphabetic() || b == b'_')
                     } else {
                         true
                     };
 
                     if before_ok {
-                        let token = &line[digit_start..px_end];
-                        found.push(token.to_string());
+                        if let Some(token) = line.get(digit_start..px_end) {
+                            found.push(token.to_string());
+                        }
                     }
                 }
             }
@@ -929,7 +941,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_valid_lumi_spec_passes() {
+    fn test_valid_lumi_spec_passes() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"---
 title: "Telemetry Viewport Feature"
 interface_type: "ui"
@@ -955,16 +967,17 @@ The UI uses responsive split panes with @container isolation rules.
 - TelemetryViewportWidget
 - ActuatorControlPanel
 "#;
-        let findings = validate_logical_ui_content(content, "docs/features/feat-01.md").unwrap();
+        let findings = validate_logical_ui_content(content, "docs/features/feat-01.md")?;
         assert!(
             findings.is_empty(),
             "Expected valid LUMI spec to produce 0 findings, got: {:?}",
             findings
         );
+        Ok(())
     }
 
     #[test]
-    fn test_lumi_missing_layer_fails() {
+    fn test_lumi_missing_layer_fails() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"---
 title: "Telemetry Viewport Feature"
 interface_type: "ui"
@@ -981,14 +994,20 @@ The UI uses responsive split panes with @container isolation rules.
 ### Layer 3: Presentation & Actuator Interface Binding
 - TelemetryViewportWidget
 "#;
-        let findings = validate_logical_ui_content(content, "docs/features/feat-01.md").unwrap();
+        let findings = validate_logical_ui_content(content, "docs/features/feat-01.md")?;
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].rule_id, "lumi-3-layer-chain-incomplete");
-        assert!(findings[0].message.contains("Layer 2: Logic & Safety State Management"));
+        assert_eq!(
+            findings.first().map(|f| f.rule_id.as_str()),
+            Some("lumi-3-layer-chain-incomplete")
+        );
+        assert!(findings
+            .first()
+            .is_some_and(|f| f.message.contains("Layer 2: Logic & Safety State Management")));
+        Ok(())
     }
 
     #[test]
-    fn test_lumi_split_panes_missing_container_query_fails() {
+    fn test_lumi_split_panes_missing_container_query_fails() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"---
 title: "Telemetry Viewport Feature"
 interface_type: "ui"
@@ -1008,43 +1027,52 @@ The UI features a resizable split pane between telemetry and controls.
 ### Layer 3: Presentation & Actuator Interface Binding
 - ViewportWidget
 "#;
-        let findings = validate_logical_ui_content(content, "docs/features/feat-01.md").unwrap();
+        let findings = validate_logical_ui_content(content, "docs/features/feat-01.md")?;
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].rule_id, "lumi-missing-container-query");
+        assert_eq!(
+            findings.first().map(|f| f.rule_id.as_str()),
+            Some("lumi-missing-container-query")
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_platform_independence_dom_attribute_leak_fails() {
+    fn test_platform_independence_dom_attribute_leak_fails() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# US-01 User Authentication
 
 The user inputs credentials in the form.
 
 The input field carries aria-label="Username" and role="textbox" with tabindex="0".
 "#;
-        let findings = validate_logical_ui_content(content, "docs/user-stories/us-01.md").unwrap();
+        let findings = validate_logical_ui_content(content, "docs/user-stories/us-01.md")?;
         assert_eq!(findings.len(), 3);
         for f in &findings {
             assert_eq!(f.rule_id, "platform-independence-dom-attribute-leak");
         }
+        Ok(())
     }
 
     #[test]
-    fn test_platform_independence_hardcoded_pixels_fails() {
+    fn test_platform_independence_hardcoded_pixels_fails() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Feat-02 Status Card
 
 The card width is fixed at 450px and height at 120px.
 Maximum bound is 1000px.
 "#;
-        let findings = validate_logical_ui_content(content, "docs/features/feat-02.md").unwrap();
+        let findings = validate_logical_ui_content(content, "docs/features/feat-02.md")?;
         assert_eq!(findings.len(), 3);
-        assert_eq!(findings[0].rule_id, "platform-independence-hardcoded-pixel-dimension");
-        assert!(findings[0].message.contains("450px"));
-        assert!(findings[1].message.contains("120px"));
-        assert!(findings[2].message.contains("1000px"));
+        assert_eq!(
+            findings.first().map(|f| f.rule_id.as_str()),
+            Some("platform-independence-hardcoded-pixel-dimension")
+        );
+        assert!(findings.first().is_some_and(|f| f.message.contains("450px")));
+        assert!(findings.get(1).is_some_and(|f| f.message.contains("120px")));
+        assert!(findings.get(2).is_some_and(|f| f.message.contains("1000px")));
+        Ok(())
     }
 
     #[test]
-    fn test_platform_independence_framework_leak_fails() {
+    fn test_platform_independence_framework_leak_fails() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Feat-03 Flight Display
 
 Acceptance Criteria:
@@ -1052,26 +1080,28 @@ Acceptance Criteria:
 - State rendered using React component.
 - Supports Electron desktop packaging.
 "#;
-        let findings = validate_logical_ui_content(content, "docs/features/feat-03.md").unwrap();
+        let findings = validate_logical_ui_content(content, "docs/features/feat-03.md")?;
         assert_eq!(findings.len(), 3);
         for f in &findings {
             assert_eq!(f.rule_id, "platform-independence-framework-leak");
         }
+        Ok(())
     }
 
     #[test]
-    fn test_english_verb_react_to_is_not_flagged() {
+    fn test_english_verb_react_to_is_not_flagged() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# US-02 Emergency Response
 
 The vehicle flight computer must react to emergency abort signals within 10 milliseconds.
 The system will react with an automatic parachute deployment.
 "#;
-        let findings = validate_logical_ui_content(content, "docs/user-stories/us-02.md").unwrap();
+        let findings = validate_logical_ui_content(content, "docs/user-stories/us-02.md")?;
         assert!(
             findings.is_empty(),
             "English verb 'react to' / 'react with' should not be flagged as framework leak: {:?}",
             findings
         );
+        Ok(())
     }
 
     #[test]
@@ -1084,15 +1114,19 @@ The system will react with an automatic parachute deployment.
     }
 
     #[test]
-    fn test_layout_guidelines_raw_na_fails() {
+    fn test_layout_guidelines_raw_na_fails() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Feat-04 Navigation Pane
 
 | Channel | Component | Container |
 | :--- | :--- | :--- |
 | GUI | NavigationTree | N/A |
 "#;
-        let findings = validate_logical_ui_content(content, "docs/features/feat-04.md").unwrap();
+        let findings = validate_logical_ui_content(content, "docs/features/feat-04.md")?;
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].rule_id, "lumi-prohibit-raw-na-fallback");
+        assert_eq!(
+            findings.first().map(|f| f.rule_id.as_str()),
+            Some("lumi-prohibit-raw-na-fallback")
+        );
+        Ok(())
     }
 }

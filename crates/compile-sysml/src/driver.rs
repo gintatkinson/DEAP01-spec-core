@@ -1590,15 +1590,8 @@ pub fn execute_cli(cli: Cli) -> i32 {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::panic
-)]
 mod tests {
     use super::*;
-    use clap::Parser;
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static DRIVER_TEST_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -1612,7 +1605,7 @@ mod tests {
             seq
         ));
         let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).expect("create temp dir");
+        let _ = fs::create_dir_all(&dir);
         dir
     }
 
@@ -1654,10 +1647,13 @@ mod tests {
         let _ = fs::remove_dir_all(&temp_ws);
         match resolved {
             Ok(SchemaTarget::SingleFile(path)) => assert_eq!(path, pipeline_schema),
-            other => panic!(
-                "expected SingleFile fallback to .pipeline/schema.sysml, got {:?}",
-                other.err()
-            ),
+            other => {
+                return Err(format!(
+                    "expected SingleFile fallback to .pipeline/schema.sysml, got {:?}",
+                    other.err()
+                )
+                .into());
+            }
         }
         Ok(())
     }
@@ -1759,13 +1755,13 @@ mod tests {
             "compile-sysml",
             "--reverse-sync",
             "--schema",
-            bad_schema.to_str().unwrap(),
+            &bad_schema.to_string_lossy(),
             "--docs",
-            docs_dir.to_str().unwrap(),
+            &docs_dir.to_string_lossy(),
             "--out",
-            out_schema.to_str().unwrap(),
+            &out_schema.to_string_lossy(),
             "--digest",
-            out_digest.to_str().unwrap(),
+            &out_digest.to_string_lossy(),
             "--force",
         ]);
         let rev_res = execute(rev_cli);
@@ -1787,11 +1783,11 @@ mod tests {
         let stpa_cli = Cli::parse_from(vec![
             "compile-sysml",
             "--stpa",
-            stpa_md.to_str().unwrap(),
+            &stpa_md.to_string_lossy(),
             "--schema",
-            bad_schema.to_str().unwrap(),
+            &bad_schema.to_string_lossy(),
             "--out",
-            out_schema.to_str().unwrap(),
+            &out_schema.to_string_lossy(),
         ]);
         let stpa_res = execute(stpa_cli);
         let _ = fs::remove_dir_all(&temp_ws);
@@ -1842,11 +1838,11 @@ mod tests {
         let mbd_cli = Cli::parse_from(vec![
             "compile-sysml",
             "--export-mbd",
-            mbd_dir.to_str().unwrap(),
+            &mbd_dir.to_string_lossy(),
             "--schema",
-            invalid_schema.to_str().unwrap(),
+            &invalid_schema.to_string_lossy(),
         ]);
-        let mbd_err = execute(mbd_cli).expect_err("ExportMbd must reject cyclic inheritance");
+        let mbd_err = execute(mbd_cli).err().ok_or("ExportMbd must reject cyclic inheritance")?;
         assert_eq!(mbd_err.0, 1);
         assert!(mbd_err.1.contains("Semantic validation error"));
 
@@ -1855,10 +1851,10 @@ mod tests {
             "--slice-package",
             "CyclicPkg",
             "--schema",
-            invalid_schema.to_str().unwrap(),
+            &invalid_schema.to_string_lossy(),
         ]);
         let slice_err =
-            execute(slice_cli).expect_err("SlicePackage must reject cyclic inheritance");
+            execute(slice_cli).err().ok_or("SlicePackage must reject cyclic inheritance")?;
         assert_eq!(slice_err.0, 1);
         assert!(slice_err.1.contains("Semantic validation error"));
 
@@ -1866,12 +1862,12 @@ mod tests {
         let flutter_cli = Cli::parse_from(vec![
             "compile-sysml",
             "--emit-flutter-contracts",
-            flutter_dir.to_str().unwrap(),
+            &flutter_dir.to_string_lossy(),
             "--schema",
-            invalid_schema.to_str().unwrap(),
+            &invalid_schema.to_string_lossy(),
         ]);
         let flutter_err =
-            execute(flutter_cli).expect_err("EmitFlutterContracts must reject cyclic inheritance");
+            execute(flutter_cli).err().ok_or("EmitFlutterContracts must reject cyclic inheritance")?;
         let _ = fs::remove_dir_all(&temp_ws);
         assert_eq!(flutter_err.0, 1);
         assert!(flutter_err.1.contains("Semantic validation error"));
@@ -1920,11 +1916,11 @@ mod tests {
             "compile-sysml",
             "--compile",
             "--schema",
-            valid_schema.to_str().unwrap(),
+            &valid_schema.to_string_lossy(),
             "--out",
-            compiled_out.to_str().unwrap(),
+            &compiled_out.to_string_lossy(),
             "--digest",
-            compiled_digest.to_str().unwrap(),
+            &compiled_digest.to_string_lossy(),
             "--dry-run",
         ]);
         assert_eq!(execute_cli(compile_cli), 0);
@@ -1939,9 +1935,9 @@ mod tests {
         let mbd_cli = Cli::parse_from(vec![
             "compile-sysml",
             "--export-mbd",
-            mbd_out.to_str().unwrap(),
+            &mbd_out.to_string_lossy(),
             "--schema",
-            valid_schema.to_str().unwrap(),
+            &valid_schema.to_string_lossy(),
             "--dry-run",
         ]);
         assert_eq!(execute_cli(mbd_cli), 0);
@@ -1952,9 +1948,9 @@ mod tests {
         let flutter_cli = Cli::parse_from(vec![
             "compile-sysml",
             "--emit-flutter-contracts",
-            flutter_out.to_str().unwrap(),
+            &flutter_out.to_string_lossy(),
             "--schema",
-            valid_schema.to_str().unwrap(),
+            &valid_schema.to_string_lossy(),
             "--dry-run",
         ]);
         assert_eq!(execute_cli(flutter_cli), 0);
@@ -1969,9 +1965,9 @@ mod tests {
             "compile-sysml",
             "--stpa-transpile",
             "--schema",
-            valid_schema.to_str().unwrap(),
+            &valid_schema.to_string_lossy(),
             "--out-dir",
-            safety_out.to_str().unwrap(),
+            &safety_out.to_string_lossy(),
             "--dry-run",
         ]);
         assert_eq!(execute_cli(stpa_transpile_cli), 0);
@@ -1990,11 +1986,11 @@ mod tests {
         let stpa_cli = Cli::parse_from(vec![
             "compile-sysml",
             "--stpa",
-            stpa_md.to_str().unwrap(),
+            &stpa_md.to_string_lossy(),
             "--schema",
-            valid_schema.to_str().unwrap(),
+            &valid_schema.to_string_lossy(),
             "--out",
-            stpa_out.to_str().unwrap(),
+            &stpa_out.to_string_lossy(),
             "--dry-run",
         ]);
         assert_eq!(execute_cli(stpa_cli), 0);

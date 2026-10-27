@@ -2,7 +2,6 @@
 //!
 //! Replaces setup_git_hooks.sh with pure cross-platform Rust logic.
 
-use clap::Args;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -34,10 +33,9 @@ use walkdir::WalkDir;
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-VERIFY-BASELINE-SETUP-HOOKS-SETUPHOOKSARGS] | SysML v2: PartDef(SetupHooksArgs)
-#[derive(Args, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct SetupHooksArgs {
     /// Target repository root or destination directory (defaults to current directory)
-    #[arg(default_value = ".")]
     pub destination: String,
 }
 

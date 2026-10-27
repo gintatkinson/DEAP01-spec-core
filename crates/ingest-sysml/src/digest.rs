@@ -734,7 +734,7 @@ mod tests {
 
         let missing_path = tmp_dir.join("DOES_NOT_EXIST.md");
         assert!(
-            compute_multi_file_sha256(&[missing_path.clone()]).is_err(),
+            compute_multi_file_sha256(std::slice::from_ref(&missing_path)).is_err(),
             "compute_multi_file_sha256 must return Err for non-existent file"
         );
         let missing_digest_res = generate_input_digest(&missing_path);

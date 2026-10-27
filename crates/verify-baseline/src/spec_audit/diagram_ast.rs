@@ -6,7 +6,7 @@
 
 use crate::spec_audit::markdown_ast::MermaidBlock;
 use crate::spec_audit::SpecAuditError;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 /// Supported diagram types parsed from diagram headers.
 ///
@@ -1020,10 +1020,10 @@ pub fn validate_mermaid_invariants(block: &MermaidBlock) -> Result<(), Vec<SpecA
         }
 
         // Track subgraphs and ends
-        if clean.starts_with("subgraph") {
+        if let Some(after_subgraph_raw) = clean.strip_prefix("subgraph") {
             subgraphs += 1;
             // Check subgraph title quotes: titles with spaces or hyphens must be quoted
-            let after_subgraph = clean["subgraph".len()..].trim();
+            let after_subgraph = after_subgraph_raw.trim();
             if !after_subgraph.is_empty() {
                 let title = after_subgraph;
                 let is_quoted = title.starts_with('"') && title.ends_with('"');
@@ -1173,11 +1173,10 @@ fn strip_mermaid_comment(line: &str) -> &str {
     let mut comment_start = None;
 
     let chars: Vec<char> = line.chars().collect();
-    for i in 0..chars.len() {
-        let c = chars[i];
+    for (i, &c) in chars.iter().enumerate() {
         if c == '"' && prev != '\\' {
             in_quotes = !in_quotes;
-        } else if !in_quotes && c == '%' && i + 1 < chars.len() && chars[i + 1] == '%' {
+        } else if !in_quotes && c == '%' && chars.get(i + 1) == Some(&'%') {
             comment_start = Some(i);
             break;
         }
@@ -1191,7 +1190,7 @@ fn strip_mermaid_comment(line: &str) -> &str {
             .nth(idx)
             .map(|(p, _)| p)
             .unwrap_or(line.len());
-        &line[..byte_pos]
+        line.get(..byte_pos).unwrap_or(line)
     } else {
         line
     }
@@ -1267,11 +1266,9 @@ fn check_unquoted_angle_brackets(line: &str, line_num: usize) -> Result<(), Spec
     let mut in_quotes = false;
     let mut prev_char = ' ';
     let bytes = line.as_bytes();
-    let n = bytes.len();
     let mut i = 0;
 
-    while i < n {
-        let b = bytes[i];
+    while let Some(&b) = bytes.get(i) {
         if b == b'"' && prev_char != '\\' {
             in_quotes = !in_quotes;
             prev_char = b as char;
@@ -1286,7 +1283,7 @@ fn check_unquoted_angle_brackets(line: &str, line_num: usize) -> Result<(), Spec
         }
 
         // Check if substring starts with any known arrow operator
-        let rest = &line[i..];
+        let rest = line.get(i..).unwrap_or("");
         let mut matched_arrow_len = 0;
         for &arrow in ARROWS {
             if rest.starts_with(arrow) {
@@ -1305,7 +1302,7 @@ fn check_unquoted_angle_brackets(line: &str, line_num: usize) -> Result<(), Spec
         if rest.starts_with("<<") {
             if let Some(close_idx) = rest.find(">>") {
                 // Verify no double quote inside
-                let inner = &rest[2..close_idx];
+                let inner = rest.get(2..close_idx).unwrap_or("");
                 if !inner.contains('"') {
                     i += close_idx + 2;
                     prev_char = ' ';
@@ -1370,11 +1367,9 @@ fn check_node_label_quoting(line: &str, line_num: usize) -> Result<(), SpecAudit
     let mut in_quotes = false;
     let mut prev = ' ';
     let chars: Vec<char> = line.chars().collect();
-    let n = chars.len();
     let mut i = 0;
 
-    while i < n {
-        let c = chars[i];
+    while let Some(&c) = chars.get(i) {
         if c == '"' && prev != '\\' {
             in_quotes = !in_quotes;
             prev = c;
@@ -1406,8 +1401,7 @@ fn check_node_label_quoting(line: &str, line_num: usize) -> Result<(), SpecAudit
             let mut inner_prev = ' ';
             let mut close_pos = None;
 
-            while j < n {
-                let jc = chars[j];
+            while let Some(&jc) = chars.get(j) {
                 if jc == '"' && inner_prev != '\\' {
                     inner_in_quotes = !inner_in_quotes;
                 } else if !inner_in_quotes {
@@ -1426,7 +1420,11 @@ fn check_node_label_quoting(line: &str, line_num: usize) -> Result<(), SpecAudit
             }
 
             if let Some(end_idx) = close_pos {
-                let inner_slice: String = chars[i + 1..end_idx].iter().collect();
+                let inner_slice: String = chars
+                    .get(i + 1..end_idx)
+                    .unwrap_or_default()
+                    .iter()
+                    .collect();
                 let inner_trimmed = inner_slice.trim();
 
                 // Strip nested shape markers if any (e.g. `([ ... ])`, `[[ ... ]]`)
@@ -1656,8 +1654,8 @@ fn parse_class_diagram(block: &MermaidBlock) -> Result<ClassDiagramAst, SpecAudi
         }
 
         // Standalone class declaration: `class Name`
-        if clean.starts_with("class ") {
-            let name_part = clean["class ".len()..].trim();
+        if let Some(after_class) = clean.strip_prefix("class ") {
+            let name_part = after_class.trim();
             if !name_part.is_empty() {
                 merge_or_push_class(
                     &mut classes_map,
@@ -1851,21 +1849,17 @@ fn parse_class_member_line(line: &str, class_def: &mut ClassDefAst, line_num: us
             }
 
             let words: Vec<&str> = before_paren.split_whitespace().collect();
-            let (op_name, return_type) = if words.len() >= 2 {
-                // e.g. `void execute_pipeline` or `ReturnType name`
-                let ret = words[0].to_string();
-                let name = words[1].to_string();
-                (name, Some(ret))
-            } else if !words.is_empty() {
-                let name = words[0].to_string();
-                let ret = if !after_close.is_empty() {
-                    Some(after_close.to_string())
-                } else {
-                    None
-                };
-                (name, ret)
-            } else {
-                ("anonymous_operation".to_string(), None)
+            let (op_name, return_type) = match (words.first(), words.get(1)) {
+                (Some(&w0), Some(&w1)) => (w1.to_string(), Some(w0.to_string())),
+                (Some(&w0), None) => {
+                    let ret = if !after_close.is_empty() {
+                        Some(after_close.to_string())
+                    } else {
+                        None
+                    };
+                    (w0.to_string(), ret)
+                }
+                _ => ("anonymous_operation".to_string(), None),
             };
 
             class_def.operations.push(ClassOperationAst {
@@ -1882,13 +1876,10 @@ fn parse_class_member_line(line: &str, class_def: &mut ClassDefAst, line_num: us
 
     // Attribute detection: no parentheses
     let words: Vec<&str> = after_vis.split_whitespace().collect();
-    let (attr_name, type_name) = if words.len() >= 2 {
-        // e.g. `float altitude` -> type is words[0], name is words[1]
-        (words[1].to_string(), Some(words[0].to_string()))
-    } else if !words.is_empty() {
-        (words[0].to_string(), None)
-    } else {
-        ("anonymous_attr".to_string(), None)
+    let (attr_name, type_name) = match (words.first(), words.get(1)) {
+        (Some(&w0), Some(&w1)) => (w1.to_string(), Some(w0.to_string())),
+        (Some(&w0), None) => (w0.to_string(), None),
+        _ => ("anonymous_attr".to_string(), None),
     };
 
     class_def.attributes.push(ClassAttributeAst {
@@ -2006,7 +1997,7 @@ fn parse_class_relation(line: &str, line_num: usize) -> Option<ClassRelationAst>
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-DIAGRAM-AST-PARSE-STATE-DIAGRAM] | SysML v2: ActionDef(parse_state_diagram)
 fn parse_state_diagram(block: &MermaidBlock) -> Result<StateDiagramAst, SpecAuditError> {
-    let mut states_set: HashSet<String> = HashSet::new();
+    let mut states_set: BTreeSet<String> = BTreeSet::new();
     let mut states = Vec::new();
     let mut transitions = Vec::new();
     let mut notes = Vec::new();
@@ -2023,8 +2014,8 @@ fn parse_state_diagram(block: &MermaidBlock) -> Result<StateDiagramAst, SpecAudi
         }
 
         // Note parsing: `note left of State : ...`
-        if clean.starts_with("note ") {
-            let after_note = clean["note ".len()..].trim();
+        if let Some(after_note_raw) = clean.strip_prefix("note ") {
+            let after_note = after_note_raw.trim();
             let (target_state, text) = if let Some((dir_and_target, note_body)) = after_note.split_once(':') {
                 let target = dir_and_target
                     .split_whitespace()
@@ -2045,8 +2036,8 @@ fn parse_state_diagram(block: &MermaidBlock) -> Result<StateDiagramAst, SpecAudi
         }
 
         // State declaration: `state "Label" as StateId` or `state StateId {`
-        if clean.starts_with("state ") {
-            let after_state = clean["state ".len()..].trim().trim_end_matches('{').trim();
+        if let Some(after_state_raw) = clean.strip_prefix("state ") {
+            let after_state = after_state_raw.trim().trim_end_matches('{').trim();
             if let Some((label_part, id_part)) = after_state.split_once(" as ") {
                 let id = id_part.trim().to_string();
                 let label = label_part.trim().trim_matches('"').to_string();
@@ -2214,8 +2205,8 @@ fn parse_sequence_diagram(block: &MermaidBlock) -> Result<SequenceDiagramAst, Sp
         }
 
         // Participant declaration: `participant Name` or `participant Name as "Alias"`
-        if clean.starts_with("participant ") {
-            let rest = clean["participant ".len()..].trim();
+        if let Some(rest_raw) = clean.strip_prefix("participant ") {
+            let rest = rest_raw.trim();
             if let Some((name_part, alias_part)) = rest.split_once(" as ") {
                 let name = name_part.trim().to_string();
                 let alias = alias_part.trim().trim_matches('"').to_string();
@@ -2237,8 +2228,8 @@ fn parse_sequence_diagram(block: &MermaidBlock) -> Result<SequenceDiagramAst, Sp
         }
 
         // Actor declaration: `actor Name` or `actor Name as "Alias"`
-        if clean.starts_with("actor ") {
-            let rest = clean["actor ".len()..].trim();
+        if let Some(rest_raw) = clean.strip_prefix("actor ") {
+            let rest = rest_raw.trim();
             if let Some((name_part, alias_part)) = rest.split_once(" as ") {
                 let name = name_part.trim().to_string();
                 let alias = alias_part.trim().trim_matches('"').to_string();
@@ -2260,8 +2251,8 @@ fn parse_sequence_diagram(block: &MermaidBlock) -> Result<SequenceDiagramAst, Sp
         }
 
         // Activation / Deactivation: `activate Name` / `deactivate Name`
-        if clean.starts_with("activate ") {
-            let part = clean["activate ".len()..].trim().to_string();
+        if let Some(part_raw) = clean.strip_prefix("activate ") {
+            let part = part_raw.trim().to_string();
             activations.push(SequenceActivationAst {
                 participant: part,
                 is_activate: true,
@@ -2269,8 +2260,8 @@ fn parse_sequence_diagram(block: &MermaidBlock) -> Result<SequenceDiagramAst, Sp
             });
             continue;
         }
-        if clean.starts_with("deactivate ") {
-            let part = clean["deactivate ".len()..].trim().to_string();
+        if let Some(part_raw) = clean.strip_prefix("deactivate ") {
+            let part = part_raw.trim().to_string();
             activations.push(SequenceActivationAst {
                 participant: part,
                 is_activate: false,
@@ -2396,7 +2387,7 @@ fn parse_flowchart(block: &MermaidBlock) -> Result<FlowchartAst, SpecAuditError>
     let mut direction = None;
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
-    let mut node_ids: HashSet<String> = HashSet::new();
+    let mut node_ids: BTreeSet<String> = BTreeSet::new();
 
     for (idx, line) in block.raw.lines().enumerate() {
         let line_num = block.start_line + idx;
@@ -2415,13 +2406,13 @@ fn parse_flowchart(block: &MermaidBlock) -> Result<FlowchartAst, SpecAuditError>
         // Edge detection: `A --> B` or `A -->|Label| B`
         for &arrow in ARROWS {
             if let Some(pos) = clean.find(arrow) {
-                let from = clean[..pos].trim();
-                let after_arrow = clean[pos + arrow.len()..].trim();
+                let from = clean.get(..pos).unwrap_or("").trim();
+                let after_arrow = clean.get(pos + arrow.len()..).unwrap_or("").trim();
 
-                let (label, to) = if after_arrow.starts_with('|') {
-                    if let Some(second_pipe) = after_arrow[1..].find('|') {
-                        let lbl = after_arrow[1..second_pipe + 1].trim();
-                        let target = after_arrow[second_pipe + 2..].trim();
+                let (label, to) = if let Some(after_pipe) = after_arrow.strip_prefix('|') {
+                    if let Some(second_pipe) = after_pipe.find('|') {
+                        let lbl = after_pipe.get(..second_pipe).unwrap_or("").trim();
+                        let target = after_pipe.get(second_pipe + 1..).unwrap_or("").trim();
                         (Some(lbl.trim_matches('"').to_string()), target)
                     } else {
                         (None, after_arrow)
@@ -2632,12 +2623,12 @@ fn parse_xychart(block: &MermaidBlock) -> Result<XyChartAst, SpecAuditError> {
 
     for line in block.raw.lines() {
         let clean = strip_mermaid_comment(line).trim();
-        if clean.starts_with("title ") {
-            title = Some(clean["title ".len()..].trim().trim_matches('"').to_string());
-        } else if clean.starts_with("x-axis ") {
-            x_axis = Some(clean["x-axis ".len()..].trim().to_string());
-        } else if clean.starts_with("y-axis ") {
-            y_axis = Some(clean["y-axis ".len()..].trim().to_string());
+        if let Some(rest) = clean.strip_prefix("title ") {
+            title = Some(rest.trim().trim_matches('"').to_string());
+        } else if let Some(rest) = clean.strip_prefix("x-axis ") {
+            x_axis = Some(rest.trim().to_string());
+        } else if let Some(rest) = clean.strip_prefix("y-axis ") {
+            y_axis = Some(rest.trim().to_string());
         }
     }
 
@@ -2697,7 +2688,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_class_diagram_parsing_with_visibility_and_types() {
+    fn test_class_diagram_parsing_with_visibility_and_types() -> Result<(), Box<dyn std::error::Error>> {
         let raw = r#"classDiagram
     class FlightController {
         +float altitude
@@ -2717,7 +2708,8 @@ mod tests {
             end_line: 21,
         };
 
-        let ast = parse_mermaid_diagram(&block).expect("Class diagram parse failed");
+        let ast = parse_mermaid_diagram(&block)?;
+        assert!(matches!(ast, DiagramAst::Class(_)), "Expected Class diagram AST");
         if let DiagramAst::Class(c_ast) = ast {
             assert_eq!(
                 c_ast.classes.len(),
@@ -2725,26 +2717,69 @@ mod tests {
                 "Classes found: {:?}",
                 c_ast.classes.iter().map(|c| &c.name).collect::<Vec<_>>()
             );
-            let fc = c_ast.classes.iter().find(|c| c.name == "FlightController").unwrap();
+            let fc = c_ast
+                .classes
+                .iter()
+                .find(|c| c.name == "FlightController")
+                .ok_or("missing FlightController")?;
             assert_eq!(fc.attributes.len(), 2);
-            assert_eq!(fc.attributes[0].name, "altitude");
-            assert_eq!(fc.attributes[0].visibility, Some(Visibility::Public));
-            assert_eq!(fc.attributes[0].type_name, Some("float".to_string()));
+            assert_eq!(fc.attributes.first().map(|a| a.name.as_str()), Some("altitude"));
+            assert_eq!(
+                fc.attributes.first().and_then(|a| a.visibility),
+                Some(Visibility::Public)
+            );
+            assert_eq!(
+                fc.attributes
+                    .first()
+                    .and_then(|a| a.type_name.as_deref()),
+                Some("float")
+            );
 
             assert_eq!(fc.operations.len(), 2);
-            assert_eq!(fc.operations[0].name, "execute_loop");
-            assert_eq!(fc.operations[0].visibility, Some(Visibility::Public));
-            assert_eq!(fc.operations[0].return_type, Some("void".to_string()));
-            assert_eq!(fc.operations[0].parameters, vec!["int rate_hz"]);
+            assert_eq!(
+                fc.operations.first().map(|o| o.name.as_str()),
+                Some("execute_loop")
+            );
+            assert_eq!(
+                fc.operations.first().and_then(|o| o.visibility),
+                Some(Visibility::Public)
+            );
+            assert_eq!(
+                fc.operations
+                    .first()
+                    .and_then(|o| o.return_type.as_deref()),
+                Some("void")
+            );
+            assert_eq!(
+                fc.operations
+                    .first()
+                    .map(|o| o.parameters.clone())
+                    .unwrap_or_default(),
+                vec!["int rate_hz"]
+            );
 
             assert_eq!(c_ast.relations.len(), 1);
-            assert_eq!(c_ast.relations[0].from_class, "FlightController");
-            assert_eq!(c_ast.relations[0].to_class, "SensorHub");
-            assert_eq!(c_ast.relations[0].relation_type, ClassRelationType::Composition);
-            assert_eq!(c_ast.relations[0].label, Some("owns".to_string()));
-        } else {
-            panic!("Expected Class diagram AST");
+            assert_eq!(
+                c_ast.relations.first().map(|r| r.from_class.as_str()),
+                Some("FlightController")
+            );
+            assert_eq!(
+                c_ast.relations.first().map(|r| r.to_class.as_str()),
+                Some("SensorHub")
+            );
+            assert_eq!(
+                c_ast.relations.first().map(|r| r.relation_type.clone()),
+                Some(ClassRelationType::Composition)
+            );
+            assert_eq!(
+                c_ast
+                    .relations
+                    .first()
+                    .and_then(|r| r.label.as_deref()),
+                Some("owns")
+            );
         }
+        Ok(())
     }
 
     #[test]
@@ -2763,8 +2798,9 @@ mod tests {
 
         let res = parse_mermaid_diagram(&block);
         assert!(res.is_err());
-        let err = res.unwrap_err();
-        assert!(err.to_string().contains("prohibited curly braces"));
+        assert!(res
+            .err()
+            .is_some_and(|err| err.to_string().contains("prohibited curly braces")));
     }
 
     #[test]
@@ -2783,8 +2819,9 @@ mod tests {
 
         let res = parse_mermaid_diagram(&block);
         assert!(res.is_err());
-        let err = res.unwrap_err();
-        assert!(err.to_string().contains("prohibited colon"));
+        assert!(res
+            .err()
+            .is_some_and(|err| err.to_string().contains("prohibited colon")));
     }
 
     #[test]
@@ -2802,8 +2839,9 @@ mod tests {
 
         let res = parse_mermaid_diagram(&block);
         assert!(res.is_err());
-        let err = res.unwrap_err();
-        assert!(err.to_string().contains("Unquoted '>' character"));
+        assert!(res
+            .err()
+            .is_some_and(|err| err.to_string().contains("Unquoted '>' character")));
     }
 
     #[test]
@@ -2837,8 +2875,9 @@ mod tests {
 
         let res = parse_mermaid_diagram(&block);
         assert!(res.is_err());
-        let err = res.unwrap_err();
-        assert!(err.to_string().contains("special characters"));
+        assert!(res
+            .err()
+            .is_some_and(|err| err.to_string().contains("special characters")));
     }
 
     #[test]
@@ -2858,7 +2897,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sequence_diagram_extraction() {
+    fn test_sequence_diagram_extraction() -> Result<(), Box<dyn std::error::Error>> {
         let raw = r#"sequenceDiagram
     actor Pilot
     participant FlightController
@@ -2875,28 +2914,50 @@ mod tests {
             end_line: 9,
         };
 
-        let ast = parse_mermaid_diagram(&block).expect("Sequence diagram parse failed");
+        let ast = parse_mermaid_diagram(&block)?;
+        assert!(
+            matches!(ast, DiagramAst::Sequence(_)),
+            "Expected Sequence diagram AST"
+        );
         if let DiagramAst::Sequence(s_ast) = ast {
             assert_eq!(s_ast.participants.len(), 3);
-            let pilot = s_ast.participants.iter().find(|p| p.name == "Pilot").unwrap();
+            let pilot = s_ast
+                .participants
+                .iter()
+                .find(|p| p.name == "Pilot")
+                .ok_or("missing Pilot")?;
             assert!(pilot.is_actor);
 
             assert_eq!(s_ast.messages.len(), 4);
-            assert_eq!(s_ast.messages[0].from, "Pilot");
-            assert_eq!(s_ast.messages[0].to, "FlightController");
-            assert_eq!(s_ast.messages[0].operation_name, Some("arm".to_string()));
-            assert!(!s_ast.messages[0].is_reply);
+            assert_eq!(s_ast.messages.first().map(|m| m.from.as_str()), Some("Pilot"));
+            assert_eq!(
+                s_ast.messages.first().map(|m| m.to.as_str()),
+                Some("FlightController")
+            );
+            assert_eq!(
+                s_ast
+                    .messages
+                    .first()
+                    .and_then(|m| m.operation_name.as_deref()),
+                Some("arm")
+            );
+            assert!(s_ast.messages.first().is_some_and(|m| !m.is_reply));
 
-            assert_eq!(s_ast.messages[2].from, "SensorHub");
-            assert_eq!(s_ast.messages[2].to, "FlightController");
-            assert!(s_ast.messages[2].is_reply);
-        } else {
-            panic!("Expected Sequence diagram AST");
+            assert_eq!(
+                s_ast.messages.get(2).map(|m| m.from.as_str()),
+                Some("SensorHub")
+            );
+            assert_eq!(
+                s_ast.messages.get(2).map(|m| m.to.as_str()),
+                Some("FlightController")
+            );
+            assert!(s_ast.messages.get(2).is_some_and(|m| m.is_reply));
         }
+        Ok(())
     }
 
     #[test]
-    fn test_state_diagram_extraction_with_guard_and_action() {
+    fn test_state_diagram_extraction_with_guard_and_action() -> Result<(), Box<dyn std::error::Error>> {
         let raw = r#"stateDiagram-v2
     [*] --> Idle
     Idle --> Active : "start [armed] / initMotors()"
@@ -2909,20 +2970,23 @@ mod tests {
             end_line: 5,
         };
 
-        let ast = parse_mermaid_diagram(&block).expect("State diagram parse failed");
+        let ast = parse_mermaid_diagram(&block)?;
+        assert!(
+            matches!(ast, DiagramAst::State(_)),
+            "Expected State diagram AST"
+        );
         if let DiagramAst::State(s_ast) = ast {
             assert_eq!(s_ast.states.len(), 2);
             assert_eq!(s_ast.transitions.len(), 3);
 
-            let trans = &s_ast.transitions[1];
+            let trans = s_ast.transitions.get(1).ok_or("missing transition 1")?;
             assert_eq!(trans.source, "Idle");
             assert_eq!(trans.target, "Active");
             assert_eq!(trans.event, Some("start".to_string()));
             assert_eq!(trans.guard, Some("armed".to_string()));
             assert_eq!(trans.action, Some("initMotors()".to_string()));
-        } else {
-            panic!("Expected State diagram AST");
         }
+        Ok(())
     }
 
     /// Verifies that inline backtick characters inside Mermaid node labels are rejected by `validate_mermaid_invariants`.

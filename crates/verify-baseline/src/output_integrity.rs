@@ -35,18 +35,15 @@ use walkdir::WalkDir;
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-VERIFY-BASELINE-OUTPUT-INTEGRITY-OUTPUTINTEGRITYARGS] | SysML v2: PartDef(OutputIntegrityArgs)
-#[derive(clap::Args, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct OutputIntegrityArgs {
     /// Target directory to scan for markdown files
-    #[arg(long = "dir")]
     pub dir: Option<PathBuf>,
 
     /// Explicit list of files to verify
-    #[arg(long = "files", num_args = 1..)]
     pub files: Option<Vec<PathBuf>>,
 
     /// Positional targets (directory or file paths)
-    #[arg(value_name = "TARGETS")]
     pub targets: Vec<PathBuf>,
 }
 

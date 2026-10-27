@@ -618,7 +618,7 @@ pub fn load_sysml_symbol_index(repo_root: &Path) -> Result<SysmlSymbolIndex, Spe
     if schema_dir.is_dir() {
         let all_schemas = deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[&schema_dir]);
         for p in all_schemas {
-            if p.extension().map_or(false, |ext| ext == "sysml") {
+            if p.extension().is_some_and(|ext| ext == "sysml") {
                 sysml_files.push(p);
             } else {
                 other_schema_files.push(p);
@@ -1161,15 +1161,15 @@ pub fn run_spec_audit(options: &SpecAuditOptions) -> Result<SpecAuditSummary, Sp
             }
 
             // Cross-document: Filename conventions
-            let mut grouped_by_dir: std::collections::HashMap<String, (String, Vec<String>)> =
-                std::collections::HashMap::new();
+            let mut grouped_by_dir: std::collections::BTreeMap<String, (String, Vec<String>)> =
+                std::collections::BTreeMap::new();
             for o in &file_outcomes {
                 let dir = match o.rel_path.rfind('/') {
-                    Some(idx) => &o.rel_path[..idx],
+                    Some(idx) => o.rel_path.get(..idx).unwrap_or("docs"),
                     None => "docs",
                 };
                 let fname = match o.rel_path.rfind('/') {
-                    Some(idx) => &o.rel_path[idx + 1..],
+                    Some(idx) => o.rel_path.get(idx + 1..).unwrap_or(&o.rel_path),
                     None => &o.rel_path,
                 };
                 let entry = grouped_by_dir
@@ -1315,22 +1315,23 @@ mod tests {
     }
 
     #[test]
-    fn test_active_gates_filter() {
-        let all = ActiveGates::parse(None).unwrap();
+    fn test_active_gates_filter() -> Result<(), Box<dyn std::error::Error>> {
+        let all = ActiveGates::parse(None)?;
         assert!(all.uml && all.sections && all.metadata && all.behavioral);
 
-        let uml = ActiveGates::parse(Some("uml")).unwrap();
+        let uml = ActiveGates::parse(Some("uml"))?;
         assert!(uml.uml && !uml.sections && !uml.metadata);
 
-        let sections = ActiveGates::parse(Some("sections")).unwrap();
+        let sections = ActiveGates::parse(Some("sections"))?;
         assert!(sections.sections && !sections.uml);
 
         let invalid = ActiveGates::parse(Some("invalid-gate"));
         assert!(invalid.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_empty_workspace_allow_missing() {
+    fn test_empty_workspace_allow_missing() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = std::env::temp_dir().join(format!("spec_audit_test_{}", std::process::id()));
         let _ = fs::create_dir_all(&temp_dir);
 
@@ -1342,16 +1343,17 @@ mod tests {
             strict: false,
         };
 
-        let summary = run_spec_audit(&options).unwrap();
+        let summary = run_spec_audit(&options)?;
         assert_eq!(summary.total_files_audited, 0);
         assert_eq!(summary.total_findings, 0);
         assert!(summary.passed);
 
         let _ = fs::remove_dir_all(&temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_empty_workspace_disallow_missing() {
+    fn test_empty_workspace_disallow_missing() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = std::env::temp_dir().join(format!("spec_audit_test_strict_{}", std::process::id()));
         let rules_dir = temp_dir.join("rules");
         let _ = fs::create_dir_all(&rules_dir);
@@ -1365,12 +1367,13 @@ mod tests {
             strict: true,
         };
 
-        let summary = run_spec_audit(&options).unwrap();
+        let summary = run_spec_audit(&options)?;
         assert_eq!(summary.total_files_audited, 0);
         assert_eq!(summary.total_findings, 1);
         assert!(!summary.passed);
 
         let _ = fs::remove_dir_all(&temp_dir);
+        Ok(())
     }
 
     #[test]
@@ -1384,7 +1387,7 @@ mod tests {
     }
 
     #[test]
-    fn test_gate_use_case_anti_boilerplate() {
+    fn test_gate_use_case_anti_boilerplate() -> Result<(), Box<dyn std::error::Error>> {
         let bad_content = r#"| Metadata Field | Value |
 |---|---|
 | Title | Use Case 01: System Vision |
@@ -1397,15 +1400,16 @@ mod tests {
 ## Alternate and Exception Flows
 5a. Condition fails.
 "#;
-        let bad_doc = parse_markdown(bad_content).unwrap();
+        let bad_doc = parse_markdown(bad_content)?;
         let errors = validate_use_case_anti_boilerplate(&bad_doc, bad_content, "docs/use-cases/uc-01.md");
         assert!(!errors.is_empty());
         assert!(errors.iter().any(|e| e.contains("fewer than 5 steps")));
         assert!(errors.iter().any(|e| e.contains("fewer than 3 exception cases")));
+        Ok(())
     }
 
     #[test]
-    fn test_gate_use_case_diagram_compliance() {
+    fn test_gate_use_case_diagram_compliance() -> Result<(), Box<dyn std::error::Error>> {
         let bad_diagram = r#"| Metadata Field | Value |
 |---|---|
 | Title | Use Case 01: System Vision |
@@ -1416,14 +1420,15 @@ flowchart LR
     Actor --> Action
 ```
 "#;
-        let doc = parse_markdown(bad_diagram).unwrap();
+        let doc = parse_markdown(bad_diagram)?;
         let errors = validate_use_case_diagram_compliance(&doc, "docs/use-cases/uc-01.md");
         assert!(!errors.is_empty());
         assert!(errors.iter().any(|e| e.contains("lacks a system boundary subgraph")));
+        Ok(())
     }
 
     #[test]
-    fn test_gate_epic_statechart_heterogeneity() {
+    fn test_gate_epic_statechart_heterogeneity() -> Result<(), Box<dyn std::error::Error>> {
         let epic1_content = r#"```mermaid
 stateDiagram-v2
     [*] --> Bootstrapping
@@ -1440,8 +1445,8 @@ stateDiagram-v2
     Compiling --> Verifying
     Verifying --> [*]
 ```"#;
-        let doc1 = parse_markdown(epic1_content).unwrap();
-        let doc2 = parse_markdown(epic2_content).unwrap();
+        let doc1 = parse_markdown(epic1_content)?;
+        let doc2 = parse_markdown(epic2_content)?;
         let epics = vec![
             ("docs/epics/epic-01.md", &doc1),
             ("docs/epics/epic-02.md", &doc2),
@@ -1449,10 +1454,11 @@ stateDiagram-v2
         let errors = validate_epic_statechart_heterogeneity(&epics);
         assert!(!errors.is_empty());
         assert!(errors.iter().any(|e| e.contains("share identical canned pipeline lifecycle statecharts")));
+        Ok(())
     }
 
     #[test]
-    fn test_gate_parent_epic_alignment() {
+    fn test_gate_parent_epic_alignment() -> Result<(), Box<dyn std::error::Error>> {
         let story_content = r#"| Metadata Field | Value |
 |---|---|
 | Title | US 01: Invariant Checks |
@@ -1472,9 +1478,9 @@ Links to [FEAT-06-SystemVisionEngine.md](../features/feat-06.md).
 | Title | Epic 03: System Vision |
 | Type | epic |
 "#;
-        let s_doc = parse_markdown(story_content).unwrap();
-        let f_doc = parse_markdown(feat_content).unwrap();
-        let e_doc = parse_markdown(epic_content).unwrap();
+        let s_doc = parse_markdown(story_content)?;
+        let f_doc = parse_markdown(feat_content)?;
+        let e_doc = parse_markdown(epic_content)?;
 
         let stories = vec![("docs/user-stories/us-01.md", &s_doc)];
         let features = vec![("docs/features/feat-06.md", &f_doc)];
@@ -1483,38 +1489,37 @@ Links to [FEAT-06-SystemVisionEngine.md](../features/feat-06.md).
         let errors = validate_parent_epic_alignment(&stories, &features, &epics);
         assert!(!errors.is_empty());
         assert!(errors.iter().any(|e| e.contains("Parent Epic Alignment Gate violation")));
+        Ok(())
     }
 
     #[test]
-    fn test_load_sysml_symbol_index_with_heterogeneous_schemas() {
+    fn test_load_sysml_symbol_index_with_heterogeneous_schemas() -> Result<(), Box<dyn std::error::Error>> {
         let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)?
             .as_nanos();
         let temp_dir = std::env::temp_dir().join(format!("test_schema_hetero_{}", ts));
         let schema_dir = temp_dir.join("schema");
-        fs::create_dir_all(&schema_dir).unwrap();
+        fs::create_dir_all(&schema_dir)?;
 
         let yaml_file = schema_dir.join("model.yaml");
         fs::write(
             &yaml_file,
             "subsystems:\n  - FlightComputer\n  - NavigationSensor\n",
-        )
-        .unwrap();
+        )?;
 
         let json_file = schema_dir.join("components.json");
         fs::write(
             &json_file,
             r#"{"components": [{"name": "TelemetryGateway"}]}"#,
-        )
-        .unwrap();
+        )?;
 
-        let index = load_sysml_symbol_index(&temp_dir).unwrap();
+        let index = load_sysml_symbol_index(&temp_dir)?;
         assert!(index.part_names.contains("FlightComputer"));
         assert!(index.part_names.contains("NavigationSensor"));
         assert!(index.part_names.contains("TelemetryGateway"));
 
-        fs::remove_dir_all(&temp_dir).ok();
+        let _ = fs::remove_dir_all(&temp_dir);
+        Ok(())
     }
 
     /// Verifies that `resolve_behavioral_triggers_path` falls back to an ancestor workspace directory.

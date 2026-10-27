@@ -17,7 +17,6 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-COMPILER-SYSML-CLI], [DO-330-TQL-4-CLI]
 
-use clap::Parser;
 use compile_sysml::cli::Cli;
 use compile_sysml::driver::execute_cli;
 use std::process;

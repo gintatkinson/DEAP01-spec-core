@@ -215,7 +215,7 @@ impl OpenAPITranslator {
                                         _ => "String".to_string(),
                                     }
                                 } else if let Some(ref_val) = p_obj.get("$ref").and_then(|r| r.as_str()) {
-                                    ref_val.split('/').last().map(|s| sanitize_identifier(s, "Type")).unwrap_or_else(|| "String".to_string())
+                                    ref_val.split('/').next_back().map(|s| sanitize_identifier(s, "Type")).unwrap_or_else(|| "String".to_string())
                                 } else {
                                     "String".to_string()
                                 }
@@ -294,7 +294,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_openapi_json_translation_synthetic() {
+    fn test_openapi_json_translation_synthetic() -> Result<(), String> {
         let openapi_json = r#"{
             "openapi": "3.0.1",
             "info": {
@@ -324,32 +324,57 @@ mod tests {
         }"#;
 
         let translator = OpenAPITranslator::new();
-        let pkg = translator.translate(openapi_json, "Fallback").expect("Translation failed");
+        let pkg = translator.translate(openapi_json, "Fallback")?;
 
         assert_eq!(pkg.name, "Synthetic_Service_Alpha");
         assert_eq!(pkg.part_defs.len(), 2);
 
-        let schema_part = pkg.part_defs.iter().find(|p| p.name == "Record_Alpha").unwrap();
+        let schema_part = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "Record_Alpha")
+            .ok_or("missing Record_Alpha")?;
         assert_eq!(schema_part.attributes.len(), 4);
-        let id_attr = schema_part.attributes.iter().find(|a| a.name == "identifier").unwrap();
+        let id_attr = schema_part
+            .attributes
+            .iter()
+            .find(|a| a.name == "identifier")
+            .ok_or("missing identifier")?;
         assert_eq!(id_attr.type_name, "Integer");
 
-        let mag_attr = schema_part.attributes.iter().find(|a| a.name == "magnitude").unwrap();
+        let mag_attr = schema_part
+            .attributes
+            .iter()
+            .find(|a| a.name == "magnitude")
+            .ok_or("missing magnitude")?;
         assert_eq!(mag_attr.type_name, "Real");
 
-        let flag_attr = schema_part.attributes.iter().find(|a| a.name == "flag").unwrap();
+        let flag_attr = schema_part
+            .attributes
+            .iter()
+            .find(|a| a.name == "flag")
+            .ok_or("missing flag")?;
         assert_eq!(flag_attr.type_name, "Boolean");
 
-        let ep_part = pkg.part_defs.iter().find(|p| p.name == "Synthetic_Service_Alpha_Endpoints").unwrap();
+        let ep_part = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "Synthetic_Service_Alpha_Endpoints")
+            .ok_or("missing Synthetic_Service_Alpha_Endpoints")?;
         assert_eq!(ep_part.actions.len(), 1);
-        assert_eq!(ep_part.actions[0].name, "FetchDataRecord");
+        assert_eq!(
+            ep_part.actions.first().map(|a| a.name.as_str()),
+            Some("FetchDataRecord")
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_openapi_yaml_fallback() {
+    fn test_openapi_yaml_fallback() -> Result<(), String> {
         let yaml_text = "openapi: 3.0.0\ninfo:\n  title: Synthetic_YAML_Model\npaths: {}\n";
         let translator = OpenAPITranslator::new();
-        let pkg = translator.translate(yaml_text, "Fallback").expect("Translation failed");
+        let pkg = translator.translate(yaml_text, "Fallback")?;
         assert_eq!(pkg.name, "Synthetic_YAML_Model");
+        Ok(())
     }
 }

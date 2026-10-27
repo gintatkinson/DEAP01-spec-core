@@ -112,7 +112,7 @@ impl ScopedTempDir {
             nanos,
             seq
         ));
-        fs::create_dir_all(&root).expect("create temp dir");
+        let _ = fs::create_dir_all(&root);
         Self { root }
     }
 }
@@ -175,26 +175,25 @@ impl Drop for ScopedTempDir {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-ISSUE-472-PACKAGE-QUALIFICATION]
 #[test]
-fn test_issue_472_parent_qualified_realization_package_naming_and_override() {
+fn test_issue_472_parent_qualified_realization_package_naming_and_override(
+) -> Result<(), Box<dyn std::error::Error>> {
     let ws = ScopedTempDir::new("pkg_naming");
     let solver_src = ws.root.join("crates").join("solver").join("src");
     let flutter_lib = ws.root.join("app_flutter").join("lib");
     let schema_dir = ws.root.join("schema");
-    fs::create_dir_all(&solver_src).expect("create crates/solver/src");
-    fs::create_dir_all(&flutter_lib).expect("create app_flutter/lib");
-    fs::create_dir_all(&schema_dir).expect("create schema/");
+    fs::create_dir_all(&solver_src)?;
+    fs::create_dir_all(&flutter_lib)?;
+    fs::create_dir_all(&schema_dir)?;
 
     fs::write(
         solver_src.join("lib.rs"),
         "/// Realises: [REQ-SOLVER-01]\npub struct TacticalSolver {\n    pub horizon_sec: u32,\n}\n",
-    )
-    .expect("write solver lib.rs");
+    )?;
 
     fs::write(
         flutter_lib.join("cockpit_hud.dart"),
         "/// Realises: [REQ-HUD-01]\nclass CockpitHud {\n  final String mode;\n  CockpitHud(this.mode);\n}\n",
-    )
-    .expect("write cockpit_hud.dart");
+    )?;
 
     let bin = env!("CARGO_BIN_EXE_ingest-sysml");
 
@@ -208,15 +207,14 @@ fn test_issue_472_parent_qualified_realization_package_naming_and_override() {
         .arg(&solver_out)
         .arg("--digest")
         .arg(&solver_digest)
-        .output()
-        .expect("run ingest-sysml on crates/solver/src");
+        .output()?;
     assert!(
         status_solver.status.success(),
         "ingest-sysml failed on crates/solver/src: {}",
         String::from_utf8_lossy(&status_solver.stderr)
     );
-    let solver_sysml = fs::read_to_string(&solver_out).expect("read solver_realization.sysml");
-    let solver_pkg = parse_sysml(&solver_sysml).expect("parse solver_realization.sysml");
+    let solver_sysml = fs::read_to_string(&solver_out)?;
+    let solver_pkg = parse_sysml(&solver_sysml)?;
     assert_eq!(
         solver_pkg.name, "solver_src_Realization",
         "Expected parent-qualified 'solver_src_Realization' instead of raw 'src', got:\n{}",
@@ -237,15 +235,14 @@ fn test_issue_472_parent_qualified_realization_package_naming_and_override() {
         .arg(&cockpit_out)
         .arg("--digest")
         .arg(&cockpit_digest)
-        .output()
-        .expect("run ingest-sysml on app_flutter/lib");
+        .output()?;
     assert!(
         status_cockpit.status.success(),
         "ingest-sysml failed on app_flutter/lib: {}",
         String::from_utf8_lossy(&status_cockpit.stderr)
     );
-    let cockpit_sysml = fs::read_to_string(&cockpit_out).expect("read cockpit_realization.sysml");
-    let cockpit_pkg = parse_sysml(&cockpit_sysml).expect("parse cockpit_realization.sysml");
+    let cockpit_sysml = fs::read_to_string(&cockpit_out)?;
+    let cockpit_pkg = parse_sysml(&cockpit_sysml)?;
     assert_eq!(
         cockpit_pkg.name, "app_flutter_lib_Realization",
         "Expected parent-qualified 'app_flutter_lib_Realization' instead of raw 'lib', got:\n{}",
@@ -268,15 +265,14 @@ fn test_issue_472_parent_qualified_realization_package_naming_and_override() {
         .arg(&custom_out)
         .arg("--digest")
         .arg(&custom_digest)
-        .output()
-        .expect("run ingest-sysml with --package CustomSolverPkg");
+        .output()?;
     assert!(
         status_custom.status.success(),
         "ingest-sysml --package failed: {}",
         String::from_utf8_lossy(&status_custom.stderr)
     );
-    let custom_sysml = fs::read_to_string(&custom_out).expect("read custom_solver.sysml");
-    let custom_pkg = parse_sysml(&custom_sysml).expect("parse custom_solver.sysml");
+    let custom_sysml = fs::read_to_string(&custom_out)?;
+    let custom_pkg = parse_sysml(&custom_sysml)?;
     assert_eq!(custom_pkg.name, "CustomSolverPkg");
 
     // 4. Verify run_extract_source and ingest_source_directory also qualify raw "src" / "lib"
@@ -286,12 +282,12 @@ fn test_issue_472_parent_qualified_realization_package_naming_and_override() {
         &schema_dir.join("extract_digest.json"),
         true,
     )
-    .expect("run_extract_source on crates/solver/src");
+    .map_err(|(_, msg)| msg)?;
     assert_eq!(extracted_pkg.name, "solver_src_Realization");
 
-    let direct_pkg = ingest_source_directory(&flutter_lib, SourceLanguage::Dart, "lib")
-        .expect("ingest_source_directory with raw 'lib'");
+    let direct_pkg = ingest_source_directory(&flutter_lib, SourceLanguage::Dart, "lib")?;
     assert_eq!(direct_pkg.name, "app_flutter_lib_Realization");
+    Ok(())
 }
 
 /// Verifies that combining `--source <DIR>` with `--schema <DOMAIN_SCHEMA>` (without manual
@@ -325,12 +321,13 @@ fn test_issue_472_parent_qualified_realization_package_naming_and_override() {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-ISSUE-472-SCHEMA-SCOPED-CODE-INGESTION]
 #[test]
-fn test_issue_472_source_with_reference_schema_scopes_to_architectural_and_realized_parts() {
+fn test_issue_472_source_with_reference_schema_scopes_to_architectural_and_realized_parts(
+) -> Result<(), Box<dyn std::error::Error>> {
     let ws = ScopedTempDir::new("schema_scoping");
     let solver_src = ws.root.join("crates").join("solver").join("src");
     let schema_dir = ws.root.join("schema");
-    fs::create_dir_all(&solver_src).expect("create crates/solver/src");
-    fs::create_dir_all(&schema_dir).expect("create schema/");
+    fs::create_dir_all(&solver_src)?;
+    fs::create_dir_all(&schema_dir)?;
 
     let domain_schema_path = schema_dir.join("domain.sysml");
     let domain_sysml = r#"package TacticalDomain {
@@ -341,7 +338,7 @@ fn test_issue_472_source_with_reference_schema_scopes_to_architectural_and_reali
     part def CockpitHud;
 }
 "#;
-    fs::write(&domain_schema_path, domain_sysml).expect("write schema/domain.sysml");
+    fs::write(&domain_schema_path, domain_sysml)?;
 
     // Source file contains:
     // 1. TacticalSolver (matches domain schema part def)
@@ -366,7 +363,7 @@ pub enum PrivateUiHelperEnum {
     Visible,
 }
 "#;
-    fs::write(solver_src.join("lib.rs"), rust_source).expect("write crates/solver/src/lib.rs");
+    fs::write(solver_src.join("lib.rs"), rust_source)?;
 
     let out_sysml_path = schema_dir.join("solver_realization.sysml");
     let out_digest_path = schema_dir.join("solver_digest.json");
@@ -381,8 +378,7 @@ pub enum PrivateUiHelperEnum {
         .arg(&out_sysml_path)
         .arg("--digest")
         .arg(&out_digest_path)
-        .output()
-        .expect("run ingest-sysml with --source and --schema");
+        .output()?;
 
     assert!(
         output.status.success(),
@@ -390,8 +386,8 @@ pub enum PrivateUiHelperEnum {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let generated = fs::read_to_string(&out_sysml_path).expect("read solver_realization.sysml");
-    let pkg = parse_sysml(&generated).expect("parse generated realization SysML");
+    let generated = fs::read_to_string(&out_sysml_path)?;
+    let pkg = parse_sysml(&generated)?;
     let part_names: Vec<&str> = pkg.part_defs.iter().map(|p| p.name.as_str()).collect();
 
     assert!(
@@ -414,6 +410,7 @@ pub enum PrivateUiHelperEnum {
         "Expected unannotated helper enum 'PrivateUiHelperEnum' to be pruned from part_defs, got: {:?}",
         part_names
     );
+    Ok(())
 }
 
 /// Verifies that Check 17 (`check_safety_integrity`) Pillar 7 FMECA bidirectional AST closure
@@ -449,12 +446,13 @@ pub enum PrivateUiHelperEnum {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-ISSUE-472-CHECK17-REALIZATION-CLOSURE]
 #[test]
-fn test_issue_472_check17_fmeca_closure_ignores_realization_only_code_parts() {
+fn test_issue_472_check17_fmeca_closure_ignores_realization_only_code_parts(
+) -> Result<(), Box<dyn std::error::Error>> {
     let ws = ScopedTempDir::new("check17_realization");
     let schema_dir = ws.root.join("schema");
     let safety_dir = ws.root.join("docs").join("safety");
-    fs::create_dir_all(&schema_dir).expect("create schema/");
-    fs::create_dir_all(&safety_dir).expect("create docs/safety/");
+    fs::create_dir_all(&schema_dir)?;
+    fs::create_dir_all(&safety_dir)?;
 
     // Domain model declares two architectural components: TacticalSolver and CockpitHud
     let domain_model = r#"package TacticalDomain {
@@ -462,7 +460,7 @@ fn test_issue_472_check17_fmeca_closure_ignores_realization_only_code_parts() {
     part def CockpitHud;
 }
 "#;
-    fs::write(schema_dir.join("domain.sysml"), domain_model).expect("write schema/domain.sysml");
+    fs::write(schema_dir.join("domain.sysml"), domain_model)?;
 
     // Code realization schema in schema/ contains implementation-level structs alongside TacticalSolver
     let realization_model = r#"package solver_src_Realization {
@@ -474,8 +472,7 @@ fn test_issue_472_check17_fmeca_closure_ignores_realization_only_code_parts() {
     fs::write(
         schema_dir.join("solver_realization.sysml"),
         realization_model,
-    )
-    .expect("write schema/solver_realization.sysml");
+    )?;
 
     let mut stpa = String::from("# System Safety & STPA Matrix\n\n");
     stpa.push_str("## 1. System Losses ($L-1..N$)\n- Loss L-1: Loss of Tactical Picture\n\n");
@@ -516,7 +513,7 @@ fn test_issue_472_check17_fmeca_closure_ignores_realization_only_code_parts() {
         "## Commercial Toolchain Hooks\n- MATLAB / Simulink / Stateflow verification hooks\n",
     );
 
-    fs::write(safety_dir.join("STPA_MATRIX.md"), stpa).expect("write STPA_MATRIX.md");
+    fs::write(safety_dir.join("STPA_MATRIX.md"), stpa)?;
 
     let res = check_safety_integrity(&ws.root, false, true);
     assert_eq!(
@@ -525,4 +522,5 @@ fn test_issue_472_check17_fmeca_closure_ignores_realization_only_code_parts() {
         "Expected Check 17 to pass when domain components are covered and realization-only structs are in *_realization.sysml, got: {:?}",
         res
     );
+    Ok(())
 }

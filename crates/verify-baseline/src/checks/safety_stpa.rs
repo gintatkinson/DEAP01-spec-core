@@ -186,10 +186,10 @@ pub fn parse_fmeca_table(content: &str) -> FmecaData {
     let mut i = 0;
 
     while i < n {
-        let line = lines[i].trim();
+        let line = lines.get(i).copied().unwrap_or("").trim();
         if line.starts_with('|') && is_fmeca_header(line) {
             // Must be followed by a table separator line containing '---'
-            let next_line = if i + 1 < n { lines[i + 1].trim() } else { "" };
+            let next_line = lines.get(i + 1).copied().unwrap_or("").trim();
             if !next_line.starts_with('|') || !next_line.contains("---") {
                 i += 1;
                 continue;
@@ -231,90 +231,91 @@ pub fn parse_fmeca_table(content: &str) -> FmecaData {
 
             // Skip separator line (|---|---|...)
             i += 1;
-            while i < n && lines[i].trim().starts_with('|') && lines[i].contains("---") {
-                i += 1;
+            while let Some(sep_line) = lines.get(i).map(|l| l.trim()) {
+                if sep_line.starts_with('|') && sep_line.contains("---") {
+                    i += 1;
+                } else {
+                    break;
+                }
             }
 
             // Parse body rows
-            while i < n && lines[i].trim().starts_with('|') {
-                let row_line = lines[i].trim();
+            while let Some(row_line) = lines.get(i).map(|l| l.trim()) {
+                if !row_line.starts_with('|') {
+                    break;
+                }
                 let cells: Vec<String> = row_line
                     .split('|')
                     .map(|s| s.trim().to_string())
                     .collect();
 
                 // Strip leading/trailing empty elements from split on |
-                let cells: Vec<String> = if cells.len() >= 2 && cells[0].is_empty() && cells[cells.len() - 1].is_empty() {
-                    cells[1..cells.len() - 1].to_vec()
+                let cells: Vec<String> = if cells.len() >= 2
+                    && cells.first().is_some_and(|c| c.is_empty())
+                    && cells.last().is_some_and(|c| c.is_empty())
+                {
+                    cells.get(1..cells.len() - 1).unwrap_or_default().to_vec()
                 } else {
                     cells
                 };
 
                 if !cells.is_empty() {
                     let mut row = FmecaRow::default();
-                    if let Some(idx) = id_idx {
-                        if idx < cells.len() {
-                            row.id = cells[idx].clone();
-                        }
+                    if let Some(cell) = id_idx.and_then(|idx| cells.get(idx)) {
+                        row.id = cell.clone();
                     }
-                    if let Some(idx) = comp_idx {
-                        if idx < cells.len() {
-                            row.component = cells[idx].clone();
-                        }
+                    if let Some(cell) = comp_idx.and_then(|idx| cells.get(idx)) {
+                        row.component = cell.clone();
                     }
-                    if let Some(idx) = mode_idx {
-                        if idx < cells.len() {
-                            row.failure_mode = cells[idx].clone();
-                        }
+                    if let Some(cell) = mode_idx.and_then(|idx| cells.get(idx)) {
+                        row.failure_mode = cell.clone();
                     }
 
                     // Fallbacks if columns were not matched by header
                     if row.component.is_empty() {
-                        if id_idx == Some(0) && cells.len() > 1 {
-                            row.component = cells[1].clone();
-                        } else if cells.len() > 1 && (cells[0].to_uppercase().starts_with("FM") || cells[0].to_uppercase().starts_with("FMECA")) {
-                            row.component = cells[1].clone();
+                        let starts_fm = cells.first().is_some_and(|c0| {
+                            let u = c0.to_uppercase();
+                            u.starts_with("FM") || u.starts_with("FMECA")
+                        });
+                        if id_idx == Some(0) || starts_fm {
+                            if let Some(c1) = cells.get(1) {
+                                row.component = c1.clone();
+                            }
                         }
                     }
                     if row.failure_mode.is_empty() {
-                        if comp_idx == Some(1) && cells.len() > 2 {
-                            row.failure_mode = cells[2].clone();
-                        } else if cells.len() > 2 && (cells[0].to_uppercase().starts_with("FM") || cells[0].to_uppercase().starts_with("FMECA")) {
-                            row.failure_mode = cells[2].clone();
+                        let starts_fm = cells.first().is_some_and(|c0| {
+                            let u = c0.to_uppercase();
+                            u.starts_with("FM") || u.starts_with("FMECA")
+                        });
+                        if comp_idx == Some(1) || starts_fm {
+                            if let Some(c2) = cells.get(2) {
+                                row.failure_mode = c2.clone();
+                            }
                         }
                     }
 
-                    if let Some(idx) = s_idx {
-                        if idx < cells.len() {
-                            row.s = cells[idx].parse::<i32>().ok();
-                        }
+                    if let Some(cell) = s_idx.and_then(|idx| cells.get(idx)) {
+                        row.s = cell.parse::<i32>().ok();
                     }
-                    if let Some(idx) = o_idx {
-                        if idx < cells.len() {
-                            row.o = cells[idx].parse::<i32>().ok();
-                        }
+                    if let Some(cell) = o_idx.and_then(|idx| cells.get(idx)) {
+                        row.o = cell.parse::<i32>().ok();
                     }
-                    if let Some(idx) = d_idx {
-                        if idx < cells.len() {
-                            row.d = cells[idx].parse::<i32>().ok();
-                        }
+                    if let Some(cell) = d_idx.and_then(|idx| cells.get(idx)) {
+                        row.d = cell.parse::<i32>().ok();
                     }
-                    if let Some(idx) = rpn_idx {
-                        if idx < cells.len() {
-                            row.rpn = cells[idx].parse::<i32>().ok();
-                        }
+                    if let Some(cell) = rpn_idx.and_then(|idx| cells.get(idx)) {
+                        row.rpn = cell.parse::<i32>().ok();
                     }
 
                     // Check basis
                     let mut found_basis = None;
-                    if let Some(idx) = basis_idx {
-                        if idx < cells.len() {
-                            let cell_upper = cells[idx].to_uppercase();
-                            if cell_upper.contains("SSOT") {
-                                found_basis = Some("SSOT".to_string());
-                            } else if cell_upper.contains("DERIVED") {
-                                found_basis = Some("Derived".to_string());
-                            }
+                    if let Some(cell) = basis_idx.and_then(|idx| cells.get(idx)) {
+                        let cell_upper = cell.to_uppercase();
+                        if cell_upper.contains("SSOT") {
+                            found_basis = Some("SSOT".to_string());
+                        } else if cell_upper.contains("DERIVED") {
+                            found_basis = Some("Derived".to_string());
                         }
                     }
                     if found_basis.is_none() {
@@ -414,19 +415,17 @@ fn matches_dimension_lower(lower: &str, keywords: &[&str]) -> bool {
             let actual_pos = start + pos;
             let end_pos = actual_pos + kw_len;
 
-            let prev_ok = if actual_pos == 0 {
-                true
-            } else {
-                let prev_char = lower[..actual_pos].chars().next_back().unwrap();
-                !prev_char.is_alphanumeric() && prev_char != '_'
-            };
+            let prev_ok = actual_pos == 0
+                || lower
+                    .get(..actual_pos)
+                    .and_then(|s| s.chars().next_back())
+                    .is_none_or(|prev_char| !prev_char.is_alphanumeric() && prev_char != '_');
 
-            let next_ok = if end_pos == lower.len() {
-                true
-            } else {
-                let next_char = lower[end_pos..].chars().next().unwrap();
-                !next_char.is_alphanumeric() && next_char != '_'
-            };
+            let next_ok = end_pos == lower.len()
+                || lower
+                    .get(end_pos..)
+                    .and_then(|s| s.chars().next())
+                    .is_none_or(|next_char| !next_char.is_alphanumeric() && next_char != '_');
 
             if prev_ok && next_ok {
                 return true;
@@ -560,7 +559,12 @@ pub fn check_uca_categories(content: &str) -> Vec<String> {
             .split_whitespace()
             .collect::<Vec<_>>()
             .windows(2)
-            .any(|w| w[0] == "not" && (w[1].starts_with("provid") || w[1] == "providing" || w[1] == "provided"));
+            .any(|w| {
+                w.first() == Some(&"not")
+                    && w.get(1).is_some_and(|w1| {
+                        w1.starts_with("provid") || *w1 == "providing" || *w1 == "provided"
+                    })
+            });
     if !has_not_providing {
         missing.push("1. Not providing causes hazard".to_string());
     }
@@ -574,24 +578,27 @@ pub fn check_uca_categories(content: &str) -> Vec<String> {
     } else {
         let mut found = false;
         let mut start = 0;
-        while let Some(pos) = lower[start..].find("providing") {
+        while let Some(pos) = lower.get(start..).and_then(|s| s.find("providing")) {
             let actual_pos = start + pos;
             let end_pos = actual_pos + "providing".len();
 
-            let prev_ok = actual_pos == 0 || {
-                let prev_char = lower[..actual_pos].chars().next_back().unwrap();
-                !prev_char.is_alphanumeric() && prev_char != '_'
-            };
-            let next_ok = end_pos == lower.len() || {
-                let next_char = lower[end_pos..].chars().next().unwrap();
-                !next_char.is_alphanumeric() && next_char != '_'
-            };
+            let prev_ok = actual_pos == 0
+                || lower
+                    .get(..actual_pos)
+                    .and_then(|s| s.chars().next_back())
+                    .is_none_or(|prev_char| !prev_char.is_alphanumeric() && prev_char != '_');
+            let next_ok = end_pos == lower.len()
+                || lower
+                    .get(end_pos..)
+                    .and_then(|s| s.chars().next())
+                    .is_none_or(|next_char| !next_char.is_alphanumeric() && next_char != '_');
 
             if prev_ok && next_ok {
-                let after = lower[end_pos..].trim_start();
-                let is_providing_too = after.starts_with("too") && (after.len() == 3 || {
-                    let after_too = after["too".len()..].chars().next().unwrap();
-                    !after_too.is_alphanumeric() && after_too != '_'
+                let after = lower.get(end_pos..).unwrap_or("").trim_start();
+                let is_providing_too = after.strip_prefix("too").is_some_and(|rem| {
+                    rem.chars()
+                        .next()
+                        .is_none_or(|after_too| !after_too.is_alphanumeric() && after_too != '_')
                 });
                 if !is_providing_too {
                     found = true;
@@ -672,15 +679,14 @@ fn has_stpa_id(lower: &str, prefix: &str) -> bool {
     }
     // Substring boundary fallback
     let mut start = 0;
-    while let Some(pos) = lower[start..].find(prefix) {
+    while let Some(pos) = lower.get(start..).and_then(|s| s.find(prefix)) {
         let actual_pos = start + pos;
-        let prev_ok = if actual_pos == 0 {
-            true
-        } else {
-            let prev_char = lower[..actual_pos].chars().next_back().unwrap();
-            !prev_char.is_alphanumeric() && prev_char != '_'
-        };
-        let after_prefix = &lower[actual_pos + prefix.len()..];
+        let prev_ok = actual_pos == 0
+            || lower
+                .get(..actual_pos)
+                .and_then(|s| s.chars().next_back())
+                .is_none_or(|prev_char| !prev_char.is_alphanumeric() && prev_char != '_');
+        let after_prefix = lower.get(actual_pos + prefix.len()..).unwrap_or("");
         let mut digits_count = 0;
         for ch in after_prefix.chars() {
             if ch.is_ascii_digit() {
@@ -690,13 +696,11 @@ fn has_stpa_id(lower: &str, prefix: &str) -> bool {
             }
         }
         if prev_ok && digits_count > 0 {
-            let after_digits = &after_prefix[digits_count..];
-            let next_ok = if after_digits.is_empty() {
-                true
-            } else {
-                let next_char = after_digits.chars().next().unwrap();
-                !next_char.is_alphanumeric() && next_char != '_'
-            };
+            let after_digits = after_prefix.get(digits_count..).unwrap_or("");
+            let next_ok = after_digits
+                .chars()
+                .next()
+                .is_none_or(|next_char| !next_char.is_alphanumeric() && next_char != '_');
             if next_ok {
                 return true;
             }
@@ -1141,7 +1145,7 @@ pub fn check_safety_integrity(
         // Validate S/O/D ratings and RPN = S * O * D
         for row in &fmeca.rows {
             if let (Some(s), Some(o), Some(d)) = (row.s, row.o, row.d) {
-                if s < 1 || s > 10 || o < 1 || o > 10 || d < 1 || d > 10 {
+                if !(1..=10).contains(&s) || !(1..=10).contains(&o) || !(1..=10).contains(&d) {
                     errors.push(format!(
                         "Pillar 7 violation: FMECA row '{}' ratings out of range [1, 10] (S={}, O={}, D={}).",
                         row.id, s, o, d
@@ -1201,16 +1205,16 @@ mod tests {
     }
 
     impl TempDir {
-        fn new(name: &str) -> Self {
+        fn new(name: &str) -> Result<Self, std::io::Error> {
             static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
             let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
             let path = std::env::temp_dir().join(format!("verify_safety_{}_{}_{}", name, nanos, count));
-            fs::create_dir_all(&path).unwrap();
-            Self { path }
+            fs::create_dir_all(&path)?;
+            Ok(Self { path })
         }
     }
 
@@ -1221,17 +1225,19 @@ mod tests {
     }
 
     #[test]
-    fn test_missing_safety_dir_allow_missing() {
-        let tmp = TempDir::new("allow_missing");
+    fn test_missing_safety_dir_allow_missing() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("allow_missing")?;
         let res = check_safety_integrity(&tmp.path, true, false);
         assert_eq!(res, Ok(SafetyCheckOutcome::DownstreamPendingOrClean));
+        Ok(())
     }
 
     #[test]
-    fn test_missing_safety_dir_strict() {
-        let tmp = TempDir::new("strict");
+    fn test_missing_safety_dir_strict() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("strict")?;
         let res = check_safety_integrity(&tmp.path, true, true);
         assert!(res.is_err());
+        Ok(())
     }
 
     #[test]
@@ -1245,10 +1251,10 @@ mod tests {
     }
 
     #[test]
-    fn test_fmeca_single_failure_mode_per_component_rejected() {
-        let tmp = TempDir::new("single_mode");
+    fn test_fmeca_single_failure_mode_per_component_rejected() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("single_mode")?;
         let safety_dir = tmp.path.join("docs").join("safety");
-        fs::create_dir_all(&safety_dir).unwrap();
+        fs::create_dir_all(&safety_dir)?;
 
         let mut fmeca_content = String::from(
             "# Safety Analysis\n\n\
@@ -1296,17 +1302,18 @@ mod tests {
              MATLAB Simulink Stateflow Embedded Coder hooks.\n"
         );
 
-        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content).unwrap();
+        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content)?;
 
         let res = check_safety_integrity(&tmp.path, false, true);
         assert!(res.is_err(), "Single-failure-mode-per-component matrix must be rejected, but got: {:?}", res);
+        Ok(())
     }
 
     #[test]
-    fn test_fmeca_multi_failure_mode_per_component_passes() {
-        let tmp = TempDir::new("multi_mode");
+    fn test_fmeca_multi_failure_mode_per_component_passes() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("multi_mode")?;
         let safety_dir = tmp.path.join("docs").join("safety");
-        fs::create_dir_all(&safety_dir).unwrap();
+        fs::create_dir_all(&safety_dir)?;
 
         let mut fmeca_content = String::from(
             "# Safety Analysis\n\n\
@@ -1353,17 +1360,18 @@ mod tests {
              MATLAB Simulink Stateflow Embedded Coder hooks.\n"
         );
 
-        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content).unwrap();
+        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content)?;
 
         let res = check_safety_integrity(&tmp.path, false, true);
         assert_eq!(res, Ok(SafetyCheckOutcome::DownstreamVerified));
+        Ok(())
     }
 
     #[test]
-    fn test_fmeca_partial_single_mode_component_fails() {
-        let tmp = TempDir::new("partial_single");
+    fn test_fmeca_partial_single_mode_component_fails() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("partial_single")?;
         let safety_dir = tmp.path.join("docs").join("safety");
-        fs::create_dir_all(&safety_dir).unwrap();
+        fs::create_dir_all(&safety_dir)?;
 
         let mut fmeca_content = String::from(
             "# Safety Analysis\n\n\
@@ -1398,19 +1406,20 @@ mod tests {
              MATLAB Simulink Stateflow Embedded Coder hooks.\n"
         );
 
-        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content).unwrap();
+        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content)?;
 
         let res = check_safety_integrity(&tmp.path, false, true);
         assert!(res.is_err());
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("Comp8") && e.contains("degenerate single-failure-mode coverage")));
+        Ok(())
     }
 
     #[test]
-    fn test_fmeca_duplicate_mode_does_not_satisfy_multi_mode() {
-        let tmp = TempDir::new("duplicate_mode");
+    fn test_fmeca_duplicate_mode_does_not_satisfy_multi_mode() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("duplicate_mode")?;
         let safety_dir = tmp.path.join("docs").join("safety");
-        fs::create_dir_all(&safety_dir).unwrap();
+        fs::create_dir_all(&safety_dir)?;
 
         let mut fmeca_content = String::from(
             "# Safety Analysis\n\n\
@@ -1460,19 +1469,20 @@ mod tests {
              MATLAB Simulink Stateflow Embedded Coder hooks.\n"
         );
 
-        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content).unwrap();
+        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content)?;
 
         let res = check_safety_integrity(&tmp.path, false, true);
         assert!(res.is_err());
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("Comp1")));
+        Ok(())
     }
 
     #[test]
-    fn test_fmeca_missing_derivation_basis_fails() {
-        let tmp = TempDir::new("missing_basis");
+    fn test_fmeca_missing_derivation_basis_fails() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("missing_basis")?;
         let safety_dir = tmp.path.join("docs").join("safety");
-        fs::create_dir_all(&safety_dir).unwrap();
+        fs::create_dir_all(&safety_dir)?;
 
         let mut fmeca_content = String::from(
             "# Safety Analysis\n\n\
@@ -1520,21 +1530,22 @@ mod tests {
              MATLAB Simulink Stateflow Embedded Coder hooks.\n"
         );
 
-        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content).unwrap();
+        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content)?;
 
         let res = check_safety_integrity(&tmp.path, false, true);
         assert!(res.is_err());
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("missing explicit Derivation Basis classification")));
+        Ok(())
     }
 
     #[test]
-    fn test_issue_249_check17_rejects_fmeca_with_undeclared_or_negated_component() {
-        let temp = TempDir::new("check17_issue249");
+    fn test_issue_249_check17_rejects_fmeca_with_undeclared_or_negated_component() -> Result<(), Box<dyn std::error::Error>> {
+        let temp = TempDir::new("check17_issue249")?;
         let safety_dir = temp.path.join("docs").join("safety");
         let schema_dir = temp.path.join("schema");
-        fs::create_dir_all(&safety_dir).unwrap();
-        fs::create_dir_all(&schema_dir).unwrap();
+        fs::create_dir_all(&safety_dir)?;
+        fs::create_dir_all(&schema_dir)?;
 
         // Model declares PrimaryProcessor and SensorUnit, and negates the backup unit: backupEnabled = 0; backupSystem = "No";
         let model_text = r#"package SystemSSOT {
@@ -1544,7 +1555,7 @@ mod tests {
     attribute backupSystem = "No";
 }
 "#;
-        fs::write(schema_dir.join("model.sysml"), model_text).unwrap();
+        fs::write(schema_dir.join("model.sysml"), model_text)?;
 
         // FMECA table includes undeclared / negated AuxiliaryBackupUnit
         let mut content = String::from("# System Safety & STPA Matrix\n\n");
@@ -1570,24 +1581,25 @@ mod tests {
         content.push_str("## 8. Domain Regulatory Objectives & Integrity Mapping\n- Pillar 8 SafetyIntegrityLevel_2 objectives\n\n");
         content.push_str("## Commercial Toolchain Hooks\n- MATLAB / Simulink / Stateflow hooks\n");
 
-        fs::write(safety_dir.join("STPA_MATRIX.md"), content).unwrap();
+        fs::write(safety_dir.join("STPA_MATRIX.md"), content)?;
 
         let result = check_safety_integrity(&temp.path, false, true);
         assert!(result.is_err(), "Expected Check 17 to fail when FMECA references undeclared/negated AuxiliaryBackupUnit");
-        let errs = result.unwrap_err();
+        let errs = result.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("Pillar 7 violation") && e.contains("'AuxiliaryBackupUnit' contradicted by negative AST model constraint")),
             "Expected Pillar 7 negation error referencing AuxiliaryBackupUnit, got: {:?}", errs);
         assert!(!errs.iter().any(|e| e.contains("contradicted by negative AST model constraint") && (e.contains("'PrimaryProcessor'") || e.contains("'SensorUnit'"))),
             "Declared, non-negated components must not be flagged as negated, got: {:?}", errs);
+        Ok(())
     }
 
     #[test]
-    fn test_issue_249_check17_rejects_missing_declared_part() {
-        let temp = TempDir::new("check17_missing_part");
+    fn test_issue_249_check17_rejects_missing_declared_part() -> Result<(), Box<dyn std::error::Error>> {
+        let temp = TempDir::new("check17_missing_part")?;
         let safety_dir = temp.path.join("docs").join("safety");
         let schema_dir = temp.path.join("schema");
-        fs::create_dir_all(&safety_dir).unwrap();
-        fs::create_dir_all(&schema_dir).unwrap();
+        fs::create_dir_all(&safety_dir)?;
+        fs::create_dir_all(&schema_dir)?;
 
         // Model declares FlightComputer and ActuatorUnit
         let model_text = r#"package SystemSSOT {
@@ -1595,7 +1607,7 @@ mod tests {
     part def ActuatorUnit;
 }
 "#;
-        fs::write(schema_dir.join("model.sysml"), model_text).unwrap();
+        fs::write(schema_dir.join("model.sysml"), model_text)?;
 
         // FMECA table covers FlightComputer across all 15 rows, but completely omits ActuatorUnit
         let mut content = String::from("# System Safety & STPA Matrix\n\n");
@@ -1620,22 +1632,23 @@ mod tests {
         content.push_str("\n## 8. Domain Regulatory Objectives & Integrity Mapping\n- Pillar 8 SORA SAIL II objectives\n\n");
         content.push_str("## Commercial Toolchain Hooks\n- MATLAB / Simulink / Stateflow hooks\n");
 
-        fs::write(safety_dir.join("STPA_MATRIX.md"), content).unwrap();
+        fs::write(safety_dir.join("STPA_MATRIX.md"), content)?;
 
         let result = check_safety_integrity(&temp.path, false, true);
         assert!(result.is_err(), "Expected Check 17 to fail when declared ActuatorUnit is missing from FMECA");
-        let errs = result.unwrap_err();
+        let errs = result.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("missing declared AST part def component(s): ActuatorUnit")),
             "Expected missing declared part error for ActuatorUnit, got: {:?}", errs);
+        Ok(())
     }
 
     #[test]
-    fn test_issue_249_check17_valid_bidirectional_ast_closure_passes() {
-        let temp = TempDir::new("check17_valid_ast");
+    fn test_issue_249_check17_valid_bidirectional_ast_closure_passes() -> Result<(), Box<dyn std::error::Error>> {
+        let temp = TempDir::new("check17_valid_ast")?;
         let safety_dir = temp.path.join("docs").join("safety");
         let schema_dir = temp.path.join("schema");
-        fs::create_dir_all(&safety_dir).unwrap();
-        fs::create_dir_all(&schema_dir).unwrap();
+        fs::create_dir_all(&safety_dir)?;
+        fs::create_dir_all(&schema_dir)?;
 
         // Model declares FlightComputer and SensorUnit with valid positive configuration
         let model_text = r#"package SystemSSOT {
@@ -1643,7 +1656,7 @@ mod tests {
     part def SensorUnit;
 }
 "#;
-        fs::write(schema_dir.join("model.sysml"), model_text).unwrap();
+        fs::write(schema_dir.join("model.sysml"), model_text)?;
 
         let mut content = String::from("# System Safety & STPA Matrix\n\n");
         content.push_str("## 1. System Losses ($L-1..N$)\n- Loss L-1: Loss of Vehicle\n\n");
@@ -1678,45 +1691,48 @@ mod tests {
         content.push_str("\n## 8. Domain Regulatory Objectives & Integrity Mapping\n- Pillar 8 SORA SAIL II objectives\n\n");
         content.push_str("## Commercial Toolchain Hooks\n- MATLAB / Simulink / Stateflow hooks\n");
 
-        fs::write(safety_dir.join("STPA_MATRIX.md"), content).unwrap();
+        fs::write(safety_dir.join("STPA_MATRIX.md"), content)?;
 
         let result = check_safety_integrity(&temp.path, false, true);
         assert!(result.is_ok(), "Expected Check 17 to pass with valid bidirectional AST closure, got: {:?}", result);
+        Ok(())
     }
 
     #[test]
-    fn test_defect_333_missing_stpa_matrix_rejected() {
-        let temp = TempDir::new("check17_missing_stpa");
+    fn test_defect_333_missing_stpa_matrix_rejected() -> Result<(), Box<dyn std::error::Error>> {
+        let temp = TempDir::new("check17_missing_stpa")?;
         let safety_dir = temp.path.join("docs").join("safety");
-        fs::create_dir_all(&safety_dir).unwrap();
+        fs::create_dir_all(&safety_dir)?;
 
         // Fragmented safety files present, but unified STPA_MATRIX.md missing
-        fs::write(safety_dir.join("01_LOSSES.md"), "# Losses\nL-1: Loss\n").unwrap();
-        fs::write(safety_dir.join("05_FMECA.md"), "# FMECA\n| FM | Comp | Mode |\n").unwrap();
+        fs::write(safety_dir.join("01_LOSSES.md"), "# Losses\nL-1: Loss\n")?;
+        fs::write(safety_dir.join("05_FMECA.md"), "# FMECA\n| FM | Comp | Mode |\n")?;
 
         let result = check_safety_integrity(&temp.path, false, true);
         assert!(result.is_err());
-        let errs = result.unwrap_err();
+        let errs = result.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("Unified STPA matrix 'docs/safety/STPA_MATRIX.md' is missing")));
+        Ok(())
     }
 
     #[test]
-    fn test_defect_333_hollow_stpa_matrix_rejected() {
-        let temp = TempDir::new("check17_hollow_stpa");
+    fn test_defect_333_hollow_stpa_matrix_rejected() -> Result<(), Box<dyn std::error::Error>> {
+        let temp = TempDir::new("check17_hollow_stpa")?;
         let safety_dir = temp.path.join("docs").join("safety");
-        fs::create_dir_all(&safety_dir).unwrap();
+        fs::create_dir_all(&safety_dir)?;
 
         // STPA_MATRIX.md only contains UCA table, missing all other 7 pillars
         let hollow_content = "# STPA Cross-Traceability Matrix\n\n\
 | UCA ID | Controller | Control Action | Guide Word |\n\
 |---|---|---|---|\n\
 | UCA-001 | Sys | Action | Not providing |\n";
-        fs::write(safety_dir.join("STPA_MATRIX.md"), hollow_content).unwrap();
+        fs::write(safety_dir.join("STPA_MATRIX.md"), hollow_content)?;
 
         let result = check_safety_integrity(&temp.path, false, true);
         assert!(result.is_err());
-        let errs = result.unwrap_err();
+        let errs = result.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("Pillar 1 violation")));
+        Ok(())
     }
 
     /// Verifies that Check 17 fails closed when `docs/safety/` contains an unreadable subdirectory during directory traversal.
@@ -1747,14 +1763,14 @@ mod tests {
     /// Realises: [REQ-CHECK-17-FAIL-CLOSED-WALKDIR-TEST]
     #[cfg(unix)]
     #[test]
-    fn test_check17_unreadable_safety_subdir_fails_closed() {
+    fn test_check17_unreadable_safety_subdir_fails_closed() -> Result<(), Box<dyn std::error::Error>> {
         use std::os::unix::fs::PermissionsExt;
 
-        let temp = TempDir::new("check17_unreadable_sub");
-        fs::create_dir_all(temp.path.join(".pipeline/upstream")).unwrap();
+        let temp = TempDir::new("check17_unreadable_sub")?;
+        fs::create_dir_all(temp.path.join(".pipeline/upstream"))?;
         let locked = temp.path.join("docs/safety/locked_subdir");
-        fs::create_dir_all(&locked).unwrap();
-        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+        fs::create_dir_all(&locked)?;
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000))?;
 
         let upstream_res = check_safety_integrity(&temp.path, true, false);
         let _ = fs::set_permissions(&locked, fs::Permissions::from_mode(0o755));
@@ -1764,5 +1780,6 @@ mod tests {
             "Check 17 upstream walk must fail closed on unreadable subdirectory, got: {:?}",
             upstream_res
         );
+        Ok(())
     }
 }

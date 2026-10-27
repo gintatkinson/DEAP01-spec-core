@@ -1,14 +1,6 @@
 //! Integration and unit tests for the 12-check native Rust adversarial defect dossier validator,
 //! dual-location `.pipeline/defects/` persistence, GitHub SSOT publishing/editing, Closed-Loop
 //! Payload Verification Gate, and minimized `adversarial-code-auditor` skill parity (refs #465, #466, #467, #468).
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::disallowed_types,
-    clippy::useless_format
-)]
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -27,7 +19,7 @@ struct ScopedTempWorkspace {
 }
 
 impl ScopedTempWorkspace {
-    fn new(prefix: &str) -> Self {
+    fn new(prefix: &str) -> Result<Self, std::io::Error> {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
@@ -38,8 +30,8 @@ impl ScopedTempWorkspace {
             std::process::id(),
             nanos
         ));
-        fs::create_dir_all(&root).expect("create temp workspace");
-        Self { root }
+        fs::create_dir_all(&root)?;
+        Ok(Self { root })
     }
 }
 
@@ -110,7 +102,7 @@ FILE_LOCATION: cesium_native_bridge/src/bridge.cpp:56-61
 }
 
 #[test]
-fn test_valid_critical_dossier_passes_all_12_checks() {
+fn test_valid_critical_dossier_passes_all_12_checks() -> Result<(), Box<dyn std::error::Error>> {
     let body = sample_valid_critical_dossier();
     let res = validate_defect_dossier(&body);
     assert!(
@@ -118,7 +110,7 @@ fn test_valid_critical_dossier_passes_all_12_checks() {
         "Expected valid critical dossier to pass all 12 checks, got: {:?}",
         res.err()
     );
-    let val = res.unwrap();
+    let val = res.map_err(|e| e.join("; "))?;
     assert_eq!(val.severity, "Critical");
     assert_eq!(val.file_location, "cesium_native_bridge/src/bridge.cpp:56-61");
     assert_eq!(val.suggested_label, "bug");
@@ -129,10 +121,11 @@ fn test_valid_critical_dossier_passes_all_12_checks() {
     assert!(val
         .symptom
         .contains("Dart FFI caller reads garbage or crashes"));
+    Ok(())
 }
 
 #[test]
-fn test_valid_suggestion_dossier_with_na_section_4_passes() {
+fn test_valid_suggestion_dossier_with_na_section_4_passes() -> Result<(), Box<dyn std::error::Error>> {
     let body = sample_valid_critical_dossier()
         .replace(
             "```mermaid\nsequenceDiagram\n    participant T1 as Thread 1 (Get Error)\n    participant T2 as Thread 2 (Shutdown)\n    T1->>T2: Concurrent execution\n    Note over T1: Acquires mutex, extracts c_str pointer p, releases mutex\n    Note over T2: Acquires mutex, erases BridgeState, deallocates string backing p\n    T1-->>T2: Dereferences p (Use-After-Free)\n```",
@@ -145,29 +138,31 @@ fn test_valid_suggestion_dossier_with_na_section_4_passes() {
         "Expected Suggestion dossier with N/A -- section 4 to pass, got: {:?}",
         res.err()
     );
-    let val = res.unwrap();
+    let val = res.map_err(|e| e.join("; "))?;
     assert_eq!(val.severity, "Suggestion");
     assert_eq!(val.suggested_label, "enhancement");
+    Ok(())
 }
 
 #[test]
-fn test_rejects_leading_h1_header_in_dossier_body() {
+fn test_rejects_leading_h1_header_in_dossier_body() -> Result<(), Box<dyn std::error::Error>> {
     let body = format!(
         "# [AUDIT] [bridge.cpp]: Leading H1 header is forbidden\n\n{}",
         sample_valid_critical_dossier()
     );
     let res = validate_defect_dossier(&body);
     assert!(res.is_err(), "Leading # H1 header must be rejected");
-    let errs = res.unwrap_err().join("\n");
+    let errs = res.err().ok_or("expected Err")?.join("\n");
     assert!(
         errs.contains("## 1. Context and References") || errs.contains("H1"),
         "Unexpected error messages: {}",
         errs
     );
+    Ok(())
 }
 
 #[test]
-fn test_rejects_non_exact_section_headers() {
+fn test_rejects_non_exact_section_headers() -> Result<(), Box<dyn std::error::Error>> {
     let body = sample_valid_critical_dossier().replace(
         "## 2. Root Cause Analysis (5 Whys)",
         "## 2. Wrong Header Name",
@@ -177,12 +172,13 @@ fn test_rejects_non_exact_section_headers() {
         res.is_err(),
         "Non-exact section header must fail validation"
     );
-    let errs = res.unwrap_err().join("\n");
+    let errs = res.err().ok_or("expected Err")?.join("\n");
     assert!(
         errs.contains("## 2. Root Cause Analysis (5 Whys)"),
         "Expected missing exact header error, got: {}",
         errs
     );
+    Ok(())
 }
 
 #[test]
@@ -326,7 +322,8 @@ fn test_validate_and_derive_defect_title() {
 }
 
 #[test]
-fn test_rejects_ephemeral_tmp_path_when_publish_or_issue_is_set() {
+fn test_rejects_ephemeral_tmp_path_when_publish_or_issue_is_set(
+) -> Result<(), Box<dyn std::error::Error>> {
     let args = DefectDossierArgs {
         body_file: Some(PathBuf::from("/tmp/gh_body_ephemeral_12345.md")),
         title: Some("[AUDIT] [bridge.cpp]: Use-after-free".to_string()),
@@ -361,8 +358,7 @@ fn test_rejects_ephemeral_tmp_path_when_publish_or_issue_is_set() {
     );
 
     let ephemeral_dry_run_file = PathBuf::from("/tmp/gh_body_ephemeral_dry_run_480.md");
-    fs::write(&ephemeral_dry_run_file, sample_valid_critical_dossier())
-        .expect("write ephemeral /tmp/ dry-run test file");
+    fs::write(&ephemeral_dry_run_file, sample_valid_critical_dossier())?;
     let dry_run_args = DefectDossierArgs {
         body_file: Some(ephemeral_dry_run_file.clone()),
         title: Some("[AUDIT] [bridge.cpp]: Use-after-free".to_string()),
@@ -380,6 +376,7 @@ fn test_rejects_ephemeral_tmp_path_when_publish_or_issue_is_set() {
         res_dry_run.is_err(),
         "Ephemeral /tmp/ path outside .pipeline/defects/ must be rejected even when --dry-run is set"
     );
+    Ok(())
 }
 
 #[test]
@@ -438,13 +435,14 @@ fn test_closed_loop_payload_verification_gate() {
 }
 
 #[test]
-fn test_defect_dossier_rs_check_34_purity_and_7_section_rustdoc() {
+fn test_defect_dossier_rs_check_34_purity_and_7_section_rustdoc(
+) -> Result<(), Box<dyn std::error::Error>> {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|p| p.parent())
-        .expect("repo root");
+        .ok_or("repo root")?;
     let path = repo_root.join("crates/verify-baseline/src/defect_dossier.rs");
-    let src = fs::read_to_string(&path).expect("read defect_dossier.rs");
+    let src = fs::read_to_string(&path)?;
     let res = audit_source_purity(
         &src,
         "crates/verify-baseline/src/defect_dossier.rs",
@@ -517,14 +515,16 @@ fn test_defect_dossier_rs_check_34_purity_and_7_section_rustdoc() {
         "Expected at least 18 documented structs/enums/functions in defect_dossier.rs, found {}",
         item_count
     );
+    Ok(())
 }
 
 #[test]
-fn test_persisted_dogfood_audit_dossiers_466_467_468_pass_12_checks() {
+fn test_persisted_dogfood_audit_dossiers_466_467_468_pass_12_checks(
+) -> Result<(), Box<dyn std::error::Error>> {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|p| p.parent())
-        .expect("repo root");
+        .ok_or("repo root")?;
     for name in [
         "DEFECT_DOCSTRING_REGRESSION.md",
         "DEFECT_AUDITOR_466.md",
@@ -534,7 +534,7 @@ fn test_persisted_dogfood_audit_dossiers_466_467_468_pass_12_checks() {
         "DEFECT_RULE_20_INIT_LOOP_AND_WP_CONTAMINATION.md",
     ] {
         let p = repo_root.join(".pipeline/defects").join(name);
-        let content = fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {}", name, e));
+        let content = fs::read_to_string(&p)?;
         let res = validate_defect_dossier(&content);
         assert!(
             res.is_ok(),
@@ -543,20 +543,21 @@ fn test_persisted_dogfood_audit_dossiers_466_467_468_pass_12_checks() {
             res.err()
         );
     }
+    Ok(())
 }
 
 #[test]
-fn test_adversarial_code_auditor_skill_minimized_and_identical() {
+fn test_adversarial_code_auditor_skill_minimized_and_identical(
+) -> Result<(), Box<dyn std::error::Error>> {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|p| p.parent())
-        .expect("repo root");
+        .ok_or("repo root")?;
     let skill_a = repo_root.join("skills/adversarial-code-auditor/SKILL.md");
     let skill_b = repo_root.join(".agents/skills/adversarial-code-auditor/SKILL.md");
 
-    let content_a = fs::read_to_string(&skill_a).expect("read skills/adversarial-code-auditor/SKILL.md");
-    let content_b =
-        fs::read_to_string(&skill_b).expect("read .agents/skills/adversarial-code-auditor/SKILL.md");
+    let content_a = fs::read_to_string(&skill_a)?;
+    let content_b = fs::read_to_string(&skill_b)?;
 
     assert_eq!(
         content_a, content_b,
@@ -590,39 +591,37 @@ fn test_adversarial_code_auditor_skill_minimized_and_identical() {
         !content_a.contains('\u{2014}'),
         "SKILL.md must contain zero Unicode em dashes"
     );
+    Ok(())
 }
 
 #[test]
-fn test_parse_github_repo_slug_ssh_https_and_invalid() {
+fn test_parse_github_repo_slug_ssh_https_and_invalid() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
-        parse_github_repo_slug("git@github.com:gintatkinson/DEAP01-cuas-coa-engine.git").unwrap(),
+        parse_github_repo_slug("git@github.com:gintatkinson/DEAP01-cuas-coa-engine.git")?,
         "gintatkinson/DEAP01-cuas-coa-engine"
     );
     assert_eq!(
-        parse_github_repo_slug("git@github.com:gintatkinson/DEAP01-spec-core").unwrap(),
+        parse_github_repo_slug("git@github.com:gintatkinson/DEAP01-spec-core")?,
         "gintatkinson/DEAP01-spec-core"
     );
     assert_eq!(
-        parse_github_repo_slug("ssh://git@github.com/gintatkinson/DEAP01-cuas-coa-engine.git")
-            .unwrap(),
+        parse_github_repo_slug("ssh://git@github.com/gintatkinson/DEAP01-cuas-coa-engine.git")?,
         "gintatkinson/DEAP01-cuas-coa-engine"
     );
     assert_eq!(
-        parse_github_repo_slug("https://github.com/gintatkinson/DEAP01-cuas-coa-engine.git")
-            .unwrap(),
+        parse_github_repo_slug("https://github.com/gintatkinson/DEAP01-cuas-coa-engine.git")?,
         "gintatkinson/DEAP01-cuas-coa-engine"
     );
     assert_eq!(
-        parse_github_repo_slug("https://github.com/gintatkinson/DEAP01-cuas-coa-engine").unwrap(),
+        parse_github_repo_slug("https://github.com/gintatkinson/DEAP01-cuas-coa-engine")?,
         "gintatkinson/DEAP01-cuas-coa-engine"
     );
     assert_eq!(
-        parse_github_repo_slug("http://github.com/gintatkinson/DEAP01-cuas-coa-engine.git")
-            .unwrap(),
+        parse_github_repo_slug("http://github.com/gintatkinson/DEAP01-cuas-coa-engine.git")?,
         "gintatkinson/DEAP01-cuas-coa-engine"
     );
     assert_eq!(
-        parse_github_repo_slug("gintatkinson/DEAP01-cuas-coa-engine").unwrap(),
+        parse_github_repo_slug("gintatkinson/DEAP01-cuas-coa-engine")?,
         "gintatkinson/DEAP01-cuas-coa-engine"
     );
 
@@ -630,11 +629,13 @@ fn test_parse_github_repo_slug_ssh_https_and_invalid() {
     assert!(parse_github_repo_slug("https://github.com/only-owner").is_err());
     assert!(parse_github_repo_slug("not-a-valid-slug").is_err());
     assert!(parse_github_repo_slug("owner/repo/extra").is_err());
+    Ok(())
 }
 
 #[test]
-fn test_resolve_target_repo_auto_detects_origin_and_fails_without_remote() {
-    let tmp = ScopedTempWorkspace::new("resolve_repo");
+fn test_resolve_target_repo_auto_detects_origin_and_fails_without_remote(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let tmp = ScopedTempWorkspace::new("resolve_repo")?;
     let repo_dir = &tmp.root;
 
     // Without git init / origin remote, omitting --repo must return a hard Err
@@ -648,8 +649,7 @@ fn test_resolve_target_repo_auto_detects_origin_and_fails_without_remote() {
     let status_init = Command::new("git")
         .args(["init", "-q"])
         .current_dir(repo_dir)
-        .status()
-        .expect("git init");
+        .status()?;
     assert!(status_init.success());
 
     let err_no_origin = resolve_target_repo(None, repo_dir);
@@ -667,26 +667,26 @@ fn test_resolve_target_repo_auto_detects_origin_and_fails_without_remote() {
             "git@github.com:gintatkinson/DEAP01-cuas-coa-engine.git",
         ])
         .current_dir(repo_dir)
-        .status()
-        .expect("git remote add origin");
+        .status()?;
     assert!(status_remote.success());
 
-    let resolved = resolve_target_repo(None, repo_dir).expect("resolve from origin remote");
+    let resolved = resolve_target_repo(None, repo_dir)?;
     assert_eq!(resolved, "gintatkinson/DEAP01-cuas-coa-engine");
 
     // Explicit --repo overrides git remote
-    let explicit =
-        resolve_target_repo(Some("gintatkinson/DEAP01-spec-core"), repo_dir).expect("explicit");
+    let explicit = resolve_target_repo(Some("gintatkinson/DEAP01-spec-core"), repo_dir)?;
     assert_eq!(explicit, "gintatkinson/DEAP01-spec-core");
+    Ok(())
 }
 
 #[test]
-fn test_run_check_defect_publishes_by_default_without_publish_flag_and_fails_closed() {
-    let tmp = ScopedTempWorkspace::new("default_publish");
+fn test_run_check_defect_publishes_by_default_without_publish_flag_and_fails_closed(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let tmp = ScopedTempWorkspace::new("default_publish")?;
     let defects_dir = tmp.root.join(".pipeline").join("defects");
-    fs::create_dir_all(&defects_dir).expect("create .pipeline/defects");
+    fs::create_dir_all(&defects_dir)?;
     let dossier_path = defects_dir.join("DEFECT_TEST_DEFAULT_PUBLISH.md");
-    fs::write(&dossier_path, sample_valid_critical_dossier()).expect("write dossier");
+    fs::write(&dossier_path, sample_valid_critical_dossier())?;
 
     // Case 1: --repo is None and directory has no git origin remote -> must fail closed with Err(1)
     let args_no_remote = DefectDossierArgs {
@@ -724,10 +724,11 @@ fn test_run_check_defect_publishes_by_default_without_publish_flag_and_fails_clo
         Err(1),
         "run_check_defect with publish: false and dry_run: false must attempt GitHub publication by default and return Err(1) on failure"
     );
+    Ok(())
 }
 
 #[test]
-fn test_rejects_regex_in_section_6_rust_blocks() {
+fn test_rejects_regex_in_section_6_rust_blocks() -> Result<(), Box<dyn std::error::Error>> {
     let base = sample_valid_critical_dossier();
     let pat_regex_colons = ["reg", "ex::"].concat();
     let pat_regex_new = ["Reg", "ex::new"].concat();
@@ -746,7 +747,7 @@ fn test_rejects_regex_in_section_6_rust_blocks() {
     );
     let res1 = validate_defect_dossier(&regex_path);
     assert!(res1.is_err(), "Must reject regex colons in Section 6 rust block");
-    let errs1 = res1.unwrap_err().join("\n");
+    let errs1 = res1.err().ok_or("expected Err")?.join("\n");
     assert!(
         errs1.contains("Check 34") || errs1.contains("regex"),
         "Expected Check 34 / regex violation, got: {}",
@@ -796,10 +797,12 @@ fn test_rejects_regex_in_section_6_rust_blocks() {
     );
     let res5 = validate_defect_dossier(&valid_rust);
     assert!(res5.is_ok(), "Valid zero-regex Rust block must pass");
+    Ok(())
 }
 
 #[test]
-fn test_rejects_downstream_crate_paths_in_upstream_workspace() {
+fn test_rejects_downstream_crate_paths_in_upstream_workspace(
+) -> Result<(), Box<dyn std::error::Error>> {
     let base = sample_valid_critical_dossier();
 
     // 1. Downstream crate cuas-coa-engine must be rejected in UPSTREAM_SPEC_CORE_COMPILER
@@ -817,7 +820,7 @@ fn test_rejects_downstream_crate_paths_in_upstream_workspace() {
         res_downstream.is_err(),
         "Must reject downstream crates/cuas-coa-engine/ path in UPSTREAM_SPEC_CORE_COMPILER"
     );
-    let errs = res_downstream.unwrap_err().join("\n");
+    let errs = res_downstream.err().ok_or("expected Err")?.join("\n");
     assert!(
         errs.contains("upstream") || errs.contains("grounding"),
         "Expected upstream crate grounding error, got: {}",
@@ -846,22 +849,22 @@ fn test_rejects_downstream_crate_paths_in_upstream_workspace() {
             res.err()
         );
     }
+    Ok(())
 }
 
 #[test]
-fn test_issue_474_governance_and_dry_run_contract_alignment() {
+fn test_issue_474_governance_and_dry_run_contract_alignment(
+) -> Result<(), Box<dyn std::error::Error>> {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|p| p.parent())
-        .expect("repo root");
+        .ok_or("repo root")?;
 
-    let agents_md = fs::read_to_string(repo_root.join("AGENTS.md")).expect("read AGENTS.md");
+    let agents_md = fs::read_to_string(repo_root.join("AGENTS.md"))?;
     let dispatch_rules =
-        fs::read_to_string(repo_root.join("rules/subagent-dispatch-standards.md"))
-            .expect("read rules/subagent-dispatch-standards.md");
+        fs::read_to_string(repo_root.join("rules/subagent-dispatch-standards.md"))?;
     let dossier_rs =
-        fs::read_to_string(repo_root.join("crates/verify-baseline/src/defect_dossier.rs"))
-            .expect("read defect_dossier.rs");
+        fs::read_to_string(repo_root.join("crates/verify-baseline/src/defect_dossier.rs"))?;
 
     for (name, content) in [
         ("AGENTS.md", &agents_md),
@@ -893,11 +896,11 @@ fn test_issue_474_governance_and_dry_run_contract_alignment() {
         "defect_dossier.rs module Rustdoc must state publishing is active whenever `--dry-run` is not passed (refs #474)"
     );
 
-    let tmp = ScopedTempWorkspace::new("dry_run_no_persist_474");
+    let tmp = ScopedTempWorkspace::new("dry_run_no_persist_474")?;
     let custom_dossier = tmp
         .root
         .join("DEFECT_DRY_RUN_NO_PERSIST_UNIQUE_474_TEST.md");
-    fs::write(&custom_dossier, sample_valid_critical_dossier()).expect("write custom dossier");
+    fs::write(&custom_dossier, sample_valid_critical_dossier())?;
     let leaked_dest = PathBuf::from(".pipeline")
         .join("defects")
         .join("DEFECT_DRY_RUN_NO_PERSIST_UNIQUE_474_TEST.md");
@@ -922,6 +925,7 @@ fn test_issue_474_governance_and_dry_run_contract_alignment() {
         !leaked_exists,
         "run_check_defect with dry_run: true must NOT persist into .pipeline/defects/ even when publish: true or issue: Some(...) is set"
     );
+    Ok(())
 }
 
 #[test]

@@ -6,7 +6,7 @@
 
 use crate::spec_audit::SpecAuditError;
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Represents an extracted Markdown heading with structural position.
 ///
@@ -183,9 +183,9 @@ pub struct MarkdownDoc {
     /// Extracted headings in source order.
     pub headings: Vec<HeadingNode>,
     /// Optional YAML frontmatter key-value pairs (`--- ... ---`).
-    pub frontmatter: Option<HashMap<String, String>>,
+    pub frontmatter: Option<BTreeMap<String, String>>,
     /// Key-value pairs extracted from CommonMark two-column metadata table.
-    pub table_metadata: HashMap<String, String>,
+    pub table_metadata: BTreeMap<String, String>,
     /// Extracted prose text segments outside headings and code blocks.
     pub prose: Vec<ProseSegment>,
     /// Extracted Mermaid diagram code blocks.
@@ -307,8 +307,12 @@ pub fn is_metadata_header_table_row(line: &str) -> bool {
         return false;
     }
 
-    let mut key = String::with_capacity(cells[0].len());
-    for c in cells[0].chars() {
+    let first_cell = match cells.first() {
+        Some(&c) => c,
+        None => return false,
+    };
+    let mut key = String::with_capacity(first_cell.len());
+    for c in first_cell.chars() {
         if !matches!(c, '*' | '`' | ':' | '#') {
             key.push(c);
         }
@@ -470,15 +474,19 @@ fn detect_placeholder_on_line(
 
     // 2. Check for #TBD reference token with word boundary
     let mut idx = 0;
-    while let Some(pos) = line_lower[idx..].find("#tbd") {
+    while let Some(pos) = line_lower.get(idx..).and_then(|s| s.find("#tbd")) {
         let abs_pos = idx + pos;
         let next_idx = abs_pos + 4;
         let boundary = next_idx == line_lower.len()
-            || !line_lower.as_bytes()[next_idx].is_ascii_alphanumeric();
+            || line_lower
+                .as_bytes()
+                .get(next_idx)
+                .is_none_or(|b| !b.is_ascii_alphanumeric());
         if boundary {
-            let token = &line[abs_pos..next_idx];
-            if !(is_meta_row && is_allowed_metadata_placeholder(token)) {
-                return Some("unresolved reference token");
+            if let Some(token) = line.get(abs_pos..next_idx) {
+                if !(is_meta_row && is_allowed_metadata_placeholder(token)) {
+                    return Some("unresolved reference token");
+                }
             }
         }
         idx = next_idx;
@@ -487,11 +495,11 @@ fn detect_placeholder_on_line(
     // 3. Check bracketed placeholders: [...]
     let mut rest = line;
     while let Some(open) = rest.find('[') {
-        let after = &rest[open + 1..];
+        let after = rest.get(open + 1..).unwrap_or("");
         if let Some(close) = after.find(']') {
-            let content = &after[..close];
+            let content = after.get(..close).unwrap_or("");
             let lower_content = content.trim().to_lowercase();
-            let full_token = &rest[open..=open + 1 + close];
+            let full_token = rest.get(open..=open + 1 + close).unwrap_or("");
 
             const PREFIXES: &[&str] = &[
                 "feature", "feat", "epic", "user story", "user-story", "user_story",
@@ -499,8 +507,8 @@ fn detect_placeholder_on_line(
             ];
             let mut matched_id = false;
             for p in PREFIXES {
-                if lower_content.starts_with(p) {
-                    let rem = lower_content[p.len()..]
+                if let Some(after_p) = lower_content.strip_prefix(p) {
+                    let rem = after_p
                         .trim_matches(|c: char| c == '-' || c == '_' || c.is_whitespace());
                     if rem == "id" || rem == "issueid" {
                         matched_id = true;
@@ -565,10 +573,17 @@ fn detect_placeholder_on_line(
     // 6. Placeholder file paths: (epic|feat|us|uc)-XX-name
     for kw in &["epic-xx-name", "feat-xx-name", "us-xx-name", "uc-xx-name"] {
         if let Some(pos) = line_lower.find(kw) {
-            let before_ok = pos == 0 || !line_lower.as_bytes()[pos - 1].is_ascii_alphanumeric();
+            let before_ok = pos == 0
+                || line_lower
+                    .as_bytes()
+                    .get(pos - 1)
+                    .is_none_or(|b| !b.is_ascii_alphanumeric());
             let after_pos = pos + kw.len();
             let after_ok = after_pos == line_lower.len()
-                || !line_lower.as_bytes()[after_pos].is_ascii_alphanumeric();
+                || line_lower
+                    .as_bytes()
+                    .get(after_pos)
+                    .is_none_or(|b| !b.is_ascii_alphanumeric());
             if before_ok && after_ok {
                 return Some("placeholder file path");
             }
@@ -581,18 +596,17 @@ fn detect_placeholder_on_line(
     }
 
     // 8. Conditional stubs
-    if include_conditional {
-        if line_lower.contains("*(none)*")
+    if include_conditional
+        && (line_lower.contains("*(none)*")
             || line_lower.contains("*(none registered)*")
             || line_lower.contains("*(to be populated)*")
             || line_lower.contains("*(tbd)*")
             || line_lower.contains("*(n/a)*")
             || line_lower.contains("*to be populated*")
             || line_lower.contains("*tbd*")
-            || line_lower.contains("*n/a*")
-        {
-            return Some("placeholder stub");
-        }
+            || line_lower.contains("*n/a*"))
+    {
+        return Some("placeholder stub");
     }
 
     None
@@ -673,22 +687,16 @@ pub fn find_unresolved_placeholders(
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-MARKDOWN-AST-EXTRACT-YAML-FRONTMATTER] | SysML v2: ActionDef(extract_yaml_frontmatter)
-pub fn extract_yaml_frontmatter(content: &str) -> Option<HashMap<String, String>> {
+pub fn extract_yaml_frontmatter(content: &str) -> Option<BTreeMap<String, String>> {
     let trimmed = content.trim_start();
     if !trimmed.starts_with("---") {
         return None;
     }
-    let rest = match trimmed.strip_prefix("---") {
-        Some(r) => r,
-        None => return None,
-    };
+    let rest = trimmed.strip_prefix("---")?;
     let end_idx = rest.find("\n---")?;
-    let fm_block = match rest.get(..end_idx) {
-        Some(b) => b,
-        None => return None,
-    };
+    let fm_block = rest.get(..end_idx)?;
 
-    let mut map = HashMap::new();
+    let mut map = BTreeMap::new();
     for line in fm_block.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -739,8 +747,8 @@ pub fn extract_yaml_frontmatter(content: &str) -> Option<HashMap<String, String>
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-MARKDOWN-AST-EXTRACT-TABLE-METADATA] | SysML v2: ActionDef(extract_table_metadata)
-pub fn extract_table_metadata(content: &str) -> HashMap<String, String> {
-    let mut table_metadata = HashMap::new();
+pub fn extract_table_metadata(content: &str) -> BTreeMap<String, String> {
+    let mut table_metadata = BTreeMap::new();
     for line in content.lines().take(50) {
         let stripped = line.trim();
         if !stripped.starts_with('|') || !stripped.ends_with('|') {
@@ -751,12 +759,13 @@ pub fn extract_table_metadata(content: &str) -> HashMap<String, String> {
             None => continue,
         };
         let cells: Vec<&str> = inner.split('|').map(|c| c.trim()).collect();
-        if cells.len() < 2 {
-            continue;
-        }
+        let (first_cell, second_cell) = match (cells.first(), cells.get(1)) {
+            (Some(&c0), Some(&c1)) => (c0, c1),
+            _ => continue,
+        };
 
-        let mut key = String::with_capacity(cells[0].len());
-        for c in cells[0].chars() {
+        let mut key = String::with_capacity(first_cell.len());
+        for c in first_cell.chars() {
             if !matches!(c, '*' | '`' | ':' | '#') {
                 key.push(c);
             }
@@ -783,7 +792,7 @@ pub fn extract_table_metadata(content: &str) -> HashMap<String, String> {
         {
             continue;
         }
-        let val = cells[1]
+        let val = second_cell
             .trim()
             .trim_matches(|c| c == '`' || c == '"' || c == '\'');
         table_metadata.insert(normalized_key.to_string(), val.to_string());
@@ -1067,18 +1076,34 @@ classDiagram
     }
 ```
 "#;
-        let doc = parse_markdown(content).unwrap();
+        let doc = parse_markdown(content).unwrap_or_else(|_| MarkdownDoc {
+            headings: Vec::new(),
+            frontmatter: None,
+            table_metadata: BTreeMap::new(),
+            prose: Vec::new(),
+            mermaid_blocks: Vec::new(),
+            unresolved_placeholders: Vec::new(),
+        });
         assert_eq!(doc.headings.len(), 2);
-        assert_eq!(doc.headings[0].level, 1);
-        assert_eq!(doc.headings[0].text, "Test Epic H1");
-        assert_eq!(doc.headings[1].level, 2);
-        assert_eq!(doc.headings[1].text, "1. Context");
+        assert_eq!(doc.headings.first().map(|h| h.level), Some(1));
+        assert_eq!(
+            doc.headings.first().map(|h| h.text.as_str()),
+            Some("Test Epic H1")
+        );
+        assert_eq!(doc.headings.get(1).map(|h| h.level), Some(2));
+        assert_eq!(
+            doc.headings.get(1).map(|h| h.text.as_str()),
+            Some("1. Context")
+        );
 
         assert_eq!(doc.table_metadata.get("issue_id").map(|s| s.as_str()), Some("100"));
         assert_eq!(doc.table_metadata.get("package").map(|s| s.as_str()), Some("SystemPackage"));
 
         assert_eq!(doc.mermaid_blocks.len(), 1);
-        assert_eq!(doc.mermaid_blocks[0].header, "classDiagram");
+        assert_eq!(
+            doc.mermaid_blocks.first().map(|b| b.header.as_str()),
+            Some("classDiagram")
+        );
         assert!(doc.unresolved_placeholders.is_empty());
     }
 
@@ -1087,8 +1112,8 @@ classDiagram
         let content = "Check issue #[IssueID] here.\nAnother line with #TBD.\nValid text.\n";
         let findings = find_unresolved_placeholders(content, false);
         assert_eq!(findings.len(), 2);
-        assert_eq!(findings[0].line, 1);
-        assert_eq!(findings[1].line, 2);
+        assert_eq!(findings.first().map(|f| f.line), Some(1));
+        assert_eq!(findings.get(1).map(|f| f.line), Some(2));
     }
 
     #[test]

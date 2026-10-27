@@ -33,7 +33,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-RECONCILE-BACKLOG-CLI, Issue Tracker as Canonical SSOT, Zero Fallback Placeholders, Automated Spec Reconciliation]
 
-use clap::Parser;
+use clap::{Arg, ArgAction, Command};
 use reconcile_backlog::create_issue::{execute_create_issue, CreateIssueArgs};
 use reconcile_backlog::tracker::{GitHubTracker, OfflineTracker};
 use reconcile_backlog::{run_reconciliation, ReconcileOptions};
@@ -66,40 +66,29 @@ use std::process;
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RECONCILE-BACKLOG-MAIN-CLI] | SysML v2: PartDef(Cli)
-#[derive(Parser, Debug)]
-#[command(name = "reconcile-backlog")]
-#[command(about = "Pure Rust Backlog Reconciler for DEAP MBSE Framework", long_about = None)]
-#[command(subcommand_precedence_over_arg = true)]
+#[derive(Debug)]
 struct Cli {
-    #[command(subcommand)]
     command: Option<Subcommands>,
 
     /// Workspace root directory (defaults to current directory)
-    #[arg(long, default_value = ".")]
     workspace: String,
 
     /// Run in offline mode without querying or updating external issue tracker
-    #[arg(long)]
     offline: bool,
 
     /// Issue tracker provider (e.g. github, gitlab)
-    #[arg(long, default_value = "github")]
     provider: String,
 
     /// Perform a trial run without modifying files or external tracker
-    #[arg(long)]
     dry_run: bool,
 
     /// Synchronize modified specification bodies to remote tracker issues
-    #[arg(long, default_value_t = true)]
     sync_bodies: bool,
 
     /// Target repository (e.g. owner/repo)
-    #[arg(long)]
     repo: Option<String>,
 
     /// Default branch name (defaults to auto-detected or main)
-    #[arg(long)]
     default_branch: Option<String>,
 }
 
@@ -129,11 +118,142 @@ struct Cli {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RECONCILE-BACKLOG-MAIN-SUBCOMMANDS] | SysML v2: PartDef(Subcommands)
-#[derive(clap::Subcommand, Debug)]
+#[derive(Debug)]
 enum Subcommands {
     /// Create or reopen an issue idempotently with precondition checks
-    #[command(name = "create-issue", alias = "create_issue")]
     CreateIssue(CreateIssueArgs),
+}
+
+impl Cli {
+    /// Parses process command-line arguments into a validated `Cli` configuration using explicit `clap::Command` builders.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `Cli::parse` in `crates/reconcile-backlog/src/main.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Constructs the CLI grammar without `clap_derive` macro lint-override emissions (`E0453`).
+    ///
+    /// ## 3. Preconditions
+    /// - Process environment supplies valid OS argument tokens via `std::env::args_os`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a populated `Cli` instance with deterministic `command` and top-level reconciliation flags.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(A)$ where $A$ is the number of CLI argument tokens.
+    /// - Space Complexity: $O(A)$ for parsed `ArgMatches` and owned `Cli` fields.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Invalid flags are intercepted by `clap::Command::get_matches`, emitting usage diagnostics and exiting non-zero.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-MAIN-CLI]
+    fn parse() -> Self {
+        let mut matches = Command::new("reconcile-backlog")
+            .about("Pure Rust Backlog Reconciler for DEAP MBSE Framework")
+            .subcommand_precedence_over_arg(true)
+            .arg(
+                Arg::new("workspace")
+                    .long("workspace")
+                    .default_value(".")
+                    .action(ArgAction::Set),
+            )
+            .arg(
+                Arg::new("offline")
+                    .long("offline")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("provider")
+                    .long("provider")
+                    .default_value("github")
+                    .action(ArgAction::Set),
+            )
+            .arg(
+                Arg::new("dry_run")
+                    .long("dry-run")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("sync_bodies")
+                    .long("sync-bodies")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(Arg::new("repo").long("repo").action(ArgAction::Set))
+            .arg(
+                Arg::new("default_branch")
+                    .long("default-branch")
+                    .action(ArgAction::Set),
+            )
+            .subcommand(
+                Command::new("create-issue")
+                    .visible_alias("create_issue")
+                    .about("Create or reopen an issue idempotently with precondition checks")
+                    .arg(Arg::new("body_file").long("body-file").action(ArgAction::Set))
+                    .arg(Arg::new("label").long("label").action(ArgAction::Set))
+                    .arg(Arg::new("title").long("title").action(ArgAction::Set))
+                    .arg(Arg::new("repo").long("repo").action(ArgAction::Set))
+                    .arg(
+                        Arg::new("reopen_with_analysis")
+                            .long("reopen-with-analysis")
+                            .action(ArgAction::Set),
+                    )
+                    .arg(
+                        Arg::new("provider")
+                            .long("provider")
+                            .default_value("github")
+                            .action(ArgAction::Set),
+                    )
+                    .arg(
+                        Arg::new("positional")
+                            .value_name("ARGS")
+                            .num_args(0..)
+                            .action(ArgAction::Append),
+                    ),
+            )
+            .get_matches();
+
+        let command = match matches.remove_subcommand() {
+            Some((name, mut sub_m)) if name == "create-issue" => {
+                Some(Subcommands::CreateIssue(CreateIssueArgs {
+                    body_file: sub_m.remove_one::<String>("body_file"),
+                    label: sub_m.remove_one::<String>("label"),
+                    title: sub_m.remove_one::<String>("title"),
+                    repo: sub_m.remove_one::<String>("repo"),
+                    reopen_with_analysis: sub_m.remove_one::<String>("reopen_with_analysis"),
+                    provider: sub_m
+                        .remove_one::<String>("provider")
+                        .unwrap_or_else(|| "github".to_string()),
+                    positional: sub_m
+                        .remove_many::<String>("positional")
+                        .map(|v| v.collect())
+                        .unwrap_or_default(),
+                }))
+            }
+            _ => None,
+        };
+
+        let sync_bodies = if matches.contains_id("sync_bodies") {
+            matches.get_flag("sync_bodies")
+        } else {
+            true
+        };
+
+        Self {
+            command,
+            workspace: matches
+                .remove_one::<String>("workspace")
+                .unwrap_or_else(|| ".".to_string()),
+            offline: matches.get_flag("offline"),
+            provider: matches
+                .remove_one::<String>("provider")
+                .unwrap_or_else(|| "github".to_string()),
+            dry_run: matches.get_flag("dry_run"),
+            sync_bodies,
+            repo: matches.remove_one::<String>("repo"),
+            default_branch: matches.remove_one::<String>("default_branch"),
+        }
+    }
 }
 
 /// Executes the `reconcile-backlog` CLI entrypoint.

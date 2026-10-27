@@ -180,7 +180,7 @@ pub fn check_wbs_suite_integrity(
             if let Some(first_line) = content.lines().next() {
                 let headers: Vec<&str> = first_line.split(',').map(|s| s.trim().trim_matches('"')).collect();
                 for req in REQUIRED_CSV_HEADERS {
-                    if !headers.iter().any(|&h| h == *req) {
+                    if !headers.contains(req) {
                         errors.push(format!("wbs_export_jira_monday_ms_project.csv missing required header: '{}'", req));
                     }
                 }
@@ -276,14 +276,23 @@ fn extract_markdown_link_targets(content: &str) -> Vec<&str> {
     let len = bytes.len();
     let mut i = 0;
     while i < len {
-        if bytes[i] == b'[' {
-            if let Some(close_bracket) = bytes[i + 1..].iter().position(|&b| b == b']').map(|p| i + 1 + p) {
-                if close_bracket + 1 < len && bytes[close_bracket + 1] == b'(' {
-                    if let Some(close_paren) = bytes[close_bracket + 2..].iter().position(|&b| b == b')').map(|p| close_bracket + 2 + p) {
-                        let target = &content[close_bracket + 2..close_paren];
-                        targets.push(target);
-                        i = close_paren + 1;
-                        continue;
+        if bytes.get(i) == Some(&b'[') {
+            if let Some(close_bracket) = bytes
+                .get(i + 1..)
+                .and_then(|s| s.iter().position(|&b| b == b']'))
+                .map(|p| i + 1 + p)
+            {
+                if bytes.get(close_bracket + 1) == Some(&b'(') {
+                    if let Some(close_paren) = bytes
+                        .get(close_bracket + 2..)
+                        .and_then(|s| s.iter().position(|&b| b == b')'))
+                        .map(|p| close_bracket + 2 + p)
+                    {
+                        if let Some(target) = content.get(close_bracket + 2..close_paren) {
+                            targets.push(target);
+                            i = close_paren + 1;
+                            continue;
+                        }
                     }
                 }
             }
@@ -309,10 +318,10 @@ mod tests {
             let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
             let path = std::env::temp_dir().join(format!("verify_wbs_{}_{}_{}", name, nanos, count));
-            fs::create_dir_all(&path).unwrap();
+            let _ = fs::create_dir_all(&path);
             Self { path }
         }
     }
@@ -338,24 +347,25 @@ mod tests {
     }
 
     #[test]
-    fn test_wbs_valid_suite() {
+    fn test_wbs_valid_suite() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("valid");
         let mgmt = tmp.path.join("docs").join("management");
-        fs::create_dir_all(&mgmt).unwrap();
+        fs::create_dir_all(&mgmt)?;
 
         let md_file = mgmt.join("WBS_DELIVERABLES_SUITE.md");
-        let mut f_md = File::create(md_file).unwrap();
-        writeln!(f_md, "| Attribute | Specification Detail |\n|---|---|\n\n| WBS Code | Deliverable / Task Name | Spec Reference | MBD Package / Model File | Verification Artifact | Target Issue Key | Owner / Role |").unwrap();
+        let mut f_md = File::create(md_file)?;
+        writeln!(f_md, "| Attribute | Specification Detail |\n|---|---|\n\n| WBS Code | Deliverable / Task Name | Spec Reference | MBD Package / Model File | Verification Artifact | Target Issue Key | Owner / Role |")?;
 
         let csv_file = mgmt.join("wbs_export_jira_monday_ms_project.csv");
-        let mut f_csv = File::create(csv_file).unwrap();
-        writeln!(f_csv, "{}", REQUIRED_CSV_HEADERS.join(",")).unwrap();
+        let mut f_csv = File::create(csv_file)?;
+        writeln!(f_csv, "{}", REQUIRED_CSV_HEADERS.join(","))?;
 
         let json_file = mgmt.join("wbs_export.json");
-        let mut f_json = File::create(json_file).unwrap();
-        writeln!(f_json, r#"{{"metadata": {{}}, "wbs_tree": {{"wbs_code": "1", "name": "Root", "level": 1, "children": []}}, "traceability_matrix": []}}"#).unwrap();
+        let mut f_json = File::create(json_file)?;
+        writeln!(f_json, r#"{{"metadata": {{}}, "wbs_tree": {{"wbs_code": "1", "name": "Root", "level": 1, "children": []}}, "traceability_matrix": []}}"#)?;
 
         let res = check_wbs_suite_integrity(&tmp.path, false, false);
         assert_eq!(res, Ok(WbsCheckOutcome::Verified));
+        Ok(())
     }
 }

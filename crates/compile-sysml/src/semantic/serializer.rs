@@ -1825,7 +1825,7 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-REQUIREMENTDEF-TO-SYSML] | SysML v2: TestCaseDef(test_serialize_requirement_def_with_assumes_requires_derived_from)
     #[test]
-    fn test_serialize_requirement_def_with_assumes_requires_derived_from() {
+    fn test_serialize_requirement_def_with_assumes_requires_derived_from() -> Result<(), Box<dyn std::error::Error>> {
         let req = RequirementDef {
             name: "REQ_0032_Test".to_string(),
             req_id: "REQ-0032".to_string(),
@@ -1849,11 +1849,9 @@ mod tests {
         assert!(sysml.contains("        require Invariant_Beta;"));
         assert!(sysml.contains("        derived from REQ_0031_Parent;"));
         assert!(sysml.contains("        derives REQ_0033_Child;"));
-        let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&sysml, "ReqTracePkg") {
-            Ok(p) => p,
-            Err(e) => panic!("reparse failed: {}", e),
-        };
+        let reparsed = crate::parser::grammar::SysmlParser::parse_source(&sysml, "ReqTracePkg")?;
         assert_eq!(reparsed, pkg);
+        Ok(())
     }
 
     #[test]
@@ -1994,7 +1992,7 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-STATEDEF-SUBSTATES-ROUNDTRIP] | SysML v2: TestCaseDef(test_serialize_state_def_sub_states_roundtrip)
     #[test]
-    fn test_serialize_state_def_sub_states_roundtrip() {
+    fn test_serialize_state_def_sub_states_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let src = "\
 doc /* Flight state machine package */
 package FlightStateMachine {
@@ -2018,18 +2016,16 @@ package FlightStateMachine {
         transition GroundIdle_to_Airborne first GroundIdle then Airborne;
     }
 }";
-        let parsed = match crate::parser::grammar::SysmlParser::parse_source(src, "FlightStateMachine") {
-            Ok(p) => p,
-            Err(e) => panic!("initial parse failed: {}", e),
-        };
+        let parsed = crate::parser::grammar::SysmlParser::parse_source(src, "FlightStateMachine")?;
         assert_eq!(parsed.state_defs.len(), 1);
         if let Some(root_state) = parsed.state_defs.first() {
             assert_eq!(root_state.doc.as_deref(), Some("Root flight mode state machine"));
             assert_eq!(root_state.sub_states.len(), 2);
-            assert_eq!(root_state.sub_states[0].doc.as_deref(), Some("Ground idle leaf state"));
-            assert_eq!(root_state.sub_states[1].doc.as_deref(), Some("Airborne composite state"));
+            assert_eq!(root_state.sub_states.first().and_then(|s| s.doc.as_deref()), Some("Ground idle leaf state"));
+            let s1 = root_state.sub_states.get(1).ok_or("missing sub_state 1")?;
+            assert_eq!(s1.doc.as_deref(), Some("Airborne composite state"));
             assert_eq!(
-                root_state.sub_states[1].transitions[0].doc.as_deref(),
+                s1.transitions.first().and_then(|t| t.doc.as_deref()),
                 Some("Climb to cruise transition")
             );
         }
@@ -2054,10 +2050,7 @@ package FlightStateMachine {
             serialized
         );
 
-        let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&serialized, "FlightStateMachine") {
-            Ok(p) => p,
-            Err(e) => panic!("reparse failed: {}", e),
-        };
+        let reparsed = crate::parser::grammar::SysmlParser::parse_source(&serialized, "FlightStateMachine")?;
         assert_eq!(reparsed, parsed);
 
         let empty_transition_state = StateDef {
@@ -2068,6 +2061,7 @@ package FlightStateMachine {
         let empty_serialized = empty_transition_state.to_sysml(0);
         assert!(empty_serialized.contains("    transition;"));
         assert!(!empty_serialized.contains("transition transition;"));
+        Ok(())
     }
 
     /// Executes deterministic fn `test_serialize_use_case_def_full_fields_roundtrip` within `crates/compile-sysml/src/semantic/serializer.rs`.
@@ -2097,7 +2091,7 @@ package FlightStateMachine {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-USECASEDEF-ROUNDTRIP] | SysML v2: TestCaseDef(test_serialize_use_case_def_full_fields_roundtrip)
     #[test]
-    fn test_serialize_use_case_def_full_fields_roundtrip() {
+    fn test_serialize_use_case_def_full_fields_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let src = "\
 package MissionUseCases {
     use case def ExecuteAutonomousSortie {
@@ -2113,10 +2107,7 @@ package MissionUseCases {
         postcondition TelemetryLogPersisted;
     }
 }";
-        let parsed = match crate::parser::grammar::SysmlParser::parse_source(src, "MissionUseCases") {
-            Ok(p) => p,
-            Err(e) => panic!("initial parse failed: {}", e),
-        };
+        let parsed = crate::parser::grammar::SysmlParser::parse_source(src, "MissionUseCases")?;
         assert_eq!(parsed.use_case_defs.len(), 1);
         if let Some(uc) = parsed.use_case_defs.first() {
             assert_eq!(uc.preconditions, vec!["VehiclePreFlightCheckComplete".to_string()]);
@@ -2131,10 +2122,7 @@ package MissionUseCases {
         assert!(serialized.contains("extend EmergencyAbortSortie;"));
         assert!(serialized.contains("postcondition TelemetryLogPersisted;"));
 
-        let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&serialized, "MissionUseCases") {
-            Ok(p) => p,
-            Err(e) => panic!("reparse failed: {}", e),
-        };
+        let reparsed = crate::parser::grammar::SysmlParser::parse_source(&serialized, "MissionUseCases")?;
         assert_eq!(reparsed, parsed);
 
         let unquoted_uc = UseCaseDef {
@@ -2176,6 +2164,7 @@ package MissionUseCases {
         assert!(uc_sysml.contains("step \"Return to recovery zone\";"));
         assert!(uc_sysml.contains("postcondition TelemetryLogPersisted;"));
         assert!(uc_sysml.contains("postcondition \"Vehicle safely recovered\";"));
+        Ok(())
     }
 
     /// Verifies that `format_doc_comment` escapes both `/*` and `*/` so glob paths like `crates/*/tests/*.rs` roundtrip cleanly through `SysmlParser::parse_source`.
@@ -2205,17 +2194,15 @@ package MissionUseCases {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-FORMAT-DOC-COMMENT] | SysML v2: TestCaseDef(test_format_doc_comment_escapes_nested_block_comment_open_and_close)
     #[test]
-    fn test_format_doc_comment_escapes_nested_block_comment_open_and_close() {
+    fn test_format_doc_comment_escapes_nested_block_comment_open_and_close() -> Result<(), Box<dyn std::error::Error>> {
         let doc = Some("Scans crates/*/src/**/*.rs and excludes crates/*/tests/*.rs".to_string());
         let formatted = super::format_doc_comment(&doc, 4);
         assert!(formatted.contains("crates/ * /src/ ** / *.rs"));
         assert!(formatted.contains("crates/ * /tests/ *.rs"));
         let sysml_src = format!("package BlueprintPkg {{\n{}    part def Guard;\n}}\n", formatted);
-        let parsed = match crate::parser::grammar::SysmlParser::parse_source(&sysml_src, "BlueprintPkg") {
-            Ok(p) => p,
-            Err(e) => panic!("expected clean parse of escaped glob doc comment, got: {}", e),
-        };
+        let parsed = crate::parser::grammar::SysmlParser::parse_source(&sysml_src, "BlueprintPkg")?;
         assert_eq!(parsed.part_defs.len(), 1);
+        Ok(())
     }
 
     /// Verifies that `port def` declarations with body blocks and `in/out/inout item` or `flow` members parse and round-trip as `port def <Name> { ... }` (Issue #476).
@@ -2245,7 +2232,7 @@ package MissionUseCases {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-PORTDEF-TO-SYSML] | SysML v2: TestCaseDef(test_port_def_with_body_and_item_flow_syntax_roundtrip)
     #[test]
-    fn test_port_def_with_body_and_item_flow_syntax_roundtrip() {
+    fn test_port_def_with_body_and_item_flow_syntax_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let src = "\
 package PortPkg {
     port def TelemetryPort {
@@ -2256,33 +2243,32 @@ package PortPkg {
         flow inout bus : BusPayload;
     }
 }";
-        let parsed = match crate::parser::grammar::SysmlParser::parse_source(src, "PortPkg") {
-            Ok(p) => p,
-            Err(e) => panic!("initial port def parse failed: {}", e),
-        };
+        let parsed = crate::parser::grammar::SysmlParser::parse_source(src, "PortPkg")?;
         assert_eq!(parsed.port_defs.len(), 1);
         if let Some(port) = parsed.port_defs.first() {
             assert_eq!(port.name, "TelemetryPort");
             assert_eq!(port.type_name, "TelemetryPort");
             assert_eq!(port.item_flows.len(), 4);
-            assert_eq!(port.item_flows[0].direction, "in");
-            assert_eq!(port.item_flows[0].name, "cmd");
-            assert_eq!(port.item_flows[0].item_type, "CommandFrame");
-            assert_eq!(port.item_flows[1].direction, "out");
-            assert_eq!(port.item_flows[1].name, "status");
-            assert_eq!(port.item_flows[2].direction, "inout");
-            assert_eq!(port.item_flows[2].name, "diag");
-            assert_eq!(port.item_flows[3].direction, "inout");
-            assert_eq!(port.item_flows[3].name, "bus");
+            let f0 = port.item_flows.first().ok_or("f0")?;
+            assert_eq!(f0.direction, "in");
+            assert_eq!(f0.name, "cmd");
+            assert_eq!(f0.item_type, "CommandFrame");
+            let f1 = port.item_flows.get(1).ok_or("f1")?;
+            assert_eq!(f1.direction, "out");
+            assert_eq!(f1.name, "status");
+            let f2 = port.item_flows.get(2).ok_or("f2")?;
+            assert_eq!(f2.direction, "inout");
+            assert_eq!(f2.name, "diag");
+            let f3 = port.item_flows.get(3).ok_or("f3")?;
+            assert_eq!(f3.direction, "inout");
+            assert_eq!(f3.name, "bus");
         }
         let serialized = parsed.to_sysml(0);
         assert!(serialized.contains("port def TelemetryPort {"), "got:\n{}", serialized);
         assert!(!serialized.contains("port inout TelemetryPort : TelemetryPort"));
-        let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&serialized, "PortPkg") {
-            Ok(p) => p,
-            Err(e) => panic!("reparse of serialized port def failed: {}", e),
-        };
+        let reparsed = crate::parser::grammar::SysmlParser::parse_source(&serialized, "PortPkg")?;
         assert_eq!(reparsed.port_defs, parsed.port_defs);
+        Ok(())
     }
 
     /// Verifies that `use case def` declarations with `include use case` and `extend use case` normalize target names and round-trip cleanly (Issue #476).
@@ -2312,7 +2298,7 @@ package PortPkg {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-USECASEDEF-TO-SYSML] | SysML v2: TestCaseDef(test_use_case_def_include_and_extend_use_case_keyword_roundtrip)
     #[test]
-    fn test_use_case_def_include_and_extend_use_case_keyword_roundtrip() {
+    fn test_use_case_def_include_and_extend_use_case_keyword_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let src = "\
 package MissionUseCases {
     use case def ExecuteSortie {
@@ -2320,10 +2306,7 @@ package MissionUseCases {
         extend use case EmergencyAbortSortie;
     }
 }";
-        let parsed = match crate::parser::grammar::SysmlParser::parse_source(src, "MissionUseCases") {
-            Ok(p) => p,
-            Err(e) => panic!("initial use case parse failed: {}", e),
-        };
+        let parsed = crate::parser::grammar::SysmlParser::parse_source(src, "MissionUseCases")?;
         assert_eq!(parsed.use_case_defs.len(), 1);
         if let Some(uc) = parsed.use_case_defs.first() {
             assert_eq!(uc.includes, vec!["ValidateFlightPlan".to_string()]);
@@ -2334,11 +2317,9 @@ package MissionUseCases {
         assert!(serialized.contains("extend EmergencyAbortSortie;"), "got:\n{}", serialized);
         assert!(!serialized.contains("include use case"));
         assert!(!serialized.contains("extend use case"));
-        let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&serialized, "MissionUseCases") {
-            Ok(p) => p,
-            Err(e) => panic!("reparse failed: {}", e),
-        };
+        let reparsed = crate::parser::grammar::SysmlParser::parse_source(&serialized, "MissionUseCases")?;
         assert_eq!(reparsed, parsed);
+        Ok(())
     }
 
     /// Verifies lossless round-trip serialization for `HazardDef`, `RiskDef`, `ActionDef`, `ConnectionDef`, `PortDef`, and `StateDef` inner `doc` statements (Issue #505).
@@ -2368,7 +2349,7 @@ package MissionUseCases {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-ROUNDTRIP-505] | SysML v2: TestCaseDef(test_issue_505_hazard_risk_action_connection_state_roundtrip)
     #[test]
-    fn test_issue_505_hazard_risk_action_connection_state_roundtrip() {
+    fn test_issue_505_hazard_risk_action_connection_state_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let src = "\
 package Roundtrip505 {
     port def BusPort {
@@ -2406,29 +2387,28 @@ package Roundtrip505 {
         state ActiveSubState;
     }
 }";
-        let parsed = match crate::parser::grammar::SysmlParser::parse_source(src, "Roundtrip505") {
-            Ok(p) => p,
-            Err(e) => panic!("initial parse failed: {}", e),
-        };
-        assert_eq!(parsed.action_defs[0].in_params[0].default_value.as_deref(), Some("10.0"));
-        assert_eq!(parsed.action_defs[0].out_params[0].default_value.as_deref(), Some("0.0"));
-        assert_eq!(parsed.action_defs[0].parameters.len(), 1);
-        assert_eq!(parsed.connection_defs[0].latency_ms, Some(0.25));
-        assert_eq!(parsed.hazard_defs[0].source_port.as_deref(), Some("Bus.pwrOut"));
-        assert_eq!(parsed.hazard_defs[0].target_port.as_deref(), Some("Actuator.pwrIn"));
-        assert_eq!(parsed.risk_defs[0].source_port.as_deref(), Some("Bus.pwrOut"));
-        assert_eq!(parsed.risk_defs[0].target_port.as_deref(), Some("Actuator.pwrIn"));
-        assert_eq!(parsed.state_defs[0].doc.as_deref(), Some("Supervisor state property doc"));
-        assert_eq!(parsed.state_defs[0].sub_states[0].doc, None);
+        let parsed = crate::parser::grammar::SysmlParser::parse_source(src, "Roundtrip505")?;
+        let act0 = parsed.action_defs.first().ok_or("act0")?;
+        assert_eq!(act0.in_params.first().and_then(|p| p.default_value.as_deref()), Some("10.0"));
+        assert_eq!(act0.out_params.first().and_then(|p| p.default_value.as_deref()), Some("0.0"));
+        assert_eq!(act0.parameters.len(), 1);
+        assert_eq!(parsed.connection_defs.first().ok_or("c0")?.latency_ms, Some(0.25));
+        let h0 = parsed.hazard_defs.first().ok_or("h0")?;
+        assert_eq!(h0.source_port.as_deref(), Some("Bus.pwrOut"));
+        assert_eq!(h0.target_port.as_deref(), Some("Actuator.pwrIn"));
+        let r0 = parsed.risk_defs.first().ok_or("r0")?;
+        assert_eq!(r0.source_port.as_deref(), Some("Bus.pwrOut"));
+        assert_eq!(r0.target_port.as_deref(), Some("Actuator.pwrIn"));
+        let s0 = parsed.state_defs.first().ok_or("s0")?;
+        assert_eq!(s0.doc.as_deref(), Some("Supervisor state property doc"));
+        assert_eq!(s0.sub_states.first().ok_or("sub0")?.doc, None);
 
         let serialized = parsed.to_sysml(0);
         assert!(!serialized.contains("\"\""));
         assert!(serialized.contains("attribute latency_ms : Real = 0.25;"));
-        let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&serialized, "Roundtrip505") {
-            Ok(p) => p,
-            Err(e) => panic!("reparse failed: {}\n---\n{}", e, serialized),
-        };
+        let reparsed = crate::parser::grammar::SysmlParser::parse_source(&serialized, "Roundtrip505")?;
         assert_eq!(reparsed, parsed);
+        Ok(())
     }
 }
 

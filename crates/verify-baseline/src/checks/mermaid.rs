@@ -98,10 +98,10 @@ mod tests {
             let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
             let path = std::env::temp_dir().join(format!("verify_mermaid_{}_{}_{}", name, nanos, count));
-            fs::create_dir_all(&path).unwrap();
+            let _ = fs::create_dir_all(&path);
             Self { path }
         }
     }
@@ -113,37 +113,48 @@ mod tests {
     }
 
     #[test]
-    fn test_clean_mermaid_passes() {
+    fn test_clean_mermaid_passes() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("clean");
         let md = tmp.path.join("doc.md");
-        let mut f = File::create(md).unwrap();
-        writeln!(f, "```mermaid\ngraph TD\nA[\"Node A\"] --> B[\"Node B\"]\n```").unwrap();
+        let mut f = File::create(md)?;
+        writeln!(f, "```mermaid\ngraph TD\nA[\"Node A\"] --> B[\"Node B\"]\n```")?;
 
         assert!(check_mermaid_syntax(&tmp.path).is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_unclosed_fence_fails() {
+    fn test_unclosed_fence_fails() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("unclosed");
         let md = tmp.path.join("doc.md");
-        let mut f = File::create(md).unwrap();
-        writeln!(f, "```mermaid\ngraph TD\nA --> B\n").unwrap();
+        let mut f = File::create(md)?;
+        writeln!(f, "```mermaid\ngraph TD\nA --> B\n")?;
 
         let res = check_mermaid_syntax(&tmp.path);
         assert!(res.is_err());
-        assert!(res.unwrap_err()[0].contains("unclosed ```mermaid fence"));
+        assert!(res
+            .err()
+            .unwrap_or_default()
+            .first()
+            .is_some_and(|e| e.contains("unclosed ```mermaid fence")));
+        Ok(())
     }
 
     #[test]
-    fn test_invalid_header_fails() {
+    fn test_invalid_header_fails() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("invalid_hdr");
         let md = tmp.path.join("doc.md");
-        let mut f = File::create(md).unwrap();
-        writeln!(f, "```mermaid\nbadHeader TD\nA --> B\n```").unwrap();
+        let mut f = File::create(md)?;
+        writeln!(f, "```mermaid\nbadHeader TD\nA --> B\n```")?;
 
         let res = check_mermaid_syntax(&tmp.path);
         assert!(res.is_err());
-        assert!(res.unwrap_err()[0].contains("missing or invalid Mermaid diagram header"));
+        assert!(res
+            .err()
+            .unwrap_or_default()
+            .first()
+            .is_some_and(|e| e.contains("missing or invalid Mermaid diagram header")));
+        Ok(())
     }
 
     /// Verifies that Check 13B fails closed when a subdirectory cannot be traversed by `WalkDir`.
@@ -174,13 +185,13 @@ mod tests {
     /// Realises: [REQ-CHECK-13B-FAIL-CLOSED-WALKDIR-TEST]
     #[cfg(unix)]
     #[test]
-    fn test_unreadable_subdir_fails_closed() {
+    fn test_unreadable_subdir_fails_closed() -> Result<(), Box<dyn std::error::Error>> {
         use std::os::unix::fs::PermissionsExt;
 
         let tmp = TempDir::new("unreadable_dir");
         let sub = tmp.path.join("locked_docs");
-        fs::create_dir_all(&sub).unwrap();
-        fs::set_permissions(&sub, fs::Permissions::from_mode(0o000)).unwrap();
+        fs::create_dir_all(&sub)?;
+        fs::set_permissions(&sub, fs::Permissions::from_mode(0o000))?;
 
         let res = check_mermaid_syntax(&tmp.path);
         let _ = fs::set_permissions(&sub, fs::Permissions::from_mode(0o755));
@@ -189,5 +200,6 @@ mod tests {
             res.is_err(),
             "Check 13B must fail closed on unreadable directory, but returned Ok(())"
         );
+        Ok(())
     }
 }

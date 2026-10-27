@@ -1,3 +1,4 @@
+#![cfg_attr(test, allow(clippy::field_reassign_with_default))]
 //! Integration tests for deterministic Dart solver bridge codegen (`flutter_codegen.rs`).
 //!
 //! ## 1. Safety Intent & Regulatory Scope
@@ -133,7 +134,7 @@ impl Drop for ScopedTempDir {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-FLUTTER-GENERATE-SOLVER-BRIDGE]
 #[test]
-fn test_emit_dart_solver_bridge_typed_dtos_and_solve_json_transport() {
+fn test_emit_dart_solver_bridge_typed_dtos_and_solve_json_transport() -> Result<(), Box<dyn std::error::Error>> {
     let tmp = ScopedTempDir::new("solver_bridge");
     let mut model = SysmlModel::default();
     model.package_name = Some("OptimizationKernelPackage".to_string());
@@ -185,11 +186,10 @@ fn test_emit_dart_solver_bridge_typed_dtos_and_solve_json_transport() {
     part_def.ports.push(part_port);
     model.parts.push(part_def);
 
-    let bridge_path = emit_dart_solver_bridge(&tmp.path, &model, 0xCAFE_BABE_1234_5678)
-        .expect("emit_dart_solver_bridge must succeed");
+    let bridge_path = emit_dart_solver_bridge(&tmp.path, &model, 0xCAFE_BABE_1234_5678)?;
     assert!(bridge_path.exists(), "solver_bridge.g.dart must be written to disk");
 
-    let dart_src = fs::read_to_string(&bridge_path).expect("read solver_bridge.g.dart");
+    let dart_src = fs::read_to_string(&bridge_path)?;
     let direct_src = generate_solver_bridge_dart(&model, 0xCAFE_BABE_1234_5678);
     assert_eq!(dart_src, direct_src);
 
@@ -214,6 +214,7 @@ fn test_emit_dart_solver_bridge_typed_dtos_and_solve_json_transport() {
     // 4. --solve-json transport method on DeapNativeSolverIsolate
     assert!(dart_src.contains("Future<Map<String, dynamic>> solveJson("));
     assert!(dart_src.contains("'--solve-json'"));
+    Ok(())
 }
 
 /// Verifies that `generate_domain_seed_dart` unions `model.parts` with topology-only `node.type_name` values,

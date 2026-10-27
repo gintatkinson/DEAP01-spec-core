@@ -3787,13 +3787,11 @@ pub fn check_executive_deliverable_traceability(repo_root: &Path) -> Result<Pari
     let mut ssot_conns = BTreeSet::new();
     let views_dir = repo_root.join("docs").join("architecture").join("views");
     if views_dir.is_dir() {
-        for entry_res in WalkDir::new(&views_dir).sort_by_file_name().into_iter() {
-            if let Ok(entry) = entry_res {
-                if entry.file_type().is_file() {
-                    if let Ok(vc) = fs::read_to_string(entry.path()) {
-                        for cid in extract_connection_ids(&vc) {
-                            ssot_conns.insert(cid);
-                        }
+        for entry in WalkDir::new(&views_dir).sort_by_file_name().into_iter().flatten() {
+            if entry.file_type().is_file() {
+                if let Ok(vc) = fs::read_to_string(entry.path()) {
+                    for cid in extract_connection_ids(&vc) {
+                        ssot_conns.insert(cid);
                     }
                 }
             }
@@ -3811,13 +3809,11 @@ pub fn check_executive_deliverable_traceability(repo_root: &Path) -> Result<Pari
     }
     let conops_dir = TargetScanDir::Conops.resolve(repo_root);
     if conops_dir.is_dir() {
-        for entry_res in WalkDir::new(&conops_dir).sort_by_file_name().into_iter() {
-            if let Ok(entry) = entry_res {
-                if entry.file_type().is_file() && entry.path().extension().is_some_and(|ext| ext == "md") {
-                    if let Ok(cc) = fs::read_to_string(entry.path()) {
-                        for cid in extract_connection_ids(&cc) {
-                            ssot_conns.insert(cid);
-                        }
+        for entry in WalkDir::new(&conops_dir).sort_by_file_name().into_iter().flatten() {
+            if entry.file_type().is_file() && entry.path().extension().is_some_and(|ext| ext == "md") {
+                if let Ok(cc) = fs::read_to_string(entry.path()) {
+                    for cid in extract_connection_ids(&cc) {
+                        ssot_conns.insert(cid);
                     }
                 }
             }
@@ -5641,12 +5637,12 @@ flowchart TD
             restore_perms.set_mode(0o755);
             let _ = fs::set_permissions(&unreadable, restore_perms);
 
-            let errs = res.expect_err("WalkDir on unreadable directory should produce errors");
+            let errs = res.err().unwrap_or_default();
             assert!(!errs.is_empty(), "Expected I/O errors for unreadable directory");
             let io_err = errs
                 .iter()
                 .find(|e| e.contains("I/O error walking directory"))
-                .expect("Expected directory traversal I/O error in error list");
+                .ok_or("Expected directory traversal I/O error in error list")?;
             assert!(
                 io_err.starts_with("Check 29 failed:"),
                 "I/O error must be formatted as Check 29 failed, got: {}",
@@ -5677,7 +5673,7 @@ flowchart TD
         )?;
 
         let res = check_coverage_digest(&tmp.path);
-        let errs = res.expect_err("Undeclared spec reference should trigger errors");
+        let errs = res.err().unwrap_or_default();
         assert!(!errs.is_empty(), "Expected errors for undeclared spec");
         for err in &errs {
             assert!(
@@ -5705,7 +5701,7 @@ flowchart TD
         )?;
 
         let res = check_obligation_witness(&tmp.path);
-        let errs = res.expect_err("Orphan hazard should trigger errors");
+        let errs = res.err().unwrap_or_default();
         assert!(!errs.is_empty(), "Expected errors for unwitnessed hazard");
         for err in &errs {
             assert!(
@@ -5728,7 +5724,7 @@ flowchart TD
         fs::create_dir_all(tmp.path.join(".pipeline").join("upstream"))?;
 
         let res = check_architecture_viewpoint_diagrams(&tmp.path, false, true);
-        let errs = res.expect_err("Missing architecture views library in upstream should trigger error");
+        let errs = res.err().unwrap_or_default();
         assert!(!errs.is_empty(), "Expected error for missing arch views");
         for err in &errs {
             assert!(

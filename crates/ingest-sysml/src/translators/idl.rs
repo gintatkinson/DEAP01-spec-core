@@ -161,24 +161,29 @@ impl IDLTranslator {
                     let param_items: Vec<&str> = params_raw.split(',').map(|p| p.trim()).filter(|p| !p.is_empty()).collect();
                     for p in param_items {
                         let p_parts: Vec<&str> = p.split_whitespace().collect();
-                        if p_parts.len() >= 3 && ["in", "out", "inout"].contains(&p_parts[0]) {
-                            let direction = p_parts[0];
-                            let p_type = p_parts[1].to_string();
-                            let p_n = sanitize_identifier(p_parts[2], "param");
-                            let attr = AttributeDef {
-                                name: p_n,
-                                type_name: p_type,
-                                default_value: None,
-                                doc: None,
-                            };
-                            if direction == "out" {
-                                out_params.push(attr);
-                            } else {
-                                in_params.push(attr);
+                        if let (Some(&direction), Some(&raw_type), Some(&raw_name)) =
+                            (p_parts.first(), p_parts.get(1), p_parts.get(2))
+                        {
+                            if ["in", "out", "inout"].contains(&direction) {
+                                let p_type = raw_type.to_string();
+                                let p_n = sanitize_identifier(raw_name, "param");
+                                let attr = AttributeDef {
+                                    name: p_n,
+                                    type_name: p_type,
+                                    default_value: None,
+                                    doc: None,
+                                };
+                                if direction == "out" {
+                                    out_params.push(attr);
+                                } else {
+                                    in_params.push(attr);
+                                }
+                                continue;
                             }
-                        } else if p_parts.len() >= 2 {
-                            let p_type = p_parts[0].to_string();
-                            let p_n = sanitize_identifier(p_parts[1], "param");
+                        }
+                        if let (Some(&raw_type), Some(&raw_name)) = (p_parts.first(), p_parts.get(1)) {
+                            let p_type = raw_type.to_string();
+                            let p_n = sanitize_identifier(raw_name, "param");
                             in_params.push(AttributeDef {
                                 name: p_n,
                                 type_name: p_type,
@@ -248,16 +253,17 @@ impl IDLTranslator {
 /// Realises: [REQ-TRANSLATORS-IDL-SCAN-MODULE-NAME] | SysML v2: ActionDef(scan_module_name)
 fn scan_module_name(content: &str) -> Option<String> {
     let mut search_pos = 0;
-    while let Some(kw_pos) = content[search_pos..].find("module") {
+    while let Some(kw_pos) = content.get(search_pos..)?.find("module") {
         let abs_pos = search_pos + kw_pos;
-        let before_ok = abs_pos == 0 || {
-            let b = content.as_bytes()[abs_pos - 1];
-            !b.is_ascii_alphanumeric() && b != b'_'
-        };
-        let after = &content[abs_pos + 6..];
+        let before_ok = abs_pos == 0
+            || content
+                .as_bytes()
+                .get(abs_pos.saturating_sub(1))
+                .is_none_or(|b| !b.is_ascii_alphanumeric() && *b != b'_');
+        let after = content.get(abs_pos + 6..)?;
         if before_ok && after.starts_with(char::is_whitespace) {
             if let Some(brace_pos) = after.find('{') {
-                let header = after[..brace_pos].trim();
+                let header = after.get(..brace_pos)?.trim();
                 let name: String = header
                     .chars()
                     .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
@@ -302,25 +308,26 @@ fn scan_module_name(content: &str) -> Option<String> {
 fn scan_idl_blocks<'a>(content: &'a str, keyword: &str) -> Vec<(&'a str, &'a str)> {
     let mut results = Vec::new();
     let mut search_pos = 0;
-    while let Some(kw_pos) = content[search_pos..].find(keyword) {
+    while let Some(kw_pos) = content.get(search_pos..).and_then(|s| s.find(keyword)) {
         let abs_pos = search_pos + kw_pos;
-        let before_ok = abs_pos == 0 || {
-            let b = content.as_bytes()[abs_pos - 1];
-            !b.is_ascii_alphanumeric() && b != b'_'
-        };
-        let after = &content[abs_pos + keyword.len()..];
+        let before_ok = abs_pos == 0
+            || content
+                .as_bytes()
+                .get(abs_pos.saturating_sub(1))
+                .is_none_or(|b| !b.is_ascii_alphanumeric() && *b != b'_');
+        let after = content.get(abs_pos + keyword.len()..).unwrap_or("");
         if before_ok && after.starts_with(char::is_whitespace) {
             if let Some(brace_open) = after.find('{') {
-                let header = after[..brace_open].trim();
+                let header = after.get(..brace_open).unwrap_or("").trim();
                 let name_len = header
                     .chars()
                     .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
                     .count();
-                let block_name = &header[..name_len];
-                let body_and_rest = &after[brace_open + 1..];
+                let block_name = header.get(..name_len).unwrap_or("");
+                let body_and_rest = after.get(brace_open + 1..).unwrap_or("");
                 if let Some(brace_close) = body_and_rest.find('}') {
-                    let body = &body_and_rest[..brace_close];
-                    let after_close = body_and_rest[brace_close + 1..].trim_start();
+                    let body = body_and_rest.get(..brace_close).unwrap_or("");
+                    let after_close = body_and_rest.get(brace_close + 1..).unwrap_or("").trim_start();
                     if after_close.starts_with(';') {
                         if !block_name.is_empty() {
                             results.push((block_name, body));
@@ -370,9 +377,8 @@ fn scan_struct_fields(body: &str) -> Vec<(String, String)> {
             continue;
         }
         let parts: Vec<&str> = trimmed.split_whitespace().collect();
-        if parts.len() >= 2 {
-            let f_type = parts[..parts.len() - 1].join(" ");
-            let f_name = parts[parts.len() - 1];
+        if let Some((&f_name, type_parts)) = parts.split_last().filter(|(_, tp)| !tp.is_empty()) {
+            let f_type = type_parts.join(" ");
             if f_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
                 && f_type.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '<' || c == '>' || c == ':')
             {
@@ -419,8 +425,9 @@ fn scan_interface_ops(if_body: &str) -> Vec<(String, String)> {
                 let before_paren = stmt[..open_paren].trim();
                 let params_raw = stmt[open_paren + 1..close_idx].trim();
                 let tokens: Vec<&str> = before_paren.split_whitespace().collect();
-                if tokens.len() >= 2 {
-                    let op_name = tokens[tokens.len() - 1];
+                if let Some((&op_name, _prefix_tokens)) =
+                    tokens.split_last().filter(|(_, p)| !p.is_empty())
+                {
                     if op_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
                         ops.push((op_name.to_string(), params_raw.to_string()));
                     }
@@ -460,20 +467,22 @@ fn scan_interface_ops(if_body: &str) -> Vec<(String, String)> {
 fn scan_typedefs(content: &str) -> Vec<(String, String)> {
     let mut typedefs = Vec::new();
     let mut search_pos = 0;
-    while let Some(kw_pos) = content[search_pos..].find("typedef") {
+    while let Some(kw_pos) = content.get(search_pos..).and_then(|s| s.find("typedef")) {
         let abs_pos = search_pos + kw_pos;
-        let before_ok = abs_pos == 0 || {
-            let b = content.as_bytes()[abs_pos - 1];
-            !b.is_ascii_alphanumeric() && b != b'_'
-        };
-        let after = &content[abs_pos + 7..];
+        let before_ok = abs_pos == 0
+            || content
+                .as_bytes()
+                .get(abs_pos.saturating_sub(1))
+                .is_none_or(|b| !b.is_ascii_alphanumeric() && *b != b'_');
+        let after = content.get(abs_pos + 7..).unwrap_or("");
         if before_ok && after.starts_with(char::is_whitespace) {
             if let Some(semi_pos) = after.find(';') {
-                let stmt = after[..semi_pos].trim();
+                let stmt = after.get(..semi_pos).unwrap_or("").trim();
                 let parts: Vec<&str> = stmt.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    let t_type = parts[..parts.len() - 1].join(" ");
-                    let t_name = parts[parts.len() - 1];
+                if let Some((&t_name, type_parts)) =
+                    parts.split_last().filter(|(_, tp)| !tp.is_empty())
+                {
+                    let t_type = type_parts.join(" ");
                     if t_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
                         && t_type.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '<' || c == '>' || c == ':')
                     {
@@ -494,7 +503,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_idl_translation_synthetic() {
+    fn test_idl_translation_synthetic() -> Result<(), String> {
         let idl_source = r#"
 module Module_Alpha {
     typedef sequence<octet> Payload_Type;
@@ -510,26 +519,50 @@ module Module_Alpha {
 };
 "#;
         let translator = IDLTranslator::new();
-        let pkg = translator.translate(idl_source, "Fallback").expect("Translation failed");
+        let pkg = translator.translate(idl_source, "Fallback")?;
 
         assert_eq!(pkg.name, "Module_Alpha");
         assert_eq!(pkg.attribute_defs.len(), 1);
-        assert_eq!(pkg.attribute_defs[0].name, "Payload_Type");
-        assert_eq!(pkg.attribute_defs[0].type_name, "sequence<octet>");
+        assert_eq!(
+            pkg.attribute_defs.first().map(|a| a.name.as_str()),
+            Some("Payload_Type")
+        );
+        assert_eq!(
+            pkg.attribute_defs.first().map(|a| a.type_name.as_str()),
+            Some("sequence<octet>")
+        );
 
         assert_eq!(pkg.part_defs.len(), 2);
-        let s0 = pkg.part_defs.iter().find(|p| p.name == "Struct_Zero").unwrap();
+        let s0 = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "Struct_Zero")
+            .ok_or("missing Struct_Zero")?;
         assert_eq!(s0.attributes.len(), 2);
-        assert_eq!(s0.attributes[0].name, "id");
-        assert_eq!(s0.attributes[1].name, "metric_x");
+        assert_eq!(s0.attributes.first().map(|a| a.name.as_str()), Some("id"));
+        assert_eq!(
+            s0.attributes.get(1).map(|a| a.name.as_str()),
+            Some("metric_x")
+        );
 
-        let ifp = pkg.part_defs.iter().find(|p| p.name == "Interface_Prime").unwrap();
+        let ifp = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "Interface_Prime")
+            .ok_or("missing Interface_Prime")?;
         assert_eq!(ifp.actions.len(), 1);
-        let action = &ifp.actions[0];
+        let action = ifp.actions.first().ok_or("missing ExecuteCommand")?;
         assert_eq!(action.name, "ExecuteCommand");
         assert_eq!(action.in_params.len(), 1);
-        assert_eq!(action.in_params[0].name, "cmd");
+        assert_eq!(
+            action.in_params.first().map(|p| p.name.as_str()),
+            Some("cmd")
+        );
         assert_eq!(action.out_params.len(), 1);
-        assert_eq!(action.out_params[0].name, "status");
+        assert_eq!(
+            action.out_params.first().map(|p| p.name.as_str()),
+            Some("status")
+        );
+        Ok(())
     }
 }

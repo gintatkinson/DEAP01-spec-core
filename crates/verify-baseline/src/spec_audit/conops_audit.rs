@@ -18,7 +18,7 @@
 use crate::spec_audit::markdown_ast::{parse_markdown, MarkdownDoc};
 use crate::spec_audit::{SpecAuditError, SpecAuditFinding};
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -252,10 +252,10 @@ pub fn extract_markdown_tables(content: &str) -> Vec<MarkdownTable> {
         }
 
         if trimmed.starts_with('|') && trimmed.ends_with('|') && trimmed.len() >= 2 {
-            let inner = match trimmed.strip_prefix('|').and_then(|s| s.strip_suffix('|')) {
-                Some(s) => s,
-                None => "",
-            };
+            let inner = trimmed
+                .strip_prefix('|')
+                .and_then(|s| s.strip_suffix('|'))
+                .unwrap_or_default();
             let cells: Vec<String> = inner.split('|').map(|c| c.trim().to_string()).collect();
 
             // Check if this is a delimiter row (| :--- | :--- |)
@@ -376,7 +376,7 @@ pub fn validate_emergency_decision_matrix(content: &str, rel_path: &str) -> Vec<
     }
 
     // Extract all EMG-XX triggers mentioned
-    let mut found_triggers = HashSet::new();
+    let mut found_triggers = BTreeSet::new();
     let upper_doc = content.to_ascii_uppercase();
 
     for &canonical in CANONICAL_EMERGENCY_TRIGGERS {
@@ -393,11 +393,11 @@ pub fn validate_emergency_decision_matrix(content: &str, rel_path: &str) -> Vec<
         };
         let abs_pos = search_from + pos;
         let suffix = upper_doc.get(abs_pos + 4..).unwrap_or("");
-        let mut num_end = 0;
-        let bytes = suffix.as_bytes();
-        while num_end < bytes.len() && bytes[num_end].is_ascii_digit() {
-            num_end += 1;
-        }
+        let num_end = suffix
+            .as_bytes()
+            .iter()
+            .take_while(|b| b.is_ascii_digit())
+            .count();
         if num_end > 0 {
             if let Some(digits) = suffix.get(..num_end) {
                 let trigger_id = format!("EMG-{}", digits);
@@ -473,7 +473,7 @@ pub fn validate_pace_plan(content: &str, rel_path: &str) -> Vec<SpecAuditFinding
         return findings;
     }
 
-    let mut found_tiers = HashSet::new();
+    let mut found_tiers = BTreeSet::new();
 
     // Scan for PACE tiers in tables or lines
     let tables = extract_markdown_tables(content);
@@ -564,7 +564,7 @@ pub fn validate_threat_matrix(content: &str, rel_path: &str) -> Vec<SpecAuditFin
         return findings;
     }
 
-    let mut found_domains = HashSet::new();
+    let mut found_domains = BTreeSet::new();
 
     for domain in MANDATORY_THREAT_DOMAINS {
         let matched = domain.keywords.iter().any(|&kw| lower_doc.contains(kw));
@@ -755,8 +755,8 @@ pub fn validate_moe_mop_metrics(content: &str, rel_path: &str) -> Vec<SpecAuditF
 /// Realises: [REQ-SPEC-AUDIT-CONOPS-AUDIT-VALIDATE-OPERATIONAL-ALLOCATION-TAGS] | SysML v2: ActionDef(validate_operational_allocation_tags)
 pub fn validate_operational_allocation_tags(content: &str, rel_path: &str) -> Vec<SpecAuditFinding> {
     let mut findings = Vec::new();
-    let mut declared_oa_tasks = HashSet::new();
-    let mut declared_met_tasks = HashSet::new();
+    let mut declared_oa_tasks = BTreeSet::new();
+    let mut declared_met_tasks = BTreeSet::new();
 
     // 1. Scan for declared OA-XX and MET-XX identifiers outside code blocks
     let mut in_code_block = false;
@@ -773,18 +773,19 @@ pub fn validate_operational_allocation_tags(content: &str, rel_path: &str) -> Ve
         }
 
         // Check for malformed allocation tags e.g. "/// OperationalAllocation:" without square brackets
-        if trimmed.starts_with("///") && trimmed.to_lowercase().contains("operationalallocation") {
-            if !trimmed.contains('[') || !trimmed.contains(']') {
-                findings.push(SpecAuditFinding::new(
-                    "conops-operational-allocation-malformed",
-                    format!(
-                        "Operational allocation tag on line {} in '{}' is malformed; expected '/// OperationalAllocation: [ID]' format.",
-                        line_no, rel_path
-                    ),
-                    rel_path,
-                    Some(line_no),
-                ));
-            }
+        if trimmed.starts_with("///")
+            && trimmed.to_lowercase().contains("operationalallocation")
+            && (!trimmed.contains('[') || !trimmed.contains(']'))
+        {
+            findings.push(SpecAuditFinding::new(
+                "conops-operational-allocation-malformed",
+                format!(
+                    "Operational allocation tag on line {} in '{}' is malformed; expected '/// OperationalAllocation: [ID]' format.",
+                    line_no, rel_path
+                ),
+                rel_path,
+                Some(line_no),
+            ));
         }
 
         // Extract OA-XX and MET-XX declarations from tables or list items
@@ -798,11 +799,11 @@ pub fn validate_operational_allocation_tags(content: &str, rel_path: &str) -> Ve
             };
             let abs_pos = search_from + pos;
             let suffix = upper_line.get(abs_pos + 3..).unwrap_or("");
-            let mut num_end = 0;
-            let bytes = suffix.as_bytes();
-            while num_end < bytes.len() && bytes[num_end].is_ascii_digit() {
-                num_end += 1;
-            }
+            let num_end = suffix
+                .as_bytes()
+                .iter()
+                .take_while(|b| b.is_ascii_digit())
+                .count();
             if num_end > 0 {
                 if let Some(digits) = suffix.get(..num_end) {
                     let id = format!("OA-{}", digits);
@@ -820,11 +821,11 @@ pub fn validate_operational_allocation_tags(content: &str, rel_path: &str) -> Ve
             };
             let abs_pos = search_from_met + pos;
             let suffix = upper_line.get(abs_pos + 4..).unwrap_or("");
-            let mut num_end = 0;
-            let bytes = suffix.as_bytes();
-            while num_end < bytes.len() && bytes[num_end].is_ascii_digit() {
-                num_end += 1;
-            }
+            let num_end = suffix
+                .as_bytes()
+                .iter()
+                .take_while(|b| b.is_ascii_digit())
+                .count();
             if num_end > 0 {
                 if let Some(digits) = suffix.get(..num_end) {
                     let id = format!("MET-{}", digits);
@@ -1095,8 +1096,8 @@ pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<
 pub fn audit_modular_subgraph_edge_routing(diag_text: &str) -> Option<String> {
     let mut subgraph_stack: Vec<String> = Vec::new();
     let mut max_nesting_depth = 0usize;
-    let mut nested_nodes: HashSet<String> = HashSet::new();
-    let mut node_subgraph: HashMap<String, String> = HashMap::new();
+    let mut nested_nodes: BTreeSet<String> = BTreeSet::new();
+    let mut node_subgraph: BTreeMap<String, String> = BTreeMap::new();
     let mut cross_edges: Vec<(String, String, String)> = Vec::new();
 
     const ARROWS: &[&str] = &[
@@ -1109,8 +1110,8 @@ pub fn audit_modular_subgraph_edge_routing(diag_text: &str) -> Option<String> {
             continue;
         }
 
-        if line.starts_with("subgraph") {
-            let after = line["subgraph".len()..].trim();
+        if let Some(after_raw) = line.strip_prefix("subgraph") {
+            let after = after_raw.trim();
             let sub_id = if let Some(bracket_pos) = after.find('[') {
                 after[..bracket_pos].trim().to_string()
             } else if let Some(space_pos) = after.find(' ') {
@@ -1137,9 +1138,9 @@ pub fn audit_modular_subgraph_edge_routing(diag_text: &str) -> Option<String> {
                 is_edge = true;
                 let from_part = line[..pos].trim();
                 let after_arrow = line[pos + arrow.len()..].trim();
-                let to_part = if after_arrow.starts_with('|') {
-                    if let Some(second_pipe) = after_arrow[1..].find('|') {
-                        after_arrow[second_pipe + 2..].trim()
+                let to_part = if let Some(after_pipe) = after_arrow.strip_prefix('|') {
+                    if let Some(second_pipe) = after_pipe.find('|') {
+                        after_pipe[second_pipe + 1..].trim()
                     } else {
                         after_arrow
                     }
@@ -1467,7 +1468,7 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
         }
     };
 
-    let required_props: HashSet<&str> = req_array
+    let required_props: BTreeSet<&str> = req_array
         .iter()
         .filter_map(|v| v.as_str())
         .collect();
@@ -1526,8 +1527,8 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
 
     // 2a. super_system_architecture property structure
     if let Some(super_sys) = props.get("super_system_architecture") {
-        let is_obj = super_sys.get("type").and_then(|t| t.as_str()).map_or(false, |t| t == "object");
-        let super_req: HashSet<&str> = super_sys
+        let is_obj = super_sys.get("type").and_then(|t| t.as_str()) == Some("object");
+        let super_req: BTreeSet<&str> = super_sys
             .get("required")
             .and_then(|r| r.as_array())
             .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
@@ -1536,7 +1537,7 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
         let has_segments = super_req.contains("segments");
         let has_diagram = super_req.contains("boundary_diagram_mermaid");
 
-        let seg_items_req: HashSet<&str> = super_sys
+        let seg_items_req: BTreeSet<&str> = super_sys
             .get("properties")
             .and_then(|p| p.get("segments"))
             .and_then(|s| s.get("items"))
@@ -1568,8 +1569,8 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
 
     // 2b. subsystem_architecture property structure
     if let Some(subsys) = props.get("subsystem_architecture") {
-        let is_obj = subsys.get("type").and_then(|t| t.as_str()).map_or(false, |t| t == "object");
-        let subsys_req: HashSet<&str> = subsys
+        let is_obj = subsys.get("type").and_then(|t| t.as_str()) == Some("object");
+        let subsys_req: BTreeSet<&str> = subsys
             .get("required")
             .and_then(|r| r.as_array())
             .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
@@ -1578,7 +1579,7 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
         let has_subsystems = subsys_req.contains("subsystems");
         let has_allocations = subsys_req.contains("ast_part_allocations");
 
-        let subsys_items_req: HashSet<&str> = subsys
+        let subsys_items_req: BTreeSet<&str> = subsys
             .get("properties")
             .and_then(|p| p.get("subsystems"))
             .and_then(|s| s.get("items"))
@@ -1611,8 +1612,8 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
 
     // 2c. system_interface_topology property structure
     if let Some(topo) = props.get("system_interface_topology") {
-        let is_obj = topo.get("type").and_then(|t| t.as_str()).map_or(false, |t| t == "object");
-        let topo_req: HashSet<&str> = topo
+        let is_obj = topo.get("type").and_then(|t| t.as_str()) == Some("object");
+        let topo_req: BTreeSet<&str> = topo
             .get("required")
             .and_then(|r| r.as_array())
             .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
@@ -1620,7 +1621,7 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
 
         let has_links = topo_req.contains("interface_links");
 
-        let link_items_req: HashSet<&str> = topo
+        let link_items_req: BTreeSet<&str> = topo
             .get("properties")
             .and_then(|p| p.get("interface_links"))
             .and_then(|l| l.get("items"))
@@ -1653,10 +1654,10 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
 
     // 2d. user_classes property structure (ISO 29148 §5.2.4, refs #291)
     if let Some(user_classes) = props.get("user_classes") {
-        let is_arr = user_classes.get("type").and_then(|t| t.as_str()).map_or(false, |t| t == "array");
+        let is_arr = user_classes.get("type").and_then(|t| t.as_str()) == Some("array");
         let min_items = user_classes.get("minItems").and_then(|m| m.as_u64()).unwrap_or(0);
 
-        let items_req: HashSet<&str> = user_classes
+        let items_req: BTreeSet<&str> = user_classes
             .get("items")
             .and_then(|i| i.get("required"))
             .and_then(|r| r.as_array())
@@ -1678,7 +1679,7 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
             .and_then(|id| id.get("pattern"))
             .and_then(|p| p.as_str());
 
-        let has_ucl_pattern = id_pattern.map_or(false, |p| p == "^UCL-[0-9]{2}$");
+        let has_ucl_pattern = id_pattern == Some("^UCL-[0-9]{2}$");
 
         if !is_arr || min_items < 1 || !has_req_fields {
             findings.push(SpecAuditFinding::new(
@@ -1796,8 +1797,7 @@ pub fn validate_user_classes(content: &str, rel_path: &str) -> Vec<SpecAuditFind
 
         if let Some(col) = id_col_idx {
             for row in &tbl.rows {
-                if col < row.cells.len() {
-                    let cell = &row.cells[col];
+                if let Some(cell) = row.cells.get(col) {
                     let raw_id = cell.trim()
                         .trim_matches('*')
                         .trim_matches('_')
@@ -1842,34 +1842,40 @@ pub fn validate_user_classes(content: &str, rel_path: &str) -> Vec<SpecAuditFind
         let bytes = line.as_bytes();
         let mut i = 0;
         while i < bytes.len() {
-            let is_uc = (bytes[i] == b'U' || bytes[i] == b'u')
-                && i + 2 < bytes.len()
-                && (bytes[i + 1] == b'C' || bytes[i + 1] == b'c')
-                && bytes[i + 2] == b'-';
+            let is_uc = bytes.get(i).is_some_and(|&b0| b0 == b'U' || b0 == b'u')
+                && bytes.get(i + 1).is_some_and(|&b1| b1 == b'C' || b1 == b'c')
+                && bytes.get(i + 2) == Some(&b'-');
 
             if is_uc {
-                let left_ok = i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_' || bytes[i - 1] == b'-');
+                let left_ok = i == 0
+                    || bytes.get(i - 1).is_none_or(|&b| {
+                        !(b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                    });
                 if left_ok {
                     let digit_start = i + 3;
                     let mut j = digit_start;
-                    while j < bytes.len() && bytes[j].is_ascii_digit() {
+                    while bytes.get(j).is_some_and(|b| b.is_ascii_digit()) {
                         j += 1;
                     }
                     if j > digit_start {
-                        let right_ok = j == bytes.len() || !(bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_' || bytes[j] == b'-');
+                        let right_ok = j == bytes.len()
+                            || bytes.get(j).is_none_or(|&b| {
+                                !(b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                            });
                         if right_ok {
-                            let matched = &line[i..j];
-                            findings.push(SpecAuditFinding::new(
-                                "conops-user-class-taxonomy-collision",
-                                format!(
-                                    "Found colliding prefix '{}' in '{}' at line {}. ConOps documents must not cite legacy 'UC-xx' User Classes or Level 2 System Use Cases; use 'UCL-xx' for User Classes per ISO/IEC/IEEE 29148:2018 §5.2.4 (refs #291).",
-                                    matched, rel_path, line_no
-                                ),
-                                rel_path,
-                                Some(line_no),
-                            ));
-                            i = j;
-                            continue;
+                            if let Some(matched) = line.get(i..j) {
+                                findings.push(SpecAuditFinding::new(
+                                    "conops-user-class-taxonomy-collision",
+                                    format!(
+                                        "Found colliding prefix '{}' in '{}' at line {}. ConOps documents must not cite legacy 'UC-xx' User Classes or Level 2 System Use Cases; use 'UCL-xx' for User Classes per ISO/IEC/IEEE 29148:2018 §5.2.4 (refs #291).",
+                                        matched, rel_path, line_no
+                                    ),
+                                    rel_path,
+                                    Some(line_no),
+                                ));
+                                i = j;
+                                continue;
+                            }
                         }
                     }
                 }
@@ -2029,7 +2035,7 @@ pub fn validate_conops_workspace(repo_root: &Path) -> Result<Vec<SpecAuditFindin
         for path in paths {
             if path.is_dir() {
                 scan_dir(&path, repo_root, findings)?;
-            } else if path.is_file() && path.extension().map_or(false, |ext| ext == "md") {
+            } else if path.is_file() && path.extension().is_some_and(|ext| ext == "md") {
                 let content = match fs::read_to_string(&path) {
                     Ok(c) => c,
                     Err(e) => return Err(SpecAuditError::IoError(e.to_string())),
@@ -2062,10 +2068,24 @@ mod tests {
 "#;
         let tables = extract_markdown_tables(content);
         assert_eq!(tables.len(), 1);
-        assert_eq!(tables[0].headers.len(), 4);
-        assert_eq!(tables[0].rows.len(), 2);
-        assert_eq!(tables[0].rows[0].cells[0], "MoE-01");
-        assert_eq!(tables[0].rows[0].cells[3], "ms");
+        assert_eq!(tables.first().map(|t| t.headers.len()), Some(4));
+        assert_eq!(tables.first().map(|t| t.rows.len()), Some(2));
+        assert_eq!(
+            tables
+                .first()
+                .and_then(|t| t.rows.first())
+                .and_then(|r| r.cells.first())
+                .map(|s| s.as_str()),
+            Some("MoE-01")
+        );
+        assert_eq!(
+            tables
+                .first()
+                .and_then(|t| t.rows.first())
+                .and_then(|r| r.cells.get(3))
+                .map(|s| s.as_str()),
+            Some("ms")
+        );
     }
 
     #[test]
@@ -2095,9 +2115,12 @@ mod tests {
 "#;
         let findings = validate_emergency_decision_matrix(content, "docs/conops/CONOPS.md");
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].rule_id, "conops-emergency-matrix-incomplete");
-        assert!(findings[0].message.contains("EMG-03"));
-        assert!(findings[0].message.contains("EMG-07"));
+        assert_eq!(
+            findings.first().map(|f| f.rule_id.as_str()),
+            Some("conops-emergency-matrix-incomplete")
+        );
+        assert!(findings.first().is_some_and(|f| f.message.contains("EMG-03")));
+        assert!(findings.first().is_some_and(|f| f.message.contains("EMG-07")));
     }
 
     #[test]
@@ -2124,9 +2147,16 @@ mod tests {
 "#;
         let findings = validate_pace_plan(content, "docs/conops/MISSION_INTENT.md");
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].rule_id, "conops-pace-plan-incomplete");
-        assert!(findings[0].message.contains("contingency"));
-        assert!(findings[0].message.contains("emergency"));
+        assert_eq!(
+            findings.first().map(|f| f.rule_id.as_str()),
+            Some("conops-pace-plan-incomplete")
+        );
+        assert!(findings
+            .first()
+            .is_some_and(|f| f.message.contains("contingency")));
+        assert!(findings
+            .first()
+            .is_some_and(|f| f.message.contains("emergency")));
     }
 
     #[test]
@@ -2156,9 +2186,14 @@ mod tests {
 "#;
         let findings = validate_threat_matrix(content, "docs/conops/MISSION_INTENT.md");
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].rule_id, "conops-threat-matrix-missing-domain");
-        assert!(findings[0].message.contains("CBRN"));
-        assert!(findings[0].message.contains("Optical"));
+        assert_eq!(
+            findings.first().map(|f| f.rule_id.as_str()),
+            Some("conops-threat-matrix-missing-domain")
+        );
+        assert!(findings.first().is_some_and(|f| f.message.contains("CBRN")));
+        assert!(findings
+            .first()
+            .is_some_and(|f| f.message.contains("Optical")));
     }
 
     #[test]
@@ -2209,8 +2244,13 @@ mod tests {
 "#;
         let unallocated_findings = validate_operational_allocation_tags(unallocated_content, "docs/conops/MISSION_INTENT.md");
         assert_eq!(unallocated_findings.len(), 1);
-        assert_eq!(unallocated_findings[0].rule_id, "conops-operational-allocation-missing");
-        assert!(unallocated_findings[0].message.contains("OA-02"));
+        assert_eq!(
+            unallocated_findings.first().map(|f| f.rule_id.as_str()),
+            Some("conops-operational-allocation-missing")
+        );
+        assert!(unallocated_findings
+            .first()
+            .is_some_and(|f| f.message.contains("OA-02")));
 
         let malformed_content = r#"# Tactical Mission Intent
 ## Operational Activities
@@ -2259,15 +2299,24 @@ Current gaps and issues.
 "#;
         let super_findings = validate_super_system_architecture(content, "docs/conops/CONOPS.md");
         assert!(!super_findings.is_empty(), "Must reject ConOps doc missing super-system architecture");
-        assert_eq!(super_findings[0].rule_id, "conops-super-system-architecture-missing");
+        assert_eq!(
+            super_findings.first().map(|f| f.rule_id.as_str()),
+            Some("conops-super-system-architecture-missing")
+        );
 
         let subsys_findings = validate_subsystem_architecture(content, "docs/conops/CONOPS.md");
         assert!(!subsys_findings.is_empty(), "Must reject ConOps doc missing subsystem architecture");
-        assert_eq!(subsys_findings[0].rule_id, "conops-subsystem-architecture-missing");
+        assert_eq!(
+            subsys_findings.first().map(|f| f.rule_id.as_str()),
+            Some("conops-subsystem-architecture-missing")
+        );
 
         let topo_findings = validate_system_interface_topology(content, "docs/conops/CONOPS.md");
         assert!(!topo_findings.is_empty(), "Must reject ConOps doc missing interface topology");
-        assert_eq!(topo_findings[0].rule_id, "conops-system-interface-topology-missing");
+        assert_eq!(
+            topo_findings.first().map(|f| f.rule_id.as_str()),
+            Some("conops-system-interface-topology-missing")
+        );
     }
 
     #[test]
@@ -2406,14 +2455,18 @@ Taxonomy of interface interconnects:
     }
 
     #[test]
-    fn test_issue_256_live_conops_schema_file_passes() {
+    fn test_issue_256_live_conops_schema_file_passes() -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let root = manifest_dir.parent().and_then(|p| p.parent()).unwrap();
+        let root = manifest_dir
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or("resolve workspace root")?;
         let schema_path = root.join(".pipeline").join("schemas").join("conops_specification_schema.json");
         if schema_path.is_file() {
-            let findings = validate_conops_schema_file(&schema_path).expect("Failed to parse live schema file");
+            let findings = validate_conops_schema_file(&schema_path)?;
             assert!(findings.is_empty(), "Live .pipeline/schemas/conops_specification_schema.json must pass contract validation: {:?}", findings);
         }
+        Ok(())
     }
 
     #[test]

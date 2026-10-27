@@ -134,14 +134,15 @@ impl Drop for ScopedTempDir {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-41-SSOT-DELEGATION]
 #[test]
-fn test_check_no_duplicate_dart_solver_math_rejects_bloated_bridge_and_markers() {
+fn test_check_no_duplicate_dart_solver_math_rejects_bloated_bridge_and_markers(
+) -> Result<(), Box<dyn std::error::Error>> {
     let tmp = ScopedTempDir::new("dup_math");
     let solver_dir = tmp.path.join("crates/domain-solver/src");
     let data_dir = tmp.path.join("app_flutter/lib/data");
-    fs::create_dir_all(&solver_dir).expect("create solver dir");
-    fs::create_dir_all(&data_dir).expect("create data dir");
+    fs::create_dir_all(&solver_dir)?;
+    fs::create_dir_all(&data_dir)?;
 
-    fs::write(solver_dir.join("solver.rs"), "// native rust solver").expect("write solver.rs");
+    fs::write(solver_dir.join("solver.rs"), "// native rust solver")?;
 
     let mut bloated_bridge = String::new();
     bloated_bridge.push_str("class NativeSolverBridge {\n");
@@ -156,12 +157,11 @@ fn test_check_no_duplicate_dart_solver_math_rejects_bloated_bridge_and_markers()
     }
     bloated_bridge.push_str("}\n");
 
-    fs::write(data_dir.join("custom_solver_bridge.dart"), &bloated_bridge)
-        .expect("write bloated bridge");
+    fs::write(data_dir.join("custom_solver_bridge.dart"), &bloated_bridge)?;
 
     let res = check_no_duplicate_dart_solver_math(&tmp.path);
     assert!(res.is_err(), "Bloated bridge and duplicate math markers must fail");
-    let errs = res.expect_err("must return violation list");
+    let errs = res.err().ok_or("must return violation list")?;
     assert!(
         errs.iter().any(|e| e.contains("1200")),
         "Must report > 1200 line ceiling violation: {:?}",
@@ -190,6 +190,7 @@ fn test_check_no_duplicate_dart_solver_math_rejects_bloated_bridge_and_markers()
 
     let gate_res = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp.path);
     assert!(gate_res.is_err(), "Check 41 gate must also fail");
+    Ok(())
 }
 
 /// Verifies that `check_41_solver_bridge_and_sqlite_seed_parity_gate` fails when `topology_data.json`
@@ -218,13 +219,13 @@ fn test_check_no_duplicate_dart_solver_math_rejects_bloated_bridge_and_markers()
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-41-BIJECTIVE-SEED-PARITY]
 #[test]
-fn test_check_41_rejects_malformed_topology_and_missing_or_empty_seeds_dir() {
+fn test_check_41_rejects_malformed_topology_and_missing_or_empty_seeds_dir(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Case 1: Malformed topology_data.json
     let tmp_malformed = ScopedTempDir::new("c41_malformed");
     let assets_malformed = tmp_malformed.path.join("app_flutter/assets");
-    fs::create_dir_all(&assets_malformed).expect("create assets dir");
-    fs::write(assets_malformed.join("topology_data.json"), "{ invalid json ")
-        .expect("write malformed json");
+    fs::create_dir_all(&assets_malformed)?;
+    fs::write(assets_malformed.join("topology_data.json"), "{ invalid json ")?;
     let res_malformed = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp_malformed.path);
     assert!(
         res_malformed.is_err(),
@@ -234,12 +235,11 @@ fn test_check_41_rejects_malformed_topology_and_missing_or_empty_seeds_dir() {
     // Case 2: Valid topology_data.json but missing app_flutter/lib/data/seeds/ directory
     let tmp_no_seeds = ScopedTempDir::new("c41_no_seeds");
     let assets_no_seeds = tmp_no_seeds.path.join("app_flutter/assets");
-    fs::create_dir_all(&assets_no_seeds).expect("create assets dir");
+    fs::create_dir_all(&assets_no_seeds)?;
     fs::write(
         assets_no_seeds.join("topology_data.json"),
         r#"{"nodes":[{"id":"NODE_ALPHA_01","typeName":"AlphaComponent","properties":{"custom_metric":1.0}}]}"#,
-    )
-    .expect("write topology_data.json");
+    )?;
     let res_no_seeds = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp_no_seeds.path);
     assert!(
         res_no_seeds.is_err(),
@@ -248,13 +248,14 @@ fn test_check_41_rejects_malformed_topology_and_missing_or_empty_seeds_dir() {
 
     // Case 3: Empty seeds directory (no non-empty .dart files)
     let seeds_empty = tmp_no_seeds.path.join("app_flutter/lib/data/seeds");
-    fs::create_dir_all(&seeds_empty).expect("create seeds dir");
-    fs::write(seeds_empty.join("empty_seed.dart"), "   \n").expect("write whitespace dart file");
+    fs::create_dir_all(&seeds_empty)?;
+    fs::write(seeds_empty.join("empty_seed.dart"), "   \n")?;
     let res_empty_seeds = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp_no_seeds.path);
     assert!(
         res_empty_seeds.is_err(),
         "Empty .dart seed files when topology_data.json exists must fail Check 41"
     );
+    Ok(())
 }
 
 /// Verifies that `check_41_solver_bridge_and_sqlite_seed_parity_gate` rejects an un-delegated or
@@ -284,12 +285,13 @@ fn test_check_41_rejects_malformed_topology_and_missing_or_empty_seeds_dir() {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-41-BIJECTIVE-SEED-PARITY]
 #[test]
-fn test_check_41_rejects_unwired_strategy_placeholder_loops_and_missing_types_or_props() {
+fn test_check_41_rejects_unwired_strategy_placeholder_loops_and_missing_types_or_props(
+) -> Result<(), Box<dyn std::error::Error>> {
     let tmp = ScopedTempDir::new("c41_strategy_and_props");
     let assets_dir = tmp.path.join("app_flutter/assets");
     let seeds_dir = tmp.path.join("app_flutter/lib/data/seeds");
-    fs::create_dir_all(&assets_dir).expect("create assets dir");
-    fs::create_dir_all(&seeds_dir).expect("create seeds dir");
+    fs::create_dir_all(&assets_dir)?;
+    fs::create_dir_all(&seeds_dir)?;
 
     let topology_json = r#"{
   "nodes": [
@@ -309,8 +311,7 @@ fn test_check_41_rejects_unwired_strategy_placeholder_loops_and_missing_types_or
     }
   ]
 }"#;
-    fs::write(assets_dir.join("topology_data.json"), topology_json)
-        .expect("write topology_data.json");
+    fs::write(assets_dir.join("topology_data.json"), topology_json)?;
 
     // Probe A: Seed file has entity IDs and 5 tables, but is missing explicit typeName 'BetaComponent' and property 'custom_metric_value'
     let incomplete_seed = r#"
@@ -322,14 +323,13 @@ Future<void> seedGeneratedDomainDatabase(Database db) async {
     fs::write(
         seeds_dir.join("generated_domain_seed.g.dart"),
         incomplete_seed,
-    )
-    .expect("write incomplete seed");
+    )?;
     let res_incomplete = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp.path);
     assert!(
         res_incomplete.is_err(),
         "Seed missing explicit typeName or property key must fail Check 41"
     );
-    let errs_incomplete = res_incomplete.expect_err("must return errors");
+    let errs_incomplete = res_incomplete.err().ok_or("must return errors")?;
     assert!(
         errs_incomplete.iter().any(|e| e.contains("BetaComponent")),
         "Must report missing typeName BetaComponent: {:?}",
@@ -354,8 +354,7 @@ Future<void> seedGeneratedDomainDatabase(Database db) async {
     fs::write(
         seeds_dir.join("generated_domain_seed.g.dart"),
         complete_generated_seed,
-    )
-    .expect("write complete generated seed");
+    )?;
 
     let defective_strategy = r#"
 class DomainSeedStrategy {
@@ -370,8 +369,7 @@ class DomainSeedStrategy {
     fs::write(
         seeds_dir.join("domain_seed_strategy.dart"),
         defective_strategy,
-    )
-    .expect("write defective domain_seed_strategy.dart");
+    )?;
 
     let res_strategy = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp.path);
     assert!(
@@ -387,8 +385,7 @@ class DomainSeedStrategy {
   }
 }
 "#;
-    fs::write(seeds_dir.join("domain_seed_strategy.dart"), clean_strategy)
-        .expect("write clean domain_seed_strategy.dart");
+    fs::write(seeds_dir.join("domain_seed_strategy.dart"), clean_strategy)?;
 
     let res_clean = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp.path);
     assert!(
@@ -396,6 +393,7 @@ class DomainSeedStrategy {
         "Complete generated seed with delegating domain_seed_strategy.dart must pass Check 41: {:?}",
         res_clean.err()
     );
+    Ok(())
 }
 
 /// Verifies that Check 39 flags Dart 3 class modifiers on mocks/fakes/stubs, generic `*Repository`/`*Service`
@@ -427,10 +425,11 @@ class DomainSeedStrategy {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-39-ZERO-MOCKING-TEST-AST-GATE]
 #[test]
-fn test_check_39_negative_probe_flags_dart3_mock_modifiers_commented_teardown_and_direct_mutation_without_tester_gesture() {
+fn test_check_39_negative_probe_flags_dart3_mock_modifiers_commented_teardown_and_direct_mutation_without_tester_gesture(
+) -> Result<(), Box<dyn std::error::Error>> {
     let tmp = ScopedTempDir::new("c39_neg_probe");
     let test_dir = tmp.path.join("app_flutter/test/features");
-    fs::create_dir_all(&test_dir).expect("create test dir");
+    fs::create_dir_all(&test_dir)?;
 
     let defective_dart = r#"
 final class MockEntityStore {}
@@ -451,18 +450,18 @@ void main() {
   });
 }
 "#;
-    fs::write(test_dir.join("defective_persistence_test.dart"), defective_dart)
-        .expect("write defective test");
+    fs::write(test_dir.join("defective_persistence_test.dart"), defective_dart)?;
 
     let res = check_39_zero_mocking_test_ast_gate(&tmp.path);
     assert!(res.is_err(), "Check 39 must reject Dart 3 mocks, commented teardown, tautologies, and gesture-free mutations");
-    let errs = res.expect_err("expected Check 39 violations");
+    let errs = res.err().ok_or("expected Check 39 violations")?;
     assert!(errs.iter().any(|e| e.contains("MockEntityStore")), "Must flag final class MockEntityStore: {:?}", errs);
     assert!(errs.iter().any(|e| e.contains("AlphaEntityRepository")), "Must flag implements AlphaEntityRepository: {:?}", errs);
     assert!(errs.iter().any(|e| e.contains("BetaDomainService")), "Must flag implements BetaDomainService: {:?}", errs);
     assert!(errs.iter().any(|e| e.contains("tearDownAll")), "Must flag commented-out tearDownAll: {:?}", errs);
     assert!(errs.iter().any(|e| e.contains("expect(true, isTrue)")), "Must flag tautological expect(true, isTrue): {:?}", errs);
     assert!(errs.iter().any(|e| e.contains("controller.mutateEntityState")), "Must flag gesture-free controller mutation: {:?}", errs);
+    Ok(())
 }
 
 /// Verifies that Check 39 passes a clean SQLite test suite with uncommented `tearDownAll` and real `tester.tap` gestures.
@@ -489,10 +488,11 @@ void main() {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-39-ZERO-MOCKING-TEST-AST-GATE]
 #[test]
-fn test_check_39_positive_probe_passes_real_sqlite_and_tester_gesture() {
+fn test_check_39_positive_probe_passes_real_sqlite_and_tester_gesture(
+) -> Result<(), Box<dyn std::error::Error>> {
     let tmp = ScopedTempDir::new("c39_pos_probe");
     let test_dir = tmp.path.join("app_flutter/test/features");
-    fs::create_dir_all(&test_dir).expect("create test dir");
+    fs::create_dir_all(&test_dir)?;
 
     let clean_dart = r#"
 void main() {
@@ -514,11 +514,11 @@ void main() {
   });
 }
 "#;
-    fs::write(test_dir.join("clean_persistence_test.dart"), clean_dart)
-        .expect("write clean test");
+    fs::write(test_dir.join("clean_persistence_test.dart"), clean_dart)?;
 
     let res = check_39_zero_mocking_test_ast_gate(&tmp.path);
     assert!(res.is_ok(), "Compliant SQLite + gesture test must pass Check 39: {:?}", res.err());
+    Ok(())
 }
 
 /// Verifies that Check 40 fails closed when `schema_ui_contract_test.g.dart` is missing or has commented-out
@@ -548,15 +548,16 @@ void main() {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-40-INTERACTIVE-GESTURE-HUD-NON-OVERLAP]
 #[test]
-fn test_check_40_negative_probe_fail_closed_on_missing_or_commented_contract_and_direct_bridge_mutation() {
+fn test_check_40_negative_probe_fail_closed_on_missing_or_commented_contract_and_direct_bridge_mutation(
+) -> Result<(), Box<dyn std::error::Error>> {
     let tmp = ScopedTempDir::new("c40_neg_probe");
     let test_dir = tmp.path.join("app_flutter/test/widgets");
-    fs::create_dir_all(&test_dir).expect("create test/widgets dir");
+    fs::create_dir_all(&test_dir)?;
 
     // Case 1: Missing schema_ui_contract_test.g.dart must fail closed
     let res_missing = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
     assert!(res_missing.is_err(), "Missing schema_ui_contract_test.g.dart must fail closed");
-    let errs_missing = res_missing.expect_err("expected missing contract error");
+    let errs_missing = res_missing.err().ok_or("expected missing contract error")?;
     assert!(
         errs_missing.iter().any(|e| e.contains("schema_ui_contract_test.g.dart")),
         "Must report missing schema_ui_contract_test.g.dart: {:?}",
@@ -565,7 +566,7 @@ fn test_check_40_negative_probe_fail_closed_on_missing_or_commented_contract_and
 
     // Case 2: Contract file present but uses commented-out tester.tap and synthetic Rect.fromLTWH, plus direct bridge mutation in widget test
     let gen_dir = tmp.path.join("app_flutter/test/generated");
-    fs::create_dir_all(&gen_dir).expect("create test/generated dir");
+    fs::create_dir_all(&gen_dir)?;
     let commented_contract = r#"
 // FHD_1080P_1X QHD_1440P_1X UHD_4K_1X UHD_4K_2X XDR_6K_1X XDR_6K_2X
 void main() {
@@ -576,8 +577,7 @@ void main() {
   });
 }
 "#;
-    fs::write(gen_dir.join("schema_ui_contract_test.g.dart"), commented_contract)
-        .expect("write commented contract");
+    fs::write(gen_dir.join("schema_ui_contract_test.g.dart"), commented_contract)?;
 
     let widget_test = r#"
 void main() {
@@ -587,12 +587,11 @@ void main() {
   });
 }
 "#;
-    fs::write(test_dir.join("generic_bridge_test.dart"), widget_test)
-        .expect("write widget test");
+    fs::write(test_dir.join("generic_bridge_test.dart"), widget_test)?;
 
     let res_commented = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
     assert!(res_commented.is_err(), "Commented contract and direct bridge mutation must fail Check 40");
-    let errs = res_commented.expect_err("expected Check 40 violations");
+    let errs = res_commented.err().ok_or("expected Check 40 violations")?;
     assert!(errs.iter().any(|e| e.contains("tester.tap(")), "Must flag missing uncommented tester.tap(: {:?}", errs);
     assert!(errs.iter().any(|e| e.contains("tester.getRect(")), "Must flag missing uncommented tester.getRect(: {:?}", errs);
     assert!(errs.iter().any(|e| e.contains("Rect.fromLTWH(")), "Must flag synthetic Rect.fromLTWH(: {:?}", errs);
@@ -601,6 +600,7 @@ void main() {
         "Must flag generic direct bridge mutation: {:?}",
         errs
     );
+    Ok(())
 }
 
 /// Verifies that Check 40 passes when `schema_ui_contract_test.g.dart` contains all 6 viewports,
@@ -628,10 +628,11 @@ void main() {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-40-INTERACTIVE-GESTURE-HUD-NON-OVERLAP]
 #[test]
-fn test_check_40_positive_probe_passes_complete_4_viewport_contract() {
+fn test_check_40_positive_probe_passes_complete_4_viewport_contract(
+) -> Result<(), Box<dyn std::error::Error>> {
     let tmp = ScopedTempDir::new("c40_pos_probe");
     let gen_dir = tmp.path.join("app_flutter/test/generated");
-    fs::create_dir_all(&gen_dir).expect("create test/generated dir");
+    fs::create_dir_all(&gen_dir)?;
 
     let valid_contract = r#"
 const kCanonicalViewports = [
@@ -654,11 +655,11 @@ void main() {
   });
 }
 "#;
-    fs::write(gen_dir.join("schema_ui_contract_test.g.dart"), valid_contract)
-        .expect("write valid contract");
+    fs::write(gen_dir.join("schema_ui_contract_test.g.dart"), valid_contract)?;
 
     let res = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
     assert!(res.is_ok(), "Complete 4-resolution, 6-viewport contract must pass Check 40: {:?}", res.err());
+    Ok(())
 }
 
 /// Verifies that Check 38 (`check_38_presentation_anti_hardcoding_ast_gate`) rejects all 19 structural
@@ -690,12 +691,13 @@ void main() {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-38-PRESENTATION-ANTI-HARDCODING]
 #[test]
-fn test_check_38_rejects_all_19_hardcoded_presentation_telemetry_and_entity_patterns() {
+fn test_check_38_rejects_all_19_hardcoded_presentation_telemetry_and_entity_patterns(
+) -> Result<(), Box<dyn std::error::Error>> {
     let tmp = ScopedTempDir::new("c38_all_19_patterns");
     let assets_dir = tmp.path.join("app_flutter/assets");
     let feature_dir = tmp.path.join("app_flutter/lib/features/panel");
-    fs::create_dir_all(&assets_dir).expect("create assets dir");
-    fs::create_dir_all(&feature_dir).expect("create feature dir");
+    fs::create_dir_all(&assets_dir)?;
+    fs::create_dir_all(&feature_dir)?;
 
     let topology_json = r#"{
   "nodes": [
@@ -717,8 +719,7 @@ fn test_check_38_rejects_all_19_hardcoded_presentation_telemetry_and_entity_patt
     }
   ]
 }"#;
-    fs::write(assets_dir.join("topology_data.json"), topology_json)
-        .expect("write topology_data.json");
+    fs::write(assets_dir.join("topology_data.json"), topology_json)?;
 
     let probes = [
         "const Text('Unit-Alpha (P1)', style: TextStyle())",
@@ -749,7 +750,7 @@ fn test_check_38_rejects_all_19_hardcoded_presentation_telemetry_and_entity_patt
             "class PanelView {{\n  void build() {{\n    {};\n  }}\n}}\n",
             snippet
         );
-        fs::write(&view_file, &dart_src).expect("write probe view.dart");
+        fs::write(&view_file, &dart_src)?;
         let res = check_38_presentation_anti_hardcoding_ast_gate(&tmp.path);
         assert!(
             res.is_err(),
@@ -758,6 +759,7 @@ fn test_check_38_rejects_all_19_hardcoded_presentation_telemetry_and_entity_patt
             snippet
         );
     }
+    Ok(())
 }
 
 /// Verifies that Check 38 strips `/* ... */` block comments and `//` line comments before scanning,
@@ -786,12 +788,13 @@ fn test_check_38_rejects_all_19_hardcoded_presentation_telemetry_and_entity_patt
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-38-PRESENTATION-ANTI-HARDCODING]
 #[test]
-fn test_check_38_ignores_block_comments_keys_and_interpolated_dynamic_bindings() {
+fn test_check_38_ignores_block_comments_keys_and_interpolated_dynamic_bindings(
+) -> Result<(), Box<dyn std::error::Error>> {
     let tmp = ScopedTempDir::new("c38_clean_comments_and_keys");
     let assets_dir = tmp.path.join("app_flutter/assets");
     let feature_dir = tmp.path.join("app_flutter/lib/features/panel");
-    fs::create_dir_all(&assets_dir).expect("create assets dir");
-    fs::create_dir_all(&feature_dir).expect("create feature dir");
+    fs::create_dir_all(&assets_dir)?;
+    fs::create_dir_all(&feature_dir)?;
 
     let topology_json = r#"{
   "nodes": [
@@ -803,8 +806,7 @@ fn test_check_38_ignores_block_comments_keys_and_interpolated_dynamic_bindings()
     }
   ]
 }"#;
-    fs::write(assets_dir.join("topology_data.json"), topology_json)
-        .expect("write topology_data.json");
+    fs::write(assets_dir.join("topology_data.json"), topology_json)?;
 
     let clean_dart = r#"
 import 'package:app_flutter/features/zone-north-01/panel_model.dart';
@@ -825,7 +827,7 @@ class CleanPanelView {
   }
 }
 "#;
-    fs::write(feature_dir.join("clean_view.dart"), clean_dart).expect("write clean_view.dart");
+    fs::write(feature_dir.join("clean_view.dart"), clean_dart)?;
 
     let res = check_38_presentation_anti_hardcoding_ast_gate(&tmp.path);
     assert!(
@@ -833,4 +835,5 @@ class CleanPanelView {
         "Clean view with block comments, keys, and dynamic interpolations must pass Check 38: {:?}",
         res.err()
     );
+    Ok(())
 }

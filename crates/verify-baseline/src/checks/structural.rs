@@ -1300,10 +1300,8 @@ fn mask_comments_and_literals_preserving_lines(source: &str) -> Vec<String> {
         i = i.saturating_add(1);
     }
 
-    if !current_line.is_empty() || !source.ends_with('\n') {
-        if !source.is_empty() {
-            lines.push(current_line);
-        }
+    if (!current_line.is_empty() || !source.ends_with('\n')) && !source.is_empty() {
+        lines.push(current_line);
     }
 
     lines
@@ -2678,16 +2676,17 @@ pub fn check_no_master_handover_checkpoint(repo_root: &Path) -> Result<(), Vec<S
 pub fn check_zero_retired_scripts_in_documentation(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
 
-    let mut retired_needles: Vec<String> = Vec::new();
-    retired_needles.push("create_issue.sh".to_string());
-    retired_needles.push("verify_downstream_baseline.py".to_string());
-    retired_needles.push("install_pipeline.sh".to_string());
-    retired_needles.push("generate-wbs-suite".to_string());
-    retired_needles.push("compile_yang.py".to_string());
-    retired_needles.push("compile_sysml.py".to_string());
-    retired_needles.push("assemble_conops.py".to_string());
-    retired_needles.push("parity_auditor".to_string());
-    retired_needles.push("setup_git_hooks.py".to_string());
+    let mut retired_needles: Vec<String> = vec![
+        "create_issue.sh".to_string(),
+        "verify_downstream_baseline.py".to_string(),
+        "install_pipeline.sh".to_string(),
+        "generate-wbs-suite".to_string(),
+        "compile_yang.py".to_string(),
+        "compile_sysml.py".to_string(),
+        "assemble_conops.py".to_string(),
+        "parity_auditor".to_string(),
+        "setup_git_hooks.py".to_string(),
+    ];
     retired_needles.push("file_defect.py".to_string());
     retired_needles.push("verify_commit_messages.py".to_string());
     retired_needles.push("verify_subagent_output.py".to_string());
@@ -3530,7 +3529,7 @@ fn check_blueprint_line_crates_paths(
             None => without_hash,
         };
         let cleaned = without_colon
-            .trim_end_matches(|c: char| matches!(c, '.' | ',' | ':' | ';' | '/'));
+            .trim_end_matches(['.', ',', ':', ';', '/']);
 
         if cleaned.is_empty() || cleaned == "crates" {
             continue;
@@ -3577,16 +3576,16 @@ mod tests {
     }
 
     impl TempDir {
-        fn new(name: &str) -> Self {
+        fn new(name: &str) -> Result<Self, std::io::Error> {
             static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
             let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
             let path = std::env::temp_dir().join(format!("verify_structural_{}_{}_{}", name, nanos, count));
-            fs::create_dir_all(&path).unwrap();
-            Self { path }
+            fs::create_dir_all(&path)?;
+            Ok(Self { path })
         }
     }
 
@@ -3597,42 +3596,45 @@ mod tests {
     }
 
     #[test]
-    fn test_check_18_downstream_exempt() {
-        let tmp = TempDir::new("c18_downstream");
+    fn test_check_18_downstream_exempt() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c18_downstream")?;
         assert!(verify_upstream_blueprint_domain_cleanliness(&tmp.path).is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_check_18_upstream_clean() {
-        let tmp = TempDir::new("c18_clean");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_check_18_upstream_clean() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c18_clean")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let schema_dir = tmp.path.join("schema");
-        fs::create_dir_all(&schema_dir).unwrap();
-        File::create(schema_dir.join(".gitkeep")).unwrap();
+        fs::create_dir_all(&schema_dir)?;
+        File::create(schema_dir.join(".gitkeep"))?;
 
         let bp_dir = tmp.path.join("docs/architecture/blueprints");
-        fs::create_dir_all(&bp_dir).unwrap();
-        File::create(bp_dir.join("CORE_ARCHITECTURE.md")).unwrap();
+        fs::create_dir_all(&bp_dir)?;
+        File::create(bp_dir.join("CORE_ARCHITECTURE.md"))?;
         // Domain-agnostic markdown blueprint that formerly failed fragile blacklist must now pass
-        File::create(bp_dir.join("FRONTEND_SYSTEMS_PATTERN.md")).unwrap();
+        File::create(bp_dir.join("FRONTEND_SYSTEMS_PATTERN.md"))?;
 
         assert!(verify_upstream_blueprint_domain_cleanliness(&tmp.path).is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_check_18_upstream_violations() {
-        let tmp = TempDir::new("c18_upstream");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_check_18_upstream_violations() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c18_upstream")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let bp_dir = tmp.path.join("docs/architecture/blueprints");
-        fs::create_dir_all(&bp_dir).unwrap();
+        fs::create_dir_all(&bp_dir)?;
 
         let clean_file = bp_dir.join("CORE_ARCHITECTURE.md");
-        File::create(&clean_file).unwrap();
+        File::create(&clean_file)?;
         assert!(verify_upstream_blueprint_domain_cleanliness(&tmp.path).is_ok());
 
         let dirty_file = bp_dir.join("FLIGHT_SYSTEMS_MODEL.sysml");
-        File::create(&dirty_file).unwrap();
+        File::create(&dirty_file)?;
         assert!(verify_upstream_blueprint_domain_cleanliness(&tmp.path).is_err());
+        Ok(())
     }
 
     /// Regression test for Check 18 scanning `docs/designs/` for ungrounded `.sysml` files (refs #530).
@@ -3664,38 +3666,38 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-CHECK-18-UPSTREAM-BLUEPRINT-CLEANLINESS].
     #[test]
-    fn test_check_18_upstream_designs_sysml_violations() {
-        let tmp = TempDir::new("c18_designs_sysml");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_check_18_upstream_designs_sysml_violations() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c18_designs_sysml")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let designs_dir = tmp.path.join("docs/designs");
-        fs::create_dir_all(&designs_dir).unwrap();
+        fs::create_dir_all(&designs_dir)?;
 
         // 1. Complete, non-empty blueprint triplet -> Ok(())
-        fs::write(designs_dir.join("blueprint-01-valid.md"), "# Valid Blueprint\n").unwrap();
-        fs::write(designs_dir.join("blueprint-01-valid.sysml"), "package Valid {}\n").unwrap();
-        fs::write(designs_dir.join("blueprint-01-valid.digest.json"), "{}\n").unwrap();
+        fs::write(designs_dir.join("blueprint-01-valid.md"), "# Valid Blueprint\n")?;
+        fs::write(designs_dir.join("blueprint-01-valid.sysml"), "package Valid {}\n")?;
+        fs::write(designs_dir.join("blueprint-01-valid.digest.json"), "{}\n")?;
         assert!(verify_upstream_blueprint_domain_cleanliness(&tmp.path).is_ok());
 
         // 2. Ungrounded domain.sysml -> Err containing "Upstream blueprint contains SysML model: docs/designs/domain.sysml"
         let domain_sysml = designs_dir.join("domain.sysml");
-        fs::write(&domain_sysml, "package ForbiddenDomain {}\n").unwrap();
+        fs::write(&domain_sysml, "package ForbiddenDomain {}\n")?;
         let res = verify_upstream_blueprint_domain_cleanliness(&tmp.path);
         assert!(res.is_err());
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(
             errs.iter()
                 .any(|e| e.contains("Upstream blueprint contains SysML model: docs/designs/domain.sysml")),
             "Expected docs/designs/domain.sysml violation, got: {:?}",
             errs
         );
-        fs::remove_file(&domain_sysml).unwrap();
+        fs::remove_file(&domain_sysml)?;
 
         // 3. Incomplete triplet (orphan .sysml without .md and .digest.json) -> Err
         let orphan_sysml = designs_dir.join("blueprint-99-orphan.sysml");
-        fs::write(&orphan_sysml, "package Orphan {}\n").unwrap();
+        fs::write(&orphan_sysml, "package Orphan {}\n")?;
         let res_orphan = verify_upstream_blueprint_domain_cleanliness(&tmp.path);
         assert!(res_orphan.is_err());
-        let errs_orphan = res_orphan.unwrap_err();
+        let errs_orphan = res_orphan.err().ok_or("expected Err")?;
         assert!(
             errs_orphan.iter().any(|e| {
                 e.contains("Upstream blueprint contains SysML model: docs/designs/blueprint-99-orphan.sysml")
@@ -3703,6 +3705,7 @@ mod tests {
             "Expected docs/designs/blueprint-99-orphan.sysml violation, got: {:?}",
             errs_orphan
         );
+        Ok(())
     }
 
     /// Regression test for Check 18 scanning `docs/architecture/blueprints/` and `docs/designs/`
@@ -3738,20 +3741,20 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-CHECK-18-UPSTREAM-BLUEPRINT-CLEANLINESS].
     #[test]
-    fn test_check_18_upstream_digest_json_sidecar_violations() {
-        let tmp = TempDir::new("c18_digest_json");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_check_18_upstream_digest_json_sidecar_violations() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c18_digest_json")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let bp_dir = tmp.path.join("docs/architecture/blueprints");
         let designs_dir = tmp.path.join("docs/designs");
-        fs::create_dir_all(&bp_dir).unwrap();
-        fs::create_dir_all(&designs_dir).unwrap();
+        fs::create_dir_all(&bp_dir)?;
+        fs::create_dir_all(&designs_dir)?;
 
         // 1. .digest.json inside docs/architecture/blueprints/ -> Err
         let bp_digest = bp_dir.join("blueprint-01.digest.json");
-        fs::write(&bp_digest, "{}\n").unwrap();
+        fs::write(&bp_digest, "{}\n")?;
         let res_bp = verify_upstream_blueprint_domain_cleanliness(&tmp.path);
         assert!(res_bp.is_err());
-        let errs_bp = res_bp.unwrap_err();
+        let errs_bp = res_bp.err().ok_or("expected Err")?;
         assert!(
             errs_bp.iter().any(|e| {
                 e.contains("Upstream blueprint contains SysML model: docs/architecture/blueprints/blueprint-01.digest.json")
@@ -3759,14 +3762,14 @@ mod tests {
             "Expected docs/architecture/blueprints/blueprint-01.digest.json violation, got: {:?}",
             errs_bp
         );
-        fs::remove_file(&bp_digest).unwrap();
+        fs::remove_file(&bp_digest)?;
 
         // 2. Ungrounded domain.digest.json in docs/designs/ -> Err
         let domain_digest = designs_dir.join("domain.digest.json");
-        fs::write(&domain_digest, "{}\n").unwrap();
+        fs::write(&domain_digest, "{}\n")?;
         let res_domain = verify_upstream_blueprint_domain_cleanliness(&tmp.path);
         assert!(res_domain.is_err());
-        let errs_domain = res_domain.unwrap_err();
+        let errs_domain = res_domain.err().ok_or("expected Err")?;
         assert!(
             errs_domain.iter().any(|e| {
                 e.contains("Upstream blueprint contains SysML model: docs/designs/domain.digest.json")
@@ -3774,14 +3777,14 @@ mod tests {
             "Expected docs/designs/domain.digest.json violation, got: {:?}",
             errs_domain
         );
-        fs::remove_file(&domain_digest).unwrap();
+        fs::remove_file(&domain_digest)?;
 
         // 3. Orphan blueprint-99-orphan.digest.json without .md and .sysml companions -> Err
         let orphan_digest = designs_dir.join("blueprint-99-orphan.digest.json");
-        fs::write(&orphan_digest, "{}\n").unwrap();
+        fs::write(&orphan_digest, "{}\n")?;
         let res_orphan = verify_upstream_blueprint_domain_cleanliness(&tmp.path);
         assert!(res_orphan.is_err());
-        let errs_orphan = res_orphan.unwrap_err();
+        let errs_orphan = res_orphan.err().ok_or("expected Err")?;
         assert!(
             errs_orphan.iter().any(|e| {
                 e.contains("Upstream blueprint contains SysML model: docs/designs/blueprint-99-orphan.digest.json")
@@ -3789,80 +3792,87 @@ mod tests {
             "Expected docs/designs/blueprint-99-orphan.digest.json violation, got: {:?}",
             errs_orphan
         );
+        Ok(())
     }
 
     #[test]
-    fn test_check_18_landing_zone_non_gitkeep_fails() {
-        let tmp = TempDir::new("c18_lz");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_check_18_landing_zone_non_gitkeep_fails() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c18_lz")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let schema_dir = tmp.path.join("schema");
-        fs::create_dir_all(&schema_dir).unwrap();
-        File::create(schema_dir.join("domain_model.sysml")).unwrap();
+        fs::create_dir_all(&schema_dir)?;
+        File::create(schema_dir.join("domain_model.sysml"))?;
         assert!(verify_upstream_blueprint_domain_cleanliness(&tmp.path).is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_check_19_downstream_exempt() {
-        let tmp = TempDir::new("c19_downstream");
+    fn test_check_19_downstream_exempt() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_downstream")?;
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_check_19_upstream_clean() {
-        let tmp = TempDir::new("c19_clean");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_check_19_upstream_clean() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_clean")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let src_dir = tmp.path.join("crates/test-crate/src");
-        fs::create_dir_all(&src_dir).unwrap();
-        let mut f = File::create(src_dir.join("lib.rs")).unwrap();
-        writeln!(f, "pub fn compute_hash(val: &[u8]) -> u64 {{ 42 }}").unwrap();
+        fs::create_dir_all(&src_dir)?;
+        let mut f = File::create(src_dir.join("lib.rs"))?;
+        writeln!(f, "pub fn compute_hash(val: &[u8]) -> u64 {{ 42 }}")?;
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_check_19_rust_crates_domain_params_fails() {
-        let tmp = TempDir::new("c19_rust");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_check_19_rust_crates_domain_params_fails() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_rust")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let src_dir = tmp.path.join("crates/test-crate/src");
-        fs::create_dir_all(&src_dir).unwrap();
-        let mut f = File::create(src_dir.join("lib.rs")).unwrap();
+        fs::create_dir_all(&src_dir)?;
+        let mut f = File::create(src_dir.join("lib.rs"))?;
         let kw = ["DOM", "AIN_PARAMS"].concat();
-        writeln!(f, "pub const {}: &[&str] = &[\"speed\"];", kw).unwrap();
+        writeln!(f, "pub const {}: &[&str] = &[\"speed\"];", kw)?;
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_reproduce_defect_265_unflagged_m1_domain_dict_bypasses_check_19() {
-        let tmp = TempDir::new("c19_m1_bypass");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_reproduce_defect_265_unflagged_m1_domain_dict_bypasses_check_19() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_m1_bypass")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let src_dir = tmp.path.join("crates/test-crate/src");
-        fs::create_dir_all(&src_dir).unwrap();
-        let mut f = File::create(src_dir.join("lib.rs")).unwrap();
-        writeln!(f, "pub const FLIGHT_ENVELOPE_MAP: &[(&str, f64)] = &[(\"max_altitude\", 10000.0)];").unwrap();
+        fs::create_dir_all(&src_dir)?;
+        let mut f = File::create(src_dir.join("lib.rs"))?;
+        writeln!(f, "pub const FLIGHT_ENVELOPE_MAP: &[(&str, f64)] = &[(\"max_altitude\", 10000.0)];")?;
         // Under unfixed Check 19, this fails because check_domain_agnostic_ast_cleanliness incorrectly returns Ok(())
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_err(), "Check 19 failed to reject unflagged M1 domain dict FLIGHT_ENVELOPE_MAP");
+        Ok(())
     }
 
     #[test]
-    fn test_check_19_legacy_python_parity_auditor_dir_fails() {
-        let tmp = TempDir::new("c19_legacy");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_check_19_legacy_python_parity_auditor_dir_fails() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c19_legacy")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let crates_dir = tmp.path.join("crates");
-        fs::create_dir_all(&crates_dir).unwrap();
+        fs::create_dir_all(&crates_dir)?;
         let legacy_dir = tmp
             .path
             .join("skills/spec-orchestrator/parity_auditor");
-        fs::create_dir_all(&legacy_dir).unwrap();
+        fs::create_dir_all(&legacy_dir)?;
 
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_check_32_zero_shell_scripts_exempts_build_dirs_and_rejects_others() {
-        let tmp = TempDir::new("c32_exempt_dirs");
+    fn test_check_32_zero_shell_scripts_exempts_build_dirs_and_rejects_others() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c32_exempt_dirs")?;
         for dir in ["build/macos", "macos/Pods", "macos/Flutter/ephemeral", ".dart_tool/build"] {
             let d = tmp.path.join(dir);
-            fs::create_dir_all(&d).unwrap();
-            File::create(d.join("generated.sh")).unwrap();
+            fs::create_dir_all(&d)?;
+            File::create(d.join("generated.sh"))?;
         }
         assert!(
             check_zero_shell_scripts(&tmp.path).is_ok(),
@@ -3870,29 +3880,32 @@ mod tests {
         );
 
         let forbidden_sh = tmp.path.join("scripts").join("deploy.sh");
-        fs::create_dir_all(forbidden_sh.parent().unwrap()).unwrap();
-        File::create(&forbidden_sh).unwrap();
+        let parent_dir = forbidden_sh.parent().ok_or("missing parent")?;
+        fs::create_dir_all(parent_dir)?;
+        File::create(&forbidden_sh)?;
         let res = check_zero_shell_scripts(&tmp.path);
         assert!(res.is_err(), "Non-exempt .sh script must fail Check 32");
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert_eq!(errs, vec!["scripts/deploy.sh".to_string()]);
+        Ok(())
     }
 
     #[test]
-    fn test_check_33_zero_python_clean() {
-        let tmp = TempDir::new("c33_clean");
+    fn test_check_33_zero_python_clean() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c33_clean")?;
         let rs_file = tmp.path.join("main.rs");
-        File::create(&rs_file).unwrap();
+        File::create(&rs_file)?;
         assert!(check_zero_python_scripts(&tmp.path).is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_check_33_zero_python_exempts_build_dirs_and_rejects_others() {
-        let tmp = TempDir::new("c33_exempt_dirs");
+    fn test_check_33_zero_python_exempts_build_dirs_and_rejects_others() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c33_exempt_dirs")?;
         for dir in ["build/macos", "macos/Pods", "macos/Flutter/ephemeral", ".dart_tool/build"] {
             let d = tmp.path.join(dir);
-            fs::create_dir_all(&d).unwrap();
-            File::create(d.join("helper.py")).unwrap();
+            fs::create_dir_all(&d)?;
+            File::create(d.join("helper.py"))?;
         }
         assert!(
             check_zero_python_scripts(&tmp.path).is_ok(),
@@ -3900,94 +3913,101 @@ mod tests {
         );
 
         let forbidden_py = tmp.path.join("scripts").join("legacy.py");
-        fs::create_dir_all(forbidden_py.parent().unwrap()).unwrap();
-        File::create(&forbidden_py).unwrap();
+        let parent_dir = forbidden_py.parent().ok_or("missing parent")?;
+        fs::create_dir_all(parent_dir)?;
+        File::create(&forbidden_py)?;
         let res = check_zero_python_scripts(&tmp.path);
         assert!(res.is_err(), "Non-exempt .py script must fail Check 33");
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert_eq!(errs, vec!["scripts/legacy.py".to_string()]);
+        Ok(())
     }
 
     #[test]
-    fn test_check_33_zero_python_violation() {
-        let tmp = TempDir::new("c33_violation");
+    fn test_check_33_zero_python_violation() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c33_violation")?;
         let py_file = tmp.path.join("script.py");
-        File::create(&py_file).unwrap();
+        File::create(&py_file)?;
         let res = check_zero_python_scripts(&tmp.path);
         assert!(res.is_err());
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert_eq!(errs.len(), 1);
-        assert_eq!(errs[0], "script.py");
+        assert_eq!(errs.first().map(String::as_str), Some("script.py"));
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_zero_regex_clean() {
-        let tmp = TempDir::new("c34_clean");
+    fn test_check_34_zero_regex_clean() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c34_clean")?;
         let crates_dir = tmp.path.join("crates").join("sample").join("src");
-        fs::create_dir_all(&crates_dir).unwrap();
+        fs::create_dir_all(&crates_dir)?;
         let rs_file = crates_dir.join("lib.rs");
-        let mut f = File::create(&rs_file).unwrap();
-        writeln!(f, "pub fn add(a: i32, b: i32) -> i32 {{ a + b }}").unwrap();
+        let mut f = File::create(&rs_file)?;
+        writeln!(f, "pub fn add(a: i32, b: i32) -> i32 {{ a + b }}")?;
 
         let cargo_file = tmp.path.join("crates").join("sample").join("Cargo.toml");
-        let mut fc = File::create(&cargo_file).unwrap();
-        writeln!(fc, "[package]\nname = \"sample\"\nversion = \"0.1.0\"").unwrap();
+        let mut fc = File::create(&cargo_file)?;
+        writeln!(fc, "[package]\nname = \"sample\"\nversion = \"0.1.0\"")?;
 
         assert!(check_zero_regex(&tmp.path).is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_zero_regex_violation_rs() {
-        let tmp = TempDir::new("c34_viol_rs");
+    fn test_check_34_zero_regex_violation_rs() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c34_viol_rs")?;
         let crates_dir = tmp.path.join("crates").join("sample").join("src");
-        fs::create_dir_all(&crates_dir).unwrap();
+        fs::create_dir_all(&crates_dir)?;
         let rs_file = crates_dir.join("lib.rs");
-        let mut f = File::create(&rs_file).unwrap();
+        let mut f = File::create(&rs_file)?;
         // Construct forbidden pattern dynamically to avoid literal in this file
         let pat = ["Reg", "ex::"].concat();
-        writeln!(f, "let _ = {}new(\"\");", pat).unwrap();
+        writeln!(f, "let _ = {}new(\"\");", pat)?;
 
         let res = check_zero_regex(&tmp.path);
         assert!(res.is_err());
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert_eq!(errs.len(), 1);
-        assert!(errs[0].contains("crates/sample/src/lib.rs:1:"));
+        assert!(errs.first().is_some_and(|e| e.contains("crates/sample/src/lib.rs:1:")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_zero_regex_violation_cargo() {
-        let tmp = TempDir::new("c34_viol_cargo");
+    fn test_check_34_zero_regex_violation_cargo() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c34_viol_cargo")?;
         let crates_dir = tmp.path.join("crates").join("sample");
-        fs::create_dir_all(&crates_dir).unwrap();
+        fs::create_dir_all(&crates_dir)?;
         let cargo_file = crates_dir.join("Cargo.toml");
-        let mut fc = File::create(&cargo_file).unwrap();
+        let mut fc = File::create(&cargo_file)?;
         // Construct forbidden dependency dynamically
         let dep = ["reg", "ex"].concat();
-        writeln!(fc, "[dependencies]\n{} = \"1.10\"", dep).unwrap();
+        writeln!(fc, "[dependencies]\n{} = \"1.10\"", dep)?;
 
         let res = check_zero_regex(&tmp.path);
         assert!(res.is_err());
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert_eq!(errs.len(), 1);
-        assert!(errs[0].contains("crates/sample/Cargo.toml:2:"));
+        assert!(errs.first().is_some_and(|e| e.contains("crates/sample/Cargo.toml:2:")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_repo_root_passes() {
+    fn test_check_34_repo_root_passes() -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .expect("repo root");
+            .ok_or("repo root")?;
         let res = check_zero_regex(repo_root);
         assert!(res.is_ok(), "Check 34 Zero Regex Invariant failed on repository root: {:?}", res.err());
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_audited_parity_gates_passes() {
+    fn test_check_34_audited_parity_gates_passes() -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .expect("repo root");
+            .ok_or("repo root")?;
         let res = check_compiler_ast_purity(repo_root);
         assert!(res.is_ok(), "Check 34 Compiler AST Purity failed on audited modules: {:?}", res.err());
 
@@ -3997,7 +4017,7 @@ mod tests {
             .join("src")
             .join("checks")
             .join("structural.rs");
-        let structural_src = fs::read_to_string(&structural_path).expect("read structural.rs");
+        let structural_src = fs::read_to_string(&structural_path)?;
         let res_structural = audit_source_purity(
             &structural_src,
             "crates/verify-baseline/src/checks/structural.rs",
@@ -4008,10 +4028,11 @@ mod tests {
             "structural.rs failed audit_source_purity: {:?}",
             res_structural.err()
         );
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_purity_a_rejects_regex() {
+    fn test_check_34_purity_a_rejects_regex() -> Result<(), Box<dyn std::error::Error>> {
         let clean = "pub fn add(a: i32, b: i32) -> i32 { a + b }";
         let res_clean = audit_source_purity(clean, "sample/src/lib.rs", false);
         assert!(res_clean.is_ok(), "Clean source must pass: {:?}", res_clean.err());
@@ -4020,12 +4041,13 @@ mod tests {
         let mutant = format!("pub fn check() {{ {}new(\"\"); }}", pat);
         let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
         assert!(res_mutant.is_err(), "Mutant with regex must fail");
-        let errs = res_mutant.unwrap_err();
+        let errs = res_mutant.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("regex usage detected")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_purity_b_rejects_static_string_slices() {
+    fn test_check_34_purity_b_rejects_static_string_slices() -> Result<(), Box<dyn std::error::Error>> {
         let clean = "pub const ALL: &'static [Self] = &[Self::VariantA, Self::VariantB];";
         let res_clean = audit_source_purity(clean, "sample/src/lib.rs", false);
         assert!(res_clean.is_ok(), "Clean enum array must pass: {:?}", res_clean.err());
@@ -4034,12 +4056,13 @@ mod tests {
         let mutant = format!("pub const KEYWORDS{kw} = &[\"forbidden\"];", kw = slice_kw);
         let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
         assert!(res_mutant.is_err(), "Mutant with static string slice array must fail");
-        let errs = res_mutant.unwrap_err();
+        let errs = res_mutant.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("static string-slice array detected")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_purity_c_rejects_hollow_gate_stubs() {
+    fn test_check_34_purity_c_rejects_hollow_gate_stubs() -> Result<(), Box<dyn std::error::Error>> {
         let clean = "pub fn check_gate(repo_root: &Path) -> Result<(), Vec<String>> { if repo_root.is_dir() { Ok(()) } else { Err(vec![]) } }";
         let res_clean = audit_source_purity(clean, "sample/src/checks/gate.rs", false);
         assert!(res_clean.is_ok(), "Clean genuine gate must pass: {:?}", res_clean.err());
@@ -4048,12 +4071,13 @@ mod tests {
         let mutant = format!("pub fn check_gate(repo_root: &Path) -> Result<(), Vec<String>> {{ {}repo_root; Ok(()) }}", hollow_pat);
         let res_mutant = audit_source_purity(&mutant, "sample/src/checks/gate.rs", false);
         assert!(res_mutant.is_err(), "Mutant with hollow gate stub must fail");
-        let errs = res_mutant.unwrap_err();
+        let errs = res_mutant.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("hollow gate stub detected")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_purity_d_rejects_fail_open_error_swallowing() {
+    fn test_check_34_purity_d_rejects_fail_open_error_swallowing() -> Result<(), Box<dyn std::error::Error>> {
         let clean = "for entry_res in WalkDir::new(dir) { let entry = match entry_res { Ok(e) => e, Err(err) => return Err(vec![err.to_string()]) }; }";
         let res_clean = audit_source_purity(clean, "sample/src/checks/gate.rs", false);
         assert!(res_clean.is_ok(), "Clean fail-closed loop must pass: {:?}", res_clean.err());
@@ -4062,12 +4086,13 @@ mod tests {
         let mutant = format!("for entry in WalkDir::new(dir).into_iter(){} {{ }}", fm_pat);
         let res_mutant = audit_source_purity(&mutant, "sample/src/checks/gate.rs", false);
         assert!(res_mutant.is_err(), "Mutant with fail-open filter_map must fail");
-        let errs = res_mutant.unwrap_err();
+        let errs = res_mutant.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("fail-open error swallowing detected")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_purity_e_rejects_cross_string_byte_slicing() {
+    fn test_check_34_purity_e_rejects_cross_string_byte_slicing() -> Result<(), Box<dyn std::error::Error>> {
         let clean = "let lower = s.to_ascii_lowercase(); let slice = lower.get(..4);";
         let res_clean = audit_source_purity(clean, "sample/src/lib.rs", false);
         assert!(res_clean.is_ok(), "Clean character boundary slicing must pass: {:?}", res_clean.err());
@@ -4076,12 +4101,13 @@ mod tests {
         let mutant = format!("let slice = &s{};", bad_slice);
         let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
         assert!(res_mutant.is_err(), "Mutant with cross-string byte indexing must fail");
-        let errs = res_mutant.unwrap_err();
+        let errs = res_mutant.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("cross-string UTF-8 byte-slice hazard detected")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_purity_f_rejects_missing_seven_section_rustdoc() {
+    fn test_check_34_purity_f_rejects_missing_seven_section_rustdoc() -> Result<(), Box<dyn std::error::Error>> {
         let clean = r#"
 /// High-integrity parity check.
 ///
@@ -4138,12 +4164,13 @@ pub fn check_audit() -> Result<(), Vec<String>> {
 "#;
         let res_mutant = audit_source_purity(mutant, "sample/src/checks/parity_gates.rs", true);
         assert!(res_mutant.is_err(), "Mutant missing section 7 must fail");
-        let errs = res_mutant.unwrap_err();
+        let errs = res_mutant.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("function missing mandatory 7-section Rustdoc")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_hardening_b_rejects_static_lifetime_string_slice_const() {
+    fn test_check_34_hardening_b_rejects_static_lifetime_string_slice_const() -> Result<(), Box<dyn std::error::Error>> {
         let clean = "pub const ALL: &'static [Self] = &[Self::VariantA, Self::VariantB];";
         let res_clean = audit_source_purity(clean, "sample/src/lib.rs", false);
         assert!(res_clean.is_ok(), "Clean typed enum array must pass: {:?}", res_clean.err());
@@ -4152,17 +4179,18 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         let mutant = format!("pub const BAD: {} = &[\"a\"];", ty);
         let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
         assert!(res_mutant.is_err(), "Mutant with 'static string-slice const must fail");
-        let errs = res_mutant.unwrap_err();
+        let errs = res_mutant.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("static string-slice array detected")), "{:?}", errs);
 
         let arr_ty = ["[&'static ", "str; 2]"].concat();
         let mutant_arr = format!("pub const BAD: {} = [\"a\", \"b\"];", arr_ty);
         let res_arr = audit_source_purity(&mutant_arr, "sample/src/lib.rs", false);
         assert!(res_arr.is_err(), "Mutant with 'static string array must fail");
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_hardening_b_rejects_static_str_array_into_iter() {
+    fn test_check_34_hardening_b_rejects_static_str_array_into_iter() -> Result<(), Box<dyn std::error::Error>> {
         let clean = "fn kinds() -> std::array::IntoIter<Kind, 3> { [Kind::A, Kind::B, Kind::C].into_iter() }";
         let res_clean = audit_source_purity(clean, "sample/src/lib.rs", false);
         assert!(res_clean.is_ok(), "Clean typed IntoIter must pass: {:?}", res_clean.err());
@@ -4171,12 +4199,13 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         let mutant = format!("fn names() -> std::array::{} {{ [\"a\", \"b\", \"c\"].into_iter() }}", iter_ty);
         let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
         assert!(res_mutant.is_err(), "Mutant with 'static str array iterator must fail");
-        let errs = res_mutant.unwrap_err();
+        let errs = res_mutant.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("static string-slice array detected")), "{:?}", errs);
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_hardening_e_rejects_direct_range_slice_indexing() {
+    fn test_check_34_hardening_e_rejects_direct_range_slice_indexing() -> Result<(), Box<dyn std::error::Error>> {
         let clean = "let sub = s.get(1..3);";
         let res_clean = audit_source_purity(clean, "sample/src/checks/parity_gates.rs", true);
         assert!(res_clean.is_ok(), "Clean .get(..) slicing must pass: {:?}", res_clean.err());
@@ -4184,7 +4213,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         let mutant = "let sub = &s[1..3];";
         let res_mutant = audit_source_purity(mutant, "sample/src/checks/parity_gates.rs", true);
         assert!(res_mutant.is_err(), "Mutant with direct panicking range indexing must fail");
-        let errs = res_mutant.unwrap_err();
+        let errs = res_mutant.err().ok_or("expected Err")?;
         assert!(
             errs.iter().any(|e| e.contains("direct panicking range-slice indexing detected")),
             "{:?}",
@@ -4193,10 +4222,11 @@ pub fn check_audit() -> Result<(), Vec<String>> {
 
         let res_unaudited = audit_source_purity(mutant, "sample/src/lib.rs", false);
         assert!(res_unaudited.is_ok(), "Rule (e) applies only when check_rustdoc is true: {:?}", res_unaudited.err());
+        Ok(())
     }
 
     #[test]
-    fn test_check_34_hardening_f_rejects_duplicate_boilerplate_rustdoc() {
+    fn test_check_34_hardening_f_rejects_duplicate_boilerplate_rustdoc() -> Result<(), Box<dyn std::error::Error>> {
         let body = r#"///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A.
@@ -4224,7 +4254,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         );
         let res_mutant = audit_source_purity(&mutant, "sample/src/checks/parity_gates.rs", true);
         assert!(res_mutant.is_err(), "Mutant with duplicated 7-section Rustdoc bodies must fail");
-        let errs = res_mutant.unwrap_err();
+        let errs = res_mutant.err().ok_or("expected Err")?;
         assert!(
             errs.iter().any(|e| e.contains("duplicate/boilerplate 7-section Rustdoc detected")),
             "{:?}",
@@ -4239,72 +4269,76 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         );
         let res_clean = audit_source_purity(&clean, "sample/src/checks/parity_gates.rs", true);
         assert!(res_clean.is_ok(), "Function-specific Rustdoc bodies must pass: {:?}", res_clean.err());
+        Ok(())
     }
 
     #[test]
-    fn test_reproduce_defect_318_stale_backlog_hallucinations_and_attribution_errors() {
+    fn test_reproduce_defect_318_stale_backlog_hallucinations_and_attribution_errors() -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .expect("repo root");
+            .ok_or("repo root")?;
         let res = check_handoff_and_backlog_integrity(repo_root);
         assert!(
             res.is_ok(),
             "Defect #318 integrity check failed on repository root: {:?}",
             res.err()
         );
+        Ok(())
     }
 
     #[test]
-    fn test_defect_318_mutation_rejects_stale_root_handoff() {
-        let tmp = TempDir::new("c318_root_handoff");
+    fn test_defect_318_mutation_rejects_stale_root_handoff() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c318_root_handoff")?;
         let handoff = tmp.path.join("HANDOFF.md");
-        File::create(&handoff).unwrap();
+        File::create(&handoff)?;
         let res = check_handoff_and_backlog_integrity(&tmp.path);
         assert!(res.is_err(), "Must reject existence of root HANDOFF.md");
+        Ok(())
     }
 
     #[test]
-    fn test_defect_318_mutation_rejects_stale_attribution_error() {
-        let tmp = TempDir::new("c318_stale_attr");
+    fn test_defect_318_mutation_rejects_stale_attribution_error() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c318_stale_attr")?;
         let designs = tmp.path.join("docs").join("designs");
-        fs::create_dir_all(&designs).unwrap();
+        fs::create_dir_all(&designs)?;
         let sol = designs.join("feat-289-290-293-solution.md");
-        let mut f = File::create(&sol).unwrap();
+        let mut f = File::create(&sol)?;
         writeln!(
             f,
             "# Solution (refs #318)\nprompt quarantine across all skills"
-        )
-        .unwrap();
+        )?;
         let res = check_handoff_and_backlog_integrity(&tmp.path);
         assert!(res.is_err(), "Must reject stale attribution error");
+        Ok(())
     }
 
     #[test]
-    fn test_defect_318_mutation_rejects_stale_work_package_queue() {
-        let tmp = TempDir::new("c318_stale_queue");
+    fn test_defect_318_mutation_rejects_stale_work_package_queue() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c318_stale_queue")?;
         let designs = tmp.path.join("docs").join("designs");
-        fs::create_dir_all(&designs).unwrap();
+        fs::create_dir_all(&designs)?;
         let sol = designs.join("feat-289-290-293-solution.md");
-        let mut f = File::create(&sol).unwrap();
-        writeln!(f, "# Solution (refs #318)\nWork Package B: Issue #293").unwrap();
+        let mut f = File::create(&sol)?;
+        writeln!(f, "# Solution (refs #318)\nWork Package B: Issue #293")?;
         let res = check_handoff_and_backlog_integrity(&tmp.path);
         assert!(
             res.is_err(),
             "Must reject listing resolved issues as outstanding work packages"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_reproduce_defect_321_root_master_handover_checkpoint_rejected() {
-        let tmp = TempDir::new("c321_root_rejection");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_reproduce_defect_321_root_master_handover_checkpoint_rejected() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c321_root_rejection")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let schema_dir = tmp.path.join("schema");
-        fs::create_dir_all(&schema_dir).unwrap();
-        File::create(schema_dir.join(".gitkeep")).unwrap();
+        fs::create_dir_all(&schema_dir)?;
+        File::create(schema_dir.join(".gitkeep"))?;
 
         let checkpoint = tmp.path.join("MASTER_HANDOVER_CHECKPOINT.md");
-        File::create(&checkpoint).unwrap();
+        File::create(&checkpoint)?;
 
         let res_no_checkpoint = check_no_master_handover_checkpoint(&tmp.path);
         assert!(res_no_checkpoint.is_err(), "Must reject root MASTER_HANDOVER_CHECKPOINT.md");
@@ -4314,20 +4348,21 @@ pub fn check_audit() -> Result<(), Vec<String>> {
 
         let res_handoff = check_handoff_and_backlog_integrity(&tmp.path);
         assert!(res_handoff.is_err(), "Handoff integrity must reject root MASTER_HANDOVER_CHECKPOINT.md");
+        Ok(())
     }
 
     #[test]
-    fn test_defect_321_docs_master_handover_checkpoint_rejected() {
-        let tmp = TempDir::new("c321_docs_rejection");
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+    fn test_defect_321_docs_master_handover_checkpoint_rejected() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c321_docs_rejection")?;
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let schema_dir = tmp.path.join("schema");
-        fs::create_dir_all(&schema_dir).unwrap();
-        File::create(schema_dir.join(".gitkeep")).unwrap();
+        fs::create_dir_all(&schema_dir)?;
+        File::create(schema_dir.join(".gitkeep"))?;
 
         let docs_dir = tmp.path.join("docs").join("architecture");
-        fs::create_dir_all(&docs_dir).unwrap();
+        fs::create_dir_all(&docs_dir)?;
         let checkpoint = docs_dir.join("MASTER_HANDOVER_CHECKPOINT.md");
-        File::create(&checkpoint).unwrap();
+        File::create(&checkpoint)?;
 
         let res_no_checkpoint = check_no_master_handover_checkpoint(&tmp.path);
         assert!(res_no_checkpoint.is_err(), "Must reject docs/architecture/MASTER_HANDOVER_CHECKPOINT.md");
@@ -4337,24 +4372,26 @@ pub fn check_audit() -> Result<(), Vec<String>> {
 
         let res_handoff = check_handoff_and_backlog_integrity(&tmp.path);
         assert!(res_handoff.is_err(), "Handoff integrity must reject docs MASTER_HANDOVER_CHECKPOINT.md");
+        Ok(())
     }
 
     #[test]
-    fn test_defect_321_root_checkpoint_variant_rejected() {
-        let tmp = TempDir::new("c321_variant_rejection");
+    fn test_defect_321_root_checkpoint_variant_rejected() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c321_variant_rejection")?;
         let variant = tmp.path.join("MASTER_HANDOVER_CHECKPOINT_V2.md");
-        File::create(&variant).unwrap();
+        File::create(&variant)?;
 
         let res = check_no_master_handover_checkpoint(&tmp.path);
         assert!(res.is_err(), "Must reject root checkpoint variant MASTER_HANDOVER_CHECKPOINT_V2.md");
+        Ok(())
     }
 
     #[test]
-    fn test_defect_321_current_repo_passes() {
+    fn test_defect_321_current_repo_passes() -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .expect("repo root");
+            .ok_or("repo root")?;
 
         let res_no_checkpoint = check_no_master_handover_checkpoint(repo_root);
         assert!(
@@ -4376,59 +4413,63 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             "Current repo must pass check_handoff_and_backlog_integrity: {:?}",
             res_handoff.err()
         );
+        Ok(())
     }
 
     #[test]
-    fn test_issue_441_documentation_contains_no_retired_script_references() {
+    fn test_issue_441_documentation_contains_no_retired_script_references() -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .expect("repo root");
+            .ok_or("repo root")?;
         let res = check_zero_retired_scripts_in_documentation(repo_root);
         assert!(
             res.is_ok(),
             "Documentation must not reference retired scripts (refs #441): {:?}",
             res.err()
         );
+        Ok(())
     }
 
     #[test]
-    fn test_defect_441_mutation_rejects_retired_script_in_markdown() {
-        let tmp = TempDir::new("c441_script_rejection");
+    fn test_defect_441_mutation_rejects_retired_script_in_markdown() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c441_script_rejection")?;
         let docs = tmp.path.join("docs").join("operations");
-        fs::create_dir_all(&docs).unwrap();
+        fs::create_dir_all(&docs)?;
         let guide = docs.join("install-guide.md");
-        let mut f = File::create(&guide).unwrap();
+        let mut f = File::create(&guide)?;
         let needle = "create_issue.sh";
-        writeln!(f, "# Guide\nRun {needle} now").unwrap();
+        writeln!(f, "# Guide\nRun {needle} now")?;
 
         let res = check_zero_retired_scripts_in_documentation(&tmp.path);
         assert!(res.is_err(), "Must reject retired script reference in docs");
-        let errs = res.err().unwrap();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains(needle)));
+        Ok(())
     }
 
     #[test]
-    fn test_defect_450_retired_python_in_pipeline_docs_fails() {
-        let tmp = TempDir::new("c450_pipeline_retired");
+    fn test_defect_450_retired_python_in_pipeline_docs_fails() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c450_pipeline_retired")?;
         let pipeline_dir = tmp.path.join(".pipeline");
-        fs::create_dir_all(&pipeline_dir).unwrap();
+        fs::create_dir_all(&pipeline_dir)?;
         let const_file = pipeline_dir.join("constitution.md");
-        let mut f = File::create(&const_file).unwrap();
-        writeln!(f, "# Constitution\nRuns validators/spec_validator.py for quality gate").unwrap();
+        let mut f = File::create(&const_file)?;
+        writeln!(f, "# Constitution\nRuns validators/spec_validator.py for quality gate")?;
 
         let res = check_zero_retired_scripts_in_documentation(&tmp.path);
         assert!(res.is_err(), "Must reject retired Python validator in .pipeline/constitution.md");
-        let errs = res.err().unwrap();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("spec_validator.py")));
+        Ok(())
     }
 
     #[test]
-    fn test_defect_459_feat42_design_blueprint_compliance() {
+    fn test_defect_459_feat42_design_blueprint_compliance() -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .expect("repo root");
+            .ok_or("repo root")?;
 
         let res = check_feat42_design_blueprint_compliance(repo_root);
         assert!(
@@ -4436,29 +4477,31 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             "FEAT-42 design blueprint must comply with deap-core references, CLI backwards compatibility, and Check 34 uniqueness (refs #459): {:?}",
             res.err()
         );
+        Ok(())
     }
 
     #[test]
-    fn test_defect_459_mutation_rejects_sysml_core_in_design() {
-        let tmp = TempDir::new("c459_sysml_core_mutation");
+    fn test_defect_459_mutation_rejects_sysml_core_in_design() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c459_sysml_core_mutation")?;
         let designs = tmp.path.join("docs").join("designs");
-        fs::create_dir_all(&designs).unwrap();
+        fs::create_dir_all(&designs)?;
         let feat = designs.join("FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md");
-        let mut f = File::create(&feat).unwrap();
-        writeln!(f, "# FEAT-42\nparticipant Core as sysml-core Parser").unwrap();
+        let mut f = File::create(&feat)?;
+        writeln!(f, "# FEAT-42\nparticipant Core as sysml-core Parser")?;
 
         let res = check_feat42_design_blueprint_compliance(&tmp.path);
         assert!(res.is_err(), "Must reject sysml-core in FEAT-42 design blueprint");
-        let errs = res.err().unwrap();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("sysml-core")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_37_blueprint_grounding_passes_on_live_repo() {
+    fn test_check_37_blueprint_grounding_passes_on_live_repo() -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .expect("repo root");
+            .ok_or("repo root")?;
 
         let res = check_blueprint_grounding(repo_root);
         assert!(
@@ -4466,26 +4509,26 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             "Check 37 blueprint grounding failed on live repository: {:?}",
             res.err()
         );
+        Ok(())
     }
 
     #[test]
-    fn test_check_37_rejects_fictional_crates_and_nonexistent_paths() {
-        let tmp = TempDir::new("c37_mutations");
+    fn test_check_37_rejects_fictional_crates_and_nonexistent_paths() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c37_mutations")?;
         let bp_dir = tmp.path.join("docs").join("architecture").join("blueprints");
-        fs::create_dir_all(&bp_dir).unwrap();
-        fs::create_dir_all(tmp.path.join("crates").join("deap-core").join("src")).unwrap();
+        fs::create_dir_all(&bp_dir)?;
+        fs::create_dir_all(tmp.path.join("crates").join("deap-core").join("src"))?;
         File::create(
             tmp.path
                 .join("crates")
                 .join("deap-core")
                 .join("src")
                 .join("lib.rs"),
-        )
-        .unwrap();
+        )?;
 
         for bp in CanonicalArchitectureBlueprint::ALL {
-            let mut f = File::create(bp_dir.join(bp.as_str())).unwrap();
-            writeln!(f, "# Blueprint\nGrounded in `crates/deap-core/src/lib.rs`.").unwrap();
+            let mut f = File::create(bp_dir.join(bp.as_str()))?;
+            writeln!(f, "# Blueprint\nGrounded in `crates/deap-core/src/lib.rs`.")?;
         }
 
         let clean_res = check_blueprint_grounding(&tmp.path);
@@ -4498,19 +4541,18 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         let target_bp = bp_dir.join(
             CanonicalArchitectureBlueprint::DeapSysmlV2IngestionEngineBlueprint.as_str(),
         );
-        let mut f = File::create(&target_bp).unwrap();
+        let mut f = File::create(&target_bp)?;
         writeln!(
             f,
             "# Corrupted Blueprint\nUses `deap-ast` and `deap-harness`.\nRuns `verify_downstream`.\nInspects `crates/verify-baseline/src/checks/uml.rs`.\nContains em dash \u{2014} here."
-        )
-        .unwrap();
+        )?;
 
         let err_res = check_blueprint_grounding(&tmp.path);
         assert!(
             err_res.is_err(),
             "Check 37 must fail closed on fictional crates, retired tools, nonexistent paths, and em dashes"
         );
-        let errs = err_res.unwrap_err();
+        let errs = err_res.err().ok_or("expected Err")?;
         assert!(
             errs.iter().any(|e| e.contains("deap-ast")),
             "Must report fictional crate deap-ast: {:?}",
@@ -4537,6 +4579,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             "Must report em dash violation: {:?}",
             errs
         );
+        Ok(())
     }
 
     /// Verifies that Check 33 excludes machine-generated digest JSON sidecars from governed text scanning.
@@ -4569,7 +4612,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-CHECK-33-GOVERNED-EXTENSIONS].
     #[test]
-    fn test_check_33_excludes_digest_json_sidecars() {
+    fn test_check_33_excludes_digest_json_sidecars() -> Result<(), Box<dyn std::error::Error>> {
         assert!(!is_governed_python_scan_extension(Path::new(
             "docs/designs/blueprint-01.digest.json"
         )));
@@ -4583,18 +4626,17 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             "docs/config.json"
         )));
 
-        let tmp = TempDir::new("c33_digest_json_sidecar");
+        let tmp = TempDir::new("c33_digest_json_sidecar")?;
         let designs_dir = tmp.path.join("docs").join("designs");
-        fs::create_dir_all(&designs_dir).unwrap();
+        fs::create_dir_all(&designs_dir)?;
         let digest_file = designs_dir.join("blueprint-01.digest.json");
-        let mut f = File::create(&digest_file).unwrap();
+        let mut f = File::create(&digest_file)?;
         let token = ["run_", "tests.py"].concat();
         writeln!(
             f,
             "{{\"summary\": \"executes pytest and {} in downstream runner\"}}",
             token
-        )
-        .unwrap();
+        )?;
 
         let res = check_zero_python_scripts(&tmp.path);
         assert!(
@@ -4602,6 +4644,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             "Check 33 must exclude machine-generated .digest.json sidecars (refs #532), got: {:?}",
             res.err()
         );
+        Ok(())
     }
 
     /// Verifies that Check 37 scans downstream `docs/designs/blueprint-*.md` files for grounding violations.
@@ -4637,19 +4680,18 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-CHECK-37-BLUEPRINT-GROUNDING].
     #[test]
-    fn test_check_37_scans_docs_designs_blueprints() {
-        let tmp = TempDir::new("c37_docs_designs_blueprints");
+    fn test_check_37_scans_docs_designs_blueprints() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c37_docs_designs_blueprints")?;
         let designs_dir = tmp.path.join("docs").join("designs");
-        fs::create_dir_all(&designs_dir).unwrap();
+        fs::create_dir_all(&designs_dir)?;
 
         let bp_file = designs_dir.join("blueprint-01-core.md");
         {
-            let mut f = File::create(&bp_file).unwrap();
+            let mut f = File::create(&bp_file)?;
             writeln!(
                 f,
                 "# Design Blueprint 01\nGrounded in `crates/deap-parser/src/lib.rs`."
-            )
-            .unwrap();
+            )?;
         }
 
         let err_res = check_blueprint_grounding(&tmp.path);
@@ -4657,7 +4699,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             err_res.is_err(),
             "Check 37 must scan docs/designs/blueprint-*.md even when docs/architecture/blueprints is absent (refs #533)"
         );
-        let errs = err_res.unwrap_err();
+        let errs = err_res.err().ok_or("expected Err")?;
         assert!(
             errs.iter()
                 .any(|e| e.contains("docs/designs/blueprint-01-core.md")
@@ -4667,12 +4709,11 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         );
 
         {
-            let mut f = File::create(&bp_file).unwrap();
+            let mut f = File::create(&bp_file)?;
             writeln!(
                 f,
                 "# Design Blueprint 01\nPure domain design specification without ungrounded crate paths."
-            )
-            .unwrap();
+            )?;
         }
 
         let clean_res = check_blueprint_grounding(&tmp.path);
@@ -4681,6 +4722,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             "Valid docs/designs/blueprint-01-core.md must pass Check 37: {:?}",
             clean_res.err()
         );
+        Ok(())
     }
 
     /// Verifies `REQ-0601` Clippy suppression token scanning and workspace manifest forbid gates (refs #525).
@@ -4717,7 +4759,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-CHECK-34-CLIPPY-ALLOW-TOKEN-SCAN].
     #[test]
-    fn test_issue_525_scan_clippy_allow_tokens_and_manifest_forbid_gate() {
+    fn test_issue_525_scan_clippy_allow_tokens_and_manifest_forbid_gate() -> Result<(), Box<dyn std::error::Error>> {
         let kw = ["all", "ow(clip", "py::"].concat();
 
         // 1. Comments, strings, raw strings, and character literals must NOT trigger false positives
@@ -4749,21 +4791,25 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         );
         let dirty_viols = scan_clippy_allow_tokens(&dirty_src, "crates/sample/src/lib.rs");
         assert_eq!(dirty_viols.len(), 4, "Expected 4 violations, got: {:?}", dirty_viols);
-        assert_eq!(dirty_viols[0].line, 1);
+        let v0 = dirty_viols.first().ok_or("missing v0")?;
+        assert_eq!(v0.line, 1);
         assert_eq!(
-            dirty_viols[0].attribute,
+            v0.attribute,
             format!("#![{kw}indexing_slicing)]")
         );
-        assert_eq!(dirty_viols[1].line, 2);
-        assert_eq!(dirty_viols[1].attribute, format!("#[{kw}unwrap_used)]"));
-        assert_eq!(dirty_viols[2].line, 3);
+        let v1 = dirty_viols.get(1).ok_or("missing v1")?;
+        assert_eq!(v1.line, 2);
+        assert_eq!(v1.attribute, format!("#[{kw}unwrap_used)]"));
+        let v2 = dirty_viols.get(2).ok_or("missing v2")?;
+        assert_eq!(v2.line, 3);
         assert_eq!(
-            dirty_viols[2].attribute,
+            v2.attribute,
             format!("#[{kw}type_complexity)]")
         );
-        assert_eq!(dirty_viols[3].line, 8);
+        let v3 = dirty_viols.get(3).ok_or("missing v3")?;
+        assert_eq!(v3.line, 8);
         assert_eq!(
-            dirty_viols[3].attribute,
+            v3.attribute,
             format!("#[cfg_attr(test,{kw}panic))]")
         );
 
@@ -4772,7 +4818,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             purity_res.is_err(),
             "audit_source_purity must reject forbidden clippy allow attributes"
         );
-        let purity_errs = purity_res.unwrap_err();
+        let purity_errs = purity_res.err().ok_or("expected Err")?;
         assert!(
             purity_errs
                 .iter()
@@ -4782,34 +4828,32 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         );
 
         // 3. WorkspaceManifestForbidGate negative probe: "deny" instead of "forbid" and missing lints
-        let tmp_bad = TempDir::new("c525_manifest_bad");
+        let tmp_bad = TempDir::new("c525_manifest_bad")?;
         {
-            let mut f = File::create(tmp_bad.path.join("Cargo.toml")).unwrap();
+            let mut f = File::create(tmp_bad.path.join("Cargo.toml"))?;
             writeln!(
                 f,
                 "[workspace]\nmembers = [\"crates/sample\"]\n\n\
                  [workspace.lints.rust]\nunsafe_code = \"deny\"\n\n\
                  [workspace.lints.clippy]\nunwrap_used = \"deny\"\n"
-            )
-            .unwrap();
+            )?;
         }
         let sample_dir = tmp_bad.path.join("crates").join("sample");
-        fs::create_dir_all(&sample_dir).unwrap();
+        fs::create_dir_all(&sample_dir)?;
         {
-            let mut f = File::create(sample_dir.join("Cargo.toml")).unwrap();
+            let mut f = File::create(sample_dir.join("Cargo.toml"))?;
             writeln!(
                 f,
                 "[package]\nname = \"sample\"\nversion = \"0.1.0\"\n\
                  [dependencies]\nclap = {{ version = \"4.4\", features = [\"derive\"] }}\n"
-            )
-            .unwrap();
+            )?;
         }
         let bad_res = WorkspaceManifestForbidGate::verify(&tmp_bad.path);
         assert!(
             bad_res.is_err(),
             "WorkspaceManifestForbidGate must reject non-forbid lints, missing lints, missing [lints] workspace = true, and clap derive"
         );
-        let bad_errs = bad_res.unwrap_err();
+        let bad_errs = bad_res.err().ok_or("expected Err")?;
         assert!(bad_errs.iter().any(|e| e.contains("unsafe_code")));
         assert!(bad_errs.iter().any(|e| e.contains("unwrap_used")));
         assert!(bad_errs.iter().any(|e| e.contains("type_complexity")));
@@ -4819,7 +4863,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .expect("repo root");
+            .ok_or("repo root")?;
         let live_gate = WorkspaceManifestForbidGate::verify(repo_root);
         assert!(
             live_gate.is_ok(),
@@ -4832,6 +4876,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             "Live repository failed check_zero_regex (refs #525): {:?}",
             live_c34.err()
         );
+        Ok(())
     }
 
     /// Regression test for Issue #526: Check 34 self-hosting AST purity, comment/literal masking,
@@ -4869,7 +4914,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-CHECK-34-COMPILER-PURITY-GATE].
     #[test]
-    fn test_issue_526_self_hosting_purity_and_fail_closed_gates() {
+    fn test_issue_526_self_hosting_purity_and_fail_closed_gates() -> Result<(), Box<dyn std::error::Error>> {
         // 1. Chained range-slice indexing `arr[0][1..2]` must be rejected
         let chained_mutant = "let sub = &arr[0][1..2];";
         let res_chained = audit_source_purity(chained_mutant, "sample/src/checks/parity_gates.rs", true);
@@ -4879,7 +4924,8 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         );
         assert!(
             res_chained
-                .unwrap_err()
+                .err()
+                .ok_or("expected Err")?
                 .iter()
                 .any(|e| e.contains("direct panicking range-slice indexing detected"))
         );
@@ -4971,12 +5017,13 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         );
 
         // 5. check_compiler_ast_purity must fail closed when audited files are missing
-        let tmp = TempDir::new("c526_missing_audited");
+        let tmp = TempDir::new("c526_missing_audited")?;
         let res_missing = check_compiler_ast_purity(&tmp.path);
         assert!(
             res_missing.is_err(),
             "check_compiler_ast_purity must fail closed when audited files are missing"
         );
+        Ok(())
     }
 }
 

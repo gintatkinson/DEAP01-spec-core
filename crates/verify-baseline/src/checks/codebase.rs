@@ -575,7 +575,7 @@ fn is_hardcoded_telemetry_or_designator_literal(inner: &str) -> bool {
     if trimmed
         .as_bytes()
         .windows(2)
-        .any(|w| w[0].is_ascii_digit() && w[1] == b'%')
+        .any(|w| w.first().is_some_and(u8::is_ascii_digit) && w.get(1) == Some(&b'%'))
     {
         return true;
     }
@@ -609,21 +609,25 @@ fn is_hardcoded_telemetry_or_designator_literal(inner: &str) -> bool {
 
     // 4. Slash-ratio telemetry: <digit> / <digit>
     for window in tokens.windows(3) {
-        let left_is_num = window[0].chars().all(|c| c.is_ascii_digit()) && !window[0].is_empty();
-        let right_is_num = window[2].chars().all(|c| c.is_ascii_digit()) && !window[2].is_empty();
-        if left_is_num && window[1] == "/" && right_is_num {
-            return true;
+        if let (Some(&w0), Some(&w1), Some(&w2)) = (window.first(), window.get(1), window.get(2)) {
+            let left_is_num = w0.chars().all(|c| c.is_ascii_digit()) && !w0.is_empty();
+            let right_is_num = w2.chars().all(|c| c.is_ascii_digit()) && !w2.is_empty();
+            if left_is_num && w1 == "/" && right_is_num {
+                return true;
+            }
         }
     }
 
     // 5. Numeric count followed by uppercase plural/status word (e.g. "2 NODES", "0 VIOLATIONS")
     for window in tokens.windows(2) {
-        let left_is_num = window[0].chars().all(|c| c.is_ascii_digit()) && !window[0].is_empty();
-        let right_clean = window[1].trim_matches(|c: char| !c.is_ascii_alphabetic());
-        let right_is_upper_word = right_clean.len() >= 3
-            && right_clean.chars().all(|c| c.is_ascii_uppercase());
-        if left_is_num && right_is_upper_word {
-            return true;
+        if let (Some(&w0), Some(&w1)) = (window.first(), window.get(1)) {
+            let left_is_num = w0.chars().all(|c| c.is_ascii_digit()) && !w0.is_empty();
+            let right_clean = w1.trim_matches(|c: char| !c.is_ascii_alphabetic());
+            let right_is_upper_word =
+                right_clean.len() >= 3 && right_clean.chars().all(|c| c.is_ascii_uppercase());
+            if left_is_num && right_is_upper_word {
+                return true;
+            }
         }
     }
 
@@ -1840,7 +1844,7 @@ mod tests {
     }
 
     impl ScopedTempDir {
-        fn new(prefix: &str) -> Self {
+        fn new(prefix: &str) -> Result<Self, std::io::Error> {
             static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
             let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let nanos = std::time::SystemTime::now()
@@ -1848,8 +1852,8 @@ mod tests {
                 .map(|d| d.as_nanos())
                 .unwrap_or(0);
             let dir = std::env::temp_dir().join(format!("test_codebase_{}_{}_{}", prefix, nanos, count));
-            fs::create_dir_all(&dir).unwrap();
-            Self { path: dir }
+            fs::create_dir_all(&dir)?;
+            Ok(Self { path: dir })
         }
     }
 
@@ -1860,10 +1864,10 @@ mod tests {
     }
 
     #[test]
-    fn test_check_38_positive_clean_presentation() {
-        let tmp = ScopedTempDir::new("check_38_pos");
+    fn test_check_38_positive_clean_presentation() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = ScopedTempDir::new("check_38_pos")?;
         let feature_dir = tmp.path.join("app_flutter/lib/features/workspace");
-        fs::create_dir_all(&feature_dir).unwrap();
+        fs::create_dir_all(&feature_dir)?;
 
         let clean_dart = r#"
 class TacticalWorkspaceView extends StatelessWidget {
@@ -1885,26 +1889,27 @@ class TacticalWorkspaceView extends StatelessWidget {
   }
 }
 "#;
-        fs::write(feature_dir.join("workspace_view.dart"), clean_dart).unwrap();
+        fs::write(feature_dir.join("workspace_view.dart"), clean_dart)?;
 
         let res = check_38_presentation_anti_hardcoding_ast_gate(&tmp.path);
         assert!(res.is_ok(), "Positive clean presentation must pass: {:?}", res.err());
+        Ok(())
     }
 
     #[test]
-    fn test_check_38_negative_hardcoded_literals() {
-        let tmp = ScopedTempDir::new("check_38_neg");
+    fn test_check_38_negative_hardcoded_literals() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = ScopedTempDir::new("check_38_neg")?;
         let assets_dir = tmp.path.join("app_flutter/assets");
         let feature_dir = tmp.path.join("app_flutter/lib/features/tactical");
-        fs::create_dir_all(&assets_dir).unwrap();
-        fs::create_dir_all(&feature_dir).unwrap();
+        fs::create_dir_all(&assets_dir)?;
+        fs::create_dir_all(&feature_dir)?;
 
         let topology_json = r#"{
   "nodes": [
     {"id": "NODE_ALPHA_01", "name": "Alpha Node", "type": "Sensor"}
   ]
 }"#;
-        fs::write(assets_dir.join("topology_data.json"), topology_json).unwrap();
+        fs::write(assets_dir.join("topology_data.json"), topology_json)?;
 
         let defective_dart = r#"
 class DefectiveView extends StatelessWidget {
@@ -1920,21 +1925,22 @@ class DefectiveView extends StatelessWidget {
   }
 }
 "#;
-        fs::write(feature_dir.join("defective_view.dart"), defective_dart).unwrap();
+        fs::write(feature_dir.join("defective_view.dart"), defective_dart)?;
 
         let res = check_38_presentation_anti_hardcoding_ast_gate(&tmp.path);
         assert!(res.is_err(), "Defective hardcoded presentation must fail Check 38");
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("NODE_ALPHA_01")));
         assert!(errs.iter().any(|e| e.contains("RULES: 0 VIOLATIONS")));
         assert!(errs.iter().any(|e| e.contains("isActive: true")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_39_positive_clean_persistence_test() {
-        let tmp = ScopedTempDir::new("check_39_pos");
+    fn test_check_39_positive_clean_persistence_test() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = ScopedTempDir::new("check_39_pos")?;
         let test_dir = tmp.path.join("app_flutter/test/data");
-        fs::create_dir_all(&test_dir).unwrap();
+        fs::create_dir_all(&test_dir)?;
 
         let clean_test = r#"
 void main() {
@@ -1954,17 +1960,18 @@ void main() {
   });
 }
 "#;
-        fs::write(test_dir.join("live_db_test.dart"), clean_test).unwrap();
+        fs::write(test_dir.join("live_db_test.dart"), clean_test)?;
 
         let res = check_39_zero_mocking_test_ast_gate(&tmp.path);
         assert!(res.is_ok(), "Clean persistence test must pass Check 39: {:?}", res.err());
+        Ok(())
     }
 
     #[test]
-    fn test_check_39_negative_mocking_and_leaking_db() {
-        let tmp = ScopedTempDir::new("check_39_neg");
+    fn test_check_39_negative_mocking_and_leaking_db() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = ScopedTempDir::new("check_39_neg")?;
         let test_dir = tmp.path.join("app_flutter/test/features");
-        fs::create_dir_all(&test_dir).unwrap();
+        fs::create_dir_all(&test_dir)?;
 
         let defective_test = r#"
 class MockDataRepository extends Mock implements TreeRepository {}
@@ -1982,23 +1989,24 @@ void main() {
   });
 }
 "#;
-        fs::write(test_dir.join("mock_test.dart"), defective_test).unwrap();
+        fs::write(test_dir.join("mock_test.dart"), defective_test)?;
 
         let res = check_39_zero_mocking_test_ast_gate(&tmp.path);
         assert!(res.is_err(), "Mocking and leaking SQLite must fail Check 39");
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("Mock") || e.contains("mocking")));
         assert!(errs.iter().any(|e| e.contains("Result.success")));
         assert!(errs.iter().any(|e| e.contains("tearDownAll")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_40_positive_ui_contracts() {
-        let tmp = ScopedTempDir::new("check_40_pos");
+    fn test_check_40_positive_ui_contracts() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = ScopedTempDir::new("check_40_pos")?;
         let test_gen_dir = tmp.path.join("app_flutter/test/generated");
         let test_dir = tmp.path.join("app_flutter/test/widgets");
-        fs::create_dir_all(&test_gen_dir).unwrap();
-        fs::create_dir_all(&test_dir).unwrap();
+        fs::create_dir_all(&test_gen_dir)?;
+        fs::create_dir_all(&test_dir)?;
 
         let generated_contract = r#"
 // Generated schema UI contract test
@@ -2023,7 +2031,7 @@ void main() {
   });
 }
 "#;
-        fs::write(test_gen_dir.join("schema_ui_contract_test.g.dart"), generated_contract).unwrap();
+        fs::write(test_gen_dir.join("schema_ui_contract_test.g.dart"), generated_contract)?;
 
         let interactive_test = r#"
 void main() {
@@ -2034,19 +2042,20 @@ void main() {
   });
 }
 "#;
-        fs::write(test_dir.join("interactive_test.dart"), interactive_test).unwrap();
+        fs::write(test_dir.join("interactive_test.dart"), interactive_test)?;
 
         let res = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
         assert!(res.is_ok(), "Positive contract test must pass Check 40: {:?}", res.err());
+        Ok(())
     }
 
     #[test]
-    fn test_check_40_negative_shallow_probing_and_direct_bridge_mutation() {
-        let tmp = ScopedTempDir::new("check_40_neg");
+    fn test_check_40_negative_shallow_probing_and_direct_bridge_mutation() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = ScopedTempDir::new("check_40_neg")?;
         let test_gen_dir = tmp.path.join("app_flutter/test/generated");
         let test_dir = tmp.path.join("app_flutter/test/widgets");
-        fs::create_dir_all(&test_gen_dir).unwrap();
-        fs::create_dir_all(&test_dir).unwrap();
+        fs::create_dir_all(&test_gen_dir)?;
+        fs::create_dir_all(&test_dir)?;
 
         // Incomplete viewports: missing XDR_6K_2X
         let incomplete_contract = r#"
@@ -2058,7 +2067,7 @@ const kViewports = [
   'XDR_6K_1X',
 ];
 "#;
-        fs::write(test_gen_dir.join("schema_ui_contract_test.g.dart"), incomplete_contract).unwrap();
+        fs::write(test_gen_dir.join("schema_ui_contract_test.g.dart"), incomplete_contract)?;
 
         let defective_test = r#"
 void probeWidgetKey(Key key) {
@@ -2072,26 +2081,27 @@ void main() {
   });
 }
 "#;
-        fs::write(test_dir.join("defective_widget_test.dart"), defective_test).unwrap();
+        fs::write(test_dir.join("defective_widget_test.dart"), defective_test)?;
 
         let res = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
         assert!(res.is_err(), "Incomplete viewports and shallow probing must fail Check 40");
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("XDR_6K_2X")));
         assert!(errs.iter().any(|e| e.contains("probeWidgetKey")));
         assert!(errs.iter().any(|e| e.contains("bridge.relockInterlock")));
         assert!(errs.iter().any(|e| e.contains("assertPairwiseHudNonOverlap")));
+        Ok(())
     }
 
     #[test]
-    fn test_check_41_positive_c_abi_and_seed_parity() {
-        let tmp = ScopedTempDir::new("check_41_pos");
+    fn test_check_41_positive_c_abi_and_seed_parity() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = ScopedTempDir::new("check_41_pos")?;
         let assets_dir = tmp.path.join("app_flutter/assets");
         let seeds_dir = tmp.path.join("app_flutter/lib/data/seeds");
         let data_dir = tmp.path.join("app_flutter/lib/data");
-        fs::create_dir_all(&assets_dir).unwrap();
-        fs::create_dir_all(&seeds_dir).unwrap();
-        fs::create_dir_all(&data_dir).unwrap();
+        fs::create_dir_all(&assets_dir)?;
+        fs::create_dir_all(&seeds_dir)?;
+        fs::create_dir_all(&data_dir)?;
 
         let topology_json = r#"{
   "nodes": [
@@ -2099,7 +2109,7 @@ void main() {
     {"id": "CONTROLLER_02", "name": "Main Controller"}
   ]
 }"#;
-        fs::write(assets_dir.join("topology_data.json"), topology_json).unwrap();
+        fs::write(assets_dir.join("topology_data.json"), topology_json)?;
 
         let seed_dart = r#"
 // Generated domain seed
@@ -2113,7 +2123,7 @@ Future<void> seedDatabase(Database db) async {
   await db.execute("INSERT INTO properties VALUES (...)");
 }
 "#;
-        fs::write(seeds_dir.join("generated_domain_seed.g.dart"), seed_dart).unwrap();
+        fs::write(seeds_dir.join("generated_domain_seed.g.dart"), seed_dart)?;
 
         let bridge_dart = r#"
 class SolverBridge {
@@ -2126,26 +2136,27 @@ class SolverBridge {
   }
 }
 "#;
-        fs::write(data_dir.join("solver_bridge.dart"), bridge_dart).unwrap();
+        fs::write(data_dir.join("solver_bridge.dart"), bridge_dart)?;
 
         let res = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp.path);
         assert!(res.is_ok(), "Positive C-ABI and seed parity must pass Check 41: {:?}", res.err());
+        Ok(())
     }
 
     #[test]
-    fn test_check_41_negative_duplicate_math_and_missing_seeds() {
-        let tmp = ScopedTempDir::new("check_41_neg");
+    fn test_check_41_negative_duplicate_math_and_missing_seeds() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = ScopedTempDir::new("check_41_neg")?;
         let solver_crate_dir = tmp.path.join("crates/domain-solver/src");
         let assets_dir = tmp.path.join("app_flutter/assets");
         let seeds_dir = tmp.path.join("app_flutter/lib/data/seeds");
         let data_dir = tmp.path.join("app_flutter/lib/data");
-        fs::create_dir_all(&solver_crate_dir).unwrap();
-        fs::create_dir_all(&assets_dir).unwrap();
-        fs::create_dir_all(&seeds_dir).unwrap();
-        fs::create_dir_all(&data_dir).unwrap();
+        fs::create_dir_all(&solver_crate_dir)?;
+        fs::create_dir_all(&assets_dir)?;
+        fs::create_dir_all(&seeds_dir)?;
+        fs::create_dir_all(&data_dir)?;
 
-        fs::write(solver_crate_dir.join("lib.rs"), "// solver crate").unwrap();
-        fs::write(solver_crate_dir.join("solver.rs"), "// solver arithmetic").unwrap();
+        fs::write(solver_crate_dir.join("lib.rs"), "// solver crate")?;
+        fs::write(solver_crate_dir.join("solver.rs"), "// solver arithmetic")?;
 
         let topology_json = r#"{
   "nodes": [
@@ -2153,7 +2164,7 @@ class SolverBridge {
     {"id": "SENSOR_02_MISSING", "name": "Missing Sensor"}
   ]
 }"#;
-        fs::write(assets_dir.join("topology_data.json"), topology_json).unwrap();
+        fs::write(assets_dir.join("topology_data.json"), topology_json)?;
 
         // Seed file misses SENSOR_02_MISSING and misses type_relations table
         let defective_seed_dart = r#"
@@ -2164,7 +2175,7 @@ Future<void> seedDatabase(Database db) async {
   await db.execute("INSERT INTO properties VALUES (...)");
 }
 "#;
-        fs::write(seeds_dir.join("generated_domain_seed.g.dart"), defective_seed_dart).unwrap();
+        fs::write(seeds_dir.join("generated_domain_seed.g.dart"), defective_seed_dart)?;
 
         // Bridge file has duplicate candidate generator and Pareto scoring
         let defective_bridge_dart = r#"
@@ -2175,13 +2186,14 @@ class SolverBridge {
   }
 }
 "#;
-        fs::write(data_dir.join("domain_solver_bridge.dart"), defective_bridge_dart).unwrap();
+        fs::write(data_dir.join("domain_solver_bridge.dart"), defective_bridge_dart)?;
 
         let res = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp.path);
         assert!(res.is_err(), "Duplicate math and missing seed entities must fail Check 41");
-        let errs = res.unwrap_err();
+        let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("SENSOR_02_MISSING")));
         assert!(errs.iter().any(|e| e.contains("type_relations")));
         assert!(errs.iter().any(|e| e.contains("_buildCandidates")));
+        Ok(())
     }
 }

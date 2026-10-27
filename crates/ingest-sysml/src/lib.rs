@@ -53,7 +53,7 @@ pub mod table;
 pub mod translators;
 
 use deap_core::sysml_ast::{ConstraintDef, PackageDef, PartDef};
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 /// Fail-safe process exit code classification for the `ingest-sysml` CLI engine.
 ///
@@ -298,7 +298,7 @@ pub fn translate_code(content: &str, file_name: &str) -> Result<PackageDef, Stri
 /// Realises: [REQ-SYSML-INGEST-SCOPE/filter_ast_to_target_scope]
 pub fn filter_ast_to_target_scope(
     pkg: &mut PackageDef,
-    allowed_parts: Option<&HashSet<String>>,
+    allowed_parts: Option<&BTreeSet<String>>,
     negative_invariants: Option<&[String]>,
 ) {
     // Step 1: Prune parts outside allowed scope if a whitelist is supplied
@@ -315,7 +315,7 @@ pub fn filter_ast_to_target_scope(
         ///
         /// ## 3. Preconditions
         /// - `part` is a valid mutable `PartDef` reference.
-        /// - `allowed` is an initialized `HashSet<String>` of permitted part names.
+        /// - `allowed` is an initialized `BTreeSet<String>` of permitted part names.
         ///
         /// ## 4. Postconditions
         /// - If `part.name` is in `allowed`, `part.parts` is pruned in-place to retain only allowed descendants.
@@ -329,7 +329,7 @@ pub fn filter_ast_to_target_scope(
         ///
         /// ## 7. Realization & Traceability
         /// Realises: [REQ-SYSML-INGEST-SCOPE/filter_part]
-        fn filter_part(part: &mut PartDef, allowed: &HashSet<String>) -> bool {
+        fn filter_part(part: &mut PartDef, allowed: &BTreeSet<String>) -> bool {
             if !allowed.contains(&part.name) {
                 return false;
             }
@@ -363,7 +363,7 @@ pub fn filter_ast_to_target_scope(
             });
 
             // Prune risks referencing pruned hazards
-            let surviving_hazards: HashSet<String> =
+            let surviving_hazards: BTreeSet<String> =
                 pkg.hazard_defs.iter().map(|h| h.name.clone()).collect();
             pkg.risk_defs.retain(|r| {
                 r.hazard_ref
@@ -624,7 +624,7 @@ fn package_contains_entity(pkg: &PackageDef, entity_name: &str) -> bool {
 /// Realises: [REQ-SYSML-INGEST-SCOPE/verify_scope_and_negative_invariants] | SysML v2: part def SourceCodeAstIngestion
 pub fn verify_scope_and_negative_invariants(
     pkg: &PackageDef,
-    allowed_parts: Option<&HashSet<String>>,
+    allowed_parts: Option<&BTreeSet<String>>,
     negative_invariants: Option<&[String]>,
 ) -> Result<(), String> {
     if let Some(allowed) = allowed_parts.filter(|a| !a.is_empty() && !package_has_any_part(pkg)) {
@@ -664,21 +664,21 @@ pub fn verify_scope_and_negative_invariants(
 ///
 /// ## 3. Preconditions
 /// - `pkg: &PackageDef` is a parsed domain reference schema package tree.
-/// - `out: &mut HashSet<String>` is an initialized hash set receiving discovered part names.
+/// - `out: &mut BTreeSet<String>` is an initialized set receiving discovered part names.
 ///
 /// ## 4. Postconditions
 /// - `out` contains every `PartDef::name` reachable from `pkg`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - **Time Complexity**: $O(P + K)$ where $P$ is total `PartDef` count and $K$ is nested `PackageDef` count.
-/// - **Space Complexity**: $O(P + K)$ for the traversal work stacks and hash set entries.
+/// - **Space Complexity**: $O(P + K)$ for the traversal work stacks and set entries.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Empty packages or part trees leave `out` unmodified without error or panic.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-INGEST-SCOPE/collect_declared_part_names], [REQ-ISSUE-472-SCHEMA-SCOPED-CODE-INGESTION]
-pub fn collect_declared_part_names(pkg: &PackageDef, out: &mut HashSet<String>) {
+pub fn collect_declared_part_names(pkg: &PackageDef, out: &mut BTreeSet<String>) {
     let mut pkg_stack: Vec<&PackageDef> = vec![pkg];
     while let Some(curr_pkg) = pkg_stack.pop() {
         let mut part_stack: Vec<&PartDef> = curr_pkg.part_defs.iter().collect();
@@ -712,7 +712,7 @@ pub fn collect_declared_part_names(pkg: &PackageDef, out: &mut HashSet<String>) 
 ///
 /// ## 3. Preconditions
 /// - `pkg: &mut PackageDef` is a mutable code-extracted SysML v2 package.
-/// - `schema_parts: &HashSet<String>` contains architectural `part def` names from the reference schema.
+/// - `schema_parts: &BTreeSet<String>` contains architectural `part def` names from the reference schema.
 ///
 /// ## 4. Postconditions
 /// - Unannotated implementation helper `PartDef` nodes absent from `schema_parts` are pruned in-place.
@@ -728,7 +728,7 @@ pub fn collect_declared_part_names(pkg: &PackageDef, out: &mut HashSet<String>) 
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-INGEST-SCOPE/filter_ast_to_realized_or_allowed], [REQ-ISSUE-472-SCHEMA-SCOPED-CODE-INGESTION]
-pub fn filter_ast_to_realized_or_allowed(pkg: &mut PackageDef, schema_parts: &HashSet<String>) {
+pub fn filter_ast_to_realized_or_allowed(pkg: &mut PackageDef, schema_parts: &BTreeSet<String>) {
     /// Recursively prunes `part.parts` and determines whether `part` is retained under realization scoping.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
@@ -741,7 +741,7 @@ pub fn filter_ast_to_realized_or_allowed(pkg: &mut PackageDef, schema_parts: &Ha
     ///
     /// ## 3. Preconditions
     /// - `part: &mut PartDef` is a candidate code-extracted part node.
-    /// - `schema_parts: &HashSet<String>` is the reference architectural part name set.
+    /// - `schema_parts: &BTreeSet<String>` is the reference architectural part name set.
     ///
     /// ## 4. Postconditions
     /// - Returns `true` iff `part` or a surviving child is in `schema_parts` or has non-empty `satisfied_requirements`.
@@ -755,7 +755,7 @@ pub fn filter_ast_to_realized_or_allowed(pkg: &mut PackageDef, schema_parts: &Ha
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-INGEST-SCOPE/retain_realized_part]
-    fn retain_realized_part(part: &mut PartDef, schema_parts: &HashSet<String>) -> bool {
+    fn retain_realized_part(part: &mut PartDef, schema_parts: &BTreeSet<String>) -> bool {
         part.parts
             .retain_mut(|sub| retain_realized_part(sub, schema_parts));
         let has_realises_doc = part
@@ -824,14 +824,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_public_translate_markdown_api() {
+    fn test_public_translate_markdown_api() -> Result<(), String> {
         let content = "# Package_0\n\n## Classifier_Alpha\nSynthetic element.";
-        let res = translate_markdown(content, "Package_0");
-        assert!(res.is_ok());
-        let pkg = res.unwrap();
+        let pkg = translate_markdown(content, "Package_0")?;
         assert_eq!(pkg.name, "Package_0");
         assert_eq!(pkg.part_defs.len(), 1);
-        assert_eq!(pkg.part_defs[0].name, "Classifier_Alpha");
+        assert_eq!(
+            pkg.part_defs.first().map(|p| p.name.as_str()),
+            Some("Classifier_Alpha")
+        );
+        Ok(())
     }
 
     #[test]
@@ -851,26 +853,32 @@ mod tests {
             ..Default::default()
         };
 
-        let mut allowed = HashSet::new();
+        let mut allowed = BTreeSet::new();
         allowed.insert("Classifier_Alpha".to_string());
         let neg = vec!["Phantom_Entity".to_string()];
 
         filter_ast_to_target_scope(&mut pkg, Some(&allowed), Some(&neg));
 
         assert_eq!(pkg.part_defs.len(), 1);
-        assert_eq!(pkg.part_defs[0].name, "Classifier_Alpha");
+        assert_eq!(
+            pkg.part_defs.first().map(|p| p.name.as_str()),
+            Some("Classifier_Alpha")
+        );
         assert_eq!(pkg.constraint_defs.len(), 1);
         assert_eq!(
-            pkg.constraint_defs[0].name,
-            "assert_exclusion_phantom_entity"
+            pkg.constraint_defs.first().map(|c| c.name.as_str()),
+            Some("assert_exclusion_phantom_entity")
         );
-        assert_eq!(pkg.constraint_defs[0].expression, "!exists(Phantom_Entity)");
+        assert_eq!(
+            pkg.constraint_defs.first().map(|c| c.expression.as_str()),
+            Some("!exists(Phantom_Entity)")
+        );
     }
 
     struct TempTestDir(std::path::PathBuf);
 
     impl TempTestDir {
-        fn new(label: &str) -> Self {
+        fn new(label: &str) -> Result<Self, std::io::Error> {
             use std::sync::atomic::{AtomicUsize, Ordering};
             static COUNTER: AtomicUsize = AtomicUsize::new(0);
             let id = COUNTER.fetch_add(1, Ordering::SeqCst);
@@ -880,9 +888,9 @@ mod tests {
                 std::process::id(),
                 id
             ));
-            std::fs::remove_dir_all(&dir).unwrap_or(());
-            std::fs::create_dir_all(&dir).unwrap();
-            Self(dir)
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir)?;
+            Ok(Self(dir))
         }
     }
 
@@ -893,43 +901,42 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_translate_multiple_files_synthetic() {
+    fn test_batch_translate_multiple_files_synthetic() -> Result<(), Box<dyn std::error::Error>> {
         use std::fs;
         let content1 = "# Package_0\n\n## Classifier_Alpha\nAlpha doc.";
         let content2 = "# Package_0\n\n## Classifier_Beta\nBeta doc.";
 
-        let tmp = TempTestDir::new("batch_synthetic");
+        let tmp = TempTestDir::new("batch_synthetic")?;
         let f1 = tmp.0.join("spec1.md");
         let f2 = tmp.0.join("spec2.md");
-        fs::write(&f1, content1).unwrap();
-        fs::write(&f2, content2).unwrap();
+        fs::write(&f1, content1)?;
+        fs::write(&f2, content2)?;
 
         let translator = translators::markdown::MarkdownTranslator::new();
         let file_paths = vec![
             f1.to_string_lossy().to_string(),
             f2.to_string_lossy().to_string(),
         ];
-        let pkg = translator
-            .translate_files(&file_paths, "Consolidated_Package")
-            .expect("Failed batch translation");
+        let pkg = translator.translate_files(&file_paths, "Consolidated_Package")?;
 
         assert_eq!(pkg.name, "Consolidated_Package");
         let p_names: Vec<&str> = pkg.part_defs.iter().map(|p| p.name.as_str()).collect();
         assert!(p_names.contains(&"Classifier_Alpha"));
         assert!(p_names.contains(&"Classifier_Beta"));
+        Ok(())
     }
 
     #[test]
-    fn test_batch_translators_fail_closed_on_empty_and_mixed_missing_inputs() {
+    fn test_batch_translators_fail_closed_on_empty_and_mixed_missing_inputs(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use std::fs;
-        let tmp = TempTestDir::new("batch_fail_closed");
+        let tmp = TempTestDir::new("batch_fail_closed")?;
 
         let valid_md_path = tmp.0.join("valid.md");
         fs::write(
             &valid_md_path,
             "# Package_0\n\n## Classifier_Alpha\nAlpha doc.",
-        )
-        .unwrap();
+        )?;
         let valid_md = valid_md_path.to_string_lossy().to_string();
         let missing_md = tmp.0.join("missing.md").to_string_lossy().to_string();
 
@@ -949,8 +956,7 @@ mod tests {
         fs::write(
             &valid_yang_path,
             "module valid-mod { namespace \"urn:test:valid\"; prefix vm; container root { leaf id { type string; } } }",
-        )
-        .unwrap();
+        )?;
         let valid_yang = valid_yang_path.to_string_lossy().to_string();
         let missing_yang = tmp.0.join("missing.yang").to_string_lossy().to_string();
 
@@ -971,6 +977,7 @@ mod tests {
                 .is_err(),
             "YangTranslator::translate_files must fail closed on mixed valid + missing batch"
         );
+        Ok(())
     }
 
     #[test]
@@ -987,30 +994,29 @@ mod tests {
     }
 
     #[test]
-    fn test_cache_ingested_sysml_model_hit_and_invalidation() {
+    fn test_cache_ingested_sysml_model_hit_and_invalidation(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp_dir =
             std::env::temp_dir().join(format!("deap_ingest_cache_test_{}", std::process::id()));
-        std::fs::remove_dir_all(&tmp_dir).unwrap_or(());
-        std::fs::create_dir_all(&tmp_dir).expect("temp dir creation");
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        std::fs::create_dir_all(&tmp_dir)?;
 
         let sysml_v1 = "package IngestPkg { part def SensorUnit { attribute rate_hz : Real; } }";
-        let (model_first, hit_first) =
-            cache_ingested_sysml_model(&tmp_dir, sysml_v1).expect("first cache call");
+        let (model_first, hit_first) = cache_ingested_sysml_model(&tmp_dir, sysml_v1)?;
         assert!(!hit_first);
         assert_eq!(model_first.parts.len(), 1);
 
-        let (model_second, hit_second) =
-            cache_ingested_sysml_model(&tmp_dir, sysml_v1).expect("second cache call");
+        let (model_second, hit_second) = cache_ingested_sysml_model(&tmp_dir, sysml_v1)?;
         assert!(hit_second);
         assert_eq!(model_second, model_first);
 
         let sysml_v2 = "package IngestPkg { part def SensorUnit { attribute rate_hz : Real; } part def ActuatorUnit {} }";
-        let (model_third, hit_third) = cache_ingested_sysml_model(&tmp_dir, sysml_v2)
-            .expect("third cache call after mutation");
+        let (model_third, hit_third) = cache_ingested_sysml_model(&tmp_dir, sysml_v2)?;
         assert!(!hit_third);
         assert_eq!(model_third.parts.len(), 2);
 
-        std::fs::remove_dir_all(&tmp_dir).unwrap_or(());
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        Ok(())
     }
 
     /// ## 1. Safety Intent & Regulatory Scope

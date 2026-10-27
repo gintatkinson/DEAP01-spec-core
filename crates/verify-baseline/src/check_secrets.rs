@@ -3,7 +3,6 @@
 //! Enforces zero regex crate usage (Anti-Regex Invariant) while detecting
 //! leaked PEM Private Keys and AWS Access Key IDs in post-build assets.
 
-use clap::Args;
 use std::fs;
 use std::path::PathBuf;
 use walkdir::WalkDir;
@@ -34,14 +33,12 @@ use walkdir::WalkDir;
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-VERIFY-BASELINE-CHECK-SECRETS-CHECKSECRETSARGS] | SysML v2: PartDef(CheckSecretsArgs)
-#[derive(Args, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct CheckSecretsArgs {
     /// Target repository root or destination directory (defaults to current directory)
-    #[arg(default_value = ".")]
     pub destination: String,
 
     /// Optional explicit directories to scan (defaults to dist, build/web, build/macos)
-    #[arg(long = "dirs", value_delimiter = ' ')]
     pub dirs: Vec<String>,
 }
 
@@ -132,24 +129,26 @@ pub fn contains_aws_access_key(text: &str) -> bool {
     let prefix = b"AKIA";
     let mut i = 0;
     while i + 20 <= bytes.len() {
-        if &bytes[i..i + 4] == prefix {
+        if bytes.get(i..i + 4) == Some(prefix.as_slice()) {
             let boundary_before = if i == 0 {
                 true
             } else {
-                let prev = bytes[i - 1];
-                !prev.is_ascii_alphanumeric() && prev != b'_'
+                !bytes
+                    .get(i - 1)
+                    .is_some_and(|&prev| prev.is_ascii_alphanumeric() || prev == b'_')
             };
 
             if boundary_before {
-                let is_key = bytes[i + 4..i + 20].iter().all(|&b| {
-                    b.is_ascii_uppercase() || b.is_ascii_digit()
-                });
+                let is_key = bytes
+                    .get(i + 4..i + 20)
+                    .is_some_and(|slice| slice.iter().all(|&b| b.is_ascii_uppercase() || b.is_ascii_digit()));
                 if is_key {
                     let boundary_after = if i + 20 == bytes.len() {
                         true
                     } else {
-                        let next = bytes[i + 20];
-                        !next.is_ascii_alphanumeric() && next != b'_'
+                        !bytes
+                            .get(i + 20)
+                            .is_some_and(|&next| next.is_ascii_alphanumeric() || next == b'_')
                     };
                     if boundary_after {
                         return true;

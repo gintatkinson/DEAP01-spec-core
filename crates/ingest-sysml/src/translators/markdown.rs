@@ -32,7 +32,7 @@
 //!   (components, parts, attributes, ports, signals, constraints). Zero domain-specific vocabulary
 //!   is hardcoded.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -479,9 +479,9 @@ fn extract_req_metadata(
                 .map(|c| c.trim())
                 .filter(|c| !c.is_empty())
                 .collect();
-            if cells.len() >= 2 {
-                let key = cells[0].replace(['*', '`', '_'], "").to_ascii_lowercase();
-                let raw_val = cells[1].trim();
+            if let (Some(c0), Some(c1)) = (cells.first(), cells.get(1)) {
+                let key = c0.replace(['*', '`', '_'], "").to_ascii_lowercase();
+                let raw_val = c1.trim();
                 let clean_val = clean_meta_val(raw_val);
                 if (key.contains("complexity") || key.contains("class")) && complexity.is_empty() {
                     complexity = clean_val;
@@ -684,7 +684,7 @@ fn extract_acceptance_criteria(content: &str) -> Vec<(String, String, String)> {
     let mut in_fence = false;
 
     while i < n {
-        let line = lines[i].trim();
+        let line = lines.get(i).map_or("", |l| l.trim());
         if line.starts_with("```") || line.starts_with("~~~") {
             in_fence = !in_fence;
             i += 1;
@@ -1178,7 +1178,7 @@ pub fn extract_formal_invariants(content: &str, req_num: &str) -> Vec<Constraint
     invariants
 }
 
-static REQ_TITLE_MAP: OnceLock<HashMap<String, String>> = OnceLock::new();
+static REQ_TITLE_MAP: OnceLock<BTreeMap<String, String>> = OnceLock::new();
 
 /// Executes deterministic fn `get_req_canonical_title` within `crates/ingest-sysml/src/translators/markdown.rs`.
 ///
@@ -1208,7 +1208,7 @@ static REQ_TITLE_MAP: OnceLock<HashMap<String, String>> = OnceLock::new();
 /// Realises: [REQ-TRANSLATORS-MARKDOWN-GET-REQ-CANONICAL-TITLE] | SysML v2: ActionDef(get_req_canonical_title)
 fn get_req_canonical_title(req_id: &str) -> Option<String> {
     let map = REQ_TITLE_MAP.get_or_init(|| {
-        let mut m = HashMap::new();
+        let mut m = BTreeMap::new();
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
         let schema_candidates = [
             Path::new("schema").to_path_buf(),
@@ -1325,7 +1325,7 @@ fn find_req_ids(text: &str) -> Vec<&str> {
             let digits_slice = &candidate[4..8];
             if digits_slice.chars().all(|c| c.is_ascii_digit()) {
                 let end_boundary =
-                    candidate.len() == 8 || !candidate.as_bytes()[8].is_ascii_digit();
+                    candidate.len() == 8 || !candidate.as_bytes().get(8).is_some_and(u8::is_ascii_digit);
                 if end_boundary {
                     ids.push(&candidate[..8]);
                 }
@@ -1460,15 +1460,17 @@ fn strip_pkg_words(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut i = 0;
     let bytes = s.as_bytes();
-    while i < bytes.len() {
-        if (bytes[i] as char).is_ascii_alphanumeric() {
+    while let Some(&b) = bytes.get(i) {
+        if (b as char).is_ascii_alphanumeric() {
             let start = i;
-            while i < bytes.len()
-                && ((bytes[i] as char).is_ascii_alphanumeric() || bytes[i] == b'_')
-            {
-                i += 1;
+            while let Some(&cb) = bytes.get(i) {
+                if (cb as char).is_ascii_alphanumeric() || cb == b'_' {
+                    i += 1;
+                } else {
+                    break;
+                }
             }
-            let word = &s[start..i];
+            let word = s.get(start..i).unwrap_or("");
             let lower = word.to_ascii_lowercase();
             if PKG_WORDS.contains(&lower.as_str()) {
                 out.push(' ');
@@ -1476,7 +1478,7 @@ fn strip_pkg_words(s: &str) -> String {
                 out.push_str(word);
             }
         } else {
-            out.push(bytes[i] as char);
+            out.push(b as char);
             i += 1;
         }
     }
@@ -3295,7 +3297,7 @@ impl MarkdownTranslator {
                         }
                     }
                     // Merge attributes without duplicate names
-                    let existing_attr_names: std::collections::HashSet<String> =
+                    let existing_attr_names: BTreeSet<String> =
                         existing.attributes.iter().map(|a| a.name.clone()).collect();
                     for a in p.attributes {
                         if !existing_attr_names.contains(&a.name) {
@@ -3303,7 +3305,7 @@ impl MarkdownTranslator {
                         }
                     }
                     // Merge ports without duplicate names
-                    let existing_port_names: std::collections::HashSet<String> =
+                    let existing_port_names: BTreeSet<String> =
                         existing.ports.iter().map(|prt| prt.name.clone()).collect();
                     for prt in p.ports {
                         if !existing_port_names.contains(&prt.name) {
@@ -3311,7 +3313,7 @@ impl MarkdownTranslator {
                         }
                     }
                     // Merge constraints without duplicate names
-                    let existing_con_names: std::collections::HashSet<String> = existing
+                    let existing_con_names: BTreeSet<String> = existing
                         .constraints
                         .iter()
                         .map(|c| c.name.clone())
@@ -3327,7 +3329,7 @@ impl MarkdownTranslator {
             }
 
             // Consolidate package-level attributes
-            let pkg_attr_names: std::collections::HashSet<String> = combined_pkg
+            let pkg_attr_names: BTreeSet<String> = combined_pkg
                 .attribute_defs
                 .iter()
                 .map(|a| a.name.clone())
@@ -3339,7 +3341,7 @@ impl MarkdownTranslator {
             }
 
             // Consolidate package-level ports
-            let pkg_port_names: std::collections::HashSet<String> = combined_pkg
+            let pkg_port_names: BTreeSet<String> = combined_pkg
                 .port_defs
                 .iter()
                 .map(|prt| prt.name.clone())
@@ -3351,7 +3353,7 @@ impl MarkdownTranslator {
             }
 
             // Consolidate package-level constraints
-            let pkg_con_names: std::collections::HashSet<String> = combined_pkg
+            let pkg_con_names: BTreeSet<String> = combined_pkg
                 .constraint_defs
                 .iter()
                 .map(|c| c.name.clone())
@@ -3363,7 +3365,7 @@ impl MarkdownTranslator {
             }
 
             // Consolidate package-level connections
-            let pkg_conn_names: std::collections::HashSet<String> = combined_pkg
+            let pkg_conn_names: BTreeSet<String> = combined_pkg
                 .connection_defs
                 .iter()
                 .map(|c| c.name.clone())
@@ -3464,13 +3466,13 @@ impl MarkdownTranslator {
         let mut table_raw_headers: Vec<String> = Vec::new();
         let mut table_norm_headers: Vec<String> = Vec::new();
         let mut table_units: Vec<String> = Vec::new();
-        let mut table_rows: Vec<HashMap<String, String>> = Vec::new();
+        let mut table_rows: Vec<BTreeMap<String, String>> = Vec::new();
 
         let flush_table = |in_tbl: &mut bool,
                            raw_h: &mut Vec<String>,
                            norm_h: &mut Vec<String>,
                            u: &mut Vec<String>,
-                           r: &mut Vec<HashMap<String, String>>,
+                           r: &mut Vec<BTreeMap<String, String>>,
                            tbls: &mut Vec<MarkdownTable>| {
             if *in_tbl && !raw_h.is_empty() && !r.is_empty() {
                 tbls.push(MarkdownTable {
@@ -3491,7 +3493,7 @@ impl MarkdownTranslator {
                              raw_h: &mut Vec<String>,
                              norm_h: &mut Vec<String>,
                              u: &mut Vec<String>,
-                             r: &mut Vec<HashMap<String, String>>,
+                             r: &mut Vec<BTreeMap<String, String>>,
                              tbls: &mut Vec<MarkdownTable>,
                              sec_hdr: &mut String,
                              comp_tgt: &mut Option<String>,
@@ -3581,7 +3583,7 @@ impl MarkdownTranslator {
         let mut in_code_block = false;
 
         while i < n {
-            let line = lines[i];
+            let line = lines.get(i).copied().unwrap_or("");
             let line_str = line.trim();
 
             if line_str.starts_with("```") || line_str.starts_with("~~~") {
@@ -3801,21 +3803,17 @@ impl MarkdownTranslator {
                     i += 1;
                     continue;
                 } else if in_table {
-                    let mut row_dict = HashMap::new();
+                    let mut row_dict = BTreeMap::new();
                     for (idx, norm_col) in table_norm_headers.iter().enumerate() {
-                        let val = if idx < cells.len() {
-                            clean_cell_value(&cells[idx])
-                        } else {
-                            String::new()
-                        };
+                        let val = cells.get(idx).map_or_else(String::new, |c| clean_cell_value(c));
                         row_dict.insert(norm_col.clone(), val);
                     }
                     table_rows.push(row_dict);
                     i += 1;
                     continue;
-                } else if i + 1 < n && lines[i + 1].contains('|') {
+                } else if lines.get(i + 1).is_some_and(|nl| nl.contains('|')) {
                     // Peek ahead to next row
-                    let next_line = lines[i + 1].trim();
+                    let next_line = lines.get(i + 1).map_or("", |nl| nl.trim());
                     let next_cells: Vec<String> = next_line
                         .trim_matches('|')
                         .split('|')
@@ -3917,7 +3915,7 @@ impl MarkdownTranslator {
     ) {
         let headers = &table.normalized_headers;
         let units = &table.units;
-        let unit_map: HashMap<String, String> = headers
+        let unit_map: BTreeMap<String, String> = headers
             .iter()
             .enumerate()
             .map(|(idx, h)| {
@@ -4120,9 +4118,9 @@ impl MarkdownTranslator {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-INGEST-MD/process_row_per_attribute_bom_row] | SysML v2: ActionDef(MarkdownTranslator::process_row_per_attribute_bom_row)
     fn process_row_per_attribute_bom_row(
-        row: &HashMap<String, String>,
+        row: &BTreeMap<String, String>,
         headers: &[String],
-        unit_map: &HashMap<String, String>,
+        unit_map: &BTreeMap<String, String>,
         attr_col: &str,
         row_citation: &str,
         part: &mut PartDef,
@@ -4452,15 +4450,11 @@ impl MarkdownTranslator {
     ) {
         let headers = &table.normalized_headers;
         let units = &table.units;
-        let unit_map: HashMap<String, String> = headers
+        let unit_map: BTreeMap<String, String> = headers
             .iter()
             .enumerate()
             .map(|(idx, h)| {
-                let u = if idx < units.len() {
-                    units[idx].clone()
-                } else {
-                    String::new()
-                };
+                let u = units.get(idx).cloned().unwrap_or_default();
                 (h.clone(), u)
             })
             .collect();
@@ -4482,11 +4476,10 @@ impl MarkdownTranslator {
             })
             .cloned()
             .unwrap_or_else(|| {
-                if !headers.is_empty() {
-                    headers[0].clone()
-                } else {
-                    "port".to_string()
-                }
+                headers
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "port".to_string())
             });
 
         let dir_col = headers
@@ -4730,15 +4723,11 @@ impl MarkdownTranslator {
     ) {
         let headers = &table.normalized_headers;
         let units = &table.units;
-        let unit_map: HashMap<String, String> = headers
+        let unit_map: BTreeMap<String, String> = headers
             .iter()
             .enumerate()
             .map(|(idx, h)| {
-                let u = if idx < units.len() {
-                    units[idx].clone()
-                } else {
-                    String::new()
-                };
+                let u = units.get(idx).cloned().unwrap_or_default();
                 (h.clone(), u)
             })
             .collect();
@@ -5303,16 +5292,14 @@ Prose
     }
 
     #[test]
-    fn test_translate_req_0001() {
+    fn test_translate_req_0001() -> Result<(), Box<dyn std::error::Error>> {
         let req1_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../schema/REQ-0001.md");
         if !std::path::Path::new(req1_path).exists() {
-            return;
+            return Ok(());
         }
-        let content = fs::read_to_string(req1_path).expect("Failed to read schema/REQ-0001.md");
+        let content = fs::read_to_string(req1_path)?;
         let translator = MarkdownTranslator::new();
-        let pkg = translator
-            .translate(&content, "REQ-0001")
-            .expect("Translation failed");
+        let pkg = translator.translate(&content, "REQ-0001")?;
 
         assert_eq!(
             pkg.name,
@@ -5335,7 +5322,7 @@ Prose
 
         // Verify formal RequirementDef entity (RED TDD expectation)
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = &pkg.requirement_defs[0];
+        let req = pkg.requirement_defs.first().ok_or("missing req")?;
         assert_eq!(req.name, "REQ_0001_Abstract_MBSE_Compiler_Mandate");
         assert_eq!(req.req_id, "REQ-0001");
         assert!(req
@@ -5344,7 +5331,7 @@ Prose
         let doc = req
             .doc
             .as_ref()
-            .expect("Expected doc metadata on RequirementDef");
+            .ok_or("Expected doc metadata on RequirementDef")?;
         assert!(doc.contains("UUIDv5: 5a4d7a99-0419-5c2b-ba0e-ccabdb05f1c9"));
         assert!(doc.contains("Complexity:"));
         assert!(doc.contains("Standard:"));
@@ -5369,8 +5356,8 @@ Prose
             .attributes
             .iter()
             .find(|a| a.name == "ac_01_pure_schema_driven_symbol_derivation")
-            .unwrap();
-        let ac1_val = ac1.default_value.as_ref().unwrap();
+            .ok_or("missing ac1")?;
+        let ac1_val = ac1.default_value.as_ref().ok_or("missing ac1 default")?;
         assert!(ac1_val.contains("Given:"));
         assert!(ac1_val.contains("When:"));
         assert!(ac1_val.contains("Then:"));
@@ -5381,8 +5368,8 @@ Prose
             .attributes
             .iter()
             .find(|a| a.name == "ac_04_bitwise_determinism_across_repeated_invocations")
-            .unwrap();
-        let ac4_val = ac4.default_value.as_ref().unwrap();
+            .ok_or("missing ac4")?;
+        let ac4_val = ac4.default_value.as_ref().ok_or("missing ac4 default")?;
         assert!(ac4_val.contains("Given:"));
         assert!(ac4_val.contains("When:"));
         assert!(ac4_val.contains("Then:"));
@@ -5397,10 +5384,11 @@ Prose
                 "AC_04_Bitwise_Determinism_across_Repeated_Invocations".to_string(),
             ]
         );
+        Ok(())
     }
 
     #[test]
-    fn test_translate_files_dynamic_grouping() {
+    fn test_translate_files_dynamic_grouping() -> Result<(), Box<dyn std::error::Error>> {
         let translator = MarkdownTranslator::new();
         let content1 = r#"---
 id: REQ-0001
@@ -5423,35 +5411,33 @@ The system shall perform beta function.
         let tmp = std::env::temp_dir().join(format!(
             "test_dyn_grouping_{}",
             std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .duration_since(std::time::UNIX_EPOCH)?
                 .as_nanos()
         ));
-        std::fs::create_dir_all(&tmp).expect("create temp dir");
+        std::fs::create_dir_all(&tmp)?;
         let f1 = tmp.join("REQ-0001.md");
         let f2 = tmp.join("REQ-0002.md");
-        std::fs::write(&f1, content1).expect("write f1");
-        std::fs::write(&f2, content2).expect("write f2");
+        std::fs::write(&f1, content1)?;
+        std::fs::write(&f2, content2)?;
 
-        let res = translator
-            .translate_files(
-                &[
-                    f1.to_string_lossy().to_string(),
-                    f2.to_string_lossy().to_string(),
-                ],
-                "CustomSystem",
-            )
-            .expect("translate");
+        let res = translator.translate_files(
+            &[
+                f1.to_string_lossy().to_string(),
+                f2.to_string_lossy().to_string(),
+            ],
+            "CustomSystem",
+        )?;
         let _ = std::fs::remove_dir_all(&tmp);
 
         assert_eq!(res.name, "CustomSystem");
         assert_eq!(res.packages.len(), 2);
         assert!(res.packages.iter().any(|p| p.name == "Subsystem_Alpha"));
         assert!(res.packages.iter().any(|p| p.name == "Subsystem_Beta"));
+        Ok(())
     }
 
     #[test]
-    fn test_translate_bom_and_ports() {
+    fn test_translate_bom_and_ports() -> Result<(), String> {
         let content = r#"
 # Package_0
 
@@ -5473,9 +5459,7 @@ The system shall perform beta function.
 | param_x | 20.0 | 28.0 | V | Synthetic parameter x |
 "#;
         let translator = MarkdownTranslator::new();
-        let pkg = translator
-            .translate(content, "Package_0")
-            .expect("Failed translation");
+        let pkg = translator.translate(content, "Package_0")?;
 
         assert_eq!(pkg.name, "Package_0");
         let part_names: Vec<&str> = pkg.part_defs.iter().map(|p| p.name.as_str()).collect();
@@ -5486,7 +5470,7 @@ The system shall perform beta function.
             .part_defs
             .iter()
             .find(|p| p.name == "Classifier_Alpha")
-            .unwrap();
+            .ok_or_else(|| "missing Classifier_Alpha".to_string())?;
         assert_eq!(alpha.doc.as_deref(), Some("Synthetic component alpha"));
         let alpha_attrs: Vec<&str> = alpha.attributes.iter().map(|a| a.name.as_str()).collect();
         assert!(alpha_attrs.contains(&"part_number"));
@@ -5503,6 +5487,7 @@ The system shall perform beta function.
             .map(|c| c.name.as_str())
             .collect();
         assert!(con_names.contains(&"assert_param_x_range"));
+        Ok(())
     }
 
     #[test]
@@ -5515,7 +5500,7 @@ The system shall perform beta function.
     }
 
     #[test]
-    fn test_extract_formal_invariants_and_cross_references() {
+    fn test_extract_formal_invariants_and_cross_references() -> Result<(), String> {
         let content = r#"---
 id: REQ-0032
 title: "Deterministic Qualified-Name Symbol Sorting for Canonical Model Emission"
@@ -5554,23 +5539,26 @@ Complexity Class P.
 "#;
         let invariants = extract_formal_invariants(content, "0032");
         assert_eq!(invariants.len(), 3);
+        let inv0 = invariants.first().ok_or("missing inv0")?;
+        let inv1 = invariants.get(1).ok_or("missing inv1")?;
+        let inv2 = invariants.get(2).ok_or("missing inv2")?;
         assert_eq!(
-            invariants[0].name,
+            inv0.name,
             "Invariant_REQ_0032_Strict_Total_Ordering_Invariant"
         );
-        assert!(!invariants[0].is_assertion);
-        assert!(invariants[0]
+        assert!(!inv0.is_assertion);
+        assert!(inv0
             .doc
             .as_ref()
-            .unwrap()
+            .ok_or("missing inv0 doc")?
             .contains(r"\forall d_1 \ne d_2"));
 
         assert_eq!(
-            invariants[1].name,
+            inv1.name,
             "Invariant_REQ_0032_Zero_Diff_Churn_Determinism"
         );
         assert_eq!(
-            invariants[2].name,
+            inv2.name,
             "Invariant_REQ_0032_Diagnostic_Code_Binding_Invariants"
         );
 
@@ -5579,23 +5567,23 @@ Complexity Class P.
         assert!(refs.iter().any(|r| r.contains("0019")));
         assert!(refs.iter().any(|r| r.contains("0044")));
         assert!(!refs.iter().any(|r| r.contains("0032")));
+        Ok(())
     }
 
     #[test]
-    fn test_translate_wires_requires_derived_from_and_constraints() {
+    fn test_translate_wires_requires_derived_from_and_constraints(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let path = format!("{}/../../schema/REQ-0032.md", manifest_dir);
         if !std::path::Path::new(&path).exists() {
-            return;
+            return Ok(());
         }
-        let content = std::fs::read_to_string(&path).expect("Failed to read REQ-0032.md");
+        let content = std::fs::read_to_string(&path)?;
         let translator = MarkdownTranslator::new();
-        let pkg = translator
-            .translate(&content, "REQ_0032")
-            .expect("Failed to translate REQ-0032");
+        let pkg = translator.translate(&content, "REQ_0032")?;
 
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = &pkg.requirement_defs[0];
+        let req = pkg.requirement_defs.first().ok_or("missing req")?;
         assert!(
             !req.requires.is_empty(),
             "Requirement requires must not be empty"
@@ -5622,28 +5610,28 @@ Complexity Class P.
             pkg.constraint_defs.is_empty(),
             "Package constraint_defs must be clean when invariants are encapsulated in requirements"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_translate_files_subsystem_constraints_and_engine_assertions() {
+    fn test_translate_files_subsystem_constraints_and_engine_assertions(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let files = vec![
             format!("{}/../../schema/REQ-0031.md", manifest_dir),
             format!("{}/../../schema/REQ-0032.md", manifest_dir),
         ];
-        if !std::path::Path::new(&files[0]).exists() {
-            return;
+        if !files.first().is_some_and(|f| std::path::Path::new(f).exists()) {
+            return Ok(());
         }
         let translator = MarkdownTranslator::new();
-        let combined = translator
-            .translate_files(&files, "schema")
-            .expect("Failed translate_files");
+        let combined = translator.translate_files(&files, "schema")?;
 
         let sub2 = combined
             .packages
             .iter()
             .find(|p| p.name.contains("Subsystem_2"))
-            .expect("Subsystem 2 missing");
+            .ok_or("Subsystem 2 missing")?;
         assert!(
             sub2.constraint_defs.is_empty(),
             "Subsystem 2 constraint_defs must be clean"
@@ -5652,7 +5640,7 @@ Complexity Class P.
             .part_defs
             .iter()
             .find(|p| p.name == "UniversalIngestionEngine")
-            .expect("UniversalIngestionEngine missing");
+            .ok_or("UniversalIngestionEngine missing")?;
         assert!(
             engine.constraints.is_empty(),
             "UniversalIngestionEngine must not have top-level constraint assertions"
@@ -5665,7 +5653,7 @@ Complexity Class P.
             .requirement_defs
             .iter()
             .find(|r| r.req_id == "REQ-0032")
-            .expect("REQ-0032 missing");
+            .ok_or("REQ-0032 missing")?;
         assert!(
             !req32.constraints.is_empty(),
             "REQ-0032 must own its formal invariant constraints"
@@ -5674,18 +5662,19 @@ Complexity Class P.
             .constraints
             .iter()
             .any(|c| c.name.contains("Strict_Total_Ordering")));
+        Ok(())
     }
 
     #[test]
-    fn test_issue_442_markdown_translator_pure_schema_no_compiler_contamination() {
+    fn test_issue_442_markdown_translator_pure_schema_no_compiler_contamination(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp_dir = std::env::temp_dir().join(format!(
             "test_issue_442_{}",
             std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .duration_since(std::time::UNIX_EPOCH)?
                 .as_nanos()
         ));
-        std::fs::create_dir_all(&tmp_dir).expect("create temp dir");
+        std::fs::create_dir_all(&tmp_dir)?;
 
         let file1 = tmp_dir.join("REQ-1001.md");
         let content1 = r#"---
@@ -5699,7 +5688,7 @@ uuidv5: 00000000-0000-0000-0000-000000000001
 
 The Attitude Determination system shall maintain pointing knowledge within 0.01 degrees.
 "#;
-        std::fs::write(&file1, content1).expect("write file1");
+        std::fs::write(&file1, content1)?;
 
         let file2 = tmp_dir.join("REQ-1002.md");
         let content2 = r#"---
@@ -5713,16 +5702,14 @@ uuidv5: 00000000-0000-0000-0000-000000000002
 
 The Electrical Power subsystem shall maintain bus voltage between 24V and 32V.
 "#;
-        std::fs::write(&file2, content2).expect("write file2");
+        std::fs::write(&file2, content2)?;
 
         let translator = MarkdownTranslator::new();
         let file_paths = vec![
             file1.to_string_lossy().to_string(),
             file2.to_string_lossy().to_string(),
         ];
-        let res = translator
-            .translate_files(&file_paths, "Satellite_System")
-            .expect("translate files");
+        let res = translator.translate_files(&file_paths, "Satellite_System")?;
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
 
@@ -5748,6 +5735,7 @@ The Electrical Power subsystem shall maintain bus voltage between 24V and 32V.
                 assert_ne!(part.name, "NodeArenaASTGraphEngine");
             }
         }
+        Ok(())
     }
 
     /// ## 1. Safety Intent & Regulatory Scope
@@ -5775,7 +5763,8 @@ The Electrical Power subsystem shall maintain bus voltage between 24V and 32V.
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-INGEST-MD/test_defect_02_translate_files_fails_closed_on_missing_or_unreadable_file] | SysML v2: VerificationCaseDef(test_defect_02_translate_files_fails_closed_on_missing_or_unreadable_file)
     #[test]
-    fn test_defect_02_translate_files_fails_closed_on_missing_or_unreadable_file() {
+    fn test_defect_02_translate_files_fails_closed_on_missing_or_unreadable_file(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         struct TempDirGuard(std::path::PathBuf);
         impl Drop for TempDirGuard {
             fn drop(&mut self) {
@@ -5806,13 +5795,12 @@ The Electrical Power subsystem shall maintain bus voltage between 24V and 32V.
             std::env::temp_dir().join(format!("deap_defect_02_mixed_{}", std::process::id())),
         );
         let _ = std::fs::remove_dir_all(&tmp_dir.0);
-        std::fs::create_dir_all(&tmp_dir.0).expect("create temp dir");
+        std::fs::create_dir_all(&tmp_dir.0)?;
         let valid_file = tmp_dir.0.join("valid_spec.md");
         std::fs::write(
             &valid_file,
             "# Package_0\n\n## Classifier_Alpha\nAlpha doc.",
-        )
-        .expect("write valid_spec.md");
+        )?;
         let valid_path = valid_file.to_string_lossy().to_string();
         let mixed_res =
             translator.translate_files(&[valid_path, missing_path.clone()], "Test_System");
@@ -5828,6 +5816,7 @@ The Electrical Power subsystem shall maintain bus voltage between 24V and 32V.
             unreadable_res.is_err(),
             "MarkdownTranslator::translate_files must fail closed on unreadable directory path, got Ok"
         );
+        Ok(())
     }
 
     /// ## 1. Safety Intent & Regulatory Scope

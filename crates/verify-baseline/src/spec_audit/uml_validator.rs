@@ -19,7 +19,7 @@ use crate::spec_audit::markdown_ast::MarkdownDoc;
 use crate::spec_audit::sections::normalize_tokens;
 use crate::spec_audit::SpecAuditError;
 use deap_core::sysml_ast::{PackageDef, PartDef, StateDef, SysmlModel};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Pre-indexed symbol set for a single classifier (Part / Block) in SysML AST.
 ///
@@ -52,15 +52,15 @@ pub struct ClassifierSymbolInfo {
     /// Classifier identifier name (e.g. `FlightController`, `SensorHub`).
     pub name: String,
     /// Declared attribute names.
-    pub attributes: HashSet<String>,
+    pub attributes: BTreeSet<String>,
     /// Declared operation names.
-    pub operations: HashSet<String>,
+    pub operations: BTreeSet<String>,
     /// Declared action names.
-    pub actions: HashSet<String>,
+    pub actions: BTreeSet<String>,
     /// Declared port names.
-    pub ports: HashSet<String>,
+    pub ports: BTreeSet<String>,
     /// Declared state names if classifier owns a state machine.
-    pub states: HashSet<String>,
+    pub states: BTreeSet<String>,
 }
 
 /// Pre-indexed symbol lookup tables providing O(1) resolution against SysML v2 models.
@@ -92,23 +92,23 @@ pub struct ClassifierSymbolInfo {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SysmlSymbolIndex {
     /// Valid Part / Block names in the model.
-    pub part_names: HashSet<String>,
+    pub part_names: BTreeSet<String>,
     /// Valid State names across all state machines in the model.
-    pub state_names: HashSet<String>,
+    pub state_names: BTreeSet<String>,
     /// Valid Action and Operation names across all parts and packages.
-    pub action_names: HashSet<String>,
+    pub action_names: BTreeSet<String>,
     /// Valid Port names across all parts and packages.
-    pub port_names: HashSet<String>,
+    pub port_names: BTreeSet<String>,
     /// Valid Attribute names across all parts and packages.
-    pub attribute_names: HashSet<String>,
+    pub attribute_names: BTreeSet<String>,
     /// Mapping of classifier name -> ClassifierSymbolInfo.
-    pub classifiers: HashMap<String, ClassifierSymbolInfo>,
+    pub classifiers: BTreeMap<String, ClassifierSymbolInfo>,
     /// Valid Requirement IDs and names.
-    pub requirement_ids: HashSet<String>,
+    pub requirement_ids: BTreeSet<String>,
     /// Valid Constraint IDs and names (including assert constraints).
-    pub constraint_ids: HashSet<String>,
+    pub constraint_ids: BTreeSet<String>,
     /// Test case name -> list of verified requirement/constraint IDs.
-    pub test_cases: HashMap<String, Vec<String>>,
+    pub test_cases: BTreeMap<String, Vec<String>>,
 }
 
 impl SysmlSymbolIndex {
@@ -374,7 +374,7 @@ impl SysmlSymbolIndex {
         if !part.name.is_empty() {
             self.part_names.insert(part.name.clone());
 
-            let mut classifier_states = HashSet::new();
+            let mut classifier_states = BTreeSet::new();
             for st in &part.states {
                 collect_state_names(st, &mut classifier_states);
             }
@@ -624,7 +624,7 @@ pub fn validate_sequence_diagram(
     let mut errors = Vec::new();
 
     // 1. Verify all non-actor lifelines resolve to declared Part/Block
-    let mut actor_names: HashSet<String> = HashSet::new();
+    let mut actor_names: BTreeSet<String> = BTreeSet::new();
 
     for p in &diagram.participants {
         if p.is_actor {
@@ -1110,7 +1110,7 @@ pub fn validate_document_uml(
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-UML-VALIDATOR-EXTRACT-IDENT] | SysML v2: ActionDef(extract_ident)
 fn extract_ident(s: &str) -> &str {
-    let trimmed = s.trim().trim_start_matches(|c| c == '+' || c == '-' || c == '#' || c == '~').trim();
+    let trimmed = s.trim().trim_start_matches(['+', '-', '#', '~']).trim();
     if let Some(open_p) = trimmed.find('(') {
         trimmed[..open_p].trim()
     } else {
@@ -1145,7 +1145,7 @@ fn extract_ident(s: &str) -> &str {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-UML-VALIDATOR-COLLECT-STATE-NAMES] | SysML v2: ActionDef(collect_state_names)
-fn collect_state_names(state: &StateDef, names: &mut HashSet<String>) {
+fn collect_state_names(state: &StateDef, names: &mut BTreeSet<String>) {
     if !state.name.is_empty() {
         names.insert(state.name.clone());
     }
@@ -1213,7 +1213,7 @@ pub fn validate_use_case_diagram_compliance(
 
         // 2. Directed arrows to actors check
         let primary_actor = doc.table_metadata.get("primary_actor").map(|s| s.trim()).unwrap_or("");
-        let mut actor_ids = HashSet::new();
+        let mut actor_ids = BTreeSet::new();
         if !primary_actor.is_empty() {
             actor_ids.insert(primary_actor.to_string());
             actor_ids.insert(primary_actor.to_lowercase());
@@ -1223,8 +1223,8 @@ pub fn validate_use_case_diagram_compliance(
 
         for l in &lines {
             let t = l.trim();
-            if t.starts_with("actor ") {
-                let act_id = t["actor ".len()..].trim().split_whitespace().next().unwrap_or("");
+            if let Some(after_actor) = t.strip_prefix("actor ") {
+                let act_id = after_actor.split_whitespace().next().unwrap_or("");
                 if !act_id.is_empty() {
                     actor_ids.insert(act_id.to_string());
                     actor_ids.insert(act_id.to_lowercase());
@@ -1282,7 +1282,7 @@ pub fn validate_use_case_diagram_compliance(
         }
 
         // 4. Trivial 2-node flows
-        let mut node_ids = HashSet::new();
+        let mut node_ids = BTreeSet::new();
         for l in &lines {
             let t = l.trim();
             if t.starts_with("%%") || t.starts_with("subgraph") || t.starts_with("end")
@@ -1291,7 +1291,7 @@ pub fn validate_use_case_diagram_compliance(
             {
                 continue;
             }
-            let first_token = t.split(|c: char| c == '[' || c == '(' || c == ' ' || c == '-' || c == '.')
+            let first_token = t.split(['[', '(', ' ', '-', '.'])
                 .next()
                 .unwrap_or("")
                 .trim();
@@ -1302,7 +1302,7 @@ pub fn validate_use_case_diagram_compliance(
             for arr in &["-->", "---", "->", "-.->"] {
                 if let Some(pos) = t.find(arr) {
                     let after = t[pos + arr.len()..].trim();
-                    let target_token = after.split(|c: char| c == '[' || c == '(' || c == ' ' || c == '-' || c == '.')
+                    let target_token = after.split(['[', '(', ' ', '-', '.'])
                         .next()
                         .unwrap_or("")
                         .trim();
@@ -1408,24 +1408,22 @@ pub fn validate_epic_statechart_heterogeneity(
     }
 
     // 2. Check for exact identical transition sets between any two different Epics
-    let mut checked_pairs = HashSet::new();
-    for i in 0..epic_transitions.len() {
-        for j in i + 1..epic_transitions.len() {
-            let (path1, trans1) = &epic_transitions[i];
-            let (path2, trans2) = &epic_transitions[j];
+    let mut checked_pairs = BTreeSet::new();
+    for (i, (path1, trans1)) in epic_transitions.iter().enumerate() {
+        for (path2, trans2) in epic_transitions.iter().skip(i + 1) {
             if !trans1.is_empty() && trans1 == trans2 {
                 let pair_key = if path1 < path2 {
                     format!("{}|{}", path1, path2)
                 } else {
                     format!("{}|{}", path2, path1)
                 };
-                if checked_pairs.insert(pair_key) {
-                    if !(canned_epics.contains(path1) && canned_epics.contains(path2)) {
-                        errors.push(format!(
-                            "Epic Statechart Heterogeneity Gate violation: Epics '{}' and '{}' share identical statechart transitions ({} transitions). Epics must define distinct subsystem-specific statecharts.",
-                            path1, path2, trans1.len()
-                        ));
-                    }
+                if checked_pairs.insert(pair_key)
+                    && !(canned_epics.contains(path1) && canned_epics.contains(path2))
+                {
+                    errors.push(format!(
+                        "Epic Statechart Heterogeneity Gate violation: Epics '{}' and '{}' share identical statechart transitions ({} transitions). Epics must define distinct subsystem-specific statecharts.",
+                        path1, path2, trans1.len()
+                    ));
                 }
             }
         }
@@ -1545,7 +1543,7 @@ pub fn validate_parent_epic_alignment(
 ) -> Vec<String> {
     let mut errors = Vec::new();
 
-    let mut feat_info: HashMap<String, (String, String)> = HashMap::new();
+    let mut feat_info: BTreeMap<String, (String, String)> = BTreeMap::new();
     for &(f_path, f_doc) in features {
         let f_basename = match f_path.rfind('/') {
             Some(idx) => &f_path[idx + 1..],
@@ -1562,7 +1560,7 @@ pub fn validate_parent_epic_alignment(
         feat_info.insert(f_stem, (subsys, parent_epic_clean));
     }
 
-    let mut epic_associated_stories: HashMap<String, String> = HashMap::new();
+    let mut epic_associated_stories: BTreeMap<String, String> = BTreeMap::new();
     for &(ep_path, ep_doc) in epics {
         let ep_basename = match ep_path.rfind('/') {
             Some(idx) => &ep_path[idx + 1..],
@@ -1737,12 +1735,12 @@ fn contains_whole_word(haystack: &str, needle: &str) -> bool {
             || !haystack[..abs_pos]
                 .chars()
                 .next_back()
-                .map_or(false, |c| c.is_alphanumeric() || c == '_');
+                .is_some_and(|c| c.is_alphanumeric() || c == '_');
         let right_ok = end_pos >= haystack.len()
             || !haystack[end_pos..]
                 .chars()
                 .next()
-                .map_or(false, |c| c.is_alphanumeric() || c == '_');
+                .is_some_and(|c| c.is_alphanumeric() || c == '_');
         if left_ok && right_ok {
             return true;
         }
@@ -1829,10 +1827,10 @@ pub fn validate_feature_operation_coverage(
             let leaf_lower = leaf.to_ascii_lowercase();
 
             for (c_name, c_info) in &index.classifiers {
-                if c_name.to_ascii_lowercase() == leaf_lower {
-                    if !matched_classifiers.iter().any(|existing| existing.name == c_info.name) {
-                        matched_classifiers.push(c_info);
-                    }
+                if c_name.to_ascii_lowercase() == leaf_lower
+                    && !matched_classifiers.iter().any(|existing| existing.name == c_info.name)
+                {
+                    matched_classifiers.push(c_info);
                 }
             }
         }
@@ -1842,7 +1840,7 @@ pub fn validate_feature_operation_coverage(
     // match parts declared in explicit Mermaid classDiagram blocks or SysML code blocks.
     // Crucially: casual body prose mentions are NEVER used.
     if matched_classifiers.is_empty() {
-        let mut explicit_declared_parts = HashSet::new();
+        let mut explicit_declared_parts = BTreeSet::new();
 
         // 2a. Mermaid classDiagram blocks
         for block in &doc.mermaid_blocks {
@@ -1855,8 +1853,8 @@ pub fn validate_feature_operation_coverage(
                     if line_str.is_empty() {
                         continue;
                     }
-                    if line_str.starts_with("class ") {
-                        let ident = line_str[6..].trim().trim_matches('{').trim();
+                    if let Some(after_class) = line_str.strip_prefix("class ") {
+                        let ident = after_class.trim().trim_matches('{').trim();
                         let ident_clean = extract_simple_ident(ident);
                         if !ident_clean.is_empty() {
                             explicit_declared_parts.insert(ident_clean.to_ascii_lowercase());
@@ -1888,11 +1886,7 @@ pub fn validate_feature_operation_coverage(
             let trimmed = line.trim();
             if trimmed.starts_with("```") {
                 let tag = trimmed.trim_start_matches('`').trim();
-                if !in_sysml_block && (tag == "sysml" || tag == "sysmlv2") {
-                    in_sysml_block = true;
-                } else {
-                    in_sysml_block = false;
-                }
+                in_sysml_block = !in_sysml_block && (tag == "sysml" || tag == "sysmlv2");
                 continue;
             }
             if in_sysml_block {
@@ -1913,17 +1907,17 @@ pub fn validate_feature_operation_coverage(
         }
 
         for (c_name, c_info) in &index.classifiers {
-            if explicit_declared_parts.contains(&c_name.to_ascii_lowercase()) {
-                if !matched_classifiers.iter().any(|existing| existing.name == c_info.name) {
-                    matched_classifiers.push(c_info);
-                }
+            if explicit_declared_parts.contains(&c_name.to_ascii_lowercase())
+                && !matched_classifiers.iter().any(|existing| existing.name == c_info.name)
+            {
+                matched_classifiers.push(c_info);
             }
         }
     }
 
     // 3. Validate operation and action coverage for all matched parts
     for classifier in matched_classifiers {
-        let mut ops_to_check = HashSet::new();
+        let mut ops_to_check = BTreeSet::new();
         ops_to_check.extend(&classifier.operations);
         ops_to_check.extend(&classifier.actions);
 
@@ -2138,19 +2132,21 @@ mod tests {
         model.parts.push(flight_controller);
         model.parts.push(sensor_hub);
 
-        let mut state_idle = StateDef {
+        let state_idle = StateDef {
             name: "Idle".to_string(),
+            entry_action: Some("init_subsystems()".to_string()),
             ..Default::default()
         };
-        state_idle.entry_action = Some("init_subsystems()".to_string());
 
         let state_active = StateDef {
             name: "Active".to_string(),
             ..Default::default()
         };
 
-        model.parts[0].states.push(state_idle);
-        model.parts[0].states.push(state_active);
+        if let Some(first_part) = model.parts.first_mut() {
+            first_part.states.push(state_idle);
+            first_part.states.push(state_active);
+        }
 
         model
     }
@@ -2242,8 +2238,10 @@ mod tests {
 
         let res = validate_sequence_diagram(&seq, &index);
         assert!(res.is_err());
-        let errors = res.unwrap_err();
-        assert!(errors[0].to_string().contains("Lifeline 'UnregisteredEngine' in sequence diagram"));
+        let errors = res.err().unwrap_or_default();
+        assert!(errors
+            .first()
+            .is_some_and(|e| e.to_string().contains("Lifeline 'UnregisteredEngine' in sequence diagram")));
     }
 
     #[test]
@@ -2281,8 +2279,10 @@ mod tests {
 
         let res = validate_sequence_diagram(&seq, &index);
         assert!(res.is_err());
-        let errors = res.unwrap_err();
-        assert!(errors[0].to_string().contains("unregistered_method"));
+        let errors = res.err().unwrap_or_default();
+        assert!(errors
+            .first()
+            .is_some_and(|e| e.to_string().contains("unregistered_method")));
     }
 
     #[test]
@@ -2335,8 +2335,10 @@ mod tests {
 
         let res = validate_class_diagram(&class_diag, &index);
         assert!(res.is_err());
-        let errors = res.unwrap_err();
-        assert!(errors[0].to_string().contains("Class 'PhantomPart' in class diagram"));
+        let errors = res.err().unwrap_or_default();
+        assert!(errors
+            .first()
+            .is_some_and(|e| e.to_string().contains("Class 'PhantomPart' in class diagram")));
     }
 
     #[test]
@@ -2358,21 +2360,23 @@ mod tests {
 
         let res = validate_class_diagram(&vacuous_diag, &index);
         assert!(res.is_err());
-        let errors = res.unwrap_err();
-        assert!(errors[0]
+        let errors = res.err().unwrap_or_default();
+        assert!(errors.first().is_some_and(|e| e
             .to_string()
-            .contains("is a vacuous stub omitting declared AST ports and attributes"));
+            .contains("is a vacuous stub omitting declared AST ports and attributes")));
     }
 
     #[test]
     fn test_class_diagram_with_port_passes() {
         let mut model = create_test_sysml_model();
-        model.parts[0].ports.push(deap_core::sysml_ast::PortDef {
-            name: "telemetry_port".to_string(),
-            type_name: "TelemetryStream".to_string(),
-            direction: "out".to_string(),
-            ..Default::default()
-        });
+        if let Some(first_part) = model.parts.first_mut() {
+            first_part.ports.push(deap_core::sysml_ast::PortDef {
+                name: "telemetry_port".to_string(),
+                type_name: "TelemetryStream".to_string(),
+                direction: "out".to_string(),
+                ..Default::default()
+            });
+        }
         let index = SysmlSymbolIndex::from_model(&model);
 
         // Test port matching in operations (Mermaid parsed with direction parentheses)
@@ -2453,8 +2457,10 @@ mod tests {
 
         let res = validate_state_diagram(&state_diag, &index);
         assert!(res.is_err());
-        let errors = res.unwrap_err();
-        assert!(errors[0].to_string().contains("State 'Exploded' in state diagram"));
+        let errors = res.err().unwrap_or_default();
+        assert!(errors
+            .first()
+            .is_some_and(|e| e.to_string().contains("State 'Exploded' in state diagram")));
     }
 
     #[test]
@@ -2473,7 +2479,7 @@ mod tests {
                 },
             ],
             frontmatter: None,
-            table_metadata: HashMap::new(),
+            table_metadata: BTreeMap::new(),
             prose: vec![ProseSegment {
                 text: "Derived from `schema/model.sysml` and IEEE 29148 clause 8.4.".to_string(),
                 line: 12,
@@ -2491,7 +2497,7 @@ mod tests {
                 line: 1,
             }],
             frontmatter: None,
-            table_metadata: HashMap::new(),
+            table_metadata: BTreeMap::new(),
             prose: Vec::new(),
             mermaid_blocks: Vec::new(),
             unresolved_placeholders: Vec::new(),
@@ -2499,7 +2505,9 @@ mod tests {
 
         let res = validate_source_references(&missing_doc);
         assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains("missing a mandatory 'Source References' section"));
+        assert!(res
+            .err()
+            .is_some_and(|e| e.to_string().contains("missing a mandatory 'Source References' section")));
     }
 
     #[test]
@@ -2510,7 +2518,7 @@ mod tests {
         let legacy_doc = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: HashMap::from([("primary_actor".to_string(), "HumanEngineer".to_string())]),
+            table_metadata: BTreeMap::from([("primary_actor".to_string(), "HumanEngineer".to_string())]),
             prose: vec![],
             mermaid_blocks: vec![MermaidBlock {
                 raw: "flowchart TD\n    Actor[\"HumanEngineer\"] --> Target[\"SystemVisionEngine\"]\n".to_string(),
@@ -2541,7 +2549,7 @@ mod tests {
         let compliant_doc = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: HashMap::from([("primary_actor".to_string(), "HumanEngineer".to_string())]),
+            table_metadata: BTreeMap::from([("primary_actor".to_string(), "HumanEngineer".to_string())]),
             prose: vec![],
             mermaid_blocks: vec![MermaidBlock {
                 raw: compliant_raw.to_string(),
@@ -2571,7 +2579,7 @@ mod tests {
         let epic1 = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: HashMap::new(),
+            table_metadata: BTreeMap::new(),
             prose: vec![],
             mermaid_blocks: vec![MermaidBlock {
                 raw: canned_raw.to_string(),
@@ -2602,7 +2610,7 @@ mod tests {
         let epic3 = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: HashMap::new(),
+            table_metadata: BTreeMap::new(),
             prose: vec![],
             mermaid_blocks: vec![MermaidBlock {
                 raw: custom_raw.to_string(),
@@ -2627,7 +2635,7 @@ mod tests {
         let feat06 = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: HashMap::from([
+            table_metadata: BTreeMap::from([
                 ("title".to_string(), "Feature 06: [System Vision] SystemVisionEngine".to_string()),
                 ("parent_epic".to_string(), "[EPIC-03-SystemVision](../epics/EPIC-03-SystemVision.md)".to_string()),
             ]),
@@ -2640,7 +2648,7 @@ mod tests {
         let epic03 = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: HashMap::new(),
+            table_metadata: BTreeMap::new(),
             prose: vec![ProseSegment {
                 text: "- [ ] [User Story 01: Bootstrap System Vision Action](../user-stories/US-01-BootstrapSystemVisionAction.md)".to_string(),
                 line: 20,
@@ -2653,7 +2661,7 @@ mod tests {
         let mismatched_story = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: HashMap::from([
+            table_metadata: BTreeMap::from([
                 ("title".to_string(), "User Story 01: Bootstrap System Vision Action".to_string()),
                 ("parent_epic".to_string(), "[EPIC-02-ConOps](../epics/EPIC-02-ConOps.md)".to_string()),
                 ("specification_source".to_string(), "[schema/subsystems/system_vision/behavior.sysml]".to_string()),
@@ -2672,15 +2680,21 @@ mod tests {
 
         let errs = validate_parent_epic_alignment(&stories, &features, &epics);
         assert_eq!(errs.len(), 1);
-        assert!(errs[0].contains("Parent Epic Alignment Gate violation"));
-        assert!(errs[0].contains("declared parent Epic 'EPIC-02-ConOps'"));
-        assert!(errs[0].contains("EPIC-03-SystemVision"));
+        assert!(errs
+            .first()
+            .is_some_and(|e| e.contains("Parent Epic Alignment Gate violation")));
+        assert!(errs
+            .first()
+            .is_some_and(|e| e.contains("declared parent Epic 'EPIC-02-ConOps'")));
+        assert!(errs
+            .first()
+            .is_some_and(|e| e.contains("EPIC-03-SystemVision")));
 
         // Aligned story
         let aligned_story = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: HashMap::from([
+            table_metadata: BTreeMap::from([
                 ("title".to_string(), "User Story 01: Bootstrap System Vision Action".to_string()),
                 ("parent_epic".to_string(), "[EPIC-03-SystemVision](../epics/EPIC-03-SystemVision.md)".to_string()),
                 ("specification_source".to_string(), "[schema/subsystems/system_vision/behavior.sysml]".to_string()),
@@ -2744,7 +2758,7 @@ ProcessData
         let feat102_doc = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: HashMap::from([(
+            table_metadata: BTreeMap::from([(
                 "schema_containers".to_string(),
                 "MockSystem::MockPayload".to_string(),
             )]),
@@ -2781,7 +2795,7 @@ ExecuteAction
         let feat101_doc = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: HashMap::from([(
+            table_metadata: BTreeMap::from([(
                 "schema_containers".to_string(),
                 "MockSystem::MockPlatform".to_string(),
             )]),
@@ -2797,9 +2811,16 @@ ExecuteAction
             &index,
         );
         assert_eq!(findings_101.len(), 1);
-        assert_eq!(findings_101[0].rule_id, "feature-operation-missing");
-        assert!(findings_101[0].message.contains("VerifyInterface"));
-        assert!(findings_101[0].message.contains("MockPlatform"));
+        assert_eq!(
+            findings_101.first().map(|f| f.rule_id.as_str()),
+            Some("feature-operation-missing")
+        );
+        assert!(findings_101
+            .first()
+            .is_some_and(|f| f.message.contains("VerifyInterface")));
+        assert!(findings_101
+            .first()
+            .is_some_and(|f| f.message.contains("MockPlatform")));
     }
 
     #[test]
@@ -2841,7 +2862,7 @@ ExecuteAction
         let valid_story_doc = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: HashMap::from([(
+            table_metadata: BTreeMap::from([(
                 "sysml_test_case".to_string(),
                 "TC_UCA_33_Verification".to_string(),
             )]),
@@ -2867,7 +2888,7 @@ ExecuteAction
         let invalid_story_doc = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: HashMap::from([(
+            table_metadata: BTreeMap::from([(
                 "sysml_test_case".to_string(),
                 "TC_Invalid_Target".to_string(),
             )]),
@@ -2884,14 +2905,19 @@ ExecuteAction
             &index,
         );
         assert_eq!(findings_invalid.len(), 1);
-        assert_eq!(findings_invalid[0].rule_id, "test-case-verify-requirement-invalid");
-        assert!(findings_invalid[0].message.contains("NonExistentRequirement_99"));
+        assert_eq!(
+            findings_invalid.first().map(|f| f.rule_id.as_str()),
+            Some("test-case-verify-requirement-invalid")
+        );
+        assert!(findings_invalid
+            .first()
+            .is_some_and(|f| f.message.contains("NonExistentRequirement_99")));
 
         // Unbound user story: binds TC_Ghost not in AST
         let ghost_story_doc = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: HashMap::from([(
+            table_metadata: BTreeMap::from([(
                 "sysml_test_case".to_string(),
                 "TC_Ghost".to_string(),
             )]),
@@ -2908,8 +2934,13 @@ ExecuteAction
             &index,
         );
         assert_eq!(findings_ghost.len(), 1);
-        assert_eq!(findings_ghost[0].rule_id, "user-story-test-case-not-in-ast");
-        assert!(findings_ghost[0].message.contains("TC_Ghost"));
+        assert_eq!(
+            findings_ghost.first().map(|f| f.rule_id.as_str()),
+            Some("user-story-test-case-not-in-ast")
+        );
+        assert!(findings_ghost
+            .first()
+            .is_some_and(|f| f.message.contains("TC_Ghost")));
     }
 
     /// Verifies state machine transition name, trigger, and state symbol indexing and state diagram validation.

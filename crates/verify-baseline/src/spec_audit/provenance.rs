@@ -161,7 +161,7 @@ pub const HITL_SENDER_TOKENS: &[&str] = &[
 pub fn is_recognized_unit(token: &str) -> bool {
     let lower = token.trim().to_lowercase();
     let clean = lower.trim_end_matches(&[',', '.', ';', ':', ')', ']', '}'][..]);
-    RECOGNIZED_UNITS.iter().any(|&u| u == clean)
+    RECOGNIZED_UNITS.contains(&clean)
 }
 
 /// Validates whether a token or table cell is a pure scalar numeric value
@@ -217,7 +217,7 @@ pub fn is_pure_scalar_numeric(val: &str) -> bool {
 
     // Must have at least one digit
     let mut has_digits = false;
-    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+    while bytes.get(idx).is_some_and(|b| b.is_ascii_digit()) {
         has_digits = true;
         idx += 1;
     }
@@ -226,20 +226,20 @@ pub fn is_pure_scalar_numeric(val: &str) -> bool {
     }
 
     // Optional decimal point and digits
-    if idx < bytes.len() && bytes[idx] == b'.' {
+    if bytes.get(idx) == Some(&b'.') {
         idx += 1;
-        while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+        while bytes.get(idx).is_some_and(|b| b.is_ascii_digit()) {
             idx += 1;
         }
     }
 
     // Optional exponent (e/E)
-    if idx < bytes.len() && (bytes[idx] == b'e' || bytes[idx] == b'E') {
+    if bytes.get(idx).is_some_and(|&b| b == b'e' || b == b'E') {
         idx += 1;
-        if idx < bytes.len() && (bytes[idx] == b'+' || bytes[idx] == b'-') {
+        if bytes.get(idx).is_some_and(|&b| b == b'+' || b == b'-') {
             idx += 1;
         }
-        while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+        while bytes.get(idx).is_some_and(|b| b.is_ascii_digit()) {
             idx += 1;
         }
     }
@@ -337,20 +337,18 @@ pub fn find_engineering_parameter(line: &str) -> Option<&'static str> {
     let lower = line.to_ascii_lowercase();
     for &param in ENGINEERING_PARAMETER_TERMS {
         if let Some(pos) = lower.find(param) {
-            let before_ok = if pos == 0 {
-                true
-            } else {
-                let prev_b = lower.as_bytes()[pos - 1];
-                !prev_b.is_ascii_alphanumeric() && prev_b != b'_' && prev_b != b'-'
-            };
+            let before_ok = pos == 0
+                || lower
+                    .as_bytes()
+                    .get(pos - 1)
+                    .is_none_or(|&prev_b| !prev_b.is_ascii_alphanumeric() && prev_b != b'_' && prev_b != b'-');
 
             let end = pos + param.len();
-            let after_ok = if end >= lower.len() {
-                true
-            } else {
-                let next_b = lower.as_bytes()[end];
-                !next_b.is_ascii_alphanumeric() && next_b != b'_' && next_b != b'-'
-            };
+            let after_ok = end >= lower.len()
+                || lower
+                    .as_bytes()
+                    .get(end)
+                    .is_none_or(|&next_b| !next_b.is_ascii_alphanumeric() && next_b != b'_' && next_b != b'-');
 
             if before_ok && after_ok {
                 return Some(param);
@@ -394,41 +392,48 @@ pub fn find_naked_numeric_quantities(line: &str) -> Vec<(String, usize)> {
 
     while idx < len {
         // Find digit start
-        if bytes[idx].is_ascii_digit() {
+        if bytes.get(idx).is_some_and(|b| b.is_ascii_digit()) {
             let start = idx;
 
             // Check if this digit is part of an identifier prefix (e.g. REQ-02, FEAT-01, AC-03, v1, PL-40, RS-485, ALPHA5)
             let mut word_start = start;
             while word_start > 0 {
-                let b = bytes[word_start - 1];
+                let Some(&b) = bytes.get(word_start - 1) else {
+                    break;
+                };
                 if b.is_ascii_whitespace() || b == b'[' || b == b'(' || b == b'{' || b == b'<' || b == b'|' {
                     break;
                 }
                 word_start -= 1;
             }
-            let prefix = &bytes[word_start..start];
+            let prefix = bytes.get(word_start..start).unwrap_or_default();
             let is_id_token_prefix = prefix.iter().any(|b| b.is_ascii_alphabetic() || *b == b'_' || *b == b'#');
 
             let mut dot_seen = false;
-            while idx < len && (bytes[idx].is_ascii_digit() || (bytes[idx] == b'.' && !dot_seen && idx + 1 < len && bytes[idx + 1].is_ascii_digit())) {
-                if bytes[idx] == b'.' {
+            while let Some(&b) = bytes.get(idx) {
+                if b.is_ascii_digit() {
+                    idx += 1;
+                } else if b == b'.' && !dot_seen && bytes.get(idx + 1).is_some_and(|nb| nb.is_ascii_digit()) {
                     dot_seen = true;
+                    idx += 1;
+                } else {
+                    break;
                 }
-                idx += 1;
             }
             let end = idx;
 
             // Character after digits: check if it's an identifier suffix (e.g. 5_ControlActions, 40_Actuator, 5pkg)
-            let is_id_token_suffix = if end < len {
-                let b = bytes[end];
+            let is_id_token_suffix = if let Some(&b) = bytes.get(end) {
                 if b == b'_' || b == b'-' {
                     true
                 } else if b.is_ascii_alphabetic() {
                     let mut unit_end = end;
-                    while unit_end < len && (bytes[unit_end].is_ascii_alphanumeric() || bytes[unit_end] == b'/' || bytes[unit_end] == b'^' || bytes[unit_end] == b'%') {
+                    while bytes.get(unit_end).is_some_and(|&ub| {
+                        ub.is_ascii_alphanumeric() || ub == b'/' || ub == b'^' || ub == b'%'
+                    }) {
                         unit_end += 1;
                     }
-                    let unit_candidate = &line[end..unit_end];
+                    let unit_candidate = line.get(end..unit_end).unwrap_or("");
                     !is_recognized_unit(unit_candidate)
                 } else {
                     false
@@ -439,7 +444,7 @@ pub fn find_naked_numeric_quantities(line: &str) -> Vec<(String, usize)> {
 
             // Check if preceding token is an index/label word (e.g. "feature 24", "epic 01", "req 02", "step 3")
             let is_preceded_by_label_word = if word_start > 0 {
-                let before_text = line[..word_start].trim_end();
+                let before_text = line.get(..word_start).unwrap_or("").trim_end();
                 let last_word = before_text.rsplit(|c: char| c.is_whitespace() || c == '|' || c == '*' || c == '`' || c == '#').next().unwrap_or("");
                 let lw_clean = last_word.trim().to_lowercase();
                 matches!(lw_clean.as_str(), "feature" | "feat" | "epic" | "req" | "ac" | "step" | "item" | "section" | "table" | "figure" | "level" | "mode" | "id" | "issue" | "case" | "story" | "check" | "bp" | "blueprint")
@@ -451,59 +456,61 @@ pub fn find_naked_numeric_quantities(line: &str) -> Vec<(String, usize)> {
 
             // Character after digits: if it's alphanumeric, check if it forms a recognized unit
             if !is_identifier && start < end {
-                let num_str = &line[start..end];
+                let num_str = line.get(start..end).unwrap_or("");
 
                 // Skip version strings, ISO dates, section numbers like 1.2 or 3.4.1, labels like 02:,
                 // or outline sub-step labels like 5a., 5e., 5i., 5d., 5a)
-                let is_outline_label = if end < len && bytes[end].is_ascii_alphabetic() {
+                let is_outline_label = if bytes.get(end).is_some_and(|b| b.is_ascii_alphabetic()) {
                     let mut letter_end = end;
-                    while letter_end < len && bytes[letter_end].is_ascii_alphabetic() {
+                    while bytes.get(letter_end).is_some_and(|b| b.is_ascii_alphabetic()) {
                         letter_end += 1;
                     }
                     (letter_end - end <= 2)
-                        && letter_end < len
-                        && (bytes[letter_end] == b'.' || bytes[letter_end] == b')' || bytes[letter_end] == b':')
+                        && bytes.get(letter_end).is_some_and(|&lb| lb == b'.' || lb == b')' || lb == b':')
                 } else {
                     false
                 };
 
-                let is_section_or_label = if end < len && (bytes[end] == b'.' || bytes[end] == b')' || bytes[end] == b':') {
-                    true
-                } else if is_outline_label {
-                    true
-                } else if start > 0 && (bytes[start - 1] == b'.' || bytes[start - 1] == b'v' || bytes[start - 1] == b'V') {
-                    true
-                } else {
-                    false
-                };
+                let is_section_or_label = bytes
+                    .get(end)
+                    .is_some_and(|&eb| eb == b'.' || eb == b')' || eb == b':')
+                    || is_outline_label
+                    || (start > 0
+                        && bytes
+                            .get(start - 1)
+                            .is_some_and(|&pb| pb == b'.' || pb == b'v' || pb == b'V'));
 
                 if !is_section_or_label {
                     // Check if followed immediately or after space by a recognized unit
                     let mut has_unit = false;
 
                     // 1. Attached unit (e.g. "50ms", "250Hz")
-                    if end < len && bytes[end].is_ascii_alphabetic() {
+                    if bytes.get(end).is_some_and(|b| b.is_ascii_alphabetic()) {
                         let mut unit_end = end;
-                        while unit_end < len && (bytes[unit_end].is_ascii_alphanumeric() || bytes[unit_end] == b'/' || bytes[unit_end] == b'^' || bytes[unit_end] == b'%') {
+                        while bytes.get(unit_end).is_some_and(|&ub| {
+                            ub.is_ascii_alphanumeric() || ub == b'/' || ub == b'^' || ub == b'%'
+                        }) {
                             unit_end += 1;
                         }
-                        let unit_candidate = &line[end..unit_end];
+                        let unit_candidate = line.get(end..unit_end).unwrap_or("");
                         if is_recognized_unit(unit_candidate) {
                             has_unit = true;
                         }
-                    } else if end < len && bytes[end] == b'%' {
+                    } else if bytes.get(end) == Some(&b'%') {
                         has_unit = true;
                     } else {
                         // 2. Trailing unit separated by whitespace (e.g. "50 ms", "250 Hz")
-                        let rem = line[end..].trim_start();
+                        let rem = line.get(end..).unwrap_or("").trim_start();
                         if !rem.is_empty() {
                             let mut unit_end = 0;
                             let rem_bytes = rem.as_bytes();
-                            while unit_end < rem_bytes.len() && (rem_bytes[unit_end].is_ascii_alphanumeric() || rem_bytes[unit_end] == b'/' || rem_bytes[unit_end] == b'^' || rem_bytes[unit_end] == b'%') {
+                            while rem_bytes.get(unit_end).is_some_and(|&ub| {
+                                ub.is_ascii_alphanumeric() || ub == b'/' || ub == b'^' || ub == b'%'
+                            }) {
                                 unit_end += 1;
                             }
                             if unit_end > 0 {
-                                let unit_candidate = &rem[..unit_end];
+                                let unit_candidate = rem.get(..unit_end).unwrap_or("");
                                 if is_recognized_unit(unit_candidate) {
                                     has_unit = true;
                                 }
@@ -622,13 +629,12 @@ pub fn is_assertion_grounded(
     // If the document body contains an authoritative Source References section citing normative standards
     // or schema baselines, standard engineering parameters inherit document-level grounding.
     let lower_doc = _content.to_ascii_lowercase();
-    if lower_doc.contains("## source references") || lower_doc.contains("## 6. source references") {
-        if lower_doc.contains("schema/")
+    if (lower_doc.contains("## source references") || lower_doc.contains("## 6. source references"))
+        && (lower_doc.contains("schema/")
             || lower_doc.contains(".sysml")
-            || NORMATIVE_STANDARDS.iter().any(|&std| lower_doc.contains(std))
-        {
-            return true;
-        }
+            || NORMATIVE_STANDARDS.iter().any(|&std| lower_doc.contains(std)))
+    {
+        return true;
     }
 
     false
@@ -719,8 +725,8 @@ pub fn validate_factual_grounding(
                     .map(|c| c.trim())
                     .filter(|c| !c.is_empty())
                     .collect();
-                if parts.len() == 2 {
-                    let k_norm = parts[0].replace(['*', '_', '`'], "").trim().to_lowercase();
+                if let Some(&first_part) = parts.first().filter(|_| parts.len() == 2) {
+                    let k_norm = first_part.replace(['*', '_', '`'], "").trim().to_lowercase();
                     if k_norm == "title"
                         || k_norm == "package"
                         || k_norm == "subsystem"
@@ -920,13 +926,10 @@ pub fn tokenize_words(s: &str) -> Vec<String> {
 /// Realises: [REQ-SPEC-AUDIT-PROVENANCE-PARSE-PARTICIPANT-DECLARATION] | SysML v2: ActionDef(parse_participant_declaration)
 fn parse_participant_declaration(line: &str) -> Option<(String, String)> {
     let trimmed = line.trim();
-    let rest = if let Some(r) = trimmed.strip_prefix("participant ") {
-        r.trim()
-    } else if let Some(r) = trimmed.strip_prefix("actor ") {
-        r.trim()
-    } else {
-        return None;
-    };
+    let rest = trimmed
+        .strip_prefix("participant ")
+        .or_else(|| trimmed.strip_prefix("actor "))?
+        .trim();
 
     if let Some((id, alias_part)) = rest.split_once(" as ") {
         let id_clean = id.trim().trim_matches('"');
@@ -1017,7 +1020,7 @@ fn parse_message_arrow(line: &str) -> Option<(&str, &str, &str)> {
 /// Realises: [REQ-SPEC-AUDIT-PROVENANCE-IS-HITL-SENDER] | SysML v2: ActionDef(is_hitl_sender)
 fn is_hitl_sender(
     sender: &str,
-    participants: &std::collections::HashMap<String, String>,
+    participants: &std::collections::BTreeMap<String, String>,
 ) -> bool {
     let s_norm = normalize_token(sender);
     let alias = participants.get(sender).cloned().unwrap_or_default();
@@ -1167,7 +1170,7 @@ fn is_disarm_action(action: &str) -> bool {
 /// Realises: [REQ-SPEC-AUDIT-PROVENANCE-IS-PHYSICAL-ARMING-TARGET] | SysML v2: ActionDef(is_physical_arming_target)
 fn is_physical_arming_target(
     target: &str,
-    participants: &std::collections::HashMap<String, String>,
+    participants: &std::collections::BTreeMap<String, String>,
 ) -> bool {
     let t_norm = normalize_token(target);
     let alias = participants.get(target).cloned().unwrap_or_default();
@@ -1272,7 +1275,7 @@ pub fn validate_sequence_diagram_temporal_safety(
         }
 
         let mut hitl_consent_granted = false;
-        let mut participants = std::collections::HashMap::new();
+        let mut participants = std::collections::BTreeMap::new();
 
         for (idx, line) in block.raw.lines().enumerate() {
             let curr_lineno = block.start_line + 1 + idx;
@@ -1311,28 +1314,26 @@ pub fn validate_sequence_diagram_temporal_safety(
                 // 4. Check if action is a Physical Arming Action
                 let is_act_arm = is_physical_arming_action(action);
 
-                if is_target_phys && is_act_arm {
-                    if !hitl_consent_granted {
-                        let reported_line = content
-                            .lines()
-                            .enumerate()
-                            .find(|(i, l)| {
-                                let lno = i + 1;
-                                lno >= block.start_line && lno <= block.end_line && l.trim() == trimmed
-                            })
-                            .map(|(i, _)| i + 1)
-                            .unwrap_or(curr_lineno);
+                if is_target_phys && is_act_arm && !hitl_consent_granted {
+                    let reported_line = content
+                        .lines()
+                        .enumerate()
+                        .find(|(i, l)| {
+                            let lno = i + 1;
+                            lno >= block.start_line && lno <= block.end_line && l.trim() == trimmed
+                        })
+                        .map(|(i, _)| i + 1)
+                        .unwrap_or(curr_lineno);
 
-                        findings.push(SpecAuditFinding::new(
-                            "factual-grounding-temporal-safety-violation",
-                            format!(
-                                "Autonomous physical actuation sequence detected in '{}' on line {}. Physical signal '{}' targeting '{}' is not preceded by an explicit Human-in-the-Loop (HITL) authorization command or operator consent.",
-                                rel_path, reported_line, action, target
-                            ),
-                            rel_path,
-                            Some(reported_line),
-                        ));
-                    }
+                    findings.push(SpecAuditFinding::new(
+                        "factual-grounding-temporal-safety-violation",
+                        format!(
+                            "Autonomous physical actuation sequence detected in '{}' on line {}. Physical signal '{}' targeting '{}' is not preceded by an explicit Human-in-the-Loop (HITL) authorization command or operator consent.",
+                            rel_path, reported_line, action, target
+                        ),
+                        rel_path,
+                        Some(reported_line),
+                    ));
                 }
             }
         }
@@ -1367,7 +1368,7 @@ pub fn validate_sequence_diagram_temporal_safety(
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-PROVENANCE-EXTRACT-SOURCE-REFERENCES-SECTION] | SysML v2: ActionDef(extract_source_references_section)
-pub fn extract_source_references_section<'a>(content: &'a str) -> Option<(usize, &'a str)> {
+pub fn extract_source_references_section(content: &str) -> Option<(usize, &str)> {
     let mut target_line = None;
     let mut target_level = 2;
     let mut start_byte = 0;
@@ -1386,7 +1387,7 @@ pub fn extract_source_references_section<'a>(content: &'a str) -> Option<(usize,
                 // Calculate byte offset of start of next line
                 let line_start = line.as_ptr() as usize - content.as_ptr() as usize;
                 start_byte = line_start + line.len();
-                if start_byte < content.len() && content.as_bytes()[start_byte] == b'\n' {
+                if content.as_bytes().get(start_byte) == Some(&b'\n') {
                     start_byte += 1;
                 }
                 break;
@@ -1394,10 +1395,7 @@ pub fn extract_source_references_section<'a>(content: &'a str) -> Option<(usize,
         }
     }
 
-    let line_no = match target_line {
-        Some(l) => l,
-        None => return None,
-    };
+    let line_no = target_line?;
 
     if start_byte >= content.len() {
         return Some((line_no, ""));
@@ -1690,16 +1688,15 @@ pub fn count_epic_features(content: &str) -> usize {
             continue;
         }
 
-        if trimmed.starts_with("- [ ]")
+        if (trimmed.starts_with("- [ ]")
             || trimmed.starts_with("- [x]")
             || trimmed.starts_with("- [X]")
             || trimmed.starts_with("* [ ]")
             || trimmed.starts_with("* [x]")
-            || trimmed.starts_with("* [X]")
+            || trimmed.starts_with("* [X]"))
+            && is_valid_epic_feature_checklist_item(trimmed)
         {
-            if is_valid_epic_feature_checklist_item(trimmed) {
-                count += 1;
-            }
+            count += 1;
         }
     }
 
@@ -1777,10 +1774,19 @@ pub fn count_feature_acceptance_criteria(content: &str) -> usize {
             if !after_box.starts_with('#') {
                 count += 1;
             }
-        } else if in_ac_section && (trimmed.starts_with('-') || trimmed.starts_with('*') || (trimmed.len() >= 2 && trimmed.as_bytes()[0].is_ascii_digit() && trimmed.as_bytes()[1] == b'.')) {
-            if lower.contains("ac-") || lower.contains("req-") || lower.contains("shall") || lower.contains("given") || lower.contains("when") || lower.contains("then") {
-                count += 1;
-            }
+        } else if in_ac_section
+            && (trimmed.starts_with('-')
+                || trimmed.starts_with('*')
+                || (trimmed.as_bytes().first().is_some_and(|b| b.is_ascii_digit())
+                    && trimmed.as_bytes().get(1) == Some(&b'.')))
+            && (lower.contains("ac-")
+                || lower.contains("req-")
+                || lower.contains("shall")
+                || lower.contains("given")
+                || lower.contains("when")
+                || lower.contains("then"))
+        {
+            count += 1;
         }
     }
 
@@ -1971,7 +1977,8 @@ mod tests {
     }
 
     #[test]
-    fn test_factual_grounding_with_valid_units_and_grounding_passes() {
+    fn test_factual_grounding_with_valid_units_and_grounding_passes(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"---
 title: "Feature 01: Telemetry Stream"
 type: feature
@@ -1991,16 +1998,16 @@ type: feature
 ## Source References
 Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
 "#;
-        let doc = parse_markdown(content).expect("parse markdown");
+        let doc = parse_markdown(content)?;
         let index = build_test_symbol_index();
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-01.md", Some(&index), &[], &[])
-            .expect("validation succeeds");
+        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-01.md", Some(&index), &[], &[])?;
 
         assert!(findings.is_empty(), "Expected no findings, got: {:?}", findings);
+        Ok(())
     }
 
     #[test]
-    fn test_factual_grounding_missing_units_fails() {
+    fn test_factual_grounding_missing_units_fails() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"---
 title: "Feature 01: Telemetry Stream"
 type: feature
@@ -2015,81 +2022,88 @@ type: feature
 ## Source References
 Derived from schema/model.sysml §4.1.
 "#;
-        let doc = parse_markdown(content).expect("parse markdown");
+        let doc = parse_markdown(content)?;
         let index = build_test_symbol_index();
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-01.md", Some(&index), &[], &[])
-            .expect("validation succeeds");
+        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-01.md", Some(&index), &[], &[])?;
 
         let missing_units: Vec<_> = findings.iter().filter(|f| f.rule_id == "factual-grounding-missing-unit").collect();
         assert!(!missing_units.is_empty(), "Expected missing unit findings");
         assert!(missing_units.iter().any(|f| f.message.contains("250")));
         assert!(missing_units.iter().any(|f| f.message.contains("50")));
         assert!(missing_units.iter().any(|f| f.message.contains("12")));
+        Ok(())
     }
 
     #[test]
-    fn test_source_reference_clause_integrity_passes() {
+    fn test_source_reference_clause_integrity_passes() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Feature 01: Flight Guidance
 
 ## Source References
 Normative standards baseline: ISO/IEC/IEEE 29148:2018 §6.4.2 and schema/model.sysml.
 "#;
-        let doc = parse_markdown(content).expect("parse markdown");
-        let findings = validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")
-            .expect("validation succeeds");
+        let doc = parse_markdown(content)?;
+        let findings = validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")?;
 
         assert!(findings.is_empty(), "Expected clean source references, got: {:?}", findings);
+        Ok(())
     }
 
     #[test]
-    fn test_source_reference_missing_section_fails() {
+    fn test_source_reference_missing_section_fails() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Feature 01: Flight Guidance
 
 ## Description
 This spec lacks a source references section.
 "#;
-        let doc = parse_markdown(content).expect("parse markdown");
-        let findings = validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")
-            .expect("validation succeeds");
+        let doc = parse_markdown(content)?;
+        let findings = validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")?;
 
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].rule_id, "source-reference-section-missing");
+        assert_eq!(
+            findings.first().map(|f| f.rule_id.as_str()),
+            Some("source-reference-section-missing")
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_source_reference_empty_section_fails() {
+    fn test_source_reference_empty_section_fails() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Feature 01: Flight Guidance
 
 ## Source References
 
 ## Next Section
 "#;
-        let doc = parse_markdown(content).expect("parse markdown");
-        let findings = validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")
-            .expect("validation succeeds");
+        let doc = parse_markdown(content)?;
+        let findings = validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")?;
 
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].rule_id, "source-reference-section-empty");
+        assert_eq!(
+            findings.first().map(|f| f.rule_id.as_str()),
+            Some("source-reference-section-empty")
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_source_reference_placeholder_and_self_referential_fails() {
+    fn test_source_reference_placeholder_and_self_referential_fails(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Feature 01: Flight Guidance
 
 ## Source References
 - Schema: [link-to-schema](docs/features/feat-01.md)
 - {{TODO: Populate external citation}}
 "#;
-        let doc = parse_markdown(content).expect("parse markdown");
-        let findings = validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")
-            .expect("validation succeeds");
+        let doc = parse_markdown(content)?;
+        let findings = validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")?;
 
         assert!(findings.iter().any(|f| f.rule_id == "source-reference-placeholder-detected"));
         assert!(findings.iter().any(|f| f.rule_id == "source-reference-self-referential"));
+        Ok(())
     }
 
     #[test]
-    fn test_cardinality_bounds_epic_bounds() {
+    fn test_cardinality_bounds_epic_bounds() -> Result<(), Box<dyn std::error::Error>> {
         // Underflow: 1 feature
         let underflow_content = r#"---
 type: epic
@@ -2099,9 +2113,8 @@ type: epic
 ## Requirements & Checklist
 - [ ] #10 - [Feature 01: Single feature](../features/FEAT-01.md) (traceable requirement)
 "#;
-        let doc1 = parse_markdown(underflow_content).expect("parse markdown");
-        let findings1 = validate_cardinality_bounds(&doc1, underflow_content, "docs/epics/epic-01.md")
-            .expect("validation succeeds");
+        let doc1 = parse_markdown(underflow_content)?;
+        let findings1 = validate_cardinality_bounds(&doc1, underflow_content, "docs/epics/epic-01.md")?;
         assert!(findings1.iter().any(|f| f.rule_id == "cardinality-bounds-epic-underflow"));
 
         // Nominal: 4 features
@@ -2116,9 +2129,8 @@ type: epic
 - [ ] #12 - [Feature 03: Feature 3](../features/FEAT-03.md) (traceable requirement)
 - [ ] #13 - [Feature 04: Feature 4](../features/FEAT-04.md) (traceable requirement)
 "#;
-        let doc2 = parse_markdown(nominal_content).expect("parse markdown");
-        let findings2 = validate_cardinality_bounds(&doc2, nominal_content, "docs/epics/epic-01.md")
-            .expect("validation succeeds");
+        let doc2 = parse_markdown(nominal_content)?;
+        let findings2 = validate_cardinality_bounds(&doc2, nominal_content, "docs/epics/epic-01.md")?;
         assert!(findings2.is_empty(), "Nominal epic features should pass: {:?}", findings2);
 
         // Overflow: 16 features
@@ -2134,14 +2146,14 @@ type: epic
             overflow_lines.push(format!("- [ ] #{i} - [Feature {i:02}: Feature {i}](../features/FEAT-{i:02}.md) (traceable requirement)"));
         }
         let overflow_content = overflow_lines.join("\n");
-        let doc3 = parse_markdown(&overflow_content).expect("parse markdown");
-        let findings3 = validate_cardinality_bounds(&doc3, &overflow_content, "docs/epics/epic-01.md")
-            .expect("validation succeeds");
+        let doc3 = parse_markdown(&overflow_content)?;
+        let findings3 = validate_cardinality_bounds(&doc3, &overflow_content, "docs/epics/epic-01.md")?;
         assert!(findings3.iter().any(|f| f.rule_id == "cardinality-bounds-epic-overflow"));
+        Ok(())
     }
 
     #[test]
-    fn test_cardinality_bounds_feature_bounds() {
+    fn test_cardinality_bounds_feature_bounds() -> Result<(), Box<dyn std::error::Error>> {
         // Underflow: 1 criterion
         let underflow_content = r#"---
 type: feature
@@ -2151,9 +2163,8 @@ type: feature
 ## Acceptance Criteria
 - [ ] AC-01: Single criterion
 "#;
-        let doc1 = parse_markdown(underflow_content).expect("parse markdown");
-        let findings1 = validate_cardinality_bounds(&doc1, underflow_content, "docs/features/feat-01.md")
-            .expect("validation succeeds");
+        let doc1 = parse_markdown(underflow_content)?;
+        let findings1 = validate_cardinality_bounds(&doc1, underflow_content, "docs/features/feat-01.md")?;
         assert!(findings1.iter().any(|f| f.rule_id == "cardinality-bounds-feature-underflow"));
 
         // Nominal: 5 criteria
@@ -2169,9 +2180,8 @@ type: feature
 - [ ] AC-04: Criterion 4
 - [ ] AC-05: Criterion 5
 "#;
-        let doc2 = parse_markdown(nominal_content).expect("parse markdown");
-        let findings2 = validate_cardinality_bounds(&doc2, nominal_content, "docs/features/feat-01.md")
-            .expect("validation succeeds");
+        let doc2 = parse_markdown(nominal_content)?;
+        let findings2 = validate_cardinality_bounds(&doc2, nominal_content, "docs/features/feat-01.md")?;
         assert!(findings2.is_empty(), "Nominal criteria should pass: {:?}", findings2);
 
         // Overflow: 11 criteria
@@ -2187,14 +2197,15 @@ type: feature
             overflow_lines.push(format!("- [ ] AC-{:02}: Criterion {}", i, i));
         }
         let overflow_content = overflow_lines.join("\n");
-        let doc3 = parse_markdown(&overflow_content).expect("parse markdown");
-        let findings3 = validate_cardinality_bounds(&doc3, &overflow_content, "docs/features/feat-01.md")
-            .expect("validation succeeds");
+        let doc3 = parse_markdown(&overflow_content)?;
+        let findings3 = validate_cardinality_bounds(&doc3, &overflow_content, "docs/features/feat-01.md")?;
         assert!(findings3.iter().any(|f| f.rule_id == "cardinality-bounds-feature-overflow"));
+        Ok(())
     }
 
     #[test]
-    fn test_reproduce_defect_213_package_digits_and_metadata_table_contradiction() {
+    fn test_reproduce_defect_213_package_digits_and_metadata_table_contradiction(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"| Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #10 |
@@ -2222,12 +2233,11 @@ type: feature
 ## Source References
 Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
 "#;
-        let doc = parse_markdown(content).expect("parse markdown");
+        let doc = parse_markdown(content)?;
         let index = build_test_symbol_index();
 
         // 1. Cardinality bounds must read 'type' from CommonMark metadata table (not just YAML frontmatter)
-        let cb_findings = validate_cardinality_bounds(&doc, content, "specifications/feat-custom-path.md")
-            .expect("cardinality validation succeeds");
+        let cb_findings = validate_cardinality_bounds(&doc, content, "specifications/feat-custom-path.md")?;
         assert!(
             cb_findings.is_empty(),
             "Expected 0 cardinality findings for nominal 3 criteria, but got: {:?}",
@@ -2235,14 +2245,14 @@ Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
         );
 
         // 2. Factual grounding must NOT treat metadata table rows or package-name digits as claimed parameters / naked numbers
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-24.md", Some(&index), &[], &[])
-            .expect("validation succeeds");
+        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-24.md", Some(&index), &[], &[])?;
 
         assert!(
             findings.is_empty(),
             "Expected 0 factual grounding findings, but package-name digits were erroneously extracted: {:?}",
             findings
         );
+        Ok(())
     }
 
     #[test]
@@ -2288,7 +2298,8 @@ Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
     }
 
     #[test]
-    fn test_concept_provenance_abstract_structural_property_graph() {
+    fn test_concept_provenance_abstract_structural_property_graph(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"---
 title: "Feature 30: Abstract Structural Topology"
 type: feature
@@ -2315,20 +2326,21 @@ type: feature
 ## Source References
 Derived from schema/model.sysml §2.1 and ISO/IEC/IEEE 15288:2023.
 "#;
-        let doc = parse_markdown(content).expect("parse markdown");
+        let doc = parse_markdown(content)?;
         let index = build_test_symbol_index();
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-30.md", Some(&index), &[], &[])
-            .expect("validation succeeds");
+        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-30.md", Some(&index), &[], &[])?;
 
         assert!(
             findings.is_empty(),
             "Abstract structural property graph should pass without domain bias: {:?}",
             findings
         );
+        Ok(())
     }
 
     #[test]
-    fn test_concept_provenance_orthogonal_actuator_fixtures() {
+    fn test_concept_provenance_orthogonal_actuator_fixtures(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"---
 title: "Feature 31: Orthogonal Actuator Subsystem Control"
 type: feature
@@ -2348,20 +2360,21 @@ type: feature
 ## Source References
 Derived from schema/model.sysml and ISO/IEC/IEEE 15026-3.
 "#;
-        let doc = parse_markdown(content).expect("parse markdown");
+        let doc = parse_markdown(content)?;
         let index = build_test_symbol_index();
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-31.md", Some(&index), &[], &[])
-            .expect("validation succeeds");
+        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-31.md", Some(&index), &[], &[])?;
 
         assert!(
             findings.is_empty(),
             "Orthogonal actuator fixture should validate cleanly without domain bias: {:?}",
             findings
         );
+        Ok(())
     }
 
     #[test]
-    fn test_concept_provenance_multi_channel_actuation_architecture() {
+    fn test_concept_provenance_multi_channel_actuation_architecture(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"---
 title: "Feature 32: Multi-Channel Actuation Architecture"
 type: feature
@@ -2381,20 +2394,21 @@ type: feature
 ## Source References
 Derived from schema/model.sysml and ISO/IEC/IEEE 12207:2017.
 "#;
-        let doc = parse_markdown(content).expect("parse markdown");
+        let doc = parse_markdown(content)?;
         let index = build_test_symbol_index();
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-32.md", Some(&index), &[], &[])
-            .expect("validation succeeds");
+        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-32.md", Some(&index), &[], &[])?;
 
         assert!(
             findings.is_empty(),
             "Multi-channel actuation architecture fixture should validate cleanly: {:?}",
             findings
         );
+        Ok(())
     }
 
     #[test]
-    fn test_concept_provenance_fails_on_unverified_domain_claim() {
+    fn test_concept_provenance_fails_on_unverified_domain_claim(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"---
 title: "Feature 33: Ungrounded Domain Claim"
 type: feature
@@ -2407,22 +2421,23 @@ type: feature
 ## Description
 This spec lacks normative citations and schema grounding for its operational velocity parameter.
 "#;
-        let doc = parse_markdown(content).expect("parse markdown");
+        let doc = parse_markdown(content)?;
         let index = build_test_symbol_index();
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-33.md", Some(&index), &[], &[])
-            .expect("validation succeeds");
+        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-33.md", Some(&index), &[], &[])?;
 
         assert!(
             findings.iter().any(|f| f.rule_id == "factual-grounding-ungrounded-assertion"),
             "Expected ungrounded assertion finding for unverified claim, got: {:?}",
             findings
         );
+        Ok(())
     }
 
     #[test]
-    fn test_autonomous_arming_sequence_diagram_detected_and_rejected() {
+    fn test_autonomous_arming_sequence_diagram_detected_and_rejected(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = include_str!("../../../../tests/fixtures/safety/autonomous_arming_usecase.md");
-        let doc = parse_markdown(content).expect("parse markdown");
+        let doc = parse_markdown(content)?;
         let findings = validate_sequence_diagram_temporal_safety(&doc, content, "tests/fixtures/safety/autonomous_arming_usecase.md");
 
         assert!(
@@ -2442,12 +2457,14 @@ This spec lacks normative citations and schema grounding for its operational vel
             violations.iter().any(|f| f.message.contains("Autonomous physical actuation sequence detected")),
             "Violation message must explain autonomous physical actuation sequence"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_hitl_authorized_arming_sequence_diagram_passes() {
+    fn test_hitl_authorized_arming_sequence_diagram_passes(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = include_str!("../../../../tests/fixtures/safety/hitl_arming_usecase.md");
-        let doc = parse_markdown(content).expect("parse markdown");
+        let doc = parse_markdown(content)?;
         let findings = validate_sequence_diagram_temporal_safety(&doc, content, "tests/fixtures/safety/hitl_arming_usecase.md");
 
         let violations: Vec<_> = findings
@@ -2459,10 +2476,12 @@ This spec lacks normative citations and schema grounding for its operational vel
             "HITL authorized actuation sequence fixture must pass temporal safety validator, got: {:?}",
             violations
         );
+        Ok(())
     }
 
     #[test]
-    fn test_conops_scn_05_sequence_diagram_passes_temporal_safety() {
+    fn test_conops_scn_05_sequence_diagram_passes_temporal_safety(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# ConOps
 ```mermaid
 sequenceDiagram
@@ -2483,13 +2502,14 @@ sequenceDiagram
     Controller ->> Sensors: 8. Maintain Continuous Stream Calibration
 ```
 "#;
-        let doc = parse_markdown(content).expect("parse markdown");
+        let doc = parse_markdown(content)?;
         let findings = validate_sequence_diagram_temporal_safety(&doc, content, "docs/conops/SCN-05.md");
         assert!(
             findings.is_empty(),
             "SCN-05 sequence diagram should pass temporal safety without violations: {:?}",
             findings
         );
+        Ok(())
     }
 
     #[test]

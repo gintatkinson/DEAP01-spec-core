@@ -6,7 +6,7 @@
 //! using pure byte, slice, and token validation.
 
 use crate::spec_audit::markdown_ast::MarkdownDoc;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Validates whether a string is a valid ISO 8601 calendar date (YYYY-MM-DD).
 ///
@@ -40,32 +40,38 @@ pub fn is_iso_date(s: &str) -> bool {
     if bytes.len() != 10 {
         return false;
     }
-    if bytes[4] != b'-' || bytes[7] != b'-' {
+    if bytes.get(4) != Some(&b'-') || bytes.get(7) != Some(&b'-') {
         return false;
     }
 
-    if !bytes[0..4].iter().all(|b| b.is_ascii_digit())
-        || !bytes[5..7].iter().all(|b| b.is_ascii_digit())
-        || !bytes[8..10].iter().all(|b| b.is_ascii_digit())
+    let (Some(y_bytes), Some(m_bytes), Some(d_bytes)) =
+        (bytes.get(0..4), bytes.get(5..7), bytes.get(8..10))
+    else {
+        return false;
+    };
+
+    if !y_bytes.iter().all(|b| b.is_ascii_digit())
+        || !m_bytes.iter().all(|b| b.is_ascii_digit())
+        || !d_bytes.iter().all(|b| b.is_ascii_digit())
     {
         return false;
     }
 
-    let year = match std::str::from_utf8(&bytes[0..4])
+    let year = match std::str::from_utf8(y_bytes)
         .ok()
         .and_then(|p| p.parse::<u32>().ok())
     {
         Some(y) => y,
         None => return false,
     };
-    let month = match std::str::from_utf8(&bytes[5..7])
+    let month = match std::str::from_utf8(m_bytes)
         .ok()
         .and_then(|p| p.parse::<u32>().ok())
     {
         Some(m) => m,
         None => return false,
     };
-    let day = match std::str::from_utf8(&bytes[8..10])
+    let day = match std::str::from_utf8(d_bytes)
         .ok()
         .and_then(|p| p.parse::<u32>().ok())
     {
@@ -73,7 +79,7 @@ pub fn is_iso_date(s: &str) -> bool {
         None => return false,
     };
 
-    if year < 1970 || year > 2100 || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+    if !(1970..=2100).contains(&year) || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
         return false;
     }
     true
@@ -120,8 +126,8 @@ pub fn is_semver(s: &str) -> bool {
         return false;
     }
 
-    let (version_core, prerelease) = match rest.find(|c| c == '-' || c == '+') {
-        Some(idx) => (&rest[..idx], Some(&rest[idx + 1..])),
+    let (version_core, prerelease) = match rest.find(['-', '+']) {
+        Some(idx) => (rest.get(..idx).unwrap_or(rest), rest.get(idx + 1..)),
         None => (rest, None),
     };
 
@@ -229,14 +235,21 @@ pub fn has_concatenated_title_metadata(val: &str) -> bool {
     let bytes = trimmed.as_bytes();
     if bytes.len() >= 10 {
         for i in 0..=bytes.len() - 10 {
-            if bytes[i + 4] == b'-' && bytes[i + 7] == b'-' {
-                if let Ok(slice) = std::str::from_utf8(&bytes[i..i + 10]) {
-                    if is_iso_date(slice) {
-                        let before_ok = i == 0 || !bytes[i - 1].is_ascii_alphanumeric();
-                        let after_ok =
-                            i + 10 == bytes.len() || !bytes[i + 10].is_ascii_alphanumeric();
-                        if before_ok && after_ok {
-                            return true;
+            if bytes.get(i + 4) == Some(&b'-') && bytes.get(i + 7) == Some(&b'-') {
+                if let Some(sub) = bytes.get(i..i + 10) {
+                    if let Ok(slice) = std::str::from_utf8(sub) {
+                        if is_iso_date(slice) {
+                            let before_ok = i == 0
+                                || bytes
+                                    .get(i - 1)
+                                    .is_none_or(|b| !b.is_ascii_alphanumeric());
+                            let after_ok = i + 10 == bytes.len()
+                                || bytes
+                                    .get(i + 10)
+                                    .is_none_or(|b| !b.is_ascii_alphanumeric());
+                            if before_ok && after_ok {
+                                return true;
+                            }
                         }
                     }
                 }
@@ -352,7 +365,7 @@ pub fn check_title_anti_stutter(title: &str) -> Option<String> {
             let redundant_sub_prefixes = ["uc", "epic", "feat", "us"];
             for sub in &redundant_sub_prefixes {
                 if let Some(rem) = after_colon.strip_prefix(sub) {
-                    let rem_clean = rem.trim_start_matches(|c: char| c == ' ' || c == '-' || c == '_');
+                    let rem_clean = rem.trim_start_matches([' ', '-', '_']);
                     let digit_count = rem_clean.bytes().take_while(|b| b.is_ascii_digit()).count();
                     if digit_count > 0 {
                         return Some(format!(
@@ -464,7 +477,7 @@ pub fn check_filename_anti_stutter(filename: &str) -> Option<String> {
                         ));
                     }
                     if let Some(rem_slug) = slug.strip_prefix(p) {
-                        let rem_clean = rem_slug.trim_start_matches(|c: char| c == '_' || c == '-');
+                        let rem_clean = rem_slug.trim_start_matches(['_', '-']);
                         let slug_digits = rem_clean.bytes().take_while(|b| b.is_ascii_digit()).count();
                         if slug_digits > 0 {
                             return Some(format!(
@@ -584,7 +597,7 @@ pub fn normalize_title(title: &str) -> String {
         stripped
     };
 
-    let separators_replaced = working.replace('-', " ").replace('_', " ");
+    let separators_replaced = working.replace(['-', '_'], " ");
 
     let filtered: String = separators_replaced
         .chars()
@@ -651,7 +664,7 @@ pub fn validate_metadata(
         .position(|l| l.trim() == "| Attribute | Specification Detail |");
     match header_pos {
         Some(pos) => {
-            for (idx, prev_line) in lines[..pos].iter().enumerate() {
+            for (idx, prev_line) in lines.get(..pos).unwrap_or_default().iter().enumerate() {
                 let t = prev_line.trim();
                 if !t.is_empty() && !t.starts_with("<!--") {
                     errors.push(format!(
@@ -662,7 +675,10 @@ pub fn validate_metadata(
                     break;
                 }
             }
-            if pos + 1 >= lines.len() || lines[pos + 1].trim() != "| :--- | :--- |" {
+            if lines
+                .get(pos + 1)
+                .is_none_or(|l| l.trim() != "| :--- | :--- |")
+            {
                 errors.push(format!(
                     "{}: Invalid metadata table separator row at line {}. Expected '| :--- | :--- |'.",
                     rel_path,
@@ -894,7 +910,7 @@ pub fn validate_metadata(
 /// Realises: [REQ-SPEC-AUDIT-METADATA-VALIDATE-TITLE-UNIQUENESS] | SysML v2: ActionDef(validate_title_uniqueness)
 pub fn validate_title_uniqueness(docs: &[(String, String, MarkdownDoc)]) -> Vec<String> {
     let mut errors = Vec::new();
-    let mut claims: HashMap<(String, String), Vec<(&str, &str)>> = HashMap::new();
+    let mut claims: BTreeMap<(String, String), Vec<(&str, &str)>> = BTreeMap::new();
 
     for (spec_type, rel_path, doc) in docs {
         let norm_spec_type = match spec_type.to_lowercase().as_str() {
@@ -939,7 +955,7 @@ pub fn validate_title_uniqueness(docs: &[(String, String, MarkdownDoc)]) -> Vec<
 
     for key in sorted_keys {
         if let Some(colliding) = claims.get(&key) {
-            if colliding.len() > 1 {
+            if let Some(first_claim) = colliding.first().filter(|_| colliding.len() > 1) {
                 let (spec_type, norm_title) = &key;
                 let listed = colliding
                     .iter()
@@ -949,7 +965,7 @@ pub fn validate_title_uniqueness(docs: &[(String, String, MarkdownDoc)]) -> Vec<
 
                 errors.push(format!(
                     "{}: duplicate {} title -- {} specifications normalise to '{}' ({}). reconcile_backlog.py addresses tracker issues by normalised title, so duplicate titles collide.",
-                    colliding[0].0,
+                    first_claim.0,
                     spec_type,
                     colliding.len(),
                     norm_title,
@@ -1001,8 +1017,8 @@ pub fn validate_filenames(spec_type: &str, filenames: &[&str], dir_rel: &str) ->
         _ => spec_type,
     };
 
-    let mut by_ordinal: HashMap<u64, Vec<&str>> = HashMap::new();
-    let mut widths: HashMap<usize, Vec<&str>> = HashMap::new();
+    let mut by_ordinal: BTreeMap<u64, Vec<&str>> = BTreeMap::new();
+    let mut widths: BTreeMap<usize, Vec<&str>> = BTreeMap::new();
 
     for &name in filenames {
         if name.starts_with('.') || !name.ends_with(".md") || name == "README.md" {
@@ -1197,11 +1213,11 @@ mod tests {
     }
 
     #[test]
-    fn test_title_uniqueness_detected() {
+    fn test_title_uniqueness_detected() -> Result<(), Box<dyn std::error::Error>> {
         let content1 = "# EPIC-01: Core Architecture\n";
         let content2 = "# EPIC-02: Core Architecture\n";
-        let doc1 = parse_markdown(content1).unwrap();
-        let doc2 = parse_markdown(content2).unwrap();
+        let doc1 = parse_markdown(content1)?;
+        let doc2 = parse_markdown(content2)?;
 
         let docs = vec![
             ("epic".to_string(), "docs/epics/epic-01.md".to_string(), doc1),
@@ -1210,7 +1226,8 @@ mod tests {
 
         let errors = validate_title_uniqueness(&docs);
         assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("duplicate epic title"));
+        assert!(errors.first().is_some_and(|e| e.contains("duplicate epic title")));
+        Ok(())
     }
 
     #[test]
@@ -1222,12 +1239,14 @@ mod tests {
         let duplicate_ordinal = ["feat-01-login.md", "feat-01-duplicate.md"];
         let errors = validate_filenames("feature", &duplicate_ordinal, "docs/features");
         assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("duplicate ordinal"));
+        assert!(errors.first().is_some_and(|e| e.contains("duplicate ordinal")));
 
         let mixed_padding = ["feat-01-login.md", "feat-002-logout.md"];
         let errors = validate_filenames("feature", &mixed_padding, "docs/features");
         assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("inconsistent ordinal padding width"));
+        assert!(errors
+            .first()
+            .is_some_and(|e| e.contains("inconsistent ordinal padding width")));
     }
 
     #[test]
@@ -1265,7 +1284,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_metadata_generation_mode_variants() {
+    fn test_validate_metadata_generation_mode_variants() -> Result<(), Box<dyn std::error::Error>> {
         let template = |key: &str, val: &str| format!(
             r#"| Attribute | Specification Detail |
 | :--- | :--- |
@@ -1294,7 +1313,7 @@ mod tests {
 
         for (k, v) in variants {
             let md = template(k, v);
-            let doc = parse_markdown(&md).expect("parse markdown");
+            let doc = parse_markdown(&md)?;
             let errors = validate_metadata("feature", &doc, &md, "docs/features/feat-01-telemetry.md");
             assert!(
                 errors.is_empty(),
@@ -1303,6 +1322,7 @@ mod tests {
                 errors
             );
         }
+        Ok(())
     }
 }
 

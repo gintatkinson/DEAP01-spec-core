@@ -281,10 +281,10 @@ pub fn extract_checklist_title_and_issue(raw_text: &str) -> (Option<u64>, String
         let bytes = trimmed.as_bytes();
         let mut i = 0;
         while i < bytes.len() {
-            if bytes[i] == b'#' {
+            if bytes.get(i).copied() == Some(b'#') {
                 let start = i + 1;
                 let mut end = start;
-                while end < bytes.len() && bytes[end].is_ascii_digit() {
+                while bytes.get(end).is_some_and(u8::is_ascii_digit) {
                     end += 1;
                 }
                 if end > start {
@@ -431,27 +431,27 @@ pub fn clean_unpopulated_placeholders_counted(content: &str) -> (String, usize) 
         let forward_bytes = forward_slice.as_bytes();
         let mut i = 0;
         // Skip horizontal spaces/tabs
-        while i < forward_bytes.len() && (forward_bytes[i] == b' ' || forward_bytes[i] == b'\t') {
+        while forward_bytes.get(i).is_some_and(|&b| b == b' ' || b == b'\t') {
             i += 1;
         }
         // Skip optional ')'
-        if i < forward_bytes.len() && forward_bytes[i] == b')' {
+        if forward_bytes.get(i).copied() == Some(b')') {
             i += 1;
         }
         // Skip horizontal spaces/tabs
-        while i < forward_bytes.len() && (forward_bytes[i] == b' ' || forward_bytes[i] == b'\t') {
+        while forward_bytes.get(i).is_some_and(|&b| b == b' ' || b == b'\t') {
             i += 1;
         }
         // Skip closing markdown emphasis: '*' or '_'
-        while i < forward_bytes.len() && (forward_bytes[i] == b'*' || forward_bytes[i] == b'_') {
+        while forward_bytes.get(i).is_some_and(|&b| b == b'*' || b == b'_') {
             i += 1;
         }
         // Skip optional ')' (in case formatted like (*...*))
-        if i < forward_bytes.len() && forward_bytes[i] == b')' {
+        if forward_bytes.get(i).copied() == Some(b')') {
             i += 1;
         }
         // Skip trailing horizontal spaces/tabs up to newline
-        while i < forward_bytes.len() && (forward_bytes[i] == b' ' || forward_bytes[i] == b'\t') {
+        while forward_bytes.get(i).is_some_and(|&b| b == b' ' || b == b'\t') {
             i += 1;
         }
         let end_idx = pos + cur_offset + i;
