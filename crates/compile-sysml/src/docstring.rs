@@ -129,6 +129,252 @@ impl DocstringExitCode {
     }
 }
 
+/// Typed algebraic error classification for safety docstring synthesis and injection (`FEAT-42` Section 2.2, refs `#512`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and FEAT-42 Section 2.2 deterministic fault classification (`DocstringError`).
+/// Distinguishes filesystem I/O failures (`Io`), source syntax validation errors (`Parse`), and unforced
+/// requirement traceability conflicts (`UnforcedConflict`) at the type level without fragile string-prefix inspection.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `Io(_)` and `Parse(_)` map algebraically to `DocstringExitCode::Error` (`1`).
+/// - `UnforcedConflict(_)` maps algebraically to `DocstringExitCode::IdempotencyOrConflict` (`2`).
+/// - Implements `Deref<Target = str>` and `Display` so callers can inspect diagnostic messages transparently.
+///
+/// ## 3. Preconditions
+/// - Constructed with a non-empty human-readable diagnostic message describing the I/O, parse, or conflict condition.
+///
+/// ## 4. Postconditions
+/// - Preserves both the algebraic failure category and the diagnostic payload across call boundaries.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) variant construction and discriminant matching.
+/// - Space Complexity: O(M) where M is the byte length of the owned diagnostic string.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Exhaustive enum variants eliminate ad-hoc string prefix matching.
+/// - State: Immutable value semantics after construction.
+/// - Action: Deterministic exit code projection via `DocstringError::exit_code`.
+/// - Resource: Single `String` heap allocation per error instance.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-DOCSTRING-ERROR-ENUM]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DocstringError {
+    /// Filesystem read/write or directory traversal error (maps to `DocstringExitCode::Error` = `1`).
+    Io(String),
+    /// Source syntax or delimiter balance validation error (maps to `DocstringExitCode::Error` = `1`).
+    Parse(String),
+    /// Conflicting unforced `Realises:` docstring requirement tag (maps to `DocstringExitCode::IdempotencyOrConflict` = `2`).
+    UnforcedConflict(String),
+}
+
+impl DocstringError {
+    /// Maps this `DocstringError` variant deterministically to its normative `DocstringExitCode`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and FEAT-42 Section 2.2 exit code contract (`DocstringError::exit_code`).
+    /// Guarantees that `Io` and `Parse` errors exit with status `1` (`DocstringExitCode::Error`) while
+    /// `UnforcedConflict` errors exit with status `2` (`DocstringExitCode::IdempotencyOrConflict`).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Total Partition: `Io(_) | Parse(_) -> DocstringExitCode::Error`, `UnforcedConflict(_) -> DocstringExitCode::IdempotencyOrConflict`.
+    ///
+    /// ## 3. Preconditions
+    /// - `self: &DocstringError` is a valid initialized `DocstringError` reference.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns the corresponding `DocstringExitCode` variant without inspecting message text.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) constant-time discriminant match.
+    /// - Space Complexity: O(1) zero heap allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Infallible `const fn` over a closed enum.
+    /// - State: Pure read-only discriminant projection.
+    /// - Action: Zero panics or branches on diagnostic message formatting.
+    /// - Resource: Zero memory allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-DOCSTRING-ERROR-EXIT-CODE]
+    pub const fn exit_code(&self) -> DocstringExitCode {
+        match self {
+            Self::Io(_) | Self::Parse(_) => DocstringExitCode::Error,
+            Self::UnforcedConflict(_) => DocstringExitCode::IdempotencyOrConflict,
+        }
+    }
+
+    /// Borrows the underlying diagnostic message slice from `self`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A diagnostic reporting (`DocstringError::as_str`).
+    /// Provides zero-copy borrowed access to the error message payload across all `DocstringError` variants.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Returns the exact `&str` slice stored inside `Io(msg)`, `Parse(msg)`, or `UnforcedConflict(msg)`.
+    ///
+    /// ## 3. Preconditions
+    /// - `self: &DocstringError` is a valid borrowed error value.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a borrowed `&str` with lifetime bound to `self`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) pointer projection.
+    /// - Space Complexity: O(1) zero allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total match across all three variants.
+    /// - State: Read-only borrow; never mutates `self`.
+    /// - Action: Cannot panic.
+    /// - Resource: Zero heap overhead.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-DOCSTRING-ERROR-AS-STR]
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Io(msg) | Self::Parse(msg) | Self::UnforcedConflict(msg) => msg.as_str(),
+        }
+    }
+
+    /// Consumes `self` and returns the owned diagnostic `String` message.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A zero-clone error propagation (`DocstringError::into_message`).
+    /// Moves the inner diagnostic `String` out of `DocstringError` when constructing CLI exit tuples.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves byte-for-byte identity with `self.as_str()` without reallocating or cloning.
+    ///
+    /// ## 3. Preconditions
+    /// - `self: DocstringError` is passed by value.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns the owned `String` payload previously held by `Io`, `Parse`, or `UnforcedConflict`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) move of the owned `String` header.
+    /// - Space Complexity: O(1) zero additional heap allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Exhaustive by-value destructuring.
+    /// - State: Transfers ownership cleanly to the caller.
+    /// - Action: Infallible move semantics.
+    /// - Resource: Reuses existing `String` buffer.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-DOCSTRING-ERROR-INTO-MESSAGE]
+    pub fn into_message(self) -> String {
+        match self {
+            Self::Io(msg) | Self::Parse(msg) | Self::UnforcedConflict(msg) => msg,
+        }
+    }
+}
+
+impl std::ops::Deref for DocstringError {
+    type Target = str;
+
+    /// Dereferences `DocstringError` to its underlying `&str` diagnostic message slice.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A ergonomic string inspection (`DocstringError::deref`).
+    /// Allows `str` methods such as `.contains(...)` to be invoked directly on `DocstringError`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Delegates directly to `DocstringError::as_str(self)`.
+    ///
+    /// ## 3. Preconditions
+    /// - `self: &DocstringError` is a valid borrowed error instance.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `&str` pointing to the inner diagnostic message.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) delegation to `as_str`.
+    /// - Space Complexity: O(1) zero allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Standard library `std::ops::Deref` trait implementation.
+    /// - State: Pure read-only borrow.
+    /// - Action: Never panics.
+    /// - Resource: Zero heap allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-DOCSTRING-ERROR-DEREF]
+    fn deref(&self) -> &Self::Target {
+        self.as_str()
+    }
+}
+
+impl std::fmt::Display for DocstringError {
+    /// Formats the diagnostic message of `DocstringError` into `f`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A human-readable diagnostic formatting (`DocstringError::fmt`).
+    /// Writes the exact underlying error message string to the formatter stream.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `format!("{err}") == err.as_str()`.
+    ///
+    /// ## 3. Preconditions
+    /// - `self: &DocstringError` and `f: &mut std::fmt::Formatter<'_>` are valid references.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `std::fmt::Result` from `f.write_str(self.as_str())`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(M) where M is `self.as_str().len()`.
+    /// - Space Complexity: O(1) streaming write into `f`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates formatter sink errors via `std::fmt::Result`.
+    /// - State: Mutates only the target `Formatter` buffer.
+    /// - Action: Zero intermediate allocations.
+    /// - Resource: Bounded by underlying message length.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-DOCSTRING-ERROR-DISPLAY]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::error::Error for DocstringError {}
+
+impl From<DocstringError> for String {
+    /// Converts a `DocstringError` into its owned `String` diagnostic message.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A error conversion compatibility (`String::from(DocstringError)`).
+    /// Enables seamless `?` propagation in callers and unit tests returning `Result<_, String>`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Equivalent to `err.into_message()`.
+    ///
+    /// ## 3. Preconditions
+    /// - `err: DocstringError` is an owned error value.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns the inner `String` diagnostic message without cloning.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) ownership transfer.
+    /// - Space Complexity: O(1) zero extra allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Standard `From<DocstringError> for String` trait implementation.
+    /// - State: Consumes `err` by value.
+    /// - Action: Infallible conversion.
+    /// - Resource: Zero additional heap memory.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-DOCSTRING-ERROR-INTO-STRING]
+    fn from(err: DocstringError) -> Self {
+        err.into_message()
+    }
+}
+
 /// Configuration options for `run_docstring_injection`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -349,18 +595,20 @@ pub fn run_extract_source(
 pub fn run_docstring_injection(
     opts: &DocstringInjectionOptions,
 ) -> Result<DocstringInjectionReport, (DocstringExitCode, String)> {
+    let map_inject_err = |e: DocstringError| -> (DocstringExitCode, String) {
+        (e.exit_code(), e.into_message())
+    };
+
     if !opts.target_path.exists() {
-        return Err((
-            DocstringExitCode::Error,
-            format!(
-                "Target path '{}' does not exist",
-                opts.target_path.display()
-            ),
-        ));
+        return Err(map_inject_err(DocstringError::Io(format!(
+            "Target path '{}' does not exist",
+            opts.target_path.display()
+        ))));
     }
 
     let files = collect_injectable_source_files(&opts.target_path)
-        .map_err(|e| (DocstringExitCode::Error, e))?;
+        .map_err(DocstringError::Io)
+        .map_err(map_inject_err)?;
 
     let mut report = DocstringInjectionReport {
         files_scanned: files.len(),
@@ -368,23 +616,14 @@ pub fn run_docstring_injection(
     };
 
     for file_path in files {
-        let original = fs::read_to_string(&file_path).map_err(|e| {
-            (
-                DocstringExitCode::Error,
-                format!("Failed to read '{}': {}", file_path.display(), e),
-            )
-        })?;
+        let original = fs::read_to_string(&file_path)
+            .map_err(|e| {
+                DocstringError::Io(format!("Failed to read '{}': {}", file_path.display(), e))
+            })
+            .map_err(map_inject_err)?;
         let file_rel = file_path.display().to_string();
         let lang = SourceLanguage::detect_from_extension(&file_path)
             .unwrap_or(SourceLanguage::Rust);
-
-        let map_inject_err = |e: String| -> (DocstringExitCode, String) {
-            if e.starts_with("Conflicting unforced docstring") {
-                (DocstringExitCode::IdempotencyOrConflict, e)
-            } else {
-                (DocstringExitCode::Error, e)
-            }
-        };
 
         let (enriched, count) = match lang {
             SourceLanguage::Rust | SourceLanguage::Auto => inject_rust_file_docstrings(
@@ -411,14 +650,14 @@ pub fn run_docstring_injection(
                 opts.schema_model.as_ref(),
                 false,
             )
-            .map_err(|e| (DocstringExitCode::IdempotencyOrConflict, e))?,
+            .map_err(map_inject_err)?,
             SourceLanguage::Dart => inject_dart_file_docstrings(
                 &enriched,
                 &file_rel,
                 opts.schema_model.as_ref(),
                 false,
             )
-            .map_err(|e| (DocstringExitCode::IdempotencyOrConflict, e))?,
+            .map_err(map_inject_err)?,
         };
 
         if second_pass != enriched || second_count != 0 {
@@ -433,12 +672,15 @@ pub fn run_docstring_injection(
 
         if enriched != original {
             if !opts.dry_run {
-                write_atomic(&file_path, &enriched).map_err(|e| {
-                    (
-                        DocstringExitCode::Error,
-                        format!("Failed to write '{}': {}", file_path.display(), e),
-                    )
-                })?;
+                write_atomic(&file_path, &enriched)
+                    .map_err(|e| {
+                        DocstringError::Io(format!(
+                            "Failed to write '{}': {}",
+                            file_path.display(),
+                            e
+                        ))
+                    })
+                    .map_err(map_inject_err)?;
             }
             report.files_modified = report.files_modified.saturating_add(1);
             report.items_enriched = report.items_enriched.saturating_add(count);
@@ -553,7 +795,7 @@ fn collect_injectable_source_files(root: &Path) -> Result<Vec<PathBuf>, String> 
 /// - `file_rel: &str` is the file path used for module tag derivation and diagnostics.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok((updated_source, enriched_item_count))` on success, or `Err(String)` if syntax validation fails.
+/// - Returns `Ok((updated_source, enriched_item_count))` on success, or `Err(DocstringError)` if syntax validation or unforced requirement checking fails.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(L) where L is the line count of `source`.
@@ -572,8 +814,9 @@ pub fn inject_rust_file_docstrings(
     file_rel: &str,
     schema_model: Option<&PackageDef>,
     force: bool,
-) -> Result<(String, usize), String> {
-    validate_source_syntax_for_language(source, file_rel, SourceLanguage::Rust)?;
+) -> Result<(String, usize), DocstringError> {
+    validate_source_syntax_for_language(source, file_rel, SourceLanguage::Rust)
+        .map_err(DocstringError::Parse)?;
 
     let raw_lines: Vec<&str> = source.lines().collect();
     let total_lines = raw_lines.len();
@@ -789,10 +1032,10 @@ pub fn inject_rust_file_docstrings(
                                     .iter()
                                     .any(|r| schema_identifiers_match(r, &schema_req))
                             {
-                                return Err(format!(
+                                return Err(DocstringError::UnforcedConflict(format!(
                                     "Conflicting unforced docstring in '{}' for '{}': existing Realises {:?} conflicts with schema requirement '{}' (use --force to overwrite)",
                                     file_rel, item_name, existing_reqs, schema_req
-                                ));
+                                )));
                             }
                         }
                     } else {
@@ -908,7 +1151,7 @@ pub fn inject_rust_file_docstrings(
 /// - `file_rel: &str` is the relative or absolute file path for diagnostic and requirement ID tagging.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok((updated_source, enriched_item_count))` passing `audit_dart_source_docstrings` with zero violations.
+/// - Returns `Ok((updated_source, enriched_item_count))` passing `audit_dart_source_docstrings` with zero violations, or `Err(DocstringError)` on syntax or unforced conflict error.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(L) where L is the number of lines in `source`.
@@ -927,8 +1170,9 @@ pub fn inject_dart_file_docstrings(
     file_rel: &str,
     schema_model: Option<&PackageDef>,
     force: bool,
-) -> Result<(String, usize), String> {
-    validate_source_syntax_for_language(source, file_rel, SourceLanguage::Dart)?;
+) -> Result<(String, usize), DocstringError> {
+    validate_source_syntax_for_language(source, file_rel, SourceLanguage::Dart)
+        .map_err(DocstringError::Parse)?;
 
     let raw_lines: Vec<&str> = source.lines().collect();
     let total_lines = raw_lines.len();
@@ -1001,10 +1245,10 @@ pub fn inject_dart_file_docstrings(
                                     .iter()
                                     .any(|r| schema_identifiers_match(r, &schema_req))
                             {
-                                return Err(format!(
+                                return Err(DocstringError::UnforcedConflict(format!(
                                     "Conflicting unforced docstring in '{}' for '{}': existing Realises {:?} conflicts with schema requirement '{}' (use --force to overwrite)",
                                     file_rel, item_name, existing_reqs, schema_req
-                                ));
+                                )));
                             }
                         }
                     } else {
@@ -1087,10 +1331,10 @@ pub fn inject_dart_file_docstrings(
                                         .iter()
                                         .any(|r| schema_identifiers_match(r, &schema_req))
                                 {
-                                    return Err(format!(
+                                    return Err(DocstringError::UnforcedConflict(format!(
                                         "Conflicting unforced docstring in '{}' for '{}': existing Realises {:?} conflicts with schema requirement '{}' (use --force to overwrite)",
                                         file_rel, member_name, existing_reqs, schema_req
-                                    ));
+                                    )));
                                 }
                             }
                         } else {
@@ -3851,6 +4095,143 @@ mod tests {
             if has_placeholder_doc_line(line) {
                 return Err(format!("Expected has_placeholder_doc_line({line:?}) to be false"));
             }
+        }
+        Ok(())
+    }
+
+    /// Verifies that `DocstringError` algebraically classifies `Io`, `Parse`, and `UnforcedConflict` failures without string-prefix matching (refs #512).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and FEAT-42 Section 2.2 exit code determinism
+    /// (`test_issue_512_docstring_error_algebraic_exit_code_classification`).
+    /// Ensures `inject_rust_file_docstrings`, `inject_dart_file_docstrings`, and `run_docstring_injection`
+    /// classify syntax/I/O failures (`DocstringExitCode::Error` = `1`) and unforced requirement conflicts
+    /// (`DocstringExitCode::IdempotencyOrConflict` = `2`) via the strongly-typed `DocstringError` enum.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `DocstringError::Io(_).exit_code() == DocstringExitCode::Error`.
+    /// - `DocstringError::Parse(_).exit_code() == DocstringExitCode::Error`.
+    /// - `DocstringError::UnforcedConflict(_).exit_code() == DocstringExitCode::IdempotencyOrConflict`.
+    /// - Production code in `src/docstring.rs` contains zero `starts_with("Conflicting unforced docstring")` string-prefix checks.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory Rust and Dart source fixtures and `PackageDef` schema fixtures are provided.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when all `DocstringError` variant mappings, syntax error returns, unforced conflict returns, and production source checks pass.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) where N is the byte length of `src/docstring.rs` and test fixtures.
+    /// - Space Complexity: O(N) to hold the source text and test buffers in memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), String>` with descriptive diagnostic messages on any mismatch.
+    /// - State: Pure in-memory fixture evaluation and read-only self-inspection.
+    /// - Action: Rejects string-prefix exit code routing in `src/docstring.rs`.
+    /// - Resource: Single bounded file read via `CARGO_MANIFEST_DIR`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-ISSUE-512-DOCSTRING-ERROR-ALGEBRAIC-EXIT-CODE]
+    #[test]
+    fn test_issue_512_docstring_error_algebraic_exit_code_classification() -> Result<(), String> {
+        let io_err = DocstringError::Io("disk read failure".to_string());
+        let parse_err = DocstringError::Parse("unbalanced brace".to_string());
+        let conflict_err = DocstringError::UnforcedConflict("conflicting Realises".to_string());
+
+        assert_eq!(io_err.exit_code(), DocstringExitCode::Error);
+        assert_eq!(parse_err.exit_code(), DocstringExitCode::Error);
+        assert_eq!(
+            conflict_err.exit_code(),
+            DocstringExitCode::IdempotencyOrConflict
+        );
+        assert_eq!(io_err.as_str(), "disk read failure");
+        assert_eq!(&*parse_err, "unbalanced brace");
+        assert_eq!(format!("{conflict_err}"), "conflicting Realises");
+        let converted: String = io_err.into_message();
+        assert_eq!(converted, "disk read failure");
+
+        let rust_parse_err = inject_rust_file_docstrings(
+            "pub fn broken( {\n",
+            "crates/core_module/src/broken.rs",
+            None,
+            false,
+        )
+        .expect_err("Expected unbalanced Rust syntax to return Err(DocstringError::Parse)");
+        assert!(matches!(rust_parse_err, DocstringError::Parse(_)));
+        assert_eq!(rust_parse_err.exit_code(), DocstringExitCode::Error);
+
+        let dart_parse_err = inject_dart_file_docstrings(
+            "class Broken {\n",
+            "lib/broken.dart",
+            None,
+            false,
+        )
+        .expect_err("Expected unbalanced Dart syntax to return Err(DocstringError::Parse)");
+        assert!(matches!(dart_parse_err, DocstringError::Parse(_)));
+        assert_eq!(dart_parse_err.exit_code(), DocstringExitCode::Error);
+
+        let model = PackageDef {
+            name: "SystemControlPkg".to_string(),
+            part_defs: vec![PartDef {
+                name: "SystemController".to_string(),
+                is_def: true,
+                satisfied_requirements: vec!["REQ-PARENT".to_string()],
+                ..Default::default()
+            }],
+            requirement_defs: vec![RequirementDef {
+                name: "REQ_PARENT".to_string(),
+                req_id: "REQ-PARENT".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let conflict_rust_src = concat!(
+            "/// System controller classifier.\n",
+            "/// ## 1. Safety Intent & Regulatory Scope\n",
+            "/// Struct SystemController safety scope.\n",
+            "/// ## 2. Invariants & Mathematical Properties\n",
+            "/// Struct SystemController invariants.\n",
+            "/// ## 3. Preconditions\n",
+            "/// Struct SystemController preconditions.\n",
+            "/// ## 4. Postconditions\n",
+            "/// Struct SystemController postconditions.\n",
+            "/// ## 5. Algorithmic Complexity Bounds\n",
+            "/// Time: O(1), Space: O(1).\n",
+            "/// ## 6. Failure Modes & Fault Tolerance\n",
+            "/// Deterministic struct layout.\n",
+            "/// ## 7. Realization & Traceability\n",
+            "/// Realises: [REQ-STALE-999]\n",
+            "pub struct SystemController;\n"
+        );
+        let rust_conflict_err = inject_rust_file_docstrings(
+            conflict_rust_src,
+            "crates/core_module/src/controller.rs",
+            Some(&model),
+            false,
+        )
+        .expect_err("Expected unforced Realises conflict to return Err(DocstringError::UnforcedConflict)");
+        assert!(matches!(
+            rust_conflict_err,
+            DocstringError::UnforcedConflict(_)
+        ));
+        assert_eq!(
+            rust_conflict_err.exit_code(),
+            DocstringExitCode::IdempotencyOrConflict
+        );
+
+        let self_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("docstring.rs");
+        let self_src = fs::read_to_string(&self_path)
+            .map_err(|e| format!("Failed to read {}: {e}", self_path.display()))?;
+        let (prod_src, _) = self_src
+            .split_once("\n#[cfg(test)]\nmod tests")
+            .ok_or_else(|| "missing mod tests boundary in src/docstring.rs".to_string())?;
+        if prod_src.contains("starts_with(\"Conflicting unforced docstring\")") {
+            return Err(
+                "src/docstring.rs production code must not use string-prefix matching for exit code classification"
+                    .to_string(),
+            );
         }
         Ok(())
     }
