@@ -2812,16 +2812,39 @@ fn leading_whitespace(raw_line: &str) -> &str {
 /// Realises: [REQ-FEAT-42-DERIVE-MODULE-REQ-TAG]
 fn derive_module_req_tag(file_rel: &str) -> String {
     let path = Path::new(file_rel);
+    let raw_components: Vec<String> = path
+        .components()
+        .filter_map(|comp| {
+            let s = comp.as_os_str().to_string_lossy();
+            let trimmed = s.trim();
+            if matches!(trimmed, "" | "." | ".." | "/" | "\\") {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .collect();
+
+    let anchor_start = raw_components
+        .iter()
+        .rposition(|c| matches!(c.as_str(), "crates" | "app_flutter"))
+        .or_else(|| {
+            raw_components
+                .iter()
+                .rposition(|c| matches!(c.as_str(), "src" | "lib" | "tests" | "bin"))
+        })
+        .unwrap_or(0);
+
+    let scoped_slice = raw_components.get(anchor_start..).unwrap_or(&raw_components);
     let mut parts = Vec::new();
-    for comp in path.components() {
-        let s = comp.as_os_str().to_string_lossy();
-        let stem = s
+    for comp in scoped_slice {
+        let stem = comp
             .strip_suffix(".rs")
-            .or_else(|| s.strip_suffix(".dart"))
-            .unwrap_or(&s);
+            .or_else(|| comp.strip_suffix(".dart"))
+            .unwrap_or(comp.as_str());
         if matches!(
             stem,
-            "" | "." | ".." | "crates" | "src" | "app_flutter" | "lib" | "Users" | "jail"
+            "" | "." | ".." | "crates" | "src" | "app_flutter" | "lib" | "tests" | "bin"
         ) {
             continue;
         }
@@ -3588,5 +3611,68 @@ mod tests {
                 "Expected synthesized Dart docstrings to mention multi-line parameter '{param_name}', got:\n{doc_only}"
             );
         }
+    }
+
+    /// Verifies structural workspace anchor resolution in `derive_module_req_tag` without hardcoded workstation path segments (refs #511).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 deterministic requirement tag derivation
+    /// (`test_issue_511_derive_module_req_tag_structural_anchor`).
+    /// Ensures `derive_module_req_tag` anchors at structural workspace boundaries (`crates`, `app_flutter`, `src`, `lib`, `tests`, `bin`)
+    /// without hardcoded workstation path skip-lists.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Prefix directories preceding the rightmost structural anchor (`crates`, `app_flutter`, `src`, `lib`, `tests`, `bin`) never leak into synthesized requirement tags.
+    /// - `src/docstring.rs` contains zero hardcoded workstation directory names in `derive_module_req_tag`.
+    ///
+    /// ## 3. Preconditions
+    /// - Input path strings represent workspace-relative or prefixed paths across `crates`, `app_flutter`, `src`, `lib`, `tests`, and `bin` layouts.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when all derived module tags match the structural post-anchor segments and no hardcoded workstation tokens exist in production source.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(P) where P is the input path byte length.
+    /// - Space Complexity: O(P) for component vectors and formatted tag strings.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), String>` on any tag mismatch or forbidden token detection.
+    /// - State: Pure in-memory evaluation and read-only self-inspection.
+    /// - Action: Verifies structural anchor slicing across multiple path topologies.
+    /// - Resource: Bounded memory allocation with zero disk writes.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-FEAT-42-DERIVE-MODULE-REQ-TAG]
+    #[test]
+    fn test_issue_511_derive_module_req_tag_structural_anchor() -> Result<(), String> {
+        let cases = [
+            ("workstation_prefix/outer_dir/app_flutter/lib/main.dart", "MAIN"),
+            ("outer_mount/workspace_dir/src/engine.rs", "ENGINE"),
+            ("outer_mount/workspace_dir/src/lib.rs", "MODULE"),
+            ("outer_mount/workspace_dir/tests/smoke_test.rs", "SMOKE-TEST"),
+            ("outer_mount/workspace_dir/bin/runner.rs", "RUNNER"),
+            ("outer_mount/workspace_dir/crates/compile-sysml/src/docstring.rs", "COMPILE-SYSML-DOCSTRING"),
+        ];
+        for (input, expected) in cases {
+            let actual = derive_module_req_tag(input);
+            if actual != expected {
+                return Err(format!(
+                    "derive_module_req_tag({input:?}) returned {actual:?}, expected {expected:?}"
+                ));
+            }
+        }
+
+        let self_src = fs::read_to_string(Path::new("src/docstring.rs"))
+            .map_err(|e| format!("Failed to read src/docstring.rs: {e}"))?;
+        let prod_src = self_src
+            .split_once("#[cfg(test)]")
+            .map(|(before, _)| before)
+            .unwrap_or(&self_src);
+        let forbidden_u = ["\"Use", "rs\""].concat();
+        let forbidden_j = ["\"ja", "il\""].concat();
+        if prod_src.contains(&forbidden_u) || prod_src.contains(&forbidden_j) {
+            return Err("derive_module_req_tag must not contain hardcoded workstation path literals".to_string());
+        }
+        Ok(())
     }
 }
