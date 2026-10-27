@@ -1818,7 +1818,7 @@ fn synthesize_7_section_docstring(
 /// expressions so synthesized Rust docstrings reflect the item's concrete AST structure.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Scans a bounded window of lines starting at `start_idx` using `.get(..)` without panicking.
+/// - Scans `raw_lines` starting at `start_idx` using `.get(..)` and balanced `{`/`}` brace-depth tracking without fixed line-window truncation or panicking.
 ///
 /// ## 3. Preconditions
 /// - `raw_lines: &[&str]` is the full line slice of the Rust source file.
@@ -1829,11 +1829,11 @@ fn synthesize_7_section_docstring(
 /// - Returns `(params, return_type, fields_or_variants, invariants)` for `ItemSynthesisContext`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(W) where W <= 40 is the bounded lookahead window in `raw_lines`.
+/// - Time Complexity: O(B) where B is the number of lines spanned by the target AST item in `raw_lines`.
 /// - Space Complexity: O(P + F) where P is parameter count and F is field/variant count.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Safely truncates lookahead at EOF via `.get(..)`.
+/// - Interface: Safely bounds lookahead at item termination (`brace_depth <= 0` or `;`) and EOF via `.get(..)`.
 /// - State: Pure read-only lookahead over `raw_lines`.
 /// - Action: Never panics.
 /// - Resource: Bounded small vectors.
@@ -1855,8 +1855,7 @@ fn inspect_rust_item_details(
         let mut brace_depth: i32 = 0;
         let mut saw_open_brace = false;
         let mut body_start_idx = start_idx.saturating_add(1);
-        let end_sig_scan = start_idx.saturating_add(16).min(raw_lines.len());
-        if let Some(window) = raw_lines.get(start_idx..end_sig_scan) {
+        if let Some(window) = raw_lines.get(start_idx..) {
             for (offset, &line) in window.iter().enumerate() {
                 let code = strip_line_comment_preserving_strings(line.trim());
                 if !sig_buf.is_empty() {
@@ -1866,6 +1865,19 @@ fn inspect_rust_item_details(
                 let (delta, has_open) = count_rust_line_brace_delta(code);
                 if has_open {
                     saw_open_brace = true;
+                    if let Some((_, after_brace)) = code.split_once('{') {
+                        let inline_stmt = after_brace.trim();
+                        if let Some(rest) = inline_stmt
+                            .strip_prefix("assert!(")
+                            .or_else(|| inline_stmt.strip_prefix("debug_assert!("))
+                        {
+                            if let Some(clean_cond) = extract_balanced_rust_assert_cond(rest) {
+                                if !clean_cond.is_empty() && invariants.len() < 3 {
+                                    invariants.push(clean_cond.replace('"', "'"));
+                                }
+                            }
+                        }
+                    }
                 }
                 brace_depth = brace_depth.saturating_add(delta);
                 body_start_idx = start_idx.saturating_add(offset).saturating_add(1);
@@ -1879,8 +1891,7 @@ fn inspect_rust_item_details(
         return_type = r;
 
         if saw_open_brace && brace_depth > 0 {
-            let end_body_scan = start_idx.saturating_add(35).min(raw_lines.len());
-            if let Some(body_window) = raw_lines.get(body_start_idx..end_body_scan) {
+            if let Some(body_window) = raw_lines.get(body_start_idx..) {
                 for &line in body_window {
                     let t = strip_line_comment_preserving_strings(line.trim());
                     if let Some(rest) = t
@@ -1904,46 +1915,63 @@ fn inspect_rust_item_details(
                 }
             }
         }
-    } else if kind == SourceItemKind::Struct || kind == SourceItemKind::Enum || kind == SourceItemKind::Trait {
-        let end_scan = start_idx.saturating_add(25).min(raw_lines.len());
-        if let Some(window) = raw_lines.get(start_idx.saturating_add(1)..end_scan) {
+    } else if kind == SourceItemKind::Struct
+        || kind == SourceItemKind::Enum
+        || kind == SourceItemKind::Trait
+    {
+        let mut brace_depth: i32 = 0;
+        let mut saw_open_brace = false;
+        if let Some(window) = raw_lines.get(start_idx..) {
             for &line in window {
                 let t = strip_line_comment_preserving_strings(line.trim());
-                if t.starts_with('}') {
-                    break;
+                let depth_before = brace_depth;
+                let (delta, has_open) = count_rust_line_brace_delta(t);
+                if has_open {
+                    saw_open_brace = true;
                 }
-                if t.is_empty() || t.starts_with('#') || t.starts_with("///") || t.starts_with("//!") {
-                    continue;
-                }
-                if kind == SourceItemKind::Struct {
-                    let after_vis = t
-                        .strip_prefix("pub(crate) ")
-                        .or_else(|| t.strip_prefix("pub(super) "))
-                        .or_else(|| t.strip_prefix("pub "))
-                        .unwrap_or(t)
-                        .trim_start();
-                    if let Some((fname, ftype)) = after_vis.split_once(':') {
-                        if let Some(id) = extract_leading_ast_ident(fname.trim()) {
-                            let clean_t = ftype.trim().trim_end_matches(',').trim();
-                            if fields_or_variants.len() < 5 {
-                                fields_or_variants.push(format!("{}: {}", id, clean_t));
+                brace_depth = brace_depth.saturating_add(delta);
+
+                if depth_before == 1
+                    && !t.starts_with('}')
+                    && !t.is_empty()
+                    && !t.starts_with('#')
+                    && !t.starts_with("///")
+                    && !t.starts_with("//!")
+                {
+                    if kind == SourceItemKind::Struct {
+                        let after_vis = t
+                            .strip_prefix("pub(crate) ")
+                            .or_else(|| t.strip_prefix("pub(super) "))
+                            .or_else(|| t.strip_prefix("pub "))
+                            .unwrap_or(t)
+                            .trim_start();
+                        if let Some((fname, ftype)) = after_vis.split_once(':') {
+                            if let Some(id) = extract_leading_ast_ident(fname.trim()) {
+                                let clean_t = ftype.trim().trim_end_matches(',').trim();
+                                if fields_or_variants.len() < 5 {
+                                    fields_or_variants.push(format!("{}: {}", id, clean_t));
+                                }
                             }
                         }
-                    }
-                } else if kind == SourceItemKind::Enum {
-                    if let Some(v) = extract_leading_ast_ident(t) {
-                        if fields_or_variants.len() < 6 {
-                            fields_or_variants.push(v);
-                        }
-                    }
-                } else if kind == SourceItemKind::Trait {
-                    if let Some((_, fn_rest)) = t.split_once("fn ") {
-                        if let Some(m) = extract_leading_ast_ident(fn_rest.trim()) {
+                    } else if kind == SourceItemKind::Enum {
+                        if let Some(v) = extract_leading_ast_ident(t) {
                             if fields_or_variants.len() < 6 {
-                                fields_or_variants.push(format!("fn {}", m));
+                                fields_or_variants.push(v);
+                            }
+                        }
+                    } else if kind == SourceItemKind::Trait {
+                        if let Some((_, fn_rest)) = t.split_once("fn ") {
+                            if let Some(m) = extract_leading_ast_ident(fn_rest.trim()) {
+                                if fields_or_variants.len() < 6 {
+                                    fields_or_variants.push(format!("fn {}", m));
+                                }
                             }
                         }
                     }
+                }
+
+                if (saw_open_brace && brace_depth <= 0) || (!saw_open_brace && t.ends_with(';')) {
+                    break;
                 }
             }
         }
@@ -4234,5 +4262,139 @@ mod tests {
             );
         }
         Ok(())
+    }
+
+    /// Verifies that `inspect_rust_item_details` scans Rust signatures, bodies, structs, enums, and traits using brace-depth tracking without fixed line-window truncation (refs #514).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and FEAT-42 Section 3.2 structural AST inspection
+    /// (`test_issue_514_inspect_rust_item_details_unbounded_brace_depth`).
+    /// Ensures `inspect_rust_item_details` extracts parameters, return types, `assert!` invariants,
+    /// struct fields, enum variants, and trait methods across arbitrary declaration lengths and nested blocks.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Callable signatures exceeding 16 lines retain trailing parameters and return types.
+    /// - Callable bodies exceeding 35 lines retain `assert!` and `debug_assert!` invariants up to the closing brace (`brace_depth == 0`).
+    /// - Enum struct-variant fields (`brace_depth > 1`) are excluded from variant lists while variants beyond line 25 at `depth_before == 1` are extracted.
+    /// - Trait default method bodies with nested braces do not prematurely terminate trait scanning before subsequent methods beyond line 25.
+    /// - Unit structs ending with `;` terminate immediately without bleeding into subsequent item declarations.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory Rust source fixtures exercising >16-line signatures, >35-line bodies, multi-line enum struct variants, trait default methods, and unit structs.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts exact parameter, return type, invariant, variant, trait method, and unit-struct isolation results.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(L) where L is the fixture line count.
+    /// - Space Complexity: O(L) for split line slices and extracted metadata vectors.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Panics with diagnostic assertion messages if any AST detail is truncated or misclassified.
+    /// - State: Pure in-memory unit test with zero filesystem writes.
+    /// - Action: Deterministic evaluation over synthetic Rust AST lines.
+    /// - Resource: Bounded in-memory strings and vectors.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-ISSUE-514-INSPECT-RUST-ITEM-DETAILS-BRACE-DEPTH]
+    #[test]
+    fn test_issue_514_inspect_rust_item_details_unbounded_brace_depth() {
+        // 1. Callable with >16 signature lines and >35 body lines before assert!
+        let mut fn_lines = vec!["pub fn evaluate_multi_stage_pipeline(".to_string()];
+        for idx in 1..=18 {
+            fn_lines.push(format!("    param_{idx}: usize,"));
+        }
+        fn_lines.push("    late_bound_limit: usize,".to_string());
+        fn_lines.push(") -> Result<usize, String> {".to_string());
+        for idx in 1..=40 {
+            fn_lines.push(format!("    let step_{idx} = param_1.saturating_add({idx});"));
+        }
+        fn_lines.push("    assert!(late_bound_limit > 0, \"limit must be positive\");".to_string());
+        fn_lines.push("    Ok(step_40 + late_bound_limit)".to_string());
+        fn_lines.push("}".to_string());
+        let fn_raw: Vec<&str> = fn_lines.iter().map(String::as_str).collect();
+
+        let (params, ret_ty, fields, invariants) =
+            inspect_rust_item_details(&fn_raw, 0, SourceItemKind::Function);
+        assert!(
+            params.iter().any(|p| p.name == "late_bound_limit"),
+            "Expected parameter 'late_bound_limit' beyond line 16 to be extracted, got: {params:?}"
+        );
+        assert_eq!(
+            ret_ty.as_deref(),
+            Some("Result<usize, String>"),
+            "Expected return type beyond line 16 to be extracted"
+        );
+        assert!(fields.is_empty());
+        assert_eq!(
+            invariants,
+            vec!["late_bound_limit > 0".to_string()],
+            "Expected assert! beyond line 35 to be extracted"
+        );
+
+        // 2. Enum with multi-line struct variant followed by VariantBeta beyond line 25
+        let mut enum_lines = vec![
+            "pub enum StageStateEnum {".to_string(),
+            "    VariantAlpha {".to_string(),
+            "        inner_slot_count: u32,".to_string(),
+        ];
+        for idx in 1..=26 {
+            enum_lines.push(format!("        // padding comment line {idx}"));
+        }
+        enum_lines.push("    },".to_string());
+        enum_lines.push("    VariantBeta,".to_string());
+        enum_lines.push("}".to_string());
+        let enum_raw: Vec<&str> = enum_lines.iter().map(String::as_str).collect();
+
+        let (_, _, enum_variants, _) =
+            inspect_rust_item_details(&enum_raw, 0, SourceItemKind::Enum);
+        assert_eq!(
+            enum_variants,
+            vec!["VariantAlpha".to_string(), "VariantBeta".to_string()],
+            "Expected only top-level enum variants (excluding struct-variant fields and including variants past line 25)"
+        );
+
+        // 3. Trait with a default method containing nested braces followed by another method beyond line 25
+        let mut trait_lines = vec![
+            "pub trait StageProcessorTrait {".to_string(),
+            "    fn process_first_stage(&self) -> usize {".to_string(),
+            "        if true {".to_string(),
+            "            1".to_string(),
+            "        } else {".to_string(),
+            "            0".to_string(),
+            "        }".to_string(),
+            "    }".to_string(),
+        ];
+        for idx in 1..=24 {
+            trait_lines.push(format!("    // trait padding comment {idx}"));
+        }
+        trait_lines.push("    fn process_final_stage(&self) -> usize;".to_string());
+        trait_lines.push("}".to_string());
+        let trait_raw: Vec<&str> = trait_lines.iter().map(String::as_str).collect();
+
+        let (_, _, trait_methods, _) =
+            inspect_rust_item_details(&trait_raw, 0, SourceItemKind::Trait);
+        assert_eq!(
+            trait_methods,
+            vec![
+                "fn process_first_stage".to_string(),
+                "fn process_final_stage".to_string()
+            ],
+            "Expected trait scan to survive closing braces of default methods and extract methods beyond line 25"
+        );
+
+        // 4. Unit struct followed immediately by another struct with fields (zero bleed-through)
+        let unit_struct_lines = [
+            "pub struct UnitMarker;",
+            "pub struct SubsequentRecord {",
+            "    pub record_id: u64,",
+            "}",
+        ];
+        let (_, _, unit_fields, _) =
+            inspect_rust_item_details(&unit_struct_lines, 0, SourceItemKind::Struct);
+        assert!(
+            unit_fields.is_empty(),
+            "Expected unit struct `pub struct UnitMarker;` to have zero extracted fields without bleeding into subsequent struct, got: {unit_fields:?}"
+        );
     }
 }
