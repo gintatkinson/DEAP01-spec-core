@@ -2426,3 +2426,256 @@ fn test_req_0604_ac04_html_comment_reopen_and_inclusive_epic_count() {
     assert_eq!(execute_emit_cli_args(&normal_args), Ok(None));
 }
 
+/// Verifies `REQ-0605` `AC-01` through `AC-05`: unified `RustDartLexState` and
+/// `ScopedItemScannerState` across `source_ast`, `docstring`, and `docstring_gate`, multi-line Dart
+/// `@pragma(\n...\n)` 2-pass idempotency, strict `owner_name` schema isolation in
+/// `resolve_schema_context`, and deduplicated Rust `impl` header and Dart lexical scanners.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C lexical and AST
+/// parity objectives for `REQ-0605` (`AC-01`..`AC-05`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `inject_dart_file_docstrings` preserves `current_doc` and `first_annot_idx` across multi-line
+///   `@pragma(\n  'vm:prefer-inline',\n)` annotations so a second injection pass yields `count == 0`
+///   and identical output (`AC-01`, `AC-02`).
+/// - `resolve_schema_context` returns `(None, None)` when `owner_name` is `Some(owner)` and `owner`
+///   is absent from `all_parts`, preventing unmapped `impl` owners from inheriting package-level
+///   `requirement_defs` or `constraint_defs` (`AC-03`, `AC-04`).
+/// - `docstring.rs` and `docstring_gate.rs` delegate to `deap_core::source_ast` without duplicate
+///   local `extract_rust_impl_header_prefix` or `scan_dart_line_preserving_lexical_state` definitions (`AC-05`).
+///
+/// ## 3. Preconditions
+/// - None.
+///
+/// ## 4. Postconditions
+/// - Asserts `REQ-0605` `AC-01`..`AC-05` behavioral and structural invariants hold.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$. Space Complexity: $O(N)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Deterministic assertions with zero `.unwrap()`, `.expect()`, or slice indexing.
+///
+/// ## 7. Realization & Traceability
+/// Traceability: Realises: [REQ-0605]
+#[test]
+fn test_req_0605_ac01_ac05_unified_lexer_multiline_annotations_and_schema_isolation() {
+    use compile_sysml::docstring::{
+        collect_all_parts, inject_dart_file_docstrings, inject_rust_file_docstrings,
+        resolve_schema_context_strict,
+    };
+    use deap_core::source_ast::{
+        RustDartLexState, ScopedItemScannerState, SourceLanguage,
+        extract_rust_impl_header_prefix, parse_rust_impl_header,
+        scan_line_with_unified_lex_state, strip_dart_annotations_tracking_state,
+    };
+    use deap_core::sysml_ast::{ConstraintDef, PackageDef, PartDef, RequirementDef};
+    use verify_baseline::checks::docstring_gate::{
+        audit_dart_source_docstrings, audit_rust_source_docstrings,
+    };
+
+    // AC-01 & AC-02: Multi-line Dart @pragma annotation 2-pass idempotency and Check 36 audit
+    let dart_multiline_annot_src = concat!(
+        "@pragma(\n",
+        "  'vm:prefer-inline',\n",
+        ")\n",
+        "int computeSignalStep(int currentStep) {\n",
+        "  return currentStep + 1;\n",
+        "}\n",
+    );
+    let pass1_res = inject_dart_file_docstrings(
+        dart_multiline_annot_src,
+        "app_flutter/lib/signal_step.dart",
+        None,
+        false,
+    );
+    assert!(
+        pass1_res.is_ok(),
+        "Expected Pass 1 of inject_dart_file_docstrings to succeed: {pass1_res:?}"
+    );
+    let (pass1_out, pass1_count) = pass1_res.unwrap_or_default();
+    assert_eq!(
+        pass1_count, 1,
+        "Expected Pass 1 to enrich 1 Dart function with multi-line @pragma, got {pass1_count} in:\n{pass1_out}"
+    );
+    let doc_pos = pass1_out.find("/// ## 1. Safety Intent");
+    let pragma_pos = pass1_out.find("@pragma(");
+    assert!(
+        doc_pos.is_some() && pragma_pos.is_some() && doc_pos < pragma_pos,
+        "Synthesized docstring must be placed BEFORE @pragma(, got:\n{pass1_out}"
+    );
+
+    let pass2_res = inject_dart_file_docstrings(
+        &pass1_out,
+        "app_flutter/lib/signal_step.dart",
+        None,
+        false,
+    );
+    assert!(
+        pass2_res.is_ok(),
+        "Expected Pass 2 of inject_dart_file_docstrings to succeed: {pass2_res:?}"
+    );
+    let (pass2_out, pass2_count) = pass2_res.unwrap_or_default();
+    assert_eq!(
+        pass2_count, 0,
+        "Expected Pass 2 on multi-line @pragma Dart function to be idempotent (count == 0), got {pass2_count} in:\n{pass2_out}"
+    );
+    assert_eq!(pass2_out, pass1_out);
+    assert_eq!(
+        audit_dart_source_docstrings(&pass1_out, "app_flutter/lib/signal_step.dart"),
+        Ok(1)
+    );
+
+    // AC-03 & AC-04: Unmapped impl owner must not fall through to package-level requirement_defs / constraint_defs
+    let schema_pkg = PackageDef {
+        name: "CoreControlPkg".to_string(),
+        part_defs: vec![PartDef {
+            name: "MappedDispatcher".to_string(),
+            is_def: true,
+            satisfied_requirements: vec!["REQ-MAPPED-01".to_string()],
+            ..Default::default()
+        }],
+        requirement_defs: vec![RequirementDef {
+            name: "process_frame".to_string(),
+            req_id: "REQ-PKG-LEAK-999".to_string(),
+            ..Default::default()
+        }],
+        constraint_defs: vec![ConstraintDef {
+            name: "invariant_process_frame_1".to_string(),
+            expression: "frame_seq > 0".to_string(),
+            is_assertion: true,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let unmapped_owner_rust = concat!(
+        "pub struct UnmappedHelper;\n\n",
+        "impl UnmappedHelper {\n",
+        "    pub fn process_frame(&self, frame_seq: u32) -> u32 {\n",
+        "        frame_seq\n",
+        "    }\n",
+        "}\n",
+    );
+    let mut parts_out = Vec::new();
+    collect_all_parts(&schema_pkg, &mut parts_out);
+    assert_eq!(parts_out.len(), 1);
+    assert_eq!(
+        resolve_schema_context_strict(
+            Some(&schema_pkg),
+            Some("UnmappedHelper"),
+            "process_frame"
+        ),
+        (None, None),
+        "resolve_schema_context_strict must return (None, None) when owner_name is absent from all_parts"
+    );
+    assert_eq!(
+        resolve_schema_context_strict(
+            Some(&schema_pkg),
+            Some("MappedDispatcher"),
+            "process_frame"
+        ),
+        (
+            Some("REQ-PKG-LEAK-999".to_string()),
+            Some("invariant_process_frame_1 (frame_seq > 0)".to_string()),
+        ),
+        "resolve_schema_context_strict must resolve member requirement and constraint when owner_name is a valid PartDef"
+    );
+    let rust_res = inject_rust_file_docstrings(
+        unmapped_owner_rust,
+        "crates/core_module/src/unmapped_helper.rs",
+        Some(&schema_pkg),
+        false,
+    );
+    assert!(rust_res.is_ok(), "Expected Rust docstring injection to succeed: {rust_res:?}");
+    let (rust_enriched, rust_count) = rust_res.unwrap_or_default();
+    assert_eq!(rust_count, 2);
+    assert!(
+        !rust_enriched.contains("REQ-PKG-LEAK-999"),
+        "Unmapped impl owner UnmappedHelper must NOT inherit package-level REQ-PKG-LEAK-999:\n{rust_enriched}"
+    );
+    assert!(
+        !rust_enriched.contains("frame_seq > 0"),
+        "Unmapped impl owner UnmappedHelper must NOT inherit package-level constraint 'frame_seq > 0':\n{rust_enriched}"
+    );
+    assert_eq!(
+        audit_rust_source_docstrings(&rust_enriched, "crates/core_module/src/unmapped_helper.rs"),
+        Ok(2)
+    );
+
+    // AC-05: Unified lexer state and absence of duplicate scanners in docstring.rs and docstring_gate.rs
+    let mut dart_lex = RustDartLexState {
+        language: SourceLanguage::Dart,
+        ..Default::default()
+    };
+    let mut scoped = ScopedItemScannerState::default();
+    assert_eq!(scoped.dart_annotation_paren_depth, 0);
+    assert_eq!(
+        strip_dart_annotations_tracking_state("@pragma(", &mut scoped.dart_annotation_paren_depth),
+        ""
+    );
+    assert_eq!(scoped.dart_annotation_paren_depth, 1);
+    assert_eq!(
+        strip_dart_annotations_tracking_state(
+            "'vm:prefer-inline',",
+            &mut scoped.dart_annotation_paren_depth
+        ),
+        ""
+    );
+    assert_eq!(scoped.dart_annotation_paren_depth, 1);
+    assert_eq!(
+        strip_dart_annotations_tracking_state(
+            ") void runStep() {}",
+            &mut scoped.dart_annotation_paren_depth
+        )
+        .trim(),
+        "void runStep() {}"
+    );
+    assert_eq!(scoped.dart_annotation_paren_depth, 0);
+    assert_eq!(
+        extract_rust_impl_header_prefix("impl<F: Fn(u32) -> bool> CoreHandler<F> {"),
+        Some("impl<F: Fn(u32) -> bool> CoreHandler<F>")
+    );
+    assert_eq!(
+        parse_rust_impl_header("impl<F: Fn(u32) -> bool> CoreHandler<F> {"),
+        Some("CoreHandler".to_string())
+    );
+    let scanned_dart =
+        scan_line_with_unified_lex_state("void/*inline*/executeStep() {}", &mut dart_lex);
+    assert_eq!(scanned_dart.trim(), "void  executeStep() {}");
+
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .unwrap_or_else(|| Path::new("."));
+    let docstring_rs_src = std::fs::read_to_string(
+        workspace_root
+            .join("crates")
+            .join("compile-sysml")
+            .join("src")
+            .join("docstring.rs"),
+    )
+    .unwrap_or_default();
+    assert!(
+        !docstring_rs_src.contains("fn extract_rust_impl_header_prefix("),
+        "docstring.rs must delegate extract_rust_impl_header_prefix to deap_core::source_ast"
+    );
+
+    let docstring_gate_src = std::fs::read_to_string(
+        workspace_root
+            .join("crates")
+            .join("verify-baseline")
+            .join("src")
+            .join("checks")
+            .join("docstring_gate.rs"),
+    )
+    .unwrap_or_default();
+    assert!(
+        !docstring_gate_src.contains("enum DartMultilineString")
+            && !docstring_gate_src.contains("fn scan_dart_line_preserving_lexical_state("),
+        "docstring_gate.rs must delegate Dart lexical scanning to deap_core::source_ast"
+    );
+}
+
+

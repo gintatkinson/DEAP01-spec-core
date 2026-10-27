@@ -42,12 +42,14 @@ use crate::semantic::digest::{generate_digest, write_atomic, write_digest_atomic
 use crate::semantic::serializer::to_sysml;
 use deap_core::source_ast::{
     classify_dart_member_ast, classify_dart_top_level_ast, classify_rust_item_line_ast,
-    extract_leading_ast_ident, extract_realises_ids_from_doc_lines, ingest_source_directory,
-    parse_dart_callable_signature, parse_rust_callable_signature, sanitize_sysml_identifier,
-    scan_rust_line_preserving_lex_state, single_char_literal_byte_len,
-    strip_leading_dart_annotations, strip_line_comment_preserving_strings, summary_from_doc_lines,
-    update_ast_delimiter_depths, validate_source_syntax_for_language, RustStringScannerState,
-    SourceItemKind, SourceLanguage, SourceParam,
+    extract_leading_ast_ident, extract_realises_ids_from_doc_lines,
+    extract_rust_impl_header_prefix, ingest_source_directory, parse_dart_callable_signature,
+    parse_rust_callable_signature, parse_rust_impl_header, sanitize_sysml_identifier,
+    scan_line_with_unified_lex_state, single_char_literal_byte_len,
+    strip_dart_annotations_tracking_state, strip_leading_dart_annotations,
+    strip_line_comment_preserving_strings, summary_from_doc_lines, update_ast_delimiter_depths,
+    validate_source_syntax_for_language, RustDartLexState, ScopedItemScannerState, SourceItemKind,
+    SourceLanguage, SourceParam,
 };
 use deap_core::sysml_ast::PackageDef;
 use std::collections::BTreeSet;
@@ -829,7 +831,10 @@ pub fn inject_rust_file_docstrings(
     let mut first_attr_idx: Option<usize> = None;
     let mut seen_docblocks: BTreeSet<String> = BTreeSet::new();
 
-    let mut lex_state = RustStringScannerState::Normal;
+    let mut lex_state = RustDartLexState {
+        language: SourceLanguage::Rust,
+        ..Default::default()
+    };
     let mut in_mod_tests = false;
     let mut cfg_test_pending = false;
     let mut attr_bracket_depth: usize = 0;
@@ -842,11 +847,12 @@ pub fn inject_rust_file_docstrings(
 
     for (idx, &raw_line) in raw_lines.iter().enumerate() {
         let trimmed = raw_line.trim();
-        let started_in_normal = lex_state == RustStringScannerState::Normal;
-        let started_in_string = matches!(
-            lex_state,
-            RustStringScannerState::StringLiteral | RustStringScannerState::RawString(_)
-        );
+        let started_in_normal = lex_state.block_comment_depth == 0
+            && lex_state.raw_hash_count.is_none()
+            && lex_state.active_string.is_none()
+            && lex_state.interp_stack.is_empty();
+        let started_in_string =
+            lex_state.raw_hash_count.is_some() || lex_state.active_string.is_some();
 
         if started_in_normal {
             if trimmed.starts_with("//!") {
@@ -868,7 +874,11 @@ pub fn inject_rust_file_docstrings(
             }
         }
 
-        let scanned_code = scan_rust_line_preserving_lex_state(trimmed, &mut lex_state);
+        let scanned_code = scan_line_with_unified_lex_state(trimmed, &mut lex_state);
+        let ended_in_normal = lex_state.block_comment_depth == 0
+            && lex_state.raw_hash_count.is_none()
+            && lex_state.active_string.is_none()
+            && lex_state.interp_stack.is_empty();
         let raw_code = scanned_code.trim();
         let code = if started_in_string {
             raw_code.strip_prefix('"').unwrap_or(raw_code).trim()
@@ -880,7 +890,7 @@ pub fn inject_rust_file_docstrings(
             continue;
         }
 
-        if !started_in_normal && (lex_state != RustStringScannerState::Normal || started_in_string) {
+        if !started_in_normal && (!ended_in_normal || started_in_string) {
             if attr_bracket_depth > 0 {
                 for b in code.bytes() {
                     if b == b'[' {
@@ -960,8 +970,8 @@ pub fn inject_rust_file_docstrings(
                 current_doc.clear();
                 pending_doc_indices.clear();
                 first_attr_idx = None;
-            } else if brace_depth == 0 && extract_rust_impl_header_prefix(code).is_some() {
-                if let Some(impl_target) = extract_rust_impl_header_prefix(code) {
+            } else if brace_depth == 0 && parse_rust_impl_header(&format!("{code} {{")).is_some() {
+                if let Some(impl_target) = parse_rust_impl_header(&format!("{code} {{")) {
                     if !code.ends_with(';') && !code.contains('}') {
                         pending_impl_target = Some(impl_target);
                     }
@@ -1058,7 +1068,7 @@ pub fn inject_rust_file_docstrings(
                         }
 
                         let inline_comment_split = if !started_in_normal
-                            && lex_state == RustStringScannerState::Normal
+                            && ended_in_normal
                             && first_attr_idx.is_none()
                         {
                             raw_line
@@ -1220,7 +1230,11 @@ pub fn inject_dart_file_docstrings(
     let mut first_annot_idx: Option<usize> = None;
     let mut seen_docblocks: BTreeSet<String> = BTreeSet::new();
 
-    let mut in_multiline_comment = false;
+    let mut dart_lex_state = RustDartLexState {
+        language: SourceLanguage::Dart,
+        ..Default::default()
+    };
+    let mut scoped_state = ScopedItemScannerState::default();
     let mut brace_depth: usize = 0;
     let mut paren_depth: usize = 0;
     let mut active_class_name: Option<String> = None;
@@ -1229,34 +1243,44 @@ pub fn inject_dart_file_docstrings(
 
     for (idx, &raw_line) in raw_lines.iter().enumerate() {
         let trimmed = raw_line.trim();
+        let started_in_comment_or_string = dart_lex_state.block_comment_depth > 0
+            || dart_lex_state.active_string.is_some()
+            || !dart_lex_state.interp_stack.is_empty();
 
-        if in_multiline_comment {
-            if trimmed.contains("*/") {
-                in_multiline_comment = false;
-            }
-            continue;
-        }
-        if trimmed.starts_with("/*") && !trimmed.contains("*/") {
-            in_multiline_comment = true;
-            continue;
-        }
-
-        if trimmed.starts_with("///") {
+        if !started_in_comment_or_string
+            && scoped_state.dart_annotation_paren_depth == 0
+            && trimmed.starts_with("///")
+        {
             current_doc.push(trimmed.to_string());
             pending_doc_indices.push(idx);
             continue;
         }
 
-        let code = strip_line_comment_preserving_strings(trimmed);
-
-        if code.is_empty() {
+        let scanned = scan_line_with_unified_lex_state(trimmed, &mut dart_lex_state);
+        if scanned.trim().is_empty() {
             continue;
         }
 
-        if code.starts_with('@') && first_annot_idx.is_none() {
+        let code_raw = if !started_in_comment_or_string && !trimmed.contains("/*") {
+            strip_line_comment_preserving_strings(trimmed)
+        } else {
+            strip_line_comment_preserving_strings(scanned.trim())
+        };
+
+        if code_raw.is_empty() {
+            continue;
+        }
+
+        if scoped_state.dart_annotation_paren_depth == 0
+            && code_raw.starts_with('@')
+            && first_annot_idx.is_none()
+        {
             first_annot_idx = Some(idx);
         }
-        let stripped_code = strip_leading_dart_annotations(code);
+        let stripped_code = strip_dart_annotations_tracking_state(
+            code_raw,
+            &mut scoped_state.dart_annotation_paren_depth,
+        );
         if stripped_code.trim().is_empty() {
             continue;
         }
@@ -2430,8 +2454,11 @@ fn inspect_dart_item_details(
 /// - Resource: Bounded by total `PartDef` count in `pkg`.
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-FEAT-42-COLLECT-ALL-PARTS]
-fn collect_all_parts<'a>(pkg: &'a PackageDef, out: &mut Vec<&'a deap_core::sysml_ast::PartDef>) {
+/// Realises: [REQ-0605], [REQ-FEAT-42-COLLECT-ALL-PARTS]
+pub fn collect_all_parts<'a>(
+    pkg: &'a PackageDef,
+    out: &mut Vec<&'a deap_core::sysml_ast::PartDef>,
+) {
     let mut stack: Vec<&'a deap_core::sysml_ast::PartDef> = pkg.part_defs.iter().rev().collect();
     while let Some(part) = stack.pop() {
         out.push(part);
@@ -3118,6 +3145,8 @@ fn resolve_schema_context(
             if matched_req.is_none() {
                 matched_req = p_req;
             }
+        } else {
+            return (None, None);
         }
     } else if let Some(part) = all_parts
         .iter()
@@ -3236,6 +3265,42 @@ fn resolve_schema_context(
     (matched_req, matched_constraint)
 }
 
+/// Resolves optional requirement ID and constraint expression from `schema_model` with strict `owner_name` part isolation (`REQ-0605` `AC-03..AC-04`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `resolve_schema_context_strict` (`REQ-0605` `AC-03..AC-04`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - When `owner_name` is `Some(owner)` and `owner` is absent from all top-level and nested `PartDef` nodes in `schema_model`, returns `(None, None)` immediately without falling through to package-level `requirement_defs` or `constraint_defs`.
+/// - When `owner_name` matches a `PartDef` or is `None`, delegates deterministically to `resolve_schema_context`.
+///
+/// ## 3. Preconditions
+/// - `schema_model: Option<&PackageDef>` is the optional parsed SysML v2 model.
+/// - `owner_name: Option<&str>` and `item_name: &str` identify the target source item and optional enclosing classifier.
+///
+/// ## 4. Postconditions
+/// - Returns `(Option<String>, Option<String>)` representing the resolved requirement ID and constraint expression, or `(None, None)` when unmatched.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(P + A + R + C) where P is part count, A is action count, R is requirement count, and C is constraint count.
+/// - Space Complexity: O(P) for collected package and part reference slices.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts `None` or arbitrary UTF-8 identifiers safely.
+/// - State: Pure read-only lookup with zero state mutation.
+/// - Action: Never panics and never attributes unrelated package-level requirements to unmapped owners.
+/// - Resource: Bounded reference vectors and at most two `String` allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0605], [REQ-FEAT-42-RESOLVE-SCHEMA-CONTEXT]
+pub fn resolve_schema_context_strict(
+    schema_model: Option<&PackageDef>,
+    owner_name: Option<&str>,
+    item_name: &str,
+) -> (Option<String>, Option<String>) {
+    resolve_schema_context(schema_model, owner_name, item_name)
+}
+
 /// Compares a schema element identifier (`schema_ident`) against a source AST identifier (`source_ident`).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -3289,76 +3354,6 @@ fn schema_identifiers_match(schema_ident: &str, source_ident: &str) -> bool {
     }
 }
 
-/// Extracts the target type identifier from a single-line or multiline Rust `impl` header prefix.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A method-to-classifier attribution (`extract_rust_impl_header_prefix`).
-/// Supports both single-line `impl<F: Fn(u32) -> bool> Target<F> {` and multiline `impl<T> Target<T>\nwhere ...` blocks.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Treats `->` inside `impl<...>` bounds as a two-character return-arrow token rather than a closing `>` bracket.
-/// - Strips optional `unsafe `, `impl<...>`, `<Trait> for `, and trailing `where` clauses.
-///
-/// ## 3. Preconditions
-/// - `code: &str` is a trimmed, comment-stripped Rust source line.
-///
-/// ## 4. Postconditions
-/// - Returns `Some(type_name)` when `code` begins an `impl` declaration, or `None`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `code.len()`.
-/// - Space Complexity: O(I) where I is the target identifier length.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Non-panicking `.get(..)` and `split_once`.
-/// - State: Stateless pure function.
-/// - Action: Returns `None` on non-`impl` lines.
-/// - Resource: At most one `String` allocation on match.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-FEAT-42-EXTRACT-IMPL-HEADER-PREFIX]
-fn extract_rust_impl_header_prefix(code: &str) -> Option<String> {
-    let after_unsafe = code.strip_prefix("unsafe ").unwrap_or(code).trim_start();
-    let rest = if let Some(r) = after_unsafe.strip_prefix("impl<") {
-        let mut depth: usize = 1;
-        let mut end_idx: Option<usize> = None;
-        let mut prev_ch: Option<char> = None;
-        for (i, ch) in r.char_indices() {
-            if ch == '<' {
-                depth = depth.saturating_add(1);
-            } else if ch == '>' && prev_ch != Some('-') {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    end_idx = Some(i.saturating_add(1));
-                    break;
-                }
-            }
-            prev_ch = Some(ch);
-        }
-        r.get(end_idx?..).unwrap_or("").trim_start()
-    } else {
-        after_unsafe.strip_prefix("impl ")?.trim_start()
-    };
-
-    let before_brace = rest.split_once('{').map(|(b, _)| b.trim()).unwrap_or(rest);
-    let before_where = before_brace
-        .split_once(" where ")
-        .map(|(b, _)| b.trim())
-        .unwrap_or(before_brace)
-        .trim_end_matches(" where")
-        .trim();
-    let target_part = if let Some((_, after_for)) = before_where.split_once(" for ") {
-        after_for.trim()
-    } else {
-        before_where
-    };
-    let target_clean = target_part
-        .trim_start_matches('&')
-        .trim_start_matches("mut ")
-        .trim();
-    extract_leading_ast_ident(target_clean)
-}
-
 /// Extracts the target type identifier from a Rust `impl` header line that opens a block with `{`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -3379,18 +3374,16 @@ fn extract_rust_impl_header_prefix(code: &str) -> Option<String> {
 /// - Space Complexity: O(I) where I is the target identifier length.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Non-panicking delegation to `extract_rust_impl_header_prefix`.
+/// - Interface: Non-panicking delegation to `extract_rust_impl_header_prefix` and `parse_rust_impl_header`.
 /// - State: Pure helper.
 /// - Action: Returns `None` if `code` is not an `impl` block with `{`.
 /// - Resource: Single `String` allocation on match.
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-FEAT-42-EXTRACT-IMPL-TARGET]
+/// Realises: [REQ-0605], [REQ-FEAT-42-EXTRACT-IMPL-TARGET]
 fn extract_rust_impl_target_name(code: &str) -> Option<String> {
-    if !code.contains('{') {
-        return None;
-    }
-    extract_rust_impl_header_prefix(code)
+    extract_rust_impl_header_prefix(code)?;
+    parse_rust_impl_header(code)
 }
 
 /// Checks whether a joined docblock contains `Realises: [<non-empty>]`.
@@ -3830,22 +3823,25 @@ mod tests {
             (None, None),
             "Method on SecondaryMonitor must not bleed inline requirement owned by NestedSubunit"
         );
-        let mut st = RustStringScannerState::Normal;
-        let scanned_chars = scan_rust_line_preserving_lex_state(
+        let mut st = RustDartLexState {
+            language: SourceLanguage::Rust,
+            ..Default::default()
+        };
+        let scanned_chars = scan_line_with_unified_lex_state(
             "let a = '\\''; let b = '\\\"'; let c = '\\x7f'; let d = '\\u{10FFFF}'; pub fn after_chars() {}",
             &mut st,
         );
-        assert_eq!(st, RustStringScannerState::Normal);
+        assert!(st.active_string.is_none() && st.block_comment_depth == 0);
         assert!(
             scanned_chars.contains("pub fn after_chars() {}"),
             "Escaped char literals must not corrupt lex_state: {}",
             scanned_chars
         );
-        let scanned_lt = scan_rust_line_preserving_lex_state(
+        let scanned_lt = scan_line_with_unified_lex_state(
             "pub fn select_lifetime<'a, 'b>(first: &'a str, second: &'b str) -> char { '\"' }",
             &mut st,
         );
-        assert_eq!(st, RustStringScannerState::Normal);
+        assert!(st.active_string.is_none() && st.block_comment_depth == 0);
         assert!(
             scanned_lt.starts_with(
                 "pub fn select_lifetime<'a, 'b>(first: &'a str, second: &'b str) -> char"

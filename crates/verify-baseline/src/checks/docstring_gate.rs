@@ -40,8 +40,8 @@
 //! Realises: [REQ-CHECK-36-DOCSTRING-GATE], [DO-330-TQL-4-DOCSTRING-GATE]
 
 use deap_core::source_ast::{
-    RustStringScannerState, extract_dart_getter_ident, scan_rust_line_preserving_lex_state,
-    strip_leading_dart_annotations,
+    RustDartLexState, ScopedItemScannerState, SourceLanguage, extract_dart_getter_ident,
+    scan_line_with_unified_lex_state, strip_dart_annotations_tracking_state,
 };
 use std::collections::BTreeSet;
 use std::fs;
@@ -594,9 +594,11 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
     let mut violations = Vec::new();
     let mut current_doc: Vec<String> = Vec::new();
     let mut seen_docblocks: BTreeSet<String> = BTreeSet::new();
-    let mut lex_state = RustStringScannerState::Normal;
-    let mut test_scope_entry_brace_depth: Option<usize> = None;
-    let mut cfg_test_pending = false;
+    let mut lex_state = RustDartLexState {
+        language: SourceLanguage::Rust,
+        ..Default::default()
+    };
+    let mut scoped_state = ScopedItemScannerState::default();
     let mut attr_bracket_depth: usize = 0;
     let mut brace_depth: usize = 0;
     let mut paren_depth: usize = 0;
@@ -606,7 +608,10 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
         let line_no = idx.saturating_add(1);
         let trimmed = raw_line.trim();
 
-        let started_in_comment_or_string = !matches!(lex_state, RustStringScannerState::Normal);
+        let started_in_comment_or_string = lex_state.block_comment_depth > 0
+            || lex_state.raw_hash_count.is_some()
+            || lex_state.active_string.is_some()
+            || !lex_state.interp_stack.is_empty();
 
         if !started_in_comment_or_string {
             if trimmed.starts_with("//!") {
@@ -622,7 +627,9 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             }
 
             if trimmed.starts_with("///") {
-                if test_scope_entry_brace_depth.is_none() {
+                if scoped_state.mod_tests_brace_depth.is_none()
+                    && scoped_state.cfg_test_block_brace_depth.is_none()
+                {
                     if contains_placeholder_docstring(trimmed) {
                         violations.push(format!(
                             "{}:{}: placeholder docstring '{}' detected",
@@ -635,20 +642,24 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             }
         }
 
-        let scanned = scan_rust_line_preserving_lex_state(trimmed, &mut lex_state);
+        let scanned = scan_line_with_unified_lex_state(trimmed, &mut lex_state);
         let code = scanned.trim();
 
         if code.is_empty() {
             continue;
         }
 
-        if let Some(entry_depth) = test_scope_entry_brace_depth {
+        if let Some(entry_depth) = scoped_state
+            .mod_tests_brace_depth
+            .or(scoped_state.cfg_test_block_brace_depth)
+        {
             update_line_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
             if brace_depth <= entry_depth {
-                test_scope_entry_brace_depth = None;
+                scoped_state.mod_tests_brace_depth = None;
+                scoped_state.cfg_test_block_brace_depth = None;
             }
             current_doc.clear();
-            cfg_test_pending = false;
+            scoped_state.cfg_test_pending = false;
             continue;
         }
 
@@ -657,7 +668,7 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             || code.starts_with("mod tests ")
             || code.starts_with("mod tests{")
         {
-            cfg_test_pending = true;
+            scoped_state.cfg_test_pending = true;
         }
 
         if attr_bracket_depth > 0 {
@@ -673,7 +684,7 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
 
         if code.starts_with("#[") {
             if code.starts_with("#[cfg(test)") || code.contains("cfg(test)") {
-                cfg_test_pending = true;
+                scoped_state.cfg_test_pending = true;
             }
             for b in code.bytes() {
                 if b == b'[' {
@@ -685,15 +696,20 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             continue;
         }
 
-        if cfg_test_pending {
+        if scoped_state.cfg_test_pending {
             let prev_brace_depth = brace_depth;
+            let is_mod_tests = code.starts_with("mod tests");
             update_line_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
             current_doc.clear();
             if brace_depth > prev_brace_depth {
-                test_scope_entry_brace_depth = Some(prev_brace_depth);
-                cfg_test_pending = false;
+                if is_mod_tests {
+                    scoped_state.mod_tests_brace_depth = Some(prev_brace_depth);
+                } else {
+                    scoped_state.cfg_test_block_brace_depth = Some(prev_brace_depth);
+                }
+                scoped_state.cfg_test_pending = false;
             } else if paren_depth == 0 && (code.ends_with(';') || code.ends_with('}')) {
-                cfg_test_pending = false;
+                scoped_state.cfg_test_pending = false;
             }
             continue;
         }
@@ -730,296 +746,6 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
     }
 }
 
-/// Discriminant tracking active Dart triple-quoted multiline string state across source lines.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ISO 26262 ASIL D Dart lexical state tracking (`DartMultilineString`).
-/// Distinguishes single-quoted (`'''...'''`) and double-quoted (`"""..."""`) Dart multiline strings
-/// as well as raw (`r'''...'''` / `r"""..."""`) vs. escape-aware variants.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `TripleSingle { raw }` closes only on three consecutive `'` bytes (ignoring `\'` when `!raw`).
-/// - `TripleDouble { raw }` closes only on three consecutive `"` bytes (ignoring `\"` when `!raw`).
-///
-/// ## 3. Preconditions
-/// - Constructed when `scan_dart_line_preserving_lexical_state` encounters an unquoted `'''` or `"""` token.
-///
-/// ## 4. Postconditions
-/// - Preserves exact delimiter and escape semantics across newline boundaries until closing `'''` or `"""`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(1) state inspection.
-/// - Space Complexity: O(1) stack value.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Closed strongly typed enum with boolean `raw` flag.
-/// - State: Copy value with zero heap references.
-/// - Action: Exhaustive pattern matching in `scan_dart_line_preserving_lexical_state`.
-/// - Resource: Zero dynamic allocation.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECK-36-DART-MULTILINE-STRING-ENUM]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DartMultilineString {
-    /// Dart `'''...'''` or `r'''...'''` multiline string literal.
-    TripleSingle {
-        /// Whether the literal was opened with an `r` raw prefix.
-        raw: bool,
-    },
-    /// Dart `"""..."""` or `r"""..."""` multiline string literal.
-    TripleDouble {
-        /// Whether the literal was opened with an `r` raw prefix.
-        raw: bool,
-    },
-}
-
-/// Advances Dart nested block comments (`/* ... */`) and triple-quoted multiline strings (`'''...'''` / `"""..."""`)
-/// across a single source line while preserving single-line code and string tokens.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Tier 2 Flutter lexical boundary completeness (refs #500).
-/// Prevents interior lines of nested Dart block comments and triple-quoted strings from triggering
-/// false-positive Check 36 item classifications, placeholder errors, or delimiter depth drift.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Nested `/* ... */` block comments increment `*block_comment_depth` on `/*` and saturatingly
-///   decrement on `*/`, emitting a separating space when `*block_comment_depth` returns to `0`.
-/// - Characters inside `/* ... */` block comments and `'''...'''` / `"""..."""` multiline strings
-///   are stripped from the returned code line.
-/// - Single-line `'...'` and `"..."` literals are emitted intact so `update_line_delimiter_depths`
-///   can evaluate `${...}` string interpolations accurately.
-///
-/// ## 3. Preconditions
-/// - `line: &str` is a valid UTF-8 Dart source line.
-/// - `block_comment_depth` and `in_triple_string` hold the active lexical state from the previous line.
-///
-/// ## 4. Postconditions
-/// - Updates `*block_comment_depth` and `*in_triple_string` to their end-of-line states and returns
-///   the non-comment, non-triple-string Dart code slice.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) single-pass scan over `line.len()`.
-/// - Space Complexity: O(N) bounded by the output `String`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Non-panicking `.get(..)` byte and char accessors throughout.
-/// - State: Mutates only `block_comment_depth` and `in_triple_string`.
-/// - Action: Maintains valid UTF-8 boundaries at every iteration via `len_utf8()`.
-/// - Resource: Bounded single-line buffer allocation.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECK-36-SCAN-DART-LEXICAL-STATE]
-fn scan_dart_line_preserving_lexical_state(
-    line: &str,
-    block_comment_depth: &mut usize,
-    in_triple_string: &mut Option<DartMultilineString>,
-) -> String {
-    let bytes = line.as_bytes();
-    let len = bytes.len();
-    let mut i: usize = 0;
-    let mut in_single_line_quote: Option<(u8, bool)> = None;
-    let mut interp_stack: Vec<((u8, bool), usize)> = Vec::new();
-    let mut out = String::with_capacity(len);
-
-    while i < len {
-        let step_utf8 = line
-            .get(i..)
-            .and_then(|s| s.chars().next())
-            .map(|c| c.len_utf8())
-            .unwrap_or(1);
-
-        if *block_comment_depth > 0 {
-            if bytes.get(i).copied() == Some(b'/')
-                && bytes.get(i.saturating_add(1)).copied() == Some(b'*')
-            {
-                *block_comment_depth = block_comment_depth.saturating_add(1);
-                i = i.saturating_add(2);
-            } else if bytes.get(i).copied() == Some(b'*')
-                && bytes.get(i.saturating_add(1)).copied() == Some(b'/')
-            {
-                *block_comment_depth = block_comment_depth.saturating_sub(1);
-                if *block_comment_depth == 0 {
-                    out.push(' ');
-                }
-                i = i.saturating_add(2);
-            } else {
-                i = i.saturating_add(step_utf8);
-            }
-            continue;
-        }
-
-        if let Some(triple_kind) = *in_triple_string {
-            let (q_byte, is_raw) = match triple_kind {
-                DartMultilineString::TripleSingle { raw } => (b'\'', raw),
-                DartMultilineString::TripleDouble { raw } => (b'"', raw),
-            };
-            if !is_raw && bytes.get(i).copied() == Some(b'\\') {
-                let next_len = line
-                    .get(i.saturating_add(1)..)
-                    .and_then(|s| s.chars().next())
-                    .map(|c| c.len_utf8())
-                    .unwrap_or(0);
-                i = i.saturating_add(1).saturating_add(next_len);
-                continue;
-            }
-            if bytes.get(i).copied() == Some(q_byte)
-                && bytes.get(i.saturating_add(1)).copied() == Some(q_byte)
-                && bytes.get(i.saturating_add(2)).copied() == Some(q_byte)
-            {
-                *in_triple_string = None;
-                out.push(' ');
-                i = i.saturating_add(3);
-                continue;
-            }
-            i = i.saturating_add(step_utf8);
-            continue;
-        }
-
-        if let Some((q_byte, is_raw)) = in_single_line_quote {
-            if !is_raw && bytes.get(i).copied() == Some(b'\\') {
-                out.push('\\');
-                if let Some(next_ch) = line
-                    .get(i.saturating_add(1)..)
-                    .and_then(|s| s.chars().next())
-                {
-                    out.push(next_ch);
-                    i = i.saturating_add(1).saturating_add(next_ch.len_utf8());
-                } else {
-                    i = len;
-                }
-                continue;
-            }
-            if !is_raw
-                && bytes.get(i).copied() == Some(b'$')
-                && bytes.get(i.saturating_add(1)).copied() == Some(b'{')
-            {
-                interp_stack.push(((q_byte, is_raw), 1));
-                in_single_line_quote = None;
-                out.push('$');
-                out.push('{');
-                i = i.saturating_add(2);
-                continue;
-            }
-            if bytes.get(i).copied() == Some(q_byte) {
-                in_single_line_quote = None;
-            }
-            if let Some(ch) = line.get(i..).and_then(|s| s.chars().next()) {
-                out.push(ch);
-                i = i.saturating_add(ch.len_utf8());
-            } else {
-                break;
-            }
-            continue;
-        }
-
-        if bytes.get(i).copied() == Some(b'/')
-            && bytes.get(i.saturating_add(1)).copied() == Some(b'/')
-        {
-            break;
-        }
-        if bytes.get(i).copied() == Some(b'/')
-            && bytes.get(i.saturating_add(1)).copied() == Some(b'*')
-        {
-            *block_comment_depth = block_comment_depth.saturating_add(1);
-            i = i.saturating_add(2);
-            continue;
-        }
-
-        if bytes.get(i).copied() == Some(b'{') {
-            if let Some((_, depth)) = interp_stack.last_mut() {
-                *depth = depth.saturating_add(1);
-            }
-            out.push('{');
-            i = i.saturating_add(1);
-            continue;
-        }
-        if bytes.get(i).copied() == Some(b'}') {
-            if let Some((saved_quote, mut depth)) = interp_stack.pop() {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    in_single_line_quote = Some(saved_quote);
-                } else {
-                    interp_stack.push((saved_quote, depth));
-                }
-            }
-            out.push('}');
-            i = i.saturating_add(1);
-            continue;
-        }
-
-        if bytes.get(i).copied() == Some(b'r') {
-            let prev_is_ident = i > 0
-                && bytes
-                    .get(i.saturating_sub(1))
-                    .copied()
-                    .map(|b| b.is_ascii_alphanumeric() || b == b'_')
-                    .unwrap_or(false);
-            if !prev_is_ident {
-                if bytes.get(i.saturating_add(1)).copied() == Some(b'\'')
-                    && bytes.get(i.saturating_add(2)).copied() == Some(b'\'')
-                    && bytes.get(i.saturating_add(3)).copied() == Some(b'\'')
-                {
-                    *in_triple_string = Some(DartMultilineString::TripleSingle { raw: true });
-                    i = i.saturating_add(4);
-                    continue;
-                }
-                if bytes.get(i.saturating_add(1)).copied() == Some(b'"')
-                    && bytes.get(i.saturating_add(2)).copied() == Some(b'"')
-                    && bytes.get(i.saturating_add(3)).copied() == Some(b'"')
-                {
-                    *in_triple_string = Some(DartMultilineString::TripleDouble { raw: true });
-                    i = i.saturating_add(4);
-                    continue;
-                }
-                if let Some(q) = bytes.get(i.saturating_add(1)).copied() {
-                    if q == b'\'' || q == b'"' {
-                        in_single_line_quote = Some((q, true));
-                        out.push('r');
-                        out.push(char::from(q));
-                        i = i.saturating_add(2);
-                        continue;
-                    }
-                }
-            }
-        }
-
-        if bytes.get(i).copied() == Some(b'\'')
-            && bytes.get(i.saturating_add(1)).copied() == Some(b'\'')
-            && bytes.get(i.saturating_add(2)).copied() == Some(b'\'')
-        {
-            *in_triple_string = Some(DartMultilineString::TripleSingle { raw: false });
-            i = i.saturating_add(3);
-            continue;
-        }
-        if bytes.get(i).copied() == Some(b'"')
-            && bytes.get(i.saturating_add(1)).copied() == Some(b'"')
-            && bytes.get(i.saturating_add(2)).copied() == Some(b'"')
-        {
-            *in_triple_string = Some(DartMultilineString::TripleDouble { raw: false });
-            i = i.saturating_add(3);
-            continue;
-        }
-
-        if let Some(q) = bytes.get(i).copied() {
-            if q == b'\'' || q == b'"' {
-                in_single_line_quote = Some((q, false));
-                out.push(char::from(q));
-                i = i.saturating_add(1);
-                continue;
-            }
-        }
-
-        if let Some(ch) = line.get(i..).and_then(|s| s.chars().next()) {
-            out.push(ch);
-            i = i.saturating_add(ch.len_utf8());
-        } else {
-            break;
-        }
-    }
-
-    out
-}
-
 /// Audits a single Dart source string for 100% per-item 7-section docstring completeness and zero placeholders.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1049,21 +775,23 @@ fn scan_dart_line_preserving_lexical_state(
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Non-panicking line and byte scanning over `source`.
-/// - State: Local state machine tracking `brace_depth`, `paren_depth`, `annotation_paren_depth`, and `active_class_name`.
+/// - State: Local state machine tracking `brace_depth`, `paren_depth`, `dart_annotation_paren_depth`, and `active_class_name`.
 /// - Action: Never panics on malformed Dart syntax; saturating arithmetic guards depth counters.
 /// - Resource: Linear memory bounded by the active docblock and diagnostic list.
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECK-36-AUDIT-DART-DOCSTRINGS]
+/// Realises: [REQ-0605], [REQ-CHECK-36-AUDIT-DART-DOCSTRINGS]
 pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usize, Vec<String>> {
     let mut violations = Vec::new();
     let mut current_doc: Vec<String> = Vec::new();
     let mut seen_docblocks: BTreeSet<String> = BTreeSet::new();
-    let mut block_comment_depth: usize = 0;
-    let mut in_triple_string: Option<DartMultilineString> = None;
+    let mut dart_lex_state = RustDartLexState {
+        language: SourceLanguage::Dart,
+        ..Default::default()
+    };
+    let mut scoped_state = ScopedItemScannerState::default();
     let mut brace_depth: usize = 0;
     let mut paren_depth: usize = 0;
-    let mut annotation_paren_depth: usize = 0;
     let mut active_class_name: Option<String> = None;
     let mut documented_items: usize = 0;
 
@@ -1071,9 +799,14 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
         let line_no = idx.saturating_add(1);
         let trimmed = raw_line.trim();
 
-        let started_in_comment_or_triple = block_comment_depth > 0 || in_triple_string.is_some();
+        let started_in_comment_or_string = dart_lex_state.block_comment_depth > 0
+            || dart_lex_state.active_string.is_some()
+            || !dart_lex_state.interp_stack.is_empty();
 
-        if !started_in_comment_or_triple && trimmed.starts_with("///") {
+        if !started_in_comment_or_string
+            && scoped_state.dart_annotation_paren_depth == 0
+            && trimmed.starts_with("///")
+        {
             if contains_placeholder_docstring(trimmed) {
                 violations.push(format!(
                     "{}:{}: placeholder docstring '{}' detected",
@@ -1084,35 +817,17 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             continue;
         }
 
-        let scanned = scan_dart_line_preserving_lexical_state(
-            trimmed,
-            &mut block_comment_depth,
-            &mut in_triple_string,
-        );
+        let scanned = scan_line_with_unified_lex_state(trimmed, &mut dart_lex_state);
         let code = scanned.trim();
 
         if code.is_empty() {
             continue;
         }
 
-        if annotation_paren_depth > 0 {
-            update_line_delimiter_depths(code, &mut brace_depth, &mut annotation_paren_depth);
-            continue;
-        }
-
-        if code.starts_with('@') {
-            let stripped_code = strip_leading_dart_annotations(code);
-            let trimmed_stripped = stripped_code.trim();
-            if trimmed_stripped.is_empty()
-                || trimmed_stripped.starts_with('@')
-                || trimmed_stripped.starts_with('(')
-            {
-                update_line_delimiter_depths(code, &mut brace_depth, &mut annotation_paren_depth);
-                continue;
-            }
-        }
-
-        let stripped_code = strip_leading_dart_annotations(code);
+        let stripped_code = strip_dart_annotations_tracking_state(
+            code,
+            &mut scoped_state.dart_annotation_paren_depth,
+        );
         if stripped_code.trim().is_empty() {
             continue;
         }
@@ -2321,17 +2036,16 @@ pub fn documented_followup() {}
         );
     }
 
-    /// Verifies `scan_rust_line_preserving_lex_state`, `scan_dart_line_preserving_lexical_state`, and zero-allocation placeholder detection.
+    /// Verifies `scan_line_with_unified_lex_state`, `RustDartLexState`, and zero-allocation placeholder detection.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A and DO-330 TQL-4 lexical unit verification (`test_consume_rust_char_literal_and_nested_block_comments`).
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - `scan_rust_line_preserving_lex_state` preserves token boundaries across inline block comments (`pub/*comment*/fn`) and tracks nested block comments via `RustStringScannerState`.
-    /// - `scan_dart_line_preserving_lexical_state` preserves token boundaries across inline block comments (`void/*comment*/realDartFn`).
+    /// - `scan_line_with_unified_lex_state` preserves token boundaries across inline block comments (`pub/*comment*/fn`) and tracks nested block comments via `RustDartLexState` in both Rust and Dart modes.
     ///
     /// ## 3. Preconditions
-    /// - Deterministic in-memory test inputs for `scan_rust_line_preserving_lex_state` and `scan_dart_line_preserving_lexical_state`.
+    /// - Deterministic in-memory test inputs for `scan_line_with_unified_lex_state`.
     ///
     /// ## 4. Postconditions
     /// - Asserts exact token separation and nested comment depth transitions in Rust and Dart.
@@ -2341,40 +2055,42 @@ pub fn documented_followup() {}
     /// - Space Complexity: O(1) stack state.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Direct invocation of `scan_rust_line_preserving_lex_state` and `scan_dart_line_preserving_lexical_state`.
+    /// - Interface: Direct invocation of `scan_line_with_unified_lex_state`.
     /// - State: Local test state only.
     /// - Action: Non-panicking `assert_eq!` checks.
     /// - Resource: Zero filesystem side effects.
     ///
     /// ## 7. Realization & Traceability
-    /// Realises: [REQ-CHECK-36-CHAR-LITERAL-AND-NESTED-COMMENT-UNIT-TEST]
+    /// Realises: [REQ-0605], [REQ-CHECK-36-CHAR-LITERAL-AND-NESTED-COMMENT-UNIT-TEST]
     #[test]
     fn test_consume_rust_char_literal_and_nested_block_comments() {
-        let mut state = RustStringScannerState::Normal;
+        let mut state = RustDartLexState {
+            language: SourceLanguage::Rust,
+            ..Default::default()
+        };
         let line1 =
-            scan_rust_line_preserving_lex_state("/* outer /* inner */ pub fn fake() {}", &mut state);
+            scan_line_with_unified_lex_state("/* outer /* inner */ pub fn fake() {}", &mut state);
         assert_eq!(line1.trim(), "");
-        assert_eq!(state, RustStringScannerState::BlockComment(1));
+        assert_eq!(state.block_comment_depth, 1);
         let line2 =
-            scan_rust_line_preserving_lex_state("still commented */ pub fn real() {}", &mut state);
-        assert_eq!(state, RustStringScannerState::Normal);
+            scan_line_with_unified_lex_state("still commented */ pub fn real() {}", &mut state);
+        assert_eq!(state.block_comment_depth, 0);
         assert_eq!(line2.trim(), "pub fn real() {}");
 
         let inline_rust =
-            scan_rust_line_preserving_lex_state("pub/*comment*/fn inline_fn() {}", &mut state);
+            scan_line_with_unified_lex_state("pub/*comment*/fn inline_fn() {}", &mut state);
         assert_eq!(
             classify_rust_item_line(inline_rust.trim()),
             Some(("fn", "inline_fn".to_string()))
         );
 
-        let mut dart_depth: usize = 0;
-        let mut dart_triple: Option<DartMultilineString> = None;
-        let inline_dart = scan_dart_line_preserving_lexical_state(
-            "void/*comment*/inlineDartFn() {}",
-            &mut dart_depth,
-            &mut dart_triple,
-        );
-        assert_eq!(dart_depth, 0);
-        assert_eq!(inline_dart.trim(), "void inlineDartFn() {}");
+        let mut dart_state = RustDartLexState {
+            language: SourceLanguage::Dart,
+            ..Default::default()
+        };
+        let inline_dart =
+            scan_line_with_unified_lex_state("void/*comment*/inlineDartFn() {}", &mut dart_state);
+        assert_eq!(dart_state.block_comment_depth, 0);
+        assert_eq!(inline_dart.trim(), "void  inlineDartFn() {}");
     }
 }

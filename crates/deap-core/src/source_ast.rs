@@ -5573,7 +5573,7 @@ pub fn strip_line_comment_preserving_strings(line: &str) -> &str {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0605], [REQ-SOURCE-AST-STRIP-DART-ANNOTATIONS]
-fn strip_dart_annotations_tracking_state<'a>(
+pub fn strip_dart_annotations_tracking_state<'a>(
     mut code: &'a str,
     dart_annotation_paren_depth: &mut usize,
 ) -> &'a str {
