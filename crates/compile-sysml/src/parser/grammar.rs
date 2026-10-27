@@ -1288,7 +1288,21 @@ impl<'a> SysmlParser<'a> {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
-                let f_doc = self.take_doc_comment();
+                let mut f_doc = self.take_inner_doc_comment();
+                self.skip_trivia();
+                while let Some(next_doc) = self.take_inner_doc_comment() {
+                    if port.doc.is_none() {
+                        port.doc = f_doc;
+                    }
+                    f_doc = Some(next_doc);
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    if port.doc.is_none() {
+                        port.doc = f_doc;
+                    }
+                    break;
+                }
                 if self.check(&TokenKind::Attribute) {
                     let attr = self.parse_attribute_decl(f_doc)?;
                     let clean_val = attr
@@ -1304,7 +1318,11 @@ impl<'a> SysmlParser<'a> {
                     } else {
                         port.electrical_attributes.insert(attr.name, clean_val);
                     }
-                } else if self.check(&TokenKind::Flow) || self.check(&TokenKind::In) || self.check(&TokenKind::Out) {
+                } else if self.check(&TokenKind::Flow)
+                    || self.check(&TokenKind::In)
+                    || self.check(&TokenKind::Out)
+                    || self.check(&TokenKind::Inout)
+                {
                     let mut flow_dir = "out".to_string();
                     if self.check(&TokenKind::Flow) {
                         self.advance();
@@ -1314,6 +1332,9 @@ impl<'a> SysmlParser<'a> {
                         } else if self.check(&TokenKind::Out) {
                             self.advance();
                             flow_dir = "out".to_string();
+                        } else if self.check(&TokenKind::Inout) {
+                            self.advance();
+                            flow_dir = "inout".to_string();
                         }
                     } else {
                         if self.check(&TokenKind::In) {
@@ -1322,13 +1343,16 @@ impl<'a> SysmlParser<'a> {
                         } else if self.check(&TokenKind::Out) {
                             self.advance();
                             flow_dir = "out".to_string();
+                        } else if self.check(&TokenKind::Inout) {
+                            self.advance();
+                            flow_dir = "inout".to_string();
                         }
                         if self.check(&TokenKind::Flow) {
                             self.advance();
                         }
                     }
                     let flow_name = self.expect_ident()?;
-                    let flow_type = if self.check(&TokenKind::Colon) {
+                    let flow_type = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
                         self.advance();
                         self.parse_type_expr()?
                     } else {
@@ -1343,7 +1367,14 @@ impl<'a> SysmlParser<'a> {
                         ..Default::default()
                     });
                 } else {
-                    self.skip_until_semi_or_brace();
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in port declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -1446,6 +1477,7 @@ impl<'a> SysmlParser<'a> {
         };
 
         let name = self.expect_ident()?;
+        let mut action_doc = doc;
         let mut in_params = Vec::new();
         let mut out_params = Vec::new();
         let mut performer = None;
@@ -1457,7 +1489,7 @@ impl<'a> SysmlParser<'a> {
                 let mut is_out = false;
                 if self.check(&TokenKind::In) {
                     self.advance();
-                } else if self.check(&TokenKind::Out) {
+                } else if self.check(&TokenKind::Out) || self.check(&TokenKind::Inout) {
                     self.advance();
                     is_out = true;
                 }
@@ -1465,7 +1497,7 @@ impl<'a> SysmlParser<'a> {
                     self.advance();
                 }
                 let param_name = self.expect_ident()?;
-                let param_type = if self.check(&TokenKind::Colon) {
+                let param_type = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
                     self.advance();
                     self.parse_type_expr()?
                 } else {
@@ -1489,25 +1521,41 @@ impl<'a> SysmlParser<'a> {
             self.expect(&TokenKind::CloseParen)?;
         }
 
+        if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
+            self.advance();
+            let _return_type = self.parse_type_expr()?;
+        }
+
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
-                self.take_doc_comment();
+                while let Some(d) = self.take_inner_doc_comment() {
+                    if action_doc.is_none() {
+                        action_doc = Some(d);
+                    }
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    break;
+                }
                 if self.check(&TokenKind::Perform) {
                     self.advance();
                     performer = Some(self.read_until_semi());
                 } else if self.check(&TokenKind::Step) {
                     self.advance();
                     steps.push(self.read_until_semi());
-                } else if self.check(&TokenKind::In) || self.check(&TokenKind::Out) {
-                    let is_out = self.check(&TokenKind::Out);
+                } else if self.check(&TokenKind::In)
+                    || self.check(&TokenKind::Out)
+                    || self.check(&TokenKind::Inout)
+                {
+                    let is_out = self.check(&TokenKind::Out) || self.check(&TokenKind::Inout);
                     self.advance();
                     if self.check(&TokenKind::Attribute) || self.check(&TokenKind::Item) {
                         self.advance();
                     }
                     let p_name = self.expect_ident()?;
-                    let p_type = if self.check(&TokenKind::Colon) {
+                    let p_type = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
                         self.advance();
                         self.parse_type_expr()?
                     } else {
@@ -1526,7 +1574,14 @@ impl<'a> SysmlParser<'a> {
                         in_params.push(p);
                     }
                 } else {
-                    self.skip_until_semi_or_brace();
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in action declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -1536,7 +1591,7 @@ impl<'a> SysmlParser<'a> {
 
         Ok(ActionDef {
             name,
-            doc,
+            doc: action_doc,
             in_params,
             out_params,
             parameters: Vec::new(),
@@ -1595,31 +1650,43 @@ impl<'a> SysmlParser<'a> {
 
         if self.check(&TokenKind::OpenParen) {
             self.advance();
-            let mut param_str = String::new();
             while !self.check(&TokenKind::CloseParen) && !self.is_at_end() {
-                let tok = self.advance();
-                match &tok.kind {
-                    TokenKind::Comma => {
-                        if !param_str.trim().is_empty() {
-                            parameters.push(param_str.trim().to_string());
-                            param_str.clear();
-                        }
-                    }
-                    TokenKind::Ident(s) => {
-                        param_str.push_str(s);
-                        param_str.push(' ');
-                    }
-                    TokenKind::Colon => {
-                        param_str.push_str(": ");
-                    }
-                    _ => {
-                        param_str.push_str(tok.kind.as_str());
-                        param_str.push(' ');
-                    }
+                self.skip_trivia();
+                if self.check(&TokenKind::CloseParen) {
+                    break;
                 }
-            }
-            if !param_str.trim().is_empty() {
-                parameters.push(param_str.trim().to_string());
+                let mut prefix = String::new();
+                if self.check(&TokenKind::In) {
+                    self.advance();
+                    prefix.push_str("in ");
+                } else if self.check(&TokenKind::Out) {
+                    self.advance();
+                    prefix.push_str("out ");
+                } else if self.check(&TokenKind::Inout) {
+                    self.advance();
+                    prefix.push_str("inout ");
+                }
+                if self.check(&TokenKind::Attribute) {
+                    self.advance();
+                    prefix.push_str("attribute ");
+                } else if self.check(&TokenKind::Item) {
+                    self.advance();
+                    prefix.push_str("item ");
+                }
+                let p_name = self.expect_ident()?;
+                let param_formatted = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
+                    self.advance();
+                    let p_type = self.parse_type_expr()?;
+                    format!("{}{}: {}", prefix, p_name, p_type)
+                } else {
+                    format!("{}{}", prefix, p_name)
+                };
+                parameters.push(param_formatted);
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
             }
             self.expect(&TokenKind::CloseParen)?;
         }
@@ -1630,21 +1697,14 @@ impl<'a> SysmlParser<'a> {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
-                if self.check(&TokenKind::Doc) {
-                    self.advance();
-                    self.skip_trivia();
-                    if let Some(d) = self.take_doc_comment() {
-                        if final_doc.is_none() {
-                            final_doc = Some(d);
-                        }
-                    }
-                    continue;
-                }
-                if let Some(d) = self.take_doc_comment() {
+                while let Some(d) = self.take_inner_doc_comment() {
                     if final_doc.is_none() {
                         final_doc = Some(d);
                     }
-                    continue;
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    break;
                 }
                 let stmt = self.read_until_semi();
                 if !stmt.trim().is_empty() {
@@ -1720,7 +1780,35 @@ impl<'a> SysmlParser<'a> {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
-                let sub_doc = self.take_doc_comment();
+                let mut sub_doc = self.take_inner_doc_comment();
+                self.skip_trivia();
+                while let Some(next_doc) = self.take_inner_doc_comment() {
+                    if let Some(prev_d) = sub_doc {
+                        if text.is_empty() {
+                            text = prev_d;
+                        }
+                    }
+                    sub_doc = Some(next_doc);
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    if let Some(d) = sub_doc {
+                        if text.is_empty() {
+                            text = d;
+                        }
+                    }
+                    break;
+                }
+                if !self.check(&TokenKind::Attribute)
+                    && !self.check(&TokenKind::Constraint)
+                    && !self.check(&TokenKind::Assert)
+                {
+                    if let Some(d) = sub_doc.take() {
+                        if text.is_empty() {
+                            text = d;
+                        }
+                    }
+                }
                 if self.check(&TokenKind::Id) {
                     self.advance();
                     if self.check(&TokenKind::Eq) {
@@ -1760,10 +1848,6 @@ impl<'a> SysmlParser<'a> {
                             layer = Some(first_val);
                         }
                     }
-                } else if let Some(d) = sub_doc {
-                    if text.is_empty() {
-                        text = d;
-                    }
                 } else if self.check(&TokenKind::Assume) {
                     self.advance();
                     assumes.push(self.read_until_semi());
@@ -1794,8 +1878,18 @@ impl<'a> SysmlParser<'a> {
                         self.advance();
                     }
                     satisfied_by.push(self.read_until_semi().replace(" :: ", "::"));
+                } else if self.check(&TokenKind::Subject) {
+                    self.advance();
+                    let _ = self.read_until_semi();
                 } else {
-                    self.skip_until_semi_or_brace();
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in requirement declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -1866,32 +1960,23 @@ impl<'a> SysmlParser<'a> {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
-                let inner_doc = if let Some(d) = self.take_doc_comment() {
-                    Some(d)
-                } else if self.check(&TokenKind::Doc) {
-                    self.advance();
-                    if let Some(d) = self.take_doc_comment() {
-                        Some(d)
-                    } else if let TokenKind::StringLit(s) = self.peek_kind().clone() {
-                        self.advance();
-                        Some(s)
-                    } else {
-                        None
+                let mut inner_doc = self.take_inner_doc_comment();
+                self.skip_trivia();
+                while let Some(next_doc) = self.take_inner_doc_comment() {
+                    if state_doc.is_none() {
+                        state_doc = inner_doc;
                     }
-                } else {
-                    None
-                };
+                    inner_doc = Some(next_doc);
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    if state_doc.is_none() {
+                        state_doc = inner_doc;
+                    }
+                    break;
+                }
                 if let Some(d) = inner_doc {
-                    while matches!(self.peek_kind(), TokenKind::LineComment(_)) {
-                        self.advance();
-                    }
-                    if self.check(&TokenKind::Semi) {
-                        self.advance();
-                        if state_doc.is_none() {
-                            state_doc = Some(d);
-                        }
-                        continue;
-                    } else if self.check(&TokenKind::State) {
+                    if self.check(&TokenKind::State) {
                         let sub_st = self.parse_state_decl(Some(d))?;
                         sub_states.push(sub_st);
                         continue;
@@ -1902,11 +1987,8 @@ impl<'a> SysmlParser<'a> {
                         t_def.doc = Some(d);
                         transitions.push(t_def);
                         continue;
-                    } else {
-                        if state_doc.is_none() {
-                            state_doc = Some(d);
-                        }
-                        continue;
+                    } else if state_doc.is_none() {
+                        state_doc = Some(d);
                     }
                 }
                 if self.check(&TokenKind::Entry)
@@ -1963,7 +2045,14 @@ impl<'a> SysmlParser<'a> {
                     let t_tokens = self.read_tokens_until_semi();
                     transitions.push(Self::parse_transition_tokens(&t_tokens));
                 } else {
-                    self.skip_until_semi_or_brace();
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in state declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -2615,11 +2704,14 @@ impl<'a> SysmlParser<'a> {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
-                if let Some(inner_doc) = self.take_doc_comment() {
+                while let Some(inner_doc) = self.take_inner_doc_comment() {
                     if conn_doc.is_none() {
                         conn_doc = Some(inner_doc);
                     }
-                    continue;
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    break;
                 }
                 if self.check(&TokenKind::Connect) || (self.check(&TokenKind::Flow) && self.peek_next_is_from()) {
                     self.advance(); // connect / flow
@@ -2640,7 +2732,14 @@ impl<'a> SysmlParser<'a> {
                         severity = attr.default_value.and_then(|v| v.parse::<i32>().ok()).unwrap_or(1);
                     }
                 } else {
-                    self.skip_until_semi_or_brace();
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in connection declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -2824,42 +2923,7 @@ impl<'a> SysmlParser<'a> {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
-                if self.check(&TokenKind::Doc) {
-                    self.advance();
-                    self.skip_trivia();
-                    if self.check(&TokenKind::Eq) || self.check(&TokenKind::Colon) {
-                        self.advance();
-                        self.skip_trivia();
-                    }
-                    let inner = if let Some(d) = self.take_doc_comment() {
-                        Some(d)
-                    } else if let TokenKind::StringLit(s) = self.peek_kind().clone() {
-                        self.advance();
-                        Some(s)
-                    } else if let TokenKind::Ident(s) = self.peek_kind().clone() {
-                        self.advance();
-                        Some(s)
-                    } else {
-                        None
-                    };
-                    if let Some(inner_text) = inner {
-                        if !inner_text.trim().is_empty() {
-                            match &mut uc_doc {
-                                Some(existing) => {
-                                    if !existing.trim().is_empty() {
-                                        existing.push_str("\n\n");
-                                    }
-                                    existing.push_str(&inner_text);
-                                }
-                                None => {
-                                    uc_doc = Some(inner_text);
-                                }
-                            }
-                        }
-                    }
-                    self.skip_trivia();
-                    continue;
-                } else if let Some(inner_text) = self.take_doc_comment() {
+                while let Some(inner_text) = self.take_inner_doc_comment() {
                     if !inner_text.trim().is_empty() {
                         match &mut uc_doc {
                             Some(existing) => {
@@ -2874,8 +2938,11 @@ impl<'a> SysmlParser<'a> {
                         }
                     }
                     self.skip_trivia();
-                    continue;
-                } else if self.check(&TokenKind::Subject) {
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    break;
+                }
+                if self.check(&TokenKind::Subject) {
                     self.advance();
                     subject = Some(self.read_until_semi());
                 } else if self.check(&TokenKind::Actor) {
@@ -2904,7 +2971,14 @@ impl<'a> SysmlParser<'a> {
                     self.advance();
                     postconditions.push(self.read_until_semi());
                 } else {
-                    self.skip_until_semi_or_brace();
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in use case declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -2960,17 +3034,39 @@ impl<'a> SysmlParser<'a> {
         }
 
         let name = self.expect_ident()?;
+        let mut item_doc = doc;
         let mut attributes = Vec::new();
 
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
-                let a_doc = self.take_doc_comment();
+                let mut a_doc = self.take_inner_doc_comment();
+                self.skip_trivia();
+                while let Some(next_doc) = self.take_inner_doc_comment() {
+                    if item_doc.is_none() {
+                        item_doc = a_doc;
+                    }
+                    a_doc = Some(next_doc);
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    if item_doc.is_none() {
+                        item_doc = a_doc;
+                    }
+                    break;
+                }
                 if self.check(&TokenKind::Attribute) {
                     attributes.push(self.parse_attribute_decl(a_doc)?);
                 } else {
-                    self.skip_until_semi_or_brace();
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in item declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -2980,7 +3076,7 @@ impl<'a> SysmlParser<'a> {
 
         Ok(ItemDef {
             name,
-            doc,
+            doc: item_doc,
             attributes,
         })
     }
@@ -3018,6 +3114,7 @@ impl<'a> SysmlParser<'a> {
         }
 
         let name = self.expect_ident()?;
+        let mut hazard_doc = doc;
         let mut severity = 1;
         let mut source_port = None;
         let mut target_port = None;
@@ -3027,6 +3124,15 @@ impl<'a> SysmlParser<'a> {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
+                while let Some(d) = self.take_inner_doc_comment() {
+                    if hazard_doc.is_none() {
+                        hazard_doc = Some(d);
+                    }
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    break;
+                }
                 if self.check(&TokenKind::Attribute) {
                     let attr = self.parse_attribute_decl(None)?;
                     if attr.name == "severity" {
@@ -3039,7 +3145,14 @@ impl<'a> SysmlParser<'a> {
                         part_ref = attr.default_value;
                     }
                 } else {
-                    self.skip_until_semi_or_brace();
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in hazard declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -3049,7 +3162,7 @@ impl<'a> SysmlParser<'a> {
 
         Ok(HazardDef {
             name,
-            doc,
+            doc: hazard_doc,
             severity,
             source_port,
             target_port,
@@ -3090,6 +3203,7 @@ impl<'a> SysmlParser<'a> {
         }
 
         let name = self.expect_ident()?;
+        let mut risk_doc = doc;
         let mut severity = 1;
         let mut hazard_ref = None;
         let mut source_port = None;
@@ -3099,6 +3213,15 @@ impl<'a> SysmlParser<'a> {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
+                while let Some(d) = self.take_inner_doc_comment() {
+                    if risk_doc.is_none() {
+                        risk_doc = Some(d);
+                    }
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    break;
+                }
                 if self.check(&TokenKind::Attribute) {
                     let attr = self.parse_attribute_decl(None)?;
                     if attr.name == "severity" {
@@ -3111,7 +3234,14 @@ impl<'a> SysmlParser<'a> {
                         target_port = attr.default_value;
                     }
                 } else {
-                    self.skip_until_semi_or_brace();
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in risk declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -3121,7 +3251,7 @@ impl<'a> SysmlParser<'a> {
 
         Ok(RiskDef {
             name,
-            doc,
+            doc: risk_doc,
             severity,
             hazard_ref,
             source_port,
@@ -3165,6 +3295,7 @@ impl<'a> SysmlParser<'a> {
         }
 
         let name = self.expect_ident()?;
+        let mut tc_doc = doc;
         let mut subject_part = None;
         let mut verified_requirements = Vec::new();
         let mut objective = None;
@@ -3174,6 +3305,15 @@ impl<'a> SysmlParser<'a> {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
+                while let Some(d) = self.take_inner_doc_comment() {
+                    if tc_doc.is_none() {
+                        tc_doc = Some(d);
+                    }
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    break;
+                }
                 if self.check(&TokenKind::Subject) {
                     self.advance();
                     subject_part = Some(self.read_until_semi());
@@ -3199,7 +3339,14 @@ impl<'a> SysmlParser<'a> {
                     self.advance();
                     test_steps.push(self.read_until_semi());
                 } else {
-                    self.skip_until_semi_or_brace();
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in test case declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -3213,7 +3360,7 @@ impl<'a> SysmlParser<'a> {
             verified_requirements,
             objective,
             test_steps,
-            doc,
+            doc: tc_doc,
         })
     }
 
@@ -3249,17 +3396,34 @@ impl<'a> SysmlParser<'a> {
             self.advance();
         }
         let name = self.expect_ident()?;
+        let mut cap_doc = doc;
         let mut subsystem = None;
 
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
+                while let Some(d) = self.take_inner_doc_comment() {
+                    if cap_doc.is_none() {
+                        cap_doc = Some(d);
+                    }
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    break;
+                }
                 if self.check(&TokenKind::Subsystem) {
                     self.advance();
                     subsystem = Some(self.read_until_semi());
                 } else {
-                    self.skip_until_semi_or_brace();
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in capability declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -3269,10 +3433,10 @@ impl<'a> SysmlParser<'a> {
 
         Ok(CapabilityDef {
             name,
-            description: doc.clone(),
+            description: cap_doc.clone(),
             subsystem,
             package_ref: None,
-            doc,
+            doc: cap_doc,
         })
     }
 
@@ -3393,6 +3557,7 @@ impl<'a> SysmlParser<'a> {
             self.advance();
         }
         let name = self.expect_ident()?;
+        let mut inter_doc = doc;
         let mut lifelines = Vec::new();
         let mut messages = Vec::new();
         let mut triggers = Vec::new();
@@ -3401,6 +3566,15 @@ impl<'a> SysmlParser<'a> {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
+                while let Some(d) = self.take_inner_doc_comment() {
+                    if inter_doc.is_none() {
+                        inter_doc = Some(d);
+                    }
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    break;
+                }
                 if self.check(&TokenKind::Lifeline) {
                     self.advance();
                     lifelines.push(self.read_until_semi());
@@ -3411,7 +3585,14 @@ impl<'a> SysmlParser<'a> {
                     self.advance();
                     triggers.push(self.read_until_semi());
                 } else {
-                    self.skip_until_semi_or_brace();
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in interaction declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -3424,7 +3605,7 @@ impl<'a> SysmlParser<'a> {
             lifelines,
             messages,
             triggers,
-            doc,
+            doc: inter_doc,
         })
     }
 
@@ -3527,29 +3708,26 @@ impl<'a> SysmlParser<'a> {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
-                if self.check(&TokenKind::Doc) {
-                    self.advance();
-                    self.skip_trivia();
-                    if let Some(d) = self.take_doc_comment() {
-                        if final_doc.is_none() {
-                            final_doc = Some(d);
-                        }
-                    }
-                    continue;
-                }
-                if let Some(d) = self.take_doc_comment() {
+                while let Some(d) = self.take_inner_doc_comment() {
                     if final_doc.is_none() {
                         final_doc = Some(d);
                     }
-                    continue;
+                    self.skip_trivia();
                 }
-                if self.check(&TokenKind::In) || self.check(&TokenKind::Attribute) {
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    break;
+                }
+                if self.check(&TokenKind::In)
+                    || self.check(&TokenKind::Out)
+                    || self.check(&TokenKind::Inout)
+                    || self.check(&TokenKind::Attribute)
+                {
                     self.advance();
                     if self.check(&TokenKind::Attribute) || self.check(&TokenKind::Item) {
                         self.advance();
                     }
                     let p_name = self.expect_ident()?;
-                    let p_type = if self.check(&TokenKind::Colon) {
+                    let p_type = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
                         self.advance();
                         self.parse_type_expr()?
                     } else {
@@ -3570,47 +3748,108 @@ impl<'a> SysmlParser<'a> {
                         default_value,
                         doc: None,
                     });
-                } else {
-                    let stmt = self.read_until_semi();
-                    let trimmed = stmt.trim();
-                    if trimmed.is_empty() {
-                        continue;
-                    }
-                    if let Some(rest) = trimmed.strip_prefix("return") {
-                        let rest = rest.trim();
-                        if let Some((lhs, rhs)) = rest.split_once('=') {
-                            if return_type.is_none() {
-                                if let Some((_, rtype)) = lhs.split_once(':') {
-                                    let first_tok = rtype.split_whitespace().next().unwrap_or("");
-                                    if !first_tok.is_empty() {
-                                        return_type = Some(first_tok.to_string());
-                                    }
-                                }
-                            }
+                } else if matches!(self.peek_kind(), TokenKind::Ident(s) if s == "return") {
+                    self.advance();
+                    self.skip_trivia();
+                    if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
+                        self.advance();
+                        let rtype = self.parse_type_expr()?;
+                        if return_type.is_none() {
+                            return_type = Some(rtype);
+                        }
+                        if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
+                            self.advance();
+                            let rhs = self.read_until_semi();
                             let rhs_trimmed = rhs.trim();
                             if !rhs_trimmed.is_empty() {
                                 expr_lines.push(rhs_trimmed.to_string());
                             }
                         } else {
-                            let is_math_expr = rest.contains('+') || rest.contains('-') || rest.contains('*') || rest.contains('/') || rest.contains('(');
-                            if return_type.is_none() && !is_math_expr && (rest.contains(':') || rest.starts_with("type ") || rest.split_whitespace().count() <= 2) {
-                                let type_part = if let Some((_, after_colon)) = rest.split_once(':') {
-                                    after_colon.trim()
-                                } else {
-                                    rest.trim_start_matches("type").trim()
-                                };
-                                let first_tok = type_part.split_whitespace().next().unwrap_or("");
-                                if !first_tok.is_empty() {
-                                    return_type = Some(first_tok.to_string());
-                                    continue;
-                                }
+                            self.expect_semi()?;
+                        }
+                    } else if matches!(self.peek_kind(), TokenKind::Ident(s) if s == "type") {
+                        self.advance();
+                        if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
+                            self.advance();
+                        }
+                        let rtype = self.parse_type_expr()?;
+                        if return_type.is_none() {
+                            return_type = Some(rtype);
+                        }
+                        if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
+                            self.advance();
+                            let rhs = self.read_until_semi();
+                            let rhs_trimmed = rhs.trim();
+                            if !rhs_trimmed.is_empty() {
+                                expr_lines.push(rhs_trimmed.to_string());
                             }
-                            let expr_candidate = rest.trim_start_matches(':').trim();
-                            if !expr_candidate.is_empty() {
-                                expr_lines.push(expr_candidate.to_string());
-                            }
+                        } else {
+                            self.expect_semi()?;
                         }
                     } else {
+                        let saved_pos = self.pos;
+                        if self.check(&TokenKind::In)
+                            || self.check(&TokenKind::Out)
+                            || self.check(&TokenKind::Inout)
+                        {
+                            self.advance();
+                        }
+                        if self.check(&TokenKind::Attribute) || self.check(&TokenKind::Item) {
+                            self.advance();
+                        }
+                        let has_ident = self.parse_identifier().is_ok();
+                        if has_ident && (self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt)) {
+                            self.advance();
+                            let rtype = self.parse_type_expr()?;
+                            if return_type.is_none() {
+                                return_type = Some(rtype);
+                            }
+                            if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
+                                self.advance();
+                                let rhs = self.read_until_semi();
+                                let rhs_trimmed = rhs.trim();
+                                if !rhs_trimmed.is_empty() {
+                                    expr_lines.push(rhs_trimmed.to_string());
+                                }
+                            } else {
+                                self.expect_semi()?;
+                            }
+                        } else if has_ident && (self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq)) {
+                            self.advance();
+                            let rhs = self.read_until_semi();
+                            let rhs_trimmed = rhs.trim();
+                            if !rhs_trimmed.is_empty() {
+                                expr_lines.push(rhs_trimmed.to_string());
+                            }
+                        } else {
+                            self.pos = saved_pos;
+                            let starts_with_call = self.parse_identifier().is_ok()
+                                && self.check(&TokenKind::OpenParen);
+                            self.pos = saved_pos;
+                            let mut parsed_bare_type = false;
+                            if return_type.is_none() && !starts_with_call {
+                                if let Ok(rtype) = self.parse_type_expr() {
+                                    if self.check(&TokenKind::Semi) {
+                                        self.advance();
+                                        return_type = Some(rtype);
+                                        parsed_bare_type = true;
+                                    }
+                                }
+                            }
+                            if !parsed_bare_type {
+                                self.pos = saved_pos;
+                                let expr_str = self.read_until_semi();
+                                let expr_trimmed = expr_str.trim();
+                                if !expr_trimmed.is_empty() {
+                                    expr_lines.push(expr_trimmed.to_string());
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    let stmt = self.read_until_semi();
+                    let trimmed = stmt.trim();
+                    if !trimmed.is_empty() {
                         expr_lines.push(trimmed.to_string());
                     }
                 }
@@ -4558,62 +4797,69 @@ impl<'a> SysmlParser<'a> {
         Ok(raw.trim().trim_matches('"').trim_matches('\'').trim().to_string())
     }
 
-    /// Executes deterministic fn `SysmlParser::skip_until_semi_or_brace` within `crates/compile-sysml/src/parser/grammar.rs`.
+    /// Extracts an inner documentation comment (`/* ... */`, `doc /* ... */`, or `doc = "..."`) inside a braced declaration body and consumes any trailing semicolon.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::skip_until_semi_or_brace` in `crates/compile-sysml/src/parser/grammar.rs`.
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::take_inner_doc_comment` in `crates/compile-sysml/src/parser/grammar.rs`.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SysmlParser::skip_until_semi_or_brace` (declaration #45) within `PARSER-GRAMMAR`.
+    /// - Preserves deterministic state conservation and referential transparency for fn `SysmlParser::take_inner_doc_comment` (declaration #45) within `PARSER-GRAMMAR`.
     ///
     /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `SysmlParser::skip_until_semi_or_brace` in `PARSER-GRAMMAR`.
+    /// - Invoked within a valid braced declaration body execution context for `SysmlParser::take_inner_doc_comment` in `PARSER-GRAMMAR`.
     ///
     /// ## 4. Postconditions
-    /// - Returns `()` from `SysmlParser::skip_until_semi_or_brace` with deterministic post-execution state.
+    /// - Returns `Option<String>` from `SysmlParser::take_inner_doc_comment` with deterministic post-execution cursor advancement.
     ///
     /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(skip_until_semi_or_brace)) bounded over input/member dimension of `SysmlParser::skip_until_semi_or_brace`.
-    /// - Space Complexity: O(K(skip_until_semi_or_brace)) bounded auxiliary memory for `SysmlParser::skip_until_semi_or_brace`.
+    /// - Time Complexity: O(1) bounded token inspection and advancement for `SysmlParser::take_inner_doc_comment`.
+    /// - Space Complexity: O(L) bounded auxiliary memory proportional to comment string length `L`.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SysmlParser::skip_until_semi_or_brace` (`()`).
-    /// - State: Maintains consistent state invariants across `SysmlParser::skip_until_semi_or_brace` without partial mutation on error.
-    /// - Action: Executes `SysmlParser::skip_until_semi_or_brace` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SysmlParser::skip_until_semi_or_brace` (`PARSER-GRAMMAR`).
+    /// - Interface: Validates boundary inputs and types for `SysmlParser::take_inner_doc_comment` (`Option<String>`).
+    /// - State: Maintains consistent state invariants across `SysmlParser::take_inner_doc_comment` without partial mutation when no doc token is present.
+    /// - Action: Executes `SysmlParser::take_inner_doc_comment` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `SysmlParser::take_inner_doc_comment` (`PARSER-GRAMMAR`).
     ///
     /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-SKIP-UNTIL-SEMI-OR-BRACE] | SysML v2: ActionDef(SysmlParser::skip_until_semi_or_brace)
-    fn skip_until_semi_or_brace(&mut self) {
-        let mut depth = 0;
-        while !self.is_at_end() {
-            match self.peek_kind() {
-                TokenKind::OpenBrace => {
-                    depth += 1;
-                    self.advance();
-                }
-                TokenKind::CloseBrace => {
-                    if depth == 0 {
-                        break;
-                    }
-                    depth -= 1;
-                    self.advance();
-                    if depth == 0 {
-                        break;
-                    }
-                }
-                TokenKind::Semi => {
-                    if depth == 0 {
-                        self.advance();
-                        break;
-                    }
-                    self.advance();
-                }
-                _ => {
-                    self.advance();
-                }
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-TAKE-INNER-DOC-COMMENT] | SysML v2: ActionDef(SysmlParser::take_inner_doc_comment)
+    fn take_inner_doc_comment(&mut self) -> Option<String> {
+        if let Some(d) = self.take_doc_comment() {
+            while matches!(self.peek_kind(), TokenKind::LineComment(_)) {
+                self.advance();
             }
+            if self.check(&TokenKind::Semi) {
+                self.advance();
+            }
+            return Some(d);
         }
+        if self.check(&TokenKind::Doc) {
+            self.advance();
+            self.skip_trivia();
+            if self.check(&TokenKind::Eq) || self.check(&TokenKind::Colon) {
+                self.advance();
+                self.skip_trivia();
+            }
+            let inner = if let Some(d) = self.take_doc_comment() {
+                Some(d)
+            } else if let TokenKind::StringLit(s) = self.peek_kind().clone() {
+                self.advance();
+                Some(s)
+            } else if let TokenKind::Ident(s) = self.peek_kind().clone() {
+                self.advance();
+                Some(s)
+            } else {
+                Some(String::new())
+            };
+            while matches!(self.peek_kind(), TokenKind::LineComment(_)) {
+                self.advance();
+            }
+            if self.check(&TokenKind::Semi) {
+                self.advance();
+            }
+            return inner;
+        }
+        None
     }
 }
 
@@ -6110,10 +6356,22 @@ package CompositeTypesPkg {
         port def DataPort {
             in flow payload : &[u8];
             out flow status : Result<T, E>;
+            inout flow bidir : (u32, Option<String>);
+            flow inout raw_bus : *mut [u8; 4];
         }
-        action def ProcessBuffer(in buf : &[u8], out res : Result<Vec<u8>, E>) {
+        action def ProcessBuffer(in buf : &[u8], out res : Result<Vec<u8>, E>, inout state_buf : (u32, &'a mut [u8])) : Result<(), E> {
             in ptr : *const [T; 10];
             out summary : Option<String>;
+            inout ctx : &mut Context<T>;
+        }
+        constraint def CheckEnvelope(in samples : &[f64; 4], out bounds : (f64, f64), inout state_ref : &'a mut Result<T, E>) {
+            samples != bounds;
+        }
+        calc def ComputeTrajectory(in vec_in : Vec<f64>, out mat_out : [f64; 16], inout state_io : (f64, f64)) {
+            in tol : Option<f64>;
+            out diag : Result<f64, E>;
+            inout scratch : &[u8; 64];
+            return res : Result<(f64, [f64; 3]), ErrorCode> = integrate(vec_in, tol);
         }
         operation def ExecuteOp(in slice_in : &[u8], out result_out : Result<T, E>) : Option<String>;
     }
@@ -6179,7 +6437,7 @@ package CompositeTypesPkg {
         assert!(frame_in.is_conjugated);
         assert_eq!(frame_in.type_name, "Channel<Result<T, E>>");
         let data_port = node.ports.get(1).ok_or("missing DataPort")?;
-        assert_eq!(data_port.item_flows.len(), 2);
+        assert_eq!(data_port.item_flows.len(), 4);
         assert_eq!(
             data_port.item_flows.first().ok_or("missing flow 0")?.item_type,
             "&[u8]"
@@ -6188,20 +6446,78 @@ package CompositeTypesPkg {
             data_port.item_flows.get(1).ok_or("missing flow 1")?.item_type,
             "Result<T, E>"
         );
+        assert_eq!(
+            data_port.item_flows.get(2).ok_or("missing flow 2")?.direction,
+            "inout"
+        );
+        assert_eq!(
+            data_port.item_flows.get(2).ok_or("missing flow 2")?.item_type,
+            "(u32, Option<String>)"
+        );
+        assert_eq!(
+            data_port.item_flows.get(3).ok_or("missing flow 3")?.direction,
+            "inout"
+        );
+        assert_eq!(
+            data_port.item_flows.get(3).ok_or("missing flow 3")?.item_type,
+            "*mut [u8; 4]"
+        );
 
         let act = node.actions.first().ok_or("missing ProcessBuffer")?;
         assert_eq!(act.in_params.len(), 2);
         assert_eq!(act.in_params.first().ok_or("missing in 0")?.type_name, "&[u8]");
         assert_eq!(act.in_params.get(1).ok_or("missing in 1")?.type_name, "*const [T; 10]");
-        assert_eq!(act.out_params.len(), 2);
+        assert_eq!(act.out_params.len(), 4);
         assert_eq!(
             act.out_params.first().ok_or("missing out 0")?.type_name,
             "Result<Vec<u8>, E>"
         );
         assert_eq!(
             act.out_params.get(1).ok_or("missing out 1")?.type_name,
+            "(u32, &'a mut [u8])"
+        );
+        assert_eq!(
+            act.out_params.get(2).ok_or("missing out 2")?.type_name,
             "Option<String>"
         );
+        assert_eq!(
+            act.out_params.get(3).ok_or("missing out 3")?.type_name,
+            "&mut Context<T>"
+        );
+
+        let con = node.constraints.first().ok_or("missing CheckEnvelope")?;
+        assert_eq!(
+            con.parameters,
+            vec![
+                "in samples: &[f64; 4]".to_string(),
+                "out bounds: (f64, f64)".to_string(),
+                "inout state_ref: &'a mut Result<T, E>".to_string(),
+            ]
+        );
+
+        let calc = node.calcs.first().ok_or("missing ComputeTrajectory")?;
+        assert_eq!(
+            calc.return_type.as_deref(),
+            Some("Result<(f64, [f64; 3]), ErrorCode>")
+        );
+        assert_eq!(calc.in_params.len(), 6);
+        assert_eq!(
+            calc.in_params.get(1).ok_or("missing calc param 1")?.type_name,
+            "[f64; 16]"
+        );
+        assert_eq!(
+            calc.in_params.get(2).ok_or("missing calc param 2")?.type_name,
+            "(f64, f64)"
+        );
+        assert_eq!(
+            calc.in_params.get(4).ok_or("missing calc param 4")?.type_name,
+            "Result<f64, E>"
+        );
+        assert_eq!(
+            calc.in_params.get(5).ok_or("missing calc param 5")?.type_name,
+            "&[u8; 64]"
+        );
+        assert_eq!(calc.expression.as_deref(), Some("integrate ( vec_in , tol )"));
 
         let op = node.operations.first().ok_or("missing ExecuteOp")?;
         assert_eq!(op.return_type.as_deref(), Some("Option<String>"));
@@ -6258,6 +6574,11 @@ package CompositeTypesPkg {
         let err3 = SysmlParser::parse_source(unknown_part_stmt, "BadPartPkg")
             .expect_err("unknown part-level keyword 'requirment' must return Err(ParseError)");
         assert_eq!(err3.span.line, 3, "expected error on line 3, got {:?}", err3);
+
+        let unknown_inner_stmt = "package BadInnerPkg {\n    port def P {\n        atribute bad : Integer;\n    }\n}\n";
+        let err4 = SysmlParser::parse_source(unknown_inner_stmt, "BadInnerPkg")
+            .expect_err("unknown inner statement in port def must return Err(ParseError)");
+        assert_eq!(err4.span.line, 3, "expected error on line 3, got {:?}", err4);
     }
 
     /// Executes deterministic unit test `test_defect_06_parse_state_transitions_first_then_and_from_to` within `crates/compile-sysml/src/parser/grammar.rs`.
@@ -6928,6 +7249,281 @@ package Issue509Pkg {
 
         let reparsed = SysmlParser::parse_source(&serialized, "Issue509Pkg")?;
         assert_eq!(reparsed, pkg);
+
+        Ok(())
+    }
+
+    /// Verifies that all 12 inner braced-body declaration parsers fail closed with `Err(ParseError)` and valid source spans on unrecognized inner statements and preserve consecutive standalone inner `doc` comments without false-positive rejection.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_504_inner_blocks_fail_closed_and_preserve_consecutive_docs` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Enforces fail-closed `Err(ParseError)` rejection across all 12 inner declaration loops (`port`, `action`, `requirement`, `state`, `connection`, `use case`, `item`, `hazard`, `risk`, `test case`, `capability`, `interaction`) while draining consecutive `DocComment` and `doc` tokens at loop boundaries.
+    ///
+    /// ## 3. Preconditions
+    /// - Input SysML v2 fixtures contain malformed inner statements across all 12 declaration types and valid declarations with consecutive inner doc comments.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts each malformed inner block returns `Err(ParseError)` on line 3 and valid consecutive inner doc comments parse cleanly and attach to parent/child AST nodes.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over fixture token stream length.
+    /// - Space Complexity: O(N) for constructed `PackageDef` AST.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates `ParseError` span line/column coordinates.
+    /// - State: Stateless in-memory verification.
+    /// - Action: Executes deterministically with zero external I/O.
+    /// - Resource: Bounded stack and heap allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-ISSUE-504-INNER-BLOCKS-FAIL-CLOSED] | SysML v2: TestCaseDef(test_issue_504_inner_blocks_fail_closed_and_preserve_consecutive_docs)
+    #[test]
+    fn test_issue_504_inner_blocks_fail_closed_and_preserve_consecutive_docs() -> Result<(), Box<dyn std::error::Error>> {
+        let bad_cases = [
+            ("port", "package P {\n    port def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("action", "package P {\n    action def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("requirement", "package P {\n    requirement def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("state", "package P {\n    state def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("connection", "package P {\n    connection def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("use case", "package P {\n    use case def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("item", "package P {\n    item def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("hazard", "package P {\n    hazard def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("risk", "package P {\n    risk def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("test case", "package P {\n    test case def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("capability", "package P {\n    capability def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("interaction", "package P {\n    interaction def X {\n        bogus_stmt x;\n    }\n}\n"),
+        ];
+
+        for (label, src) in bad_cases {
+            let err = SysmlParser::parse_source(src, "P").err().ok_or_else(|| {
+                format!("expected Err(ParseError) for unknown inner statement in {}", label)
+            })?;
+            assert_eq!(
+                err.span.line, 3,
+                "expected error on line 3 for {}, got {:?}",
+                label, err
+            );
+            assert!(
+                err.span.col > 0,
+                "expected positive column for {}, got {:?}",
+                label, err
+            );
+        }
+
+        let valid_docs_src = r#"
+package ConsecutiveInnerDocsPkg {
+    port def P1 {
+        /* port header doc 1 */
+        doc /* port header doc 2 */
+        /* flow doc */
+        inout flow sig : Vec<u8>;
+        /* trailing port comment */
+    }
+    action def A1 {
+        /* action inner doc 1 */
+        doc /* action inner doc 2 */
+        perform Controller;
+        step execute_step;
+        /* trailing action comment */
+    }
+    requirement def R1 {
+        /* req doc 1 */
+        /* req doc 2 */
+        id = "REQ-1";
+        /* attr doc */
+        attribute priority : Integer = 1;
+        /* trailing req comment */
+    }
+    state def S1 {
+        /* state doc 1 */
+        doc /* state doc 2 */
+        entry init;
+        /* trailing state comment */
+    }
+    connection def C1 {
+        /* conn doc 1 */
+        doc /* conn doc 2 */
+        connect a.p to b.q;
+        /* trailing conn comment */
+    }
+    use case def UC1 {
+        /* uc doc 1 */
+        doc /* uc doc 2 */
+        subject Sys;
+        /* trailing uc comment */
+    }
+    item def I1 {
+        /* item doc 1 */
+        doc /* item doc 2 */
+        /* item attr doc */
+        attribute payload : &[u8];
+        /* trailing item comment */
+    }
+    hazard def H1 {
+        /* hazard doc 1 */
+        doc /* hazard doc 2 */
+        attribute severity : Integer = 3;
+        /* trailing hazard comment */
+    }
+    risk def K1 {
+        /* risk doc 1 */
+        doc /* risk doc 2 */
+        attribute severity : Integer = 2;
+        /* trailing risk comment */
+    }
+    test case def T1 {
+        /* test doc 1 */
+        doc /* test doc 2 */
+        subject Sys;
+        step check_out;
+        /* trailing test comment */
+    }
+    capability def Cap1 {
+        /* cap doc 1 */
+        doc /* cap doc 2 */
+        subsystem Nav;
+        /* trailing cap comment */
+    }
+    interaction def Int1 {
+        /* inter doc 1 */
+        doc /* inter doc 2 */
+        lifeline A;
+        message m1;
+        trigger t1;
+        /* trailing inter comment */
+    }
+}
+"#;
+        let pkg = SysmlParser::parse_source(valid_docs_src, "ConsecutiveInnerDocsPkg")?;
+        let p1 = pkg.port_defs.first().ok_or("missing P1")?;
+        assert_eq!(p1.doc.as_deref(), Some("port header doc 1"));
+        assert_eq!(
+            p1.item_flows.first().and_then(|f| f.doc.as_deref()),
+            Some("flow doc")
+        );
+        let a1 = pkg.action_defs.first().ok_or("missing A1")?;
+        assert_eq!(a1.doc.as_deref(), Some("action inner doc 1"));
+        let r1 = pkg.requirement_defs.first().ok_or("missing R1")?;
+        assert_eq!(r1.text, "req doc 1");
+        assert_eq!(
+            r1.attributes.first().and_then(|a| a.doc.as_deref()),
+            Some("attr doc")
+        );
+        let i1 = pkg.item_defs.first().ok_or("missing I1")?;
+        assert_eq!(i1.doc.as_deref(), Some("item doc 1"));
+        assert_eq!(
+            i1.attributes.first().and_then(|a| a.doc.as_deref()),
+            Some("item attr doc")
+        );
+        let h1 = pkg.hazard_defs.first().ok_or("missing H1")?;
+        assert_eq!(h1.doc.as_deref(), Some("hazard doc 1"));
+        let k1 = pkg.risk_defs.first().ok_or("missing K1")?;
+        assert_eq!(k1.doc.as_deref(), Some("risk doc 1"));
+        let t1 = pkg.test_case_defs.first().ok_or("missing T1")?;
+        assert_eq!(t1.doc.as_deref(), Some("test doc 1"));
+        let cap1 = pkg.capability_defs.first().ok_or("missing Cap1")?;
+        assert_eq!(cap1.doc.as_deref(), Some("cap doc 1"));
+        assert_eq!(cap1.description.as_deref(), Some("cap doc 1"));
+        let int1 = pkg.interaction_defs.first().ok_or("missing Int1")?;
+        assert_eq!(int1.doc.as_deref(), Some("inter doc 1"));
+
+        Ok(())
+    }
+
+    /// Verifies that `parse_constraint_decl`, `parse_calc_decl`, `parse_action_decl`, and `parse_port_decl` preserve multi-argument generics, tuples, fixed-size arrays, pointers, and lifetime references via `parse_type_expr()`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_504_composite_types_in_constraint_calc_action_and_port` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Ensures `constraint def` parameter lists do not split on commas inside `<T, E>` or `(T1, T2)` and do not terminate at `)` of a tuple parameter; ensures `calc def` braced return statements preserve composite types across all syntax variants without corrupting function call expressions (`return compute(a, b);`).
+    ///
+    /// ## 3. Preconditions
+    /// - Input SysML v2 fixture contains `constraint def`, `calc def`, `action def`, and `port def` declarations with composite types.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<(), Box<dyn std::error::Error>>` confirming exact type strings and expression strings.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over fixture token stream length.
+    /// - Space Complexity: O(N) for constructed `PackageDef` AST.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates any `ParseError` via `Result`.
+    /// - State: Stateless in-memory verification.
+    /// - Action: Executes deterministically with zero external I/O.
+    /// - Resource: Bounded stack and heap allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-ISSUE-504-COMPOSITE-TYPES-PARITY] | SysML v2: TestCaseDef(test_issue_504_composite_types_in_constraint_calc_action_and_port)
+    #[test]
+    fn test_issue_504_composite_types_in_constraint_calc_action_and_port() -> Result<(), Box<dyn std::error::Error>> {
+        let src = r#"
+package Issue504CompositePkg {
+    constraint def MultiParamConstraint(
+        in pair : (u32, Option<String>),
+        out outcome : Result<Vec<u8>, ErrorCode>,
+        inout window : &[f64; 4],
+        bare_param
+    ) {
+        pair != outcome;
+    }
+
+    calc def CalcColonReturn {
+        return : Result<(u32, u64), E> = compute(x, y);
+    }
+
+    calc def CalcTypeReturn {
+        return type *const [u8; 16];
+    }
+
+    calc def CalcBareTypeReturn {
+        return &'a mut [u8; 32];
+    }
+
+    calc def CalcCallExprReturn {
+        return compute_norm(a, b);
+    }
+
+    calc def CalcAssignNoTypeReturn {
+        return out_val = x + y;
+    }
+}
+"#;
+        let pkg = SysmlParser::parse_source(src, "Issue504CompositePkg")?;
+        let con = pkg.constraint_defs.first().ok_or("missing MultiParamConstraint")?;
+        assert_eq!(
+            con.parameters,
+            vec![
+                "in pair: (u32, Option<String>)".to_string(),
+                "out outcome: Result<Vec<u8>, ErrorCode>".to_string(),
+                "inout window: &[f64; 4]".to_string(),
+                "bare_param".to_string(),
+            ]
+        );
+        assert_eq!(con.expression, "pair != outcome");
+
+        let c0 = pkg.calc_defs.first().ok_or("missing CalcColonReturn")?;
+        assert_eq!(c0.return_type.as_deref(), Some("Result<(u32, u64), E>"));
+        assert_eq!(c0.expression.as_deref(), Some("compute ( x , y )"));
+
+        let c1 = pkg.calc_defs.get(1).ok_or("missing CalcTypeReturn")?;
+        assert_eq!(c1.return_type.as_deref(), Some("*const [u8; 16]"));
+        assert_eq!(c1.expression, None);
+
+        let c2 = pkg.calc_defs.get(2).ok_or("missing CalcBareTypeReturn")?;
+        assert_eq!(c2.return_type.as_deref(), Some("&'a mut [u8; 32]"));
+        assert_eq!(c2.expression, None);
+
+        let c3 = pkg.calc_defs.get(3).ok_or("missing CalcCallExprReturn")?;
+        assert_eq!(c3.return_type, None);
+        assert_eq!(c3.expression.as_deref(), Some("compute_norm ( a , b )"));
+
+        let c4 = pkg.calc_defs.get(4).ok_or("missing CalcAssignNoTypeReturn")?;
+        assert_eq!(c4.return_type, None);
+        assert_eq!(c4.expression.as_deref(), Some("x + y"));
 
         Ok(())
     }
