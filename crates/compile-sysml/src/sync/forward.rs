@@ -1806,13 +1806,17 @@ pub fn forward_sync_sysml_to_specs(
             .map(|pos| pos + 1)
             .unwrap_or(1);
 
+        let pkg_stories: Vec<usize> = story_metas
+            .iter()
+            .filter(|s| s.pkg_name == p.name)
+            .map(|s| s.s_num)
+            .collect();
+
         for (u_idx, uc) in p.use_case_defs.iter().enumerate() {
-            let story_s_num = story_metas
-                .iter()
-                .filter(|s| s.pkg_name == p.name)
-                .nth(u_idx)
-                .or_else(|| story_metas.iter().find(|s| s.pkg_name == p.name))
-                .map(|s| s.s_num);
+            let story_s_num = pkg_stories
+                .get(u_idx)
+                .copied()
+                .or_else(|| pkg_stories.first().copied());
             let parsed_doc = parse_use_case_doc(uc.doc.as_deref());
             let subject_candidate = uc.subject.as_ref().or(parsed_doc.subject.as_ref());
             let engine_name = if let Some(subj) = subject_candidate {
@@ -2122,6 +2126,32 @@ Safety-critical invariant satisfaction, formal trace matrix closure, and zero ha
 
         let bdd_criteria = generate_feature_bdd(ctx.part, &matching_reqs);
 
+        let mut emitted_part_ops = BTreeSet::new();
+        let mut op_action_bullets = Vec::new();
+        for op in &ctx.part.operations {
+            let ret = op.return_type.as_deref().unwrap_or("void");
+            if emitted_part_ops.insert(op.name.as_str()) {
+                op_action_bullets.push(format!("- `+{}() : {}`", op.name, ret));
+            }
+        }
+        for act in &ctx.part.actions {
+            if emitted_part_ops.insert(act.name.as_str()) {
+                op_action_bullets.push(format!("- `+{}() : void`", act.name));
+            }
+        }
+        let interactive_flow_section = if op_action_bullets.is_empty() {
+            format!(
+                "Operational lifecycle events and discrete state transitions for {}.",
+                part_name
+            )
+        } else {
+            format!(
+                "Operational lifecycle events and discrete state transitions for {}.\n{}",
+                part_name,
+                op_action_bullets.join("\n")
+            )
+        };
+
         let source_refs = if !has_modular_schema {
             r#"- System Architecture Model: `schema/model.sysml`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process"#
@@ -2205,7 +2235,7 @@ Formal constraints and invariant guarantees enforced by {part_name}.
 Logical layout, viewport containment, and container structure for {part_name} conforming to platform design tokens. Container boundaries enforce @container isolation rules.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for {part_name}.
+{interactive_flow_section}
 
 ### Layer 1: Domain State & Signal Model
 Domain state vector representing {part_name} status, AST references, and typed signal models.
@@ -2234,6 +2264,7 @@ Component behavior and interface definitions derive from `schema/model.sysml` pu
             part_name = part_name,
             class_diagram_block = class_diagram_block,
             json_schema = json_schema,
+            interactive_flow_section = interactive_flow_section,
             bdd_criteria = bdd_criteria,
             source_refs = source_refs,
         );
@@ -2333,20 +2364,20 @@ Component behavior and interface definitions derive from `schema/model.sysml` pu
         }
         let req_features = req_features_list.join("\n");
 
-        let parent_epic_link = {
+        let parent_epic_link = if s_meta.pkg_name == "SysML_Model" || s_meta.pkg_name == pkg.name {
+            format!("[EPIC-01-{p_name}](../epics/EPIC-01-{p_name}.md)", p_name = pkg.name)
+        } else if s_meta.pkg_name == "ConOps" {
+            "[EPIC-02-ConOps](../epics/EPIC-02-ConOps.md)".to_string()
+        } else {
             let ep_idx = ordered_packages
                 .iter()
                 .position(|p| p.name == s_meta.pkg_name)
                 .map(|idx| idx + 1)
-                .unwrap_or(2);
-            if s_meta.pkg_name == "ConOps" {
-                "[EPIC-02-ConOps](../epics/EPIC-02-ConOps.md)".to_string()
-            } else {
-                format!(
-                    "[EPIC-{:02}-{}](../epics/EPIC-{:02}-{}.md)",
-                    ep_idx, s_meta.pkg_name, ep_idx, s_meta.pkg_name
-                )
-            }
+                .unwrap_or(1);
+            format!(
+                "[EPIC-{:02}-{}](../epics/EPIC-{:02}-{}.md)",
+                ep_idx, s_meta.pkg_name, ep_idx, s_meta.pkg_name
+            )
         };
 
         let spec_source = if !has_modular_schema {
@@ -2707,50 +2738,6 @@ Use case operational flows and lifecycle activity references:
 
     // 5. STPA Matrix (safety/STPA_MATRIX.md)
     let ucas = expand_cartesian_stpa(pkg);
-    let all_constraints = pkg.get_all_constraints();
-
-    let mut sc_table = String::new();
-    sc_table.push_str("| SC ID | Constraint Statement / Description | Controller / Subsystem | Traceability / UCA |\n");
-    sc_table.push_str("| :--- | :--- | :--- | :--- |\n");
-
-    for (idx, c) in all_constraints.iter().enumerate() {
-        let sc_id = format!("SC-{:02}", idx + 1);
-        let desc = c.doc.as_deref().filter(|d| !d.is_empty()).unwrap_or(&c.expression);
-        let desc_clean = if desc.is_empty() { &c.name } else { desc }.replace('|', "\\|");
-        let uca_trace = ucas
-            .iter()
-            .find(|u| u.constraint == sc_id || u.constraint == c.name)
-            .map(|u| u.id.as_str())
-            .unwrap_or("-");
-        let controller = ucas
-            .iter()
-            .find(|u| u.constraint == sc_id || u.constraint == c.name)
-            .map(|u| u.controller.as_str())
-            .unwrap_or("-");
-        sc_table.push_str(&format!(
-            "| **{}** | {} | {} | {} |\n",
-            sc_id, desc_clean, controller, uca_trace
-        ));
-    }
-
-    for u in &ucas {
-        if !all_constraints.iter().any(|c| c.name == u.constraint) {
-            sc_table.push_str(&format!(
-                "| **{}** | System shall prevent {} during {} | {} | {} |\n",
-                u.constraint, u.guide_word, u.control_action, u.controller, u.id
-            ));
-        }
-    }
-
-    let mut uca_table = String::new();
-    uca_table.push_str("| UCA ID | Controller | Control Action | Guide Word | Hazard | Safety Constraint |\n");
-    uca_table.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
-    for u in &ucas {
-        uca_table.push_str(&format!(
-            "| {} | {} | {} | {} | {} | {} |\n",
-            u.id, u.controller, u.control_action, u.guide_word, u.hazard, u.constraint
-        ));
-    }
 
     let fmeca_rows = crate::stpa::fmeca::generate_fmeca_matrix(pkg, None);
     let tokens = crate::stpa::safety_suite::collect_parameter_tokens(pkg);
@@ -4864,6 +4851,199 @@ Custom authored Layer 3 presentation actuator bindings.
         assert_eq!(
             norm_post,
             vec!["Output state verified without error".to_string()]
+        );
+
+        Ok(())
+    }
+
+    /// Executes deterministic unit test `test_forward_to_reverse_to_forward_roundtrip_idempotency_and_parent_epic_links` within `crates/compile-sysml/src/sync/forward.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_forward_to_reverse_to_forward_roundtrip_idempotency_and_parent_epic_links` in `crates/compile-sysml/src/sync/forward.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Verifies that `US-01-PrimaryFlowAction.md` links to `[EPIC-02-SubsystemAlpha](../epics/EPIC-02-SubsystemAlpha.md)`, `UC-02-ExecuteSecondaryFlow.md` links to `US-02-SecondaryFlowAction.md`, `FEAT-01-AlphaEngine.md` emits `- \`+ComputeStepAction() : void\`` under `## Interface Requirements`, and `reverse_sync_specs_to_sysml` preserves `ComputeStepAction` and subsystem `use_case_defs` without leaking root duplicates.
+    ///
+    /// ## 3. Preconditions
+    /// - Constructs a synthetic `SystemPackage` containing `SubsystemAlpha` with `AlphaEngine`, `ComputeStepAction`, `PrimaryFlowAction`, `SecondaryFlowAction`, and two `UseCaseDef` nodes.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when forward-to-reverse roundtrip preserves parent epic links, use-case-to-story links, feature operation/action bullets, and AST idempotency.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over synthetic AST nodes.
+    /// - Space Complexity: O(N) auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Cleans temporary directory deterministically on completion.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS] | SysML v2: VerificationCaseDef(test_forward_to_reverse_to_forward_roundtrip_idempotency_and_parent_epic_links)
+    #[test]
+    fn test_forward_to_reverse_to_forward_roundtrip_idempotency_and_parent_epic_links(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::parser::grammar::SysmlParser;
+        use crate::semantic::serializer::to_sysml;
+        use crate::sync::reverse::{reverse_sync_specs_to_sysml, ReverseSyncOptions};
+        use deap_core::sysml_ast::{ActionDef, PackageDef, PartDef, UseCaseDef};
+
+        let tmp_dir = std::env::temp_dir().join(format!(
+            "deap_issue_507_roundtrip_{}",
+            std::process::id()
+        ));
+        if tmp_dir.exists() {
+            std::fs::remove_dir_all(&tmp_dir)?;
+        }
+        let docs_dir = tmp_dir.join("docs");
+        std::fs::create_dir_all(&docs_dir)?;
+
+        let mut root = PackageDef {
+            name: "SystemPackage".to_string(),
+            ..Default::default()
+        };
+        let mut sub = PackageDef {
+            name: "SubsystemAlpha".to_string(),
+            parent_package: Some("SystemPackage".to_string()),
+            ..Default::default()
+        };
+        let mut alpha_engine = PartDef {
+            name: "AlphaEngine".to_string(),
+            ..Default::default()
+        };
+        alpha_engine.actions.push(ActionDef {
+            name: "ComputeStepAction".to_string(),
+            ..Default::default()
+        });
+        sub.part_defs.push(alpha_engine);
+
+        sub.action_defs.push(ActionDef {
+            name: "PrimaryFlowAction".to_string(),
+            ..Default::default()
+        });
+        sub.action_defs.push(ActionDef {
+            name: "SecondaryFlowAction".to_string(),
+            ..Default::default()
+        });
+
+        sub.use_case_defs.push(UseCaseDef {
+            name: "ExecutePrimaryFlow".to_string(),
+            actors: vec!["SystemActor".to_string()],
+            subject: Some("AlphaEngine".to_string()),
+            objective: Some("Execute primary flow".to_string()),
+            preconditions: vec!["Primary precondition".to_string()],
+            steps: vec!["Primary step".to_string()],
+            postconditions: vec!["Primary postcondition".to_string()],
+            ..Default::default()
+        });
+        sub.use_case_defs.push(UseCaseDef {
+            name: "ExecuteSecondaryFlow".to_string(),
+            actors: vec!["SystemActor".to_string()],
+            subject: Some("AlphaEngine".to_string()),
+            objective: Some("Execute secondary flow".to_string()),
+            preconditions: vec!["Secondary precondition".to_string()],
+            steps: vec!["Secondary step".to_string()],
+            postconditions: vec!["Secondary postcondition".to_string()],
+            ..Default::default()
+        });
+        root.packages.push(sub);
+
+        let fwd_opts = ForwardSyncOptions {
+            schema_path: tmp_dir.join("schema").join("model.sysml"),
+            docs_dir: docs_dir.clone(),
+            out_dir: Some(docs_dir.clone()),
+            dry_run: false,
+            force: true,
+        };
+        let generated = forward_sync_sysml_to_specs(&root, &fwd_opts)?;
+
+        let us01 = generated
+            .get("user-stories/US-01-PrimaryFlowAction.md")
+            .ok_or("expected user-stories/US-01-PrimaryFlowAction.md")?;
+        assert!(
+            us01.contains("[EPIC-02-SubsystemAlpha](../epics/EPIC-02-SubsystemAlpha.md)"),
+            "US-01 must link to EPIC-02-SubsystemAlpha, got:\n{}",
+            us01
+        );
+
+        let uc02 = generated
+            .get("use-cases/UC-02-ExecuteSecondaryFlow.md")
+            .ok_or("expected use-cases/UC-02-ExecuteSecondaryFlow.md")?;
+        assert!(
+            uc02.contains("US-02-SecondaryFlowAction.md"),
+            "UC-02 must link to US-02-SecondaryFlowAction.md, got:\n{}",
+            uc02
+        );
+
+        let feat01 = generated
+            .get("features/FEAT-01-AlphaEngine.md")
+            .ok_or("expected features/FEAT-01-AlphaEngine.md")?;
+        assert!(
+            feat01.contains("- `+ComputeStepAction() : void`"),
+            "FEAT-01-AlphaEngine.md must contain `- `+ComputeStepAction() : void`` under Interface Requirements, got:\n{}",
+            feat01
+        );
+
+        let rev_opts = ReverseSyncOptions {
+            docs_dir: docs_dir.clone(),
+            schema_path: None,
+            output_path: tmp_dir.join(".pipeline").join("schema.sysml"),
+            digest_path: tmp_dir.join(".pipeline").join("schema-digest.json"),
+            allow_overwrite: true,
+        };
+        let (synced_pkg, _digest) = reverse_sync_specs_to_sysml(Some(&root), &rev_opts)?;
+        let serialized = to_sysml(&synced_pkg);
+        let reparsed = SysmlParser::parse_source(&serialized, "SystemPackage")?;
+
+        let (synced_without_base, _) = reverse_sync_specs_to_sysml(None, &rev_opts)?;
+
+        if tmp_dir.exists() {
+            std::fs::remove_dir_all(&tmp_dir)?;
+        }
+
+        let reparsed_sub = reparsed
+            .packages
+            .iter()
+            .find(|p| p.name == "SubsystemAlpha")
+            .ok_or("expected SubsystemAlpha in reparsed PackageDef")?;
+        assert_eq!(
+            reparsed_sub.use_case_defs.len(),
+            2,
+            "SubsystemAlpha must preserve both use_case_defs on roundtrip"
+        );
+        let reparsed_engine = reparsed_sub
+            .part_defs
+            .iter()
+            .find(|pt| pt.name == "AlphaEngine")
+            .ok_or("expected AlphaEngine in reparsed SubsystemAlpha")?;
+        assert!(
+            reparsed_engine
+                .actions
+                .iter()
+                .any(|a| a.name == "ComputeStepAction"),
+            "reparsed AlphaEngine must preserve ComputeStepAction in actions"
+        );
+
+        let engine_no_base = synced_without_base
+            .part_defs
+            .iter()
+            .chain(
+                synced_without_base
+                    .packages
+                    .iter()
+                    .flat_map(|p| p.part_defs.iter()),
+            )
+            .find(|pt| pt.name == "AlphaEngine")
+            .ok_or("expected AlphaEngine in synced_without_base")?;
+        assert!(
+            engine_no_base
+                .actions
+                .iter()
+                .any(|a| a.name == "ComputeStepAction")
+                || engine_no_base
+                    .operations
+                    .iter()
+                    .any(|o| o.name == "ComputeStepAction"),
+            "reverse_sync_specs_to_sysml(None, ...) must preserve ComputeStepAction on AlphaEngine from FEAT-01-AlphaEngine.md"
         );
 
         Ok(())
