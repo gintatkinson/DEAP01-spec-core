@@ -906,7 +906,10 @@ pub fn generate_domain_seed_dart(
                 None => "null".to_string(),
             };
             let default_str = match &attr.default_value {
-                Some(d) => format!("'{}'", escape_dart_single_quoted(d)),
+                Some(d) => format!(
+                    "'{}'",
+                    escape_dart_single_quoted(strip_surrounding_quotes(d))
+                ),
                 None => "null".to_string(),
             };
 
@@ -1112,72 +1115,163 @@ pub fn generate_schema_models_dart(
     out.push_str("import 'package:flutter/widgets.dart';\n");
     out.push_str("import 'package:app_flutter/models/instance_record.dart';\n\n");
 
-    // Extension types for each part def
+    // Extension types for union of model.parts and topology-only node.type_name values
+    let mut all_type_names: Vec<String> = Vec::new();
     for part in &model.parts {
-        let view_name = format!("{}View", to_pascal_case(&part.name));
+        let trimmed = part.name.trim();
+        if !trimmed.is_empty() {
+            all_type_names.push(trimmed.to_string());
+        }
+    }
+    for node in nodes {
+        let trimmed = node.type_name.trim();
+        if !trimmed.is_empty() {
+            all_type_names.push(trimmed.to_string());
+        }
+    }
+
+    let mut seen_views: BTreeSet<String> = BTreeSet::new();
+    for type_name in &all_type_names {
+        let pascal_type = to_pascal_case(type_name);
+        if pascal_type.is_empty() {
+            continue;
+        }
+        let view_name = format!("{}View", pascal_type);
+        if !seen_views.insert(view_name.clone()) {
+            continue;
+        }
+
         out.push_str("/// Strongly-typed zero-allocation view projection over an InstanceRecord.\n");
         out.push_str(&format!(
             "extension type const {}(InstanceRecord _record) implements InstanceRecord {{\n",
             view_name
         ));
 
-        for attr in &part.attributes {
-            let camel_attr = to_camel_case(&attr.name);
-            let pascal_attr = to_pascal_case(&attr.name);
-            let attr_name_esc = escape_dart_single_quoted(&attr.name);
+        let mut seen_getters: BTreeSet<String> = BTreeSet::new();
 
-            if attr.type_name == "Real" || attr.type_name == "Float" || attr.type_name == "Double" {
-                let default_val = attr
-                    .default_value
-                    .as_deref()
-                    .unwrap_or("0.0");
-                out.push_str(&format!(
-                    "  double get {} => _record.getPropertyDouble('{}') ?? {};\n",
-                    camel_attr, attr_name_esc, default_val
-                ));
+        if let Some(part) = model.parts.iter().find(|p| p.name.trim() == type_name) {
+            for attr in &part.attributes {
+                let camel_attr = to_camel_case(&attr.name);
+                if camel_attr.is_empty() || !seen_getters.insert(camel_attr.clone()) {
+                    continue;
+                }
+                let pascal_attr = to_pascal_case(&attr.name);
+                let attr_name_esc = escape_dart_single_quoted(&attr.name);
 
-                let (min_opt, max_opt) = extract_bounds_from_doc(attr.doc.as_deref());
-                let min_val = min_opt.unwrap_or(0.0);
-                let max_val = max_opt.unwrap_or(1000000.0);
-                out.push_str(&format!(
-                    "\n  /// Validates SysML inv constraint for {}\n  bool validate{}() {{\n    final v = {};\n    return v >= {:.1} && v <= {:.1};\n  }}\n",
-                    camel_attr, pascal_attr, camel_attr, min_val, max_val
-                ));
-            } else if attr.type_name == "Integer" || attr.type_name == "Int" {
-                let default_val = attr.default_value.as_deref().unwrap_or("0");
-                out.push_str(&format!(
-                    "  int get {} => _record.getPropertyInt('{}') ?? {};\n",
-                    camel_attr, attr_name_esc, default_val
-                ));
-            } else if attr.type_name == "Boolean" || attr.type_name == "Bool" {
-                let default_val = attr.default_value.as_deref().unwrap_or("false");
-                out.push_str(&format!(
-                    "  bool get {} => _record.getPropertyBool('{}') ?? {};\n",
-                    camel_attr, attr_name_esc, default_val
-                ));
-            } else {
-                let default_val = attr.default_value.as_deref().unwrap_or("");
-                out.push_str(&format!(
-                    "  String get {} => _record.getPropertyString('{}') ?? '{}';\n",
-                    camel_attr,
-                    attr_name_esc,
-                    escape_dart_single_quoted(default_val)
-                ));
+                if attr.type_name == "Real" || attr.type_name == "Float" || attr.type_name == "Double" {
+                    let parsed = attr
+                        .default_value
+                        .as_deref()
+                        .and_then(|v| strip_surrounding_quotes(v).parse::<f64>().ok())
+                        .unwrap_or(0.0);
+                    let default_val = if parsed.fract() == 0.0 {
+                        format!("{:.1}", parsed)
+                    } else {
+                        format!("{}", parsed)
+                    };
+                    out.push_str(&format!(
+                        "  double get {} => _record.getPropertyDouble('{}') ?? {};\n",
+                        camel_attr, attr_name_esc, default_val
+                    ));
+
+                    let (min_opt, max_opt) = extract_bounds_from_doc(attr.doc.as_deref());
+                    let min_val = min_opt.unwrap_or(0.0);
+                    let max_val = max_opt.unwrap_or(1000000.0);
+                    out.push_str(&format!(
+                        "\n  /// Validates SysML inv constraint for {}\n  bool validate{}() {{\n    final v = {};\n    return v >= {:.1} && v <= {:.1};\n  }}\n",
+                        camel_attr, pascal_attr, camel_attr, min_val, max_val
+                    ));
+                } else if attr.type_name == "Integer" || attr.type_name == "Int" {
+                    let parsed = attr
+                        .default_value
+                        .as_deref()
+                        .and_then(|v| strip_surrounding_quotes(v).parse::<i64>().ok())
+                        .unwrap_or(0);
+                    out.push_str(&format!(
+                        "  int get {} => _record.getPropertyInt('{}') ?? {};\n",
+                        camel_attr, attr_name_esc, parsed
+                    ));
+                } else if attr.type_name == "Boolean" || attr.type_name == "Bool" {
+                    let is_true = attr
+                        .default_value
+                        .as_deref()
+                        .map(|v| strip_surrounding_quotes(v).eq_ignore_ascii_case("true"))
+                        .unwrap_or(false);
+                    let default_val = if is_true { "true" } else { "false" };
+                    out.push_str(&format!(
+                        "  bool get {} => _record.getPropertyBool('{}') ?? {};\n",
+                        camel_attr, attr_name_esc, default_val
+                    ));
+                } else {
+                    let default_val = attr
+                        .default_value
+                        .as_deref()
+                        .map(strip_surrounding_quotes)
+                        .unwrap_or("");
+                    out.push_str(&format!(
+                        "  String get {} => _record.getPropertyString('{}') ?? '{}';\n",
+                        camel_attr,
+                        attr_name_esc,
+                        escape_dart_single_quoted(default_val)
+                    ));
+                }
             }
         }
+
+        for node in nodes.iter().filter(|n| n.type_name.trim() == type_name) {
+            for (k, v) in &node.properties {
+                let key_trimmed = k.trim();
+                if key_trimmed.is_empty() {
+                    continue;
+                }
+                let camel_attr = to_camel_case(key_trimmed);
+                if camel_attr.is_empty() || !seen_getters.insert(camel_attr.clone()) {
+                    continue;
+                }
+                let attr_name_esc = escape_dart_single_quoted(key_trimmed);
+                if v.is_number() {
+                    out.push_str(&format!(
+                        "  double get {} => _record.getPropertyDouble('{}') ?? 0.0;\n",
+                        camel_attr, attr_name_esc
+                    ));
+                } else if v.is_boolean() {
+                    out.push_str(&format!(
+                        "  bool get {} => _record.getPropertyBool('{}') ?? false;\n",
+                        camel_attr, attr_name_esc
+                    ));
+                } else {
+                    out.push_str(&format!(
+                        "  String get {} => _record.getPropertyString('{}') ?? '';\n",
+                        camel_attr, attr_name_esc
+                    ));
+                }
+            }
+        }
+
         out.push_str("}\n\n");
     }
 
-    // SchemaEntityIds class
+    // SchemaEntityIds class (deduplicating camel_id constants and including parent_id entities)
     out.push_str("/// Authoritative compile-time schema entity IDs guaranteeing zero string drift.\n");
     out.push_str("abstract final class SchemaEntityIds {\n");
+    let mut seen_camel_ids: BTreeSet<String> = BTreeSet::new();
     for node in nodes {
-        let camel_id = to_camel_case(&node.id);
-        out.push_str(&format!(
-            "  static const String {} = '{}';\n",
-            camel_id,
-            escape_dart_single_quoted(&node.id)
-        ));
+        for candidate_id in [Some(node.id.as_str()), node.parent_id.as_deref()] {
+            if let Some(raw_id) = candidate_id {
+                let trimmed_id = raw_id.trim();
+                if trimmed_id.is_empty() {
+                    continue;
+                }
+                let camel_id = to_camel_case(trimmed_id);
+                if !camel_id.is_empty() && seen_camel_ids.insert(camel_id.clone()) {
+                    out.push_str(&format!(
+                        "  static const String {} = '{}';\n",
+                        camel_id,
+                        escape_dart_single_quoted(trimmed_id)
+                    ));
+                }
+            }
+        }
     }
     out.push_str("}\n\n");
 
@@ -1252,11 +1346,49 @@ fn resolve_dto_attribute_codec(attr: &deap_core::sysml_ast::AttributeDef) -> (St
         let from_json = format!("(json['{}'] as bool?) ?? {}", key_esc, default_lit);
         ("bool".to_string(), default_lit, from_json)
     } else {
-        let raw_default = attr.default_value.as_deref().unwrap_or("");
+        let raw_default = attr
+            .default_value
+            .as_deref()
+            .map(strip_surrounding_quotes)
+            .unwrap_or("");
         let default_lit = format!("'{}'", escape_dart_single_quoted(raw_default));
         let from_json = format!("(json['{}'] as String?) ?? {}", key_esc, default_lit);
         ("String".to_string(), default_lit, from_json)
     }
+}
+
+/// Strips matching surrounding single (`'...'`) or double (`"..."`) quotes from a raw SysML default literal.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D deterministic literal sanitization mandates.
+/// Prevents double-quoting or malformed numeric parsing when SysML attribute defaults carry outer quotes.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Zero Regex: Uses prefix/suffix character stripping.
+/// - Idempotent on unquoted strings.
+///
+/// ## 3. Preconditions
+/// - `raw` is a UTF-8 string slice representing a SysML attribute default expression.
+///
+/// ## 4. Postconditions
+/// - Returns the inner unquoted slice if surrounded by matching `"` or `'`, otherwise the trimmed slice.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ slice boundary check after whitespace trim.
+/// - Space Complexity: $O(1)$ zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function: never panics on empty or single-character strings.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FLUTTER-GENERATE-SCHEMA-MODELS], [REQ-FLUTTER-GENERATE-DOMAIN-SEED]
+fn strip_surrounding_quotes(raw: &str) -> &str {
+    let trimmed = raw.trim();
+    trimmed
+        .strip_prefix('"')
+        .and_then(|s| s.strip_suffix('"'))
+        .or_else(|| trimmed.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')))
+        .unwrap_or(trimmed)
 }
 
 /// Appends a strongly-typed Dart DTO class definition for a SysML port or item definition.

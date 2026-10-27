@@ -26,8 +26,8 @@
 //! Realises: [REQ-COMPILER-FLUTTER-CODEGEN], [REQ-FLUTTER-GENERATE-SOLVER-BRIDGE]
 
 use compile_sysml::flutter_codegen::{
-    emit_dart_solver_bridge, generate_domain_seed_dart, generate_solver_bridge_dart,
-    generate_ui_contract_test_dart, TopologyNode,
+    emit_dart_solver_bridge, generate_domain_seed_dart, generate_schema_models_dart,
+    generate_solver_bridge_dart, generate_ui_contract_test_dart, TopologyNode,
 };
 use deap_core::sysml_ast::{AttributeDef, ItemDef, PartDef, PortDef, SysmlModel};
 use std::collections::BTreeMap;
@@ -455,4 +455,199 @@ fn test_generate_ui_contract_test_dart_emits_live_pump_getrect_tap_and_pairwise_
     }
     assert!(!stripped.contains("Rect.fromLTWH("), "Must not use synthetic Rect.fromLTWH literals");
     assert!(!stripped.contains("'{}'"), "Must not contain uninterpolated '{{}}' placeholders");
+}
+
+/// Verifies that `generate_schema_models_dart`, `generate_domain_seed_dart`, and `generate_solver_bridge_dart`
+/// union `model.parts` with topology-only `node.type_name` and dynamic `node.properties`, deduplicate
+/// `SchemaEntityIds` while including `node.parent_id`, and sanitize outer quotes and non-numeric default values.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D deterministic schema-to-UI code generation mandates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Every distinct topology `node.type_name` emits a `<Type>View` extension type with getters for dynamic `node.properties`.
+/// - `SchemaEntityIds` includes `node.parent_id` entities and deduplicates colliding `camelCase` identifier constants.
+/// - Surrounding quotes on string `default_value` and non-numeric `Real`/`Integer`/`Boolean` defaults are sanitized across models, seeds, and DTOs.
+///
+/// ## 3. Preconditions
+/// - `SysmlModel` has attributes with quoted and non-numeric defaults; `nodes` has topology-only types, dynamic properties, `parent_id`, and colliding IDs.
+///
+/// ## 4. Postconditions
+/// - Generated Dart sources contain all unioned views/getters, deduplicated entity IDs including `parent_id`, and sanitized default literals.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(T + A + N + P)$ linear in types, attributes, nodes, and properties.
+/// - Space Complexity: $O(T + A + N + P)$ for generated Dart strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Panics in test if any view, getter, entity ID constant, or default value sanitization invariant is violated.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FLUTTER-GENERATE-SCHEMA-MODELS], [REQ-FLUTTER-GENERATE-DOMAIN-SEED]
+#[test]
+fn test_generate_schema_models_and_seed_union_topology_types_dedup_ids_and_sanitize_defaults() {
+    let mut model = SysmlModel::default();
+    let mut alpha_part = PartDef::default();
+    alpha_part.name = "AlphaComponent".to_string();
+    alpha_part.is_def = true;
+    alpha_part.attributes.push(AttributeDef {
+        name: "quoted_mode".to_string(),
+        type_name: "String".to_string(),
+        default_value: Some("\"NOMINAL\"".to_string()),
+        doc: None,
+    });
+    alpha_part.attributes.push(AttributeDef {
+        name: "single_quoted_tag".to_string(),
+        type_name: "String".to_string(),
+        default_value: Some("'STANDBY'".to_string()),
+        doc: None,
+    });
+    alpha_part.attributes.push(AttributeDef {
+        name: "bad_real_default".to_string(),
+        type_name: "Real".to_string(),
+        default_value: Some("TBD".to_string()),
+        doc: None,
+    });
+    alpha_part.attributes.push(AttributeDef {
+        name: "bad_int_default".to_string(),
+        type_name: "Integer".to_string(),
+        default_value: Some("N/A".to_string()),
+        doc: None,
+    });
+    alpha_part.attributes.push(AttributeDef {
+        name: "bad_bool_default".to_string(),
+        type_name: "Boolean".to_string(),
+        default_value: Some("INVALID".to_string()),
+        doc: None,
+    });
+    let mut port_def = PortDef::default();
+    port_def.name = "alpha_port".to_string();
+    port_def.type_name = "AlphaComponent".to_string();
+    alpha_part.ports.push(port_def);
+    model.parts.push(alpha_part);
+
+    let mut alpha_props = BTreeMap::new();
+    alpha_props.insert("dynamic_extra_metric".to_string(), serde_json::json!(7.25));
+    alpha_props.insert("dynamic_flag".to_string(), serde_json::json!(true));
+    alpha_props.insert("dynamic_label".to_string(), serde_json::json!("ACTIVE"));
+
+    let mut beta_props = BTreeMap::new();
+    beta_props.insert("topology_only_prop".to_string(), serde_json::json!("READY"));
+    beta_props.insert("topology_only_num".to_string(), serde_json::json!(15.0));
+
+    let nodes = vec![
+        TopologyNode {
+            id: "NODE-ALPHA-01".to_string(),
+            type_name: "AlphaComponent".to_string(),
+            label: "Alpha Node 01".to_string(),
+            parent_id: Some("ZONE-NORTH-01".to_string()),
+            properties: alpha_props,
+            created_at: 1000,
+            updated_at: 2000,
+        },
+        TopologyNode {
+            id: "NODE_ALPHA_01".to_string(),
+            type_name: "AlphaComponent".to_string(),
+            label: "Alpha Node 01 Duplicate Camel".to_string(),
+            parent_id: Some("ZONE-NORTH-01".to_string()),
+            properties: BTreeMap::new(),
+            created_at: 1000,
+            updated_at: 2000,
+        },
+        TopologyNode {
+            id: "NODE_BETA_02".to_string(),
+            type_name: "BetaTopologyOnlyType".to_string(),
+            label: "Beta Node 02".to_string(),
+            parent_id: Some("ZONE-NORTH-01".to_string()),
+            properties: beta_props,
+            created_at: 1000,
+            updated_at: 2000,
+        },
+    ];
+
+    let models_src = generate_schema_models_dart(&model, &nodes, 0x1234);
+    let seed_src = generate_domain_seed_dart(&model, &nodes, 0x1234);
+    let bridge_src = generate_solver_bridge_dart(&model, 0x1234);
+
+    // 1. Topology-only type view & dynamic property getters
+    assert!(
+        models_src.contains("extension type const BetaTopologyOnlyTypeView(InstanceRecord _record) implements InstanceRecord"),
+        "Must emit BetaTopologyOnlyTypeView for topology-only node.type_name: {}",
+        models_src
+    );
+    assert!(
+        models_src.contains("double get dynamicExtraMetric => _record.getPropertyDouble('dynamic_extra_metric')"),
+        "Must emit dynamicExtraMetric getter on AlphaComponentView: {}",
+        models_src
+    );
+    assert!(
+        models_src.contains("bool get dynamicFlag => _record.getPropertyBool('dynamic_flag')"),
+        "Must emit dynamicFlag getter on AlphaComponentView: {}",
+        models_src
+    );
+    assert!(
+        models_src.contains("String get dynamicLabel => _record.getPropertyString('dynamic_label')"),
+        "Must emit dynamicLabel getter on AlphaComponentView: {}",
+        models_src
+    );
+    assert!(
+        models_src.contains("String get topologyOnlyProp => _record.getPropertyString('topology_only_prop')"),
+        "Must emit topologyOnlyProp getter on BetaTopologyOnlyTypeView: {}",
+        models_src
+    );
+    assert!(
+        models_src.contains("double get topologyOnlyNum => _record.getPropertyDouble('topology_only_num')"),
+        "Must emit topologyOnlyNum getter on BetaTopologyOnlyTypeView: {}",
+        models_src
+    );
+
+    // 2. SchemaEntityIds includes parent_id and deduplicates colliding camel_id
+    assert!(
+        models_src.contains("static const String zoneNorth01 = 'ZONE-NORTH-01';"),
+        "Must include parent_id ZONE-NORTH-01 in SchemaEntityIds: {}",
+        models_src
+    );
+    let camel_occurrences = models_src.matches("static const String nodeAlpha01 =").count();
+    assert_eq!(
+        camel_occurrences, 1,
+        "Must deduplicate colliding camel_id constants in SchemaEntityIds: {}",
+        models_src
+    );
+
+    // 3. Sanitized defaults in models_src, seed_src, and bridge_src
+    assert!(
+        models_src.contains("String get quotedMode => _record.getPropertyString('quoted_mode') ?? 'NOMINAL';"),
+        "Must strip surrounding double quotes from default_value in generate_schema_models_dart: {}",
+        models_src
+    );
+    assert!(
+        models_src.contains("String get singleQuotedTag => _record.getPropertyString('single_quoted_tag') ?? 'STANDBY';"),
+        "Must strip surrounding single quotes from default_value in generate_schema_models_dart: {}",
+        models_src
+    );
+    assert!(
+        models_src.contains("double get badRealDefault => _record.getPropertyDouble('bad_real_default') ?? 0.0;"),
+        "Must sanitize non-numeric Real default_value to 0.0: {}",
+        models_src
+    );
+    assert!(
+        models_src.contains("int get badIntDefault => _record.getPropertyInt('bad_int_default') ?? 0;"),
+        "Must sanitize non-numeric Integer default_value to 0: {}",
+        models_src
+    );
+    assert!(
+        models_src.contains("bool get badBoolDefault => _record.getPropertyBool('bad_bool_default') ?? false;"),
+        "Must sanitize invalid Boolean default_value to false: {}",
+        models_src
+    );
+    assert!(
+        !seed_src.contains("'\"NOMINAL\"'"),
+        "Must strip outer double quotes from type_attributes default_value in generate_domain_seed_dart: {}",
+        seed_src
+    );
+    assert!(
+        !bridge_src.contains("'\"NOMINAL\"'"),
+        "Must strip outer double quotes from DTO default literal in generate_solver_bridge_dart: {}",
+        bridge_src
+    );
 }

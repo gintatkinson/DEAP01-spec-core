@@ -182,11 +182,24 @@ fn extract_strings_from_json_value(val: &serde_json::Value, entities: &mut BTree
                     || lower_k == "label"
                     || lower_k == "callsign"
                     || lower_k == "title"
+                    || lower_k == "parentid"
+                    || lower_k == "parent_id"
+                    || lower_k == "source"
+                    || lower_k == "target"
+                    || lower_k == "sourceid"
+                    || lower_k == "targetid"
                 {
                     if let Some(s) = v.as_str() {
-                        let trimmed = s.trim();
-                        if trimmed.len() >= 3 && !is_generic_schema_keyword(trimmed) {
-                            entities.insert(trimmed.to_string());
+                        insert_entity_and_stems(s, entities);
+                    }
+                } else if lower_k == "properties" {
+                    if let serde_json::Value::Object(prop_map) = v {
+                        for prop_val in prop_map.values() {
+                            if let Some(ps) = prop_val.as_str() {
+                                if ps.contains('-') || ps.contains('_') {
+                                    insert_entity_and_stems(ps, entities);
+                                }
+                            }
                         }
                     }
                 }
@@ -199,6 +212,57 @@ fn extract_strings_from_json_value(val: &serde_json::Value, entities: &mut BTree
             }
         }
         _ => {}
+    }
+}
+
+/// Inserts an entity identifier and its parenthetical/hyphenated base stems into `entities`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and MIL-STD-1472H entity stem disambiguation mandates.
+/// Ensures compound topology labels (e.g. `"Unit-Alpha (P1)"`) and hierarchical parent IDs
+/// (e.g. `"ZONE-NORTH-01"`) register both full strings and stems (`"Unit-Alpha"`, `"NORTH-01"`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Zero Regex: Decomposes strings using deterministic `.split_once()` character boundaries.
+/// - Enforces minimum length >= 3 and keyword exclusion on all inserted stems.
+///
+/// ## 3. Preconditions
+/// - `raw` is a UTF-8 string slice; `entities` is a mutable `BTreeSet<String>`.
+///
+/// ## 4. Postconditions
+/// - Inserts the trimmed identifier, any `(`-stripped prefix stem, and any hyphenated sub-stem into `entities`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L \log E)$ where $L$ is string length and $E$ is entity set size.
+/// - Space Complexity: $O(L)$ for stem string allocations.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function: short or keyword strings are safely ignored.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-38-EXTRACT-JSON-VALUES]
+fn insert_entity_and_stems(raw: &str, entities: &mut BTreeSet<String>) {
+    let trimmed = raw.trim();
+    if trimmed.len() >= 3 && !is_generic_schema_keyword(trimmed) {
+        entities.insert(trimmed.to_string());
+    }
+    let base = if let Some((before_paren, _)) = trimmed.split_once('(') {
+        let stem = before_paren.trim();
+        if stem.len() >= 3 && !is_generic_schema_keyword(stem) {
+            entities.insert(stem.to_string());
+        }
+        stem
+    } else {
+        trimmed
+    };
+    if let Some((_, sub_stem)) = base.split_once('-') {
+        let sub_clean = sub_stem.trim();
+        if sub_clean.contains('-')
+            && sub_clean.len() >= 4
+            && !is_generic_schema_keyword(sub_clean)
+        {
+            entities.insert(sub_clean.to_string());
+        }
     }
 }
 
@@ -296,7 +360,8 @@ fn scan_dart_features_for_hardcoding(
                         .unwrap_or(path)
                         .display()
                         .to_string();
-                    for (idx, line) in content.lines().enumerate() {
+                    let stripped_content = strip_dart_comments(&content);
+                    for (idx, line) in stripped_content.lines().enumerate() {
                         let line_no = idx.saturating_add(1);
                         check_presentation_line(line, &rel, line_no, entity_ids, violations);
                     }
@@ -345,66 +410,283 @@ fn check_presentation_line(
         line.trim()
     };
 
-    if stripped.is_empty() {
+    if stripped.is_empty()
+        || stripped.starts_with("import ")
+        || stripped.starts_with("export ")
+        || stripped.starts_with("part ")
+        || stripped.starts_with("library ")
+    {
         return;
     }
 
-    let static_bool_patterns = [
-        "isActive: true",
-        "isActive: false",
-        "isSelected: true",
-        "isSelected: false",
-        "isActive:\ttrue",
-        "isActive:\tfalse",
-        "isSelected:\ttrue",
-        "isSelected:\tfalse",
-    ];
-
-    for pat in &static_bool_patterns {
-        if stripped.contains(pat) {
-            violations.push(format!(
-                "Check 38 violation: Hardcoded static boolean flag '{}' found in {}:{}. Row states must bind dynamically.",
-                pat, file_rel, line_no
-            ));
-        }
-    }
-
-    if stripped.contains("RULES: 0 VIOLATIONS")
-        || stripped.contains("12x CLASS-")
-        || stripped.contains("Text('PASS')")
-        || stripped.contains("Text(\"PASS\")")
-        || stripped.contains("Text('FAIL')")
-        || stripped.contains("Text(\"FAIL\")")
-    {
-        violations.push(format!(
-            "Check 38 violation: Hardcoded static telemetry indicator found in {}:{}: '{}'. Telemetry status must bind to live solver or monitor state.",
-            file_rel, line_no, stripped
-        ));
-    }
-
-    if let Some(text_idx) = stripped.find("Text(") {
-        let after_text = stripped.get(text_idx.saturating_add(5)..).unwrap_or("");
-        if let Some((raw_arg, _)) = after_text.split_once(')') {
-            let arg = raw_arg.trim();
-            let is_literal_string = (arg.starts_with('\'') && arg.ends_with('\'') && arg.len() >= 2)
-                || (arg.starts_with('"') && arg.ends_with('"') && arg.len() >= 2);
-            if is_literal_string && !arg.contains('$') {
-                let inner = arg
-                    .get(1..arg.len().saturating_sub(1))
-                    .unwrap_or("")
-                    .trim();
-                for entity in entity_ids {
-                    if inner == entity || inner.contains(entity) {
+    for flag_name in ["isActive", "isSelected"] {
+        let key_colon = format!("{}:", flag_name);
+        let mut search_from = 0usize;
+        while let Some(rel_idx) = stripped.get(search_from..).and_then(|s| s.find(&key_colon)) {
+            let after_colon_idx = search_from
+                .saturating_add(rel_idx)
+                .saturating_add(key_colon.len());
+            let after_colon = stripped.get(after_colon_idx..).unwrap_or("").trim_start();
+            for bool_lit in ["true", "false"] {
+                if let Some(rest) = after_colon.strip_prefix(bool_lit) {
+                    let boundary_ok = rest
+                        .chars()
+                        .next()
+                        .map(|c| !c.is_ascii_alphanumeric() && c != '_')
+                        .unwrap_or(true);
+                    if boundary_ok {
                         violations.push(format!(
-                            "Check 38 violation: Hardcoded un-interpolated domain entity literal '{}' in Text widget in {}:{}.",
-                            entity, file_rel, line_no
+                            "Check 38 violation: Hardcoded static boolean flag '{}: {}' found in {}:{}. Row states must bind dynamically.",
+                            flag_name, bool_lit, file_rel, line_no
                         ));
-                        break;
                     }
                 }
             }
+            search_from = after_colon_idx;
         }
     }
+
+    let literals = extract_uninterpolated_string_literals(stripped);
+    for (start_idx, inner_raw) in literals {
+        let prefix_trimmed = stripped.get(..start_idx).unwrap_or("").trim_end();
+        if prefix_trimmed.ends_with("Key(") {
+            continue;
+        }
+        let inner = inner_raw.trim();
+        if inner.is_empty() {
+            continue;
+        }
+
+        let mut matched_entity = false;
+        for entity in entity_ids {
+            if inner == entity.as_str() || inner.contains(entity.as_str()) {
+                violations.push(format!(
+                    "Check 38 violation: Hardcoded un-interpolated domain entity literal '{}' in Text widget in {}:{}.",
+                    entity, file_rel, line_no
+                ));
+                matched_entity = true;
+                break;
+            }
+        }
+
+        if is_hardcoded_telemetry_or_designator_literal(inner) {
+            violations.push(format!(
+                "Check 38 violation: Hardcoded static telemetry indicator found in {}:{}: '{}'. Telemetry status must bind to live solver or monitor state.",
+                file_rel, line_no, stripped
+            ));
+        } else if matched_entity {
+            // Entity violation already recorded above.
+        }
+    }
+}
+
+/// Extracts all un-interpolated single-quoted or double-quoted string literals from a Dart source line.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 34 Zero-Regex lexical scanning mandates.
+/// Replaces naive `split_once(')')` slicing so strings containing inner parentheses or trailing widget
+/// arguments are extracted losslessly.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Respects `\` character escapes inside string literals.
+/// - Excludes any literal containing `$` (Dart string interpolation).
+///
+/// ## 3. Preconditions
+/// - `line` is a comment-stripped UTF-8 Dart source line.
+///
+/// ## 4. Postconditions
+/// - Returns `Vec<(usize, String)>` pairing each literal's opening quote byte index with its inner text.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ single linear pass over `line`.
+/// - Space Complexity: $O(L)$ for extracted literal slices.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Unclosed quotes at end of line are safely ignored without panicking.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-38-CHECK-PRESENTATION-LINE]
+fn extract_uninterpolated_string_literals(line: &str) -> Vec<(usize, String)> {
+    let mut results = Vec::new();
+    let mut chars = line.char_indices().peekable();
+
+    while let Some((idx, ch)) = chars.next() {
+        if ch == '\'' || ch == '"' {
+            let quote = ch;
+            let mut buf = String::new();
+            let mut closed = false;
+            while let Some((_, c)) = chars.next() {
+                if c == '\\' {
+                    buf.push(c);
+                    if let Some((_, esc)) = chars.next() {
+                        buf.push(esc);
+                    }
+                } else if c == quote {
+                    closed = true;
+                    break;
+                } else {
+                    buf.push(c);
+                }
+            }
+            if closed && !buf.contains('$') {
+                results.push((idx, buf));
+            }
+        }
+    }
+
+    results
+}
+
+/// Evaluates whether an un-interpolated presentation string literal matches a structural telemetry,
+/// status readout, badge, or hyphenated entity designator pattern without regular expressions.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, Check 19 (Zero Hardcoded Domain Concepts), and Check 34 (Zero Regex).
+/// Detects static telemetry readouts and hardcoded entity designators using pure character-class predicates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Zero Regex and Zero Domain Constants: inspects character classes (digits, `%`, `/`, `:`, `[]`, `()`, `-`).
+/// - Rejects standalone status tokens (`PASS`, `FAIL`), percentage literals (`<digit>%`), slash-ratios (`<digit> / <digit>`),
+///   bracketed uppercase badges (`[AIR-GAP]`), colon-prefixed uppercase headers, parenthesized priority/timer tags,
+///   hyphenated alphanumeric designators, and numeric count + uppercase/unit tokens.
+///
+/// ## 3. Preconditions
+/// - `inner` is a trimmed, non-empty, un-interpolated string literal body.
+///
+/// ## 4. Postconditions
+/// - Returns `true` if `inner` exhibits any hardcoded telemetry or entity designator structure; `false` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ linear in the byte/character length of `inner`.
+/// - Space Complexity: $O(T)$ where $T$ is the count of whitespace-delimited tokens in `inner`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Pure total function over UTF-8 string slices.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-38-CHECK-PRESENTATION-LINE]
+fn is_hardcoded_telemetry_or_designator_literal(inner: &str) -> bool {
+    let trimmed = inner.trim();
+    if trimmed == "PASS" || trimmed == "FAIL" {
+        return true;
+    }
+
+    // 1. Percentage literal: <digit>%
+    if trimmed
+        .as_bytes()
+        .windows(2)
+        .any(|w| w[0].is_ascii_digit() && w[1] == b'%')
+    {
+        return true;
+    }
+
+    // 2. Bracketed uppercase badge: [<UPPER/HYPHEN>]
+    if trimmed.len() >= 4 && trimmed.starts_with('[') && trimmed.ends_with(']') {
+        let badge_body = trimmed.get(1..trimmed.len().saturating_sub(1)).unwrap_or("");
+        let upper_count = badge_body.chars().filter(|c| c.is_ascii_uppercase()).count();
+        let all_badge_chars = badge_body
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '-' || c == '_');
+        if upper_count >= 2 && all_badge_chars {
+            return true;
+        }
+    }
+
+    // 3. Colon-prefixed uppercase or designator status/telemetry readout: <UPPER_OR_ID>: <val>
+    if let Some((left, right)) = trimmed.split_once(':') {
+        let left_clean = left.trim_start_matches('(').trim();
+        let right_clean = right.trim_end_matches(')').trim();
+        if !left_clean.is_empty() && !right_clean.is_empty() {
+            let upper_count = left_clean.chars().filter(|c| c.is_ascii_uppercase()).count();
+            let has_lower = left_clean.chars().any(|c| c.is_ascii_lowercase());
+            if upper_count >= 2 && !has_lower {
+                return true;
+            }
+        }
+    }
+
+    let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+
+    // 4. Slash-ratio telemetry: <digit> / <digit>
+    for window in tokens.windows(3) {
+        let left_is_num = window[0].chars().all(|c| c.is_ascii_digit()) && !window[0].is_empty();
+        let right_is_num = window[2].chars().all(|c| c.is_ascii_digit()) && !window[2].is_empty();
+        if left_is_num && window[1] == "/" && right_is_num {
+            return true;
+        }
+    }
+
+    // 5. Numeric count followed by uppercase plural/status word (e.g. "2 NODES", "0 VIOLATIONS")
+    for window in tokens.windows(2) {
+        let left_is_num = window[0].chars().all(|c| c.is_ascii_digit()) && !window[0].is_empty();
+        let right_clean = window[1].trim_matches(|c: char| !c.is_ascii_alphabetic());
+        let right_is_upper_word = right_clean.len() >= 3
+            && right_clean.chars().all(|c| c.is_ascii_uppercase());
+        if left_is_num && right_is_upper_word {
+            return true;
+        }
+    }
+
+    // 6. Per-token inspection: parenthesized tags, hyphenated designators, and numeric multipliers/units
+    for raw_tok in &tokens {
+        if raw_tok.starts_with("(P")
+            && raw_tok.ends_with(')')
+            && raw_tok.len() >= 4
+            && raw_tok
+                .get(2..raw_tok.len().saturating_sub(1))
+                .map(|s| s.chars().all(|c| c.is_ascii_digit()))
+                .unwrap_or(false)
+        {
+            return true;
+        }
+
+        let clean_tok = raw_tok.trim_matches(|c: char| {
+            c == '(' || c == ')' || c == '[' || c == ']' || c == ',' || c == ';' || c == ':'
+        });
+        if clean_tok.is_empty() {
+            continue;
+        }
+
+        // Numeric multiplier or unit token (e.g. "12x", "15km")
+        let digit_prefix_len = clean_tok
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .count();
+        if digit_prefix_len >= 1 && digit_prefix_len < clean_tok.len() {
+            let unit_suffix = clean_tok.get(digit_prefix_len..).unwrap_or("");
+            if matches!(unit_suffix, "x" | "km" | "m" | "s" | "ms" | "Hz" | "dB") {
+                return true;
+            }
+        }
+
+        // Hyphenated designator / callsign token (e.g. "Unit-Alpha", "ZONE-ALPHA-01", "NORTH-01", "SENSOR-01")
+        if clean_tok.contains('-') && clean_tok.len() >= 4 {
+            let starts_upper = clean_tok
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_uppercase())
+                .unwrap_or(false);
+            let segments: Vec<&str> = clean_tok.split('-').collect();
+            let valid_segments = segments.len() >= 2
+                && segments.iter().all(|seg| {
+                    !seg.is_empty()
+                        && seg
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '_')
+                })
+                && segments.get(1..).unwrap_or(&[]).iter().any(|seg| {
+                    seg.chars()
+                        .next()
+                        .map(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+                        .unwrap_or(false)
+                });
+            if starts_upper && valid_segments {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 /// Check 39: Zero-Mocking Test AST & SQLite Disposal Gate.

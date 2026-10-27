@@ -30,7 +30,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use verify_baseline::checks::codebase::{
-    check_39_zero_mocking_test_ast_gate,
+    check_38_presentation_anti_hardcoding_ast_gate, check_39_zero_mocking_test_ast_gate,
     check_40_interactive_gesture_and_hud_non_overlap_gate,
     check_41_solver_bridge_and_sqlite_seed_parity_gate, check_no_duplicate_dart_solver_math,
 };
@@ -659,4 +659,178 @@ void main() {
 
     let res = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
     assert!(res.is_ok(), "Complete 4-resolution, 6-viewport contract must pass Check 40: {:?}", res.err());
+}
+
+/// Verifies that Check 38 (`check_38_presentation_anti_hardcoding_ast_gate`) rejects all 19 structural
+/// presentation hardcoding patterns (inner parentheses in `Text(...)`, trailing `style:` parameters,
+/// multi-line `Text(...)`, named `id:`/`label:` widget arguments, arbitrary whitespace after `isActive:`/`isSelected:`,
+/// parentId/sub-stem entity references, percentage telemetry, slash-ratio counts, colon-prefixed telemetry
+/// readouts, bracketed badges, and numeric unit/count tokens).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and MIL-STD-1472H human-machine interface anti-hardcoding verification mandates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Every individual hardcoded presentation symptom pattern produces `Err(violations)` when placed in `app_flutter/lib/features/**/*.dart`.
+/// - Zero Regex and Zero Hardcoded Domain Concepts: all detections rely on dynamic topology/schema entity extraction and structural token predicates.
+///
+/// ## 3. Preconditions
+/// - Temporary workspace contains `app_flutter/assets/topology_data.json` and `app_flutter/lib/features/panel/view.dart`.
+///
+/// ## 4. Postconditions
+/// - Every negative probe returns `Err` from `check_38_presentation_anti_hardcoding_ast_gate`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(P \times L)$ where $P$ is the probe count and $L$ is file length.
+/// - Space Complexity: $O(E + V)$ for extracted entity identifiers and violation strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Panics in test if any of the 20 negative probes silently passes Check 38.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-38-PRESENTATION-ANTI-HARDCODING]
+#[test]
+fn test_check_38_rejects_all_19_hardcoded_presentation_telemetry_and_entity_patterns() {
+    let tmp = ScopedTempDir::new("c38_all_19_patterns");
+    let assets_dir = tmp.path.join("app_flutter/assets");
+    let feature_dir = tmp.path.join("app_flutter/lib/features/panel");
+    fs::create_dir_all(&assets_dir).expect("create assets dir");
+    fs::create_dir_all(&feature_dir).expect("create feature dir");
+
+    let topology_json = r#"{
+  "nodes": [
+    {
+      "id": "UNIT_ALPHA_01",
+      "label": "Unit-Alpha (P1)",
+      "parentId": "ZONE-NORTH-01",
+      "typeName": "AlphaUnit",
+      "properties": {
+        "zone_code": "ZONE-ALPHA-01"
+      }
+    },
+    {
+      "id": "UNIT_BRAVO_02",
+      "label": "Unit-Bravo (P2)",
+      "parentId": "ZONE-NORTH-01",
+      "typeName": "AlphaUnit",
+      "properties": {}
+    }
+  ]
+}"#;
+    fs::write(assets_dir.join("topology_data.json"), topology_json)
+        .expect("write topology_data.json");
+
+    let probes = [
+        "const Text('Unit-Alpha (P1)', style: TextStyle())",
+        "const Text('Unit-Bravo (P2)')",
+        "EntityRow(isActive:   true)",
+        "EntityRow(isActive:   false)",
+        "ZoneSelector(id: 'ZONE-ALPHA-01')",
+        "const Text('2 NODES')",
+        "const Text('75% Reserve * Primary First')",
+        "const Text('FOCUSED NODE: Unit-Alpha')",
+        "const Text('NORTH-01 v')",
+        "const Text('WAVE 02 INGRESS (T-01:09) * 12x CLASS-2NODE')",
+        "const Text('RULES: 0 VIOLATIONS')",
+        "const Text('SENSOR-01: 15km', style: TextStyle())",
+        "const Text('ACTUATOR-02: ENGAGED', style: TextStyle())",
+        "const Text('[AIR-GAP]')",
+        "const Text('LOW (0.0%)')",
+        "const Text('2 / 8 ALLOCATED')",
+        "const Text('6 / 8 ALLOCATED')",
+        "const Text('(ENGINE CONF: 99.2%)')",
+        "const Text('WAVE N+1: PASS')",
+        "const Text(\n  'Unit-Alpha (P1)',\n)",
+    ];
+
+    let view_file = feature_dir.join("view.dart");
+    for (idx, snippet) in probes.iter().enumerate() {
+        let dart_src = format!(
+            "class PanelView {{\n  void build() {{\n    {};\n  }}\n}}\n",
+            snippet
+        );
+        fs::write(&view_file, &dart_src).expect("write probe view.dart");
+        let res = check_38_presentation_anti_hardcoding_ast_gate(&tmp.path);
+        assert!(
+            res.is_err(),
+            "Check 38 probe #{} failed to reject hardcoded snippet: {}",
+            idx + 1,
+            snippet
+        );
+    }
+}
+
+/// Verifies that Check 38 strips `/* ... */` block comments and `//` line comments before scanning,
+/// and permits `Key(...)`/`ValueKey(...)`, `import` directives, and dynamically interpolated `$` strings.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DO-330 TQL-4 zero false-positive comment and key disambiguation mandates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Commented-out hardcoded literals inside `/* ... */` or `//` do not trigger violations.
+/// - `Key('...')`, `ValueKey('...')`, `import '...'`, and interpolated `'${vm.value}'` strings pass cleanly.
+///
+/// ## 3. Preconditions
+/// - Temporary workspace contains `topology_data.json` and a clean Dart feature file with comments, keys, and interpolations.
+///
+/// ## 4. Postconditions
+/// - `check_38_presentation_anti_hardcoding_ast_gate` returns `Ok(())`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ linear in Dart file length.
+/// - Space Complexity: $O(L)$ for comment-stripped buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Panics in test if false-positive violations are emitted.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-38-PRESENTATION-ANTI-HARDCODING]
+#[test]
+fn test_check_38_ignores_block_comments_keys_and_interpolated_dynamic_bindings() {
+    let tmp = ScopedTempDir::new("c38_clean_comments_and_keys");
+    let assets_dir = tmp.path.join("app_flutter/assets");
+    let feature_dir = tmp.path.join("app_flutter/lib/features/panel");
+    fs::create_dir_all(&assets_dir).expect("create assets dir");
+    fs::create_dir_all(&feature_dir).expect("create feature dir");
+
+    let topology_json = r#"{
+  "nodes": [
+    {
+      "id": "UNIT_ALPHA_01",
+      "label": "Unit-Alpha (P1)",
+      "parentId": "ZONE-NORTH-01",
+      "typeName": "AlphaUnit"
+    }
+  ]
+}"#;
+    fs::write(assets_dir.join("topology_data.json"), topology_json)
+        .expect("write topology_data.json");
+
+    let clean_dart = r#"
+import 'package:app_flutter/features/zone-north-01/panel_model.dart';
+
+/*
+  const Text('Unit-Alpha (P1)');
+  const Text('LOW (0.0%)');
+  EntityRow(isActive: true);
+*/
+class CleanPanelView {
+  void build(PanelViewModel vm) {
+    // const Text('RULES: 0 VIOLATIONS');
+    final k1 = const Key('ZONE-NORTH-01');
+    final k2 = const ValueKey('UNIT_ALPHA_01');
+    final t1 = Text('${vm.unitLabel} (P1)');
+    final t2 = Text('${vm.ratioText}');
+    final row = EntityRow(isActive: vm.isActive, isSelected: vm.isSelected);
+  }
+}
+"#;
+    fs::write(feature_dir.join("clean_view.dart"), clean_dart).expect("write clean_view.dart");
+
+    let res = check_38_presentation_anti_hardcoding_ast_gate(&tmp.path);
+    assert!(
+        res.is_ok(),
+        "Clean view with block comments, keys, and dynamic interpolations must pass Check 38: {:?}",
+        res.err()
+    );
 }
