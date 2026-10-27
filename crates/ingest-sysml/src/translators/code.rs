@@ -34,12 +34,95 @@
 //! Realises: [REQ-FEAT-42-CODE-TRANSLATOR], [DO-330-TQL-4-CODE-TRANSLATOR]
 
 use deap_core::source_ast::{
-    ingest_source_directory, lower_source_ast_to_package, parse_dart_source_ast,
-    parse_rust_source_ast, SourceAstItem, SourceLanguage,
+    classify_dart_top_level_ast, classify_rust_item_line_ast, ingest_source_directory,
+    lower_source_ast_to_package, parse_dart_source_ast, parse_rust_source_ast, SourceAstItem,
+    SourceLanguage,
 };
 use deap_core::sysml_ast::PackageDef;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+/// Infers whether an extensionless source buffer is Dart or Rust using language-grammar lexical scoring.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 36 (Pure Schema-Driven Compiler Invariant).
+/// Eliminates hardcoded UI-framework widget substrings from `SourceLanguage::Auto` fallback detection
+/// by scoring general Dart and Rust module directives and top-level item grammar classifiers.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Framework-Agnostic: Relies strictly on Dart and Rust language grammar keywords (`import`, `export`,
+///   `part`, `library`, `use`, `mod`, `impl`) and `deap_core::source_ast` top-level AST classifiers.
+/// - Deterministic Tie-Breaking: Returns `SourceLanguage::Dart` when `dart_score > rust_score`, and
+///   `SourceLanguage::Rust` otherwise.
+///
+/// ## 3. Preconditions
+/// - `content: &str` is a valid UTF-8 source buffer whose filename lacked a `.rs` or `.dart` extension.
+///
+/// ## 4. Postconditions
+/// - Returns `SourceLanguage::Dart` or `SourceLanguage::Rust` with zero side effects or allocations.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `content.len()`.
+/// - Space Complexity: O(1) constant stack space.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts any `&str` slice including empty or comment-only buffers.
+/// - State: Pure function with local saturating integer counters (`dart_score`, `rust_score`).
+/// - Action: Never panics or overflows regardless of line count.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-CODE-LANG-DETECT], [DO-330-TQL-4-CODE-TRANSLATOR]
+fn detect_language_from_content(content: &str) -> SourceLanguage {
+    let mut dart_score: usize = 0;
+    let mut rust_score: usize = 0;
+
+    for raw_line in content.lines() {
+        let line = raw_line.trim();
+        if line.is_empty()
+            || line.starts_with("//")
+            || line.starts_with("/*")
+            || line.starts_with('*')
+        {
+            continue;
+        }
+        if line.starts_with("import '")
+            || line.starts_with("import \"")
+            || line.starts_with("export '")
+            || line.starts_with("export \"")
+            || line.starts_with("part '")
+            || line.starts_with("part \"")
+            || line.starts_with("part of ")
+            || line.starts_with("library ")
+            || line.starts_with("final ")
+            || line.starts_with("late ")
+        {
+            dart_score = dart_score.saturating_add(2);
+        }
+        if line.starts_with("use ")
+            || line.starts_with("pub use ")
+            || line.starts_with("mod ")
+            || line.starts_with("pub mod ")
+            || line.starts_with("impl ")
+            || line.starts_with("impl<")
+            || line.starts_with("#[")
+            || line.starts_with("#![")
+        {
+            rust_score = rust_score.saturating_add(2);
+        }
+        if classify_rust_item_line_ast(line).is_some() {
+            rust_score = rust_score.saturating_add(2);
+        } else if classify_dart_top_level_ast(line).is_some() {
+            dart_score = dart_score.saturating_add(2);
+        }
+    }
+
+    if dart_score > rust_score {
+        SourceLanguage::Dart
+    } else {
+        SourceLanguage::Rust
+    }
+}
 
 /// Deterministic translator converting Rust and Dart source code into canonical SysML v2 `PackageDef` models.
 ///
@@ -207,17 +290,7 @@ impl CodeTranslator {
     pub fn translate(&self, content: &str, file_name: &str) -> Result<PackageDef, String> {
         let resolved_lang = match self.language {
             SourceLanguage::Auto => SourceLanguage::detect_from_extension(Path::new(file_name))
-                .unwrap_or_else(|| {
-                    if content.contains("extends StatefulWidget")
-                        || content.contains("extends StatelessWidget")
-                        || content.contains("Widget build(")
-                        || content.contains("import 'package:")
-                    {
-                        SourceLanguage::Dart
-                    } else {
-                        SourceLanguage::Rust
-                    }
-                }),
+                .unwrap_or_else(|| detect_language_from_content(content)),
             explicit => explicit,
         };
 
@@ -281,9 +354,8 @@ impl CodeTranslator {
             })?;
             let label = path.display().to_string();
             let file_lang = match self.language {
-                SourceLanguage::Auto => {
-                    SourceLanguage::detect_from_extension(path).unwrap_or(SourceLanguage::Rust)
-                }
+                SourceLanguage::Auto => SourceLanguage::detect_from_extension(path)
+                    .unwrap_or_else(|| detect_language_from_content(&content)),
                 explicit => explicit,
             };
             let mut items = match file_lang {
@@ -331,5 +403,64 @@ impl CodeTranslator {
         package_name: &str,
     ) -> Result<PackageDef, String> {
         ingest_source_directory(source_dir, self.language, package_name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn translate_auto_detects_extensionless_non_flutter_dart_buffer() -> Result<(), String> {
+        let dart_src = "import 'dart:async';\n\nclass SampleService {\n  final int count;\n  SampleService(this.count);\n}\n";
+        let translator = CodeTranslator::new();
+        let pkg = translator.translate(dart_src, "sample_service")?;
+        if pkg.part_defs.iter().any(|p| p.name == "SampleService") {
+            Ok(())
+        } else {
+            Err(format!(
+                "Expected PartDef 'SampleService' from extensionless Dart buffer, got part_defs: {:?}",
+                pkg.part_defs.iter().map(|p| &p.name).collect::<Vec<_>>()
+            ))
+        }
+    }
+
+    #[test]
+    fn translate_auto_detects_extensionless_rust_buffer() -> Result<(), String> {
+        let rust_src = "pub struct SampleRecord {\n    pub count: usize,\n}\n";
+        let translator = CodeTranslator::new();
+        let pkg = translator.translate(rust_src, "sample_record")?;
+        if pkg.part_defs.iter().any(|p| p.name == "SampleRecord") {
+            Ok(())
+        } else {
+            Err(format!(
+                "Expected PartDef 'SampleRecord' from extensionless Rust buffer, got part_defs: {:?}",
+                pkg.part_defs.iter().map(|p| &p.name).collect::<Vec<_>>()
+            ))
+        }
+    }
+
+    #[test]
+    fn translate_files_auto_detects_extensionless_non_flutter_dart_file() -> Result<(), String> {
+        let mut temp_dir = std::env::temp_dir();
+        temp_dir.push(format!("deap_code_translator_test_{}", std::process::id()));
+        fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+        let file_path = temp_dir.join("sample_service_unit");
+        let dart_src = "import 'dart:convert';\n\nclass SampleWorker {\n  final String label;\n  SampleWorker(this.label);\n}\n";
+        fs::write(&file_path, dart_src).map_err(|e| e.to_string())?;
+
+        let translator = CodeTranslator::new();
+        let result = translator.translate_files(&[file_path], "sample_pkg");
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        let pkg = result?;
+        if pkg.part_defs.iter().any(|p| p.name == "SampleWorker") {
+            Ok(())
+        } else {
+            Err(format!(
+                "Expected PartDef 'SampleWorker' from extensionless Dart file, got part_defs: {:?}",
+                pkg.part_defs.iter().map(|p| &p.name).collect::<Vec<_>>()
+            ))
+        }
     }
 }
