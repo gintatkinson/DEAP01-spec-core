@@ -868,14 +868,14 @@ pub fn validate_checklist_publish_integrity(
         let bytes = item.full_line.as_bytes();
         let mut i = 0;
         while i < bytes.len() {
-            if bytes[i] == b'#' {
+            if bytes.get(i).copied() == Some(b'#') {
                 let start = i + 1;
                 let mut end = start;
-                while end < bytes.len() && bytes[end].is_ascii_digit() {
+                while bytes.get(end).is_some_and(|b| b.is_ascii_digit()) {
                     end += 1;
                 }
                 if end > start {
-                    if let Ok(num) = item.full_line[start..end].parse::<u64>() {
+                    if let Some(num) = item.full_line.get(start..end).and_then(|s| s.parse::<u64>().ok()) {
                         if !issue_index.by_number.contains_key(&num) {
                             return Err(format!(
                                 "Publish gate blocked: specification '{}' contains unresolvable checklist issue reference '#{}'. Sibling must be registered on live tracker before publishing.",
@@ -2174,6 +2174,73 @@ type: use-case
             !created_path.exists(),
             "TempDirGuard must automatically remove temporary directory on Drop"
         );
+        Ok(())
+    }
+
+    /// Executes deterministic fn `test_defect_08_zero_blanket_clippy_allow_suppressions` within `crates/reconcile-backlog/src/lib.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_defect_08_zero_blanket_clippy_allow_suppressions` in `crates/reconcile-backlog/src/lib.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Verifies that all target modules (`lib.rs`, `main.rs`, `checklist.rs`, `frontmatter.rs`, `tracker.rs`) contain zero crate-level or item-level `clippy::` allow suppressions and zero production `.unwrap(` or `.expect(` calls.
+    ///
+    /// ## 3. Preconditions
+    /// - Source files in `crates/reconcile-backlog/src/` are available at compile time via `include_str!`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts the absence of blanket `allow(clippy::...)` attributes and production unwrap/expect invocations across `lib.rs`, `main.rs`, `checklist.rs`, `frontmatter.rs`, and `tracker.rs`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over source byte length.
+    /// - Space Complexity: O(1) auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates compile-time source slices deterministically.
+    /// - State: Read-only verification with zero filesystem mutation.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Zero heap allocations required for substring checks.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-TEST-DEFECT-08-ZERO-CLIPPY-SUPPRESSIONS] | SysML v2: VerificationCaseDef(test_defect_08_zero_blanket_clippy_allow_suppressions) | Issue: #499
+    #[test]
+    fn test_defect_08_zero_blanket_clippy_allow_suppressions() -> Result<(), Box<dyn std::error::Error>> {
+        let forbidden_inner_multiline = concat!("#![allow", "(", "\n    clippy::");
+        let forbidden_inner_inline = concat!("#![allow", "(", "clippy::");
+        let forbidden_outer_multiline = concat!("#[allow", "(", "\n    clippy::");
+        let forbidden_outer_inline = concat!("#[allow", "(", "clippy::");
+        let unwrap_token = concat!(".unwrap", "(");
+        let expect_token = concat!(".expect", "(");
+
+        for (name, src) in [
+            ("lib.rs", include_str!("lib.rs")),
+            ("main.rs", include_str!("main.rs")),
+            ("checklist.rs", include_str!("checklist.rs")),
+            ("frontmatter.rs", include_str!("frontmatter.rs")),
+            ("tracker.rs", include_str!("tracker.rs")),
+        ] {
+            assert!(
+                !src.contains(forbidden_inner_multiline)
+                    && !src.contains(forbidden_inner_inline)
+                    && !src.contains(forbidden_outer_multiline)
+                    && !src.contains(forbidden_outer_inline),
+                "Source file {} must not contain clippy allow overrides",
+                name
+            );
+            let prod_part = src.split("#[cfg(test)]").next().unwrap_or(src);
+            assert!(
+                !prod_part.contains(unwrap_token),
+                "Production code in {} must not contain {}",
+                name,
+                unwrap_token
+            );
+            assert!(
+                !prod_part.contains(expect_token),
+                "Production code in {} must not contain {}",
+                name,
+                expect_token
+            );
+        }
         Ok(())
     }
 }

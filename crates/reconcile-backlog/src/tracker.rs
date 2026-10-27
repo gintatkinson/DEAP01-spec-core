@@ -1839,7 +1839,10 @@ impl std::io::Write for TempFileNamed {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEMPFILENAMED-WRITE] | SysML v2: ActionDef(TempFileNamed::write)
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.file.as_mut().expect("file handle open").write(buf)
+        self.file
+            .as_mut()
+            .ok_or_else(|| std::io::Error::other("file handle closed"))?
+            .write(buf)
     }
 
     /// Executes deterministic fn `TempFileNamed::flush` within `crates/reconcile-backlog/src/tracker.rs`.
@@ -1869,7 +1872,10 @@ impl std::io::Write for TempFileNamed {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEMPFILENAMED-FLUSH] | SysML v2: ActionDef(TempFileNamed::flush)
     fn flush(&mut self) -> std::io::Result<()> {
-        self.file.as_mut().expect("file handle open").flush()
+        self.file
+            .as_mut()
+            .ok_or_else(|| std::io::Error::other("file handle closed"))?
+            .flush()
     }
 }
 
@@ -2729,6 +2735,50 @@ mod tests {
             missing_err
         );
 
+        Ok(())
+    }
+
+    /// Executes deterministic fn `test_temp_file_named_write_and_flush_after_handle_closed_returns_err` within `crates/reconcile-backlog/src/tracker.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_temp_file_named_write_and_flush_after_handle_closed_returns_err` in `crates/reconcile-backlog/src/tracker.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state conservation and referential transparency for fn `test_temp_file_named_write_and_flush_after_handle_closed_returns_err` within `RECONCILE-BACKLOG-TRACKER`.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked within a valid test execution context for `test_temp_file_named_write_and_flush_after_handle_closed_returns_err` in `RECONCILE-BACKLOG-TRACKER`.
+    ///
+    /// ## 4. Postconditions
+    /// - Verifies that `TempFileNamed::write` and `TempFileNamed::flush` return `Err` without panicking when the underlying file handle has been taken.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded over the constant fixture size of `test_temp_file_named_write_and_flush_after_handle_closed_returns_err`.
+    /// - Space Complexity: O(1) bounded auxiliary memory for `test_temp_file_named_write_and_flush_after_handle_closed_returns_err`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and `std::io::Error` propagation for `TempFileNamed::write` and `TempFileNamed::flush`.
+    /// - State: Confirms consistent state invariants and RAII file cleanup across `TempFileNamed` without panicking.
+    /// - Action: Executes `test_temp_file_named_write_and_flush_after_handle_closed_returns_err` deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `test_temp_file_named_write_and_flush_after_handle_closed_returns_err` (`RECONCILE-BACKLOG-TRACKER`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEST-TEMPFILENAMED-CLOSED-HANDLE] | SysML v2: VerificationCaseDef(test_temp_file_named_write_and_flush_after_handle_closed_returns_err) | Issue: #499
+    #[test]
+    fn test_temp_file_named_write_and_flush_after_handle_closed_returns_err() -> Result<(), String> {
+        use std::io::Write;
+        let mut temp = tempfile_named()?;
+        temp.write_all(b"ok").map_err(|e| e.to_string())?;
+        temp.flush().map_err(|e| e.to_string())?;
+        let _ = temp.file.take();
+        assert!(
+            temp.write(b"after-close").is_err(),
+            "Expected Err when writing to closed TempFileNamed handle"
+        );
+        assert!(
+            temp.flush().is_err(),
+            "Expected Err when flushing closed TempFileNamed handle"
+        );
         Ok(())
     }
 }
