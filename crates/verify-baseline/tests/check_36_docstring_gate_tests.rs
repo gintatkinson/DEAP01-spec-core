@@ -1142,5 +1142,92 @@ pub extern "C" fn ffi_entrypoint() {}
     }
 }
 
+/// Verifies that inline block comments and adjacent string/raw-string literals preserve token separation in Rust and Dart (refs #517).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DO-330 TQL-4 lexical token boundary preservation in Check 36 (`test_check_36_inline_comment_and_literal_token_separation_issue_517`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Closing `*/`, `"`, and `"#` tokens do not fuse adjacent keywords (`pub/*comment*/fn`, `pub extern"C"fn`, `pub extern r#"C"#fn`, `void/*comment*/undocumentedDartFn`).
+/// - Nested block comments (`/* outer /* inner */ pub fn fake_undocumented() {} */`) remain suppressed until outer `*/`.
+///
+/// ## 3. Preconditions
+/// - In-memory Rust and Dart fixtures contain inline block comments and string literals without surrounding spaces.
+///
+/// ## 4. Postconditions
+/// - `audit_rust_source_docstrings` and `audit_dart_source_docstrings` fail closed on all undocumented items while ignoring declarations inside nested block comments.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) over the fixture lines.
+/// - Space Complexity: O(1) bounded diagnostic buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Direct invocation of `audit_rust_source_docstrings` and `audit_dart_source_docstrings`.
+/// - State: Isolated per-call lexical state.
+/// - Action: Asserts every undocumented symbol is reported and nested-comment symbols are excluded.
+/// - Resource: Zero filesystem mutations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-36-TOKEN-SEPARATION-517]
+#[test]
+fn test_check_36_inline_comment_and_literal_token_separation_issue_517() {
+    let rust_fixture = concat!(
+        "/* outer /* inner */ pub fn fake_undocumented() {} */\n",
+        "pub/*comment*/fn undocumented_comment_fn() {}\n",
+        "pub/*comment*/struct UndocumentedCommentStruct {}\n",
+        "pub extern\"C\"fn undocumented_extern_fn() {}\n",
+        "pub extern r#\"C\"#fn undocumented_raw_extern_fn() {}\n",
+    );
+
+    let rust_res = audit_rust_source_docstrings(rust_fixture, "crates/demo/src/lib.rs");
+    assert!(
+        rust_res.is_err(),
+        "Check 36 must reject undocumented Rust items separated by inline comments or string literals, got: {:?}",
+        rust_res
+    );
+    let rust_errs = rust_res.err().unwrap_or_default().join("\n");
+    assert!(
+        !rust_errs.contains("fake_undocumented"),
+        "Nested block comment item must not be flagged, got:\n{}",
+        rust_errs
+    );
+    for expected in [
+        "undocumented_comment_fn",
+        "UndocumentedCommentStruct",
+        "undocumented_extern_fn",
+        "undocumented_raw_extern_fn",
+    ] {
+        assert!(
+            rust_errs.contains(expected),
+            "Expected Check 36 to flag '{}', got:\n{}",
+            expected,
+            rust_errs
+        );
+    }
+
+    let dart_fixture = concat!(
+        "/* outer /* inner */ void fakeUndocumentedDartFn() {} */\n",
+        "void/*comment*/undocumentedDartFn() {}\n",
+    );
+    let dart_res = audit_dart_source_docstrings(dart_fixture, "app_flutter/lib/inline.dart");
+    assert!(
+        dart_res.is_err(),
+        "Check 36 must reject undocumented Dart function separated by inline block comment, got: {:?}",
+        dart_res
+    );
+    let dart_errs = dart_res.err().unwrap_or_default().join("\n");
+    assert!(
+        !dart_errs.contains("fakeUndocumentedDartFn"),
+        "Nested Dart block comment item must not be flagged, got:\n{}",
+        dart_errs
+    );
+    assert!(
+        dart_errs.contains("undocumentedDartFn"),
+        "Expected Check 36 to flag 'undocumentedDartFn', got:\n{}",
+        dart_errs
+    );
+}
+
+
 
 
