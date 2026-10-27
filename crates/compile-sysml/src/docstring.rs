@@ -44,10 +44,10 @@ use deap_core::source_ast::{
     classify_dart_member_ast, classify_dart_top_level_ast, classify_rust_item_line_ast,
     extract_leading_ast_ident, extract_realises_ids_from_doc_lines, ingest_source_directory,
     parse_dart_callable_signature, parse_rust_callable_signature, sanitize_sysml_identifier,
-    scan_rust_line_preserving_lex_state, strip_leading_dart_annotations,
-    strip_line_comment_preserving_strings, summary_from_doc_lines, update_ast_delimiter_depths,
-    validate_source_syntax_for_language, RustStringScannerState, SourceItemKind, SourceLanguage,
-    SourceParam,
+    scan_rust_line_preserving_lex_state, single_char_literal_byte_len,
+    strip_leading_dart_annotations, strip_line_comment_preserving_strings, summary_from_doc_lines,
+    update_ast_delimiter_depths, validate_source_syntax_for_language, RustStringScannerState,
+    SourceItemKind, SourceLanguage, SourceParam,
 };
 use deap_core::sysml_ast::PackageDef;
 use std::collections::BTreeSet;
@@ -2215,16 +2215,12 @@ fn extract_balanced_rust_assert_cond(after_open_paren: &str) -> Option<&str> {
         match ch {
             '"' => in_string = true,
             '\'' => {
-                if let Some(rem) = after_open_paren.get(idx.saturating_add(1)..) {
-                    let mut it = rem.chars();
-                    let is_char_lit = match (it.next(), it.next()) {
-                        (Some('\\'), Some(_)) => it.next() == Some('\''),
-                        (Some(c), Some('\'')) if c != '\'' => true,
-                        _ => false,
-                    };
-                    if is_char_lit {
-                        in_char = true;
-                    }
+                if after_open_paren
+                    .get(idx..)
+                    .and_then(single_char_literal_byte_len)
+                    .is_some()
+                {
+                    in_char = true;
                 }
             }
             '(' => paren_depth = paren_depth.saturating_add(1),
@@ -2306,16 +2302,12 @@ fn count_rust_line_brace_delta(code: &str) -> (i32, bool) {
         match ch {
             '"' => in_string = true,
             '\'' => {
-                if let Some(rem) = code.get(idx.saturating_add(1)..) {
-                    let mut it = rem.chars();
-                    let is_char_lit = match (it.next(), it.next()) {
-                        (Some('\\'), Some(_)) => it.next() == Some('\''),
-                        (Some(c), Some('\'')) if c != '\'' => true,
-                        _ => false,
-                    };
-                    if is_char_lit {
-                        in_char = true;
-                    }
+                if code
+                    .get(idx..)
+                    .and_then(single_char_literal_byte_len)
+                    .is_some()
+                {
+                    in_char = true;
                 }
             }
             '{' => {
@@ -2568,11 +2560,38 @@ fn resolve_schema_context(
     let mut matched_req: Option<String> = None;
     let mut matched_constraint: Option<String> = None;
     let norm_ident = normalize_alnum(item_name);
+    let active_part_ident = owner_name.unwrap_or(item_name);
     let item_is_other_part = all_parts
         .iter()
         .any(|p| schema_identifiers_match(&p.name, item_name));
 
+    let req_belongs_to_other_part = |r: &deap_core::sysml_ast::RequirementDef| -> bool {
+        let nr = normalize_alnum(&r.name);
+        let nreq = normalize_alnum(&r.req_id);
+        all_parts.iter().any(|p| {
+            if schema_identifiers_match(&p.name, active_part_ident) {
+                return false;
+            }
+            let satisfied_by_other = p.satisfied_requirements.iter().any(|sr| {
+                schema_identifiers_match(sr, &r.name)
+                    || (!r.req_id.is_empty() && schema_identifiers_match(sr, &r.req_id))
+            }) || p.safety_realises.iter().any(|sr| {
+                schema_identifiers_match(sr, &r.name)
+                    || (!r.req_id.is_empty() && schema_identifiers_match(sr, &r.req_id))
+            }) || r
+                .satisfied_by
+                .iter()
+                .any(|sb| schema_identifiers_match(sb, &p.name));
+            let np = normalize_alnum(&p.name);
+            let named_after_other = np.len() >= 4 && (nr.contains(&np) || nreq.contains(&np));
+            satisfied_by_other || named_after_other
+        })
+    };
+
     let req_matches_member = |r: &deap_core::sysml_ast::RequirementDef, member_ident: &str| -> bool {
+        if req_belongs_to_other_part(r) {
+            return false;
+        }
         if schema_identifiers_match(&r.name, member_ident)
             || schema_identifiers_match(&r.req_id, member_ident)
             || r.satisfied_by
@@ -2778,13 +2797,14 @@ fn resolve_schema_context(
     if matched_req.is_none() {
         for pkg in &all_pkgs {
             if let Some(req_def) = pkg.requirement_defs.iter().find(|r| {
-                schema_identifiers_match(&r.name, target_ident)
-                    || schema_identifiers_match(&r.req_id, target_ident)
-                    || r.satisfied_by
-                        .iter()
-                        .any(|s| schema_identifiers_match(s, target_ident))
-                    || schema_identifiers_match(&r.name, item_name)
-                    || schema_identifiers_match(&r.req_id, item_name)
+                !req_belongs_to_other_part(r)
+                    && (schema_identifiers_match(&r.name, target_ident)
+                        || schema_identifiers_match(&r.req_id, target_ident)
+                        || r.satisfied_by
+                            .iter()
+                            .any(|s| schema_identifiers_match(s, target_ident))
+                        || schema_identifiers_match(&r.name, item_name)
+                        || schema_identifiers_match(&r.req_id, item_name))
             }) {
                 let id = if !req_def.req_id.is_empty() {
                     req_def.req_id.clone()
@@ -3359,6 +3379,26 @@ mod tests {
             "Method primary_controller on SecondaryMonitor must not match unrelated PartDef PrimaryController"
         );
         assert_eq!(
+            resolve_schema_context(Some(&pkg), Some("SecondaryMonitor"), "control"),
+            (None, None),
+            "Method control on SecondaryMonitor must not bleed REQ-PC-001 from PrimaryControllerLimitReq"
+        );
+        assert_eq!(
+            resolve_schema_context(Some(&pkg), Some("SecondaryMonitor"), "limit"),
+            (None, None),
+            "Method limit on SecondaryMonitor must not bleed REQ-PC-001 from PrimaryControllerLimitReq"
+        );
+        assert_eq!(
+            extract_balanced_rust_assert_cond("ch != '\\x29' && ch != '\\u{7d}', \"msg\");"),
+            Some("ch != '\\x29' && ch != '\\u{7d}'"),
+            "extract_balanced_rust_assert_cond must handle hex and unicode char escapes without premature truncation"
+        );
+        assert_eq!(
+            count_rust_line_brace_delta("let c = '\\u{7d}'; let d = '\\u{10FFFF}';"),
+            (0, false),
+            "count_rust_line_brace_delta must ignore braces inside unicode escape char literals"
+        );
+        assert_eq!(
             resolve_schema_context(Some(&pkg), None, "calibrate_element"),
             (None, None),
             "Package action calibrate_element without reqs must not inherit pkg.requirement_defs.first()"
@@ -3440,6 +3480,10 @@ mod tests {
         assert!(
             !prod_src.contains("size_of::<"),
             "src/docstring.rs must not contain size_of workarounds"
+        );
+        assert!(
+            !prod_src.contains("(Some('\\\\'), Some(_)) =>"),
+            "src/docstring.rs must delegate char literal scanning to single_char_literal_byte_len"
         );
         Ok(())
     }
