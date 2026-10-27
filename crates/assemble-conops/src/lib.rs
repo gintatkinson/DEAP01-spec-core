@@ -28,14 +28,6 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-ASSEMBLE-CONOPS-LIB], [DO-330-TQL-4-CONOPS-LIB]
-#![allow(
-    clippy::cloned_ref_to_slice_refs,
-    clippy::disallowed_types,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::unnecessary_lazy_evaluations,
-    clippy::unwrap_used
-)]
 
 pub mod assembler;
 pub mod params;
@@ -72,6 +64,39 @@ mod tests {
         assert!(module_doc.contains("## 6. Failure Modes & Fault Tolerance"));
         assert!(module_doc.contains("## 7. Realization & Traceability"));
         assert!(module_doc.contains("Realises: [REQ-ASSEMBLE-CONOPS-LIB], [DO-330-TQL-4-CONOPS-LIB]"));
+    }
+
+    #[test]
+    fn test_no_unconditional_crate_root_safety_lint_allows() {
+        for (name, src) in [
+            ("crates/assemble-conops/src/lib.rs", include_str!("lib.rs")),
+            ("crates/assemble-conops/src/main.rs", include_str!("main.rs")),
+            (
+                "crates/compile-sysml/src/lib.rs",
+                include_str!("../../compile-sysml/src/lib.rs"),
+            ),
+            (
+                "crates/compile-sysml/src/main.rs",
+                include_str!("../../compile-sysml/src/main.rs"),
+            ),
+            (
+                "crates/verify-baseline/src/lib.rs",
+                include_str!("../../verify-baseline/src/lib.rs"),
+            ),
+            (
+                "crates/verify-baseline/src/main.rs",
+                include_str!("../../verify-baseline/src/main.rs"),
+            ),
+        ] {
+            let prod_src = src.split("#[cfg(test)]").next().unwrap_or(src);
+            let has_unconditional_inner_allow = prod_src
+                .lines()
+                .any(|line| line.trim_start().starts_with("#![allow("));
+            assert!(
+                !has_unconditional_inner_allow,
+                "{name} must not declare unconditional crate-root #![allow(...)] attributes"
+            );
+        }
     }
 }
 

@@ -38,13 +38,6 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-ASSEMBLE-CONOPS-CLI], [DO-330-TQL-4-CONOPS-CLI]
-#![allow(
-    clippy::disallowed_types,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used
-)]
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -273,5 +266,15 @@ mod tests {
         assert!(src.contains("//! Realises: [REQ-ASSEMBLE-CONOPS-CLI], [DO-330-TQL-4-CONOPS-CLI]"));
         assert!(src.contains("/// ## 1. Safety Intent & Regulatory Scope"));
         assert!(src.contains("/// Realises: ["));
+    }
+
+    #[test]
+    fn test_assemble_conops_main_no_unconditional_safety_lint_allows() {
+        let src = include_str!("main.rs");
+        let prod_src = src.split("#[cfg(test)]").next().unwrap_or(src);
+        let has_unconditional_inner_allow = prod_src
+            .lines()
+            .any(|line| line.trim_start().starts_with("#![allow("));
+        assert!(!has_unconditional_inner_allow);
     }
 }

@@ -76,4 +76,22 @@ mod tests {
             module_docs.contains("Realises: [REQ-VERIFY-BASELINE-LIB], [DO-330-TQL-4-VERIFY-LIB]")
         );
     }
+
+    #[test]
+    fn test_crate_roots_forbid_unconditional_safety_lint_allows() {
+        for src in [
+            include_str!("../../assemble-conops/src/lib.rs"),
+            include_str!("../../assemble-conops/src/main.rs"),
+            include_str!("../../compile-sysml/src/lib.rs"),
+            include_str!("../../compile-sysml/src/main.rs"),
+            include_str!("lib.rs"),
+            include_str!("main.rs"),
+        ] {
+            let prod_src = src.split("#[cfg(test)]").next().unwrap_or(src);
+            let has_unconditional_inner_allow = prod_src
+                .lines()
+                .any(|line| line.trim_start().starts_with("#![allow("));
+            assert!(!has_unconditional_inner_allow);
+        }
+    }
 }

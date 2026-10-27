@@ -29,16 +29,7 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-COMPILER-SYSML-LIB], [DO-330-TQL-4-LIB]
-#![cfg_attr(
-    test,
-    allow(
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::indexing_slicing,
-        clippy::panic,
-        clippy::field_reassign_with_default
-    )
-)]
+#![cfg_attr(test, allow(clippy::field_reassign_with_default))]
 
 pub mod cli;
 pub mod docstring;
