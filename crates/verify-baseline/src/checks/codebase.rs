@@ -847,19 +847,56 @@ pub fn check_41_solver_bridge_and_sqlite_seed_parity_gate(
 }
 
 /// Verifies that Dart solver bridge files are thin delegation adapters without duplicate solver math.
+/// Audits Dart solver bridge files for duplicate optimization mathematics and thin-bridge ceiling violations.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A single source of truth kernel integrity mandates.
+/// Exposes a standalone verification entrypoint for Check 41 duplicate solver math auditing.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Rejects any `app_flutter/lib/data/*bridge*.dart` file exceeding 1200 lines when a native solver crate exists.
+/// - Rejects candidate synthesis, composite scoring, constraint evaluation, and HOTL veto state mutation in Dart bridges.
+///
+/// ## 3. Preconditions
+/// - `repo_root` is the workspace root directory.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(())` if all Dart solver bridges are thin delegation shims, or `Err(violations)` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(B \times L)$ across Dart bridge files and lines.
+/// - Space Complexity: $O(V)$ for accumulated violation strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Returns `Ok(())` when no solver crate or `app_flutter/lib/data` directory exists.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-41-SSOT-DELEGATION]
+pub fn check_no_duplicate_dart_solver_math(repo_root: &Path) -> Result<(), Vec<String>> {
+    let mut violations = Vec::new();
+    check_solver_bridge_ssot_delegation(repo_root, &mut violations);
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(violations)
+    }
+}
+
+/// Enforces that Dart solver bridge sources delegate optimization math exclusively to the Rust solver.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A single source of truth kernel integrity mandates.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Triggers when a native Rust solver crate exists under `crates/`.
-/// - Rejects candidate generator functions and Pareto scoring in Dart bridge sources.
+/// - Rejects bridge files exceeding the 1200-line thin-bridge ceiling.
+/// - Rejects candidate generator functions, composite scoring, constraint evaluation, and HOTL veto logic in Dart bridge sources.
 ///
 /// ## 3. Preconditions
 /// - `repo_root` is workspace root directory; `violations` is diagnostic accumulator.
 ///
 /// ## 4. Postconditions
-/// - Appends violation diagnostic if duplicate solver math is detected in Dart bridge files.
+/// - Appends violation diagnostic if duplicate solver math or bloated bridge files are detected.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(B * L) across Dart bridge files.
@@ -919,6 +956,13 @@ fn check_solver_bridge_ssot_delegation(repo_root: &Path, violations: &mut Vec<St
         "extraDensityPenalty",
         "paretoScore",
         "violationCount: 0",
+        "synthesize_candidates(",
+        "synthesizeCandidates(",
+        "compute_composite_score(",
+        "computeCompositeScore(",
+        "evaluate_constraints(",
+        "evaluateConstraints(",
+        "_hotlVetoActive = true",
     ];
 
     for entry_res in WalkDir::new(&data_dir) {
@@ -936,6 +980,13 @@ fn check_solver_bridge_ssot_delegation(repo_root: &Path, violations: &mut Vec<St
                         .unwrap_or(path)
                         .display()
                         .to_string();
+                    let line_count = content.lines().count();
+                    if line_count > 1200 {
+                        violations.push(format!(
+                            "Check 41 violation: Dart solver bridge {} exceeds 1200-line thin-bridge ceiling ({} lines). Dart solver bridge must be a thin C-ABI delegation shim.",
+                            rel, line_count
+                        ));
+                    }
                     for (idx, line) in content.lines().enumerate() {
                         let line_no = idx.saturating_add(1);
                         let trimmed = line.trim();
