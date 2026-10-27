@@ -473,14 +473,356 @@ pub fn check_39_zero_mocking_test_ast_gate(
     }
 }
 
+/// Strips `//` line comments and `/* ... */` block comments from Dart source while preserving newlines.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 34 Zero-Regex static analysis mandates.
+/// Prevents commented-out code (`// tearDownAll`, `// await tester.tap`) from bypassing AST gates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves exact line count (`\n` characters) so diagnostic line numbers remain 1:1 with source files.
+/// - Preserves `//` and `/*` sequences inside single-quoted and double-quoted string literals.
+///
+/// ## 3. Preconditions
+/// - `content` is a valid UTF-8 Dart source slice.
+///
+/// ## 4. Postconditions
+/// - Returns a `String` with all line and block comments replaced by empty space/newlines.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ single linear pass in character count.
+/// - Space Complexity: $O(N)$ output string buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function: never panics or fails on arbitrary UTF-8 input.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-VERIFY-BASELINE-CODEBASE-CHECKS]
+pub fn strip_dart_comments(content: &str) -> String {
+    let mut out = String::with_capacity(content.len());
+    let mut chars = content.chars().peekable();
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut in_line_comment = false;
+    let mut in_block_comment = false;
+
+    while let Some(ch) = chars.next() {
+        if in_line_comment {
+            if ch == '\n' {
+                in_line_comment = false;
+                out.push('\n');
+            }
+        } else if in_block_comment {
+            if ch == '*' && chars.peek() == Some(&'/') {
+                let _ = chars.next();
+                in_block_comment = false;
+            } else if ch == '\n' {
+                out.push('\n');
+            }
+        } else if in_single {
+            out.push(ch);
+            if ch == '\\' {
+                if let Some(esc) = chars.next() {
+                    out.push(esc);
+                }
+            } else if ch == '\'' {
+                in_single = false;
+            }
+        } else if in_double {
+            out.push(ch);
+            if ch == '\\' {
+                if let Some(esc) = chars.next() {
+                    out.push(esc);
+                }
+            } else if ch == '"' {
+                in_double = false;
+            }
+        } else if ch == '/' && chars.peek() == Some(&'/') {
+            let _ = chars.next();
+            in_line_comment = true;
+        } else if ch == '/' && chars.peek() == Some(&'*') {
+            let _ = chars.next();
+            in_block_comment = true;
+        } else {
+            if ch == '\'' {
+                in_single = true;
+            } else if ch == '"' {
+                in_double = true;
+            }
+            out.push(ch);
+        }
+    }
+    out
+}
+
+/// Extracts a Dart class identifier from a line regardless of Dart 3 class modifiers.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Section 1.9 Zero-Mocking class declaration detection.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Handles `class Foo`, `final class Foo`, `base class Foo`, `sealed class Foo`, `abstract interface class Foo`.
+///
+/// ## 3. Preconditions
+/// - `trimmed_line` is a comment-stripped, whitespace-trimmed Dart source line.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(class_name)` if a class declaration is present on the line; `None` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ linear in line length.
+/// - Space Complexity: $O(1)$ zero-allocation slice return.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Returns `None` if no identifier follows `class`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-39-SCAN-TEST-FILE]
+fn extract_dart_class_name(trimmed_line: &str) -> Option<&str> {
+    let header = trimmed_line.split('{').next().unwrap_or(trimmed_line);
+    let mut tokens = header.split_whitespace();
+    while let Some(tok) = tokens.next() {
+        if tok == "class" {
+            if let Some(raw_name) = tokens.next() {
+                let clean = raw_name.split('<').next().unwrap_or(raw_name).trim();
+                if !clean.is_empty() {
+                    return Some(clean);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Extracts a receiver method call `<receiver>.<method>(` from a comment-stripped Dart line.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 39/40 direct state mutation detection mandates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `Some("<receiver>.<method>(")` when a non-lifecycle method invocation is found on `receiver_prefix`.
+/// - Ignores benign lifecycle and inspection methods (`dispose`, `close`, `addListener`, `removeListener`, `toString`).
+///
+/// ## 3. Preconditions
+/// - `line` is a comment-stripped Dart line; `receiver_prefix` ends with `.` (e.g. `"bridge."`).
+///
+/// ## 4. Postconditions
+/// - Returns `Some(call_str)` if a mutating method invocation is found; `None` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ linear in line length.
+/// - Space Complexity: $O(M)$ proportional to method identifier length.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Safe slice indexing with zero panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-39-SCAN-TEST-FILE], [REQ-CHECK-40-SCAN-TEST-GESTURES]
+fn extract_receiver_method_call(line: &str, receiver_prefix: &str) -> Option<String> {
+    let idx = line.find(receiver_prefix)?;
+    if idx > 0 {
+        let prev = line.as_bytes().get(idx.saturating_sub(1)).copied().unwrap_or(b' ');
+        if prev.is_ascii_alphanumeric() || prev == b'_' {
+            return None;
+        }
+    }
+    let after = line.get(idx.saturating_add(receiver_prefix.len())..)?;
+    let method_name: String = after
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .collect();
+    if method_name.is_empty() {
+        return None;
+    }
+    let rest = after.get(method_name.len()..)?.trim_start();
+    if !rest.starts_with('(') {
+        return None;
+    }
+    let benign = ["dispose", "close", "addListener", "removeListener", "toString"];
+    if benign.contains(&method_name.as_str()) {
+        return None;
+    }
+    Some(format!("{}{}((", receiver_prefix, method_name).trim_end_matches('(').to_string() + "(")
+}
+
+/// Scans comment-stripped `testWidgets` blocks for direct receiver mutations without `tester.` gestures.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and MIL-STD-1472H interactive gesture verification mandates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Partitions `stripped` into `testWidgets` blocks by brace depth.
+/// - Flags any `receivers` method call in a `testWidgets` block that lacks a `tester.` gesture.
+///
+/// ## 3. Preconditions
+/// - `stripped` is comment-stripped Dart test source; `receivers` lists receiver prefixes (e.g. `["bridge."]`).
+///
+/// ## 4. Postconditions
+/// - Returns `Vec<(usize, String)>` of `(line_number, matched_call)` for every un-gestured direct mutation.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L \times R)$ where $L$ is line count and $R$ is receiver prefix count.
+/// - Space Complexity: $O(M)$ for collected mutation records within a block.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function over arbitrary comment-stripped source text.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-39-SCAN-TEST-FILE], [REQ-CHECK-40-SCAN-TEST-GESTURES]
+fn find_ungestured_test_widgets_mutations(
+    stripped: &str,
+    receivers: &[&str],
+) -> Vec<(usize, String)> {
+    let mut results = Vec::new();
+    let mut in_block = false;
+    let mut brace_depth: isize = 0;
+    let mut has_gesture = false;
+    let mut block_mutations: Vec<(usize, String)> = Vec::new();
+    let gestures = [
+        "tester.tap(",
+        "tester.drag(",
+        "tester.enterText(",
+        "tester.longPress(",
+        "tester.sendKeyEvent(",
+    ];
+
+    for (idx, line) in stripped.lines().enumerate() {
+        let line_no = idx.saturating_add(1);
+        if !in_block && line.contains("testWidgets(") {
+            in_block = true;
+            brace_depth = 0;
+            has_gesture = false;
+            block_mutations.clear();
+        }
+        if in_block {
+            if gestures.iter().any(|g| line.contains(g)) {
+                has_gesture = true;
+            }
+            for rec in receivers {
+                if let Some(call) = extract_receiver_method_call(line, rec) {
+                    block_mutations.push((line_no, call));
+                }
+            }
+            for ch in line.chars() {
+                if ch == '{' {
+                    brace_depth = brace_depth.saturating_add(1);
+                } else if ch == '}' {
+                    brace_depth = brace_depth.saturating_sub(1);
+                }
+            }
+            if brace_depth <= 0 && line.contains("});") {
+                if !has_gesture {
+                    results.append(&mut block_mutations);
+                }
+                in_block = false;
+            }
+        }
+    }
+    if in_block && !has_gesture {
+        results.append(&mut block_mutations);
+    }
+    results
+}
+
+/// Inspects a single comment-stripped line for mock/fake/stub declarations, forbidden `implements`, and tautologies.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Section 1.9 Zero-Mocking Live Persistence Mandate.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Detects `Mock*`, `_Mock*`, `Fake*`, `_Fake*`, `Stub*`, `_Stub*` regardless of Dart 3 class modifiers.
+/// - Detects `implements *Repository`, `*DataSource`, `*Transport`, `*Service`, `*Store`, `*Client`.
+/// - Detects tautological assertions (`expect(true, isTrue)`, `expect(false, isFalse)`).
+///
+/// ## 3. Preconditions
+/// - `trimmed` is a comment-stripped, trimmed Dart line.
+///
+/// ## 4. Postconditions
+/// - Appends any detected line-level Check 39 violations to `violations`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ linear in line length.
+/// - Space Complexity: $O(V)$ for appended violation diagnostics.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-panicking token inspection.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-39-SCAN-TEST-FILE]
+fn check_line_for_mocking_violations(
+    trimmed: &str,
+    file_rel: &str,
+    line_no: usize,
+    violations: &mut Vec<String>,
+) {
+    if let Some(cls) = extract_dart_class_name(trimmed) {
+        let is_mock_cls = cls.starts_with("Mock")
+            || cls.starts_with("_Mock")
+            || cls.starts_with("Fake")
+            || cls.starts_with("_Fake")
+            || cls.starts_with("Stub")
+            || cls.starts_with("_Stub")
+            || cls.contains("Mock")
+            || cls.contains("Fake")
+            || cls.contains("Stub");
+        if is_mock_cls {
+            violations.push(format!(
+                "Check 39 violation: Forbidden mock or fake class declaration in {}:{}: '{}'. Live persistence required.",
+                file_rel, line_no, trimmed
+            ));
+        }
+    }
+    for ext in ["extends Mock", "extends Fake", "with Mock", "with Fake"] {
+        if trimmed.contains(ext) {
+            violations.push(format!(
+                "Check 39 violation: Forbidden inheritance from Mock/Fake in {}:{}: '{}'.",
+                file_rel, line_no, trimmed
+            ));
+        }
+    }
+    if let Some((_, after_imp)) = trimmed.split_once("implements ") {
+        let suffixes = ["Repository", "DataSource", "Transport", "Service", "Store", "Client"];
+        for raw_tok in after_imp.split(|c: char| c == ',' || c == '{' || c.is_whitespace()) {
+            let tok = raw_tok.trim();
+            if suffixes.iter().any(|s| tok.ends_with(s)) {
+                violations.push(format!(
+                    "Check 39 violation: Forbidden mock repository/datasource implementation in {}:{}: '{}'.",
+                    file_rel, line_no, trimmed
+                ));
+            }
+        }
+    }
+    if trimmed.contains("TestThemeService") || trimmed.contains("FakeThemeService") {
+        violations.push(format!(
+            "Check 39 violation: Forbidden mock theme service in {}:{}: '{}'.",
+            file_rel, line_no, trimmed
+        ));
+    }
+    for stub in [
+        "Result.success([])",
+        "TopologyData(coordinateMapping: {}, nodes: [], links: [])",
+        "TopologyData(nodes: [], links: [])",
+        "expect(true, isTrue)",
+        "expect(false, isFalse)",
+    ] {
+        if trimmed.contains(stub) {
+            violations.push(format!(
+                "Check 39 violation: Hardcoded empty result stub or tautological assertion in {}:{}: '{}'.",
+                file_rel, line_no, trimmed
+            ));
+        }
+    }
+}
+
 /// Inspects a single test file for forbidden mock classes, empty stubs, and leaking SQLite connections.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A live persistence testing mandates.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Detects mock classes via token matching on `class Mock`, `class Fake`, `extends Mock`, etc.
-/// - Validates paired presence of `tearDownAll` containing `.close()` or `.dispose()` when `openDatabase` is present in `setUpAll`.
+/// - Strips comments first via `strip_dart_comments` so commented-out `tearDownAll` or mocks are accurately analyzed.
+/// - Rejects Dart 3 modified mock/fake/stub classes, service/repository `implements`, tautologies, and un-gestured mutations.
+/// - Validates paired presence of uncommented `tearDownAll` containing `.close()` or `.dispose()`.
 ///
 /// ## 3. Preconditions
 /// - `file_path` exists on disk; `file_rel` is workspace-relative path string.
@@ -489,8 +831,8 @@ pub fn check_39_zero_mocking_test_ast_gate(
 /// - Appends diagnostic violation strings to `violations`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(L) where L is lines in the file.
-/// - Space Complexity: O(V) for diagnostic accumulation.
+/// - Time Complexity: $O(L)$ where $L$ is lines in the file.
+/// - Space Complexity: $O(V)$ for diagnostic accumulation.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Files failing read operations do not panic.
@@ -498,66 +840,28 @@ pub fn check_39_zero_mocking_test_ast_gate(
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-39-SCAN-TEST-FILE]
 fn scan_test_file_for_mocking(file_path: &Path, file_rel: &str, violations: &mut Vec<String>) {
-    let content = match fs::read_to_string(file_path) {
+    let raw_content = match fs::read_to_string(file_path) {
         Ok(c) => c,
         Err(_) => return,
     };
-
-    let forbidden_class_prefixes = ["class Mock", "class _Mock", "class Fake", "class _Fake"];
-    let forbidden_extends = ["extends Mock", "extends Fake", "with Mock", "with Fake"];
-    let forbidden_implements = ["implements TreeRepository", "implements DataSource", "implements TacticalTransport"];
-    let forbidden_stubs = [
-        "Result.success([])",
-        "TopologyData(coordinateMapping: {}, nodes: [], links: [])",
-        "TopologyData(nodes: [], links: [])",
-    ];
+    let content = strip_dart_comments(&raw_content);
 
     for (idx, line) in content.lines().enumerate() {
         let line_no = idx.saturating_add(1);
         let trimmed = line.trim();
-
-        for prefix in &forbidden_class_prefixes {
-            if trimmed.starts_with(prefix) {
-                violations.push(format!(
-                    "Check 39 violation: Forbidden mock or fake class declaration in {}:{}: '{}'. Live persistence required.",
-                    file_rel, line_no, trimmed
-                ));
-            }
+        if !trimmed.is_empty() {
+            check_line_for_mocking_violations(trimmed, file_rel, line_no, violations);
         }
+    }
 
-        for ext in &forbidden_extends {
-            if trimmed.contains(ext) {
-                violations.push(format!(
-                    "Check 39 violation: Forbidden inheritance from Mock/Fake in {}:{}: '{}'.",
-                    file_rel, line_no, trimmed
-                ));
-            }
-        }
-
-        for imp in &forbidden_implements {
-            if trimmed.contains(imp) {
-                violations.push(format!(
-                    "Check 39 violation: Forbidden mock repository/datasource implementation in {}:{}: '{}'.",
-                    file_rel, line_no, trimmed
-                ));
-            }
-        }
-
-        if trimmed.contains("TestThemeService") || trimmed.contains("FakeThemeService") {
-            violations.push(format!(
-                "Check 39 violation: Forbidden mock theme service in {}:{}: '{}'.",
-                file_rel, line_no, trimmed
-            ));
-        }
-
-        for stub in &forbidden_stubs {
-            if trimmed.contains(stub) {
-                violations.push(format!(
-                    "Check 39 violation: Hardcoded empty result stub in {}:{}: '{}'.",
-                    file_rel, line_no, trimmed
-                ));
-            }
-        }
+    for (line_no, call) in find_ungestured_test_widgets_mutations(
+        &content,
+        &["bridge.", "controller.", "notifier."],
+    ) {
+        violations.push(format!(
+            "Check 39 violation: Direct state mutation '{}' without tester gesture in {}:{}.",
+            call, file_rel, line_no
+        ));
     }
 
     let has_sqlite_setup = content.contains("openDatabase(")
@@ -622,6 +926,11 @@ pub fn check_40_interactive_gesture_and_hud_non_overlap_gate(
             .display()
             .to_string();
         verify_ui_contract_test_viewports(&contract_path, &rel, &mut violations);
+    } else {
+        violations.push(
+            "Check 40 violation: Missing mandatory generated UI contract test app_flutter/test/generated/schema_ui_contract_test.g.dart."
+                .to_string(),
+        );
     }
 
     let test_dirs = [
@@ -659,23 +968,26 @@ pub fn check_40_interactive_gesture_and_hud_non_overlap_gate(
     }
 }
 
-/// Verifies that the generated schema UI contract test sweeps all 6 canonical viewports.
+/// Verifies that the generated schema UI contract test sweeps all 6 canonical viewports and 4 physical resolutions.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to MIL-STD-1472H multi-resolution spatial layout verification mandates.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Bijective presence verification for the 6 canonical viewports from FHD_1080P_1X to XDR_6K_2X.
+/// - Strips comments first via `strip_dart_comments`.
+/// - Verifies all 6 canonical viewports (`FHD_1080P_1X`..`XDR_6K_2X`), all 4 physical resolutions,
+///   live `tester.getRect(`, uncommented `tester.tap(`, `assertPairwiseHudNonOverlap`, and `.overlaps(`.
+/// - Rejects synthetic `Rect.fromLTWH(` literals in active contract code.
 ///
 /// ## 3. Preconditions
 /// - `contract_path` points to existing generated test file on disk.
 ///
 /// ## 4. Postconditions
-/// - Appends violation diagnostic if any of the 6 canonical viewports is missing.
+/// - Appends violation diagnostic if any viewport, resolution, or live spatial check is missing or mocked.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(C) where C is contract file length.
-/// - Space Complexity: O(1) static inspection.
+/// - Time Complexity: $O(C)$ where $C$ is contract file length.
+/// - Space Complexity: $O(C)$ for comment-stripped buffer.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Reads safely and logs diagnostics on missing content.
@@ -683,27 +995,56 @@ pub fn check_40_interactive_gesture_and_hud_non_overlap_gate(
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-40-VERIFY-VIEWPORTS]
 fn verify_ui_contract_test_viewports(contract_path: &Path, file_rel: &str, violations: &mut Vec<String>) {
-    let content = match fs::read_to_string(contract_path) {
+    let raw_content = match fs::read_to_string(contract_path) {
         Ok(c) => c,
         Err(_) => return,
     };
+    let content = strip_dart_comments(&raw_content);
 
-    let canonical_viewports = [
+    for vp in [
         "FHD_1080P_1X",
         "QHD_1440P_1X",
         "UHD_4K_1X",
         "UHD_4K_2X",
         "XDR_6K_1X",
         "XDR_6K_2X",
-    ];
-
-    for vp in &canonical_viewports {
+    ] {
         if !content.contains(vp) {
             violations.push(format!(
                 "Check 40 violation: Generated UI contract test {} is missing canonical viewport '{}'.",
                 file_rel, vp
             ));
         }
+    }
+
+    for (w, h) in [("1920", "1080"), ("2560", "1440"), ("3840", "2160"), ("6016", "3384")] {
+        if !content.contains(w) || !content.contains(h) {
+            violations.push(format!(
+                "Check 40 violation: Generated UI contract test {} is missing physical resolution {}x{}.",
+                file_rel, w, h
+            ));
+        }
+    }
+
+    for required_token in [
+        "tester.getRect(",
+        "tester.tap(",
+        "assertPairwiseHudNonOverlap",
+        ".overlaps(",
+    ] {
+        if !content.contains(required_token) {
+            violations.push(format!(
+                "Check 40 violation: Generated UI contract test {} is missing active '{}' invocation.",
+                file_rel, required_token
+            ));
+        }
+    }
+
+    if content.contains("Rect.fromLTWH(") {
+        violations.push(format!(
+            "Check 40 violation: Generated UI contract test {} uses synthetic Rect.fromLTWH( instead of live tester.getRect(.",
+            file_rel
+        ));
     }
 }
 
@@ -713,8 +1054,9 @@ fn verify_ui_contract_test_viewports(contract_path: &Path, file_rel: &str, viola
 /// Conforms to DO-178C Level A and MIL-STD-1472H interactive gesture actuation requirements.
 ///
 /// ## 2. Invariants & Mathematical Properties
+/// - Strips comments first via `strip_dart_comments`.
 /// - Rejects `probeWidgetKey` and shallow `evaluate().isNotEmpty`.
-/// - Rejects direct `bridge.*` mutations in test bodies.
+/// - Rejects domain-agnostic direct `bridge.<method>(` mutations in `testWidgets` blocks lacking a `tester.` gesture.
 /// - Rejects HUD mounts lacking `assertPairwiseHudNonOverlap` or `.overlaps(`.
 ///
 /// ## 3. Preconditions
@@ -724,8 +1066,8 @@ fn verify_ui_contract_test_viewports(contract_path: &Path, file_rel: &str, viola
 /// - Appends violation diagnostics to `violations`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(L) where L is lines in the file.
-/// - Space Complexity: O(V) for diagnostics.
+/// - Time Complexity: $O(L)$ where $L$ is lines in the file.
+/// - Space Complexity: $O(V)$ for diagnostics.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Non-panicking line iteration.
@@ -737,20 +1079,11 @@ fn scan_test_file_for_interactive_gestures(
     file_rel: &str,
     violations: &mut Vec<String>,
 ) {
-    let content = match fs::read_to_string(file_path) {
+    let raw_content = match fs::read_to_string(file_path) {
         Ok(c) => c,
         Err(_) => return,
     };
-
-    let banned_bridge_mutations = [
-        "bridge.relockInterlock(",
-        "bridge.triggerHotlRfJamRetasking(",
-        "bridge.restoreStrategicLink(",
-        "bridge.setMobileAtakEudMode(",
-        "bridge.toggleRadarDegraded(",
-        "bridge.setSwarmDensityMultiplier(",
-        "bridge.setMinMagazineReserveRatio(",
-    ];
+    let content = strip_dart_comments(&raw_content);
 
     for (idx, line) in content.lines().enumerate() {
         let line_no = idx.saturating_add(1);
@@ -769,15 +1102,13 @@ fn scan_test_file_for_interactive_gestures(
                 file_rel, line_no
             ));
         }
+    }
 
-        for mut_call in &banned_bridge_mutations {
-            if trimmed.contains(mut_call) {
-                violations.push(format!(
-                    "Check 40 violation: Direct solver bridge mutation detected in {}:{}: '{}'. UI tests must actuate controls via tester.tap(find.byKey(...)).",
-                    file_rel, line_no, mut_call
-                ));
-            }
-        }
+    for (line_no, mut_call) in find_ungestured_test_widgets_mutations(&content, &["bridge."]) {
+        violations.push(format!(
+            "Check 40 violation: Direct solver bridge mutation detected in {}:{}: '{}'. UI tests must actuate controls via tester.tap(find.byKey(...)).",
+            file_rel, line_no, mut_call
+        ));
     }
 
     let mounts_hud = content.contains("HudOverlay")
@@ -787,7 +1118,8 @@ fn scan_test_file_for_interactive_gestures(
         || content.contains("hud_overlay");
 
     if mounts_hud {
-        let has_non_overlap = content.contains("assertPairwiseHudNonOverlap") || content.contains(".overlaps(");
+        let has_non_overlap =
+            content.contains("assertPairwiseHudNonOverlap") || content.contains(".overlaps(");
         if !has_non_overlap {
             violations.push(format!(
                 "Check 40 violation: {}: Test file mounts Tactical HUD overlays but lacks assertPairwiseHudNonOverlap or Rect.overlaps assertion.",
@@ -1389,17 +1721,23 @@ void main() {
         let generated_contract = r#"
 // Generated schema UI contract test
 const kCanonicalViewports = [
-  'FHD_1080P_1X',
-  'QHD_1440P_1X',
-  'UHD_4K_1X',
-  'UHD_4K_2X',
-  'XDR_6K_1X',
-  'XDR_6K_2X',
+  CanonicalViewport(identifier: 'FHD_1080P_1X', physicalWidth: 1920, physicalHeight: 1080),
+  CanonicalViewport(identifier: 'QHD_1440P_1X', physicalWidth: 2560, physicalHeight: 1440),
+  CanonicalViewport(identifier: 'UHD_4K_1X', physicalWidth: 3840, physicalHeight: 2160),
+  CanonicalViewport(identifier: 'UHD_4K_2X', physicalWidth: 3840, physicalHeight: 2160),
+  CanonicalViewport(identifier: 'XDR_6K_1X', physicalWidth: 6016, physicalHeight: 3384),
+  CanonicalViewport(identifier: 'XDR_6K_2X', physicalWidth: 6016, physicalHeight: 3384),
 ];
+
+void assertPairwiseHudNonOverlap(List<Rect> rects) {
+  final overlaps = rects[0].overlaps(rects[1]);
+}
 
 void main() {
   testWidgets('assert zero RenderFlex overflow across all viewports', (tester) async {
-    // contract verification
+    final rect = tester.getRect(find.byKey(const ValueKey('hud')));
+    assertPairwiseHudNonOverlap([rect, rect]);
+    await tester.tap(find.byKey(const ValueKey('row')));
   });
 }
 "#;

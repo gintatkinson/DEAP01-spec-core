@@ -26,7 +26,8 @@
 //! Realises: [REQ-COMPILER-FLUTTER-CODEGEN], [REQ-FLUTTER-GENERATE-SOLVER-BRIDGE]
 
 use compile_sysml::flutter_codegen::{
-    emit_dart_solver_bridge, generate_domain_seed_dart, generate_solver_bridge_dart, TopologyNode,
+    emit_dart_solver_bridge, generate_domain_seed_dart, generate_solver_bridge_dart,
+    generate_ui_contract_test_dart, TopologyNode,
 };
 use deap_core::sysml_ast::{AttributeDef, ItemDef, PartDef, PortDef, SysmlModel};
 use std::collections::BTreeMap;
@@ -346,4 +347,112 @@ fn test_generate_domain_seed_dart_unions_topology_types_attributes_and_part_defa
         seed_src.contains("['NODE_ALPHA_01', 'mode_tag', 'NOMINAL', null, 'text']"),
         "Must seed fallback mode_tag = 'NOMINAL' for NODE_ALPHA_01"
     );
+}
+
+/// Strips line comments (`//`) from Dart source text for structural test assertions.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-330 TQL-4 comment-insensitive verification standards.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Removes all characters after `//` on each line while preserving line breaks.
+///
+/// ## 3. Preconditions
+/// - `src` is a valid UTF-8 Dart source slice.
+///
+/// ## 4. Postconditions
+/// - Returns comment-stripped Dart source text.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ linear in source length.
+/// - Space Complexity: $O(N)$ allocated output string.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function over UTF-8 strings.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FLUTTER-GENERATE-UI-CONTRACT-TEST]
+fn strip_line_comments_for_test(src: &str) -> String {
+    let mut out = String::with_capacity(src.len());
+    for line in src.lines() {
+        let code = match line.split_once("//") {
+            Some((before, _)) => before,
+            None => line,
+        };
+        out.push_str(code);
+        out.push('\n');
+    }
+    out
+}
+
+/// Verifies that `generate_ui_contract_test_dart` emits live widget pumping, `tester.getRect`,
+/// uncommented `tester.tap`, `a.overlaps(b)`, `DomainSeedStrategy`, and zero `Rect.fromLTWH` or `'{}'`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, MIL-STD-1472H, and Check 39/40 UI contract test generation mandates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Comment-stripped output contains `DomainSeedStrategy`, `a.overlaps(b)`, `tester.pumpWidget(`,
+///   `tester.getRect(`, uncommented `await tester.tap(find.byKey(SchemaWidgetKeys.entityRow(`, and all 4 resolutions.
+/// - Comment-stripped output contains zero `Rect.fromLTWH(` and zero `'{}'` placeholders.
+///
+/// ## 3. Preconditions
+/// - `SysmlModel` and `nodes` represent a valid domain-independent schema and topology dataset.
+///
+/// ## 4. Postconditions
+/// - Generated Dart contract test satisfies all live spatial and interactive gesture invariants.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ linear in generated source length.
+/// - Space Complexity: $O(N)$ for comment-stripped source buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Panics in test if any required token is missing or banned placeholder is present.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FLUTTER-GENERATE-UI-CONTRACT-TEST]
+#[test]
+fn test_generate_ui_contract_test_dart_emits_live_pump_getrect_tap_and_pairwise_overlaps() {
+    let model = SysmlModel::default();
+    let nodes = vec![
+        TopologyNode {
+            id: "NODE_ALPHA_01".to_string(),
+            type_name: "AlphaComponent".to_string(),
+            label: "Alpha Node 01".to_string(),
+            parent_id: None,
+            properties: BTreeMap::new(),
+            created_at: 1000,
+            updated_at: 2000,
+        },
+        TopologyNode {
+            id: "NODE_BETA_02".to_string(),
+            type_name: "BetaComponent".to_string(),
+            label: "Beta Node 02".to_string(),
+            parent_id: Some("NODE_ALPHA_01".to_string()),
+            properties: BTreeMap::new(),
+            created_at: 1000,
+            updated_at: 2000,
+        },
+    ];
+
+    let raw_dart = generate_ui_contract_test_dart(&model, &nodes);
+    let stripped = strip_line_comments_for_test(&raw_dart);
+
+    assert!(stripped.contains("DomainSeedStrategy"), "Must reference DomainSeedStrategy in active code");
+    assert!(stripped.contains("a.overlaps(b)"), "Must use a.overlaps(b) in assertPairwiseHudNonOverlap");
+    assert!(stripped.contains("tester.pumpWidget("), "Must mount live widget tree via tester.pumpWidget");
+    assert!(stripped.contains("tester.getRect("), "Must query live RenderBox bounds via tester.getRect");
+    assert!(
+        stripped.contains("await tester.tap(find.byKey(SchemaWidgetKeys.entityRow('NODE_ALPHA_01')));"),
+        "Must emit uncommented tester.tap for NODE_ALPHA_01"
+    );
+    assert!(
+        stripped.contains("await tester.tap(find.byKey(SchemaWidgetKeys.entityRow('NODE_BETA_02')));"),
+        "Must emit uncommented tester.tap for NODE_BETA_02"
+    );
+    for dim in ["1920", "1080", "2560", "1440", "3840", "2160", "6016", "3384"] {
+        assert!(stripped.contains(dim), "Must contain canonical physical dimension {dim}");
+    }
+    assert!(!stripped.contains("Rect.fromLTWH("), "Must not use synthetic Rect.fromLTWH literals");
+    assert!(!stripped.contains("'{}'"), "Must not contain uninterpolated '{{}}' placeholders");
 }

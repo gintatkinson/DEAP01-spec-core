@@ -30,6 +30,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use verify_baseline::checks::codebase::{
+    check_39_zero_mocking_test_ast_gate,
+    check_40_interactive_gesture_and_hud_non_overlap_gate,
     check_41_solver_bridge_and_sqlite_seed_parity_gate, check_no_duplicate_dart_solver_math,
 };
 
@@ -394,4 +396,267 @@ class DomainSeedStrategy {
         "Complete generated seed with delegating domain_seed_strategy.dart must pass Check 41: {:?}",
         res_clean.err()
     );
+}
+
+/// Verifies that Check 39 flags Dart 3 class modifiers on mocks/fakes/stubs, generic `*Repository`/`*Service`
+/// `implements` clauses, commented-out `tearDownAll`, tautological `expect(true, isTrue)`, and direct
+/// controller/bridge mutations inside `testWidgets` without a `tester.` gesture.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Section 1.9 Zero-Mocking Live Persistence Mandate.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Comment stripping prevents `// tearDownAll(() => db.close());` from satisfying SQLite disposal.
+/// - Dart 3 modifiers (`final class Mock...`, `sealed class Fake...`, `base class Stub...`) are caught.
+/// - `implements *Repository` and `implements *Service` are rejected.
+/// - Tautological assertions and gesture-free `controller.`/`bridge.` mutations in `testWidgets` are rejected.
+///
+/// ## 3. Preconditions
+/// - Temporary workspace contains defective Dart test file under `app_flutter/test/`.
+///
+/// ## 4. Postconditions
+/// - `check_39_zero_mocking_test_ast_gate` returns `Err` containing all expected violation diagnostics.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ linear in test file lines.
+/// - Space Complexity: $O(V)$ for violation strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Panics in test if any violation class is missed.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-39-ZERO-MOCKING-TEST-AST-GATE]
+#[test]
+fn test_check_39_negative_probe_flags_dart3_mock_modifiers_commented_teardown_and_direct_mutation_without_tester_gesture() {
+    let tmp = ScopedTempDir::new("c39_neg_probe");
+    let test_dir = tmp.path.join("app_flutter/test/features");
+    fs::create_dir_all(&test_dir).expect("create test dir");
+
+    let defective_dart = r#"
+final class MockEntityStore {}
+base class StubTelemetryClient implements AlphaEntityRepository {}
+class CustomFakeAdapter implements BetaDomainService {}
+
+void main() {
+  setUpAll(() async {
+    final db = await openDatabase(inMemoryDatabasePath);
+    await DomainSeedStrategy.seed(db);
+  });
+  // tearDownAll(() async { await db.close(); });
+
+  testWidgets('mutates controller directly without tester gesture', (tester) async {
+    await tester.pumpWidget(const SizedBox());
+    controller.mutateEntityState('NODE_01');
+    expect(true, isTrue);
+  });
+}
+"#;
+    fs::write(test_dir.join("defective_persistence_test.dart"), defective_dart)
+        .expect("write defective test");
+
+    let res = check_39_zero_mocking_test_ast_gate(&tmp.path);
+    assert!(res.is_err(), "Check 39 must reject Dart 3 mocks, commented teardown, tautologies, and gesture-free mutations");
+    let errs = res.expect_err("expected Check 39 violations");
+    assert!(errs.iter().any(|e| e.contains("MockEntityStore")), "Must flag final class MockEntityStore: {:?}", errs);
+    assert!(errs.iter().any(|e| e.contains("AlphaEntityRepository")), "Must flag implements AlphaEntityRepository: {:?}", errs);
+    assert!(errs.iter().any(|e| e.contains("BetaDomainService")), "Must flag implements BetaDomainService: {:?}", errs);
+    assert!(errs.iter().any(|e| e.contains("tearDownAll")), "Must flag commented-out tearDownAll: {:?}", errs);
+    assert!(errs.iter().any(|e| e.contains("expect(true, isTrue)")), "Must flag tautological expect(true, isTrue): {:?}", errs);
+    assert!(errs.iter().any(|e| e.contains("controller.mutateEntityState")), "Must flag gesture-free controller mutation: {:?}", errs);
+}
+
+/// Verifies that Check 39 passes a clean SQLite test suite with uncommented `tearDownAll` and real `tester.tap` gestures.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A live persistence verification standards.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Clean `openDatabase` + `DomainSeedStrategy` with active `tearDownAll` and `tester.tap` yields zero violations.
+///
+/// ## 3. Preconditions
+/// - Temporary workspace contains a compliant Dart test file under `app_flutter/test/`.
+///
+/// ## 4. Postconditions
+/// - `check_39_zero_mocking_test_ast_gate` returns `Ok(())`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ linear in test file lines.
+/// - Space Complexity: $O(1)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Panics in test if false-positive violations are reported.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-39-ZERO-MOCKING-TEST-AST-GATE]
+#[test]
+fn test_check_39_positive_probe_passes_real_sqlite_and_tester_gesture() {
+    let tmp = ScopedTempDir::new("c39_pos_probe");
+    let test_dir = tmp.path.join("app_flutter/test/features");
+    fs::create_dir_all(&test_dir).expect("create test dir");
+
+    let clean_dart = r#"
+void main() {
+  late Database db;
+  setUpAll(() async {
+    db = await openDatabase(inMemoryDatabasePath);
+    await seedGeneratedDomainDatabase(db);
+  });
+
+  tearDownAll(() async {
+    await db.close();
+  });
+
+  testWidgets('actuates UI via tester.tap before verifying state', (tester) async {
+    await tester.pumpWidget(const SizedBox());
+    await tester.tap(find.byKey(const ValueKey('entity_row_NODE_01')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('entity_inspector_NODE_01')), findsOneWidget);
+  });
+}
+"#;
+    fs::write(test_dir.join("clean_persistence_test.dart"), clean_dart)
+        .expect("write clean test");
+
+    let res = check_39_zero_mocking_test_ast_gate(&tmp.path);
+    assert!(res.is_ok(), "Compliant SQLite + gesture test must pass Check 39: {:?}", res.err());
+}
+
+/// Verifies that Check 40 fails closed when `schema_ui_contract_test.g.dart` is missing or has commented-out
+/// `tester.tap`/`Rect.fromLTWH`, and flags domain-agnostic direct `bridge.<method>(` mutations without `tester.` gestures.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and MIL-STD-1472H spatial and interactive verification gates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Missing `app_flutter/test/generated/schema_ui_contract_test.g.dart` fails closed when `app_flutter/test` exists.
+/// - Commented-out `// await tester.tap(...)` or synthetic `Rect.fromLTWH(` in contract test is rejected.
+/// - Direct `bridge.<method>(` call in `testWidgets` without a `tester.` gesture is rejected without hardcoded domain names.
+///
+/// ## 3. Preconditions
+/// - Temporary workspace contains `app_flutter/test/`.
+///
+/// ## 4. Postconditions
+/// - `check_40_interactive_gesture_and_hud_non_overlap_gate` returns `Err` for both missing and commented-out contracts.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ linear in scanned test lines.
+/// - Space Complexity: $O(V)$ for violation strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Panics in test if missing file or commented contract passes.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-40-INTERACTIVE-GESTURE-HUD-NON-OVERLAP]
+#[test]
+fn test_check_40_negative_probe_fail_closed_on_missing_or_commented_contract_and_direct_bridge_mutation() {
+    let tmp = ScopedTempDir::new("c40_neg_probe");
+    let test_dir = tmp.path.join("app_flutter/test/widgets");
+    fs::create_dir_all(&test_dir).expect("create test/widgets dir");
+
+    // Case 1: Missing schema_ui_contract_test.g.dart must fail closed
+    let res_missing = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
+    assert!(res_missing.is_err(), "Missing schema_ui_contract_test.g.dart must fail closed");
+    let errs_missing = res_missing.expect_err("expected missing contract error");
+    assert!(
+        errs_missing.iter().any(|e| e.contains("schema_ui_contract_test.g.dart")),
+        "Must report missing schema_ui_contract_test.g.dart: {:?}",
+        errs_missing
+    );
+
+    // Case 2: Contract file present but uses commented-out tester.tap and synthetic Rect.fromLTWH, plus direct bridge mutation in widget test
+    let gen_dir = tmp.path.join("app_flutter/test/generated");
+    fs::create_dir_all(&gen_dir).expect("create test/generated dir");
+    let commented_contract = r#"
+// FHD_1080P_1X QHD_1440P_1X UHD_4K_1X UHD_4K_2X XDR_6K_1X XDR_6K_2X
+void main() {
+  testWidgets('placeholder contract', (tester) async {
+    final rect = const Rect.fromLTWH(0, 0, 1920, 1080);
+    // await tester.tap(find.byKey(SchemaWidgetKeys.entityRow('NODE_01')));
+    // tester.getRect(find.byKey(SchemaWidgetKeys.hudOverlay('primary')));
+  });
+}
+"#;
+    fs::write(gen_dir.join("schema_ui_contract_test.g.dart"), commented_contract)
+        .expect("write commented contract");
+
+    let widget_test = r#"
+void main() {
+  testWidgets('direct generic bridge mutation without gesture', (tester) async {
+    await tester.pumpWidget(const HudOverlay());
+    bridge.applyGenericParameterMutation(42);
+  });
+}
+"#;
+    fs::write(test_dir.join("generic_bridge_test.dart"), widget_test)
+        .expect("write widget test");
+
+    let res_commented = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
+    assert!(res_commented.is_err(), "Commented contract and direct bridge mutation must fail Check 40");
+    let errs = res_commented.expect_err("expected Check 40 violations");
+    assert!(errs.iter().any(|e| e.contains("tester.tap(")), "Must flag missing uncommented tester.tap(: {:?}", errs);
+    assert!(errs.iter().any(|e| e.contains("tester.getRect(")), "Must flag missing uncommented tester.getRect(: {:?}", errs);
+    assert!(errs.iter().any(|e| e.contains("Rect.fromLTWH(")), "Must flag synthetic Rect.fromLTWH(: {:?}", errs);
+    assert!(
+        errs.iter().any(|e| e.contains("bridge.applyGenericParameterMutation(")),
+        "Must flag generic direct bridge mutation: {:?}",
+        errs
+    );
+}
+
+/// Verifies that Check 40 passes when `schema_ui_contract_test.g.dart` contains all 6 viewports,
+/// all 4 physical resolutions, live `tester.getRect(`, `tester.tap(`, `assertPairwiseHudNonOverlap`, and `.overlaps(`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and MIL-STD-1472H multi-viewport verification standards.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Complete uncommented contract test and gesture-driven widget test pass Check 40 with zero violations.
+///
+/// ## 3. Preconditions
+/// - Temporary workspace contains compliant `schema_ui_contract_test.g.dart` and widget test.
+///
+/// ## 4. Postconditions
+/// - `check_40_interactive_gesture_and_hud_non_overlap_gate` returns `Ok(())`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ linear in contract and test lines.
+/// - Space Complexity: $O(1)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Panics in test if false-positive violations occur.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-40-INTERACTIVE-GESTURE-HUD-NON-OVERLAP]
+#[test]
+fn test_check_40_positive_probe_passes_complete_4_viewport_contract() {
+    let tmp = ScopedTempDir::new("c40_pos_probe");
+    let gen_dir = tmp.path.join("app_flutter/test/generated");
+    fs::create_dir_all(&gen_dir).expect("create test/generated dir");
+
+    let valid_contract = r#"
+const kCanonicalViewports = [
+  CanonicalViewport(identifier: 'FHD_1080P_1X', physicalWidth: 1920, physicalHeight: 1080),
+  CanonicalViewport(identifier: 'QHD_1440P_1X', physicalWidth: 2560, physicalHeight: 1440),
+  CanonicalViewport(identifier: 'UHD_4K_1X', physicalWidth: 3840, physicalHeight: 2160),
+  CanonicalViewport(identifier: 'UHD_4K_2X', physicalWidth: 3840, physicalHeight: 2160),
+  CanonicalViewport(identifier: 'XDR_6K_1X', physicalWidth: 6016, physicalHeight: 3384),
+  CanonicalViewport(identifier: 'XDR_6K_2X', physicalWidth: 6016, physicalHeight: 3384),
+];
+void assertPairwiseHudNonOverlap(List<Rect> rects) {
+  final overlaps = rects[0].overlaps(rects[1]);
+}
+void main() {
+  testWidgets('live contract', (tester) async {
+    await tester.pumpWidget(const SizedBox());
+    final r = tester.getRect(find.byKey(const ValueKey('hud')));
+    assertPairwiseHudNonOverlap([r, r]);
+    await tester.tap(find.byKey(const ValueKey('row')));
+  });
+}
+"#;
+    fs::write(gen_dir.join("schema_ui_contract_test.g.dart"), valid_contract)
+        .expect("write valid contract");
+
+    let res = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
+    assert!(res.is_ok(), "Complete 4-resolution, 6-viewport contract must pass Check 40: {:?}", res.err());
 }
