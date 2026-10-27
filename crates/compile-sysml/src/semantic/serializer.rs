@@ -579,8 +579,13 @@ impl SysmlSerializable for StateDef {
             }
         }
         for t in &self.transitions {
-            let t_name = t.name.as_deref().unwrap_or("transition");
-            lines.push(format!("{}    transition {};", pad, t_name));
+            let clause = crate::parser::grammar::SysmlParser::format_transition_clause(t);
+            let rendered = if clause.is_empty() {
+                "transition"
+            } else {
+                clause.as_str()
+            };
+            lines.push(format!("{}    transition {};", pad, rendered));
         }
         lines.push(format!("{}}}", pad));
         lines.join("\n")

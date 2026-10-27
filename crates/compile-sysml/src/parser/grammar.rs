@@ -1879,8 +1879,8 @@ impl<'a> SysmlParser<'a> {
                     sub_states.push(sub_st);
                 } else if self.check(&TokenKind::Transition) {
                     self.advance();
-                    let t_stmt = self.read_until_semi();
-                    transitions.push(Self::parse_transition_clause(&t_stmt));
+                    let t_tokens = self.read_tokens_until_semi();
+                    transitions.push(Self::parse_transition_tokens(&t_tokens));
                 } else {
                     self.skip_until_semi_or_brace();
                 }
@@ -1910,7 +1910,7 @@ impl<'a> SysmlParser<'a> {
     /// - Pure predicate over token slice strings in `PARSER-GRAMMAR`.
     ///
     /// ## 3. Preconditions
-    /// - `tok: &str` is a whitespace-delimited token slice from a transition statement.
+    /// - `tok: &str` is a token slice from a transition statement.
     ///
     /// ## 4. Postconditions
     /// - Returns `true` if and only if `tok` matches a reserved transition clause delimiter.
@@ -1931,34 +1931,285 @@ impl<'a> SysmlParser<'a> {
         matches!(tok, "first" | "from" | "then" | "to" | "accept" | "if" | "do")
     }
 
-    /// Decomposes a raw SysML v2 transition statement body into a structured `TransitionDef`.
+    /// Returns `true` when `tok` is an unquoted lexer token representing a SysML v2 transition clause keyword (`first`, `from`, `then`, `to`, `accept`, `if`, `do`).
     ///
     /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_transition_clause` in `crates/compile-sysml/src/parser/grammar.rs`.
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::is_transition_keyword_token` in `crates/compile-sysml/src/parser/grammar.rs`.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - Extracts `first <src> then <tgt>` and `from <src> to <tgt>` into `TransitionDef::source` and `TransitionDef::target` while preserving optional `name`, `accept <trigger>`, `if <guard>`, and `do <effect>` clauses.
+    /// - Distinguishes unquoted transition clause keywords from string literals and single-quoted unrestricted identifiers in `PARSER-GRAMMAR`.
     ///
     /// ## 3. Preconditions
-    /// - `raw: &str` contains the normalized token text between `transition` and `;`.
+    /// - `tok: &Token` is a valid lexer token from a transition statement.
     ///
     /// ## 4. Postconditions
-    /// - Returns a populated `TransitionDef` with structured `source` and `target` endpoints when present.
+    /// - Returns `true` if and only if `tok` is an unquoted keyword token matching a transition clause delimiter.
     ///
     /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(T) linear scan over the whitespace-delimited tokens `T` in `raw`.
-    /// - Space Complexity: O(T) bounded auxiliary token vector and owned clause strings.
+    /// - Time Complexity: O(1) constant-time token inspection.
+    /// - Space Complexity: O(1) zero auxiliary heap allocation.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Total function over `&str`; gracefully handles partial or shorthand transition clauses.
-    /// - State: Stateless pure transformation.
-    /// - Action: Strictly advancing cursor `idx` guarantees termination.
-    /// - Resource: Bounded allocations proportional to `raw.len()`.
+    /// - Interface: Total function over `&Token`.
+    /// - State: Stateless pure predicate.
+    /// - Action: Executes deterministically in constant time.
+    /// - Resource: Zero heap allocation.
     ///
     /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-TRANSITION-CLAUSE] | SysML v2: ActionDef(SysmlParser::parse_transition_clause)
-    fn parse_transition_clause(raw: &str) -> TransitionDef {
-        let tokens: Vec<&str> = raw.split_whitespace().collect();
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-IS-TRANSITION-KEYWORD-TOKEN] | SysML v2: ActionDef(SysmlParser::is_transition_keyword_token)
+    fn is_transition_keyword_token(tok: &Token) -> bool {
+        match &tok.kind {
+            TokenKind::StringLit(_)
+            | TokenKind::IntLit(_)
+            | TokenKind::RealLit(_)
+            | TokenKind::BoolLit(_)
+            | TokenKind::LineComment(_)
+            | TokenKind::DocComment(_)
+            | TokenKind::Eof => false,
+            TokenKind::Ident(s) => Self::is_transition_clause_keyword(s.as_str()),
+            other => Self::is_transition_clause_keyword(other.as_str()),
+        }
+    }
+
+    /// Renders a single lexer `Token` into its canonical textual lexeme for transition clause reconstruction.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::token_lexeme` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves exact literal, identifier, and punctuation representations without panicking in `PARSER-GRAMMAR`.
+    ///
+    /// ## 3. Preconditions
+    /// - `tok: &Token` is a valid lexer token.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `String` representing the canonical text of `tok`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(L) linear in the byte length `L` of the token lexeme.
+    /// - Space Complexity: O(L) bounded output string allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total function over `&Token`.
+    /// - State: Stateless pure transformation.
+    /// - Action: Executes deterministically with zero recursion.
+    /// - Resource: Bounded heap allocation proportional to token length.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-TOKEN-LEXEME] | SysML v2: ActionDef(SysmlParser::token_lexeme)
+    fn token_lexeme(tok: &Token) -> String {
+        match &tok.kind {
+            TokenKind::Ident(s) => s.clone(),
+            TokenKind::StringLit(s) => format!("\"{}\"", s),
+            TokenKind::IntLit(n) => n.to_string(),
+            TokenKind::RealLit(f) => {
+                if f.fract() == 0.0 {
+                    format!("{:.1}", f)
+                } else {
+                    f.to_string()
+                }
+            }
+            TokenKind::BoolLit(b) => b.to_string(),
+            TokenKind::Eof | TokenKind::LineComment(_) | TokenKind::DocComment(_) => String::new(),
+            _ => tok.kind.as_str().to_string(),
+        }
+    }
+
+    /// Parses a simple, `::`-qualified, or `.`-dotted state endpoint reference from `tokens` starting at `*idx`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_transition_endpoint` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Concatenates contiguous `::` and `.` path segments (e.g. `Mode::Standby`, `Sub.Armed`) without spaces while advancing `*idx` strictly monotonically in `PARSER-GRAMMAR`.
+    ///
+    /// ## 3. Preconditions
+    /// - `tokens: &[Token]` is a transition token slice and `idx: &mut usize` indexes the first token after `first`, `from`, `then`, or `to`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Option<String>` containing the complete endpoint path if present, with `*idx` positioned at the next clause token.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(P) linear in the number of path segment tokens `P`.
+    /// - Space Complexity: O(P) bounded string allocation for the endpoint identifier.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total function over `(&[Token], &mut usize)` using checked `.get()` indexing.
+    /// - State: Advances `*idx` deterministically without out-of-bounds access.
+    /// - Action: Terminates in at most `tokens.len()` steps.
+    /// - Resource: Bounded heap allocation proportional to endpoint length.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-TRANSITION-ENDPOINT] | SysML v2: ActionDef(SysmlParser::parse_transition_endpoint)
+    fn parse_transition_endpoint(tokens: &[Token], idx: &mut usize) -> Option<String> {
+        let mut out = String::new();
+        if let Some(tok) = tokens.get(*idx) {
+            if Self::is_transition_keyword_token(tok) {
+                return None;
+            }
+            if tok.kind == TokenKind::DoubleColon {
+                out.push_str("::");
+                *idx += 1;
+            }
+        } else {
+            return None;
+        }
+
+        if let Some(first_seg) = tokens.get(*idx) {
+            let lex = Self::token_lexeme(first_seg);
+            if lex.is_empty() {
+                return None;
+            }
+            out.push_str(&lex);
+            *idx += 1;
+        } else {
+            return None;
+        }
+
+        while let Some(sep_tok) = tokens.get(*idx) {
+            let sep_str = match sep_tok.kind {
+                TokenKind::DoubleColon => "::",
+                TokenKind::Dot => ".",
+                _ => break,
+            };
+            out.push_str(sep_str);
+            *idx += 1;
+            if let Some(seg_tok) = tokens.get(*idx) {
+                let seg_lex = Self::token_lexeme(seg_tok);
+                if !seg_lex.is_empty() {
+                    out.push_str(&seg_lex);
+                    *idx += 1;
+                }
+            } else {
+                break;
+            }
+        }
+
+        if out.is_empty() {
+            None
+        } else {
+            Some(out)
+        }
+    }
+
+    /// Formats a slice of transition clause expression tokens (`accept`, `if`, or `do`) with tight punctuation around `::`, `.`, `()`, `[]`, and `,`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::format_transition_expr` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Eliminates spurious whitespace around `::`, `.`, call parentheses `fn(x, y)`, and index brackets while preserving single spaces around binary operators in `PARSER-GRAMMAR`.
+    ///
+    /// ## 3. Preconditions
+    /// - `tokens: &[Token]` contains the tokens of a single trigger, guard, or effect expression.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `String` containing the formatted expression text.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(T) linear in `tokens.len()`.
+    /// - Space Complexity: O(T) bounded output string allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total function over `&[Token]`.
+    /// - State: Stateless pure formatting transformation.
+    /// - Action: Single bounded pass over `tokens`.
+    /// - Resource: Bounded heap allocation proportional to expression length.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-FORMAT-TRANSITION-EXPR] | SysML v2: ActionDef(SysmlParser::format_transition_expr)
+    fn format_transition_expr(tokens: &[Token]) -> String {
+        let mut out = String::new();
+        for (i, tok) in tokens.iter().enumerate() {
+            let lex = Self::token_lexeme(tok);
+            if lex.is_empty() {
+                continue;
+            }
+            if i > 0 && !out.is_empty() {
+                let prev_kind = tokens.get(i - 1).map(|t| &t.kind);
+                let curr_kind = &tok.kind;
+                let prev_is_callable_target = prev_kind.is_some_and(|pk| {
+                    matches!(
+                        pk,
+                        TokenKind::Ident(_) | TokenKind::CloseParen | TokenKind::CloseBracket
+                    ) || pk
+                        .as_str()
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                });
+                let no_space_after_prev = matches!(
+                    prev_kind,
+                    Some(
+                        TokenKind::DoubleColon
+                            | TokenKind::Dot
+                            | TokenKind::OpenParen
+                            | TokenKind::OpenBracket
+                    )
+                );
+                let no_space_before_curr = matches!(
+                    curr_kind,
+                    TokenKind::DoubleColon
+                        | TokenKind::Dot
+                        | TokenKind::CloseParen
+                        | TokenKind::CloseBracket
+                        | TokenKind::Comma
+                        | TokenKind::Semi
+                ) || (matches!(
+                    curr_kind,
+                    TokenKind::OpenParen | TokenKind::OpenBracket
+                ) && prev_is_callable_target);
+
+                if !no_space_after_prev && !no_space_before_curr {
+                    out.push(' ');
+                }
+            }
+            out.push_str(&lex);
+        }
+        out
+    }
+
+    /// Parses a slice of lexer `Token` items from a SysML v2 `transition` statement directly into a `TransitionDef` without fabricating synthetic names for unnamed transitions.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_transition_tokens` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves `TransitionDef::name == None` whenever no transition name is declared in source, parses qualified/dotted endpoints (`Mode::Standby`, `Sub.Armed`), and tracks parenthesis/bracket/brace depth across `accept`, `if`, and `do` clauses so transition keywords inside arguments do not prematurely terminate clauses.
+    ///
+    /// ## 3. Preconditions
+    /// - `raw_tokens: &[Token]` contains the lexer tokens between `transition` and `;`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a populated `TransitionDef` with exact `name`, `source`, `target`, `trigger`, `guard`, and `effect` fields.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(T) single pass over the token slice `T`.
+    /// - Space Complexity: O(T) bounded auxiliary vector and clause strings.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total function over `&[Token]` with checked indexing.
+    /// - State: Stateless pure transformation.
+    /// - Action: Strictly advancing index `idx` guarantees termination.
+    /// - Resource: Bounded heap allocations proportional to `raw_tokens.len()`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-TRANSITION-TOKENS] | SysML v2: ActionDef(SysmlParser::parse_transition_tokens)
+    fn parse_transition_tokens(raw_tokens: &[Token]) -> TransitionDef {
+        let tokens: Vec<Token> = raw_tokens
+            .iter()
+            .filter(|t| {
+                !matches!(
+                    t.kind,
+                    TokenKind::Eof
+                        | TokenKind::Semi
+                        | TokenKind::LineComment(_)
+                        | TokenKind::DocComment(_)
+                )
+            })
+            .cloned()
+            .collect();
+
         let mut name = None;
         let mut source = None;
         let mut target = None;
@@ -1967,71 +2218,70 @@ impl<'a> SysmlParser<'a> {
         let mut effect = None;
 
         let mut idx = 0usize;
-        if let Some(first_tok) = tokens.first().copied() {
-            if !Self::is_transition_clause_keyword(first_tok) {
-                name = Some(first_tok.to_string());
-                idx = 1;
+        if let Some(first_tok) = tokens.first() {
+            if !Self::is_transition_keyword_token(first_tok) {
+                if let Some(ep_or_name) = Self::parse_transition_endpoint(&tokens, &mut idx) {
+                    name = Some(ep_or_name);
+                }
             }
         }
 
-        while let Some(kw) = tokens.get(idx).copied() {
-            match kw {
+        while let Some(tok) = tokens.get(idx) {
+            let kw = if Self::is_transition_keyword_token(tok) {
+                Self::token_lexeme(tok)
+            } else {
+                idx += 1;
+                continue;
+            };
+
+            match kw.as_str() {
                 "first" | "from" => {
-                    if let Some(src_tok) = tokens.get(idx + 1).copied() {
-                        source = Some(src_tok.to_string());
-                        idx += 2;
-                    } else {
-                        idx += 1;
+                    idx += 1;
+                    if let Some(ep) = Self::parse_transition_endpoint(&tokens, &mut idx) {
+                        source = Some(ep);
                     }
                 }
                 "then" | "to" => {
-                    if let Some(tgt_tok) = tokens.get(idx + 1).copied() {
-                        target = Some(tgt_tok.to_string());
-                        idx += 2;
-                    } else {
-                        idx += 1;
+                    idx += 1;
+                    if let Some(ep) = Self::parse_transition_endpoint(&tokens, &mut idx) {
+                        target = Some(ep);
                     }
                 }
-                "accept" => {
+                "accept" | "if" | "do" => {
                     idx += 1;
-                    let mut trig_tokens = Vec::new();
-                    while let Some(tok) = tokens.get(idx).copied() {
-                        if Self::is_transition_clause_keyword(tok) {
+                    let start_idx = idx;
+                    let mut paren_depth = 0usize;
+                    let mut bracket_depth = 0usize;
+                    let mut brace_depth = 0usize;
+                    while let Some(inner_tok) = tokens.get(idx) {
+                        let at_top_level =
+                            paren_depth == 0 && bracket_depth == 0 && brace_depth == 0;
+                        if at_top_level && Self::is_transition_keyword_token(inner_tok) {
                             break;
                         }
-                        trig_tokens.push(tok);
-                        idx += 1;
-                    }
-                    if !trig_tokens.is_empty() {
-                        trigger = Some(trig_tokens.join(" "));
-                    }
-                }
-                "if" => {
-                    idx += 1;
-                    let mut guard_tokens = Vec::new();
-                    while let Some(tok) = tokens.get(idx).copied() {
-                        if Self::is_transition_clause_keyword(tok) {
-                            break;
+                        match inner_tok.kind {
+                            TokenKind::OpenParen => paren_depth += 1,
+                            TokenKind::CloseParen => paren_depth = paren_depth.saturating_sub(1),
+                            TokenKind::OpenBracket => bracket_depth += 1,
+                            TokenKind::CloseBracket => {
+                                bracket_depth = bracket_depth.saturating_sub(1);
+                            }
+                            TokenKind::OpenBrace => brace_depth += 1,
+                            TokenKind::CloseBrace => brace_depth = brace_depth.saturating_sub(1),
+                            _ => {}
                         }
-                        guard_tokens.push(tok);
                         idx += 1;
                     }
-                    if !guard_tokens.is_empty() {
-                        guard = Some(guard_tokens.join(" "));
-                    }
-                }
-                "do" => {
-                    idx += 1;
-                    let mut effect_tokens = Vec::new();
-                    while let Some(tok) = tokens.get(idx).copied() {
-                        if Self::is_transition_clause_keyword(tok) {
-                            break;
+                    if let Some(slice) = tokens.get(start_idx..idx) {
+                        let formatted = Self::format_transition_expr(slice);
+                        if !formatted.is_empty() {
+                            match kw.as_str() {
+                                "accept" => trigger = Some(formatted),
+                                "if" => guard = Some(formatted),
+                                "do" => effect = Some(formatted),
+                                _ => {}
+                            }
                         }
-                        effect_tokens.push(tok);
-                        idx += 1;
-                    }
-                    if !effect_tokens.is_empty() {
-                        effect = Some(effect_tokens.join(" "));
                     }
                 }
                 _ => {
@@ -2064,31 +2314,17 @@ impl<'a> SysmlParser<'a> {
             }
         }
 
-        if name.is_none() {
-            let has_extra_clauses = trigger.is_some() || guard.is_some() || effect.is_some();
-            if has_extra_clauses && (source.is_some() || target.is_some()) {
-                let temp = TransitionDef {
-                    name: None,
-                    source: source.clone(),
-                    target: target.clone(),
-                    trigger: trigger.clone(),
-                    guard: guard.clone(),
-                    effect: effect.clone(),
-                    doc: None,
-                };
-                name = Some(Self::format_transition_clause(&temp));
-            } else {
-                name = match (&source, &target) {
-                    (Some(s), Some(t)) => Some(format!("{s}_to_{t}")),
-                    _ => {
-                        let trimmed = raw.trim();
-                        if trimmed.is_empty() {
-                            None
-                        } else {
-                            Some(trimmed.to_string())
-                        }
-                    }
-                };
+        if name.is_none()
+            && source.is_none()
+            && target.is_none()
+            && trigger.is_none()
+            && guard.is_none()
+            && effect.is_none()
+            && !tokens.is_empty()
+        {
+            let fallback = Self::format_transition_expr(&tokens);
+            if !fallback.is_empty() {
+                name = Some(fallback);
             }
         }
 
@@ -2103,13 +2339,61 @@ impl<'a> SysmlParser<'a> {
         }
     }
 
+    /// Decomposes a raw SysML v2 transition statement body into a structured `TransitionDef`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_transition_clause` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Tokenizes `raw` via `SysmlParser::tokenize_source` and delegates to `SysmlParser::parse_transition_tokens` so `first <src> then <tgt>` and `from <src> to <tgt>` extract structured endpoints without fabricating synthetic names on unnamed transitions.
+    ///
+    /// ## 3. Preconditions
+    /// - `raw: &str` contains the transition text between `transition` and `;`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a populated `TransitionDef` with structured `source` and `target` endpoints when present.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) linear in `raw.len()`.
+    /// - Space Complexity: O(N) bounded auxiliary token vector and owned clause strings.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total function over `&str`; gracefully handles partial or shorthand transition clauses.
+    /// - State: Stateless pure transformation.
+    /// - Action: Executes deterministically in bounded single-pass loops.
+    /// - Resource: Bounded allocations proportional to `raw.len()`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-TRANSITION-CLAUSE] | SysML v2: ActionDef(SysmlParser::parse_transition_clause)
+    pub fn parse_transition_clause(raw: &str) -> TransitionDef {
+        match Self::tokenize_source(raw) {
+            Ok(tokens) => Self::parse_transition_tokens(&tokens),
+            Err(_) => {
+                let trimmed = raw.trim();
+                TransitionDef {
+                    name: if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    },
+                    source: None,
+                    target: None,
+                    trigger: None,
+                    guard: None,
+                    effect: None,
+                    doc: None,
+                }
+            }
+        }
+    }
+
     /// Formats a structured `TransitionDef` into a canonical SysML v2 transition statement body (`[name] [first <src>] [accept <trig>] [if <grd>] [do <eff>] [then <tgt>]`).
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::format_transition_clause` in `crates/compile-sysml/src/parser/grammar.rs`.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves round-trip equivalence (`SysmlParser::parse_transition_clause(&SysmlParser::format_transition_clause(t))`) across `name`, `source`, `target`, `trigger`, `guard`, and `effect` fields while suppressing synthetic `{source}_to_{target}` placeholders.
+    /// - Preserves round-trip equivalence (`SysmlParser::parse_transition_clause(&SysmlParser::format_transition_clause(t))`) across `name`, `source`, `target`, `trigger`, `guard`, and `effect` fields while preserving legacy `{source}_to_{target}` shorthand identifiers when explicitly present in `t.name`.
     ///
     /// ## 3. Preconditions
     /// - `t: &TransitionDef` is a valid AST transition definition.
@@ -2130,16 +2414,28 @@ impl<'a> SysmlParser<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-FORMAT-TRANSITION-CLAUSE] | SysML v2: ActionDef(SysmlParser::format_transition_clause)
     pub fn format_transition_clause(t: &TransitionDef) -> String {
+        if let Some(n) = t.name.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            let is_legacy_shorthand = matches!(
+                (t.source.as_deref(), t.target.as_deref()),
+                (Some(s), Some(tg))
+                    if (n == format!("{s}_to_{tg}")
+                        && t.trigger.is_none()
+                        && t.guard.is_none()
+                        && t.effect.is_none())
+                        || t.trigger.as_deref().is_some_and(|tr| {
+                            n == format!("{s}_to_{tg}_on_{tr}")
+                                && t.guard.is_none()
+                                && t.effect.is_none()
+                        })
+            );
+            if is_legacy_shorthand {
+                return n.to_string();
+            }
+        }
+
         let mut parts = Vec::new();
         if let Some(n) = t.name.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-            let is_synthetic = matches!(
-                (t.source.as_deref(), t.target.as_deref()),
-                (Some(s), Some(tg)) if n == format!("{s}_to_{tg}")
-            );
-            if !is_synthetic
-                && !n.contains(char::is_whitespace)
-                && !Self::is_transition_clause_keyword(n)
-            {
+            if !n.contains(char::is_whitespace) && !Self::is_transition_clause_keyword(n) {
                 parts.push(n.to_string());
             }
         }
@@ -4039,6 +4335,49 @@ impl<'a> SysmlParser<'a> {
         pieces.join(" ")
     }
 
+    /// Collects raw lexer `Token` items up to the terminating `;` or enclosing `}`, consuming `;` if present.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::read_tokens_until_semi` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves exact lexer `Token` boundaries and spans up to `;` or `}` without flattening into whitespace-joined strings in `PARSER-GRAMMAR`.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked within a valid statement context in `SysmlParser`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Vec<Token>` containing the statement's tokens and advances `self.pos` past the terminating `;`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(T) linear in the number of tokens `T` before `;`.
+    /// - Space Complexity: O(T) bounded vector allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total method returning `Vec<Token>`.
+    /// - State: Advances cursor deterministically to statement boundary.
+    /// - Action: Terminates at `;`, `}`, or `EOF`.
+    /// - Resource: Bounded heap allocation proportional to statement token count.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-READ-TOKENS-UNTIL-SEMI] | SysML v2: ActionDef(SysmlParser::read_tokens_until_semi)
+    fn read_tokens_until_semi(&mut self) -> Vec<Token> {
+        let mut out = Vec::new();
+        while !self.check(&TokenKind::Semi)
+            && !self.check(&TokenKind::CloseBrace)
+            && !self.is_at_end()
+        {
+            let tok = self.advance().clone();
+            if !matches!(tok.kind, TokenKind::LineComment(_) | TokenKind::DocComment(_)) {
+                out.push(tok);
+            }
+        }
+        if self.check(&TokenKind::Semi) {
+            self.advance();
+        }
+        out
+    }
+
     /// Executes deterministic fn `SysmlParser::parse_satisfy_stmt` within `crates/compile-sysml/src/parser/grammar.rs`.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
@@ -5872,6 +6211,7 @@ package StateMachinePkg {
         assert_eq!(state_def.transitions.len(), 4);
 
         let tr0 = state_def.transitions.first().ok_or("missing transition 0")?;
+        assert!(tr0.name.is_none(), "unnamed transition must have name == None, got {:?}", tr0.name);
         assert_eq!(tr0.source.as_deref(), Some("Init"));
         assert_eq!(tr0.target.as_deref(), Some("Standby"));
         assert_eq!(tr0.trigger, None);
@@ -5887,6 +6227,7 @@ package StateMachinePkg {
         assert_eq!(tr1.effect.as_deref(), Some("EnableServos"));
 
         let tr2 = state_def.transitions.get(2).ok_or("missing transition 2")?;
+        assert!(tr2.name.is_none(), "unnamed transition must have name == None, got {:?}", tr2.name);
         assert_eq!(tr2.source.as_deref(), Some("Armed"));
         assert_eq!(tr2.target.as_deref(), Some("Active"));
         assert_eq!(tr2.trigger, None);
@@ -6277,6 +6618,104 @@ package StateMachinePkg {
             let reparsed = SysmlParser::parse_transition_clause(&formatted);
             assert_eq!(parsed, reparsed);
         }
+
+        Ok(())
+    }
+
+    /// Verifies that `SysmlParser` parses state transitions directly from lexer tokens without fabricating `name` on unnamed transitions, preserves qualified/dotted endpoints (`Mode::Standby`, `Sub.Active`) and call expressions (`do sendCmd(x, y)`), and round-trips both anonymous and named transitions through `StateDef::to_sysml`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_496_transition_tokens_qualified_endpoints_and_roundtrip` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Enforces `TransitionDef::name == None` for unnamed transitions, preserves qualified/dotted endpoint paths and tight call-expression punctuation across `accept`, `if`, and `do` clauses, and maintains `parse_source(pkg.to_sysml(0)) == pkg` round-trip idempotency.
+    ///
+    /// ## 3. Preconditions
+    /// - Input SysML v2 fixture contains anonymous and named transitions with qualified/dotted endpoints, multi-token guards, and call expressions containing transition keywords inside arguments.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<(), Box<dyn std::error::Error>>` confirming exact AST field extraction and lossless `to_sysml` round-trip conservation.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over fixture token stream length.
+    /// - Space Complexity: O(N) for constructed `PackageDef` AST.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates any `ParseError` via `Result`.
+    /// - State: Stateless in-memory verification.
+    /// - Action: Executes deterministically with zero external I/O.
+    /// - Resource: Bounded stack and heap allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-ISSUE-496-TRANSITION-TOKENS] | SysML v2: TestCaseDef(test_issue_496_transition_tokens_qualified_endpoints_and_roundtrip)
+    #[test]
+    fn test_issue_496_transition_tokens_qualified_endpoints_and_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::semantic::serializer::SysmlSerializable;
+
+        let source = r#"
+package Issue496Pkg {
+    state def FlightMode {
+        state Init;
+        state Standby;
+        state Armed;
+
+        transition first Init then Mode::Standby;
+        transition first Mode::Standby accept Sig::Arm(from) if check(to, speed > 0) do sendCmd(x, y) then Sub.Armed;
+        transition t_named first Sub.Armed accept Nav::Disarm if isSafe(first) do resetState(then) then Init;
+    }
+}
+"#;
+        let pkg = SysmlParser::parse_source(source, "Issue496Pkg")?;
+        let st = pkg.state_defs.first().ok_or("missing FlightMode")?;
+        assert_eq!(st.transitions.len(), 3);
+
+        // 1. Unnamed transition with qualified target
+        let t0 = st.transitions.first().ok_or("missing transition 0")?;
+        assert_eq!(t0.name, None);
+        assert_eq!(t0.source.as_deref(), Some("Init"));
+        assert_eq!(t0.target.as_deref(), Some("Mode::Standby"));
+        assert_eq!(t0.trigger, None);
+        assert_eq!(t0.guard, None);
+        assert_eq!(t0.effect, None);
+
+        // 2. Unnamed transition with qualified source, dotted target, call expressions, and keywords inside parens
+        let t1 = st.transitions.get(1).ok_or("missing transition 1")?;
+        assert_eq!(t1.name, None);
+        assert_eq!(t1.source.as_deref(), Some("Mode::Standby"));
+        assert_eq!(t1.target.as_deref(), Some("Sub.Armed"));
+        assert_eq!(t1.trigger.as_deref(), Some("Sig::Arm(from)"));
+        assert_eq!(t1.guard.as_deref(), Some("check(to, speed > 0)"));
+        assert_eq!(t1.effect.as_deref(), Some("sendCmd(x, y)"));
+
+        // 3. Named transition with full clauses
+        let t2 = st.transitions.get(2).ok_or("missing transition 2")?;
+        assert_eq!(t2.name.as_deref(), Some("t_named"));
+        assert_eq!(t2.source.as_deref(), Some("Sub.Armed"));
+        assert_eq!(t2.target.as_deref(), Some("Init"));
+        assert_eq!(t2.trigger.as_deref(), Some("Nav::Disarm"));
+        assert_eq!(t2.guard.as_deref(), Some("isSafe(first)"));
+        assert_eq!(t2.effect.as_deref(), Some("resetState(then)"));
+
+        // 4. Round-trip serialization through StateDef::to_sysml
+        let serialized = pkg.to_sysml(0);
+        assert!(
+            serialized.contains("transition first Init then Mode::Standby;"),
+            "serialized output missing t0: {}",
+            serialized
+        );
+        assert!(
+            serialized.contains("transition first Mode::Standby accept Sig::Arm(from) if check(to, speed > 0) do sendCmd(x, y) then Sub.Armed;"),
+            "serialized output missing t1: {}",
+            serialized
+        );
+        assert!(
+            serialized.contains("transition t_named first Sub.Armed accept Nav::Disarm if isSafe(first) do resetState(then) then Init;"),
+            "serialized output missing full named transition t2: {}",
+            serialized
+        );
+
+        let reparsed = SysmlParser::parse_source(&serialized, "Issue496Pkg")?;
+        assert_eq!(reparsed, pkg);
 
         Ok(())
     }
