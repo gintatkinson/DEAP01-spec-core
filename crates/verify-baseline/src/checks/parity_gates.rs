@@ -3867,14 +3867,209 @@ pub fn check_executive_deliverable_traceability(repo_root: &Path) -> Result<Pari
 /// ## 3. Preconditions
 /// `repo_root` must be a directory.
 ///
+/// Parses SysML v2 `use case def` declarations from source text into `(name, normalized_body)` pairs.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D model-to-specification verification gates.
+/// Extracts all `use case def` AST declarations from SysML v2 packages for Check 30A forward
+/// realization verification and Check 31 dual-schema SSOT parity comparison.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strips SysML comments and masks string literals prior to keyword scanning so comments and
+///   quoted strings cannot produce false-positive `use case def` nodes.
+/// - Preserves declaration order and normalizes whitespace within brace bodies for deterministic
+///   structural comparison.
+///
+/// ## 3. Preconditions
+/// `content` must be a valid UTF-8 SysML v2 source slice.
+///
 /// ## 4. Postconditions
-/// Returns `Ok(ParityOutcome::Verified)` when zero phantom specification file references exist.
+/// Returns a `Vec<(String, String)>` of `(use_case_name, normalized_body)` tuples.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(L) where L is the byte length of `content`.
+/// Space Complexity: O(U * B) where U is `use case def` count and B is average body length.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Malformed or unclosed declarations are skipped safely using checked slice bounds; never panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COVERAGE-DIGEST-GATE], [REQ-DUAL-SCHEMA-SSOT-PARITY].
+fn parse_use_case_defs(content: &str) -> Vec<(String, String)> {
+    let clean = strip_sysml_comments(content);
+    let masked = mask_string_literals(&clean);
+    let bytes = masked.as_bytes();
+    let len = bytes.len();
+    let mut out = Vec::new();
+    let mut idx = 0;
+
+    while let Some(rel_pos) = masked.get(idx..).and_then(|s| s.find("use")) {
+        let pos = idx + rel_pos;
+        let before_ok = pos == 0
+            || !bytes
+                .get(pos - 1)
+                .copied()
+                .is_some_and(|b| b.is_ascii_alphanumeric() || b == b'_');
+        if !before_ok {
+            idx = pos + 3;
+            continue;
+        }
+        let mut curr = pos + 3;
+        let ws1 = masked
+            .get(curr..)
+            .unwrap_or("")
+            .bytes()
+            .take_while(|b| b.is_ascii_whitespace())
+            .count();
+        if ws1 == 0 {
+            idx = pos + 3;
+            continue;
+        }
+        curr += ws1;
+        if !masked.get(curr..).is_some_and(|s| s.starts_with("case")) {
+            idx = curr;
+            continue;
+        }
+        curr += 4;
+        let ws2 = masked
+            .get(curr..)
+            .unwrap_or("")
+            .bytes()
+            .take_while(|b| b.is_ascii_whitespace())
+            .count();
+        if ws2 == 0 {
+            idx = curr;
+            continue;
+        }
+        curr += ws2;
+        if !masked.get(curr..).is_some_and(|s| s.starts_with("def")) {
+            idx = curr;
+            continue;
+        }
+        curr += 3;
+        let ws3 = masked
+            .get(curr..)
+            .unwrap_or("")
+            .bytes()
+            .take_while(|b| b.is_ascii_whitespace())
+            .count();
+        if ws3 == 0 {
+            idx = curr;
+            continue;
+        }
+        curr += ws3;
+
+        let name_len = masked
+            .get(curr..)
+            .unwrap_or("")
+            .bytes()
+            .take_while(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'-')
+            .count();
+        let name = clean
+            .get(curr..curr + name_len)
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if name.is_empty() {
+            idx = curr.saturating_add(1).min(len);
+            continue;
+        }
+        curr += name_len;
+
+        while curr < len {
+            let b = bytes.get(curr).copied().unwrap_or(b';');
+            if b == b'{' {
+                if let Some(close_pos) = find_matching_brace(&clean, curr) {
+                    let raw_body = clean.get(curr + 1..close_pos).unwrap_or("");
+                    let norm_body = raw_body.split_whitespace().collect::<Vec<_>>().join(" ");
+                    out.push((name.clone(), norm_body));
+                    idx = close_pos + 1;
+                } else {
+                    idx = curr + 1;
+                }
+                break;
+            } else if b == b';' {
+                out.push((name.clone(), String::new()));
+                idx = curr + 1;
+                break;
+            }
+            curr += 1;
+        }
+        if curr >= len {
+            break;
+        }
+    }
+
+    out
+}
+
+/// Normalizes a use case identifier or markdown string for forward realization matching in Check 30A.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D traceability verification requirements.
+/// Provides deterministic token normalization for matching SysML v2 `use case def` identifiers
+/// against `docs/use-cases/*.md` stems and prose.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Collapses consecutive non-ASCII-alphanumeric characters into a single `_`, converts to ASCII
+///   lowercase, and trims leading and trailing `_` characters.
+///
+/// ## 3. Preconditions
+/// `s` must be a valid UTF-8 string slice.
+///
+/// ## 4. Postconditions
+/// Returns a normalized lowercase string suitable for deterministic substring inclusion checks.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(L) where L is byte length of `s`.
+/// Space Complexity: O(L).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Total function; never panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COVERAGE-DIGEST-GATE].
+fn normalize_uc_token(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut prev_sep = false;
+    for ch in s.chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_lowercase());
+            prev_sep = false;
+        } else if !prev_sep {
+            out.push('_');
+            prev_sep = true;
+        }
+    }
+    out.trim_matches('_').to_string()
+}
+
+/// Check 30A: Coverage Digest & Use Case Realization Gate (Gate 28A).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D bidirectional traceability requirements.
+/// Verifies that no specification or coverage digest references phantom specification files
+/// (`feat-*.md`, `uc-*.md`, `us-*.md`) and that every declared SysML v2 `use case def` is realized
+/// in `docs/use-cases/` when active use case specifications exist.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Zero Phantom References: Every referenced `feat-*.md`, `uc-*.md`, or `us-*.md` file must exist on disk.
+/// - Forward Use Case Realization: When `docs/use-cases/` contains active `.md` specifications, every
+///   `use case def` declared in `.pipeline/schema.sysml` or `schema/**/*.sysml` must be realized in
+///   at least one active `docs/use-cases/*.md` filename stem or body.
+///
+/// ## 3. Preconditions
+/// `repo_root` must be a directory.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(ParityOutcome::Verified)` when zero phantom specification file references and zero
+/// unrealized `use case def` declarations exist.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// Time Complexity: O(M * L). Space Complexity: O(F).
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// Fails closed on phantom realizations.
+/// Fails closed on phantom realizations or unrealized schema `use case def` declarations.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COVERAGE-DIGEST-GATE].
@@ -3886,6 +4081,7 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
 
     let mut errors = Vec::new();
     let mut declared_specs = BTreeSet::new();
+    let mut active_uc_files = Vec::new();
     for spec_dir_kind in [
         TargetScanDir::Features,
         TargetScanDir::UseCases,
@@ -3909,6 +4105,9 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
                     let name = entry.file_name().to_string_lossy().to_string();
                     if name.ends_with(".md") && name != "README.md" {
                         declared_specs.insert(name.to_ascii_lowercase());
+                        if spec_dir_kind == TargetScanDir::UseCases && !name.starts_with('_') {
+                            active_uc_files.push(entry.path().to_path_buf());
+                        }
                     }
                 }
             }
@@ -3980,6 +4179,69 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
                             ));
                         }
                     }
+                }
+            }
+        }
+    }
+
+    if !active_uc_files.is_empty() {
+        let mut schema_files = Vec::new();
+        let pipeline_schema = repo_root.join(".pipeline").join("schema.sysml");
+        if pipeline_schema.is_file() {
+            schema_files.push(pipeline_schema);
+        }
+        let schema_dir = repo_root.join("schema");
+        if schema_dir.is_dir() {
+            let discovered =
+                deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[&schema_dir]);
+            for p in discovered {
+                if p.extension().is_some_and(|ext| ext == "sysml") {
+                    schema_files.push(p);
+                }
+            }
+        }
+
+        let mut declared_uc_names = BTreeSet::new();
+        for sf in &schema_files {
+            if let Ok(content) = fs::read_to_string(sf) {
+                for (uc_name, _) in parse_use_case_defs(&content) {
+                    if !uc_name.is_empty() {
+                        declared_uc_names.insert(uc_name);
+                    }
+                }
+            }
+        }
+
+        if !declared_uc_names.is_empty() {
+            let mut normalized_uc_docs = Vec::new();
+            for uc_path in &active_uc_files {
+                let stem = uc_path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let norm_stem = normalize_uc_token(&stem);
+                let norm_content = fs::read_to_string(uc_path)
+                    .map(|c| normalize_uc_token(&c))
+                    .unwrap_or_default();
+                normalized_uc_docs.push((norm_stem, norm_content));
+            }
+
+            for uc_name in &declared_uc_names {
+                let norm = normalize_uc_token(uc_name);
+                if norm.is_empty() {
+                    continue;
+                }
+                let norm_alnum = norm.replace('_', "");
+                let realized = normalized_uc_docs.iter().any(|(stem, body)| {
+                    stem.contains(&norm)
+                        || body.contains(&norm)
+                        || (!norm_alnum.is_empty() && stem.replace('_', "").contains(&norm_alnum))
+                });
+                if !realized {
+                    errors.push(format!(
+                        "Check 30A failed: Schema use case def '{}' is not realized in docs/use-cases/",
+                        uc_name
+                    ));
                 }
             }
         }
@@ -4362,8 +4624,8 @@ fn compare_scoped_defs<T: PartialEq>(
 /// as well as companion digest sidecar presence (`docs/designs/*.digest.json`), preventing drift.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - AST Parity Invariant: Every scope-qualified SysML v2 declaration across all 10 AST kinds
-///   (part, port, action, requirement, constraint, state, calc, connection, test case, attribute)
+/// - AST Parity Invariant: Every scope-qualified SysML v2 declaration across all 11 AST kinds
+///   (part, port, action, requirement, constraint, state, calc, connection, test case, attribute, use case)
 ///   in `schema/**/*.sysml` and `docs/designs/*.sysml` must be structurally isomorphic to `.pipeline/schema.sysml`.
 /// - Design Digest Sidecar Invariant: Every non-empty `docs/designs/<stem>.sysml` file must have a
 ///   non-empty companion `docs/designs/<stem>.digest.json` sidecar on disk.
@@ -4480,6 +4742,7 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
     let mut conns_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
     let mut tests_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
     let mut attrs_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut use_cases_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
 
     for (pkg_path, body) in &dir_bodies {
         for p in parse_part_defs(body) {
@@ -4522,6 +4785,10 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
             let qual = if pkg_path.is_empty() { a.name.clone() } else { format!("{}::{}", pkg_path, a.name) };
             attrs_dir.entry(qual).or_default().push(a);
         }
+        for (uc_name, uc_body) in parse_use_case_defs(body) {
+            let qual = if pkg_path.is_empty() { uc_name.clone() } else { format!("{}::{}", pkg_path, uc_name) };
+            use_cases_dir.entry(qual).or_default().push((uc_name, uc_body));
+        }
     }
 
     let mut parts_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
@@ -4534,6 +4801,7 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
     let mut conns_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
     let mut tests_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
     let mut attrs_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut use_cases_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
 
     for (pkg_path, body) in &pipe_bodies {
         for p in parse_part_defs(body) {
@@ -4576,6 +4844,10 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
             let qual = if pkg_path.is_empty() { a.name.clone() } else { format!("{}::{}", pkg_path, a.name) };
             attrs_pipe.entry(qual).or_default().push(a);
         }
+        for (uc_name, uc_body) in parse_use_case_defs(body) {
+            let qual = if pkg_path.is_empty() { uc_name.clone() } else { format!("{}::{}", pkg_path, uc_name) };
+            use_cases_pipe.entry(qual).or_default().push((uc_name, uc_body));
+        }
     }
 
     let mut mismatches = Vec::new();
@@ -4589,6 +4861,7 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
     compare_scoped_defs("connection def", &conns_dir, &conns_pipe, &mut mismatches);
     compare_scoped_defs("test case def", &tests_dir, &tests_pipe, &mut mismatches);
     compare_scoped_defs("attribute def", &attrs_dir, &attrs_pipe, &mut mismatches);
+    compare_scoped_defs("use case def", &use_cases_dir, &use_cases_pipe, &mut mismatches);
 
     if mismatches.is_empty() {
         Ok(ParityOutcome::DualSchemaIdentical)
@@ -5997,6 +6270,123 @@ flowchart TD
             json_text.as_deref().is_some_and(|t| t.contains("Alpha")),
             "Expected SectionSlicer::extract_section on .digest.json with section '1.0' to return content containing 'Alpha', got: {:?}",
             json_text
+        );
+
+        Ok(())
+    }
+
+    /// Regression test for Issue #478 verifying that Check 30A (`check_coverage_digest`) rejects
+    /// unrealized `use case def` declarations when `docs/use-cases/` contains active specifications,
+    /// and Check 31 (`check_dual_schema_ssot_parity`) detects `use case def` divergence between
+    /// `schema/*.sysml` and `.pipeline/schema.sysml`.
+    ///
+    /// # Parameters
+    /// None.
+    ///
+    /// # Returns
+    /// `Result<(), Box<dyn std::error::Error>>` indicating test execution success.
+    ///
+    /// # Errors
+    /// Returns an error if temporary directory or fixture file creation fails.
+    ///
+    /// # Safety
+    /// Operates strictly within an isolated temporary directory that is cleaned up on drop.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C verification
+    /// requirements for Issue #478 in `crates/verify-baseline/src/checks/parity_gates.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Check 30A enforces 100% forward realization of schema `use case def` nodes in `docs/use-cases/*.md`
+    ///   when active use case specifications exist.
+    /// - Check 31 enforces bidirectional AST parity for `use case def` across `schema/*.sysml` and
+    ///   `.pipeline/schema.sysml`.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary filesystem is writable.
+    ///
+    /// ## 4. Postconditions
+    /// - Confirms deterministic failure on unrealized `use case def` in Check 30A and divergent
+    ///   `use case def` in Check 31, followed by deterministic `Ok` outcomes once reconciled.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded fixture file count and payload size.
+    /// - Space Complexity: O(1) bounded fixture payload size.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Propagates any filesystem setup failure via `Result`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-COVERAGE-DIGEST-GATE], [REQ-DUAL-SCHEMA-SSOT-PARITY]
+    #[test]
+    fn test_issue_478_check_30a_rejects_unrealized_schema_use_case_defs_and_check_31_detects_use_case_def_divergence(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("issue_478_use_case_def_parity")?;
+        let schema_dir = tmp.path.join("schema");
+        let pipe_dir = tmp.path.join(".pipeline");
+        let uc_dir = tmp.path.join("docs").join("use-cases");
+        fs::create_dir_all(&schema_dir)?;
+        fs::create_dir_all(&pipe_dir)?;
+        fs::create_dir_all(&uc_dir)?;
+
+        let full_sysml = "package Ops {\n  use case def PerformPreFlightCheck;\n  use case def ExecuteEmergencyLanding;\n}\n";
+        fs::write(schema_dir.join("ops.sysml"), full_sysml)?;
+        fs::write(pipe_dir.join("schema.sysml"), full_sysml)?;
+
+        // Realize only PerformPreFlightCheck in docs/use-cases/
+        fs::write(
+            uc_dir.join("uc-001-perform-pre-flight-check.md"),
+            "# UC-001: PerformPreFlightCheck\nRealizes `use case def PerformPreFlightCheck`.\n",
+        )?;
+
+        let res_30a_unrealized = check_coverage_digest(&tmp.path);
+        assert!(
+            res_30a_unrealized.is_err(),
+            "Check 30A must fail when schema use case def ExecuteEmergencyLanding is not realized in docs/use-cases/"
+        );
+        let errs_30a = res_30a_unrealized.err().unwrap_or_default().join("\n");
+        assert!(
+            errs_30a.contains("Check 30A failed: Schema use case def 'ExecuteEmergencyLanding' is not realized in docs/use-cases/"),
+            "Expected Check 30A diagnostic for unrealized ExecuteEmergencyLanding, got: {}",
+            errs_30a
+        );
+
+        // Now realize ExecuteEmergencyLanding -> Check 30A must pass
+        fs::write(
+            uc_dir.join("uc-002-execute-emergency-landing.md"),
+            "# UC-002: ExecuteEmergencyLanding\nRealizes `use case def ExecuteEmergencyLanding`.\n",
+        )?;
+        let res_30a_ok = check_coverage_digest(&tmp.path);
+        assert_eq!(
+            res_30a_ok,
+            Ok(ParityOutcome::Verified),
+            "Check 30A must pass when all schema use case defs are realized in docs/use-cases/"
+        );
+
+        // Check 31: diverge .pipeline/schema.sysml by omitting ExecuteEmergencyLanding
+        fs::write(
+            pipe_dir.join("schema.sysml"),
+            "package Ops {\n  use case def PerformPreFlightCheck;\n}\n",
+        )?;
+        let res_31_divergent = check_dual_schema_ssot_parity(&tmp.path);
+        assert!(
+            res_31_divergent.is_err(),
+            "Check 31 must fail when use case def diverges between schema/*.sysml and .pipeline/schema.sysml"
+        );
+        let errs_31 = res_31_divergent.err().unwrap_or_default().join("\n");
+        assert!(
+            errs_31.contains("use case def") && errs_31.contains("Ops::ExecuteEmergencyLanding"),
+            "Expected Check 31 mismatch diagnostic for use case def Ops::ExecuteEmergencyLanding, got: {}",
+            errs_31
+        );
+
+        // Restore .pipeline/schema.sysml -> Check 31 must pass
+        fs::write(pipe_dir.join("schema.sysml"), full_sysml)?;
+        let res_31_ok = check_dual_schema_ssot_parity(&tmp.path);
+        assert_eq!(
+            res_31_ok,
+            Ok(ParityOutcome::DualSchemaIdentical),
+            "Check 31 must return Ok(DualSchemaIdentical) when use case defs match across dual schemas"
         );
 
         Ok(())
