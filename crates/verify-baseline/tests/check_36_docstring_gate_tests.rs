@@ -650,6 +650,497 @@ fn test_check_36_nested_block_comments_and_escaped_char_literals() {
         Ok(1),
         "Nested Dart block comment must remain active after inner `*/` until outer `*/`"
     );
+
+    let mut rust_neg = String::from(rust_source);
+    rust_neg.push_str("\npub fn undocumented_after_nested_comment() {}\n");
+    let rust_neg_res = audit_rust_source_docstrings(&rust_neg, "crates/demo/src/lib.rs");
+    assert!(
+        rust_neg_res.is_err(),
+        "Undocumented Rust function after nested block comment must fail closed"
+    );
+    assert!(
+        rust_neg_res
+            .err()
+            .unwrap_or_default()
+            .iter()
+            .any(|e| e.contains("undocumented_after_nested_comment")),
+        "Expected diagnostic for undocumented_after_nested_comment"
+    );
+
+    let mut dart_neg = String::from(dart_source);
+    dart_neg.push_str("\nvoid undocumentedAfterNestedDartComment() {}\n");
+    let dart_neg_res = audit_dart_source_docstrings(&dart_neg, "app_flutter/lib/nested.dart");
+    assert!(
+        dart_neg_res.is_err(),
+        "Undocumented Dart function after nested block comment must fail closed"
+    );
+    assert!(
+        dart_neg_res
+            .err()
+            .unwrap_or_default()
+            .iter()
+            .any(|e| e.contains("undocumentedAfterNestedDartComment")),
+        "Expected diagnostic for undocumentedAfterNestedDartComment"
+    );
 }
+
+/// Verifies that `audit_source_purity` fails closed on outer and inner clippy lint suppressions.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34 zero-lint-suppression verification (`test_check_36_source_purity_negative_probes`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Both outer and inner clippy allow attributes are rejected across production and test targets.
+///
+/// ## 3. Preconditions
+/// - Synthetic Rust source inputs contain outer and inner clippy suppression attributes.
+///
+/// ## 4. Postconditions
+/// - `audit_source_purity` returns `Err` for both outer and inner suppression attributes.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) where L is the synthetic fixture line count.
+/// - Space Complexity: O(1) bounded diagnostic output.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Invokes `audit_source_purity` directly with deterministic UTF-8 slices.
+/// - State: Stateless purity verification.
+/// - Action: Asserts `is_err()` on all negative probes.
+/// - Resource: Zero filesystem mutations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-36-SOURCE-PURITY-NEG-PROBE]
+#[test]
+fn test_check_36_source_purity_negative_probes() {
+    let outer_allow = concat!(
+        "#",
+        "[allow(clippy::too_many_arguments)]\n",
+        "pub fn impure_fn() {}\n"
+    );
+    assert!(
+        audit_source_purity(outer_allow, "crates/demo/src/lib.rs", true).is_err(),
+        "audit_source_purity must reject outer clippy allow attribute in production source"
+    );
+
+    let inner_allow = concat!(
+        "#!",
+        "[allow(clippy::unwrap_used)]\n",
+        "pub fn impure_mod_fn() {}\n"
+    );
+    assert!(
+        audit_source_purity(inner_allow, "crates/demo/src/lib.rs", true).is_err(),
+        "audit_source_purity must reject inner clippy allow attribute in production source"
+    );
+
+    let test_allow = concat!(
+        "#[cfg(test)]\n",
+        "mod tests {\n",
+        "    #",
+        "[allow(clippy::unwrap_used)]\n",
+        "    #[test]\n",
+        "    fn bad_test() {}\n",
+        "}\n"
+    );
+    assert!(
+        audit_source_purity(test_allow, "crates/demo/src/lib.rs", true).is_err(),
+        "audit_source_purity must reject clippy allow attribute inside #[cfg(test)] when check_test_targets is true"
+    );
+}
+
+/// Verifies Dart nested quotes inside `${...}` string interpolations containing `//` or `/*` and multiline `@Annotation(...)` preservation.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D Dart lexical and annotation completeness (refs #508).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Nested quotes inside `${...}` interpolations (`"${map["http://"]}"` and `"${map["/*"]}"`) never close the outer string literal or trigger line/block comments.
+/// - Multiline `@Annotation(\n  ...\n)` blocks preserve the preceding 7-section `current_doc` buffer until the annotated declaration line.
+///
+/// ## 3. Preconditions
+/// - Dart source fixtures contain `${...}` nested string literals with `//` and `/*` tokens and multiline `@Deprecated(...)` annotations.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(3)` when all items are documented and fails closed (`Err`) when a member following `"${map["http://"]}"` or `"${map["/*"]}"` is undocumented.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) over the Dart fixture line count.
+/// - Space Complexity: O(1) bounded test buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Direct invocation of `audit_dart_source_docstrings`.
+/// - State: Isolated per-call lexical state.
+/// - Action: Verifies both positive and negative probes deterministically.
+/// - Resource: Zero filesystem side effects.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-36-DART-INTERP-QUOTES-AND-MULTILINE-ANNOTATION]
+#[test]
+fn test_check_36_dart_interpolated_nested_quotes_with_comment_tokens_and_multiline_annotations() {
+    let dart_with_undocumented_after_http = r#"
+/// Documented Dart telemetry formatter class.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Formats telemetry endpoints under DO-178C Level A.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves nested string interpolations containing comment tokens.
+///
+/// ## 3. Preconditions
+/// - Input map contains valid string keys.
+///
+/// ## 4. Postconditions
+/// - Instantiates formatter class.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Infallible class declaration.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DART-INTERP-CLASS-01]
+class TelemetryFormatter {
+  /// Formats endpoint URI from configuration map.
+  ///
+  /// ## 1. Safety Intent & Regulatory Scope
+  /// Evaluates nested quotes in string interpolations safely.
+  ///
+  /// ## 2. Invariants & Mathematical Properties
+  /// - Token `//` inside nested interpolation quotes remains string data.
+  ///
+  /// ## 3. Preconditions
+  /// - `map` is non-null.
+  ///
+  /// ## 4. Postconditions
+  /// - Returns formatted endpoint string.
+  ///
+  /// ## 5. Algorithmic Complexity Bounds
+  /// - Time Complexity: O(1).
+  /// - Space Complexity: O(1).
+  ///
+  /// ## 6. Failure Modes & Fault Tolerance
+  /// - Falls back to empty string on missing key.
+  ///
+  /// ## 7. Realization & Traceability
+  /// Realises: [REQ-DART-INTERP-METHOD-01]
+  String formatEndpoint(Map<String, String> map) {
+    if (map.isNotEmpty) { final uri = "${map["http://"]}"; return uri; }
+    return "";
+  }
+
+  void undocumentedAfterHttpInterp() {}
+}
+"#;
+
+    let neg_http_res = audit_dart_source_docstrings(
+        dart_with_undocumented_after_http,
+        "app_flutter/lib/telemetry.dart",
+    );
+    assert!(
+        neg_http_res.is_err(),
+        "Undocumented method after interpolated 'http://' quote must be flagged, got: {:?}",
+        neg_http_res
+    );
+    let neg_http_errs = neg_http_res.err().unwrap_or_default().join("\n");
+    assert!(
+        neg_http_errs.contains("undocumentedAfterHttpInterp"),
+        "Expected violation for undocumentedAfterHttpInterp, got:\n{}",
+        neg_http_errs
+    );
+
+    let dart_with_undocumented_after_block_open = r#"
+/// Documented Dart telemetry formatter class.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Formats telemetry endpoints under DO-178C Level A.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves nested string interpolations containing block-comment tokens.
+///
+/// ## 3. Preconditions
+/// - Input map contains valid string keys.
+///
+/// ## 4. Postconditions
+/// - Instantiates formatter class.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Infallible class declaration.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DART-INTERP-CLASS-02]
+class GlobFormatter {
+  /// Formats glob pattern from configuration map.
+  ///
+  /// ## 1. Safety Intent & Regulatory Scope
+  /// Evaluates nested quotes containing `/*` in string interpolations safely.
+  ///
+  /// ## 2. Invariants & Mathematical Properties
+  /// - Token `/*` inside nested interpolation quotes never increments `block_comment_depth`.
+  ///
+  /// ## 3. Preconditions
+  /// - `map` is non-null.
+  ///
+  /// ## 4. Postconditions
+  /// - Returns formatted glob string.
+  ///
+  /// ## 5. Algorithmic Complexity Bounds
+  /// - Time Complexity: O(1).
+  /// - Space Complexity: O(1).
+  ///
+  /// ## 6. Failure Modes & Fault Tolerance
+  /// - Falls back to empty string on missing key.
+  ///
+  /// ## 7. Realization & Traceability
+  /// Realises: [REQ-DART-INTERP-METHOD-02]
+  String formatGlob(Map<String, String> map) {
+    final glob = "${map["/*"]}";
+    return glob;
+  }
+
+  void undocumentedAfterBlockOpenInterp() {}
+}
+"#;
+
+    let neg_block_res = audit_dart_source_docstrings(
+        dart_with_undocumented_after_block_open,
+        "app_flutter/lib/glob.dart",
+    );
+    assert!(
+        neg_block_res.is_err(),
+        "Undocumented method after interpolated '/*' quote must be flagged, got: {:?}",
+        neg_block_res
+    );
+    let neg_block_errs = neg_block_res.err().unwrap_or_default().join("\n");
+    assert!(
+        neg_block_errs.contains("undocumentedAfterBlockOpenInterp"),
+        "Expected violation for undocumentedAfterBlockOpenInterp, got:\n{}",
+        neg_block_errs
+    );
+
+    let dart_with_multiline_annotation = r#"
+/// Documented Dart telemetry formatter class.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Formats telemetry endpoints under DO-178C Level A.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves nested string interpolations containing comment tokens.
+///
+/// ## 3. Preconditions
+/// - Input map contains valid string keys.
+///
+/// ## 4. Postconditions
+/// - Instantiates formatter class.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Infallible class declaration.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DART-INTERP-CLASS-01]
+class TelemetryFormatter {
+  /// Formats endpoint URI and glob pattern from configuration map.
+  ///
+  /// ## 1. Safety Intent & Regulatory Scope
+  /// Evaluates nested quotes in string interpolations safely.
+  ///
+  /// ## 2. Invariants & Mathematical Properties
+  /// - Tokens `//` and `/*` inside nested interpolation quotes remain string data.
+  ///
+  /// ## 3. Preconditions
+  /// - `map` is non-null.
+  ///
+  /// ## 4. Postconditions
+  /// - Returns formatted endpoint string.
+  ///
+  /// ## 5. Algorithmic Complexity Bounds
+  /// - Time Complexity: O(1).
+  /// - Space Complexity: O(1).
+  ///
+  /// ## 6. Failure Modes & Fault Tolerance
+  /// - Falls back to empty string on missing key.
+  ///
+  /// ## 7. Realization & Traceability
+  /// Realises: [REQ-DART-INTERP-METHOD-01]
+  String formatEndpoint(Map<String, String> map) {
+    if (map.isNotEmpty) { final uri = "${map["http://"]}"; return uri; }
+    final glob = "${map["/*"]}";
+    return glob;
+  }
+
+  /// Legacy reset endpoint preserved across multiline Dart annotation.
+  ///
+  /// ## 1. Safety Intent & Regulatory Scope
+  /// Verifies docstring retention across multiline annotations under DO-178C Level A.
+  ///
+  /// ## 2. Invariants & Mathematical Properties
+  /// - `annotation_paren_depth` preserves `current_doc` until closing `)`.
+  ///
+  /// ## 3. Preconditions
+  /// - Formatter instance is initialized.
+  ///
+  /// ## 4. Postconditions
+  /// - Resets formatter state cleanly.
+  ///
+  /// ## 5. Algorithmic Complexity Bounds
+  /// - Time Complexity: O(1).
+  /// - Space Complexity: O(1).
+  ///
+  /// ## 6. Failure Modes & Fault Tolerance
+  /// - No-op reset cannot fail.
+  ///
+  /// ## 7. Realization & Traceability
+  /// Realises: [REQ-DART-INTERP-METHOD-03]
+  @Deprecated(
+    'Use formatEndpoint instead',
+  )
+  void legacyReset() {}
+}
+"#;
+
+    assert_eq!(
+        audit_dart_source_docstrings(
+            dart_with_multiline_annotation,
+            "app_flutter/lib/telemetry.dart"
+        ),
+        Ok(3),
+        "Expected class + 2 documented methods (including multiline @Deprecated) to return Ok(3)"
+    );
+}
+
+/// Verifies scoped `#[cfg(test)]` / `mod tests` handling and `pub(self)`, `unsafe`, and `extern` Rust item classification.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DO-330 TQL-4 Rust test-scope isolation and item classification completeness (refs #508).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `#[cfg(test)] mod tests;` and braced `mod tests { ... }` exempt only their own declaration or brace scope, never subsequent production items.
+/// - `#[cfg(test)] impl SomeType { ... }` exempts all methods inside the test-only `impl` block.
+/// - `pub(self)`, `unsafe trait`, `unsafe fn`, and `extern "C" fn` items are classified and audited for 7-section docstrings.
+///
+/// ## 3. Preconditions
+/// - In-memory Rust fixtures exercise `mod tests;`, `mod tests { ... }`, `#[cfg(test)] impl`, and extended item qualifiers.
+///
+/// ## 4. Postconditions
+/// - Rejects undocumented production items after `mod tests` and undocumented `pub(self)`/`unsafe`/`extern` items, while accepting `#[cfg(test)] impl` helpers.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) over the Rust fixture lines.
+/// - Space Complexity: O(1) bounded diagnostic vectors.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Direct invocation of `audit_rust_source_docstrings`.
+/// - State: Isolated per-invocation scanner state.
+/// - Action: Asserts exact negative and positive outcomes.
+/// - Resource: Zero filesystem side effects.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-36-RUST-SCOPED-CFG-TEST-AND-QUALIFIERS]
+#[test]
+fn test_check_36_rust_scoped_cfg_test_and_extended_qualifiers() {
+    // 1. Production items after `#[cfg(test)] mod tests;` and inline `mod tests { ... }` must still be audited.
+    let rust_after_mod_tests = r#"#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+mod inline_tests {
+    fn helper_in_test_mod() {}
+}
+
+pub fn undocumented_after_test_mod() {}
+"#;
+    let after_mod_res =
+        audit_rust_source_docstrings(rust_after_mod_tests, "crates/demo/src/lib.rs");
+    assert!(
+        after_mod_res.is_err(),
+        "Production function after #[cfg(test)] mod tests must not be exempted, got: {:?}",
+        after_mod_res
+    );
+    let after_mod_errs = after_mod_res.err().unwrap_or_default().join("\n");
+    assert!(
+        after_mod_errs.contains("undocumented_after_test_mod"),
+        "Expected undocumented_after_test_mod violation, got:\n{}",
+        after_mod_errs
+    );
+
+    // 2. `#[cfg(test)] impl` methods must be exempted while subsequent production items are audited.
+    let rust_cfg_test_impl = r#"/// Documented carrier struct for cfg(test) impl block verification.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Verifies scoped #[cfg(test)] impl block exemption under DO-178C Level A.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Production struct requires 7-section docstring while #[cfg(test)] impl methods are test-scoped.
+///
+/// ## 3. Preconditions
+/// - None.
+///
+/// ## 4. Postconditions
+/// - Instantiates unit carrier struct.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Zero-sized struct cannot fail.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CFG-TEST-IMPL-01]
+pub struct Carrier;
+
+#[cfg(test)]
+impl Carrier {
+    pub fn test_only_helper() -> bool {
+        true
+    }
+}
+"#;
+    assert_eq!(
+        audit_rust_source_docstrings(rust_cfg_test_impl, "crates/demo/src/lib.rs"),
+        Ok(1),
+        "#[cfg(test)] impl methods must be exempted while Carrier struct is counted"
+    );
+
+    // 3. Undocumented `pub(self) fn`, `pub unsafe fn`, `pub unsafe trait`, and `pub extern "C" fn` must fail closed.
+    let rust_extended_qualifiers = r#"
+pub(self) fn hidden_self_fn() {}
+pub unsafe fn raw_ptr_fn() {}
+pub unsafe trait RawSafetyTrait {
+    fn check(&self);
+}
+pub extern "C" fn ffi_entrypoint() {}
+"#;
+    let qual_res =
+        audit_rust_source_docstrings(rust_extended_qualifiers, "crates/demo/src/lib.rs");
+    assert!(
+        qual_res.is_err(),
+        "Undocumented pub(self), unsafe, and extern items must fail closed, got: {:?}",
+        qual_res
+    );
+    let qual_errs = qual_res.err().unwrap_or_default().join("\n");
+    for expected in [
+        "hidden_self_fn",
+        "raw_ptr_fn",
+        "RawSafetyTrait",
+        "ffi_entrypoint",
+    ] {
+        assert!(
+            qual_errs.contains(expected),
+            "Expected Check 36 to flag undocumented qualified item '{}', got:\n{}",
+            expected,
+            qual_errs
+        );
+    }
+}
+
 
 

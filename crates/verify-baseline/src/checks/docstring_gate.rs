@@ -39,10 +39,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-CHECK-36-DOCSTRING-GATE], [DO-330-TQL-4-DOCSTRING-GATE]
 
-use deap_core::source_ast::{
-    extract_dart_getter_ident, strip_leading_dart_annotations,
-    strip_line_comment_preserving_strings,
-};
+use deap_core::source_ast::{extract_dart_getter_ident, strip_leading_dart_annotations};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
@@ -599,7 +596,7 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
         raw_string_hashes: None,
         in_multiline_string: false,
     };
-    let mut in_mod_tests = false;
+    let mut test_scope_entry_brace_depth: Option<usize> = None;
     let mut cfg_test_pending = false;
     let mut attr_bracket_depth: usize = 0;
     let mut brace_depth: usize = 0;
@@ -626,7 +623,7 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             }
 
             if trimmed.starts_with("///") {
-                if !in_mod_tests {
+                if test_scope_entry_brace_depth.is_none() {
                     if contains_placeholder_docstring(trimmed) {
                         violations.push(format!(
                             "{}:{}: placeholder docstring '{}' detected",
@@ -646,16 +643,22 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             continue;
         }
 
-        if code == "mod tests {"
-            || code.starts_with("mod tests ")
-            || code.starts_with("mod tests{")
-            || (cfg_test_pending && code.starts_with("mod "))
-        {
-            in_mod_tests = true;
+        if let Some(entry_depth) = test_scope_entry_brace_depth {
+            update_line_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
+            if brace_depth <= entry_depth {
+                test_scope_entry_brace_depth = None;
+            }
+            current_doc.clear();
+            cfg_test_pending = false;
+            continue;
         }
 
-        if in_mod_tests {
-            continue;
+        if code == "mod tests {"
+            || code == "mod tests;"
+            || code.starts_with("mod tests ")
+            || code.starts_with("mod tests{")
+        {
+            cfg_test_pending = true;
         }
 
         if attr_bracket_depth > 0 {
@@ -683,30 +686,37 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             continue;
         }
 
+        if cfg_test_pending {
+            let prev_brace_depth = brace_depth;
+            update_line_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
+            current_doc.clear();
+            if brace_depth > prev_brace_depth {
+                test_scope_entry_brace_depth = Some(prev_brace_depth);
+                cfg_test_pending = false;
+            } else if paren_depth == 0 && (code.ends_with(';') || code.ends_with('}')) {
+                cfg_test_pending = false;
+            }
+            continue;
+        }
+
         if paren_depth == 0 {
             if let Some((kind, item_name)) = classify_rust_item_line(code) {
-                if cfg_test_pending {
-                    cfg_test_pending = false;
-                    current_doc.clear();
-                } else {
-                    let target = ItemDocTarget {
-                        file_rel,
-                        line_no,
-                        kind,
-                        item_name: &item_name,
-                        check_uniqueness: kind == "fn",
-                    };
-                    validate_item_docblock(
-                        &current_doc,
-                        &target,
-                        &mut seen_docblocks,
-                        &mut violations,
-                    );
-                    documented_items = documented_items.saturating_add(1);
-                    current_doc.clear();
-                }
+                let target = ItemDocTarget {
+                    file_rel,
+                    line_no,
+                    kind,
+                    item_name: &item_name,
+                    check_uniqueness: kind == "fn",
+                };
+                validate_item_docblock(
+                    &current_doc,
+                    &target,
+                    &mut seen_docblocks,
+                    &mut violations,
+                );
+                documented_items = documented_items.saturating_add(1);
+                current_doc.clear();
             } else {
-                cfg_test_pending = false;
                 current_doc.clear();
             }
         }
@@ -1175,6 +1185,7 @@ fn scan_dart_line_preserving_lexical_state(
     let len = bytes.len();
     let mut i: usize = 0;
     let mut in_single_line_quote: Option<(u8, bool)> = None;
+    let mut interp_stack: Vec<((u8, bool), usize)> = Vec::new();
     let mut out = String::with_capacity(len);
 
     while i < len {
@@ -1241,6 +1252,17 @@ fn scan_dart_line_preserving_lexical_state(
                 }
                 continue;
             }
+            if !is_raw
+                && bytes.get(i).copied() == Some(b'$')
+                && bytes.get(i.saturating_add(1)).copied() == Some(b'{')
+            {
+                interp_stack.push(((q_byte, is_raw), 1));
+                in_single_line_quote = None;
+                out.push('$');
+                out.push('{');
+                i = i.saturating_add(2);
+                continue;
+            }
             if bytes.get(i).copied() == Some(q_byte) {
                 in_single_line_quote = None;
             }
@@ -1263,6 +1285,28 @@ fn scan_dart_line_preserving_lexical_state(
         {
             *block_comment_depth = block_comment_depth.saturating_add(1);
             i = i.saturating_add(2);
+            continue;
+        }
+
+        if bytes.get(i).copied() == Some(b'{') {
+            if let Some((_, depth)) = interp_stack.last_mut() {
+                *depth = depth.saturating_add(1);
+            }
+            out.push('{');
+            i = i.saturating_add(1);
+            continue;
+        }
+        if bytes.get(i).copied() == Some(b'}') {
+            if let Some((saved_quote, mut depth)) = interp_stack.pop() {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    in_single_line_quote = Some(saved_quote);
+                } else {
+                    interp_stack.push((saved_quote, depth));
+                }
+            }
+            out.push('}');
+            i = i.saturating_add(1);
             continue;
         }
 
@@ -1350,7 +1394,7 @@ fn scan_dart_line_preserving_lexical_state(
 /// ## 2. Invariants & Mathematical Properties
 /// - Brace and Parenthesis Depth Tracking: Tracks `(brace_depth, paren_depth)` so named parameter
 ///   blocks `({super.key})` inside `(...)` never corrupt class vs. method body brace depth.
-/// - Annotation Preservation: Preserves `current_doc` across `@override` and `@immutable` annotations.
+/// - Annotation Preservation: Preserves `current_doc` across single-line and multiline `@Annotation(...)` headers.
 /// - Placeholder Rejection: Any `/// Member documentation.` line triggers an immediate violation even if
 ///   attached to a constructor or field.
 ///
@@ -1368,7 +1412,7 @@ fn scan_dart_line_preserving_lexical_state(
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Non-panicking line and byte scanning over `source`.
-/// - State: Local state machine tracking `brace_depth`, `paren_depth`, and `active_class_name`.
+/// - State: Local state machine tracking `brace_depth`, `paren_depth`, `annotation_paren_depth`, and `active_class_name`.
 /// - Action: Never panics on malformed Dart syntax; saturating arithmetic guards depth counters.
 /// - Resource: Linear memory bounded by the active docblock and diagnostic list.
 ///
@@ -1382,6 +1426,7 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
     let mut in_triple_string: Option<DartMultilineString> = None;
     let mut brace_depth: usize = 0;
     let mut paren_depth: usize = 0;
+    let mut annotation_paren_depth: usize = 0;
     let mut active_class_name: Option<String> = None;
     let mut documented_items: usize = 0;
 
@@ -1407,10 +1452,27 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             &mut block_comment_depth,
             &mut in_triple_string,
         );
-        let code = strip_line_comment_preserving_strings(&scanned);
+        let code = scanned.trim();
 
         if code.is_empty() {
             continue;
+        }
+
+        if annotation_paren_depth > 0 {
+            update_line_delimiter_depths(code, &mut brace_depth, &mut annotation_paren_depth);
+            continue;
+        }
+
+        if code.starts_with('@') {
+            let stripped_code = strip_leading_dart_annotations(code);
+            let trimmed_stripped = stripped_code.trim();
+            if trimmed_stripped.is_empty()
+                || trimmed_stripped.starts_with('@')
+                || trimmed_stripped.starts_with('(')
+            {
+                update_line_delimiter_depths(code, &mut brace_depth, &mut annotation_paren_depth);
+                continue;
+            }
         }
 
         let stripped_code = strip_leading_dart_annotations(code);
@@ -1717,16 +1779,17 @@ fn contains_placeholder_docstring(doc_line: &str) -> bool {
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A per-item Rust verification rules (`classify_rust_item_line`).
-/// Identifies all production `pub struct`, `struct`, `pub enum`, `enum`, `pub trait`, `trait`,
-/// `pub fn`, `pub const fn`, `pub async fn`, `pub(crate) fn`, and `fn` items without regex.
+/// Identifies all production `pub struct`, `struct`, `pub enum`, `enum`, `pub trait`, `unsafe trait`,
+/// `trait`, `pub fn`, `pub const fn`, `pub async fn`, `pub unsafe fn`, `pub extern fn`, `pub(crate) fn`,
+/// `pub(super) fn`, `pub(self) fn`, and `fn` items without regex.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Strips optional visibility (`pub`, `pub(crate)`, `pub(super)`, `pub(in ...)`) and function
-///   qualifiers (`const`, `async`) before matching `struct `, `enum `, `trait `, or `fn `.
+/// - Strips optional visibility (`pub`, `pub(crate)`, `pub(super)`, `pub(self)`, `pub(in ...)`) and
+///   qualifiers (`const`, `async`, `unsafe`, `extern`) before matching `struct `, `enum `, `trait `, or `fn `.
 /// - Returns `Some((kind, identifier))` if and only if a valid Rust identifier immediately follows the keyword.
 ///
 /// ## 3. Preconditions
-/// - `code: &str` is a trimmed, comment-stripped Rust source line outside `mod tests` and strings.
+/// - `code: &str` is a trimmed, comment-stripped Rust source line outside test scopes and strings.
 ///
 /// ## 4. Postconditions
 /// - Returns `Some((kind, name))` where `kind` is `"struct"`, `"enum"`, `"trait"`, or `"fn"`,
@@ -1749,6 +1812,8 @@ fn classify_rust_item_line(code: &str) -> Option<(&'static str, String)> {
         rest.trim_start()
     } else if let Some(rest) = code.strip_prefix("pub(super) ") {
         rest.trim_start()
+    } else if let Some(rest) = code.strip_prefix("pub(self) ") {
+        rest.trim_start()
     } else if let Some(rest) = code.strip_prefix("pub(in ") {
         if let Some((_, after_paren)) = rest.split_once(") ") {
             after_paren.trim_start()
@@ -1769,20 +1834,38 @@ fn classify_rust_item_line(code: &str) -> Option<(&'static str, String)> {
         let name = extract_leading_identifier(rest.trim_start())?;
         return Some(("enum", name));
     }
-    if let Some(rest) = after_vis.strip_prefix("trait ") {
+    let after_unsafe_trait = after_vis
+        .strip_prefix("unsafe ")
+        .map(str::trim_start)
+        .unwrap_or(after_vis);
+    if let Some(rest) = after_unsafe_trait.strip_prefix("trait ") {
         let name = extract_leading_identifier(rest.trim_start())?;
         return Some(("trait", name));
     }
 
-    let after_qual = if let Some(rest) = after_vis.strip_prefix("const async ") {
-        rest.trim_start()
-    } else if let Some(rest) = after_vis.strip_prefix("async ") {
-        rest.trim_start()
-    } else if let Some(rest) = after_vis.strip_prefix("const ") {
-        rest.trim_start()
-    } else {
-        after_vis
-    };
+    let mut after_qual = after_vis;
+    for _ in 0..4 {
+        if let Some(rest) = after_qual.strip_prefix("const ") {
+            after_qual = rest.trim_start();
+        } else if let Some(rest) = after_qual.strip_prefix("async ") {
+            after_qual = rest.trim_start();
+        } else if let Some(rest) = after_qual.strip_prefix("unsafe ") {
+            after_qual = rest.trim_start();
+        } else if let Some(rest) = after_qual.strip_prefix("extern ") {
+            let rest = rest.trim_start();
+            if let Some(after_quote) = rest.strip_prefix('"') {
+                if let Some((_, after_abi)) = after_quote.split_once('"') {
+                    after_qual = after_abi.trim_start();
+                } else {
+                    break;
+                }
+            } else {
+                after_qual = rest;
+            }
+        } else {
+            break;
+        }
+    }
 
     if let Some(rest) = after_qual.strip_prefix("fn ") {
         let name = extract_leading_identifier(rest.trim_start())?;
