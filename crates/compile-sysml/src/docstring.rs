@@ -2711,7 +2711,7 @@ fn any_placeholder_in_doc(doc_lines: &[String]) -> bool {
 /// Matches the exact stub patterns rejected by `contains_placeholder_docstring` in `docstring_gate.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Assembles placeholder needles dynamically to satisfy self-hosting scanner hygiene.
+/// - Evaluates lowercased whitespace tokens directly without runtime needle concatenation.
 ///
 /// ## 3. Preconditions
 /// - `doc_line: &str` is a trimmed `///` or `//!` comment line.
@@ -2727,7 +2727,7 @@ fn any_placeholder_in_doc(doc_lines: &[String]) -> bool {
 /// - Interface: Safe prefix stripping and lowercase conversion.
 /// - State: Pure function.
 /// - Action: Never panics.
-/// - Resource: Short-lived string allocations.
+/// - Resource: Single lowercased string buffer with zero-allocation token iterator.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-HAS-PLACEHOLDER-DOC-LINE]
@@ -2737,16 +2737,14 @@ fn has_placeholder_doc_line(doc_line: &str) -> bool {
         .trim_start_matches("//!")
         .trim()
         .to_ascii_lowercase();
-    let needle_member_dot = ["member ", "documentation."].concat();
-    let needle_member = ["member ", "documentation"].concat();
-    let needle_todo_doc = ["todo: ", "document"].concat();
-    let needle_placeholder_doc = ["placeholder ", "documentation"].concat();
-
-    body == needle_member_dot
-        || body == needle_member
-        || body.starts_with(&needle_member_dot)
-        || body.starts_with(&needle_todo_doc)
-        || body.starts_with(&needle_placeholder_doc)
+    let mut tokens = body.split_whitespace();
+    match (tokens.next(), tokens.next(), tokens.next()) {
+        (Some("member"), Some("documentation"), None) => true,
+        (Some("member"), Some(second), _) => second.starts_with("documentation."),
+        (Some("todo:"), Some(second), _) => second.starts_with("document"),
+        (Some("placeholder"), Some(second), _) => second.starts_with("documentation"),
+        _ => false,
+    }
 }
 
 /// Extracts the leading whitespace slice from `raw_line`.
@@ -3118,25 +3116,24 @@ mod tests {
             enriched
         );
 
-        let self_src = fs::read_to_string(Path::new("src/docstring.rs"))
-            .map_err(|e| format!("Failed to read src/docstring.rs: {}", e))?;
-        let prod_src = self_src
-            .split_once("#[cfg(test)]")
-            .map(|(before, _)| before)
-            .unwrap_or(&self_src);
-        let banned_close_pos = ["close_pos", " <= 10"].concat();
-        let banned_local_enum = ["enum ", "RustStringScannerState"].concat();
-        let banned_size_of = ["size_of", "::<"].concat();
+        let self_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("docstring.rs");
+        let self_src = fs::read_to_string(&self_path)
+            .map_err(|e| format!("Failed to read {}: {}", self_path.display(), e))?;
+        let (prod_src, _) = self_src
+            .split_once("\n#[cfg(test)]\nmod tests")
+            .ok_or_else(|| "missing mod tests boundary in src/docstring.rs".to_string())?;
         assert!(
-            !prod_src.contains(&banned_close_pos) && !self_src.contains(&banned_close_pos),
+            !prod_src.contains("close_pos <= 10"),
             "src/docstring.rs must not contain magic close_pos heuristic"
         );
         assert!(
-            !self_src.contains(&banned_local_enum),
+            !prod_src.contains("enum RustStringScannerState"),
             "src/docstring.rs must import RustStringScannerState from deap_core::source_ast instead of redefining it"
         );
         assert!(
-            !prod_src.contains(&banned_size_of) && !self_src.contains(&banned_size_of),
+            !prod_src.contains("size_of::<"),
             "src/docstring.rs must not contain size_of workarounds"
         );
         Ok(())
@@ -3213,8 +3210,11 @@ mod tests {
             enriched
         );
 
-        let self_src = fs::read_to_string(Path::new("src/docstring.rs"))
-            .map_err(|e| format!("Failed to read src/docstring.rs: {}", e))?;
+        let self_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("docstring.rs");
+        let self_src = fs::read_to_string(&self_path)
+            .map_err(|e| format!("Failed to read {}: {}", self_path.display(), e))?;
         let (_self_enriched, self_count) = inject_rust_file_docstrings(
             &self_src,
             "crates/compile-sysml/src/docstring.rs",
@@ -3662,16 +3662,49 @@ mod tests {
             }
         }
 
-        let self_src = fs::read_to_string(Path::new("src/docstring.rs"))
-            .map_err(|e| format!("Failed to read src/docstring.rs: {e}"))?;
-        let prod_src = self_src
-            .split_once("#[cfg(test)]")
-            .map(|(before, _)| before)
-            .unwrap_or(&self_src);
-        let forbidden_u = ["\"Use", "rs\""].concat();
-        let forbidden_j = ["\"ja", "il\""].concat();
-        if prod_src.contains(&forbidden_u) || prod_src.contains(&forbidden_j) {
-            return Err("derive_module_req_tag must not contain hardcoded workstation path literals".to_string());
+        let self_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("docstring.rs");
+        let self_src = fs::read_to_string(&self_path)
+            .map_err(|e| format!("Failed to read {}: {e}", self_path.display()))?;
+        let (prod_src, _) = self_src
+            .split_once("\n#[cfg(test)]\nmod tests")
+            .ok_or_else(|| "missing mod tests boundary in src/docstring.rs".to_string())?;
+        let (_, after_fn_start) = prod_src
+            .split_once("fn derive_module_req_tag")
+            .ok_or_else(|| "missing fn derive_module_req_tag".to_string())?;
+        let (fn_body, _) = after_fn_start
+            .split_once("fn sanitize_req_segment")
+            .ok_or_else(|| "missing fn sanitize_req_segment boundary".to_string())?;
+        let allowed_literals = [
+            "",
+            ".",
+            "..",
+            "/",
+            "\\\\",
+            "crates",
+            "app_flutter",
+            "src",
+            "lib",
+            "tests",
+            "bin",
+            ".rs",
+            ".dart",
+            "-",
+            "MODULE",
+        ];
+        for line in fn_body.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            for (idx, segment) in trimmed.split('"').enumerate() {
+                if idx % 2 == 1 && !allowed_literals.contains(&segment) {
+                    return Err(format!(
+                        "derive_module_req_tag contains unexpected string literal: {segment:?}"
+                    ));
+                }
+            }
         }
         Ok(())
     }
@@ -3707,8 +3740,11 @@ mod tests {
     /// Realises: [REQ-ISSUE-515-DOCSTRING-ZERO-HARDCODED-DOMAIN-CONCEPTS]
     #[test]
     fn test_issue_515_docstring_tests_zero_hardcoded_domain_concepts() -> Result<(), String> {
-        let self_src = fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/docstring.rs"))
-            .map_err(|e| format!("Failed to read src/docstring.rs: {e}"))?;
+        let self_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("docstring.rs");
+        let self_src = fs::read_to_string(&self_path)
+            .map_err(|e| format!("Failed to read {}: {e}", self_path.display()))?;
         let forbidden_tokens = [
             concat!("Avionics", "Pkg"),
             concat!("Thermal", "Limit"),
@@ -3738,6 +3774,82 @@ mod tests {
                 return Err(format!(
                     "src/docstring.rs must not contain hardcoded domain concept token: {token}"
                 ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Verifies that `src/docstring.rs` uses zero runtime slice-concatenation workarounds and anchors all self-reads to `CARGO_MANIFEST_DIR` (refs #513).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 36 static scanner hygiene
+    /// (`test_issue_513_zero_concat_evasion_and_manifest_anchored_self_reads`).
+    /// Ensures `has_placeholder_doc_line` evaluates tokens without runtime slice-join allocations and all self-reading unit tests resolve `src/docstring.rs` via `CARGO_MANIFEST_DIR`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Zero runtime slice-join calls exist in `src/docstring.rs` prior to this test boundary.
+    /// - Zero CWD-relative self-reads exist in `src/docstring.rs` prior to this test boundary.
+    /// - `has_placeholder_doc_line` detects all banned placeholder prefixes and rejects valid documentation lines.
+    ///
+    /// ## 3. Preconditions
+    /// - `src/docstring.rs` is readable at `Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("docstring.rs")`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when `before_self` contains zero slice-concatenation or CWD-relative self-read patterns and all `has_placeholder_doc_line` probes match expected truth values.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) where N is the byte length of `src/docstring.rs`.
+    /// - Space Complexity: O(N) to hold the source text in memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), String>` with descriptive diagnostic messages on failure.
+    /// - State: Read-only self-inspection and pure predicate evaluation.
+    /// - Action: Fails closed if boundary marker is missing or any forbidden pattern is found.
+    /// - Resource: Single bounded file read.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-ISSUE-513-ZERO-CONCAT-AND-MANIFEST-SELF-READS]
+    #[test]
+    fn test_issue_513_zero_concat_evasion_and_manifest_anchored_self_reads() -> Result<(), String> {
+        let self_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("docstring.rs");
+        let self_src = fs::read_to_string(&self_path)
+            .map_err(|e| format!("Failed to read {}: {e}", self_path.display()))?;
+        let (before_self, _) = self_src
+            .split_once("fn test_issue_513_zero_concat_evasion_and_manifest_anchored_self_reads")
+            .ok_or_else(|| "missing test_issue_513 boundary".to_string())?;
+        if before_self.contains(".concat()") {
+            return Err("src/docstring.rs must not use runtime .concat() scanner-evasion".to_string());
+        }
+        if before_self.contains("Path::new(\"src/docstring.rs\")") {
+            return Err(
+                "src/docstring.rs must not use CWD-relative Path::new(\"src/docstring.rs\")"
+                    .to_string(),
+            );
+        }
+
+        let positive_cases = [
+            "/// Member documentation.",
+            "/// Member documentation",
+            "/// Member documentation. Extra",
+            "/// TODO: document foo",
+            "/// Placeholder documentation",
+            "//! Placeholder documentation.",
+        ];
+        for line in positive_cases {
+            if !has_placeholder_doc_line(line) {
+                return Err(format!("Expected has_placeholder_doc_line({line:?}) to be true"));
+            }
+        }
+
+        let negative_cases = [
+            "/// Member documentation for x",
+            "/// Validates the AST token stream.",
+        ];
+        for line in negative_cases {
+            if has_placeholder_doc_line(line) {
+                return Err(format!("Expected has_placeholder_doc_line({line:?}) to be false"));
             }
         }
         Ok(())
