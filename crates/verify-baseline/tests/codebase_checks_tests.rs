@@ -189,3 +189,209 @@ fn test_check_no_duplicate_dart_solver_math_rejects_bloated_bridge_and_markers()
     let gate_res = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp.path);
     assert!(gate_res.is_err(), "Check 41 gate must also fail");
 }
+
+/// Verifies that `check_41_solver_bridge_and_sqlite_seed_parity_gate` fails when `topology_data.json`
+/// is malformed or when `app_flutter/lib/data/seeds/` is missing or contains no non-empty `.dart` files.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A fail-closed persistence verification mandates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Malformed `topology_data.json` or missing `"nodes"` array produces a `[Check 41]` violation.
+/// - Missing `app_flutter/lib/data/seeds/` or empty `.dart` seed files when `topology_data.json` exists produces a `[Check 41]` violation.
+///
+/// ## 3. Preconditions
+/// - Temporary workspace directory contains `app_flutter/assets/topology_data.json`.
+///
+/// ## 4. Postconditions
+/// - Returns `Err(violations)` for malformed topology JSON, missing `seeds/` directory, and empty `seeds/` directory.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ linear in topology JSON size.
+/// - Space Complexity: $O(V)$ for violation strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Panics in test if any negative probe silently returns `Ok(())`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-41-BIJECTIVE-SEED-PARITY]
+#[test]
+fn test_check_41_rejects_malformed_topology_and_missing_or_empty_seeds_dir() {
+    // Case 1: Malformed topology_data.json
+    let tmp_malformed = ScopedTempDir::new("c41_malformed");
+    let assets_malformed = tmp_malformed.path.join("app_flutter/assets");
+    fs::create_dir_all(&assets_malformed).expect("create assets dir");
+    fs::write(assets_malformed.join("topology_data.json"), "{ invalid json ")
+        .expect("write malformed json");
+    let res_malformed = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp_malformed.path);
+    assert!(
+        res_malformed.is_err(),
+        "Malformed topology_data.json must fail Check 41"
+    );
+
+    // Case 2: Valid topology_data.json but missing app_flutter/lib/data/seeds/ directory
+    let tmp_no_seeds = ScopedTempDir::new("c41_no_seeds");
+    let assets_no_seeds = tmp_no_seeds.path.join("app_flutter/assets");
+    fs::create_dir_all(&assets_no_seeds).expect("create assets dir");
+    fs::write(
+        assets_no_seeds.join("topology_data.json"),
+        r#"{"nodes":[{"id":"NODE_ALPHA_01","typeName":"AlphaComponent","properties":{"custom_metric":1.0}}]}"#,
+    )
+    .expect("write topology_data.json");
+    let res_no_seeds = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp_no_seeds.path);
+    assert!(
+        res_no_seeds.is_err(),
+        "Missing app_flutter/lib/data/seeds/ when topology_data.json exists must fail Check 41"
+    );
+
+    // Case 3: Empty seeds directory (no non-empty .dart files)
+    let seeds_empty = tmp_no_seeds.path.join("app_flutter/lib/data/seeds");
+    fs::create_dir_all(&seeds_empty).expect("create seeds dir");
+    fs::write(seeds_empty.join("empty_seed.dart"), "   \n").expect("write whitespace dart file");
+    let res_empty_seeds = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp_no_seeds.path);
+    assert!(
+        res_empty_seeds.is_err(),
+        "Empty .dart seed files when topology_data.json exists must fail Check 41"
+    );
+}
+
+/// Verifies that `check_41_solver_bridge_and_sqlite_seed_parity_gate` rejects an un-delegated or
+/// placeholder-polluted `domain_seed_strategy.dart` even when `generated_domain_seed.g.dart` is complete,
+/// rejects missing explicit topology `typeName` or `properties` keys, and passes when properly wired.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D bijective SQLite persistence parity standards.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `generated_domain_seed.g.dart` cannot mask an un-delegated `domain_seed_strategy.dart` or synthetic placeholders (`space_$`, `field_1`).
+/// - Explicit topology node `typeName` and `properties` keys must be present in the SQLite seed.
+///
+/// ## 3. Preconditions
+/// - Temporary workspace directory contains `topology_data.json` and SQLite seed files under `app_flutter/lib/data/seeds/`.
+///
+/// ## 4. Postconditions
+/// - Returns `Err(violations)` for un-delegated/placeholder `domain_seed_strategy.dart` and missing `typeName`/`properties` keys; returns `Ok(())` when complete and delegated.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(E + S)$ linear in topology nodes and seed file size.
+/// - Space Complexity: $O(E + V)$ for entity sets and violation diagnostics.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Panics in test if any negative probe passes or positive probe fails.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-41-BIJECTIVE-SEED-PARITY]
+#[test]
+fn test_check_41_rejects_unwired_strategy_placeholder_loops_and_missing_types_or_props() {
+    let tmp = ScopedTempDir::new("c41_strategy_and_props");
+    let assets_dir = tmp.path.join("app_flutter/assets");
+    let seeds_dir = tmp.path.join("app_flutter/lib/data/seeds");
+    fs::create_dir_all(&assets_dir).expect("create assets dir");
+    fs::create_dir_all(&seeds_dir).expect("create seeds dir");
+
+    let topology_json = r#"{
+  "nodes": [
+    {
+      "id": "NODE_ALPHA_01",
+      "typeName": "AlphaComponent",
+      "properties": {
+        "custom_metric_value": 42.5
+      }
+    },
+    {
+      "id": "NODE_BETA_02",
+      "typeName": "BetaComponent",
+      "properties": {
+        "status_label_key": "NOMINAL"
+      }
+    }
+  ]
+}"#;
+    fs::write(assets_dir.join("topology_data.json"), topology_json)
+        .expect("write topology_data.json");
+
+    // Probe A: Seed file has entity IDs and 5 tables, but is missing explicit typeName 'BetaComponent' and property 'custom_metric_value'
+    let incomplete_seed = r#"
+Future<void> seedGeneratedDomainDatabase(Database db) async {
+  // type_definitions, type_attributes, type_relations, instances, properties
+  // AlphaComponent, NODE_ALPHA_01, NODE_BETA_02, status_label_key
+}
+"#;
+    fs::write(
+        seeds_dir.join("generated_domain_seed.g.dart"),
+        incomplete_seed,
+    )
+    .expect("write incomplete seed");
+    let res_incomplete = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp.path);
+    assert!(
+        res_incomplete.is_err(),
+        "Seed missing explicit typeName or property key must fail Check 41"
+    );
+    let errs_incomplete = res_incomplete.expect_err("must return errors");
+    assert!(
+        errs_incomplete.iter().any(|e| e.contains("BetaComponent")),
+        "Must report missing typeName BetaComponent: {:?}",
+        errs_incomplete
+    );
+    assert!(
+        errs_incomplete
+            .iter()
+            .any(|e| e.contains("custom_metric_value")),
+        "Must report missing property key custom_metric_value: {:?}",
+        errs_incomplete
+    );
+
+    // Probe B: Complete generated_domain_seed.g.dart, but sibling domain_seed_strategy.dart does not delegate and uses synthetic space_$ / field_1 placeholders
+    let complete_generated_seed = r#"
+Future<void> seedGeneratedDomainDatabase(Database db) async {
+  // type_definitions, type_attributes, type_relations, instances, properties
+  // AlphaComponent, BetaComponent, NODE_ALPHA_01, NODE_BETA_02
+  // custom_metric_value, status_label_key
+}
+"#;
+    fs::write(
+        seeds_dir.join("generated_domain_seed.g.dart"),
+        complete_generated_seed,
+    )
+    .expect("write complete generated seed");
+
+    let defective_strategy = r#"
+class DomainSeedStrategy {
+  Future<void> seed(Database db) async {
+    for (int i = 0; i < 10; i++) {
+      final id = 'space_$i';
+      final prop = 'field_1';
+    }
+  }
+}
+"#;
+    fs::write(
+        seeds_dir.join("domain_seed_strategy.dart"),
+        defective_strategy,
+    )
+    .expect("write defective domain_seed_strategy.dart");
+
+    let res_strategy = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp.path);
+    assert!(
+        res_strategy.is_err(),
+        "Un-delegated or placeholder-polluted domain_seed_strategy.dart must fail Check 41 even when generated_domain_seed.g.dart is present"
+    );
+
+    // Probe C: Clean domain_seed_strategy.dart delegating to seedGeneratedDomainDatabase
+    let clean_strategy = r#"
+class DomainSeedStrategy {
+  Future<void> seed(Database db) async {
+    await seedGeneratedDomainDatabase(db);
+  }
+}
+"#;
+    fs::write(seeds_dir.join("domain_seed_strategy.dart"), clean_strategy)
+        .expect("write clean domain_seed_strategy.dart");
+
+    let res_clean = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp.path);
+    assert!(
+        res_clean.is_ok(),
+        "Complete generated seed with delegating domain_seed_strategy.dart must pass Check 41: {:?}",
+        res_clean.err()
+    );
+}

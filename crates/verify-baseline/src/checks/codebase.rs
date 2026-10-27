@@ -1035,17 +1035,70 @@ fn check_bijective_sqlite_seed_parity(repo_root: &Path, violations: &mut Vec<Str
         return;
     }
 
+    let content = match fs::read_to_string(&topology_path) {
+        Ok(c) => c,
+        Err(err) => {
+            violations.push(format!(
+                "Check 41 violation: Failed to read app_flutter/assets/topology_data.json: {}.",
+                err
+            ));
+            return;
+        }
+    };
+
+    let val = match serde_json::from_str::<serde_json::Value>(&content) {
+        Ok(v) => v,
+        Err(err) => {
+            violations.push(format!(
+                "Check 41 violation: Malformed JSON in app_flutter/assets/topology_data.json: {}.",
+                err
+            ));
+            return;
+        }
+    };
+
+    let nodes_opt = val
+        .get("nodes")
+        .and_then(|n| n.as_array())
+        .or_else(|| val.as_array());
+    let nodes = match nodes_opt {
+        Some(arr) => arr,
+        None => {
+            violations.push(
+                "Check 41 violation: app_flutter/assets/topology_data.json is missing a valid 'nodes' array."
+                    .to_string(),
+            );
+            return;
+        }
+    };
+
     let mut topology_entity_ids = BTreeSet::new();
-    if let Ok(content) = fs::read_to_string(&topology_path) {
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(nodes) = val.get("nodes").and_then(|n| n.as_array()) {
-                for node in nodes {
-                    if let Some(id_str) = node.get("id").and_then(|i| i.as_str()) {
-                        let trimmed = id_str.trim();
-                        if !trimmed.is_empty() {
-                            topology_entity_ids.insert(trimmed.to_string());
-                        }
-                    }
+    let mut topology_type_names = BTreeSet::new();
+    let mut topology_property_keys = BTreeSet::new();
+
+    for node in nodes {
+        if let Some(id_str) = node.get("id").and_then(|i| i.as_str()) {
+            let trimmed = id_str.trim();
+            if !trimmed.is_empty() {
+                topology_entity_ids.insert(trimmed.to_string());
+            }
+        }
+        if let Some(type_str) = node
+            .get("typeName")
+            .or_else(|| node.get("type_name"))
+            .or_else(|| node.get("type"))
+            .and_then(|t| t.as_str())
+        {
+            let trimmed = type_str.trim();
+            if !trimmed.is_empty() {
+                topology_type_names.insert(trimmed.to_string());
+            }
+        }
+        if let Some(props_obj) = node.get("properties").and_then(|p| p.as_object()) {
+            for prop_key in props_obj.keys() {
+                let trimmed = prop_key.trim();
+                if !trimmed.is_empty() {
+                    topology_property_keys.insert(trimmed.to_string());
                 }
             }
         }
@@ -1053,26 +1106,68 @@ fn check_bijective_sqlite_seed_parity(repo_root: &Path, violations: &mut Vec<Str
 
     let seeds_dir = repo_root.join("app_flutter").join("lib").join("data").join("seeds");
     if !seeds_dir.is_dir() {
+        violations.push(
+            "Check 41 violation: SQLite seed directory app_flutter/lib/data/seeds is missing while topology_data.json is present."
+                .to_string(),
+        );
         return;
     }
 
     let mut seed_files_content = String::new();
+    let mut has_generated_seed = false;
+    let mut strategy_content: Option<String> = None;
+
     if let Ok(entries) = fs::read_dir(&seeds_dir) {
         for entry in entries.flatten() {
             if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
                 let path = entry.path();
                 if path.extension().map(|ext| ext == "dart").unwrap_or(false) {
                     if let Ok(c) = fs::read_to_string(&path) {
-                        seed_files_content.push_str(&c);
-                        seed_files_content.push('\n');
+                        if !c.trim().is_empty() {
+                            let fname = entry.file_name().to_string_lossy().to_string();
+                            if fname == "generated_domain_seed.g.dart" {
+                                has_generated_seed = true;
+                            } else if fname == "domain_seed_strategy.dart" {
+                                strategy_content = Some(c.clone());
+                            }
+                            seed_files_content.push_str(&c);
+                            seed_files_content.push('\n');
+                        }
                     }
                 }
             }
         }
     }
 
-    if seed_files_content.is_empty() {
+    if seed_files_content.trim().is_empty() {
+        violations.push(
+            "Check 41 violation: No non-empty .dart SQLite seed files found in app_flutter/lib/data/seeds."
+                .to_string(),
+        );
         return;
+    }
+
+    if let Some(strat) = &strategy_content {
+        for placeholder in &["space_$", "field_1", "field_50"] {
+            if strat.contains(placeholder) {
+                violations.push(format!(
+                    "Check 41 violation: Synthetic placeholder pattern '{}' detected in app_flutter/lib/data/seeds/domain_seed_strategy.dart.",
+                    placeholder
+                ));
+            }
+        }
+        if has_generated_seed {
+            let delegates_to_generated = strat.contains("seedGeneratedDomainDatabase")
+                || strat.contains("seedDatabase");
+            let contains_all_entities = !topology_entity_ids.is_empty()
+                && topology_entity_ids.iter().all(|id| strat.contains(id));
+            if !delegates_to_generated && !contains_all_entities {
+                violations.push(
+                    "Check 41 violation: domain_seed_strategy.dart neither delegates to seedGeneratedDomainDatabase nor seeds all topology entities directly."
+                        .to_string(),
+                );
+            }
+        }
     }
 
     for entity_id in &topology_entity_ids {
@@ -1080,6 +1175,24 @@ fn check_bijective_sqlite_seed_parity(repo_root: &Path, violations: &mut Vec<Str
             violations.push(format!(
                 "Check 41 violation: Bijective SQLite seed parity failure: entity '{}' from topology_data.json is missing from SQLite domain seed.",
                 entity_id
+            ));
+        }
+    }
+
+    for type_name in &topology_type_names {
+        if !seed_files_content.contains(type_name) {
+            violations.push(format!(
+                "Check 41 violation: Bijective SQLite seed parity failure: entity type '{}' from topology_data.json is missing from SQLite domain seed.",
+                type_name
+            ));
+        }
+    }
+
+    for prop_key in &topology_property_keys {
+        if !seed_files_content.contains(prop_key) {
+            violations.push(format!(
+                "Check 41 violation: Bijective SQLite seed parity failure: property key '{}' from topology_data.json is missing from SQLite domain seed.",
+                prop_key
             ));
         }
     }

@@ -25,8 +25,11 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-COMPILER-FLUTTER-CODEGEN], [REQ-FLUTTER-GENERATE-SOLVER-BRIDGE]
 
-use compile_sysml::flutter_codegen::{emit_dart_solver_bridge, generate_solver_bridge_dart};
+use compile_sysml::flutter_codegen::{
+    emit_dart_solver_bridge, generate_domain_seed_dart, generate_solver_bridge_dart, TopologyNode,
+};
 use deap_core::sysml_ast::{AttributeDef, ItemDef, PartDef, PortDef, SysmlModel};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -210,4 +213,137 @@ fn test_emit_dart_solver_bridge_typed_dtos_and_solve_json_transport() {
     // 4. --solve-json transport method on DeapNativeSolverIsolate
     assert!(dart_src.contains("Future<Map<String, dynamic>> solveJson("));
     assert!(dart_src.contains("'--solve-json'"));
+}
+
+/// Verifies that `generate_domain_seed_dart` unions `model.parts` with topology-only `node.type_name` values,
+/// unions `part.attributes` with dynamic `node.properties` keys, and seeds `PartDef` default values when
+/// not overridden by `node.properties`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Tier 1 Relational Persistence bijective seed parity standards.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Every distinct `node.type_name` is present in `type_definitions` to satisfy foreign key constraints.
+/// - Every distinct `(node.type_name, key)` is present in `type_attributes`.
+/// - Every `PartDef` attribute with a `default_value` is seeded into `properties` when omitted from `node.properties`.
+///
+/// ## 3. Preconditions
+/// - `SysmlModel` defines `AlphaComponent` with default attributes; `nodes` includes both `AlphaComponent` and `BetaTopologyOnlyType`.
+///
+/// ## 4. Postconditions
+/// - Generated Dart source contains `INSERT OR REPLACE` statements for all unioned types, attributes, and default properties.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(T + A + N + P)$ linear in types, attributes, nodes, and properties.
+/// - Space Complexity: $O(T + A + N + P)$ for generated Dart source string.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Panics in test if any unioned type, attribute, or default property is missing from the generated seed.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FLUTTER-GENERATE-DOMAIN-SEED]
+#[test]
+fn test_generate_domain_seed_dart_unions_topology_types_attributes_and_part_defaults() {
+    let mut model = SysmlModel::default();
+    let mut alpha_part = PartDef::default();
+    alpha_part.name = "AlphaComponent".to_string();
+    alpha_part.is_def = true;
+    alpha_part.attributes.push(AttributeDef {
+        name: "default_threshold".to_string(),
+        type_name: "Real".to_string(),
+        default_value: Some("42.5".to_string()),
+        doc: None,
+    });
+    alpha_part.attributes.push(AttributeDef {
+        name: "override_metric".to_string(),
+        type_name: "Real".to_string(),
+        default_value: Some("10.0".to_string()),
+        doc: None,
+    });
+    alpha_part.attributes.push(AttributeDef {
+        name: "active_flag".to_string(),
+        type_name: "Boolean".to_string(),
+        default_value: Some("true".to_string()),
+        doc: None,
+    });
+    alpha_part.attributes.push(AttributeDef {
+        name: "mode_tag".to_string(),
+        type_name: "String".to_string(),
+        default_value: Some("NOMINAL".to_string()),
+        doc: None,
+    });
+    model.parts.push(alpha_part);
+
+    let mut alpha_props = BTreeMap::new();
+    alpha_props.insert("override_metric".to_string(), serde_json::json!(99.5));
+    alpha_props.insert("dynamic_extra_metric".to_string(), serde_json::json!(7.25));
+
+    let mut beta_props = BTreeMap::new();
+    beta_props.insert("topology_only_prop".to_string(), serde_json::json!("READY"));
+    beta_props.insert("topology_only_flag".to_string(), serde_json::json!(false));
+
+    let nodes = vec![
+        TopologyNode {
+            id: "NODE_ALPHA_01".to_string(),
+            type_name: "AlphaComponent".to_string(),
+            label: "Alpha Node 01".to_string(),
+            parent_id: None,
+            properties: alpha_props,
+            created_at: 1000,
+            updated_at: 2000,
+        },
+        TopologyNode {
+            id: "NODE_BETA_02".to_string(),
+            type_name: "BetaTopologyOnlyType".to_string(),
+            label: "Beta Node 02".to_string(),
+            parent_id: Some("NODE_ALPHA_01".to_string()),
+            properties: beta_props,
+            created_at: 1000,
+            updated_at: 2000,
+        },
+    ];
+
+    let seed_src = generate_domain_seed_dart(&model, &nodes, 0x1234_5678_9ABC_DEF0);
+
+    // (a) Union of model.parts and topology-only node.type_name in type_definitions
+    assert!(
+        seed_src.contains("['AlphaComponent', 'Alpha Component', 'layers']"),
+        "Must seed AlphaComponent in type_definitions"
+    );
+    assert!(
+        seed_src.contains("['BetaTopologyOnlyType', 'Beta Topology Only Type', 'layers']"),
+        "Must seed topology-only BetaTopologyOnlyType in type_definitions"
+    );
+
+    // (b) Union of part.attributes and dynamic node.properties keys in type_attributes
+    assert!(
+        seed_src.contains("['AlphaComponent', 'dynamic_extra_metric'"),
+        "Must seed dynamic_extra_metric in type_attributes for AlphaComponent"
+    );
+    assert!(
+        seed_src.contains("['BetaTopologyOnlyType', 'topology_only_prop'"),
+        "Must seed topology_only_prop in type_attributes for BetaTopologyOnlyType"
+    );
+    assert!(
+        seed_src.contains("['BetaTopologyOnlyType', 'topology_only_flag'"),
+        "Must seed topology_only_flag in type_attributes for BetaTopologyOnlyType"
+    );
+
+    // (c) Fallback seeding of PartDef default_value attributes into properties when not overridden
+    assert!(
+        seed_src.contains("['NODE_ALPHA_01', 'override_metric', null, 99.5, 'double']"),
+        "Must seed overridden override_metric = 99.5 for NODE_ALPHA_01"
+    );
+    assert!(
+        seed_src.contains("['NODE_ALPHA_01', 'default_threshold', null, 42.5, 'double']"),
+        "Must seed fallback default_threshold = 42.5 for NODE_ALPHA_01"
+    );
+    assert!(
+        seed_src.contains("['NODE_ALPHA_01', 'active_flag', 'true', 1, 'bool']"),
+        "Must seed fallback active_flag = true for NODE_ALPHA_01"
+    );
+    assert!(
+        seed_src.contains("['NODE_ALPHA_01', 'mode_tag', 'NOMINAL', null, 'text']"),
+        "Must seed fallback mode_tag = 'NOMINAL' for NODE_ALPHA_01"
+    );
 }

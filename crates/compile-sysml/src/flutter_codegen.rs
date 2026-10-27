@@ -39,7 +39,7 @@
 //! Realises: [REQ-COMPILER-FLUTTER-CODEGEN], [DO-330-TQL-4-CODEGEN], [MIL-STD-1472H-SPATIAL]
 
 use deap_core::sysml_ast::SysmlModel;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -853,9 +853,11 @@ pub fn generate_domain_seed_dart(
 
     out.push_str("    final batch = txn.batch();\n\n");
 
-    // 1. Seed type_definitions
+    // 1. Seed type_definitions (union of model.parts and distinct topology node.type_name values)
     out.push_str("    // 1. Seed type_definitions\n");
+    let mut seen_types = BTreeSet::new();
     for part in &model.parts {
+        seen_types.insert(part.name.clone());
         let display = format_display_name(&part.name);
         out.push_str(&format!(
             "    batch.rawInsert(\n      'INSERT OR REPLACE INTO type_definitions (type_name, display_name, icon_symbol) VALUES (?, ?, ?)',\n      ['{}', '{}', 'layers'],\n    );\n",
@@ -863,11 +865,26 @@ pub fn generate_domain_seed_dart(
             escape_dart_single_quoted(&display)
         ));
     }
+    for node in nodes {
+        let t_name = node.type_name.trim();
+        if !t_name.is_empty() && seen_types.insert(t_name.to_string()) {
+            let display = format_display_name(t_name);
+            out.push_str(&format!(
+                "    batch.rawInsert(\n      'INSERT OR REPLACE INTO type_definitions (type_name, display_name, icon_symbol) VALUES (?, ?, ?)',\n      ['{}', '{}', 'layers'],\n    );\n",
+                escape_dart_single_quoted(t_name),
+                escape_dart_single_quoted(&display)
+            ));
+        }
+    }
 
-    // 2. Seed type_attributes
+    // 2. Seed type_attributes (union of part.attributes and dynamic node.properties keys)
     out.push_str("\n    // 2. Seed type_attributes\n");
+    let mut seen_type_attrs: BTreeSet<(String, String)> = BTreeSet::new();
+    let mut next_order_by_type: BTreeMap<String, usize> = BTreeMap::new();
     for part in &model.parts {
         for (order, attr) in part.attributes.iter().enumerate() {
+            seen_type_attrs.insert((part.name.clone(), attr.name.clone()));
+            next_order_by_type.insert(part.name.clone(), order.saturating_add(1));
             let label = format_display_name(&attr.name);
             let field_type = if attr.type_name == "Real" || attr.type_name == "Float" || attr.type_name == "Double" {
                 "double"
@@ -906,6 +923,48 @@ pub fn generate_domain_seed_dart(
             ));
         }
     }
+    for node in nodes {
+        let t_name = node.type_name.trim();
+        if t_name.is_empty() {
+            continue;
+        }
+        for (k, v) in &node.properties {
+            let key_trimmed = k.trim();
+            if key_trimmed.is_empty() {
+                continue;
+            }
+            if seen_type_attrs.insert((t_name.to_string(), key_trimmed.to_string())) {
+                let order = next_order_by_type.get(t_name).copied().unwrap_or(0);
+                next_order_by_type.insert(t_name.to_string(), order.saturating_add(1));
+                let label = format_display_name(key_trimmed);
+                let field_type = if v.is_number() {
+                    "double"
+                } else if v.is_boolean() {
+                    "bool"
+                } else {
+                    "text"
+                };
+                let default_str = if let Some(num) = v.as_f64() {
+                    format!("'{}'", num)
+                } else if let Some(b) = v.as_bool() {
+                    format!("'{}'", b)
+                } else if let Some(s) = v.as_str() {
+                    format!("'{}'", escape_dart_single_quoted(s))
+                } else {
+                    "null".to_string()
+                };
+                out.push_str(&format!(
+                    "    batch.rawInsert(\n      '''INSERT OR REPLACE INTO type_attributes \n         (type_name, key, label, field_type, section_label, section_order, is_required, min_value, max_value, default_value) \n         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',\n      ['{}', '{}', '{}', '{}', 'General', {}, 1, null, null, {}],\n    );\n",
+                    escape_dart_single_quoted(t_name),
+                    escape_dart_single_quoted(key_trimmed),
+                    escape_dart_single_quoted(&label),
+                    escape_dart_single_quoted(field_type),
+                    order,
+                    default_str
+                ));
+            }
+        }
+    }
 
     // 3. Seed type_relations
     out.push_str("\n    // 3. Seed type_relations\n");
@@ -939,11 +998,53 @@ pub fn generate_domain_seed_dart(
         ));
     }
 
-    // 5. Seed properties (EAV)
+    // 5. Seed properties (EAV) merging PartDef default_value attributes when not overridden
     out.push_str("\n    // 5. Seed properties\n");
     for node in nodes {
         let node_id_esc = escape_dart_single_quoted(&node.id);
-        for (k, v) in &node.properties {
+        let mut merged_props: BTreeMap<String, serde_json::Value> = node.properties.clone();
+        if let Some(part) = model.parts.iter().find(|p| p.name == node.type_name) {
+            for attr in &part.attributes {
+                if !merged_props.contains_key(&attr.name) {
+                    if let Some(raw_def) = &attr.default_value {
+                        let trimmed_def = raw_def.trim();
+                        let val = if attr.type_name == "Real"
+                            || attr.type_name == "Float"
+                            || attr.type_name == "Double"
+                            || attr.type_name == "Integer"
+                            || attr.type_name == "Int"
+                        {
+                            if let Ok(num) = trimmed_def.parse::<f64>() {
+                                serde_json::json!(num)
+                            } else {
+                                serde_json::Value::String(trimmed_def.to_string())
+                            }
+                        } else if attr.type_name == "Boolean" || attr.type_name == "Bool" {
+                            if trimmed_def.eq_ignore_ascii_case("true") {
+                                serde_json::Value::Bool(true)
+                            } else if trimmed_def.eq_ignore_ascii_case("false") {
+                                serde_json::Value::Bool(false)
+                            } else {
+                                serde_json::Value::String(trimmed_def.to_string())
+                            }
+                        } else {
+                            let unquoted = trimmed_def
+                                .strip_prefix('"')
+                                .and_then(|s| s.strip_suffix('"'))
+                                .or_else(|| {
+                                    trimmed_def
+                                        .strip_prefix('\'')
+                                        .and_then(|s| s.strip_suffix('\''))
+                                })
+                                .unwrap_or(trimmed_def);
+                            serde_json::Value::String(unquoted.to_string())
+                        };
+                        merged_props.insert(attr.name.clone(), val);
+                    }
+                }
+            }
+        }
+        for (k, v) in &merged_props {
             let key_esc = escape_dart_single_quoted(k);
             if let Some(num) = v.as_f64() {
                 out.push_str(&format!(
