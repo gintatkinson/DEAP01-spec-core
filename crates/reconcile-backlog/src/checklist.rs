@@ -477,7 +477,9 @@ pub fn clean_unpopulated_placeholders_counted(content: &str) -> (String, usize) 
             // If there was preceding non-envelope text, peel only trailing envelope from `before`
             let mut j = pos;
             while j > line_start {
-                let prev_char = rest[..j].chars().next_back().unwrap();
+                let Some(prev_char) = rest.get(..j).and_then(|s| s.chars().next_back()) else {
+                    break;
+                };
                 if prev_char == ' ' || prev_char == '\t' || prev_char == '*' || prev_char == '_' || prev_char == '(' {
                     j -= prev_char.len_utf8();
                 } else {
@@ -1219,7 +1221,11 @@ pub fn synthesize_and_reconcile_hierarchy(
     let mut updated = parent_spec.content.clone();
 
     if is_epic {
-        let total_epics = child_specs.iter().filter(|s| is_spec_epic(s)).count();
+        let total_epics = child_specs
+            .iter()
+            .filter(|s| s.rel_path != parent_spec.rel_path && is_spec_epic(s))
+            .count()
+            + 1;
         let mut child_features: Vec<&crate::LoadedSpec> = Vec::new();
         let mut child_use_cases: Vec<&crate::LoadedSpec> = Vec::new();
         let mut child_user_stories: Vec<&crate::LoadedSpec> = Vec::new();
@@ -1326,7 +1332,11 @@ pub fn synthesize_and_reconcile_hierarchy(
             }
         }
     } else if is_feature {
-        let total_features = child_specs.iter().filter(|s| is_spec_feature(s)).count();
+        let total_features = child_specs
+            .iter()
+            .filter(|s| s.rel_path != parent_spec.rel_path && is_spec_feature(s))
+            .count()
+            + 1;
         let mut child_use_cases: Vec<&crate::LoadedSpec> = Vec::new();
         let mut child_user_stories: Vec<&crate::LoadedSpec> = Vec::new();
 
@@ -2019,6 +2029,178 @@ Subsystem composition.
         assert!(
             reconciled_feat.contains("User Story 01: Operator Run"),
             "Single-feature workspace must bind child user story when child_specs includes parent_spec, got:\n{}",
+            reconciled_feat
+        );
+    }
+
+    /// Verifies that `synthesize_and_reconcile_hierarchy` does not undercount `total_epics` or `total_features` when `parent_spec` is excluded from `child_specs` (Issue #506).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_506_multi_parent_hierarchy_when_child_specs_excludes_parent_spec` in `crates/reconcile-backlog/src/checklist.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves strict subsystem/epic isolation across multi-Epic and multi-Feature workspaces regardless of whether `parent_spec` is present in `child_specs`.
+    ///
+    /// ## 3. Preconditions
+    /// - Workspace has 2 Epics (`Radar` and `Sonar`) and 2 Features (`Radar` and `Sonar`), and `child_specs` passed to `synthesize_and_reconcile_hierarchy` excludes `parent_spec`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts that `epic_radar` does not bind ` Sonar` children and `feat_radar` does not bind `Sonar` Use Cases or User Stories.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over specification slice length.
+    /// - Space Complexity: O(N) bounded auxiliary memory for test fixtures.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `synthesize_and_reconcile_hierarchy`.
+    /// - State: Maintains consistent state invariants across hierarchy synthesis without cross-subsystem contamination.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `RECONCILE-BACKLOG-CHECKLIST`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-MULTI-PARENT-ISOLATION] | SysML v2: TestCaseDef(test_issue_506_multi_parent_hierarchy_when_child_specs_excludes_parent_spec) | Issue: #506
+    #[test]
+    fn test_issue_506_multi_parent_hierarchy_when_child_specs_excludes_parent_spec() {
+        use crate::frontmatter::SpecFrontmatter;
+        use crate::LoadedSpec;
+        use std::path::PathBuf;
+
+        let epic_radar = LoadedSpec {
+            path: PathBuf::from("docs/epics/EPIC-01-Radar.md"),
+            rel_path: "docs/epics/EPIC-01-Radar.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Epic 01: Radar Subsystem".to_string(),
+                spec_type: "epic".to_string(),
+                issue_id: Some(1),
+                subsystem: Some("Radar".to_string()),
+                ..Default::default()
+            },
+            content: "# Epic 01: Radar Subsystem\n\n## 2. Requirements & Checklist\n*To be populated after Phase 2*\n".to_string(),
+        };
+
+        let epic_sonar = LoadedSpec {
+            path: PathBuf::from("docs/epics/EPIC-02-Sonar.md"),
+            rel_path: "docs/epics/EPIC-02-Sonar.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Epic 02: Sonar Subsystem".to_string(),
+                spec_type: "epic".to_string(),
+                issue_id: Some(2),
+                subsystem: Some("Sonar".to_string()),
+                ..Default::default()
+            },
+            content: "# Epic 02: Sonar Subsystem\n".to_string(),
+        };
+
+        let feat_radar = LoadedSpec {
+            path: PathBuf::from("docs/features/FEAT-01-RadarTracker.md"),
+            rel_path: "docs/features/FEAT-01-RadarTracker.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Feature 01: Radar Tracker".to_string(),
+                spec_type: "feature".to_string(),
+                issue_id: Some(11),
+                epic: Some("EPIC-01-Radar".to_string()),
+                subsystem: Some("Radar".to_string()),
+                ..Default::default()
+            },
+            content: "# Feature 01: Radar Tracker\n\n### Associated Use Cases & User Stories\n#### Associated Use Cases\n*To be populated after Phase 3*\n\n#### Associated User Stories\n*To be populated after Phase 3*\n".to_string(),
+        };
+
+        let feat_sonar = LoadedSpec {
+            path: PathBuf::from("docs/features/FEAT-02-SonarArray.md"),
+            rel_path: "docs/features/FEAT-02-SonarArray.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Feature 02: Sonar Array".to_string(),
+                spec_type: "feature".to_string(),
+                issue_id: Some(12),
+                epic: Some("EPIC-02-Sonar".to_string()),
+                subsystem: Some("Sonar".to_string()),
+                ..Default::default()
+            },
+            content: "# Feature 02: Sonar Array\n".to_string(),
+        };
+
+        let uc_sonar = LoadedSpec {
+            path: PathBuf::from("docs/use-cases/UC-02-SonarPing.md"),
+            rel_path: "docs/use-cases/UC-02-SonarPing.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Use Case 02: Sonar Ping".to_string(),
+                spec_type: "use_case".to_string(),
+                issue_id: Some(22),
+                subsystem: Some("Sonar".to_string()),
+                ..Default::default()
+            },
+            content: "# Use Case 02: Sonar Ping\n".to_string(),
+        };
+
+        let us_sonar = LoadedSpec {
+            path: PathBuf::from("docs/user-stories/US-02-SonarOperator.md"),
+            rel_path: "docs/user-stories/US-02-SonarOperator.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "User Story 02: Sonar Operator".to_string(),
+                spec_type: "user-story".to_string(),
+                issue_id: Some(32),
+                subsystem: Some("Sonar".to_string()),
+                ..Default::default()
+            },
+            content: "# User Story 02: Sonar Operator\n".to_string(),
+        };
+
+        let issue_index = crate::tracker::IssueIndex::default();
+
+        // Pass child_specs WITHOUT epic_radar (only 1 other epic in slice)
+        let children_for_epic = vec![
+            epic_sonar.clone(),
+            feat_radar.clone(),
+            feat_sonar.clone(),
+            uc_sonar.clone(),
+            us_sonar.clone(),
+        ];
+        let reconciled_epic = synthesize_and_reconcile_hierarchy(
+            &epic_radar,
+            &children_for_epic,
+            "org/repo",
+            "main",
+            &issue_index,
+        );
+        assert!(
+            reconciled_epic.contains("Feature 01: Radar Tracker"),
+            "Radar Epic must bind Radar Feature, got:\n{}",
+            reconciled_epic
+        );
+        assert!(
+            !reconciled_epic.contains("Feature 02: Sonar Array"),
+            "Radar Epic must NOT bind unrelated Sonar Feature when parent_spec is excluded from child_specs, got:\n{}",
+            reconciled_epic
+        );
+        assert!(
+            !reconciled_epic.contains("Use Case 02: Sonar Ping"),
+            "Radar Epic must NOT bind unrelated Sonar Use Case when parent_spec is excluded from child_specs, got:\n{}",
+            reconciled_epic
+        );
+
+        // Pass child_specs WITHOUT feat_radar (only 1 other feature in slice)
+        let children_for_feat = vec![
+            epic_radar,
+            epic_sonar,
+            feat_sonar,
+            uc_sonar,
+            us_sonar,
+        ];
+        let reconciled_feat = synthesize_and_reconcile_hierarchy(
+            &feat_radar,
+            &children_for_feat,
+            "org/repo",
+            "main",
+            &issue_index,
+        );
+        assert!(
+            !reconciled_feat.contains("Use Case 02: Sonar Ping"),
+            "Radar Feature must NOT bind unrelated Sonar Use Case when parent_spec is excluded from child_specs, got:\n{}",
+            reconciled_feat
+        );
+        assert!(
+            !reconciled_feat.contains("User Story 02: Sonar Operator"),
+            "Radar Feature must NOT bind unrelated Sonar User Story when parent_spec is excluded from child_specs, got:\n{}",
             reconciled_feat
         );
     }

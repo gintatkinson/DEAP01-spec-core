@@ -206,23 +206,38 @@ fn parse_table_row(line: &str) -> Option<(String, String)> {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-ADVANCE-HTML-COMMENT-STATE] | SysML v2: ActionDef(advance_html_comment_state) | Issue: #522
 fn advance_html_comment_state(line_trimmed: &str, in_html_comment: &mut bool) -> bool {
-    if *in_html_comment {
-        if let Some((_, after_close)) = line_trimmed.split_once("-->") {
-            *in_html_comment = false;
-            let rem = after_close.trim();
-            if rem.starts_with("<!--") && !rem.contains("-->") {
-                *in_html_comment = true;
+    let mut rest = line_trimmed.trim();
+    if rest.is_empty() {
+        return *in_html_comment;
+    }
+    let mut consumed_any = false;
+    loop {
+        if *in_html_comment {
+            consumed_any = true;
+            if let Some((_, after_close)) = rest.split_once("-->") {
+                *in_html_comment = false;
+                rest = after_close.trim();
+                if rest.is_empty() {
+                    return true;
+                }
+            } else {
+                return true;
             }
+        } else if let Some(after_open) = rest.strip_prefix("<!--") {
+            consumed_any = true;
+            if let Some((_, after_close)) = after_open.split_once("-->") {
+                rest = after_close.trim();
+                if rest.is_empty() {
+                    return true;
+                }
+            } else {
+                *in_html_comment = true;
+                return true;
+            }
+        } else {
+            return consumed_any && rest.is_empty();
         }
-        return true;
     }
-    if let Some(after_open) = line_trimmed.strip_prefix("<!--") {
-        if !after_open.contains("-->") {
-            *in_html_comment = true;
-        }
-        return true;
-    }
-    line_trimmed.ends_with("-->")
 }
 
 /// Extracts metadata from native CommonMark 2-column table or YAML frontmatter.
@@ -1084,6 +1099,101 @@ type: feature
             updated.matches("| Attribute | Specification Detail |").count(),
             1,
             "update_frontmatter_issue_id must not prepend a duplicate CommonMark table when a multi-line HTML comment precedes the table"
+        );
+        Ok(())
+    }
+
+    /// Verifies that `advance_html_comment_state`, `parse_frontmatter`, and `update_frontmatter_issue_id` handle compound multi-comment lines and stray `-->` tokens accurately (Issue #506).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_506_compound_html_comment_state_and_stray_arrow` in `crates/reconcile-backlog/src/frontmatter.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic state transitions across multiple `<!-- ... -->` comment pairs on a single line and prevents false comment detection on non-comment lines ending with `-->`.
+    ///
+    /// ## 3. Preconditions
+    /// - Input Markdown document contains compound HTML comment openings (`<!-- c1 --> <!-- c2`) and closings (`--> <!-- c3 --> <!-- c4`) spanning >25 lines with interior pipe rows before a CommonMark metadata table.
+    ///
+    /// ## 4. Postconditions
+    /// - `advance_html_comment_state` accurately tracks open/closed state, `parse_frontmatter` extracts `issue_id == Some(506)`, and `update_frontmatter_issue_id` updates `Issue ID` in place without duplicate table injection.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over document line count.
+    /// - Space Complexity: O(N) bounded auxiliary memory for test fixture strings.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `advance_html_comment_state`, `parse_frontmatter`, and `update_frontmatter_issue_id`.
+    /// - State: Maintains consistent state invariants across frontmatter parsing and updating without partial mutation.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `RECONCILE-BACKLOG-FRONTMATTER`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-COMPOUND-HTML-COMMENT-GUARD] | SysML v2: TestCaseDef(test_issue_506_compound_html_comment_state_and_stray_arrow) | Issue: #506
+    #[test]
+    fn test_issue_506_compound_html_comment_state_and_stray_arrow() -> Result<(), Box<dyn std::error::Error>> {
+        let mut in_comment = false;
+        assert!(
+            !advance_html_comment_state("Plain text arrow -->", &mut in_comment),
+            "Non-comment line ending with '-->' must not be classified as an HTML comment when in_html_comment is false"
+        );
+        assert!(!in_comment);
+
+        assert!(
+            advance_html_comment_state("<!-- closed inline --> <!-- unclosed second comment", &mut in_comment),
+            "Line starting with closed inline comment followed by unclosed comment must return true"
+        );
+        assert!(
+            in_comment,
+            "Trailing unclosed comment after inline closed comment must leave in_html_comment == true"
+        );
+
+        assert!(
+            advance_html_comment_state("--> <!-- middle closed --> <!-- trailing open", &mut in_comment),
+            "Compound close-then-reopen comment line must return true"
+        );
+        assert!(
+            in_comment,
+            "Compound close-then-reopen comment line with unclosed trailing '<!--' must leave in_html_comment == true"
+        );
+
+        assert!(
+            advance_html_comment_state("closing final comment -->", &mut in_comment),
+            "Closing comment line must return true"
+        );
+        assert!(!in_comment);
+
+        let mut preamble = String::from("<!-- header 1 --> <!-- unclosed block 1\n");
+        for idx in 1..=20 {
+            if idx == 10 {
+                preamble.push_str("| Ignored | Comment Pipe Row |\n");
+            } else {
+                preamble.push_str(&format!("Comment body line {}\n", idx));
+            }
+        }
+        preamble.push_str("--> <!-- inline 2 --> <!-- unclosed block 2\n");
+        for idx in 21..=35 {
+            preamble.push_str(&format!("Second comment body line {}\n", idx));
+        }
+        preamble.push_str("-->\n\n");
+
+        let content = format!(
+            "{}| Attribute | Specification Detail |\n| :--- | :--- |\n| **Issue ID** | #506 |\n| **Title** | Feature 506: Compound Comment State |\n| **Type** | feature |\n\n# Feature 506: Compound Comment State\n",
+            preamble
+        );
+
+        let fm = parse_frontmatter(&content)
+            .ok_or("parse_frontmatter failed when compound multi-comment preamble preceded the metadata table")?;
+        assert_eq!(fm.issue_id, Some(506));
+        assert_eq!(fm.title, "Feature 506: Compound Comment State");
+        assert_eq!(fm.spec_type, "feature");
+
+        let updated = update_frontmatter_issue_id(&content, 507);
+        assert!(updated.contains("| **Issue ID** | #507 |"));
+        assert!(!updated.contains("#506"));
+        assert_eq!(
+            updated.matches("| Attribute | Specification Detail |").count(),
+            1,
+            "update_frontmatter_issue_id must not inject a duplicate CommonMark table after compound HTML comments"
         );
         Ok(())
     }

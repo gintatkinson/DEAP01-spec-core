@@ -32,14 +32,6 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-RECONCILE-BACKLOG-LIB, Issue Tracker as Canonical SSOT, Zero Fallback Placeholders, Automated Spec Reconciliation]
-#![allow(
-    clippy::collapsible_str_replace,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::type_complexity,
-    clippy::unwrap_used
-)]
 
 pub mod checklist;
 pub mod create_issue;
@@ -239,22 +231,42 @@ pub fn load_specifications(workspace_root: &Path) -> Vec<LoadedSpec> {
             continue;
         }
 
-        for entry in WalkDir::new(&dir).sort_by_file_name().into_iter().filter_map(|e| e.ok()) {
+        for entry_res in WalkDir::new(&dir).sort_by_file_name() {
+            let entry = match entry_res {
+                Ok(e) => e,
+                Err(e) => {
+                    eprintln!(
+                        "[reconcile-backlog] warning: failed to read directory entry under '{}': {}",
+                        dir.display(),
+                        e
+                    );
+                    continue;
+                }
+            };
             let path = entry.path();
             if path.is_file() && path.extension().map(|ext| ext == "md").unwrap_or(false) {
-                if let Ok(content) = fs::read_to_string(path) {
-                    if let Some(fm) = parse_frontmatter(&content) {
-                        let rel = path
-                            .strip_prefix(workspace_root)
-                            .unwrap_or(path)
-                            .display()
-                            .to_string();
-                        specs.push(LoadedSpec {
-                            path: path.to_path_buf(),
-                            rel_path: rel,
-                            frontmatter: fm,
-                            content,
-                        });
+                match fs::read_to_string(path) {
+                    Ok(content) => {
+                        if let Some(fm) = parse_frontmatter(&content) {
+                            let rel = path
+                                .strip_prefix(workspace_root)
+                                .unwrap_or(path)
+                                .display()
+                                .to_string();
+                            specs.push(LoadedSpec {
+                                path: path.to_path_buf(),
+                                rel_path: rel,
+                                frontmatter: fm,
+                                content,
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[reconcile-backlog] warning: failed to read specification '{}': {}",
+                            path.display(),
+                            e
+                        );
                     }
                 }
             }
@@ -1420,10 +1432,146 @@ mod tests {
     use super::*;
     use crate::tracker::{OfflineTracker, TrackerIssue, TrackerLabel};
     use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    /// RAII guard for temporary test workspace directories ensuring cleanup on scope exit or panic unwind.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `TempDirGuard` in `crates/reconcile-backlog/src/lib.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Guarantees unique per-invocation path generation via process ID, monotonic atomic counter, and nanosecond timestamp.
+    /// - Guarantees directory removal on `Drop`.
+    ///
+    /// ## 3. Preconditions
+    /// - Caller provides a valid path-safe `prefix: &str`.
+    ///
+    /// ## 4. Postconditions
+    /// - Removes `self.0` recursively when dropped.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) allocation, O(K) recursive removal over created test fixture files.
+    /// - Space Complexity: O(1) auxiliary heap storage for `PathBuf`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Exposes `path(&self) -> &Path` for test fixture operations.
+    /// - State: Cleans up temporary directory deterministically on `Drop`.
+    /// - Action: Executes without blocking or panicking.
+    /// - Resource: Prevents temporary directory leaks in `std::env::temp_dir()`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-TEST-TEMP-DIR-GUARD] | SysML v2: PartDef(TempDirGuard) | Issue: #506
+    struct TempDirGuard(PathBuf);
+
+    impl TempDirGuard {
+        /// Creates a unique temporary directory path guard with the given prefix.
+        ///
+        /// ## 1. Safety Intent & Regulatory Scope
+        /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TempDirGuard::new` in `crates/reconcile-backlog/src/lib.rs`.
+        ///
+        /// ## 2. Invariants & Mathematical Properties
+        /// - Monotonically increments `TEST_TEMP_DIR_COUNTER` to prevent concurrent test path collisions.
+        ///
+        /// ## 3. Preconditions
+        /// - `prefix: &str` is a valid filename prefix.
+        ///
+        /// ## 4. Postconditions
+        /// - Returns a `TempDirGuard` owning a unique `PathBuf` under `std::env::temp_dir()`.
+        ///
+        /// ## 5. Algorithmic Complexity Bounds
+        /// - Time Complexity: O(1).
+        /// - Space Complexity: O(1).
+        ///
+        /// ## 6. Failure Modes & Fault Tolerance
+        /// - Interface: Accepts `&str` and returns `Self`.
+        /// - State: Atomic `Ordering::Relaxed` increment is lock-free and wait-free.
+        /// - Action: Zero panicking operations.
+        /// - Resource: Bounded single `PathBuf` allocation.
+        ///
+        /// ## 7. Realization & Traceability
+        /// Realises: [REQ-RECONCILE-BACKLOG-TEST-TEMP-DIR-GUARD-NEW] | SysML v2: ActionDef(TempDirGuard::new) | Issue: #506
+        fn new(prefix: &str) -> Self {
+            let seq = TEST_TEMP_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+            let dir = std::env::temp_dir().join(format!(
+                "{}_{}_{}_{}",
+                prefix,
+                std::process::id(),
+                seq,
+                nanos
+            ));
+            Self(dir)
+        }
+
+        /// Returns a reference to the guarded temporary directory path.
+        ///
+        /// ## 1. Safety Intent & Regulatory Scope
+        /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TempDirGuard::path` in `crates/reconcile-backlog/src/lib.rs`.
+        ///
+        /// ## 2. Invariants & Mathematical Properties
+        /// - Referentially transparent accessor returning `&self.0`.
+        ///
+        /// ## 3. Preconditions
+        /// - `self` is a valid `TempDirGuard`.
+        ///
+        /// ## 4. Postconditions
+        /// - Returns `&Path` referencing the temporary directory.
+        ///
+        /// ## 5. Algorithmic Complexity Bounds
+        /// - Time Complexity: O(1).
+        /// - Space Complexity: O(1).
+        ///
+        /// ## 6. Failure Modes & Fault Tolerance
+        /// - Interface: Borrowed `&Path` slice.
+        /// - State: Read-only.
+        /// - Action: Infallible.
+        /// - Resource: Zero allocations.
+        ///
+        /// ## 7. Realization & Traceability
+        /// Realises: [REQ-RECONCILE-BACKLOG-TEST-TEMP-DIR-GUARD-PATH] | SysML v2: ActionDef(TempDirGuard::path) | Issue: #506
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TempDirGuard {
+        /// Recursively removes the guarded temporary directory when dropped.
+        ///
+        /// ## 1. Safety Intent & Regulatory Scope
+        /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TempDirGuard::drop` in `crates/reconcile-backlog/src/lib.rs`.
+        ///
+        /// ## 2. Invariants & Mathematical Properties
+        /// - Ensures zero leaked temporary directories even when a test returns early via `?` or unwinds.
+        ///
+        /// ## 3. Preconditions
+        /// - `self` is being dropped at end of scope.
+        ///
+        /// ## 4. Postconditions
+        /// - `self.0` is removed from disk if present.
+        ///
+        /// ## 5. Algorithmic Complexity Bounds
+        /// - Time Complexity: O(K) over files in `self.0`.
+        /// - Space Complexity: O(1).
+        ///
+        /// ## 6. Failure Modes & Fault Tolerance
+        /// - Interface: Standard `Drop::drop`.
+        /// - State: Ignores `NotFound` or removal errors during unwind to prevent double-panic.
+        /// - Action: Non-panicking cleanup.
+        /// - Resource: Reclaims temporary filesystem entries.
+        ///
+        /// ## 7. Realization & Traceability
+        /// Realises: [REQ-RECONCILE-BACKLOG-TEST-TEMP-DIR-GUARD-DROP] | SysML v2: ActionDef(TempDirGuard::drop) | Issue: #506
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
 
     #[test]
     fn test_relative_links_in_projected_issue_bodies_red_probe() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir = std::env::temp_dir().join(format!("reconcile_red_probe_{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)));
+        let guard = TempDirGuard::new("reconcile_red_probe");
+        let temp_dir = guard.path().to_path_buf();
         let epics_dir = temp_dir.join("docs/epics");
         let stories_dir = temp_dir.join("docs/user-stories");
         fs::create_dir_all(&epics_dir)?;
@@ -1746,7 +1894,8 @@ type: user-story
 
     #[test]
     fn test_reconciliation_workflow_reconciles_markdown_linked_and_inline_issues() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir = std::env::temp_dir().join(format!("reconcile_md_links_{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)));
+        let guard = TempDirGuard::new("reconcile_md_links");
+        let temp_dir = guard.path().to_path_buf();
         let stories_dir = temp_dir.join("docs/user-stories");
         fs::create_dir_all(&stories_dir)?;
 
@@ -1815,7 +1964,8 @@ type: user-story
 
     #[test]
     fn test_issue_439_reconcile_workflow_placeholder_telemetry() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir = std::env::temp_dir().join(format!("reconcile_telemetry_test_{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)));
+        let guard = TempDirGuard::new("reconcile_telemetry_test");
+        let temp_dir = guard.path().to_path_buf();
         let epics_dir = temp_dir.join("docs/epics");
         fs::create_dir_all(&epics_dir)?;
 
@@ -1895,10 +2045,8 @@ type: epic
     /// Realises: [REQ-RECONCILE-BACKLOG-TEST-SYNC-TITLES-AND-NESTED-BRACKET-LINKS] | SysML v2: VerificationCaseDef(test_run_reconciliation_syncs_updated_issue_titles_and_nested_bracket_links)
     #[test]
     fn test_run_reconciliation_syncs_updated_issue_titles_and_nested_bracket_links() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir = std::env::temp_dir().join(format!(
-            "reconcile_title_nested_links_{}",
-            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
-        ));
+        let guard = TempDirGuard::new("reconcile_title_nested_links");
+        let temp_dir = guard.path().to_path_buf();
         let uc_dir = temp_dir.join("docs/use-cases");
         fs::create_dir_all(&uc_dir)?;
 
@@ -1963,6 +2111,69 @@ type: use-case
         );
 
         let _ = fs::remove_dir_all(&temp_dir);
+        Ok(())
+    }
+
+    /// Verifies that `reconcile-backlog` sources contain zero crate-level clippy lint suppressions and zero production `.unwrap()` calls (Issue #506).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_506_zero_clippy_allow_overrides_and_production_unwraps` in `crates/reconcile-backlog/src/lib.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Enforces Check 34/36 lint-integrity and panic-freedom across `lib.rs`, `checklist.rs`, and `frontmatter.rs`.
+    ///
+    /// ## 3. Preconditions
+    /// - Source files `lib.rs`, `checklist.rs`, and `frontmatter.rs` are embedded at compile time via `include_str!`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts that no crate-level clippy allow attribute or production `.unwrap(` call exists in the inspected modules.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over source byte length.
+    /// - Space Complexity: O(1) auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates compile-time source slices deterministically.
+    /// - State: Read-only verification with zero filesystem mutation.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Zero heap allocations required for substring checks.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RECONCILE-BACKLOG-TEST-ZERO-CLIPPY-ALLOW-OVERRIDES] | SysML v2: VerificationCaseDef(test_issue_506_zero_clippy_allow_overrides_and_production_unwraps) | Issue: #506
+    #[test]
+    fn test_issue_506_zero_clippy_allow_overrides_and_production_unwraps() -> Result<(), Box<dyn std::error::Error>> {
+        let forbidden_allow = concat!("#![allow", "(", "\n    clippy::");
+        let forbidden_inline_allow = concat!("#![allow", "(", "clippy::");
+        for (name, src) in [
+            ("lib.rs", include_str!("lib.rs")),
+            ("checklist.rs", include_str!("checklist.rs")),
+            ("frontmatter.rs", include_str!("frontmatter.rs")),
+        ] {
+            assert!(
+                !src.contains(forbidden_allow) && !src.contains(forbidden_inline_allow),
+                "Source file {} must not contain crate-level clippy allow overrides",
+                name
+            );
+            let prod_part = src.split("#[cfg(test)]").next().unwrap_or(src);
+            let unwrap_token = concat!(".unwrap", "()");
+            assert!(
+                !prod_part.contains(unwrap_token),
+                "Production code in {} must not contain {}",
+                name,
+                unwrap_token
+            );
+        }
+
+        let created_path = {
+            let guard = TempDirGuard::new("reconcile_raii_drop_probe");
+            fs::create_dir_all(guard.path())?;
+            assert!(guard.path().exists(), "TempDirGuard directory should exist while guard is in scope");
+            guard.path().to_path_buf()
+        };
+        assert!(
+            !created_path.exists(),
+            "TempDirGuard must automatically remove temporary directory on Drop"
+        );
         Ok(())
     }
 }
