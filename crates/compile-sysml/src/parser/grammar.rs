@@ -223,6 +223,7 @@ impl<'a> SysmlParser<'a> {
                 match bytes.get(tok.span.start).copied() {
                     Some(b'&') => tok.kind = TokenKind::Ident("&".to_string()),
                     Some(b'?') => tok.kind = TokenKind::Ident("?".to_string()),
+                    Some(b'\'') => tok.kind = TokenKind::Ident("'".to_string()),
                     _ => {}
                 }
             }
@@ -230,13 +231,13 @@ impl<'a> SysmlParser<'a> {
         Ok(tokens)
     }
 
-    /// Pre-processes standalone reference `&` and optional `?` type sigils outside comments and string literals into 1-byte `,` placeholders accepted by `Scanner`.
+    /// Pre-processes standalone reference `&`, optional `?`, and lifetime/unclosed `'` sigils outside comments and string literals into 1-byte `,` placeholders accepted by `Scanner`.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::normalize_type_sigils` in `crates/compile-sysml/src/parser/grammar.rs`.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves exact 1-to-1 byte length (`out.len() == source.len()`), line numbers, column numbers, and lexical boundaries across all comments, string literals, single-quoted unrestricted identifiers (including backslash escapes), and `&&` logical operators while masking standalone `&` and `?` tokens in `PARSER-GRAMMAR`.
+    /// - Preserves exact 1-to-1 byte length (`out.len() == source.len()`), line numbers, column numbers, and lexical boundaries across all comments, string literals, single-quoted unrestricted identifiers (including backslash escapes), and `&&` logical operators while masking standalone `&`, `?`, and non-identifier `'` tokens in `PARSER-GRAMMAR`.
     ///
     /// ## 3. Preconditions
     /// - `source: &str` is a valid UTF-8 source buffer supplied to `SysmlParser::normalize_type_sigils`.
@@ -245,7 +246,7 @@ impl<'a> SysmlParser<'a> {
     /// - Returns `String` of identical byte length containing the lexically normalized SysML v2 source text.
     ///
     /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N) single pass over the characters of `source`.
+    /// - Time Complexity: O(N) bounded pass over the characters of `source`.
     /// - Space Complexity: O(N) bounded output string allocation equal to `source.len()`.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
@@ -257,7 +258,7 @@ impl<'a> SysmlParser<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-NORMALIZE-TYPE-SIGILS] | SysML v2: ActionDef(SysmlParser::normalize_type_sigils)
     fn normalize_type_sigils(source: &str) -> String {
-        if !source.contains('&') && !source.contains('?') {
+        if !source.contains('&') && !source.contains('?') && !source.contains('\'') {
             return source.to_string();
         }
         let chars: Vec<char> = source.chars().collect();
@@ -325,7 +326,7 @@ impl<'a> SysmlParser<'a> {
                         i += 2;
                         continue;
                     }
-                } else if c == '\'' {
+                } else if c == '\'' || c == '\n' {
                     in_single_quote = false;
                 }
                 i += 1;
@@ -356,8 +357,12 @@ impl<'a> SysmlParser<'a> {
             }
 
             if c == '\'' {
-                out.push(c);
-                in_single_quote = true;
+                if Self::is_closed_single_quoted_ident(&chars, i) {
+                    out.push(c);
+                    in_single_quote = true;
+                } else {
+                    out.push(',');
+                }
                 i += 1;
                 continue;
             }
@@ -385,6 +390,58 @@ impl<'a> SysmlParser<'a> {
         }
 
         out
+    }
+
+    /// Determines whether the single quote at `chars[start]` opens a valid closed single-quoted unrestricted identifier on the same line rather than a lifetime prefix (`&'a T`) or unclosed quote.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::is_closed_single_quoted_ident` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Returns `false` when immediately preceded by `&` (lifetime syntax `&'a`) or when no matching closing `'` exists before end-of-line or when the closing `'` is immediately followed by an identifier continuation character (`&'a ... &'b`).
+    ///
+    /// ## 3. Preconditions
+    /// - `chars: &[char]` is the character slice of the source buffer and `start: usize` indexes a `'` character.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `bool` indicating whether `chars[start]` initiates a well-formed single-quoted unrestricted identifier on the current line.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(L) bounded by the remaining characters `L` on the current line.
+    /// - Space Complexity: O(1) constant auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total function over `(&[char], usize)` using checked slice indexing.
+    /// - State: Stateless pure predicate with zero mutation.
+    /// - Action: Strictly advancing index `j` guarantees bounded termination at newline or end-of-slice.
+    /// - Resource: Zero heap allocations (`PARSER-GRAMMAR`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-IS-CLOSED-SINGLE-QUOTED-IDENT] | SysML v2: ActionDef(SysmlParser::is_closed_single_quoted_ident)
+    fn is_closed_single_quoted_ident(chars: &[char], start: usize) -> bool {
+        if start > 0 && chars.get(start - 1) == Some(&'&') {
+            return false;
+        }
+        let mut j = start + 1;
+        while let Some(&ch) = chars.get(j) {
+            if ch == '\n' || ch == '\r' {
+                return false;
+            }
+            if ch == '\\' {
+                j += 2;
+                continue;
+            }
+            if ch == '\'' {
+                if let Some(&after) = chars.get(j + 1) {
+                    if after.is_ascii_alphanumeric() || after == '_' {
+                        return false;
+                    }
+                }
+                return j > start + 1;
+            }
+            j += 1;
+        }
+        false
     }
 
     /// Parse a package or top-level file definitions into PackageDef.
@@ -2008,17 +2065,31 @@ impl<'a> SysmlParser<'a> {
         }
 
         if name.is_none() {
-            name = match (&source, &target) {
-                (Some(s), Some(t)) => Some(format!("{s}_to_{t}")),
-                _ => {
-                    let trimmed = raw.trim();
-                    if trimmed.is_empty() {
-                        None
-                    } else {
-                        Some(trimmed.to_string())
+            let has_extra_clauses = trigger.is_some() || guard.is_some() || effect.is_some();
+            if has_extra_clauses && (source.is_some() || target.is_some()) {
+                let temp = TransitionDef {
+                    name: None,
+                    source: source.clone(),
+                    target: target.clone(),
+                    trigger: trigger.clone(),
+                    guard: guard.clone(),
+                    effect: effect.clone(),
+                    doc: None,
+                };
+                name = Some(Self::format_transition_clause(&temp));
+            } else {
+                name = match (&source, &target) {
+                    (Some(s), Some(t)) => Some(format!("{s}_to_{t}")),
+                    _ => {
+                        let trimmed = raw.trim();
+                        if trimmed.is_empty() {
+                            None
+                        } else {
+                            Some(trimmed.to_string())
+                        }
                     }
-                }
-            };
+                };
+            }
         }
 
         TransitionDef {
@@ -2029,6 +2100,68 @@ impl<'a> SysmlParser<'a> {
             guard,
             effect,
             doc: None,
+        }
+    }
+
+    /// Formats a structured `TransitionDef` into a canonical SysML v2 transition statement body (`[name] [first <src>] [accept <trig>] [if <grd>] [do <eff>] [then <tgt>]`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::format_transition_clause` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves round-trip equivalence (`SysmlParser::parse_transition_clause(&SysmlParser::format_transition_clause(t))`) across `name`, `source`, `target`, `trigger`, `guard`, and `effect` fields while suppressing synthetic `{source}_to_{target}` placeholders.
+    ///
+    /// ## 3. Preconditions
+    /// - `t: &TransitionDef` is a valid AST transition definition.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `String` containing the normalized SysML v2 transition clause body suitable for `transition <body>;`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(K) linear in the total byte length `K` of the transition fields.
+    /// - Space Complexity: O(K) bounded output string allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total function over `&TransitionDef` with zero panics.
+    /// - State: Stateless pure formatting function.
+    /// - Action: Executes deterministically in constant field sequence.
+    /// - Resource: Bounded heap allocation proportional to transition clause length (`PARSER-GRAMMAR`).
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-FORMAT-TRANSITION-CLAUSE] | SysML v2: ActionDef(SysmlParser::format_transition_clause)
+    pub fn format_transition_clause(t: &TransitionDef) -> String {
+        let mut parts = Vec::new();
+        if let Some(n) = t.name.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            let is_synthetic = matches!(
+                (t.source.as_deref(), t.target.as_deref()),
+                (Some(s), Some(tg)) if n == format!("{s}_to_{tg}")
+            );
+            if !is_synthetic
+                && !n.contains(char::is_whitespace)
+                && !Self::is_transition_clause_keyword(n)
+            {
+                parts.push(n.to_string());
+            }
+        }
+        if let Some(s) = t.source.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            parts.push(format!("first {s}"));
+        }
+        if let Some(trig) = t.trigger.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            parts.push(format!("accept {trig}"));
+        }
+        if let Some(grd) = t.guard.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            parts.push(format!("if {grd}"));
+        }
+        if let Some(eff) = t.effect.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            parts.push(format!("do {eff}"));
+        }
+        if let Some(tg) = t.target.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            parts.push(format!("then {tg}"));
+        }
+        if parts.is_empty() {
+            t.name.as_deref().unwrap_or("").trim().to_string()
+        } else {
+            parts.join(" ")
         }
     }
 
@@ -3420,7 +3553,8 @@ impl<'a> SysmlParser<'a> {
         let tok = self.peek();
         match &tok.kind {
             TokenKind::Ident(s)
-                if !((s == "&" || s == "?") && tok.span.end.saturating_sub(tok.span.start) == 1) =>
+                if !((s == "&" || s == "?" || s == "'")
+                    && tok.span.end.saturating_sub(tok.span.start) == 1) =>
             {
                 let name = s.clone();
                 self.advance();
@@ -3569,7 +3703,7 @@ impl<'a> SysmlParser<'a> {
             return Ok(out);
         }
 
-        // 2. Reference prefixes: &T, &mut T, &const T, &&T
+        // 2. Reference prefixes: &T, &mut T, &const T, &'a T, &'a mut T, &&T
         let is_single_amp = matches!(
             self.peek(),
             Token {
@@ -3584,6 +3718,19 @@ impl<'a> SysmlParser<'a> {
             } else {
                 self.advance();
                 out.push('&');
+            }
+            if matches!(
+                self.peek(),
+                Token {
+                    kind: TokenKind::Ident(s),
+                    span,
+                } if s == "'" && span.end.saturating_sub(span.start) == 1
+            ) {
+                self.advance();
+                let lifetime = self.parse_identifier()?;
+                out.push('\'');
+                out.push_str(&lifetime);
+                out.push(' ');
             }
             if let TokenKind::Ident(s) = self.peek_kind().clone() {
                 if s == "mut" || s == "const" {
@@ -6022,6 +6169,114 @@ package StateMachinePkg {
             .expect_err("expected error on trailing package typo");
         assert_eq!(expr_err.span.start, z_typo_start);
         assert_eq!(expr_err.span.end, z_typo_start + "atribute".len());
+
+        Ok(())
+    }
+
+    /// Verifies that lifetime sigils (`&'a T?`, `&'static mut [u8]`) preserve 1-byte spans without latching `in_single_quote` and that `TransitionDef` clauses round-trip losslessly through `to_sysml` and `parse_source`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_521_lifetime_sigils_and_transition_clause_roundtrip` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Enforces 1-byte `Span` invariance across lifetime reference types (`&'a T?`) and preserves `TransitionDef` `source`, `target`, `trigger`, `guard`, and `effect` fields across `PackageDef::to_sysml` -> `SysmlParser::parse_source`.
+    ///
+    /// ## 3. Preconditions
+    /// - Input SysML v2 fixtures contain lifetime reference types, trailing `?` sigils, unclosed single quotes, and multi-clause state transitions.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts zero span drift on lifetime tokens, rejects unclosed single quotes in identifier positions, and verifies lossless `TransitionDef` round-trip conservation.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over fixture byte length.
+    /// - Space Complexity: O(N) for token and AST structures.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates `ParseError` rejection on malformed unclosed single quotes.
+    /// - State: Stateless in-memory verification.
+    /// - Action: Executes deterministically with zero external I/O.
+    /// - Resource: Bounded stack and heap allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-ISSUE-521-LIFETIME-AND-TRANSITION-ROUNDTRIP] | SysML v2: TestCaseDef(test_issue_521_lifetime_sigils_and_transition_clause_roundtrip)
+    #[test]
+    fn test_issue_521_lifetime_sigils_and_transition_clause_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::semantic::serializer::SysmlSerializable;
+
+        // 1. Lifetime reference type followed by optional '?' sigil and second reference on same line
+        let lifetime_src = "package P {\n    attribute r : &'a T?;\n    attribute buf : &'static mut [u8];\n}\n";
+        let tokens = SysmlParser::tokenize_source(lifetime_src)?;
+        let q_tok = tokens
+            .iter()
+            .find(|t| t.kind == TokenKind::Ident("?".to_string()))
+            .ok_or("missing '?' token after lifetime reference &'a T")?;
+        assert_eq!(
+            q_tok.span,
+            Span {
+                start: 35,
+                end: 36,
+                line: 2,
+                col: 24,
+            },
+            "'?' after &'a T must be normalized and preserve exact 1-byte span"
+        );
+
+        let pkg = SysmlParser::parse_source(lifetime_src, "P")?;
+        assert_eq!(pkg.attribute_defs.first().map(|a| a.type_name.as_str()), Some("&'a T?"));
+        assert_eq!(pkg.attribute_defs.get(1).map(|a| a.type_name.as_str()), Some("&'static mut [u8]"));
+
+        // Multiple lifetimes on the same line (ensuring 'a ... 'b does not form a synthetic single-quoted ident)
+        let multi_lifetime_src = "package P {\n    attribute pair : (&'a T, &'b mut U?);\n}\n";
+        let multi_pkg = SysmlParser::parse_source(multi_lifetime_src, "P")?;
+        assert_eq!(
+            multi_pkg.attribute_defs.first().map(|a| a.type_name.as_str()),
+            Some("(&'a T, &'b mut U?)")
+        );
+
+        // 2. Unclosed single quote in identifier position must fail closed
+        assert!(
+            SysmlParser::parse_source("package P { part def 'a; }", "P").is_err(),
+            "unclosed single quote in identifier position must fail closed"
+        );
+
+        // 3. State transition clause round-trip through PackageDef::to_sysml -> SysmlParser::parse_source
+        let state_src = "package ModePkg {\n    state def OperatingMode {\n        state Idle;\n        state Active;\n        transition first Idle accept EngageCmd if is_ready do init_actuators then Active;\n    }\n}\n";
+        let state_pkg1 = SysmlParser::parse_source(state_src, "ModePkg")?;
+        let t1 = state_pkg1
+            .state_defs
+            .first()
+            .and_then(|s| s.transitions.first())
+            .ok_or("missing transition in state_pkg1")?;
+        assert_eq!(t1.source.as_deref(), Some("Idle"));
+        assert_eq!(t1.target.as_deref(), Some("Active"));
+        assert_eq!(t1.trigger.as_deref(), Some("EngageCmd"));
+        assert_eq!(t1.guard.as_deref(), Some("is_ready"));
+        assert_eq!(t1.effect.as_deref(), Some("init_actuators"));
+
+        let emitted = state_pkg1.to_sysml(0);
+        let state_pkg2 = SysmlParser::parse_source(&emitted, "ModePkg")?;
+        let t2 = state_pkg2
+            .state_defs
+            .first()
+            .and_then(|s| s.transitions.first())
+            .ok_or("missing transition in round-tripped state_pkg2")?;
+        assert_eq!(t2.source.as_deref(), Some("Idle"));
+        assert_eq!(t2.target.as_deref(), Some("Active"));
+        assert_eq!(t2.trigger.as_deref(), Some("EngageCmd"));
+        assert_eq!(t2.guard.as_deref(), Some("is_ready"));
+        assert_eq!(t2.effect.as_deref(), Some("init_actuators"));
+
+        // 4. SysmlParser::format_transition_clause round-trip for named transitions
+        for named_raw in [
+            "t_arm first Idle accept ArmCmd if safety_ok do lock_interlock then Armed",
+            "t_fault first Armed accept FaultDetected then Faulted",
+        ] {
+            let parsed = SysmlParser::parse_transition_clause(named_raw);
+            let formatted = SysmlParser::format_transition_clause(&parsed);
+            assert_eq!(formatted, named_raw);
+            let reparsed = SysmlParser::parse_transition_clause(&formatted);
+            assert_eq!(parsed, reparsed);
+        }
 
         Ok(())
     }
