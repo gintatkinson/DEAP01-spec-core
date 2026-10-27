@@ -579,6 +579,10 @@ impl SysmlSerializable for StateDef {
             }
         }
         for t in &self.transitions {
+            let t_doc = format_doc_comment(&t.doc, indent + 4);
+            if !t_doc.is_empty() {
+                lines.push(t_doc.trim_end().to_string());
+            }
             let clause = crate::parser::grammar::SysmlParser::format_transition_clause(t);
             let rendered = if clause.is_empty() {
                 "transition"

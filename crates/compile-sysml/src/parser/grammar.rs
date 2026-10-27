@@ -1855,6 +1855,7 @@ impl<'a> SysmlParser<'a> {
         }
 
         let name = self.expect_ident()?;
+        let mut state_doc = doc;
         let mut entry_action = None;
         let mut do_action = None;
         let mut exit_action = None;
@@ -1865,15 +1866,95 @@ impl<'a> SysmlParser<'a> {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
-                if self.check(&TokenKind::Entry) {
+                let inner_doc = if let Some(d) = self.take_doc_comment() {
+                    Some(d)
+                } else if self.check(&TokenKind::Doc) {
                     self.advance();
-                    entry_action = Some(self.read_until_semi());
-                } else if self.check(&TokenKind::Do) {
+                    if let Some(d) = self.take_doc_comment() {
+                        Some(d)
+                    } else if let TokenKind::StringLit(s) = self.peek_kind().clone() {
+                        self.advance();
+                        Some(s)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                if let Some(d) = inner_doc {
+                    while matches!(self.peek_kind(), TokenKind::LineComment(_)) {
+                        self.advance();
+                    }
+                    if self.check(&TokenKind::Semi) {
+                        self.advance();
+                        if state_doc.is_none() {
+                            state_doc = Some(d);
+                        }
+                        continue;
+                    } else if self.check(&TokenKind::State) {
+                        let sub_st = self.parse_state_decl(Some(d))?;
+                        sub_states.push(sub_st);
+                        continue;
+                    } else if self.check(&TokenKind::Transition) {
+                        self.advance();
+                        let t_tokens = self.read_tokens_until_semi();
+                        let mut t_def = Self::parse_transition_tokens(&t_tokens);
+                        t_def.doc = Some(d);
+                        transitions.push(t_def);
+                        continue;
+                    } else {
+                        if state_doc.is_none() {
+                            state_doc = Some(d);
+                        }
+                        continue;
+                    }
+                }
+                if self.check(&TokenKind::Entry)
+                    || self.check(&TokenKind::Do)
+                    || self.check(&TokenKind::Exit)
+                {
+                    let clause_kind = self.peek_kind().clone();
                     self.advance();
-                    do_action = Some(self.read_until_semi());
-                } else if self.check(&TokenKind::Exit) {
-                    self.advance();
-                    exit_action = Some(self.read_until_semi());
+                    let raw_tokens = self.read_tokens_until_semi();
+                    let tokens: Vec<Token> = raw_tokens
+                        .into_iter()
+                        .filter(|t| {
+                            !matches!(
+                                t.kind,
+                                TokenKind::Eof
+                                    | TokenKind::Semi
+                                    | TokenKind::LineComment(_)
+                                    | TokenKind::DocComment(_)
+                            )
+                        })
+                        .collect();
+                    let slice = tokens.as_slice();
+                    let action_slice = if slice.first().is_some_and(|t| t.kind == TokenKind::Action)
+                        && slice.get(1).is_some_and(|t| {
+                            !matches!(
+                                t.kind,
+                                TokenKind::OpenParen
+                                    | TokenKind::CloseParen
+                                    | TokenKind::OpenBracket
+                                    | TokenKind::CloseBracket
+                                    | TokenKind::Dot
+                                    | TokenKind::DoubleColon
+                                    | TokenKind::Comma
+                                    | TokenKind::Semi
+                            )
+                        })
+                    {
+                        slice.get(1..).unwrap_or_default()
+                    } else {
+                        slice
+                    };
+                    let formatted = Self::format_transition_expr(action_slice);
+                    match clause_kind {
+                        TokenKind::Entry => entry_action = Some(formatted),
+                        TokenKind::Do => do_action = Some(formatted),
+                        TokenKind::Exit => exit_action = Some(formatted),
+                        _ => {}
+                    }
                 } else if self.check(&TokenKind::State) {
                     let sub_st = self.parse_state_decl(None)?;
                     sub_states.push(sub_st);
@@ -1892,7 +1973,7 @@ impl<'a> SysmlParser<'a> {
 
         Ok(StateDef {
             name,
-            doc,
+            doc: state_doc,
             entry_action,
             do_action,
             exit_action,
@@ -2273,7 +2354,27 @@ impl<'a> SysmlParser<'a> {
                         idx += 1;
                     }
                     if let Some(slice) = tokens.get(start_idx..idx) {
-                        let formatted = Self::format_transition_expr(slice);
+                        let expr_slice = if kw == "do"
+                            && slice.first().is_some_and(|t| t.kind == TokenKind::Action)
+                            && slice.get(1).is_some_and(|t| {
+                                !matches!(
+                                    t.kind,
+                                    TokenKind::OpenParen
+                                        | TokenKind::CloseParen
+                                        | TokenKind::OpenBracket
+                                        | TokenKind::CloseBracket
+                                        | TokenKind::Dot
+                                        | TokenKind::DoubleColon
+                                        | TokenKind::Comma
+                                        | TokenKind::Semi
+                                )
+                            })
+                        {
+                            slice.get(1..).unwrap_or_default()
+                        } else {
+                            slice
+                        };
+                        let formatted = Self::format_transition_expr(expr_slice);
                         if !formatted.is_empty() {
                             match kw.as_str() {
                                 "accept" => trigger = Some(formatted),
@@ -6715,6 +6816,117 @@ package Issue496Pkg {
         );
 
         let reparsed = SysmlParser::parse_source(&serialized, "Issue496Pkg")?;
+        assert_eq!(reparsed, pkg);
+
+        Ok(())
+    }
+
+    /// Verifies that `SysmlParser::parse_state_decl`, `SysmlParser::parse_transition_tokens`, and `StateDef::to_sysml` preserve token-aware formatting for `entry`/`do`/`exit` actions, strip optional `action` keyword prefixes while preserving `action` when used as a contextual identifier, and retain inner state, sub-state, and transition `doc` comments across `to_sysml` round-trips.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_509_state_action_clauses_and_doc_comments_roundtrip` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Enforces token-aware expression formatting (`Nav::initFilter(x, y)`, `ctrl.runStep(a[0], b)`), strips optional `action` keyword prefixes on state `entry`/`do`/`exit` and transition `do` clauses without corrupting contextual `action` identifiers, and preserves state, sub-state, and transition `doc` comments across `parse_source(pkg.to_sysml(0)) == pkg`.
+    ///
+    /// ## 3. Preconditions
+    /// - Input SysML v2 fixture contains state definitions with inner `doc`, `entry`/`do`/`exit` action clauses (with and without `action` prefix, plus contextual `action` identifier), documented sub-states, and documented transitions with `do action` effects.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Result<(), Box<dyn std::error::Error>>` confirming exact AST extraction and lossless `to_sysml` round-trip conservation.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over fixture token stream length.
+    /// - Space Complexity: O(N) for constructed `PackageDef` AST.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates any `ParseError` via `Result`.
+    /// - State: Stateless in-memory verification.
+    /// - Action: Executes deterministically with zero external I/O.
+    /// - Resource: Bounded stack and heap allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-ISSUE-509-STATE-ACTIONS-AND-DOCS] | SysML v2: TestCaseDef(test_issue_509_state_action_clauses_and_doc_comments_roundtrip)
+    #[test]
+    fn test_issue_509_state_action_clauses_and_doc_comments_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::semantic::serializer::SysmlSerializable;
+
+        let source = r#"
+package Issue509Pkg {
+    doc /* Issue 509 package */
+    state def GuidanceState {
+        doc /* Primary guidance state machine */
+        entry action Nav::initFilter(x, y); // inline comment must not become <dynamic>
+        do ctrl.runStep(a[0], b);
+        exit action Actuator::shutdown();
+
+        doc /* Nominal standby sub-state */
+        state Standby;
+
+        doc /* Active guidance sub-state */
+        state Active {
+            entry action;
+            do action::step(1);
+        }
+
+        doc /* Transition from Standby to Active */
+        transition t_engage first Standby accept EngageCmd if navReady(x) do action EnableServos(1, 2) then Active;
+    }
+}
+"#;
+        let pkg = SysmlParser::parse_source(source, "Issue509Pkg")?;
+        assert_eq!(pkg.doc.as_deref(), Some("Issue 509 package"));
+        let st = pkg.state_defs.first().ok_or("missing GuidanceState")?;
+        assert_eq!(st.name, "GuidanceState");
+        assert_eq!(st.doc.as_deref(), Some("Primary guidance state machine"));
+        assert_eq!(st.entry_action.as_deref(), Some("Nav::initFilter(x, y)"));
+        assert_eq!(st.do_action.as_deref(), Some("ctrl.runStep(a[0], b)"));
+        assert_eq!(st.exit_action.as_deref(), Some("Actuator::shutdown()"));
+
+        assert_eq!(st.sub_states.len(), 2);
+        let sub0 = st.sub_states.first().ok_or("missing Standby sub-state")?;
+        assert_eq!(sub0.name, "Standby");
+        assert_eq!(sub0.doc.as_deref(), Some("Nominal standby sub-state"));
+
+        let sub1 = st.sub_states.get(1).ok_or("missing Active sub-state")?;
+        assert_eq!(sub1.name, "Active");
+        assert_eq!(sub1.doc.as_deref(), Some("Active guidance sub-state"));
+        assert_eq!(sub1.entry_action.as_deref(), Some("action"));
+        assert_eq!(sub1.do_action.as_deref(), Some("action::step(1)"));
+
+        assert_eq!(st.transitions.len(), 1);
+        let tr = st.transitions.first().ok_or("missing transition t_engage")?;
+        assert_eq!(tr.name.as_deref(), Some("t_engage"));
+        assert_eq!(tr.doc.as_deref(), Some("Transition from Standby to Active"));
+        assert_eq!(tr.source.as_deref(), Some("Standby"));
+        assert_eq!(tr.target.as_deref(), Some("Active"));
+        assert_eq!(tr.trigger.as_deref(), Some("EngageCmd"));
+        assert_eq!(tr.guard.as_deref(), Some("navReady(x)"));
+        assert_eq!(tr.effect.as_deref(), Some("EnableServos(1, 2)"));
+
+        let serialized = pkg.to_sysml(0);
+        assert!(
+            serialized.contains("entry Nav::initFilter(x, y);"),
+            "serialized output missing formatted entry action: {}",
+            serialized
+        );
+        assert!(
+            serialized.contains("do ctrl.runStep(a[0], b);"),
+            "serialized output missing formatted do action: {}",
+            serialized
+        );
+        assert!(
+            serialized.contains("exit Actuator::shutdown();"),
+            "serialized output missing formatted exit action: {}",
+            serialized
+        );
+        assert!(
+            serialized.contains("doc /* Transition from Standby to Active */"),
+            "serialized output missing transition doc comment: {}",
+            serialized
+        );
+
+        let reparsed = SysmlParser::parse_source(&serialized, "Issue509Pkg")?;
         assert_eq!(reparsed, pkg);
 
         Ok(())
