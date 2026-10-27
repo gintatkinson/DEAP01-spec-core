@@ -56,15 +56,6 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-SYSML-INGEST-CLI], [DO-330-TQL-4-INGEST-CLI]
-#![allow(
-    clippy::collapsible_if,
-    clippy::disallowed_types,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unnecessary_map_or,
-    clippy::unwrap_used
-)]
 
 use clap::Parser;
 use std::collections::HashSet;
@@ -75,7 +66,9 @@ use std::process;
 use compile_sysml::{
     generate_digest, parse_sysml, parse_sysml_tree, to_sysml, write_atomic, write_digest_atomic,
 };
-use deap_core::source_ast::{resolve_source_package_name, sanitize_sysml_identifier, SourceLanguage};
+use deap_core::source_ast::{
+    resolve_source_package_name, sanitize_sysml_identifier, SourceLanguage,
+};
 use deap_core::sysml_ast::PackageDef;
 use ingest_sysml::detectors::discover_schema_targets;
 use ingest_sysml::translators::{
@@ -113,7 +106,11 @@ use ingest_sysml::{
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-INGEST-CLI/CliArgs], [DO-330-TQL-4-INGEST-CLI]
 #[derive(Parser, Debug)]
-#[command(name = "ingest-sysml", version = "0.1.0", about = "SysML v2 Universal Ingestion Engine")]
+#[command(
+    name = "ingest-sysml",
+    version = "0.1.0",
+    about = "SysML v2 Universal Ingestion Engine"
+)]
 pub struct CliArgs {
     /// Path to root of source code tree for AST extraction (can be combined with --schema for realization scoping)
     #[arg(long)]
@@ -184,10 +181,7 @@ pub struct CliArgs {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-INGEST-CLI/resolve_ingested_package_name], [REQ-ISSUE-472-PACKAGE-QUALIFICATION]
-pub fn resolve_ingested_package_name(
-    source_path: &Path,
-    explicit_package: Option<&str>,
-) -> String {
+pub fn resolve_ingested_package_name(source_path: &Path, explicit_package: Option<&str>) -> String {
     resolve_source_package_name(source_path, explicit_package)
 }
 
@@ -389,48 +383,45 @@ pub fn run_ingestion_with_code(args: CliArgs) -> Result<(), (IngestExitCode, Str
         // When --schema is supplied alongside --source (and --allowed-parts is omitted),
         // scope code PartDef extraction to architectural part defs declared in the reference schema
         // or source items carrying explicit Realises: requirement bindings.
-        if let Some(ref schema_path) = args.schema {
-            if args.allowed_parts.is_none() {
-                let ref_pkg = if schema_path.is_dir() {
-                    let (_, sysml_files) =
-                        discover_schema_targets(Some(schema_path), Some("sysml"))
-                            .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
-                    parse_sysml_tree(&sysml_files).map_err(|e| {
-                        (
-                            IngestExitCode::ParseOrIoError,
-                            format!(
-                                "Failed to parse reference schema directory '{}': {}",
-                                schema_path.display(),
-                                e
-                            ),
-                        )
-                    })?
-                } else {
-                    let schema_content = fs::read_to_string(schema_path).map_err(|e| {
-                        (
-                            IngestExitCode::ParseOrIoError,
-                            format!(
-                                "Failed to read reference schema '{}': {}",
-                                schema_path.display(),
-                                e
-                            ),
-                        )
-                    })?;
-                    parse_sysml(&schema_content).map_err(|e| {
-                        (
-                            IngestExitCode::ParseOrIoError,
-                            format!(
-                                "Failed to parse reference schema '{}': {}",
-                                schema_path.display(),
-                                e
-                            ),
-                        )
-                    })?
-                };
-                let mut schema_parts = HashSet::new();
-                collect_declared_part_names(&ref_pkg, &mut schema_parts);
-                filter_ast_to_realized_or_allowed(&mut pkg, &schema_parts);
-            }
+        if let (Some(schema_path), None) = (&args.schema, &args.allowed_parts) {
+            let ref_pkg = if schema_path.is_dir() {
+                let (_, sysml_files) = discover_schema_targets(Some(schema_path), Some("sysml"))
+                    .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
+                parse_sysml_tree(&sysml_files).map_err(|e| {
+                    (
+                        IngestExitCode::ParseOrIoError,
+                        format!(
+                            "Failed to parse reference schema directory '{}': {}",
+                            schema_path.display(),
+                            e
+                        ),
+                    )
+                })?
+            } else {
+                let schema_content = fs::read_to_string(schema_path).map_err(|e| {
+                    (
+                        IngestExitCode::ParseOrIoError,
+                        format!(
+                            "Failed to read reference schema '{}': {}",
+                            schema_path.display(),
+                            e
+                        ),
+                    )
+                })?;
+                parse_sysml(&schema_content).map_err(|e| {
+                    (
+                        IngestExitCode::ParseOrIoError,
+                        format!(
+                            "Failed to parse reference schema '{}': {}",
+                            schema_path.display(),
+                            e
+                        ),
+                    )
+                })?
+            };
+            let mut schema_parts = HashSet::new();
+            collect_declared_part_names(&ref_pkg, &mut schema_parts);
+            filter_ast_to_realized_or_allowed(&mut pkg, &schema_parts);
         }
 
         println!(
@@ -439,10 +430,7 @@ pub fn run_ingestion_with_code(args: CliArgs) -> Result<(), (IngestExitCode, Str
             args.out.display()
         );
     } else if args.format.eq_ignore_ascii_case("code") {
-        let target_path = args
-            .schema
-            .clone()
-            .unwrap_or_else(|| PathBuf::from("src"));
+        let target_path = args.schema.clone().unwrap_or_else(|| PathBuf::from("src"));
         let lang = SourceLanguage::from_flag(&args.language)
             .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
         let pkg_name = resolve_ingested_package_name(&target_path, args.package.as_deref());
@@ -609,7 +597,12 @@ pub fn run_ingestion_with_code(args: CliArgs) -> Result<(), (IngestExitCode, Str
         }
     }
 
-    if let Some(explicit_pkg) = args.package.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(explicit_pkg) = args
+        .package
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         pkg.name = sanitize_sysml_identifier(explicit_pkg, &pkg.name);
     }
 
@@ -657,8 +650,7 @@ pub fn run_ingestion_with_code(args: CliArgs) -> Result<(), (IngestExitCode, Str
                 .ok()
                 .map(|entries| {
                     entries.flatten().any(|e| {
-                        e.path().is_file()
-                            && e.path().extension().is_some_and(|ext| ext == "sysml")
+                        e.path().is_file() && e.path().extension().is_some_and(|ext| ext == "sysml")
                     })
                 })
                 .unwrap_or(false);
@@ -776,7 +768,10 @@ mod tests {
     /// Realises: [REQ-0001/run_ingestion_with_code]
     #[test]
     fn test_downstream_populates_schema_dir() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_ws = std::env::temp_dir().join(format!(".deap_test_downstream_ingest_{}", std::process::id()));
+        let temp_ws = std::env::temp_dir().join(format!(
+            ".deap_test_downstream_ingest_{}",
+            std::process::id()
+        ));
         let _ = fs::remove_dir_all(&temp_ws);
         let schema_dir = temp_ws.join("schema");
         let pipeline_dir = temp_ws.join(".pipeline");
@@ -799,15 +794,25 @@ mod tests {
         };
         let res = run_ingestion_with_code(make_args());
         assert!(res.is_ok(), "downstream ingestion failed: {:?}", res.err());
-        assert!(schema_dir.join("model.sysml").is_file(), "expected schema/model.sysml to be created in downstream workspace");
+        assert!(
+            schema_dir.join("model.sysml").is_file(),
+            "expected schema/model.sysml to be created in downstream workspace"
+        );
 
         // Now verify upstream workspace (.pipeline/upstream exists) does NOT create schema/model.sysml
         fs::remove_file(schema_dir.join("model.sysml"))?;
         fs::create_dir_all(pipeline_dir.join("upstream"))?;
         let res_upstream = run_ingestion_with_code(make_args());
         let _ = fs::remove_dir_all(&temp_ws);
-        assert!(res_upstream.is_ok(), "upstream ingestion failed: {:?}", res_upstream.err());
-        assert!(!schema_dir.join("model.sysml").exists(), "upstream workspace must keep schema/ clean");
+        assert!(
+            res_upstream.is_ok(),
+            "upstream ingestion failed: {:?}",
+            res_upstream.err()
+        );
+        assert!(
+            !schema_dir.join("model.sysml").exists(),
+            "upstream workspace must keep schema/ clean"
+        );
         Ok(())
     }
 }

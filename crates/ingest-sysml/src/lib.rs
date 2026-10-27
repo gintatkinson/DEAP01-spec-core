@@ -46,43 +46,14 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-SYSML-INGEST-LIB], [DO-330-TQL-4-INGEST-LIB]
-#![allow(
-    clippy::collapsible_if,
-    clippy::collapsible_match,
-    clippy::collapsible_str_replace,
-    clippy::disallowed_types,
-    clippy::double_ended_iterator_last,
-    clippy::expect_used,
-    clippy::if_same_then_else,
-    clippy::indexing_slicing,
-    clippy::manual_contains,
-    clippy::manual_flatten,
-    clippy::manual_ignore_case_cmp,
-    clippy::manual_pattern_char_comparison,
-    clippy::manual_range_contains,
-    clippy::manual_strip,
-    clippy::manual_unwrap_or,
-    clippy::manual_unwrap_or_default,
-    clippy::needless_bool,
-    clippy::needless_bool_assign,
-    clippy::needless_lifetimes,
-    clippy::panic,
-    clippy::question_mark,
-    clippy::result_unit_err,
-    clippy::trim_split_whitespace,
-    clippy::unnecessary_map_or,
-    clippy::unnecessary_unwrap,
-    clippy::unwrap_used,
-    clippy::vec_init_then_push
-)]
 
 pub mod detectors;
 pub mod digest;
 pub mod table;
 pub mod translators;
 
-use std::collections::HashSet;
 use deap_core::sysml_ast::{ConstraintDef, PackageDef, PartDef};
+use std::collections::HashSet;
 
 /// Fail-safe process exit code classification for the `ingest-sysml` CLI engine.
 ///
@@ -373,38 +344,47 @@ pub fn filter_ast_to_target_scope(
             // Prune item defs not associated with surviving parts
             pkg.item_defs.retain(|item| {
                 allowed.contains(&item.name)
-                    || pkg.part_defs.iter().any(|p| p.name.contains(&item.name) || item.name.contains(&p.name))
+                    || pkg
+                        .part_defs
+                        .iter()
+                        .any(|p| p.name.contains(&item.name) || item.name.contains(&p.name))
             });
 
             // Prune capabilities whose subsystem is not allowed
             pkg.capability_defs.retain(|c| {
-                c.subsystem.as_ref().map_or(true, |sub| allowed.contains(sub)) || allowed.contains(&c.name)
+                c.subsystem.as_ref().is_none_or(|sub| allowed.contains(sub))
+                    || allowed.contains(&c.name)
             });
 
             // Prune hazards referencing excluded parts
             pkg.hazard_defs.retain(|h| {
-                h.part_ref.as_ref().map_or(true, |pr| allowed.contains(pr)) || allowed.contains(&h.name)
+                h.part_ref.as_ref().is_none_or(|pr| allowed.contains(pr))
+                    || allowed.contains(&h.name)
             });
 
             // Prune risks referencing pruned hazards
-            let surviving_hazards: HashSet<String> = pkg.hazard_defs.iter().map(|h| h.name.clone()).collect();
+            let surviving_hazards: HashSet<String> =
+                pkg.hazard_defs.iter().map(|h| h.name.clone()).collect();
             pkg.risk_defs.retain(|r| {
-                r.hazard_ref.as_ref().map_or(true, |hr| surviving_hazards.contains(hr)) || allowed.contains(&r.name)
+                r.hazard_ref
+                    .as_ref()
+                    .is_none_or(|hr| surviving_hazards.contains(hr))
+                    || allowed.contains(&r.name)
             });
 
             // Prune connection defs where source or target part is excluded
             pkg.connection_defs.retain(|conn| {
                 let src_part = conn.source_port.split('.').next();
                 let tgt_part = conn.target_port.split('.').next();
-                if let Some(sp) = src_part {
-                    if conn.source_port.contains('.') && !allowed.contains(sp) {
-                        return false;
-                    }
+                if src_part
+                    .is_some_and(|sp| conn.source_port.contains('.') && !allowed.contains(sp))
+                {
+                    return false;
                 }
-                if let Some(tp) = tgt_part {
-                    if conn.target_port.contains('.') && !allowed.contains(tp) {
-                        return false;
-                    }
+                if tgt_part
+                    .is_some_and(|tp| conn.target_port.contains('.') && !allowed.contains(tp))
+                {
+                    return false;
                 }
                 true
             });
@@ -424,13 +404,20 @@ pub fn filter_ast_to_target_scope(
                 .to_ascii_lowercase();
             let clean_name = clean.trim_matches('_');
             let constraint_name = format!("assert_exclusion_{}", clean_name);
-            if !pkg.constraint_defs.iter().any(|c| c.name == constraint_name) {
+            if !pkg
+                .constraint_defs
+                .iter()
+                .any(|c| c.name == constraint_name)
+            {
                 pkg.constraint_defs.push(ConstraintDef {
                     name: constraint_name,
                     expression: format!("!exists({})", inv),
                     parameters: Vec::new(),
                     is_assertion: true,
-                    doc: Some(format!("Negative invariant asserting exclusion of phantom entity: {}", inv)),
+                    doc: Some(format!(
+                        "Negative invariant asserting exclusion of phantom entity: {}",
+                        inv
+                    )),
                     pre_conditions: Vec::new(),
                     post_conditions: Vec::new(),
                 });
@@ -552,7 +539,10 @@ fn package_contains_entity(pkg: &PackageDef, entity_name: &str) -> bool {
     while let Some(curr_pkg) = pkg_stack.pop() {
         if curr_pkg.item_defs.iter().any(|i| i.name == entity_name)
             || curr_pkg.action_defs.iter().any(|a| a.name == entity_name)
-            || curr_pkg.port_defs.iter().any(|port| port.name == entity_name)
+            || curr_pkg
+                .port_defs
+                .iter()
+                .any(|port| port.name == entity_name)
             || curr_pkg.state_defs.iter().any(|s| s.name == entity_name)
         {
             return true;
@@ -637,13 +627,11 @@ pub fn verify_scope_and_negative_invariants(
     allowed_parts: Option<&HashSet<String>>,
     negative_invariants: Option<&[String]>,
 ) -> Result<(), String> {
-    if let Some(allowed) = allowed_parts {
-        if !allowed.is_empty() && !package_has_any_part(pkg) {
-            return Err(format!(
-                "Architectural scope verification failed: none of the --allowed-parts {:?} matched any extracted PartDef in package '{}'",
-                allowed, pkg.name
-            ));
-        }
+    if let Some(allowed) = allowed_parts.filter(|a| !a.is_empty() && !package_has_any_part(pkg)) {
+        return Err(format!(
+            "Architectural scope verification failed: none of the --allowed-parts {:?} matched any extracted PartDef in package '{}'",
+            allowed, pkg.name
+        ));
     }
 
     if let Some(neg_list) = negative_invariants {
@@ -872,7 +860,10 @@ mod tests {
         assert_eq!(pkg.part_defs.len(), 1);
         assert_eq!(pkg.part_defs[0].name, "Classifier_Alpha");
         assert_eq!(pkg.constraint_defs.len(), 1);
-        assert_eq!(pkg.constraint_defs[0].name, "assert_exclusion_phantom_entity");
+        assert_eq!(
+            pkg.constraint_defs[0].name,
+            "assert_exclusion_phantom_entity"
+        );
         assert_eq!(pkg.constraint_defs[0].expression, "!exists(Phantom_Entity)");
     }
 
@@ -914,8 +905,13 @@ mod tests {
         fs::write(&f2, content2).unwrap();
 
         let translator = translators::markdown::MarkdownTranslator::new();
-        let file_paths = vec![f1.to_string_lossy().to_string(), f2.to_string_lossy().to_string()];
-        let pkg = translator.translate_files(&file_paths, "Consolidated_Package").expect("Failed batch translation");
+        let file_paths = vec![
+            f1.to_string_lossy().to_string(),
+            f2.to_string_lossy().to_string(),
+        ];
+        let pkg = translator
+            .translate_files(&file_paths, "Consolidated_Package")
+            .expect("Failed batch translation");
 
         assert_eq!(pkg.name, "Consolidated_Package");
         let p_names: Vec<&str> = pkg.part_defs.iter().map(|p| p.name.as_str()).collect();
@@ -929,7 +925,11 @@ mod tests {
         let tmp = TempTestDir::new("batch_fail_closed");
 
         let valid_md_path = tmp.0.join("valid.md");
-        fs::write(&valid_md_path, "# Package_0\n\n## Classifier_Alpha\nAlpha doc.").unwrap();
+        fs::write(
+            &valid_md_path,
+            "# Package_0\n\n## Classifier_Alpha\nAlpha doc.",
+        )
+        .unwrap();
         let valid_md = valid_md_path.to_string_lossy().to_string();
         let missing_md = tmp.0.join("missing.md").to_string_lossy().to_string();
 
@@ -988,10 +988,8 @@ mod tests {
 
     #[test]
     fn test_cache_ingested_sysml_model_hit_and_invalidation() {
-        let tmp_dir = std::env::temp_dir().join(format!(
-            "deap_ingest_cache_test_{}",
-            std::process::id()
-        ));
+        let tmp_dir =
+            std::env::temp_dir().join(format!("deap_ingest_cache_test_{}", std::process::id()));
         std::fs::remove_dir_all(&tmp_dir).unwrap_or(());
         std::fs::create_dir_all(&tmp_dir).expect("temp dir creation");
 
@@ -1007,12 +1005,74 @@ mod tests {
         assert_eq!(model_second, model_first);
 
         let sysml_v2 = "package IngestPkg { part def SensorUnit { attribute rate_hz : Real; } part def ActuatorUnit {} }";
-        let (model_third, hit_third) =
-            cache_ingested_sysml_model(&tmp_dir, sysml_v2).expect("third cache call after mutation");
+        let (model_third, hit_third) = cache_ingested_sysml_model(&tmp_dir, sysml_v2)
+            .expect("third cache call after mutation");
         assert!(!hit_third);
         assert_eq!(model_third.parts.len(), 2);
 
         std::fs::remove_dir_all(&tmp_dir).unwrap_or(());
     }
-}
 
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_491_zero_blanket_lint_suppressions` in `crates/ingest-sysml/src/lib.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Enforces zero crate-level and item-level clippy and dead-code allow suppressions across `ingest-sysml` core and translator modules, and verifies fail-closed empty-slice rejection in `MarkdownTranslator::translate_files`.
+    ///
+    /// ## 3. Preconditions
+    /// - `CARGO_MANIFEST_DIR` resolves to the `crates/ingest-sysml` package root containing the audited source and test files.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` if and only if zero forbidden lint-suppression attributes exist across the target files and `MarkdownTranslator::translate_files(&[], "EmptyBatch")` returns `Err`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) linear scan over the 7 target source files.
+    /// - Space Complexity: O(N) bounded by single-file string buffer size.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates file I/O errors cleanly via `Result<(), Box<dyn std::error::Error>>`.
+    /// - State: Pure read-only inspection with zero filesystem mutation.
+    /// - Action: Deterministic substring checks with zero regex or slice indexing.
+    /// - Resource: Bounded stack and heap usage.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-INGEST-LIB/test_issue_491_zero_blanket_lint_suppressions] | SysML v2: VerificationCaseDef(test_issue_491_zero_blanket_lint_suppressions)
+    #[test]
+    fn test_issue_491_zero_blanket_lint_suppressions() -> Result<(), Box<dyn std::error::Error>> {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let targets = [
+            "src/lib.rs",
+            "src/main.rs",
+            "src/translators/markdown.rs",
+            "src/translators/yang.rs",
+            "src/translators/code.rs",
+            "tests/code_ingestion_tests.rs",
+            "tests/code_realization_scoping_tests.rs",
+        ];
+        let crate_allow = concat!("#![", "allow(");
+        let crate_clippy = concat!("#![", "allow(", "clippy::");
+        let item_clippy = concat!("#[", "allow(", "clippy::");
+        let dead_code_attr = concat!("#[", "allow(", "dead_code)]");
+
+        for rel in targets {
+            let path = manifest_dir.join(rel);
+            let content = std::fs::read_to_string(&path)?;
+            assert!(
+                !content.contains(crate_allow) && !content.contains(crate_clippy),
+                "{rel} contains forbidden crate-level clippy suppression"
+            );
+            assert!(
+                !content.contains(item_clippy),
+                "{rel} contains forbidden item-level clippy suppression"
+            );
+            assert!(
+                !content.contains(dead_code_attr),
+                "{rel} contains forbidden dead_code suppression"
+            );
+        }
+
+        let md = translators::markdown::MarkdownTranslator::new();
+        assert!(md.translate_files(&[], "EmptyBatch").is_err());
+        Ok(())
+    }
+}

@@ -34,12 +34,6 @@
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-ISSUE-472-REALIZATION-SCOPING-TESTS]
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::panic
-)]
 
 use compile_sysml::docstring::run_extract_source;
 use compile_sysml::parse_sysml;
@@ -518,7 +512,9 @@ fn test_issue_472_check17_fmeca_closure_ignores_realization_only_code_parts() {
         ));
     }
     stpa.push_str("\n## 8. Domain Regulatory Objectives & Integrity Mapping\n- Pillar 8 DO-178C DAL A and SORA SAIL II objectives\n\n");
-    stpa.push_str("## Commercial Toolchain Hooks\n- MATLAB / Simulink / Stateflow verification hooks\n");
+    stpa.push_str(
+        "## Commercial Toolchain Hooks\n- MATLAB / Simulink / Stateflow verification hooks\n",
+    );
 
     fs::write(safety_dir.join("STPA_MATRIX.md"), stpa).expect("write STPA_MATRIX.md");
 

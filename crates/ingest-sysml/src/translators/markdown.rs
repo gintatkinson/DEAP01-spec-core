@@ -37,15 +37,15 @@ use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
 
+use crate::table::{
+    classify_table, clean_cell_value, compose_grounded_doc, extract_provenance_citation,
+    extract_unit_from_header_or_val, is_table_delimiter_cell, normalize_col,
+    parse_numeric_with_unit, parse_range_bounds, sanitize_identifier, MarkdownTable, TableType,
+    NON_COMPONENT_SECTION_KEYWORDS, PROVENANCE_COLUMNS,
+};
 use deap_core::sysml_ast::{
     ActionDef, AttributeDef, ConnectionDef, ConstraintDef, FlowDef, InteractionDef, PackageDef,
     PartDef, PortDef, RequirementDef, StateDef, TestCaseDef, TransitionDef, UseCaseDef,
-};
-use crate::table::{
-    classify_table, clean_cell_value, compose_grounded_doc, extract_provenance_citation,
-    extract_unit_from_header_or_val, is_table_delimiter_cell, normalize_col, parse_numeric_with_unit,
-    parse_range_bounds, sanitize_identifier, MarkdownTable, TableType,
-    NON_COMPONENT_SECTION_KEYWORDS, PROVENANCE_COLUMNS,
 };
 
 /// Extracted YAML frontmatter metadata from the beginning of a Markdown requirement document.
@@ -86,8 +86,6 @@ pub struct Frontmatter {
     pub uuidv5: Option<String>,
 }
 
-
-
 #[cfg(test)]
 fn make_port(name: &str, type_name: &str, direction: &str) -> PortDef {
     PortDef {
@@ -102,10 +100,6 @@ fn make_port(name: &str, type_name: &str, direction: &str) -> PortDef {
         item_flows: Vec::new(),
     }
 }
-
-
-
-
 
 /// Executes deterministic fn `strip_markdown_links` within `crates/ingest-sysml/src/translators/markdown.rs`.
 ///
@@ -142,12 +136,13 @@ fn strip_markdown_links(val: &str) -> String {
         if let Some(end_bracket) = after_start.find(']') {
             let visible_text = &after_start[..end_bracket];
             let after_end_bracket = &after_start[end_bracket + 1..];
-            if after_end_bracket.starts_with('(') {
-                if let Some(end_paren) = after_end_bracket.find(')') {
-                    out.push_str(visible_text);
-                    rest = &after_end_bracket[end_paren + 1..];
-                    continue;
-                }
+            if let Some(end_paren) = after_end_bracket
+                .find(')')
+                .filter(|_| after_end_bracket.starts_with('('))
+            {
+                out.push_str(visible_text);
+                rest = &after_end_bracket[end_paren + 1..];
+                continue;
             }
         }
         out.push('[');
@@ -233,7 +228,10 @@ fn strip_latex_math_commands(text: &str, cmds: Option<&[&str]>) -> String {
     while let Some(slash_idx) = rest.find('\\') {
         out.push_str(&rest[..slash_idx]);
         let after_slash = &rest[slash_idx + 1..];
-        let cmd_len = after_slash.chars().take_while(|c| c.is_ascii_alphabetic()).count();
+        let cmd_len = after_slash
+            .chars()
+            .take_while(|c| c.is_ascii_alphabetic())
+            .count();
         if cmd_len > 0 {
             let cmd = &after_slash[..cmd_len];
             let is_match = match cmds {
@@ -242,14 +240,17 @@ fn strip_latex_math_commands(text: &str, cmds: Option<&[&str]>) -> String {
             };
             if is_match {
                 let after_cmd = &after_slash[cmd_len..];
-                if after_cmd.starts_with('{') {
-                    if let Some(close_brace) = after_cmd.find('}') {
-                        let inner = &after_cmd[1..close_brace];
-                        if inner.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c.is_whitespace()) {
-                            out.push_str(inner);
-                            rest = &after_cmd[close_brace + 1..];
-                            continue;
-                        }
+                if let Some(close_brace) =
+                    after_cmd.find('}').filter(|_| after_cmd.starts_with('{'))
+                {
+                    let inner = &after_cmd[1..close_brace];
+                    if inner
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c.is_whitespace())
+                    {
+                        out.push_str(inner);
+                        rest = &after_cmd[close_brace + 1..];
+                        continue;
                     }
                 }
                 rest = after_cmd;
@@ -484,9 +485,13 @@ fn extract_req_metadata(
                 let clean_val = clean_meta_val(raw_val);
                 if (key.contains("complexity") || key.contains("class")) && complexity.is_empty() {
                     complexity = clean_val;
-                } else if (key.contains("standard") || key.contains("governing")) && standard.is_empty() {
+                } else if (key.contains("standard") || key.contains("governing"))
+                    && standard.is_empty()
+                {
                     standard = clean_val;
-                } else if (key.contains("diagnostic") || key.contains("binding")) && diagnostics.is_empty() {
+                } else if (key.contains("diagnostic") || key.contains("binding"))
+                    && diagnostics.is_empty()
+                {
                     diagnostics = clean_val;
                 } else if (key.contains("uuid") || key.contains("anchor")) && uuid.is_empty() {
                     uuid = clean_val;
@@ -854,14 +859,15 @@ fn strip_latex_commands(text: &str) -> String {
     while let Some(slash_idx) = rest.find('\\') {
         out.push_str(&rest[..slash_idx]);
         let after_slash = &rest[slash_idx + 1..];
-        let cmd_len = after_slash.chars().take_while(|c| c.is_ascii_alphabetic()).count();
+        let cmd_len = after_slash
+            .chars()
+            .take_while(|c| c.is_ascii_alphabetic())
+            .count();
         if cmd_len > 0 {
             let after_cmd = &after_slash[cmd_len..];
-            if after_cmd.starts_with('{') {
-                if let Some(close_brace) = after_cmd.find('}') {
-                    rest = &after_cmd[close_brace + 1..];
-                    continue;
-                }
+            if let Some(close_brace) = after_cmd.find('}').filter(|_| after_cmd.starts_with('{')) {
+                rest = &after_cmd[close_brace + 1..];
+                continue;
             }
             rest = after_cmd;
             continue;
@@ -928,7 +934,16 @@ fn clean_invariant_title(raw: &str) -> String {
 
     // Truncate at common connectors
     let mut s = text;
-    for delim in &[" over ", " across ", " for ", " where ", " on ", " satisfying ", " satisfies ", " under "] {
+    for delim in &[
+        " over ",
+        " across ",
+        " for ",
+        " where ",
+        " on ",
+        " satisfying ",
+        " satisfies ",
+        " under ",
+    ] {
         if let Some(pos) = s.to_ascii_lowercase().find(delim) {
             s = s[..pos].to_string();
         }
@@ -1058,8 +1073,7 @@ pub fn extract_formal_invariants(content: &str, req_num: &str) -> Vec<Constraint
                 i += 1;
                 continue;
             }
-            if (line.starts_with("```") && !line.starts_with("```math"))
-                || line.starts_with("~~~")
+            if (line.starts_with("```") && !line.starts_with("```math")) || line.starts_with("~~~")
             {
                 in_code_fence = true;
                 i += 1;
@@ -1126,7 +1140,10 @@ pub fn extract_formal_invariants(content: &str, req_num: &str) -> Vec<Constraint
                 let base_name = format!("Invariant_REQ_{}_{}", req_num, slug);
                 let mut inv_name = base_name.clone();
                 let mut suffix = 2;
-                while invariants.iter().any(|inv: &ConstraintDef| inv.name == inv_name) {
+                while invariants
+                    .iter()
+                    .any(|inv: &ConstraintDef| inv.name == inv_name)
+                {
                     inv_name = format!("{}_{}", base_name, suffix);
                     suffix += 1;
                 }
@@ -1205,12 +1222,14 @@ fn get_req_canonical_title(req_id: &str) -> Option<String> {
                         let path = entry.path();
                         if path.extension().and_then(|s| s.to_str()) == Some("md") {
                             let fname = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-                            if fname.starts_with("REQ-") {
-                                if let Ok(content) = fs::read_to_string(&path) {
-                                    let (fm, _) = MarkdownTranslator::parse_frontmatter(&content);
-                                    if let (Some(id), Some(title)) = (fm.id, fm.title) {
-                                        m.insert(id, title);
-                                    }
+                            if let Some(content) = fname
+                                .starts_with("REQ-")
+                                .then(|| fs::read_to_string(&path).ok())
+                                .flatten()
+                            {
+                                let (fm, _) = MarkdownTranslator::parse_frontmatter(&content);
+                                if let (Some(id), Some(title)) = (fm.id, fm.title) {
+                                    m.insert(id, title);
                                 }
                             }
                         }
@@ -1305,7 +1324,8 @@ fn find_req_ids(text: &str) -> Vec<&str> {
         if candidate.len() >= 8 {
             let digits_slice = &candidate[4..8];
             if digits_slice.chars().all(|c| c.is_ascii_digit()) {
-                let end_boundary = candidate.len() == 8 || !candidate.as_bytes()[8].is_ascii_digit();
+                let end_boundary =
+                    candidate.len() == 8 || !candidate.as_bytes()[8].is_ascii_digit();
                 if end_boundary {
                     ids.push(&candidate[..8]);
                 }
@@ -1354,7 +1374,10 @@ pub fn extract_requirement_cross_references(content: &str, current_req_id: &str)
         }
     }
 
-    let current_digits: String = current_req_id.chars().filter(|c| c.is_ascii_digit()).collect();
+    let current_digits: String = current_req_id
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect();
     let mut refs = Vec::new();
 
     for r_str in find_req_ids(relevant_text) {
@@ -1376,17 +1399,17 @@ pub fn extract_requirement_cross_references(content: &str, current_req_id: &str)
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ParsedSection` in `crates/ingest-sysml/src/translators/markdown.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `ParsedSection` across member set `[header: String, component_target: Option<String>, section_doc: String, tables: Vec<MarkdownTable>]`.
+/// - Preserves structural type invariants for struct `ParsedSection` across member set `[component_target: Option<String>, section_doc: String, tables: Vec<MarkdownTable>]`.
 ///
 /// ## 3. Preconditions
-/// - Caller supplies well-formed values for `ParsedSection` members (`header: String, component_target: Option<String>, section_doc: String, tables: Vec<MarkdownTable>`).
+/// - Caller supplies well-formed values for `ParsedSection` members (`component_target: Option<String>, section_doc: String, tables: Vec<MarkdownTable>`).
 ///
 /// ## 4. Postconditions
 /// - Defines the authoritative `ParsedSection` representation for struct `ParsedSection`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(4)) bounded over input/member dimension of `ParsedSection`.
-/// - Space Complexity: O(M(4)) bounded auxiliary memory for `ParsedSection`.
+/// - Time Complexity: O(M(3)) bounded over input/member dimension of `ParsedSection`.
+/// - Space Complexity: O(M(3)) bounded auxiliary memory for `ParsedSection`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Validates boundary inputs and types for `ParsedSection` (`ParsedSection`).
@@ -1397,10 +1420,7 @@ pub fn extract_requirement_cross_references(content: &str, current_req_id: &str)
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-TRANSLATORS-MARKDOWN-PARSEDSECTION] | SysML v2: PartDef(ParsedSection)
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)]
 struct ParsedSection {
-    /// Verbatim section heading text (e.g. `## Bill of Materials`).
-    pub header: String,
     /// Component identifier if this section introduces or describes a specific component.
     pub component_target: Option<String>,
     /// Aggregated prose documentation lines within this section.
@@ -1443,7 +1463,9 @@ fn strip_pkg_words(s: &str) -> String {
     while i < bytes.len() {
         if (bytes[i] as char).is_ascii_alphanumeric() {
             let start = i;
-            while i < bytes.len() && ((bytes[i] as char).is_ascii_alphanumeric() || bytes[i] == b'_') {
+            while i < bytes.len()
+                && ((bytes[i] as char).is_ascii_alphanumeric() || bytes[i] == b'_')
+            {
                 i += 1;
             }
             let word = &s[start..i];
@@ -1488,24 +1510,40 @@ fn strip_pkg_words(s: &str) -> String {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-TRANSLATORS-MARKDOWN-STRIP-COMP-PREFIX] | SysML v2: ActionDef(strip_comp_prefix)
 fn strip_comp_prefix(header: &str) -> String {
-    const PREFIXES: &[&str] = &["component", "part", "subsystem", "assembly", "block", "module"];
+    const PREFIXES: &[&str] = &[
+        "component",
+        "part",
+        "subsystem",
+        "assembly",
+        "block",
+        "module",
+    ];
     let mut candidate = header.trim();
-    if let Some((first_tok, rest_after_num)) = candidate.split_once(char::is_whitespace) {
-        if !first_tok.is_empty()
-            && first_tok.chars().any(|c| c.is_ascii_digit())
-            && first_tok.chars().all(|c| c.is_ascii_digit() || c == '.')
-        {
-            candidate = rest_after_num.trim_start();
-        }
+    if let Some((first_tok, rest_after_num)) =
+        candidate
+            .split_once(char::is_whitespace)
+            .filter(|(first_tok, _)| {
+                !first_tok.is_empty()
+                    && first_tok.chars().any(|c| c.is_ascii_digit())
+                    && first_tok.chars().all(|c| c.is_ascii_digit() || c == '.')
+            })
+    {
+        let _ = first_tok;
+        candidate = rest_after_num.trim_start();
     }
     let lower = candidate.to_ascii_lowercase();
     for &prefix in PREFIXES {
-        if lower.starts_with(prefix) {
-            if let Some(rest) = candidate.get(prefix.len()..) {
-                let trimmed = rest.trim_start();
-                if let Some(after_sep) = trimmed.strip_prefix(':').or_else(|| trimmed.strip_prefix('-')) {
-                    return after_sep.trim().to_string();
-                }
+        if let Some(rest) = lower
+            .starts_with(prefix)
+            .then(|| candidate.get(prefix.len()..))
+            .flatten()
+        {
+            let trimmed = rest.trim_start();
+            if let Some(after_sep) = trimmed
+                .strip_prefix(':')
+                .or_else(|| trimmed.strip_prefix('-'))
+            {
+                return after_sep.trim().to_string();
             }
         }
     }
@@ -1734,18 +1772,16 @@ fn extract_bom_bullet_parts(content: &str, pkg: &mut PackageDef) {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-INGEST-MD/strip_ingested_action_prefix] | SysML v2: ActionDef(strip_ingested_action_prefix)
 fn strip_ingested_action_prefix(raw: &str) -> &str {
-    if let Some(after_prefix) = raw
+    if let Some((digits, rest)) = raw
         .strip_prefix("US_AC_")
         .or_else(|| raw.strip_prefix("US_"))
+        .and_then(|after_prefix| after_prefix.split_once('_'))
+        .filter(|(digits, rest)| {
+            !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()) && !rest.is_empty()
+        })
     {
-        if let Some((digits, rest)) = after_prefix.split_once('_') {
-            if !digits.is_empty()
-                && digits.bytes().all(|b| b.is_ascii_digit())
-                && !rest.is_empty()
-            {
-                return rest;
-            }
-        }
+        let _ = digits;
+        return rest;
     }
     raw
 }
@@ -1789,14 +1825,15 @@ fn extract_behavioral_ast_nodes(content: &str, pkg: &mut PackageDef) {
     for line in content.lines() {
         let trimmed = line.trim();
         if !in_mermaid {
-            if let Some(after_ticks) = trimmed.strip_prefix("```") {
-                if after_ticks.trim().eq_ignore_ascii_case("mermaid") {
-                    in_mermaid = true;
-                    mermaid_mode = "";
-                    seq_lifelines.clear();
-                    seq_messages.clear();
-                    state_transitions.clear();
-                }
+            if trimmed
+                .strip_prefix("```")
+                .is_some_and(|after_ticks| after_ticks.trim().eq_ignore_ascii_case("mermaid"))
+            {
+                in_mermaid = true;
+                mermaid_mode = "";
+                seq_lifelines.clear();
+                seq_messages.clear();
+                state_transitions.clear();
             }
             continue;
         }
@@ -1817,7 +1854,9 @@ fn extract_behavioral_ast_nodes(content: &str, pkg: &mut PackageDef) {
                         lifelines: std::mem::take(&mut seq_lifelines),
                         messages: std::mem::take(&mut seq_messages),
                         triggers: Vec::new(),
-                        doc: Some("Extracted from Mermaid sequenceDiagram specification.".to_string()),
+                        doc: Some(
+                            "Extracted from Mermaid sequenceDiagram specification.".to_string(),
+                        ),
                     });
                 }
             } else if mermaid_mode == "state" && !state_transitions.is_empty() {
@@ -1831,18 +1870,19 @@ fn extract_behavioral_ast_nodes(content: &str, pkg: &mut PackageDef) {
                 if !pkg.state_defs.iter().any(|s| s.name == state_name) {
                     let mut sub_states: Vec<StateDef> = Vec::new();
                     for tr in &state_transitions {
-                        for candidate in [tr.source.as_deref(), tr.target.as_deref()] {
-                            if let Some(st_id) = candidate {
-                                if st_id != "Initial"
-                                    && st_id != "Terminal"
-                                    && !st_id.is_empty()
-                                    && !sub_states.iter().any(|s| s.name == st_id)
-                                {
-                                    sub_states.push(StateDef {
-                                        name: st_id.to_string(),
-                                        ..Default::default()
-                                    });
-                                }
+                        for st_id in [tr.source.as_deref(), tr.target.as_deref()]
+                            .into_iter()
+                            .flatten()
+                        {
+                            if st_id != "Initial"
+                                && st_id != "Terminal"
+                                && !st_id.is_empty()
+                                && !sub_states.iter().any(|s| s.name == st_id)
+                            {
+                                sub_states.push(StateDef {
+                                    name: st_id.to_string(),
+                                    ..Default::default()
+                                });
                             }
                         }
                     }
@@ -1922,7 +1962,10 @@ fn extract_behavioral_ast_nodes(content: &str, pkg: &mut PackageDef) {
                 let (receiver_raw, msg_raw) = if let Some((r, m)) = rhs.split_once(':') {
                     (r.trim().trim_start_matches(['+', '-']).trim(), m.trim())
                 } else {
-                    (rhs.trim().trim_start_matches(['+', '-']).trim(), "SendMessage")
+                    (
+                        rhs.trim().trim_start_matches(['+', '-']).trim(),
+                        "SendMessage",
+                    )
                 };
                 let sender_id = sanitize_identifier(sender_raw, "Sender");
                 let receiver_id = sanitize_identifier(receiver_raw, "Receiver");
@@ -2111,8 +2154,10 @@ fn extract_behavioral_ast_nodes(content: &str, pkg: &mut PackageDef) {
 
     let subject_name = pkg.part_defs.first().map(|p| p.name.clone());
     for (ac_num_str, clean_ac_slug, ac_bdd_text) in extract_acceptance_criteria(content) {
-        let uc_name =
-            sanitize_identifier(&format!("UC_AC_{}_{}", ac_num_str, clean_ac_slug), "UseCase");
+        let uc_name = sanitize_identifier(
+            &format!("UC_AC_{}_{}", ac_num_str, clean_ac_slug),
+            "UseCase",
+        );
         let objective_str = clean_ac_slug.replace('_', " ");
         if !pkg.use_case_defs.iter().any(|u| u.name == uc_name) {
             pkg.use_case_defs.push(UseCaseDef {
@@ -2173,14 +2218,14 @@ fn strip_leading_section_number(s: &str) -> &str {
         .chars()
         .take_while(|c| c.is_ascii_digit() || *c == '.')
         .count();
-    if let Some(prefix) = without_sec.get(..num_prefix_len) {
-        if !prefix.is_empty() && prefix.chars().any(|c| c.is_ascii_digit()) {
-            if let Some(rest) = without_sec.get(num_prefix_len..) {
-                let stripped = rest.trim_start_matches([':', '-', ')', ' ']).trim_start();
-                if !stripped.is_empty() {
-                    return stripped;
-                }
-            }
+    if let Some(rest) = without_sec
+        .get(..num_prefix_len)
+        .filter(|prefix| !prefix.is_empty() && prefix.chars().any(|c| c.is_ascii_digit()))
+        .and_then(|_| without_sec.get(num_prefix_len..))
+    {
+        let stripped = rest.trim_start_matches([':', '-', ')', ' ']).trim_start();
+        if !stripped.is_empty() {
+            return stripped;
         }
     }
     trimmed
@@ -2225,7 +2270,10 @@ fn parse_latency_to_ms(raw: &str, col_unit: &str) -> Option<f64> {
     };
     if matches!(unit.as_str(), "s" | "sec" | "secs" | "second" | "seconds") {
         Some(num * 1000.0)
-    } else if matches!(unit.as_str(), "us" | "\u{00b5}s" | "\u{03bc}s" | "usec" | "microseconds") {
+    } else if matches!(
+        unit.as_str(),
+        "us" | "\u{00b5}s" | "\u{03bc}s" | "usec" | "microseconds"
+    ) {
         Some(num / 1000.0)
     } else {
         Some(num)
@@ -2262,11 +2310,7 @@ fn is_use_case_table(headers: &[String]) -> bool {
     headers.iter().any(|h| {
         matches!(
             h.as_str(),
-            "use_case_id"
-                | "uc_id"
-                | "use_case"
-                | "included_use_cases"
-                | "verification_test_cases"
+            "use_case_id" | "uc_id" | "use_case" | "included_use_cases" | "verification_test_cases"
         )
     })
 }
@@ -2382,10 +2426,11 @@ fn parse_prose_uc_header(line: &str) -> Option<String> {
             return None;
         }
         trimmed.get(hashes..)?.trim()
-    } else if let Some(inner) = trimmed.strip_prefix("**").and_then(|s| s.strip_suffix("**")) {
-        inner.trim()
     } else {
-        return None;
+        let inner = trimmed
+            .strip_prefix("**")
+            .and_then(|s| s.strip_suffix("**"))?;
+        inner.trim()
     };
     let clean_body = raw_body.trim_matches(['*', '`', ' ']);
     let lower_body = clean_body.to_ascii_lowercase();
@@ -2434,20 +2479,21 @@ fn apply_prose_uc_field(
     in_scenario: &mut bool,
 ) {
     let num_len = line.chars().take_while(|c| c.is_ascii_digit()).count();
-    if num_len > 0 {
-        if let Some(after_digits) = line.get(num_len..) {
-            if let Some(step_body) = after_digits
+    if let Some(step_body) = (num_len > 0)
+        .then(|| line.get(num_len..))
+        .flatten()
+        .and_then(|after_digits| {
+            after_digits
                 .strip_prefix(". ")
                 .or_else(|| after_digits.strip_prefix(") "))
-            {
-                *in_scenario = true;
-                let cleaned = clean_bdd_text(step_body.trim());
-                if !cleaned.is_empty() {
-                    uc.steps.push(cleaned);
-                }
-                return;
-            }
+        })
+    {
+        *in_scenario = true;
+        let cleaned = clean_bdd_text(step_body.trim());
+        if !cleaned.is_empty() {
+            uc.steps.push(cleaned);
         }
+        return;
     }
 
     let bullet = line
@@ -2503,11 +2549,9 @@ fn apply_prose_uc_field(
 
     if *in_scenario && !line.starts_with('|') && !line.starts_with('-') && !line.starts_with('*') {
         let cont = clean_bdd_text(line);
-        if !cont.is_empty() {
-            if let Some(last_step) = uc.steps.last_mut() {
-                last_step.push(' ');
-                last_step.push_str(&cont);
-            }
+        if let Some(last_step) = (!cont.is_empty()).then(|| uc.steps.last_mut()).flatten() {
+            last_step.push(' ');
+            last_step.push_str(&cont);
         }
     }
 }
@@ -2545,27 +2589,26 @@ fn extract_prose_use_cases(content: &str, pkg: &mut PackageDef) {
     let mut current_tcs: Vec<String> = Vec::new();
     let mut in_scenario = false;
 
-    let flush_uc = |uc_opt: &mut Option<UseCaseDef>,
-                    tcs: &mut Vec<String>,
-                    pkg_out: &mut PackageDef| {
-        if let Some(mut uc) = uc_opt.take() {
-            if uc.doc.is_none() {
-                uc.doc = uc.objective.clone();
-            }
-            for tc_name in tcs.drain(..) {
-                if !pkg_out.test_case_defs.iter().any(|t| t.name == tc_name) {
-                    pkg_out.test_case_defs.push(TestCaseDef {
-                        name: tc_name,
-                        doc: Some(format!("Verification test case for {}", uc.name)),
-                        ..Default::default()
-                    });
+    let flush_uc =
+        |uc_opt: &mut Option<UseCaseDef>, tcs: &mut Vec<String>, pkg_out: &mut PackageDef| {
+            if let Some(mut uc) = uc_opt.take() {
+                if uc.doc.is_none() {
+                    uc.doc = uc.objective.clone();
+                }
+                for tc_name in tcs.drain(..) {
+                    if !pkg_out.test_case_defs.iter().any(|t| t.name == tc_name) {
+                        pkg_out.test_case_defs.push(TestCaseDef {
+                            name: tc_name,
+                            doc: Some(format!("Verification test case for {}", uc.name)),
+                            ..Default::default()
+                        });
+                    }
+                }
+                if !pkg_out.use_case_defs.iter().any(|u| u.name == uc.name) {
+                    pkg_out.use_case_defs.push(uc);
                 }
             }
-            if !pkg_out.use_case_defs.iter().any(|u| u.name == uc.name) {
-                pkg_out.use_case_defs.push(uc);
-            }
-        }
-    };
+        };
 
     for raw_line in content.lines() {
         let trimmed = raw_line.trim();
@@ -2591,10 +2634,8 @@ fn extract_prose_use_cases(content: &str, pkg: &mut PackageDef) {
             in_scenario = false;
             continue;
         }
-        if let Some(ref mut uc) = current_uc {
-            if !trimmed.is_empty() {
-                apply_prose_uc_field(trimmed, uc, &mut current_tcs, &mut in_scenario);
-            }
+        if let Some(uc) = current_uc.as_mut().filter(|_| !trimmed.is_empty()) {
+            apply_prose_uc_field(trimmed, uc, &mut current_tcs, &mut in_scenario);
         }
     }
     flush_uc(&mut current_uc, &mut current_tcs, pkg);
@@ -2689,18 +2730,22 @@ impl MarkdownTranslator {
     pub fn parse_frontmatter(content: &str) -> (Frontmatter, &str) {
         let trimmed = content.trim_start();
         if let Some(after_opening) = trimmed.strip_prefix("---") {
-            let after_opening_trimmed = after_opening.trim_start_matches(|c| c == '\r' || c == '\n');
+            let after_opening_trimmed = after_opening.trim_start_matches(['\r', '\n']);
             if let Some(close_idx) = after_opening_trimmed.find("\n---") {
                 let yaml_block = &after_opening_trimmed[..close_idx];
                 let rest = &after_opening_trimmed[close_idx + 4..];
-                let rest_trimmed = rest.trim_start_matches(|c| c == '\r' || c == '\n');
+                let rest_trimmed = rest.trim_start_matches(['\r', '\n']);
 
                 let mut fm = Frontmatter::default();
                 for line in yaml_block.lines() {
                     let l = line.trim();
                     if let Some(colon_idx) = l.find(':') {
                         let key = l[..colon_idx].trim();
-                        let val = l[colon_idx + 1..].trim().trim_matches('"').trim_matches('\'').trim();
+                        let val = l[colon_idx + 1..]
+                            .trim()
+                            .trim_matches('"')
+                            .trim_matches('\'')
+                            .trim();
                         match key {
                             "id" => fm.id = Some(val.to_string()),
                             "title" => fm.title = Some(val.to_string()),
@@ -2818,7 +2863,8 @@ impl MarkdownTranslator {
         let (frontmatter, body_content) = Self::parse_frontmatter(content);
 
         // Step 2: Decompose structural sections and identify target components
-        let (pkg_name, sections) = self.parse_markdown_structure(body_content, default_name, &frontmatter);
+        let (pkg_name, sections) =
+            self.parse_markdown_structure(body_content, default_name, &frontmatter);
 
         let mut pkg = PackageDef {
             name: pkg_name.clone(),
@@ -2848,10 +2894,11 @@ impl MarkdownTranslator {
                             ..Default::default()
                         },
                     );
-                } else if let Some(part) = part_registry.get_mut(&part_name) {
-                    if part.doc.is_none() && !sec.section_doc.is_empty() {
-                        part.doc = Some(sec.section_doc.clone());
-                    }
+                } else if let Some(part) = part_registry
+                    .get_mut(&part_name)
+                    .filter(|part| part.doc.is_none() && !sec.section_doc.is_empty())
+                {
+                    part.doc = Some(sec.section_doc.clone());
                 }
                 current_part_name = Some(part_name);
             }
@@ -2940,122 +2987,122 @@ impl MarkdownTranslator {
         extract_behavioral_ast_nodes(body_content, &mut pkg);
 
         // Step 6: Extract formal RequirementDef if this is a requirement document
-        if let Some(ref req_id) = frontmatter.id {
-            if req_id.starts_with("REQ-")
+        if let Some(req_id) = frontmatter.id.as_deref().filter(|req_id| {
+            req_id.starts_with("REQ-")
                 || req_id.starts_with("REQ_")
                 || req_id.starts_with("BP-")
                 || req_id.starts_with("BP_")
-            {
-                let is_blueprint = req_id.starts_with("BP-")
-                    || req_id.starts_with("BP_")
-                    || pkg.name.starts_with("BP_");
-                let sub_str = frontmatter.subsystem.as_deref().unwrap_or("").trim();
-                let parent_pkg_name = if !is_blueprint && !sub_str.is_empty() {
-                    sanitize_identifier(sub_str, &pkg.name)
-                } else {
-                    pkg.name.clone()
-                };
-                pkg.parent_package = Some(parent_pkg_name.clone());
-                let normative_text = extract_normative_statement(content);
-                let (uuid, complexity, standard, diagnostics) =
-                    extract_req_metadata(content, &frontmatter);
+        }) {
+            let is_blueprint = req_id.starts_with("BP-")
+                || req_id.starts_with("BP_")
+                || pkg.name.starts_with("BP_");
+            let sub_str = frontmatter.subsystem.as_deref().unwrap_or("").trim();
+            let parent_pkg_name = if !is_blueprint && !sub_str.is_empty() {
+                sanitize_identifier(sub_str, &pkg.name)
+            } else {
+                pkg.name.clone()
+            };
+            pkg.parent_package = Some(parent_pkg_name.clone());
+            let normative_text = extract_normative_statement(content);
+            let (uuid, complexity, standard, diagnostics) =
+                extract_req_metadata(content, &frontmatter);
 
-                let num_str: String = req_id.chars().filter(|c| c.is_ascii_digit()).collect();
-                let title_clean = if let Some(ref title) = frontmatter.title {
-                    let primary = title
-                        .split('&')
-                        .next()
-                        .unwrap_or(title)
-                        .split(':')
-                        .next()
-                        .unwrap_or(title)
-                        .trim();
-                    sanitize_identifier(primary, "Requirement")
-                } else {
-                    "Requirement".to_string()
-                };
-                let req_name = format!("REQ_{}_{}", num_str, title_clean);
-                let doc_str = format!(
-                    "UUIDv5: {} | Complexity: {} | Standard: {} | Diagnostics: {}",
-                    uuid, complexity, standard, diagnostics
-                );
+            let num_str: String = req_id.chars().filter(|c| c.is_ascii_digit()).collect();
+            let title_clean = if let Some(ref title) = frontmatter.title {
+                let primary = title
+                    .split('&')
+                    .next()
+                    .unwrap_or(title)
+                    .split(':')
+                    .next()
+                    .unwrap_or(title)
+                    .trim();
+                sanitize_identifier(primary, "Requirement")
+            } else {
+                "Requirement".to_string()
+            };
+            let req_name = format!("REQ_{}_{}", num_str, title_clean);
+            let doc_str = format!(
+                "UUIDv5: {} | Complexity: {} | Standard: {} | Diagnostics: {}",
+                uuid, complexity, standard, diagnostics
+            );
 
-                let mut req_attributes = Vec::new();
+            let mut req_attributes = Vec::new();
 
-                // Metadata attributes
+            // Metadata attributes
+            req_attributes.push(AttributeDef {
+                name: "uuidv5".to_string(),
+                type_name: "String".to_string(),
+                default_value: Some(format!("\"{}\"", uuid)),
+                doc: None,
+            });
+            req_attributes.push(AttributeDef {
+                name: "complexity_class".to_string(),
+                type_name: "String".to_string(),
+                default_value: Some(format!("\"{}\"", complexity)),
+                doc: None,
+            });
+            req_attributes.push(AttributeDef {
+                name: "governing_standard".to_string(),
+                type_name: "String".to_string(),
+                default_value: Some(format!("\"{}\"", standard)),
+                doc: None,
+            });
+            req_attributes.push(AttributeDef {
+                name: "diagnostic_codes".to_string(),
+                type_name: "String".to_string(),
+                default_value: Some(format!("\"{}\"", diagnostics)),
+                doc: None,
+            });
+
+            // Acceptance criteria attributes and verify_by targets
+            let mut verified_by = Vec::new();
+            let ac_items = extract_acceptance_criteria(content);
+            for (ac_num_str, clean_ac_slug, ac_bdd_text) in ac_items {
+                let ac_attr_name =
+                    format!("ac_{}_{}", ac_num_str, clean_ac_slug.to_ascii_lowercase());
                 req_attributes.push(AttributeDef {
-                    name: "uuidv5".to_string(),
+                    name: ac_attr_name,
                     type_name: "String".to_string(),
-                    default_value: Some(format!("\"{}\"", uuid)),
+                    default_value: Some(format!("\"{}\"", ac_bdd_text)),
                     doc: None,
                 });
-                req_attributes.push(AttributeDef {
-                    name: "complexity_class".to_string(),
-                    type_name: "String".to_string(),
-                    default_value: Some(format!("\"{}\"", complexity)),
-                    doc: None,
-                });
-                req_attributes.push(AttributeDef {
-                    name: "governing_standard".to_string(),
-                    type_name: "String".to_string(),
-                    default_value: Some(format!("\"{}\"", standard)),
-                    doc: None,
-                });
-                req_attributes.push(AttributeDef {
-                    name: "diagnostic_codes".to_string(),
-                    type_name: "String".to_string(),
-                    default_value: Some(format!("\"{}\"", diagnostics)),
-                    doc: None,
-                });
-
-                // Acceptance criteria attributes and verify_by targets
-                let mut verified_by = Vec::new();
-                let ac_items = extract_acceptance_criteria(content);
-                for (ac_num_str, clean_ac_slug, ac_bdd_text) in ac_items {
-                    let ac_attr_name = format!("ac_{}_{}", ac_num_str, clean_ac_slug.to_ascii_lowercase());
-                    req_attributes.push(AttributeDef {
-                        name: ac_attr_name,
-                        type_name: "String".to_string(),
-                        default_value: Some(format!("\"{}\"", ac_bdd_text)),
-                        doc: None,
-                    });
-                    verified_by.push(format!("AC_{}_{}", ac_num_str, clean_ac_slug));
-                }
-
-                // Formal invariant constraints
-                let formal_invariants = extract_formal_invariants(content, &num_str);
-                let mut requires = Vec::new();
-                for inv in &formal_invariants {
-                    if !requires.contains(&inv.name) {
-                        requires.push(inv.name.clone());
-                    }
-                }
-
-                // Requirement cross-reference derivations
-                let derived_from = extract_requirement_cross_references(content, req_id);
-
-                let satisfied_by_target = pkg
-                    .part_defs
-                    .first()
-                    .map(|p| p.name.clone())
-                    .unwrap_or_else(|| format!("{}_Component", parent_pkg_name));
-
-                let req_def = RequirementDef {
-                    name: req_name,
-                    req_id: req_id.clone(),
-                    text: normative_text,
-                    doc: Some(doc_str),
-                    attributes: req_attributes,
-                    constraints: formal_invariants,
-                    requires,
-                    derived_from,
-                    verified_by,
-                    satisfied_by: vec![satisfied_by_target],
-                    ..Default::default()
-                };
-
-                pkg.requirement_defs.push(req_def);
+                verified_by.push(format!("AC_{}_{}", ac_num_str, clean_ac_slug));
             }
+
+            // Formal invariant constraints
+            let formal_invariants = extract_formal_invariants(content, &num_str);
+            let mut requires = Vec::new();
+            for inv in &formal_invariants {
+                if !requires.contains(&inv.name) {
+                    requires.push(inv.name.clone());
+                }
+            }
+
+            // Requirement cross-reference derivations
+            let derived_from = extract_requirement_cross_references(content, req_id);
+
+            let satisfied_by_target = pkg
+                .part_defs
+                .first()
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| format!("{}_Component", parent_pkg_name));
+
+            let req_def = RequirementDef {
+                name: req_name,
+                req_id: req_id.to_string(),
+                text: normative_text,
+                doc: Some(doc_str),
+                attributes: req_attributes,
+                constraints: formal_invariants,
+                requires,
+                derived_from,
+                verified_by,
+                satisfied_by: vec![satisfied_by_target],
+                ..Default::default()
+            };
+
+            pkg.requirement_defs.push(req_def);
         }
 
         Ok(pkg)
@@ -3088,11 +3135,17 @@ impl MarkdownTranslator {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-INGEST-MD/translate_files] | SysML v2: ActionDef(MarkdownTranslator::translate_files)
-    pub fn translate_files(&self, file_paths: &[String], default_name: &str) -> Result<PackageDef, String> {
+    pub fn translate_files(
+        &self,
+        file_paths: &[String],
+        default_name: &str,
+    ) -> Result<PackageDef, String> {
         use rayon::prelude::*;
 
         if file_paths.is_empty() {
-            return Err("Zero Markdown specification files provided to translate_files".to_string());
+            return Err(
+                "Zero Markdown specification files provided to translate_files".to_string(),
+            );
         }
 
         // Translate each file concurrently with isolated thread contexts and fail-closed error propagation
@@ -3113,7 +3166,10 @@ impl MarkdownTranslator {
                         e
                     )
                 })?;
-                let f_basename = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Module");
+                let f_basename = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("Module");
                 self.translate(&content, f_basename).map_err(|e| {
                     format!(
                         "Failed to translate Markdown specification file '{}': {}",
@@ -3137,14 +3193,20 @@ impl MarkdownTranslator {
                     .parent_package
                     .clone()
                     .unwrap_or_else(|| sub_pkg.name.clone());
-                let entry = subsys_map.entry(sub_name.clone()).or_insert_with(|| PackageDef {
-                    name: sub_name.clone(),
-                    doc: Some(format!("Subsystem package for {}", sub_name)),
-                    parent_package: Some(root_name.clone()),
-                    ..Default::default()
-                });
+                let entry = subsys_map
+                    .entry(sub_name.clone())
+                    .or_insert_with(|| PackageDef {
+                        name: sub_name.clone(),
+                        doc: Some(format!("Subsystem package for {}", sub_name)),
+                        parent_package: Some(root_name.clone()),
+                        ..Default::default()
+                    });
                 for req in sub_pkg.requirement_defs {
-                    if !entry.requirement_defs.iter().any(|r| r.req_id == req.req_id) {
+                    if !entry
+                        .requirement_defs
+                        .iter()
+                        .any(|r| r.req_id == req.req_id)
+                    {
                         entry.requirement_defs.push(req);
                     }
                 }
@@ -3249,8 +3311,11 @@ impl MarkdownTranslator {
                         }
                     }
                     // Merge constraints without duplicate names
-                    let existing_con_names: std::collections::HashSet<String> =
-                        existing.constraints.iter().map(|c| c.name.clone()).collect();
+                    let existing_con_names: std::collections::HashSet<String> = existing
+                        .constraints
+                        .iter()
+                        .map(|c| c.name.clone())
+                        .collect();
                     for c in p.constraints {
                         if !existing_con_names.contains(&c.name) {
                             existing.constraints.push(c);
@@ -3262,8 +3327,11 @@ impl MarkdownTranslator {
             }
 
             // Consolidate package-level attributes
-            let pkg_attr_names: std::collections::HashSet<String> =
-                combined_pkg.attribute_defs.iter().map(|a| a.name.clone()).collect();
+            let pkg_attr_names: std::collections::HashSet<String> = combined_pkg
+                .attribute_defs
+                .iter()
+                .map(|a| a.name.clone())
+                .collect();
             for a in sub_pkg.attribute_defs {
                 if !pkg_attr_names.contains(&a.name) {
                     combined_pkg.attribute_defs.push(a);
@@ -3271,8 +3339,11 @@ impl MarkdownTranslator {
             }
 
             // Consolidate package-level ports
-            let pkg_port_names: std::collections::HashSet<String> =
-                combined_pkg.port_defs.iter().map(|prt| prt.name.clone()).collect();
+            let pkg_port_names: std::collections::HashSet<String> = combined_pkg
+                .port_defs
+                .iter()
+                .map(|prt| prt.name.clone())
+                .collect();
             for prt in sub_pkg.port_defs {
                 if !pkg_port_names.contains(&prt.name) {
                     combined_pkg.port_defs.push(prt);
@@ -3280,8 +3351,11 @@ impl MarkdownTranslator {
             }
 
             // Consolidate package-level constraints
-            let pkg_con_names: std::collections::HashSet<String> =
-                combined_pkg.constraint_defs.iter().map(|c| c.name.clone()).collect();
+            let pkg_con_names: std::collections::HashSet<String> = combined_pkg
+                .constraint_defs
+                .iter()
+                .map(|c| c.name.clone())
+                .collect();
             for c in sub_pkg.constraint_defs {
                 if !pkg_con_names.contains(&c.name) {
                     combined_pkg.constraint_defs.push(c);
@@ -3289,8 +3363,11 @@ impl MarkdownTranslator {
             }
 
             // Consolidate package-level connections
-            let pkg_conn_names: std::collections::HashSet<String> =
-                combined_pkg.connection_defs.iter().map(|c| c.name.clone()).collect();
+            let pkg_conn_names: std::collections::HashSet<String> = combined_pkg
+                .connection_defs
+                .iter()
+                .map(|c| c.name.clone())
+                .collect();
             for conn in sub_pkg.connection_defs {
                 if !pkg_conn_names.contains(&conn.name) {
                     combined_pkg.connection_defs.push(conn);
@@ -3303,7 +3380,11 @@ impl MarkdownTranslator {
                 }
             }
             for inter in sub_pkg.interaction_defs {
-                if !combined_pkg.interaction_defs.iter().any(|i| i.name == inter.name) {
+                if !combined_pkg
+                    .interaction_defs
+                    .iter()
+                    .any(|i| i.name == inter.name)
+                {
                     combined_pkg.interaction_defs.push(inter);
                 }
             }
@@ -3318,7 +3399,11 @@ impl MarkdownTranslator {
                 }
             }
             for tc in sub_pkg.test_case_defs {
-                if !combined_pkg.test_case_defs.iter().any(|t| t.name == tc.name) {
+                if !combined_pkg
+                    .test_case_defs
+                    .iter()
+                    .any(|t| t.name == tc.name)
+                {
                     combined_pkg.test_case_defs.push(tc);
                 }
             }
@@ -3415,7 +3500,6 @@ impl MarkdownTranslator {
             flush_table(in_tbl, raw_h, norm_h, u, r, tbls);
             if !sec_hdr.is_empty() || !tbls.is_empty() || !sec_doc.is_empty() {
                 secs.push(ParsedSection {
-                    header: sec_hdr.clone(),
                     component_target: comp_tgt.clone(),
                     section_doc: sec_doc
                         .join(" ")
@@ -3430,24 +3514,36 @@ impl MarkdownTranslator {
         };
 
         let has_explicit_comp_prefix = |header: &str| -> bool {
-            const PREFIXES: &[&str] = &["component", "part", "subsystem", "assembly", "block", "module"];
+            const PREFIXES: &[&str] = &[
+                "component",
+                "part",
+                "subsystem",
+                "assembly",
+                "block",
+                "module",
+            ];
             let mut candidate = header.trim();
-            if let Some((first_tok, rest_after_num)) = candidate.split_once(char::is_whitespace) {
-                if !first_tok.is_empty()
-                    && first_tok.chars().any(|c| c.is_ascii_digit())
-                    && first_tok.chars().all(|c| c.is_ascii_digit() || c == '.')
-                {
-                    candidate = rest_after_num.trim_start();
-                }
+            if let Some((first_tok, rest_after_num)) = candidate
+                .split_once(char::is_whitespace)
+                .filter(|(first_tok, _)| {
+                    !first_tok.is_empty()
+                        && first_tok.chars().any(|c| c.is_ascii_digit())
+                        && first_tok.chars().all(|c| c.is_ascii_digit() || c == '.')
+                })
+            {
+                let _ = first_tok;
+                candidate = rest_after_num.trim_start();
             }
             let lower = candidate.to_ascii_lowercase();
             for &prefix in PREFIXES {
-                if lower.starts_with(prefix) {
-                    if let Some(rest) = candidate.get(prefix.len()..) {
-                        let trimmed = rest.trim_start();
-                        if trimmed.starts_with(':') || trimmed.starts_with('-') {
-                            return true;
-                        }
+                if let Some(rest) = lower
+                    .starts_with(prefix)
+                    .then(|| candidate.get(prefix.len()..))
+                    .flatten()
+                {
+                    let trimmed = rest.trim_start();
+                    if trimmed.starts_with(':') || trimmed.starts_with('-') {
+                        return true;
                     }
                 }
             }
@@ -3469,7 +3565,9 @@ impl MarkdownTranslator {
                 let hc = t.chars().take_while(|&c| c == '#').count();
                 if (2..=4).contains(&hc) {
                     let after = &t[hc..];
-                    if after.starts_with(char::is_whitespace) && has_explicit_comp_prefix(after.trim()) {
+                    if after.starts_with(char::is_whitespace)
+                        && has_explicit_comp_prefix(after.trim())
+                    {
                         found = true;
                         break;
                     }
@@ -3489,8 +3587,12 @@ impl MarkdownTranslator {
             if line_str.starts_with("```") || line_str.starts_with("~~~") {
                 if in_table {
                     flush_table(
-                        &mut in_table, &mut table_raw_headers, &mut table_norm_headers,
-                        &mut table_units, &mut table_rows, &mut current_tables,
+                        &mut in_table,
+                        &mut table_raw_headers,
+                        &mut table_norm_headers,
+                        &mut table_units,
+                        &mut table_rows,
+                        &mut current_tables,
                     );
                 }
                 in_code_block = !in_code_block;
@@ -3520,10 +3622,16 @@ impl MarkdownTranslator {
 
             if let Some(raw_pkg) = is_h1 {
                 flush_section(
-                    &mut in_table, &mut table_raw_headers, &mut table_norm_headers,
-                    &mut table_units, &mut table_rows, &mut current_tables,
-                    &mut current_sec_header, &mut current_component_target,
-                    &mut current_sec_doc, &mut sections,
+                    &mut in_table,
+                    &mut table_raw_headers,
+                    &mut table_norm_headers,
+                    &mut table_units,
+                    &mut table_rows,
+                    &mut current_tables,
+                    &mut current_sec_header,
+                    &mut current_component_target,
+                    &mut current_sec_doc,
+                    &mut sections,
                 );
                 let raw_pkg_clean = strip_pkg_words(raw_pkg);
                 let cand_name = if !raw_pkg_clean.is_empty() {
@@ -3562,10 +3670,16 @@ impl MarkdownTranslator {
 
             if let Some((level, raw_header)) = is_h_sub {
                 flush_section(
-                    &mut in_table, &mut table_raw_headers, &mut table_norm_headers,
-                    &mut table_units, &mut table_rows, &mut current_tables,
-                    &mut current_sec_header, &mut current_component_target,
-                    &mut current_sec_doc, &mut sections,
+                    &mut in_table,
+                    &mut table_raw_headers,
+                    &mut table_norm_headers,
+                    &mut table_units,
+                    &mut table_rows,
+                    &mut current_tables,
+                    &mut current_sec_header,
+                    &mut current_component_target,
+                    &mut current_sec_doc,
+                    &mut sections,
                 );
                 current_sec_header = raw_header.to_string();
 
@@ -3663,7 +3777,8 @@ impl MarkdownTranslator {
                     .map(|c| c.trim().to_string())
                     .collect();
 
-                let is_delimiter = !cells.is_empty() && cells.iter().all(|c| is_table_delimiter_cell(c));
+                let is_delimiter =
+                    !cells.is_empty() && cells.iter().all(|c| is_table_delimiter_cell(c));
 
                 if is_delimiter && !in_table {
                     if let Some(header_line) = current_sec_doc.pop() {
@@ -3698,45 +3813,51 @@ impl MarkdownTranslator {
                     table_rows.push(row_dict);
                     i += 1;
                     continue;
-                } else {
+                } else if i + 1 < n && lines[i + 1].contains('|') {
                     // Peek ahead to next row
-                    if i + 1 < n && lines[i + 1].contains('|') {
-                        let next_line = lines[i + 1].trim();
-                        let next_cells: Vec<String> = next_line
-                            .trim_matches('|')
-                            .split('|')
-                            .map(|c| c.trim().to_string())
+                    let next_line = lines[i + 1].trim();
+                    let next_cells: Vec<String> = next_line
+                        .trim_matches('|')
+                        .split('|')
+                        .map(|c| c.trim().to_string())
+                        .collect();
+                    if !next_cells.is_empty()
+                        && next_cells.iter().all(|c| is_table_delimiter_cell(c))
+                    {
+                        flush_table(
+                            &mut in_table,
+                            &mut table_raw_headers,
+                            &mut table_norm_headers,
+                            &mut table_units,
+                            &mut table_rows,
+                            &mut current_tables,
+                        );
+                        table_raw_headers = cells.clone();
+                        table_norm_headers = cells.iter().map(|c| normalize_col(c)).collect();
+                        table_units = cells
+                            .iter()
+                            .map(|c| extract_unit_from_header_or_val(c).1)
                             .collect();
-                        if !next_cells.is_empty() && next_cells.iter().all(|c| is_table_delimiter_cell(c)) {
-                            flush_table(
-                                &mut in_table, &mut table_raw_headers, &mut table_norm_headers,
-                                &mut table_units, &mut table_rows, &mut current_tables,
-                            );
-                            table_raw_headers = cells.clone();
-                            table_norm_headers = cells.iter().map(|c| normalize_col(c)).collect();
-                            table_units = cells
-                                .iter()
-                                .map(|c| extract_unit_from_header_or_val(c).1)
-                                .collect();
-                            in_table = true;
-                            i += 2;
-                            continue;
-                        }
+                        in_table = true;
+                        i += 2;
+                        continue;
                     }
                 }
             }
 
             if in_table && (!line_str.contains('|') || line_str.is_empty()) {
                 flush_table(
-                    &mut in_table, &mut table_raw_headers, &mut table_norm_headers,
-                    &mut table_units, &mut table_rows, &mut current_tables,
+                    &mut in_table,
+                    &mut table_raw_headers,
+                    &mut table_norm_headers,
+                    &mut table_units,
+                    &mut table_rows,
+                    &mut current_tables,
                 );
             }
 
             // Prose line
-            if !line_str.is_empty()
-                && !line_str.starts_with("<!--")
-                && !line_str.starts_with("```")
+            if !line_str.is_empty() && !line_str.starts_with("<!--") && !line_str.starts_with("```")
             {
                 current_sec_doc.push(line_str.to_string());
             }
@@ -3745,10 +3866,16 @@ impl MarkdownTranslator {
         }
 
         flush_section(
-            &mut in_table, &mut table_raw_headers, &mut table_norm_headers,
-            &mut table_units, &mut table_rows, &mut current_tables,
-            &mut current_sec_header, &mut current_component_target,
-            &mut current_sec_doc, &mut sections,
+            &mut in_table,
+            &mut table_raw_headers,
+            &mut table_norm_headers,
+            &mut table_units,
+            &mut table_rows,
+            &mut current_tables,
+            &mut current_sec_header,
+            &mut current_component_target,
+            &mut current_sec_doc,
+            &mut sections,
         );
 
         (pkg_name, sections)
@@ -3803,13 +3930,24 @@ impl MarkdownTranslator {
             .iter()
             .find(|h| {
                 [
-                    "component", "component_name", "part", "part_name",
-                    "subsystem", "item", "module", "assembly",
+                    "component",
+                    "component_name",
+                    "part",
+                    "part_name",
+                    "subsystem",
+                    "item",
+                    "module",
+                    "assembly",
                 ]
                 .contains(&h.as_str())
             })
             .cloned()
-            .unwrap_or_else(|| headers.first().cloned().unwrap_or_else(|| "component".to_string()));
+            .unwrap_or_else(|| {
+                headers
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "component".to_string())
+            });
 
         let attr_name_col = headers
             .iter()
@@ -3830,14 +3968,21 @@ impl MarkdownTranslator {
             })
             .cloned();
 
-        let summary_keywords = ["total", "subtotal", "sum", "summary", "aggregate", "overall"];
+        let summary_keywords = [
+            "total",
+            "subtotal",
+            "sum",
+            "summary",
+            "aggregate",
+            "overall",
+        ];
 
         for row in &table.rows {
             let comp_raw = row.get(&comp_col).map_or("", |v| v.trim());
             let is_sep = !comp_raw.is_empty()
-                && comp_raw
-                    .chars()
-                    .all(|c| c == '-' || c == '=' || c == '_' || c == ':' || c == '|' || c.is_whitespace());
+                && comp_raw.chars().all(|c| {
+                    c == '-' || c == '=' || c == '_' || c == ':' || c == '|' || c.is_whitespace()
+                });
             if comp_raw.is_empty() || is_sep {
                 continue;
             }
@@ -3848,7 +3993,9 @@ impl MarkdownTranslator {
                 .collect();
             let comp_clean = comp_clean.trim().to_ascii_lowercase();
             if summary_keywords.contains(&comp_clean.as_str())
-                || summary_keywords.iter().any(|&kw| comp_clean.starts_with(&format!("{} ", kw)))
+                || summary_keywords
+                    .iter()
+                    .any(|&kw| comp_clean.starts_with(&format!("{} ", kw)))
             {
                 continue;
             }
@@ -3861,10 +4008,12 @@ impl MarkdownTranslator {
             }
 
             let comp_name = sanitize_identifier(comp_raw, "Component");
-            let part = part_registry.entry(comp_name.clone()).or_insert_with(|| PartDef {
-                name: comp_name,
-                ..Default::default()
-            });
+            let part = part_registry
+                .entry(comp_name.clone())
+                .or_insert_with(|| PartDef {
+                    name: comp_name,
+                    ..Default::default()
+                });
 
             let row_citation = extract_provenance_citation(row, headers);
             if let Some(ref attr_col) = attr_name_col {
@@ -3881,7 +4030,10 @@ impl MarkdownTranslator {
 
             let mut desc_found = false;
             for (col, val) in row {
-                if col == &comp_col || val.trim().is_empty() || PROVENANCE_COLUMNS.contains(&col.as_str()) {
+                if col == &comp_col
+                    || val.trim().is_empty()
+                    || PROVENANCE_COLUMNS.contains(&col.as_str())
+                {
                     continue;
                 }
 
@@ -3907,7 +4059,10 @@ impl MarkdownTranslator {
                     if !val.contains('.') {
                         ("Integer".to_string(), i_val.to_string())
                     } else {
-                        ("Real".to_string(), num_val.unwrap_or(i_val as f64).to_string())
+                        (
+                            "Real".to_string(),
+                            num_val.unwrap_or(i_val as f64).to_string(),
+                        )
                     }
                 } else if let Some(n_val) = num_val {
                     ("Real".to_string(), n_val.to_string())
@@ -3923,7 +4078,11 @@ impl MarkdownTranslator {
                         name: attr_name,
                         type_name,
                         default_value: Some(def_val),
-                        doc: if doc_str.is_empty() { None } else { Some(doc_str) },
+                        doc: if doc_str.is_empty() {
+                            None
+                        } else {
+                            Some(doc_str)
+                        },
                     });
                 }
             }
@@ -3975,9 +4134,9 @@ impl MarkdownTranslator {
             return;
         }
         let attr_name = sanitize_identifier(raw_attr, "attr");
-        let type_col = headers.iter().find(|h| {
-            ["type", "data_type", "attribute_type", "value_type"].contains(&h.as_str())
-        });
+        let type_col = headers
+            .iter()
+            .find(|h| ["type", "data_type", "attribute_type", "value_type"].contains(&h.as_str()));
         let def_col = headers.iter().find(|h| {
             [
                 "default",
@@ -4012,7 +4171,10 @@ impl MarkdownTranslator {
         let (num_val, val_unit, int_val) = parse_numeric_with_unit(raw_def);
         let eff_unit = if !row_unit.is_empty() {
             row_unit.to_string()
-        } else if let Some(u) = def_col.and_then(|c| unit_map.get(c)).filter(|u| !u.is_empty()) {
+        } else if let Some(u) = def_col
+            .and_then(|c| unit_map.get(c))
+            .filter(|u| !u.is_empty())
+        {
             u.clone()
         } else {
             val_unit.unwrap_or_default()
@@ -4022,10 +4184,24 @@ impl MarkdownTranslator {
             let low = raw_type.to_ascii_lowercase();
             if matches!(
                 low.as_str(),
-                "int" | "integer" | "usize" | "u64" | "u32" | "u16" | "u8" | "isize" | "i64" | "i32" | "i16" | "i8"
+                "int"
+                    | "integer"
+                    | "usize"
+                    | "u64"
+                    | "u32"
+                    | "u16"
+                    | "u8"
+                    | "isize"
+                    | "i64"
+                    | "i32"
+                    | "i16"
+                    | "i8"
             ) {
                 "Integer".to_string()
-            } else if matches!(low.as_str(), "real" | "float" | "float32" | "float64" | "double" | "f64" | "f32") {
+            } else if matches!(
+                low.as_str(),
+                "real" | "float" | "float32" | "float64" | "double" | "f64" | "f32"
+            ) {
                 "Real".to_string()
             } else if matches!(low.as_str(), "bool" | "boolean") {
                 "Boolean".to_string()
@@ -4070,7 +4246,11 @@ impl MarkdownTranslator {
                 name: attr_name,
                 type_name,
                 default_value: def_val,
-                doc: if doc_str.is_empty() { None } else { Some(doc_str) },
+                doc: if doc_str.is_empty() {
+                    None
+                } else {
+                    Some(doc_str)
+                },
             });
         }
     }
@@ -4128,8 +4308,13 @@ impl MarkdownTranslator {
             .iter()
             .find(|h| ["included_use_cases", "includes", "include"].contains(&h.as_str()));
         let tc_col = headers.iter().find(|h| {
-            ["verification_test_cases", "test_cases", "test_case", "verification"]
-                .contains(&h.as_str())
+            [
+                "verification_test_cases",
+                "test_cases",
+                "test_case",
+                "verification",
+            ]
+            .contains(&h.as_str())
         });
         let steps_col = headers
             .iter()
@@ -4284,8 +4469,14 @@ impl MarkdownTranslator {
             .iter()
             .find(|h| {
                 [
-                    "port", "port_name", "signal", "signal_name", "signal_id",
-                    "interface", "name", "flow",
+                    "port",
+                    "port_name",
+                    "signal",
+                    "signal_name",
+                    "signal_id",
+                    "interface",
+                    "name",
+                    "flow",
                 ]
                 .contains(&h.as_str())
             })
@@ -4298,16 +4489,36 @@ impl MarkdownTranslator {
                 }
             });
 
-        let dir_col = headers.iter().find(|h| ["direction", "dir", "flow_direction"].contains(&h.as_str()));
-        let type_col = headers.iter().find(|h| ["type", "data_type", "item_type", "payload", "port_type"].contains(&h.as_str()));
-        let protocol_col = headers.iter().find(|h| ["protocol", "protocol_family", "bus"].contains(&h.as_str()));
-        let rate_col = headers.iter().find(|h| ["rate", "rate_hz", "frequency", "update_rate"].contains(&h.as_str()));
-        let range_col = headers.iter().find(|h| ["range", "valid_range"].contains(&h.as_str()));
-        let unit_col = headers.iter().find(|h| ["unit", "units", "engineering_units"].contains(&h.as_str()));
-        let def_col = headers.iter().find(|h| ["default", "default_value"].contains(&h.as_str()));
-        let doc_col = headers.iter().find(|h| ["description", "doc", "notes"].contains(&h.as_str()));
-        let src_col = headers.iter().find(|h| ["source_port", "source", "source_part"].contains(&h.as_str()));
-        let tgt_col = headers.iter().find(|h| ["target_port", "target", "target_part"].contains(&h.as_str()));
+        let dir_col = headers
+            .iter()
+            .find(|h| ["direction", "dir", "flow_direction"].contains(&h.as_str()));
+        let type_col = headers.iter().find(|h| {
+            ["type", "data_type", "item_type", "payload", "port_type"].contains(&h.as_str())
+        });
+        let protocol_col = headers
+            .iter()
+            .find(|h| ["protocol", "protocol_family", "bus"].contains(&h.as_str()));
+        let rate_col = headers
+            .iter()
+            .find(|h| ["rate", "rate_hz", "frequency", "update_rate"].contains(&h.as_str()));
+        let range_col = headers
+            .iter()
+            .find(|h| ["range", "valid_range"].contains(&h.as_str()));
+        let unit_col = headers
+            .iter()
+            .find(|h| ["unit", "units", "engineering_units"].contains(&h.as_str()));
+        let def_col = headers
+            .iter()
+            .find(|h| ["default", "default_value"].contains(&h.as_str()));
+        let doc_col = headers
+            .iter()
+            .find(|h| ["description", "doc", "notes"].contains(&h.as_str()));
+        let src_col = headers
+            .iter()
+            .find(|h| ["source_port", "source", "source_part"].contains(&h.as_str()));
+        let tgt_col = headers
+            .iter()
+            .find(|h| ["target_port", "target", "target_part"].contains(&h.as_str()));
         let latency_col = headers.iter().find(|h| {
             [
                 "latency",
@@ -4372,11 +4583,19 @@ impl MarkdownTranslator {
                 .filter(|u| !u.is_empty())
                 .unwrap_or_else(|| unit_map.get(&name_col).cloned().unwrap_or_default());
 
-            let val_range = range_col.and_then(|c| row.get(c)).map(|v| v.trim().to_string());
-            let def_val = def_col.and_then(|c| row.get(c)).map(|v| v.trim().to_string());
+            let val_range = range_col
+                .and_then(|c| row.get(c))
+                .map(|v| v.trim().to_string());
+            let def_val = def_col
+                .and_then(|c| row.get(c))
+                .map(|v| v.trim().to_string());
 
             let mut item_flows = Vec::new();
-            if rate_hz.is_some() || !eff_unit.is_empty() || val_range.is_some() || (type_name != "Port" && direction != "inout") {
+            if rate_hz.is_some()
+                || !eff_unit.is_empty()
+                || val_range.is_some()
+                || (type_name != "Port" && direction != "inout")
+            {
                 let flow_name = format!("{}_flow", port_name);
                 let flow_doc = compose_sanitized_doc(raw_desc, &cit, &eff_unit);
                 item_flows.push(FlowDef {
@@ -4391,9 +4610,17 @@ impl MarkdownTranslator {
                     } else {
                         "Item".to_string()
                     },
-                    doc: if flow_doc.is_empty() { None } else { Some(flow_doc) },
+                    doc: if flow_doc.is_empty() {
+                        None
+                    } else {
+                        Some(flow_doc)
+                    },
                     rate_hz,
-                    unit: if eff_unit.is_empty() { None } else { Some(eff_unit) },
+                    unit: if eff_unit.is_empty() {
+                        None
+                    } else {
+                        Some(eff_unit)
+                    },
                     valid_range: val_range,
                     default_value: def_val,
                 });
@@ -4446,10 +4673,18 @@ impl MarkdownTranslator {
                             target_part: tgt_val
                                 .split_once('.')
                                 .map(|(p, _)| p.trim_matches(['`', '*', ' ']).to_string()),
-                            doc: if conn_doc.is_empty() { None } else { Some(conn_doc) },
+                            doc: if conn_doc.is_empty() {
+                                None
+                            } else {
+                                Some(conn_doc)
+                            },
                             severity: 1,
                             item_flow_ref: None,
-                            protocol: if !protocol.is_empty() { Some(protocol) } else { None },
+                            protocol: if !protocol.is_empty() {
+                                Some(protocol)
+                            } else {
+                                None
+                            },
                             latency_ms,
                             is_flow: false,
                         });
@@ -4522,7 +4757,12 @@ impl MarkdownTranslator {
             .iter()
             .find(|h| {
                 [
-                    "parameter", "param", "property", "metric", "variable", "name",
+                    "parameter",
+                    "param",
+                    "property",
+                    "metric",
+                    "variable",
+                    "name",
                 ]
                 .contains(&h.as_str())
             })
@@ -4536,14 +4776,30 @@ impl MarkdownTranslator {
                     .unwrap_or_else(|| "parameter".to_string())
             });
 
-        let min_col = headers.iter().find(|h| ["min", "minimum", "lower_bound", "min_val"].contains(&h.as_str()));
-        let max_col = headers.iter().find(|h| ["max", "maximum", "upper_bound", "max_val"].contains(&h.as_str()));
-        let range_col = headers.iter().find(|h| ["range", "valid_range", "bounds", "limit", "bound"].contains(&h.as_str()));
-        let unit_col = headers.iter().find(|h| ["unit", "units", "engineering_units"].contains(&h.as_str()));
-        let type_col = headers.iter().find(|h| ["type", "data_type"].contains(&h.as_str()));
-        let def_col = headers.iter().find(|h| ["default", "default_value", "nominal", "value"].contains(&h.as_str()));
-        let constraint_col = headers.iter().find(|h| ["constraint", "condition", "invariant", "assertion"].contains(&h.as_str()));
-        let doc_col = headers.iter().find(|h| ["description", "doc", "notes"].contains(&h.as_str()));
+        let min_col = headers
+            .iter()
+            .find(|h| ["min", "minimum", "lower_bound", "min_val"].contains(&h.as_str()));
+        let max_col = headers
+            .iter()
+            .find(|h| ["max", "maximum", "upper_bound", "max_val"].contains(&h.as_str()));
+        let range_col = headers
+            .iter()
+            .find(|h| ["range", "valid_range", "bounds", "limit", "bound"].contains(&h.as_str()));
+        let unit_col = headers
+            .iter()
+            .find(|h| ["unit", "units", "engineering_units"].contains(&h.as_str()));
+        let type_col = headers
+            .iter()
+            .find(|h| ["type", "data_type"].contains(&h.as_str()));
+        let def_col = headers
+            .iter()
+            .find(|h| ["default", "default_value", "nominal", "value"].contains(&h.as_str()));
+        let constraint_col = headers
+            .iter()
+            .find(|h| ["constraint", "condition", "invariant", "assertion"].contains(&h.as_str()));
+        let doc_col = headers
+            .iter()
+            .find(|h| ["description", "doc", "notes"].contains(&h.as_str()));
 
         for row in &table.rows {
             let raw_param = row.get(&param_col).map_or("", |v| v.trim());
@@ -4563,35 +4819,33 @@ impl MarkdownTranslator {
             let mut min_val: Option<f64> = None;
             let mut max_val: Option<f64> = None;
 
-            if let Some(c) = min_col {
-                if let Some(v_str) = row.get(c) {
-                    let (v, u, _) = parse_numeric_with_unit(v_str);
-                    min_val = v;
-                    if eff_unit.is_empty() && u.is_some() {
-                        eff_unit = u.unwrap();
-                    }
+            if let Some(v_str) = min_col.and_then(|c| row.get(c)) {
+                let (v, u, _) = parse_numeric_with_unit(v_str);
+                min_val = v;
+                if let Some(unit_str) = u.filter(|_| eff_unit.is_empty()) {
+                    eff_unit = unit_str;
                 }
             }
 
-            if let Some(c) = max_col {
-                if let Some(v_str) = row.get(c) {
-                    let (v, u, _) = parse_numeric_with_unit(v_str);
-                    max_val = v;
-                    if eff_unit.is_empty() && u.is_some() {
-                        eff_unit = u.unwrap();
-                    }
+            if let Some(v_str) = max_col.and_then(|c| row.get(c)) {
+                let (v, u, _) = parse_numeric_with_unit(v_str);
+                max_val = v;
+                if let Some(unit_str) = u.filter(|_| eff_unit.is_empty()) {
+                    eff_unit = unit_str;
                 }
             }
 
-            if (min_val.is_none() || max_val.is_none()) && range_col.is_some() {
-                if let Some(v_str) = row.get(range_col.unwrap()) {
-                    let (r_min, r_max) = parse_range_bounds(v_str);
-                    if min_val.is_none() {
-                        min_val = r_min;
-                    }
-                    if max_val.is_none() {
-                        max_val = r_max;
-                    }
+            if let Some(v_str) = (min_val.is_none() || max_val.is_none())
+                .then_some(range_col)
+                .flatten()
+                .and_then(|rc| row.get(rc))
+            {
+                let (r_min, r_max) = parse_range_bounds(v_str);
+                if min_val.is_none() {
+                    min_val = r_min;
+                }
+                if max_val.is_none() {
+                    max_val = r_max;
                 }
             }
 
@@ -4626,7 +4880,11 @@ impl MarkdownTranslator {
                     expression,
                     parameters: Vec::new(),
                     is_assertion: true,
-                    doc: if con_doc.is_empty() { None } else { Some(con_doc) },
+                    doc: if con_doc.is_empty() {
+                        None
+                    } else {
+                        Some(con_doc)
+                    },
                     pre_conditions: Vec::new(),
                     post_conditions: Vec::new(),
                 };
@@ -4709,7 +4967,11 @@ impl MarkdownTranslator {
                 name: param_name.clone(),
                 type_name,
                 default_value: def_val,
-                doc: if attr_doc.is_empty() { None } else { Some(attr_doc) },
+                doc: if attr_doc.is_empty() {
+                    None
+                } else {
+                    Some(attr_doc)
+                },
             };
 
             if let Some(ref mut part) = target_part {
@@ -4924,14 +5186,21 @@ impl MarkdownTranslator {
                 if !clean_v.contains('.') {
                     ("Integer".to_string(), Some(i_val.to_string()))
                 } else {
-                    ("Real".to_string(), Some(num_v.unwrap_or(i_val as f64).to_string()))
+                    (
+                        "Real".to_string(),
+                        Some(num_v.unwrap_or(i_val as f64).to_string()),
+                    )
                 }
             } else if let Some(n_val) = num_v {
                 ("Real".to_string(), Some(n_val.to_string()))
-            } else if clean_v.eq_ignore_ascii_case("true") || clean_v.eq_ignore_ascii_case("false") {
+            } else if clean_v.eq_ignore_ascii_case("true") || clean_v.eq_ignore_ascii_case("false")
+            {
                 ("Boolean".to_string(), Some(clean_v.to_ascii_lowercase()))
             } else if !clean_v.is_empty() {
-                ("String".to_string(), Some(escape_sysml_string_literal(clean_v)))
+                (
+                    "String".to_string(),
+                    Some(escape_sysml_string_literal(clean_v)),
+                )
             } else {
                 ("String".to_string(), None)
             };
@@ -4941,7 +5210,11 @@ impl MarkdownTranslator {
                 name: attr_name.clone(),
                 type_name,
                 default_value: def_val,
-                doc: if eff_doc.is_empty() { None } else { Some(eff_doc) },
+                doc: if eff_doc.is_empty() {
+                    None
+                } else {
+                    Some(eff_doc)
+                },
             };
 
             if let Some(ref mut part) = target_part {
@@ -5037,7 +5310,9 @@ Prose
         }
         let content = fs::read_to_string(req1_path).expect("Failed to read schema/REQ-0001.md");
         let translator = MarkdownTranslator::new();
-        let pkg = translator.translate(&content, "REQ-0001").expect("Translation failed");
+        let pkg = translator
+            .translate(&content, "REQ-0001")
+            .expect("Translation failed");
 
         assert_eq!(
             pkg.name,
@@ -5063,8 +5338,13 @@ Prose
         let req = &pkg.requirement_defs[0];
         assert_eq!(req.name, "REQ_0001_Abstract_MBSE_Compiler_Mandate");
         assert_eq!(req.req_id, "REQ-0001");
-        assert!(req.text.contains("abstract Model-Based Systems Engineering"));
-        let doc = req.doc.as_ref().expect("Expected doc metadata on RequirementDef");
+        assert!(req
+            .text
+            .contains("abstract Model-Based Systems Engineering"));
+        let doc = req
+            .doc
+            .as_ref()
+            .expect("Expected doc metadata on RequirementDef");
         assert!(doc.contains("UUIDv5: 5a4d7a99-0419-5c2b-ba0e-ccabdb05f1c9"));
         assert!(doc.contains("Complexity:"));
         assert!(doc.contains("Standard:"));
@@ -5081,10 +5361,15 @@ Prose
         // Verify AC attributes on RequirementDef
         assert!(req_attr_names.contains(&"ac_01_pure_schema_driven_symbol_derivation"));
         assert!(req_attr_names.contains(&"ac_02_zero_domain_vocabulary_contamination"));
-        assert!(req_attr_names.contains(&"ac_03_deterministic_rfc_4122_uuidv5_topological_path_anchors"));
+        assert!(req_attr_names
+            .contains(&"ac_03_deterministic_rfc_4122_uuidv5_topological_path_anchors"));
         assert!(req_attr_names.contains(&"ac_04_bitwise_determinism_across_repeated_invocations"));
 
-        let ac1 = req.attributes.iter().find(|a| a.name == "ac_01_pure_schema_driven_symbol_derivation").unwrap();
+        let ac1 = req
+            .attributes
+            .iter()
+            .find(|a| a.name == "ac_01_pure_schema_driven_symbol_derivation")
+            .unwrap();
         let ac1_val = ac1.default_value.as_ref().unwrap();
         assert!(ac1_val.contains("Given:"));
         assert!(ac1_val.contains("When:"));
@@ -5092,7 +5377,11 @@ Prose
         assert!(ac1_val.contains("Diagnostic:"));
         assert!(ac1_val.contains("E0100"));
 
-        let ac4 = req.attributes.iter().find(|a| a.name == "ac_04_bitwise_determinism_across_repeated_invocations").unwrap();
+        let ac4 = req
+            .attributes
+            .iter()
+            .find(|a| a.name == "ac_04_bitwise_determinism_across_repeated_invocations")
+            .unwrap();
         let ac4_val = ac4.default_value.as_ref().unwrap();
         assert!(ac4_val.contains("Given:"));
         assert!(ac4_val.contains("When:"));
@@ -5184,14 +5473,20 @@ The system shall perform beta function.
 | param_x | 20.0 | 28.0 | V | Synthetic parameter x |
 "#;
         let translator = MarkdownTranslator::new();
-        let pkg = translator.translate(content, "Package_0").expect("Failed translation");
+        let pkg = translator
+            .translate(content, "Package_0")
+            .expect("Failed translation");
 
         assert_eq!(pkg.name, "Package_0");
         let part_names: Vec<&str> = pkg.part_defs.iter().map(|p| p.name.as_str()).collect();
         assert!(part_names.contains(&"Classifier_Alpha"));
         assert!(part_names.contains(&"Classifier_Beta"));
 
-        let alpha = pkg.part_defs.iter().find(|p| p.name == "Classifier_Alpha").unwrap();
+        let alpha = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "Classifier_Alpha")
+            .unwrap();
         assert_eq!(alpha.doc.as_deref(), Some("Synthetic component alpha"));
         let alpha_attrs: Vec<&str> = alpha.attributes.iter().map(|a| a.name.as_str()).collect();
         assert!(alpha_attrs.contains(&"part_number"));
@@ -5202,7 +5497,11 @@ The system shall perform beta function.
         assert!(port_names.contains(&"Port_1"));
         assert!(port_names.contains(&"Port_2"));
 
-        let con_names: Vec<&str> = pkg.constraint_defs.iter().map(|c| c.name.as_str()).collect();
+        let con_names: Vec<&str> = pkg
+            .constraint_defs
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect();
         assert!(con_names.contains(&"assert_param_x_range"));
     }
 
@@ -5255,12 +5554,25 @@ Complexity Class P.
 "#;
         let invariants = extract_formal_invariants(content, "0032");
         assert_eq!(invariants.len(), 3);
-        assert_eq!(invariants[0].name, "Invariant_REQ_0032_Strict_Total_Ordering_Invariant");
+        assert_eq!(
+            invariants[0].name,
+            "Invariant_REQ_0032_Strict_Total_Ordering_Invariant"
+        );
         assert!(!invariants[0].is_assertion);
-        assert!(invariants[0].doc.as_ref().unwrap().contains(r"\forall d_1 \ne d_2"));
+        assert!(invariants[0]
+            .doc
+            .as_ref()
+            .unwrap()
+            .contains(r"\forall d_1 \ne d_2"));
 
-        assert_eq!(invariants[1].name, "Invariant_REQ_0032_Zero_Diff_Churn_Determinism");
-        assert_eq!(invariants[2].name, "Invariant_REQ_0032_Diagnostic_Code_Binding_Invariants");
+        assert_eq!(
+            invariants[1].name,
+            "Invariant_REQ_0032_Zero_Diff_Churn_Determinism"
+        );
+        assert_eq!(
+            invariants[2].name,
+            "Invariant_REQ_0032_Diagnostic_Code_Binding_Invariants"
+        );
 
         let refs = extract_requirement_cross_references(content, "REQ-0032");
         assert!(refs.iter().any(|r| r.contains("0031")));
@@ -5278,20 +5590,34 @@ Complexity Class P.
         }
         let content = std::fs::read_to_string(&path).expect("Failed to read REQ-0032.md");
         let translator = MarkdownTranslator::new();
-        let pkg = translator.translate(&content, "REQ_0032").expect("Failed to translate REQ-0032");
+        let pkg = translator
+            .translate(&content, "REQ_0032")
+            .expect("Failed to translate REQ-0032");
 
         assert_eq!(pkg.requirement_defs.len(), 1);
         let req = &pkg.requirement_defs[0];
-        assert!(!req.requires.is_empty(), "Requirement requires must not be empty");
-        assert!(req.requires.iter().any(|r| r.contains("Strict_Total_Ordering")));
-        assert!(!req.derived_from.is_empty(), "Requirement derived_from must not be empty");
+        assert!(
+            !req.requires.is_empty(),
+            "Requirement requires must not be empty"
+        );
+        assert!(req
+            .requires
+            .iter()
+            .any(|r| r.contains("Strict_Total_Ordering")));
+        assert!(
+            !req.derived_from.is_empty(),
+            "Requirement derived_from must not be empty"
+        );
         assert!(req.derived_from.iter().any(|d| d.contains("0031")));
 
         assert!(
             !req.constraints.is_empty(),
             "Requirement constraints must contain encapsulated invariants"
         );
-        assert!(req.constraints.iter().any(|c| c.name.contains("Strict_Total_Ordering")));
+        assert!(req
+            .constraints
+            .iter()
+            .any(|c| c.name.contains("Strict_Total_Ordering")));
         assert!(
             pkg.constraint_defs.is_empty(),
             "Package constraint_defs must be clean when invariants are encapsulated in requirements"
@@ -5309,10 +5635,19 @@ Complexity Class P.
             return;
         }
         let translator = MarkdownTranslator::new();
-        let combined = translator.translate_files(&files, "schema").expect("Failed translate_files");
+        let combined = translator
+            .translate_files(&files, "schema")
+            .expect("Failed translate_files");
 
-        let sub2 = combined.packages.iter().find(|p| p.name.contains("Subsystem_2")).expect("Subsystem 2 missing");
-        assert!(sub2.constraint_defs.is_empty(), "Subsystem 2 constraint_defs must be clean");
+        let sub2 = combined
+            .packages
+            .iter()
+            .find(|p| p.name.contains("Subsystem_2"))
+            .expect("Subsystem 2 missing");
+        assert!(
+            sub2.constraint_defs.is_empty(),
+            "Subsystem 2 constraint_defs must be clean"
+        );
         let engine = sub2
             .part_defs
             .iter()
@@ -5322,10 +5657,23 @@ Complexity Class P.
             engine.constraints.is_empty(),
             "UniversalIngestionEngine must not have top-level constraint assertions"
         );
-        assert!(!sub2.requirement_defs.is_empty(), "Subsystem 2 must have requirement definitions");
-        let req32 = sub2.requirement_defs.iter().find(|r| r.req_id == "REQ-0032").expect("REQ-0032 missing");
-        assert!(!req32.constraints.is_empty(), "REQ-0032 must own its formal invariant constraints");
-        assert!(req32.constraints.iter().any(|c| c.name.contains("Strict_Total_Ordering")));
+        assert!(
+            !sub2.requirement_defs.is_empty(),
+            "Subsystem 2 must have requirement definitions"
+        );
+        let req32 = sub2
+            .requirement_defs
+            .iter()
+            .find(|r| r.req_id == "REQ-0032")
+            .expect("REQ-0032 missing");
+        assert!(
+            !req32.constraints.is_empty(),
+            "REQ-0032 must own its formal invariant constraints"
+        );
+        assert!(req32
+            .constraints
+            .iter()
+            .any(|c| c.name.contains("Strict_Total_Ordering")));
     }
 
     #[test]
@@ -5447,7 +5795,8 @@ The Electrical Power subsystem shall maintain bus voltage between 24V and 32V.
             .join("nonexistent_defect_02_blueprint_491.md")
             .to_string_lossy()
             .to_string();
-        let missing_res = translator.translate_files(std::slice::from_ref(&missing_path), "Test_System");
+        let missing_res =
+            translator.translate_files(std::slice::from_ref(&missing_path), "Test_System");
         assert!(
             missing_res.is_err(),
             "MarkdownTranslator::translate_files must fail closed on nonexistent path, got Ok"
@@ -5459,8 +5808,11 @@ The Electrical Power subsystem shall maintain bus voltage between 24V and 32V.
         let _ = std::fs::remove_dir_all(&tmp_dir.0);
         std::fs::create_dir_all(&tmp_dir.0).expect("create temp dir");
         let valid_file = tmp_dir.0.join("valid_spec.md");
-        std::fs::write(&valid_file, "# Package_0\n\n## Classifier_Alpha\nAlpha doc.")
-            .expect("write valid_spec.md");
+        std::fs::write(
+            &valid_file,
+            "# Package_0\n\n## Classifier_Alpha\nAlpha doc.",
+        )
+        .expect("write valid_spec.md");
         let valid_path = valid_file.to_string_lossy().to_string();
         let mixed_res =
             translator.translate_files(&[valid_path, missing_path.clone()], "Test_System");
@@ -5503,7 +5855,8 @@ The Electrical Power subsystem shall maintain bus voltage between 24V and 32V.
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-INGEST-MD/test_extract_behavioral_ast_nodes_populates_sub_states_and_fallback_state_def] | SysML v2: VerificationCaseDef(test_extract_behavioral_ast_nodes_populates_sub_states_and_fallback_state_def)
     #[test]
-    fn test_extract_behavioral_ast_nodes_populates_sub_states_and_fallback_state_def() -> Result<(), String> {
+    fn test_extract_behavioral_ast_nodes_populates_sub_states_and_fallback_state_def(
+    ) -> Result<(), String> {
         let md_with_state = r#"
 ```mermaid
 sequenceDiagram
@@ -5619,7 +5972,8 @@ sequenceDiagram
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-INGEST-MD/test_issue_475_blueprint_heading_row_attr_constraint_latency_and_uc_extraction] | SysML v2: VerificationCaseDef(test_issue_475_blueprint_heading_row_attr_constraint_latency_and_uc_extraction)
     #[test]
-    fn test_issue_475_blueprint_heading_row_attr_constraint_latency_and_uc_extraction() -> Result<(), String> {
+    fn test_issue_475_blueprint_heading_row_attr_constraint_latency_and_uc_extraction(
+    ) -> Result<(), String> {
         let blueprint_md = r#"# Dual-Use Drone Orchestration Blueprint
 
 ## 2.1 Operational Context
@@ -5673,7 +6027,9 @@ All safety invariants verified.
         let part_names: Vec<&str> = pkg.part_defs.iter().map(|p| p.name.as_str()).collect();
         assert!(!part_names.iter().any(|n| n.contains("Operational_Context")));
         assert!(!part_names.iter().any(|n| n.contains("Acceptance_Criteria")));
-        assert!(!part_names.iter().any(|n| n.contains("Operational_Use_Cases")));
+        assert!(!part_names
+            .iter()
+            .any(|n| n.contains("Operational_Use_Cases")));
         assert!(!part_names.iter().any(|n| n.contains("UC_M2M")));
 
         // 2. Defect 2: Row-per-attribute BOM table populates both rows on StrategicAirspaceCoordinatorNode
@@ -5695,7 +6051,11 @@ All safety invariants verified.
         assert!(!strat_attrs.contains(&"default_bound"));
 
         // 3. Defect 3: Explicit Constraint Name column honored, fallback preserved
-        let con_names: Vec<&str> = pkg.constraint_defs.iter().map(|c| c.name.as_str()).collect();
+        let con_names: Vec<&str> = pkg
+            .constraint_defs
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect();
         assert!(
             con_names.contains(&"SubsecondEdgeSolverLatencyBound"),
             "missing explicit constraint name in {con_names:?}"
@@ -5719,8 +6079,14 @@ All safety invariants verified.
             .iter()
             .find(|c| c.name == "conn_policy_out")
             .ok_or_else(|| "missing conn_policy_out".to_string())?;
-        assert_eq!(conn_policy.source_port, "StrategicAirspaceCoordinatorNode.policy_out");
-        assert_eq!(conn_policy.target_port, "TacticalEdgeCoordinatorNode.policy_in");
+        assert_eq!(
+            conn_policy.source_port,
+            "StrategicAirspaceCoordinatorNode.policy_out"
+        );
+        assert_eq!(
+            conn_policy.target_port,
+            "TacticalEdgeCoordinatorNode.policy_in"
+        );
         assert_eq!(
             conn_policy.source_part.as_deref(),
             Some("StrategicAirspaceCoordinatorNode")
@@ -5798,7 +6164,8 @@ All safety invariants verified.
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-INGEST-MD/test_issue_524_doc_sanitization_property_table_columns_and_fenced_code_scanners] | SysML v2: VerificationCaseDef(test_issue_524_doc_sanitization_property_table_columns_and_fenced_code_scanners)
     #[test]
-    fn test_issue_524_doc_sanitization_property_table_columns_and_fenced_code_scanners() -> Result<(), String> {
+    fn test_issue_524_doc_sanitization_property_table_columns_and_fenced_code_scanners(
+    ) -> Result<(), String> {
         // Fix 1: Sanitize /* and */ across text & doc builders
         let norm_cleaned = clean_normative_text("The system /* block */ shall sanitize */ tokens.");
         assert!(!norm_cleaned.contains("/*") && !norm_cleaned.contains("*/"));
@@ -6002,7 +6369,9 @@ Given: fake fenced given
         );
 
         let invs = extract_formal_invariants(fenced_req_md, "0524");
-        let first_inv = invs.first().ok_or_else(|| "missing formal invariant".to_string())?;
+        let first_inv = invs
+            .first()
+            .ok_or_else(|| "missing formal invariant".to_string())?;
         assert_eq!(
             first_inv.name,
             "Invariant_REQ_0524_Real_Determinism_Invariant"
@@ -6011,5 +6380,3 @@ Given: fake fenced given
         Ok(())
     }
 }
-
-

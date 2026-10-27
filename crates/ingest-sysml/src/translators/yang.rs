@@ -27,12 +27,46 @@ use deap_core::sysml_ast::{
 
 /// SysML v2 reserved keywords that must not be used as bare identifiers in AST generation.
 const RESERVED_SYSML_KEYWORDS: &[&str] = &[
-    "package", "part", "def", "port", "attribute", "action", "flow",
-    "item", "connect", "connection", "interface", "doc", "assert",
-    "constraint", "state", "requirement", "use", "case", "test",
-    "in", "out", "inout", "import", "public", "private", "alias",
-    "perform", "subsystem", "first", "then", "step", "entry", "exit",
-    "do", "transition", "assume", "require", "verify", "satisfy", "text",
+    "package",
+    "part",
+    "def",
+    "port",
+    "attribute",
+    "action",
+    "flow",
+    "item",
+    "connect",
+    "connection",
+    "interface",
+    "doc",
+    "assert",
+    "constraint",
+    "state",
+    "requirement",
+    "use",
+    "case",
+    "test",
+    "in",
+    "out",
+    "inout",
+    "import",
+    "public",
+    "private",
+    "alias",
+    "perform",
+    "subsystem",
+    "first",
+    "then",
+    "step",
+    "entry",
+    "exit",
+    "do",
+    "transition",
+    "assume",
+    "require",
+    "verify",
+    "satisfy",
+    "text",
 ];
 
 /// Executes deterministic fn `is_reserved_keyword` within `crates/ingest-sysml/src/translators/yang.rs`.
@@ -394,7 +428,10 @@ fn scan_quoted_string(chars: &[char], pos: &mut usize, quote_char: char) -> Resu
         }
     }
 
-    Err(format!("Unterminated quoted string starting with {}", quote_char))
+    Err(format!(
+        "Unterminated quoted string starting with {}",
+        quote_char
+    ))
 }
 
 /// Scans a quoted string literal including any RFC 6020 / RFC 7950 string concatenation with `+`.
@@ -510,10 +547,19 @@ fn tokenize_yang(source: &str) -> Result<Vec<YangToken>, String> {
                 let mut word = String::new();
                 while pos < chars.len() {
                     let c = chars[pos];
-                    if c.is_whitespace() || c == '{' || c == '}' || c == ';' || c == '"' || c == '\'' {
+                    if c.is_whitespace()
+                        || c == '{'
+                        || c == '}'
+                        || c == ';'
+                        || c == '"'
+                        || c == '\''
+                    {
                         break;
                     }
-                    if c == '/' && pos + 1 < chars.len() && (chars[pos + 1] == '/' || chars[pos + 1] == '*') {
+                    if c == '/'
+                        && pos + 1 < chars.len()
+                        && (chars[pos + 1] == '/' || chars[pos + 1] == '*')
+                    {
                         break;
                     }
                     word.push(c);
@@ -687,7 +733,10 @@ impl YangStmt {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-TRANSLATORS-YANG-YANGSTMT-FIND-ALL] | SysML v2: ActionDef(YangStmt::find_all)
     pub fn find_all(&self, kw: &str) -> Vec<&YangStmt> {
-        self.substatements.iter().filter(|s| s.keyword == kw).collect()
+        self.substatements
+            .iter()
+            .filter(|s| s.keyword == kw)
+            .collect()
     }
 }
 
@@ -725,7 +774,9 @@ fn parse_statement(tokens: &[YangToken], pos: &mut usize) -> Result<YangStmt, St
             kw.clone()
         }
         Some(tok) => return Err(format!("Expected keyword, found {:?}", tok)),
-        None => return Err("Unexpected end of tokens while expecting statement keyword".to_string()),
+        None => {
+            return Err("Unexpected end of tokens while expecting statement keyword".to_string())
+        }
     };
 
     let mut argument = None;
@@ -753,7 +804,10 @@ fn parse_statement(tokens: &[YangToken], pos: &mut usize) -> Result<YangStmt, St
                 *pos += 1;
             }
             YangToken::CloseBrace => {
-                return Err(format!("Unexpected '}}' directly after keyword '{}'", keyword));
+                return Err(format!(
+                    "Unexpected '}}' directly after keyword '{}'",
+                    keyword
+                ));
             }
         }
     }
@@ -780,7 +834,10 @@ fn parse_statement(tokens: &[YangToken], pos: &mut usize) -> Result<YangStmt, St
             "Expected ';' or '{{' after argument for '{}', found {:?}",
             keyword, tok
         )),
-        None => Err(format!("Unexpected end of tokens after argument for '{}'", keyword)),
+        None => Err(format!(
+            "Unexpected end of tokens after argument for '{}'",
+            keyword
+        )),
     }
 }
 
@@ -898,14 +955,30 @@ fn map_yang_type(raw_type: &str, typedef_map: &HashMap<String, String>) -> Strin
     }
 
     match unaliased {
-        "int8" | "int16" | "int32" | "int64"
-        | "uint8" | "uint16" | "uint32" | "uint64"
-        | "counter32" | "counter64" | "zero-based-counter32" | "zero-based-counter64"
-        | "gauge32" | "gauge64" => "Integer".to_string(),
+        "int8"
+        | "int16"
+        | "int32"
+        | "int64"
+        | "uint8"
+        | "uint16"
+        | "uint32"
+        | "uint64"
+        | "counter32"
+        | "counter64"
+        | "zero-based-counter32"
+        | "zero-based-counter64"
+        | "gauge32"
+        | "gauge64" => "Integer".to_string(),
         "decimal64" | "float" => "Real".to_string(),
         "boolean" | "empty" => "Boolean".to_string(),
-        "string" | "binary" | "enumeration" | "identityref"
-        | "leafref" | "instance-identifier" | "union" | "bits" => "String".to_string(),
+        "string"
+        | "binary"
+        | "enumeration"
+        | "identityref"
+        | "leafref"
+        | "instance-identifier"
+        | "union"
+        | "bits" => "String".to_string(),
         other => to_pascal_case(other),
     }
 }
@@ -1067,146 +1140,137 @@ impl YangTranslator {
 
         // 1. Process imports
         for stmt in mod_subs {
-            if stmt.keyword == "import" {
-                if let Some(target) = stmt.argument.as_deref() {
-                    pkg.imports.push(ImportDef {
-                        path: to_pascal_case(target),
-                        is_wildcard: true,
-                        is_recursive: false,
-                        doc: stmt.get_arg("reference").map(|r| r.to_string()),
-                    });
-                }
+            if let ("import", Some(target)) = (stmt.keyword.as_str(), stmt.argument.as_deref()) {
+                pkg.imports.push(ImportDef {
+                    path: to_pascal_case(target),
+                    is_wildcard: true,
+                    is_recursive: false,
+                    doc: stmt.get_arg("reference").map(|r| r.to_string()),
+                });
             }
         }
 
         // 2. Build local typedef resolution map
         let mut typedef_map: HashMap<String, String> = HashMap::new();
         for stmt in mod_subs {
-            if stmt.keyword == "typedef" {
-                if let Some(td_name) = stmt.argument.as_deref() {
-                    let base_type = stmt
-                        .find_first("type")
-                        .and_then(|t| t.argument.as_deref())
-                        .unwrap_or("string");
-                    let resolved = map_yang_type(base_type, &typedef_map);
-                    typedef_map.insert(td_name.to_string(), resolved);
-                }
+            if let ("typedef", Some(td_name)) = (stmt.keyword.as_str(), stmt.argument.as_deref()) {
+                let base_type = stmt
+                    .find_first("type")
+                    .and_then(|t| t.argument.as_deref())
+                    .unwrap_or("string");
+                let resolved = map_yang_type(base_type, &typedef_map);
+                typedef_map.insert(td_name.to_string(), resolved);
             }
         }
 
         // 3. Translate typedefs into package attributes and structural PartDefs
         for stmt in mod_subs {
-            if stmt.keyword == "typedef" {
-                if let Some(td_name) = stmt.argument.as_deref() {
-                    let base_type = typedef_map
-                        .get(td_name)
-                        .cloned()
-                        .unwrap_or_else(|| "String".to_string());
-                    let td_doc = stmt.get_arg("description").map(|d| d.to_string());
-                    let default_val = stmt
-                        .get_arg("default")
-                        .map(|d| format_yang_default_value(d, &base_type));
+            if let ("typedef", Some(td_name)) = (stmt.keyword.as_str(), stmt.argument.as_deref()) {
+                let base_type = typedef_map
+                    .get(td_name)
+                    .cloned()
+                    .unwrap_or_else(|| "String".to_string());
+                let td_doc = stmt.get_arg("description").map(|d| d.to_string());
+                let default_val = stmt
+                    .get_arg("default")
+                    .map(|d| format_yang_default_value(d, &base_type));
 
-                    // Attribute alias on package
-                    pkg.attribute_defs.push(AttributeDef {
-                        name: to_camel_case(td_name),
-                        type_name: base_type.clone(),
-                        default_value: default_val.clone(),
-                        doc: td_doc.clone(),
-                    });
+                // Attribute alias on package
+                pkg.attribute_defs.push(AttributeDef {
+                    name: to_camel_case(td_name),
+                    type_name: base_type.clone(),
+                    default_value: default_val.clone(),
+                    doc: td_doc.clone(),
+                });
 
-                    // Build formal constraints
-                    let mut constraints = Vec::new();
-                    let type_stmt = stmt.find_first("type");
+                // Build formal constraints
+                let mut constraints = Vec::new();
+                let type_stmt = stmt.find_first("type");
 
-                    if let Some(t_stmt) = type_stmt {
-                        if let Some(range_val) = t_stmt.get_arg("range") {
-                            constraints.push(ConstraintDef {
-                                name: format!("{}_range", to_snake_case(td_name)),
-                                expression: format!("value in {}", range_val),
-                                is_assertion: true,
-                                doc: Some(format!("Range constraint: {}", range_val)),
-                                ..Default::default()
-                            });
-                        }
-                        if let Some(len_val) = t_stmt.get_arg("length") {
-                            constraints.push(ConstraintDef {
-                                name: format!("{}_length", to_snake_case(td_name)),
-                                expression: format!("length(value) in {}", len_val),
-                                is_assertion: true,
-                                doc: Some(format!("Length constraint: {}", len_val)),
-                                ..Default::default()
-                            });
-                        }
-                        for (idx, pat_val) in t_stmt.get_all_args("pattern").into_iter().enumerate() {
-                            let clean_pat = pat_val.replace('"', "\\\"");
-                            constraints.push(ConstraintDef {
-                                name: format!("{}_pattern_{}", to_snake_case(td_name), idx + 1),
-                                expression: format!("matches(value, \"{}\")", clean_pat),
-                                is_assertion: true,
-                                doc: Some(format!("Pattern constraint: {}", pat_val)),
-                                ..Default::default()
-                            });
-                        }
-                        if let Some(fd) = t_stmt.get_arg("fraction-digits") {
-                            constraints.push(ConstraintDef {
-                                name: format!("{}_fraction_digits", to_snake_case(td_name)),
-                                expression: format!("fraction_digits <= {}", fd),
-                                is_assertion: true,
-                                doc: Some(format!("Fraction digits bound: {}", fd)),
-                                ..Default::default()
-                            });
-                        }
-                        let enums = t_stmt.find_all("enum");
-                        if !enums.is_empty() {
-                            let enum_names: Vec<&str> = enums
-                                .iter()
-                                .filter_map(|e| e.argument.as_deref())
-                                .collect();
-                            let enum_conds: Vec<String> = enum_names
-                                .iter()
-                                .map(|n| format!("value == \"{}\"", n))
-                                .collect();
-                            constraints.push(ConstraintDef {
-                                name: format!("{}_enum_values", to_snake_case(td_name)),
-                                expression: enum_conds.join(" || "),
-                                is_assertion: true,
-                                doc: Some("Enumeration value constraints".to_string()),
-                                ..Default::default()
-                            });
-                        }
+                if let Some(t_stmt) = type_stmt {
+                    if let Some(range_val) = t_stmt.get_arg("range") {
+                        constraints.push(ConstraintDef {
+                            name: format!("{}_range", to_snake_case(td_name)),
+                            expression: format!("value in {}", range_val),
+                            is_assertion: true,
+                            doc: Some(format!("Range constraint: {}", range_val)),
+                            ..Default::default()
+                        });
                     }
-
-                    // Structural PartDef for the type definition
-                    pkg.part_defs.push(PartDef {
-                        name: to_pascal_case(td_name),
-                        doc: td_doc,
-                        attributes: vec![AttributeDef {
-                            name: "value".to_string(),
-                            type_name: base_type,
-                            default_value: default_val,
-                            doc: None,
-                        }],
-                        constraints,
-                        is_def: true,
-                        ..Default::default()
-                    });
+                    if let Some(len_val) = t_stmt.get_arg("length") {
+                        constraints.push(ConstraintDef {
+                            name: format!("{}_length", to_snake_case(td_name)),
+                            expression: format!("length(value) in {}", len_val),
+                            is_assertion: true,
+                            doc: Some(format!("Length constraint: {}", len_val)),
+                            ..Default::default()
+                        });
+                    }
+                    for (idx, pat_val) in t_stmt.get_all_args("pattern").into_iter().enumerate() {
+                        let clean_pat = pat_val.replace('"', "\\\"");
+                        constraints.push(ConstraintDef {
+                            name: format!("{}_pattern_{}", to_snake_case(td_name), idx + 1),
+                            expression: format!("matches(value, \"{}\")", clean_pat),
+                            is_assertion: true,
+                            doc: Some(format!("Pattern constraint: {}", pat_val)),
+                            ..Default::default()
+                        });
+                    }
+                    if let Some(fd) = t_stmt.get_arg("fraction-digits") {
+                        constraints.push(ConstraintDef {
+                            name: format!("{}_fraction_digits", to_snake_case(td_name)),
+                            expression: format!("fraction_digits <= {}", fd),
+                            is_assertion: true,
+                            doc: Some(format!("Fraction digits bound: {}", fd)),
+                            ..Default::default()
+                        });
+                    }
+                    let enums = t_stmt.find_all("enum");
+                    if !enums.is_empty() {
+                        let enum_names: Vec<&str> =
+                            enums.iter().filter_map(|e| e.argument.as_deref()).collect();
+                        let enum_conds: Vec<String> = enum_names
+                            .iter()
+                            .map(|n| format!("value == \"{}\"", n))
+                            .collect();
+                        constraints.push(ConstraintDef {
+                            name: format!("{}_enum_values", to_snake_case(td_name)),
+                            expression: enum_conds.join(" || "),
+                            is_assertion: true,
+                            doc: Some("Enumeration value constraints".to_string()),
+                            ..Default::default()
+                        });
+                    }
                 }
+
+                // Structural PartDef for the type definition
+                pkg.part_defs.push(PartDef {
+                    name: to_pascal_case(td_name),
+                    doc: td_doc,
+                    attributes: vec![AttributeDef {
+                        name: "value".to_string(),
+                        type_name: base_type,
+                        default_value: default_val,
+                        doc: None,
+                    }],
+                    constraints,
+                    is_def: true,
+                    ..Default::default()
+                });
             }
         }
 
         // 4. Translate feature flags into PartDefs
         for stmt in mod_subs {
-            if stmt.keyword == "feature" {
-                if let Some(feat_name) = stmt.argument.as_deref() {
-                    let feat_doc = stmt.get_arg("description").map(|d| d.to_string());
-                    pkg.part_defs.push(PartDef {
-                        name: to_pascal_case(feat_name),
-                        doc: feat_doc,
-                        is_def: true,
-                        ..Default::default()
-                    });
-                }
+            if let ("feature", Some(feat_name)) = (stmt.keyword.as_str(), stmt.argument.as_deref())
+            {
+                let feat_doc = stmt.get_arg("description").map(|d| d.to_string());
+                pkg.part_defs.push(PartDef {
+                    name: to_pascal_case(feat_name),
+                    doc: feat_doc,
+                    is_def: true,
+                    ..Default::default()
+                });
             }
         }
 
@@ -1222,70 +1286,73 @@ impl YangTranslator {
 
         // 6. Translate RPC / action statements
         for stmt in mod_subs {
-            if stmt.keyword == "rpc" || stmt.keyword == "action" {
-                if let Some(rpc_name) = stmt.argument.as_deref() {
-                    let rpc_doc = stmt.get_arg("description").map(|d| d.to_string());
-                    let mut in_params = Vec::new();
-                    let mut out_params = Vec::new();
+            if let ("rpc" | "action", Some(rpc_name)) =
+                (stmt.keyword.as_str(), stmt.argument.as_deref())
+            {
+                let rpc_doc = stmt.get_arg("description").map(|d| d.to_string());
+                let mut in_params = Vec::new();
+                let mut out_params = Vec::new();
 
-                    if let Some(input_stmt) = stmt.find_first("input") {
-                        for leaf in input_stmt.find_all("leaf") {
-                            if let Some(l_name) = leaf.argument.as_deref() {
-                                let l_type = leaf
-                                    .find_first("type")
-                                    .and_then(|t| t.argument.as_deref())
-                                    .unwrap_or("string");
-                                let p_type = map_yang_type(l_type, &typedef_map);
-                                let p_default = leaf
-                                    .get_arg("default")
-                                    .map(|d| format_yang_default_value(d, &p_type));
-                                in_params.push(AttributeDef {
-                                    name: to_camel_case(l_name),
-                                    type_name: p_type,
-                                    default_value: p_default,
-                                    doc: leaf.get_arg("description").map(|d| d.to_string()),
-                                });
-                            }
+                if let Some(input_stmt) = stmt.find_first("input") {
+                    for leaf in input_stmt.find_all("leaf") {
+                        if let Some(l_name) = leaf.argument.as_deref() {
+                            let l_type = leaf
+                                .find_first("type")
+                                .and_then(|t| t.argument.as_deref())
+                                .unwrap_or("string");
+                            let p_type = map_yang_type(l_type, &typedef_map);
+                            let p_default = leaf
+                                .get_arg("default")
+                                .map(|d| format_yang_default_value(d, &p_type));
+                            in_params.push(AttributeDef {
+                                name: to_camel_case(l_name),
+                                type_name: p_type,
+                                default_value: p_default,
+                                doc: leaf.get_arg("description").map(|d| d.to_string()),
+                            });
                         }
                     }
-
-                    if let Some(output_stmt) = stmt.find_first("output") {
-                        for leaf in output_stmt.find_all("leaf") {
-                            if let Some(l_name) = leaf.argument.as_deref() {
-                                let l_type = leaf
-                                    .find_first("type")
-                                    .and_then(|t| t.argument.as_deref())
-                                    .unwrap_or("string");
-                                let p_type = map_yang_type(l_type, &typedef_map);
-                                let p_default = leaf
-                                    .get_arg("default")
-                                    .map(|d| format_yang_default_value(d, &p_type));
-                                out_params.push(AttributeDef {
-                                    name: to_camel_case(l_name),
-                                    type_name: p_type,
-                                    default_value: p_default,
-                                    doc: leaf.get_arg("description").map(|d| d.to_string()),
-                                });
-                            }
-                        }
-                    }
-
-                    pkg.action_defs.push(ActionDef {
-                        name: to_pascal_case(rpc_name),
-                        doc: rpc_doc,
-                        in_params,
-                        out_params,
-                        is_def: true,
-                        ..Default::default()
-                    });
                 }
+
+                if let Some(output_stmt) = stmt.find_first("output") {
+                    for leaf in output_stmt.find_all("leaf") {
+                        if let Some(l_name) = leaf.argument.as_deref() {
+                            let l_type = leaf
+                                .find_first("type")
+                                .and_then(|t| t.argument.as_deref())
+                                .unwrap_or("string");
+                            let p_type = map_yang_type(l_type, &typedef_map);
+                            let p_default = leaf
+                                .get_arg("default")
+                                .map(|d| format_yang_default_value(d, &p_type));
+                            out_params.push(AttributeDef {
+                                name: to_camel_case(l_name),
+                                type_name: p_type,
+                                default_value: p_default,
+                                doc: leaf.get_arg("description").map(|d| d.to_string()),
+                            });
+                        }
+                    }
+                }
+
+                pkg.action_defs.push(ActionDef {
+                    name: to_pascal_case(rpc_name),
+                    doc: rpc_doc,
+                    in_params,
+                    out_params,
+                    is_def: true,
+                    ..Default::default()
+                });
             }
         }
 
         // Add standard operational lifecycle action and use case for downstream projection
         pkg.action_defs.push(ActionDef {
             name: format!("Validate{}", pkg.name),
-            doc: Some(format!("Validates {} data contracts and invariants", pkg.name)),
+            doc: Some(format!(
+                "Validates {} data contracts and invariants",
+                pkg.name
+            )),
             is_def: true,
             ..Default::default()
         });
@@ -1303,7 +1370,10 @@ impl YangTranslator {
         // 7. Deduplicate part_defs by name
         let mut dedup_parts: Vec<PartDef> = Vec::new();
         for p in pkg.part_defs {
-            if let Some(existing) = dedup_parts.iter_mut().find(|existing| existing.name == p.name) {
+            if let Some(existing) = dedup_parts
+                .iter_mut()
+                .find(|existing| existing.name == p.name)
+            {
                 // Merge attributes and child parts
                 for attr in p.attributes {
                     if !existing.attributes.iter().any(|a| a.name == attr.name) {
@@ -1356,7 +1426,11 @@ impl YangTranslator {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-TRANSLATORS-YANG-YANGTRANSLATOR-TRANSLATE-FILES] | SysML v2: ActionDef(YangTranslator::translate_files)
-    pub fn translate_files(&self, file_paths: &[String], default_name: &str) -> Result<PackageDef, String> {
+    pub fn translate_files(
+        &self,
+        file_paths: &[String],
+        default_name: &str,
+    ) -> Result<PackageDef, String> {
         if file_paths.is_empty() {
             return Err("Zero valid YANG schema files were loaded".to_string());
         }
@@ -1366,7 +1440,10 @@ impl YangTranslator {
         for fpath in file_paths {
             let path = Path::new(fpath);
             if !path.exists() {
-                return Err(format!("YANG schema file does not exist: '{}'", path.display()));
+                return Err(format!(
+                    "YANG schema file does not exist: '{}'",
+                    path.display()
+                ));
             }
             let content = fs::read_to_string(path)
                 .map_err(|e| format!("Failed to read schema file '{}': {}", fpath, e))?;
@@ -1407,11 +1484,12 @@ impl YangTranslator {
             finalized_packages.push(pkg);
         }
 
-        let root_name = if default_name == "schema" || default_name == "Model" || default_name.is_empty() {
-            "SysML_Model".to_string()
-        } else {
-            to_pascal_case(default_name)
-        };
+        let root_name =
+            if default_name == "schema" || default_name == "Model" || default_name.is_empty() {
+                "SysML_Model".to_string()
+            } else {
+                to_pascal_case(default_name)
+            };
 
         let root_pkg = PackageDef {
             name: root_name,
@@ -1508,8 +1586,17 @@ fn translate_container_or_grouping(
                 for (idx, pat_val) in t_stmt.get_all_args("pattern").into_iter().enumerate() {
                     let clean_pat = pat_val.replace('"', "\\\"");
                     constraints.push(ConstraintDef {
-                        name: format!("{}_{}_pattern_{}", to_snake_case(name), to_snake_case(l_name), idx + 1),
-                        expression: format!("matches({}, \"{}\")", to_camel_case(l_name), clean_pat),
+                        name: format!(
+                            "{}_{}_pattern_{}",
+                            to_snake_case(name),
+                            to_snake_case(l_name),
+                            idx + 1
+                        ),
+                        expression: format!(
+                            "matches({}, \"{}\")",
+                            to_camel_case(l_name),
+                            clean_pat
+                        ),
                         is_assertion: true,
                         doc: Some(format!("Pattern constraint: {}", pat_val)),
                         ..Default::default()
@@ -1539,17 +1626,17 @@ fn translate_container_or_grouping(
 
     // 3. Process nested containers and lists
     for child in &stmt.substatements {
-        if child.keyword == "container" || child.keyword == "list" {
-            if let Some(c_name) = child.argument.as_deref() {
-                let child_part = translate_container_or_grouping(child, typedef_map, extra_parts);
-                parts.push(PartDef {
-                    name: to_camel_case(c_name),
-                    type_name: Some(child_part.name.clone()),
-                    is_def: false,
-                    ..Default::default()
-                });
-                extra_parts.push(child_part);
-            }
+        if let ("container" | "list", Some(c_name)) =
+            (child.keyword.as_str(), child.argument.as_deref())
+        {
+            let child_part = translate_container_or_grouping(child, typedef_map, extra_parts);
+            parts.push(PartDef {
+                name: to_camel_case(c_name),
+                type_name: Some(child_part.name.clone()),
+                is_def: false,
+                ..Default::default()
+            });
+            extra_parts.push(child_part);
         }
     }
 
@@ -1561,7 +1648,8 @@ fn translate_container_or_grouping(
             for case_stmt in choice.find_all("case") {
                 if let Some(cs_name) = case_stmt.argument.as_deref() {
                     case_names.push(to_camel_case(cs_name));
-                    let case_part = translate_container_or_grouping(case_stmt, typedef_map, extra_parts);
+                    let case_part =
+                        translate_container_or_grouping(case_stmt, typedef_map, extra_parts);
                     parts.push(PartDef {
                         name: to_camel_case(cs_name),
                         type_name: Some(case_part.name.clone()),
@@ -1670,14 +1758,22 @@ mod tests {
         let translator = YangTranslator::new();
         let pkg = translator.translate(yang_src, "TestModule").unwrap();
         assert_eq!(pkg.name, "TestModule");
-        assert!(pkg.doc.as_deref().unwrap().contains("Test module description with concatenation."));
+        assert!(pkg
+            .doc
+            .as_deref()
+            .unwrap()
+            .contains("Test module description with concatenation."));
 
         // Check typedef
         assert!(pkg.attribute_defs.iter().any(|a| a.name == "testType"));
         assert!(pkg.part_defs.iter().any(|p| p.name == "TestType"));
 
         // Check container
-        let container = pkg.part_defs.iter().find(|p| p.name == "TestContainer").unwrap();
+        let container = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "TestContainer")
+            .unwrap();
         assert!(container.attributes.iter().any(|a| a.name == "id"));
         assert!(container.parts.iter().any(|p| p.name == "a"));
         assert!(container.parts.iter().any(|p| p.name == "b"));
@@ -1768,14 +1864,23 @@ mod tests {
         assert_eq!(format_yang_default_value("0.25", "Real"), "0.25");
         assert_eq!(format_yang_default_value("true", "Boolean"), "true");
         assert_eq!(format_yang_default_value("false", "Boolean"), "false");
-        assert_eq!(format_yang_default_value("00:00:00", "String"), "\"00:00:00\"");
+        assert_eq!(
+            format_yang_default_value("00:00:00", "String"),
+            "\"00:00:00\""
+        );
         assert_eq!(format_yang_default_value("ipv4", "String"), "\"ipv4\"");
         assert_eq!(format_yang_default_value("42", "String"), "\"42\"");
-        assert_eq!(format_yang_default_value("unbounded", "Integer"), "\"unbounded\"");
+        assert_eq!(
+            format_yang_default_value("unbounded", "Integer"),
+            "\"unbounded\""
+        );
         assert_eq!(format_yang_default_value("TRUE", "Boolean"), "\"TRUE\"");
         assert_eq!(format_yang_default_value("true", "String"), "\"true\"");
         assert_eq!(format_yang_default_value("", "String"), "\"\"");
-        assert_eq!(format_yang_default_value("a\"b\\c", "String"), "\"a\\\"b\\\\c\"");
+        assert_eq!(
+            format_yang_default_value("a\"b\\c", "String"),
+            "\"a\\\"b\\\\c\""
+        );
         assert_eq!(format_yang_default_value("3", "TimeText"), "\"3\"");
     }
 
@@ -1786,14 +1891,27 @@ mod tests {
             .expect("translate fixture");
 
         let td_attr = pkg.attribute_defs.iter().find(|a| a.name == "timeText");
-        assert_eq!(td_attr.and_then(|a| a.default_value.as_deref()), Some("\"00:00:00\""));
+        assert_eq!(
+            td_attr.and_then(|a| a.default_value.as_deref()),
+            Some("\"00:00:00\"")
+        );
         let ratio_attr = pkg.attribute_defs.iter().find(|a| a.name == "ratioValue");
-        assert_eq!(ratio_attr.and_then(|a| a.default_value.as_deref()), Some("0.5"));
+        assert_eq!(
+            ratio_attr.and_then(|a| a.default_value.as_deref()),
+            Some("0.5")
+        );
         let td_part = pkg.part_defs.iter().find(|p| p.name == "TimeText");
         let td_value = td_part.and_then(|p| p.attributes.iter().find(|a| a.name == "value"));
-        assert_eq!(td_value.and_then(|a| a.default_value.as_deref()), Some("\"00:00:00\""));
+        assert_eq!(
+            td_value.and_then(|a| a.default_value.as_deref()),
+            Some("\"00:00:00\"")
+        );
 
-        let root = pkg.part_defs.iter().find(|p| p.name == "SampleRoot").expect("SampleRoot");
+        let root = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "SampleRoot")
+            .expect("SampleRoot");
         let default_of = |name: &str| {
             root.attributes
                 .iter()
@@ -1804,16 +1922,33 @@ mod tests {
         assert_eq!(default_of("family").as_deref(), Some("\"ipv4\""));
         assert_eq!(default_of("retries").as_deref(), Some("3"));
         assert_eq!(default_of("enabled").as_deref(), Some("true"));
-        assert_eq!(default_of("quotedText").as_deref(), Some("\"say \\\"hi\\\" \\\\ bye\""));
+        assert_eq!(
+            default_of("quotedText").as_deref(),
+            Some("\"say \\\"hi\\\" \\\\ bye\"")
+        );
         assert_eq!(default_of("tags"), None);
         let tags = root.attributes.iter().find(|a| a.name == "tags");
         assert_eq!(tags.map(|a| a.type_name.as_str()), Some("String[]"));
 
-        let first_mode = pkg.part_defs.iter().find(|p| p.name == "FirstMode").expect("FirstMode");
-        let first_value = first_mode.attributes.iter().find(|a| a.name == "firstValue");
-        assert_eq!(first_value.and_then(|a| a.default_value.as_deref()), Some("\"alpha\""));
+        let first_mode = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "FirstMode")
+            .expect("FirstMode");
+        let first_value = first_mode
+            .attributes
+            .iter()
+            .find(|a| a.name == "firstValue");
+        assert_eq!(
+            first_value.and_then(|a| a.default_value.as_deref()),
+            Some("\"alpha\"")
+        );
 
-        let rpc = pkg.action_defs.iter().find(|a| a.name == "ResetItem").expect("ResetItem");
+        let rpc = pkg
+            .action_defs
+            .iter()
+            .find(|a| a.name == "ResetItem")
+            .expect("ResetItem");
         let in_default = |name: &str| {
             rpc.in_params
                 .iter()
@@ -1838,8 +1973,14 @@ mod tests {
             .translate(ROUND_TRIP_YANG, "SampleModule")
             .expect("translate fixture");
         let sysml_text = compile_sysml::to_sysml(&pkg);
-        assert!(sysml_text.contains("String[]"), "leaf-list type missing:\n{sysml_text}");
-        assert!(sysml_text.contains("\"00:00:00\""), "quoted default missing:\n{sysml_text}");
+        assert!(
+            sysml_text.contains("String[]"),
+            "leaf-list type missing:\n{sysml_text}"
+        );
+        assert!(
+            sysml_text.contains("\"00:00:00\""),
+            "quoted default missing:\n{sysml_text}"
+        );
 
         let reparsed = compile_sysml::parse_sysml(&sysml_text);
         assert!(
@@ -1872,6 +2013,9 @@ mod tests {
         let tags = root.attributes.iter().find(|a| a.name == "tags");
         assert_eq!(tags.map(|a| a.type_name.as_str()), Some("String[]"));
         let start = root.attributes.iter().find(|a| a.name == "startTime");
-        assert_eq!(start.and_then(|a| a.default_value.as_deref()), Some("\"00:00:00\""));
+        assert_eq!(
+            start.and_then(|a| a.default_value.as_deref()),
+            Some("\"00:00:00\"")
+        );
     }
 }
