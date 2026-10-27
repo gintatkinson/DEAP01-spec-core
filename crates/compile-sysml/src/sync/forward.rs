@@ -832,6 +832,87 @@ fn generate_use_case_diagram(
     lines.join("\n")
 }
 
+/// Extracts transition source, target, and formatted trigger/guard/effect label from a TransitionDef.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `extract_transition_endpoints` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `extract_transition_endpoints` within `SYNC-FORWARD`.
+///
+/// ## 3. Preconditions
+/// - `trans: &deap_core::sysml_ast::TransitionDef` must satisfy domain and type-safety constraints prior to invoking `extract_transition_endpoints`.
+///
+/// ## 4. Postconditions
+/// - Returns `Option<(String, String, Option<String>)>` from `extract_transition_endpoints` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(trans)) bounded over input/member dimension of `extract_transition_endpoints`.
+/// - Space Complexity: O(N(trans)) bounded auxiliary memory for `extract_transition_endpoints`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `extract_transition_endpoints` (`Option<(String, String, Option<String>)>`).
+/// - State: Maintains consistent state invariants across `extract_transition_endpoints` without partial mutation on error.
+/// - Action: Executes `extract_transition_endpoints` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `extract_transition_endpoints` (`SYNC-FORWARD`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-EXTRACT-TRANSITION-ENDPOINTS] | SysML v2: ActionDef(extract_transition_endpoints)
+fn extract_transition_endpoints(
+    trans: &deap_core::sysml_ast::TransitionDef,
+) -> Option<(String, String, Option<String>)> {
+    let resolved_pair = match (
+        trans.source.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+        trans.target.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+    ) {
+        (Some(src), Some(tgt)) => Some((src.to_string(), tgt.to_string())),
+        _ => {
+            let t_name = trans.name.as_deref().unwrap_or("");
+            let first_idx = t_name.find("first ")?;
+            let after_first = t_name.get(first_idx + 6..)?;
+            let src_candidate = after_first.split_whitespace().next().unwrap_or("");
+            let then_idx = after_first.find("then ")?;
+            let after_then = after_first.get(then_idx + 5..)?;
+            let tgt_candidate = after_then.split_whitespace().next().unwrap_or("");
+            if src_candidate.is_empty() || tgt_candidate.is_empty() {
+                None
+            } else {
+                Some((src_candidate.to_string(), tgt_candidate.to_string()))
+            }
+        }
+    }?;
+
+    let (raw_src, raw_tgt) = resolved_pair;
+    let src = if raw_src == "Initial" || raw_src == "entry" || raw_src == "[*]" {
+        "[*]".to_string()
+    } else {
+        raw_src
+    };
+    let tgt = if raw_tgt == "Terminal" || raw_tgt == "exit" || raw_tgt == "[*]" {
+        "[*]".to_string()
+    } else {
+        raw_tgt
+    };
+
+    let mut label_parts = Vec::new();
+    if let Some(trig) = trans.trigger.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        label_parts.push(trig.to_string());
+    }
+    if let Some(grd) = trans.guard.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        label_parts.push(format!("[{}]", grd));
+    }
+    if let Some(eff) = trans.effect.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        label_parts.push(format!("/ {}", eff));
+    }
+    let label = if label_parts.is_empty() {
+        None
+    } else {
+        Some(label_parts.join(" "))
+    };
+
+    Some((src, tgt, label))
+}
+
 /// Generates a Mermaid state machine diagram lowered from PackageDef state_defs or falls back to system lifecycle modes.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -866,66 +947,23 @@ fn generate_epic_statechart(p: &PackageDef) -> String {
         let mut target_states = BTreeSet::new();
 
         for trans in &st_def.transitions {
-            if let (Some(raw_src), Some(raw_tgt)) =
-                (trans.source.as_deref(), trans.target.as_deref())
-            {
-                if !raw_src.is_empty() && !raw_tgt.is_empty() {
-                    let src = if raw_src == "Initial" || raw_src == "entry" || raw_src == "[*]" {
-                        "[*]"
-                    } else {
-                        raw_src
-                    };
-                    let tgt = if raw_tgt == "Terminal" || raw_tgt == "exit" || raw_tgt == "[*]" {
-                        "[*]"
-                    } else {
-                        raw_tgt
-                    };
-                    if src == "[*]" {
-                        lines.push(format!("    [*] --> {}", tgt));
-                        if tgt != "[*]" {
-                            target_states.insert(tgt.to_string());
-                        }
-                    } else if tgt == "[*]" {
-                        lines.push(format!("    {} --> [*]", src));
-                        source_states.insert(src.to_string());
-                    } else {
-                        if let Some(trig) = trans.trigger.as_deref().filter(|s| !s.is_empty()) {
-                            lines.push(format!("    {} --> {} : {}", src, tgt, trig));
-                        } else {
-                            lines.push(format!("    {} --> {}", src, tgt));
-                        }
-                        source_states.insert(src.to_string());
-                        target_states.insert(tgt.to_string());
+            if let Some((src, tgt, label)) = extract_transition_endpoints(trans) {
+                if src == "[*]" {
+                    lines.push(format!("    [*] --> {}", tgt));
+                    if tgt != "[*]" {
+                        target_states.insert(tgt);
                     }
-                    continue;
-                }
-            }
-            let t_name = trans.name.as_deref().unwrap_or("");
-            if let Some(first_idx) = t_name.find("first ") {
-                let after_first = t_name.get(first_idx + 6..).unwrap_or("");
-                let src_candidate = after_first.split_whitespace().next().unwrap_or("");
-                if let Some(then_idx) = after_first.find("then ") {
-                    let after_then = after_first.get(then_idx + 5..).unwrap_or("");
-                    let tgt_candidate = after_then.split_whitespace().next().unwrap_or("");
-                    if !src_candidate.is_empty() && !tgt_candidate.is_empty() {
-                        let src = if src_candidate == "entry" || src_candidate == "Initial" {
-                            "[*]"
-                        } else {
-                            src_candidate
-                        };
-                        let tgt = if tgt_candidate == "exit" || tgt_candidate == "Terminal" {
-                            "[*]"
-                        } else {
-                            tgt_candidate
-                        };
+                } else if tgt == "[*]" {
+                    lines.push(format!("    {} --> [*]", src));
+                    source_states.insert(src);
+                } else {
+                    if let Some(lbl) = label {
+                        lines.push(format!("    {} --> {} : {}", src, tgt, lbl));
+                    } else {
                         lines.push(format!("    {} --> {}", src, tgt));
-                        if src != "[*]" {
-                            source_states.insert(src.to_string());
-                        }
-                        if tgt != "[*]" {
-                            target_states.insert(tgt.to_string());
-                        }
                     }
+                    source_states.insert(src);
+                    target_states.insert(tgt);
                 }
             }
         }
@@ -4636,6 +4674,198 @@ Custom authored Layer 3 presentation actuator bindings.
         if tmp_dir.exists() {
             std::fs::remove_dir_all(&tmp_dir)?;
         }
+        Ok(())
+    }
+
+    /// Verifies `DEFECT-07` (Issue #497): full AST roundtrip synchronization (`forward_sync_sysml_to_specs`
+    /// -> `reverse_sync_specs_to_sysml` -> `to_sysml` -> `SysmlParser::parse_source`) preserves
+    /// `StateDef` transition endpoints, triggers, guards, and effects as well as multi-token `UseCaseDef` clauses.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_defect_07_full_ast_roundtrip_sync_preserves_state_transitions_and_use_cases` in `crates/compile-sysml/src/sync/forward.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves full AST state transition and use-case clause fidelity across forward/reverse/serialize/parse roundtrips.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary workspace directory is writable for forward and reverse sync artifacts.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts generated Epic statechart contains full `TransitionDef` trigger/guard/effect label and re-parsed AST preserves `TransitionDef` and `UseCaseDef` fields.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over fixture AST and markdown files.
+    /// - Space Complexity: O(N) bounded auxiliary memory for test fixture.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Cleans temporary directory deterministically on completion.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-FORWARD-EXTRACT-TRANSITION-ENDPOINTS, REQ-SYNC-FORWARD-GENERATE-EPIC-STATECHART] | SysML v2: VerificationCaseDef(test_defect_07_full_ast_roundtrip_sync_preserves_state_transitions_and_use_cases)
+    #[test]
+    fn test_defect_07_full_ast_roundtrip_sync_preserves_state_transitions_and_use_cases(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::parser::grammar::SysmlParser;
+        use crate::semantic::serializer::to_sysml;
+        use crate::sync::reverse::{reverse_sync_specs_to_sysml, ReverseSyncOptions};
+        use deap_core::sysml_ast::{
+            ActionDef, PackageDef, PartDef, StateDef, TransitionDef, UseCaseDef,
+        };
+
+        let tmp_dir = std::env::temp_dir().join(format!(
+            "deap_defect_07_full_ast_roundtrip_{}",
+            std::process::id()
+        ));
+        if tmp_dir.exists() {
+            std::fs::remove_dir_all(&tmp_dir)?;
+        }
+        let docs_dir = tmp_dir.join("docs");
+        std::fs::create_dir_all(&docs_dir)?;
+
+        let mut root = PackageDef {
+            name: "SystemPackage".to_string(),
+            ..Default::default()
+        };
+        let mut sub = PackageDef {
+            name: "SubsystemAlpha".to_string(),
+            parent_package: Some("SystemPackage".to_string()),
+            ..Default::default()
+        };
+        let mut processor = PartDef {
+            name: "ProcessorEngine".to_string(),
+            ..Default::default()
+        };
+        processor.actions.push(ActionDef {
+            name: "ProcessItemAction".to_string(),
+            ..Default::default()
+        });
+        sub.part_defs.push(processor);
+
+        sub.action_defs.push(ActionDef {
+            name: "ExecuteSequenceAction".to_string(),
+            ..Default::default()
+        });
+
+        let mut state_def = StateDef {
+            name: "ProcessorLifecycleState".to_string(),
+            ..Default::default()
+        };
+        state_def.transitions.push(TransitionDef {
+            name: Some("IdleToActive".to_string()),
+            source: Some("IdleState".to_string()),
+            target: Some("ActiveState".to_string()),
+            trigger: Some("StartCommand".to_string()),
+            guard: Some("input_ready == true".to_string()),
+            effect: Some("InitializeContext".to_string()),
+            doc: None,
+        });
+        sub.state_defs.push(state_def);
+
+        sub.use_case_defs.push(UseCaseDef {
+            name: "ExecuteSubsystemWorkflow".to_string(),
+            actors: vec!["SystemActor".to_string()],
+            subject: Some("ProcessorEngine".to_string()),
+            objective: Some("Execute deterministic subsystem workflow".to_string()),
+            preconditions: vec!["Subsystem initialized in nominal state".to_string()],
+            steps: vec!["Actor dispatches request to ProcessorEngine".to_string()],
+            postconditions: vec!["Output state verified without error".to_string()],
+            ..Default::default()
+        });
+        root.packages.push(sub);
+
+        let fwd_opts = ForwardSyncOptions {
+            schema_path: tmp_dir.join("schema").join("model.sysml"),
+            docs_dir: docs_dir.clone(),
+            out_dir: Some(docs_dir.clone()),
+            dry_run: false,
+            force: true,
+        };
+        let generated_initial = forward_sync_sysml_to_specs(&root, &fwd_opts)?;
+        let epic_md = generated_initial
+            .iter()
+            .find(|(k, _)| k.contains("EPIC-") && k.contains("SubsystemAlpha"))
+            .map(|(_, v)| v)
+            .ok_or("expected generated EPIC for SubsystemAlpha")?;
+        assert!(
+            epic_md.contains("IdleState --> ActiveState"),
+            "Epic statechart must render structured TransitionDef source and target, got:\n{}",
+            epic_md
+        );
+        assert!(
+            epic_md.contains(
+                "IdleState --> ActiveState : StartCommand [input_ready == true] / InitializeContext"
+            ),
+            "Epic statechart must render structured TransitionDef trigger, guard, and effect, got:\n{}",
+            epic_md
+        );
+
+        let rev_opts = ReverseSyncOptions {
+            docs_dir: docs_dir.clone(),
+            schema_path: None,
+            output_path: tmp_dir.join(".pipeline").join("schema.sysml"),
+            digest_path: tmp_dir.join(".pipeline").join("schema-digest.json"),
+            allow_overwrite: true,
+        };
+        let (synced_pkg, _digest) = reverse_sync_specs_to_sysml(Some(&root), &rev_opts)?;
+        let serialized = to_sysml(&synced_pkg);
+        let reparsed = SysmlParser::parse_source(&serialized, "SystemPackage")?;
+
+        if tmp_dir.exists() {
+            std::fs::remove_dir_all(&tmp_dir)?;
+        }
+
+        let reparsed_sub = reparsed
+            .packages
+            .iter()
+            .find(|p| p.name == "SubsystemAlpha")
+            .ok_or("expected SubsystemAlpha in reparsed PackageDef")?;
+        let reparsed_state = reparsed_sub
+            .state_defs
+            .first()
+            .ok_or("expected StateDef in reparsed SubsystemAlpha")?;
+        let reparsed_trans = reparsed_state
+            .transitions
+            .first()
+            .ok_or("expected TransitionDef in reparsed StateDef")?;
+
+        assert_eq!(reparsed_trans.source.as_deref(), Some("IdleState"));
+        assert_eq!(reparsed_trans.target.as_deref(), Some("ActiveState"));
+        assert_eq!(reparsed_trans.trigger.as_deref(), Some("StartCommand"));
+        assert_eq!(reparsed_trans.guard.as_deref(), Some("input_ready == true"));
+        assert_eq!(reparsed_trans.effect.as_deref(), Some("InitializeContext"));
+
+        let reparsed_uc = reparsed_sub
+            .use_case_defs
+            .first()
+            .ok_or("expected UseCaseDef in reparsed SubsystemAlpha")?;
+        let norm_pre: Vec<String> = reparsed_uc
+            .preconditions
+            .iter()
+            .map(|s| s.trim_matches('"').to_string())
+            .collect();
+        let norm_steps: Vec<String> = reparsed_uc
+            .steps
+            .iter()
+            .map(|s| s.trim_matches('"').to_string())
+            .collect();
+        let norm_post: Vec<String> = reparsed_uc
+            .postconditions
+            .iter()
+            .map(|s| s.trim_matches('"').to_string())
+            .collect();
+        assert_eq!(
+            norm_pre,
+            vec!["Subsystem initialized in nominal state".to_string()]
+        );
+        assert_eq!(
+            norm_steps,
+            vec!["Actor dispatches request to ProcessorEngine".to_string()]
+        );
+        assert_eq!(
+            norm_post,
+            vec!["Output state verified without error".to_string()]
+        );
+
         Ok(())
     }
 }
