@@ -1552,10 +1552,7 @@ pub fn forward_sync_sysml_to_specs(
     }
 
     let mut story_metas: Vec<StoryMeta> = Vec::new();
-    for p in &ordered_packages {
-        if p.name == "ConOps" {
-            continue;
-        }
+    for p in &part_packages {
         let subsys_display = if p.name == pkg.name || p.name == "SysML_Model" {
             "System Architecture".to_string()
         } else {
@@ -1563,18 +1560,46 @@ pub fn forward_sync_sysml_to_specs(
         };
         let subsys_dir = if p.name == pkg.name || p.name == "SysML_Model" {
             "architecture".to_string()
+        } else if p.name == "ConOps" {
+            "conops".to_string()
         } else {
             to_snake_case(&p.name)
         };
 
-        for (a_idx, action_def) in p.action_defs.iter().enumerate() {
-            let action_name = strip_use_case_prefix(&action_def.name).to_string();
-            let default_engine_name = p
-                .part_defs
-                .iter()
-                .find(|part| part.name.ends_with("Engine"))
-                .or_else(|| p.part_defs.first())
-                .map(|part| part.name.clone())
+        let mut pkg_behavior_items: Vec<(String, Option<String>)> = Vec::new();
+        let mut seen_behavior_names: BTreeSet<String> = BTreeSet::new();
+
+        for action_def in &p.action_defs {
+            let clean = strip_use_case_prefix(&action_def.name).to_string();
+            if !clean.is_empty() && seen_behavior_names.insert(clean.to_ascii_lowercase()) {
+                pkg_behavior_items.push((clean, None));
+            }
+        }
+        for part in &p.part_defs {
+            for action_def in &part.actions {
+                let clean = strip_use_case_prefix(&action_def.name).to_string();
+                if !clean.is_empty() && seen_behavior_names.insert(clean.to_ascii_lowercase()) {
+                    pkg_behavior_items.push((clean, Some(part.name.clone())));
+                }
+            }
+        }
+        let non_inter_len = pkg_behavior_items.len();
+        for inter in p.interaction_defs.iter().skip(non_inter_len) {
+            let clean = strip_use_case_prefix(&inter.name).to_string();
+            if !clean.is_empty() && seen_behavior_names.insert(clean.to_ascii_lowercase()) {
+                pkg_behavior_items.push((clean, None));
+            }
+        }
+
+        for (a_idx, (action_name, owner_part)) in pkg_behavior_items.into_iter().enumerate() {
+            let default_engine_name = owner_part
+                .or_else(|| {
+                    p.part_defs
+                        .iter()
+                        .find(|part| part.name.ends_with("Engine"))
+                        .or_else(|| p.part_defs.first())
+                        .map(|part| part.name.clone())
+                })
                 .unwrap_or_else(|| sanitize_id(&p.name));
 
             let mut caller_engine = sanitize_id(&pkg.name);
@@ -1716,12 +1741,11 @@ pub fn forward_sync_sysml_to_specs(
     }
 
     let mut uc_metas: Vec<UseCaseMeta> = Vec::new();
-    for p in &ordered_packages {
-        if p.name == "ConOps" {
-            continue;
-        }
+    for p in &part_packages {
         let subsys_dir = if p.name == pkg.name || p.name == "SysML_Model" {
             "architecture".to_string()
+        } else if p.name == "ConOps" {
+            "conops".to_string()
         } else {
             to_snake_case(&p.name)
         };
@@ -1744,12 +1768,13 @@ pub fn forward_sync_sysml_to_specs(
             .map(|pos| pos + 1)
             .unwrap_or(1);
 
-        let story_s_num = story_metas
-            .iter()
-            .find(|s| s.pkg_name == p.name)
-            .map(|s| s.s_num);
-
-        for uc in &p.use_case_defs {
+        for (u_idx, uc) in p.use_case_defs.iter().enumerate() {
+            let story_s_num = story_metas
+                .iter()
+                .filter(|s| s.pkg_name == p.name)
+                .nth(u_idx)
+                .or_else(|| story_metas.iter().find(|s| s.pkg_name == p.name))
+                .map(|s| s.s_num);
             let parsed_doc = parse_use_case_doc(uc.doc.as_deref());
             let subject_candidate = uc.subject.as_ref().or(parsed_doc.subject.as_ref());
             let engine_name = if let Some(subj) = subject_candidate {
@@ -1783,6 +1808,9 @@ pub fn forward_sync_sysml_to_specs(
             });
         }
     }
+
+    let has_conops_uc = uc_metas.iter().any(|m| m.pkg_name == "ConOps");
+    let has_conops_us = story_metas.iter().any(|m| m.pkg_name == "ConOps");
 
     let schema_base = target_out_dir
         .parent()
@@ -1884,7 +1912,10 @@ pub fn forward_sync_sysml_to_specs(
 
         // Associated use cases and user stories
         let mut assoc_uc = Vec::new();
-        for uc_m in uc_metas.iter().filter(|m| m.pkg_name == p.name || is_conops) {
+        for uc_m in uc_metas
+            .iter()
+            .filter(|m| m.pkg_name == p.name || (is_conops && !has_conops_uc))
+        {
             let clean_name = strip_use_case_prefix(&uc_m.uc.name);
             let uc_slug = sanitize_id(clean_name);
             let uc_path = format!("use-cases/UC-{:02}-{}.md", uc_m.u_num, uc_slug);
@@ -1896,7 +1927,10 @@ pub fn forward_sync_sysml_to_specs(
         }
 
         let mut assoc_us = Vec::new();
-        for s_m in story_metas.iter().filter(|m| m.pkg_name == p.name || is_conops) {
+        for s_m in story_metas
+            .iter()
+            .filter(|m| m.pkg_name == p.name || (is_conops && !has_conops_us))
+        {
             let us_slug = sanitize_id(&s_m.action_name);
             let us_path = format!("user-stories/US-{:02}-{}.md", s_m.s_num, us_slug);
             let us_issue = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &us_path));
@@ -2692,10 +2726,25 @@ Use case operational flows and lifecycle activity references:
     );
     generated_files.insert("safety/STPA_MATRIX.md".to_string(), stpa_content);
 
-    // If not dry-run, remove stale files when force is enabled, then persist generated files
+    // When not forcing destructive overwrite, merge existing authored sections and [x] checkboxes
+    if !opts.force {
+        let keys: Vec<String> = generated_files.keys().cloned().collect();
+        for rel_path in keys {
+            if let Some(existing_content) = read_existing_spec_content(&target_out_dir, &rel_path) {
+                if let Some(gen_content) = generated_files.get(&rel_path).cloned() {
+                    let merged = merge_existing_spec_content(&rel_path, &gen_content, &existing_content);
+                    generated_files.insert(rel_path, merged);
+                }
+            }
+        }
+    }
+
+    // If not dry-run, remove stale files when force is enabled (or colliding prefix files when !force), then persist generated files
     if !opts.dry_run {
         if opts.force {
             clean_stale_specifications(&target_out_dir, &generated_files)?;
+        } else {
+            clean_colliding_prefix_specifications(&target_out_dir, &generated_files)?;
         }
 
         for (rel_path, text) in &generated_files {
@@ -2721,6 +2770,443 @@ Use case operational flows and lifecycle activity references:
     }
 
     Ok(generated_files)
+}
+
+/// Extracts the 2-dash specification ID prefix (e.g., `EPIC-02-`, `FEAT-01-`, `US-01-`, `UC-01-`) from a file name.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `extract_id_prefix` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Uses `.get(..)` bounds-checked slicing and returns `Some` only when two hyphen delimiters exist.
+///
+/// ## 3. Preconditions
+/// - `file_name: &str` is a candidate specification filename.
+///
+/// ## 4. Postconditions
+/// - Returns `Option<&str>` representing the leading 2-dash prefix including the second hyphen.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(file_name)) bounded over filename length.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `extract_id_prefix` (`Option<&str>`).
+/// - State: Pure function with zero side effects.
+/// - Action: Executes deterministically without panics.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-EXTRACT-ID-PREFIX] | SysML v2: ActionDef(extract_id_prefix)
+fn extract_id_prefix(file_name: &str) -> Option<&str> {
+    let prefix_len = file_name.find('-').and_then(|first_dash| {
+        file_name
+            .get(first_dash + 1..)
+            .and_then(|rest| rest.find('-').map(|second_dash| first_dash + 1 + second_dash + 1))
+    })?;
+    file_name.get(..prefix_len)
+}
+
+/// Reads existing specification content from disk by exact relative path or matching 2-dash ID prefix in the same subdirectory.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `read_existing_spec_content` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Resolves exact path matches first, falling back to deterministic sorted prefix lookup within the same subdirectory.
+///
+/// ## 3. Preconditions
+/// - `target_out_dir: &Path` and `rel_path: &str` denote a valid specification path.
+///
+/// ## 4. Postconditions
+/// - Returns `Option<String>` containing existing file contents if present on disk.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(target_out_dir)) bounded over directory entries.
+/// - Space Complexity: O(N(content)) bounded over file size.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `None` gracefully when no matching file exists.
+/// - State: Read-only filesystem inspection.
+/// - Action: Executes deterministically with sorted directory traversal.
+/// - Resource: Bounds heap allocation to single specification file content.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-READ-EXISTING-SPEC] | SysML v2: ActionDef(read_existing_spec_content)
+fn read_existing_spec_content(target_out_dir: &Path, rel_path: &str) -> Option<String> {
+    let full = target_out_dir.join(rel_path);
+    if let Ok(content) = fs::read_to_string(&full) {
+        return Some(content);
+    }
+    let parent = Path::new(rel_path).parent()?;
+    let file_name = Path::new(rel_path).file_name().and_then(|f| f.to_str())?;
+    let prefix = extract_id_prefix(file_name)?;
+    let dir_path = target_out_dir.join(parent);
+    let entries = fs::read_dir(&dir_path).ok()?;
+    let mut matching_paths: Vec<PathBuf> = entries
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name();
+            let name_str = name.to_string_lossy();
+            if name_str.starts_with(prefix) && name_str.ends_with(".md") {
+                Some(e.path())
+            } else {
+                None
+            }
+        })
+        .collect();
+    matching_paths.sort();
+    for path in matching_paths {
+        if let Ok(content) = fs::read_to_string(&path) {
+            return Some(content);
+        }
+    }
+    None
+}
+
+/// Extracts a canonical matching key for a markdown checklist line item after `- [ ]` or `- [x]`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `extract_checklist_item_key` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Maps `AC-XX` / `AC-US-XX-YY` items to their AC identifier and linked `FEAT-XX-` / `UC-XX-` / `US-XX-` items to their 2-dash prefix.
+///
+/// ## 3. Preconditions
+/// - `after_checkbox: &str` is the trimmed substring following `- [ ]` or `- [x]`.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty `String` key for checklist state matching.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(after_checkbox)) bounded over line length.
+/// - Space Complexity: O(N(after_checkbox)) bounded over key length.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles all checklist line shapes without panicking.
+/// - State: Pure function with zero side effects.
+/// - Action: Executes deterministically.
+/// - Resource: Bounded small string allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-EXTRACT-CHECKLIST-KEY] | SysML v2: ActionDef(extract_checklist_item_key)
+fn extract_checklist_item_key(after_checkbox: &str) -> String {
+    let trimmed = after_checkbox.trim();
+    if trimmed.starts_with("AC-") {
+        if let Some((ac_id, _)) = trimmed.split_once(':') {
+            return ac_id.trim().to_string();
+        }
+    }
+    for marker in ["../features/", "../use-cases/", "../user-stories/"] {
+        if let Some(pos) = trimmed.find(marker) {
+            if let Some(rest) = trimmed.get(pos + marker.len()..) {
+                if let Some(prefix) = extract_id_prefix(rest) {
+                    return prefix.to_string();
+                }
+            }
+        }
+    }
+    trimmed.to_string()
+}
+
+/// Extracts the trimmed body of a markdown section identified by `heading` (excluding the heading line itself and subsequent same-or-higher-level headings).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `extract_markdown_section_body` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Respects fenced code blocks (` ``` `) so headings inside code blocks do not prematurely terminate section extraction.
+///
+/// ## 3. Preconditions
+/// - `doc: &str` is markdown text and `heading: &str` starts with `## ` or `### `.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(String)` when a non-empty section body exists under `heading`, or `None` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(doc)) single linear pass over lines.
+/// - Space Complexity: O(N(doc)) bounded section buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `extract_markdown_section_body` (`Option<String>`).
+/// - State: Pure function with zero side effects.
+/// - Action: Executes deterministically with zero unbounded recursion.
+/// - Resource: Bounded heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-EXTRACT-MARKDOWN-SECTION] | SysML v2: ActionDef(extract_markdown_section_body)
+fn extract_markdown_section_body(doc: &str, heading: &str) -> Option<String> {
+    let target_level = heading.chars().take_while(|c| *c == '#').count();
+    let mut in_fence = false;
+    let mut collecting = false;
+    let mut body_lines = Vec::new();
+
+    for line in doc.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            in_fence = !in_fence;
+        }
+        if !in_fence {
+            if !collecting {
+                if trimmed == heading {
+                    collecting = true;
+                    continue;
+                }
+            } else if trimmed.starts_with('#') {
+                let level = trimmed.chars().take_while(|c| *c == '#').count();
+                if level > 0 && level <= target_level && trimmed.get(level..level + 1) == Some(" ") {
+                    break;
+                }
+            }
+        }
+        if collecting {
+            body_lines.push(line);
+        }
+    }
+
+    let joined = body_lines.join("\n");
+    let trimmed_body = joined.trim();
+    if collecting && !trimmed_body.is_empty() {
+        Some(trimmed_body.to_string())
+    } else {
+        None
+    }
+}
+
+/// Replaces the body of a markdown section identified by `heading` with `new_body`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `replace_markdown_section_body` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves all surrounding sections, headings, and code fences intact while substituting the target section body.
+///
+/// ## 3. Preconditions
+/// - `doc: &str`, `heading: &str`, and `new_body: &str` are valid UTF-8 strings.
+///
+/// ## 4. Postconditions
+/// - Returns `String` with `heading` followed by `new_body`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(doc)) single linear pass over lines.
+/// - Space Complexity: O(N(doc) + N(new_body)) bounded output string.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns original content unchanged if `heading` is not present.
+/// - State: Pure function with zero side effects.
+/// - Action: Executes deterministically.
+/// - Resource: Bounded heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-REPLACE-MARKDOWN-SECTION] | SysML v2: ActionDef(replace_markdown_section_body)
+fn replace_markdown_section_body(doc: &str, heading: &str, new_body: &str) -> String {
+    let target_level = heading.chars().take_while(|c| *c == '#').count();
+    let mut in_fence = false;
+    let mut skipping = false;
+    let mut out_lines: Vec<String> = Vec::new();
+
+    for line in doc.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            in_fence = !in_fence;
+        }
+        if !in_fence {
+            if !skipping {
+                if trimmed == heading {
+                    out_lines.push(line.to_string());
+                    out_lines.push(new_body.trim().to_string());
+                    out_lines.push(String::new());
+                    skipping = true;
+                    continue;
+                }
+            } else if trimmed.starts_with('#') {
+                let level = trimmed.chars().take_while(|c| *c == '#').count();
+                if level > 0 && level <= target_level && trimmed.get(level..level + 1) == Some(" ") {
+                    skipping = false;
+                }
+            }
+        }
+        if !skipping {
+            out_lines.push(line.to_string());
+        }
+    }
+
+    let mut result = out_lines.join("\n");
+    if doc.ends_with('\n') && !result.ends_with('\n') {
+        result.push('\n');
+    }
+    result
+}
+
+/// Merges existing authored prose sections and `- [x]` checkbox states into generated specification content when `!opts.force`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `merge_existing_spec_content` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves `- [x]` / `- [X]` completion states on matching checklist items (`FEAT-XX`, `UC-XX`, `US-XX`, `AC-XX`) and authored prose sections in `EPIC-*.md` and `FEAT-*.md`.
+///
+/// ## 3. Preconditions
+/// - `rel_path: &str`, `generated: &str`, and `existing: &str` are valid specification strings.
+///
+/// ## 4. Postconditions
+/// - Returns merged `String` combining fresh AST-derived tables/diagrams/checklists with preserved authored sections and checked box states.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(generated) + N(existing)) bounded over specification line count.
+/// - Space Complexity: O(N(generated) + N(existing)) bounded auxiliary memory.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles arbitrary markdown content deterministically.
+/// - State: Pure function with zero side effects.
+/// - Action: Executes deterministically without panics or unbounded loops.
+/// - Resource: Bounded heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-MERGE-EXISTING-SPEC] | SysML v2: ActionDef(merge_existing_spec_content)
+fn merge_existing_spec_content(rel_path: &str, generated: &str, existing: &str) -> String {
+    let mut checked_keys: BTreeSet<String> = BTreeSet::new();
+    for line in existing.lines() {
+        let trimmed = line.trim_start();
+        if let Some(after) = trimmed
+            .strip_prefix("- [x] ")
+            .or_else(|| trimmed.strip_prefix("- [X] "))
+        {
+            checked_keys.insert(extract_checklist_item_key(after));
+        }
+    }
+
+    let mut merged = if checked_keys.is_empty() {
+        generated.to_string()
+    } else {
+        let mut lines_out = Vec::new();
+        for line in generated.lines() {
+            let trimmed = line.trim_start();
+            if let Some(after) = trimmed.strip_prefix("- [ ] ") {
+                let key = extract_checklist_item_key(after);
+                if checked_keys.contains(&key) {
+                    let indent_len = line.len().saturating_sub(trimmed.len());
+                    let indent = line.get(..indent_len).unwrap_or("");
+                    lines_out.push(format!("{}- [x] {}", indent, after));
+                    continue;
+                }
+            }
+            lines_out.push(line.to_string());
+        }
+        let mut s = lines_out.join("\n");
+        if generated.ends_with('\n') && !s.ends_with('\n') {
+            s.push('\n');
+        }
+        s
+    };
+
+    if rel_path.starts_with("epics/") {
+        let epic_headings = [
+            "## 1. Context",
+            "## 3. Architecture",
+            "## 4. Operational Considerations",
+            "## 5. Security & Governance",
+        ];
+        for heading in &epic_headings {
+            if let Some(existing_body) = extract_markdown_section_body(existing, heading) {
+                merged = replace_markdown_section_body(&merged, heading, &existing_body);
+            }
+        }
+    } else if rel_path.starts_with("features/") {
+        let feat_headings = [
+            "### 2. Validation & Constraints",
+            "### 3. Visual Layout & Arrangement",
+            "### 4. Interactive Flow & States",
+            "### Layer 1: Domain State & Signal Model",
+            "### Layer 2: Logic & Safety State Management",
+            "### Layer 3: Presentation & Actuator Interface Binding",
+        ];
+        for heading in &feat_headings {
+            if let Some(existing_body) = extract_markdown_section_body(existing, heading) {
+                merged = replace_markdown_section_body(&merged, heading, &existing_body);
+            }
+        }
+    }
+
+    merged
+}
+
+/// Removes stale `.md` files in `epics/`, `features/`, `user-stories/`, `use-cases/` that are not in `active_specs`
+/// but share the same 2-dash ID prefix (`EPIC-XX-`, `FEAT-XX-`, `US-XX-`, `UC-XX-`) in the same subdirectory.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `clean_colliding_prefix_specifications` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Removes only obsolete slug variants sharing an active `(subdir, ID-prefix)` while leaving non-colliding files untouched.
+///
+/// ## 3. Preconditions
+/// - `target_out_dir: &Path` and `active_specs: &BTreeMap<String, String>` are valid.
+///
+/// ## 4. Postconditions
+/// - Returns `Result<(), String>` after removing colliding stale slug files.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(target_out_dir)) bounded over directory entries.
+/// - Space Complexity: O(N(active_specs)) bounded auxiliary set of active prefixes.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `clean_colliding_prefix_specifications` (`Result<(), String>`).
+/// - State: Preserves all active specifications and non-colliding files.
+/// - Action: Executes deterministically with sorted directory traversal.
+/// - Resource: Bounds heap allocations to active specification prefix set.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-CLEAN-COLLIDING-PREFIX] | SysML v2: ActionDef(clean_colliding_prefix_specifications)
+fn clean_colliding_prefix_specifications(
+    target_out_dir: &Path,
+    active_specs: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    let subdirs = ["epics", "features", "user-stories", "use-cases"];
+    let active_keys: BTreeSet<String> = active_specs.keys().cloned().collect();
+    let mut active_prefixes: BTreeSet<(String, String)> = BTreeSet::new();
+
+    for key in &active_keys {
+        if let Some((subdir, file_name)) = key.split_once('/') {
+            if let Some(prefix) = extract_id_prefix(file_name) {
+                active_prefixes.insert((subdir.to_string(), prefix.to_string()));
+            }
+        }
+    }
+
+    for subdir in &subdirs {
+        let dir_path = target_out_dir.join(subdir);
+        if !dir_path.is_dir() {
+            continue;
+        }
+
+        for entry in WalkDir::new(&dir_path)
+            .sort_by_file_name()
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let file_path = entry.path();
+            if file_path.extension().map(|e| e == "md").unwrap_or(false) {
+                if let Ok(rel) = file_path.strip_prefix(target_out_dir) {
+                    let rel_str = rel.to_string_lossy().replace('\\', "/");
+                    if !active_keys.contains(&rel_str) {
+                        if let Some(file_name) = file_path.file_name().and_then(|f| f.to_str()) {
+                            if let Some(prefix) = extract_id_prefix(file_name) {
+                                if active_prefixes.contains(&((*subdir).to_string(), prefix.to_string())) {
+                                    let _ = fs::remove_file(file_path);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Removes stale or obsolete generated specification files that are no longer part of the AST.
@@ -3841,6 +4327,315 @@ mod tests {
             !src.contains(utc_now_token),
             "forward.rs must not invoke wall-clock time"
         );
+        Ok(())
+    }
+
+    /// Verifies Issue #477: `ConOps` + `part.actions` + `p.interaction_defs` UC/US projection,
+    /// `!opts.force` preservation of authored `EPIC-*.md`/`FEAT-*.md` prose sections & `- [x]` checkboxes,
+    /// and same-prefix slug collision cleanup.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_477_conops_part_behavior_projection_and_non_destructive_sync` in `crates/compile-sysml/src/sync/forward.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Projects `ConOps` package `use_case_defs` and `action_defs`, `PartDef::actions`, and standalone `PackageDef::interaction_defs` into `UC-*.md` and `US-*.md`.
+    /// - Preserves authored prose sections and `- [x]` checkboxes when `!opts.force`, and cleans stale same-prefix slug collisions on disk.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary test directory is writable for pre-existing authored specifications.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts all projected `UC-*`/`US-*` artifacts exist, authored sections and `[x]` checkboxes survive non-forced sync, and stale colliding files are removed.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over fixture AST and markdown files.
+    /// - Space Complexity: O(N) bounded auxiliary memory for test fixture.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Cleans temporary directory deterministically on completion.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS] | SysML v2: VerificationCaseDef(test_issue_477_conops_part_behavior_projection_and_non_destructive_sync)
+    #[test]
+    fn test_issue_477_conops_part_behavior_projection_and_non_destructive_sync() -> Result<(), Box<dyn std::error::Error>> {
+        use deap_core::sysml_ast::{ActionDef, InteractionDef, PartDef, UseCaseDef};
+
+        let tmp_dir = std::env::temp_dir().join(format!(
+            "deap_issue_477_forward_sync_{}",
+            std::process::id()
+        ));
+        if tmp_dir.exists() {
+            std::fs::remove_dir_all(&tmp_dir)?;
+        }
+        let docs_dir = tmp_dir.join("docs");
+        std::fs::create_dir_all(docs_dir.join("epics"))?;
+        std::fs::create_dir_all(docs_dir.join("features"))?;
+        std::fs::create_dir_all(docs_dir.join("use-cases"))?;
+        std::fs::create_dir_all(docs_dir.join("user-stories"))?;
+
+        let existing_epic = r#"| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #2 |
+| **Title** | Epic 02: Concept of Operations Operational Activities |
+| **Type** | epic |
+
+# Epic 02: Concept of Operations Operational Activities
+
+## 1. Context
+Custom authored ConOps context narrative that must not be clobbered.
+
+## 2. Requirements & Checklist
+- [x] #12 - [Feature 01: [Con Ops] MissionOperator](../features/FEAT-01-MissionOperator.md) (conops.sysml)
+
+### Associated Use Cases & User Stories
+
+#### Associated Use Cases
+- [x] #42 - [Use Case 01: Mission Planning](../use-cases/UC-01-MissionPlanning.md)
+
+#### Associated User Stories
+- [ ] TBD - [User Story 01: Execute Mission Plan Action](../user-stories/US-01-ExecuteMissionPlanAction.md)
+
+## 3. Architecture
+Custom authored architecture narrative with detailed telemetry buses.
+
+## 4. Operational Considerations
+Custom authored operational considerations for mission timing bounds.
+
+## 5. Security & Governance
+Custom authored security and zero-trust governance controls.
+
+## 6. Source References
+- Custom source ref
+"#;
+        std::fs::write(docs_dir.join("epics/EPIC-02-ConOps.md"), existing_epic)?;
+
+        let existing_feat = r#"| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #12 |
+| **Title** | Feature 01: [Con Ops] MissionOperator |
+| **Type** | feature |
+
+# Feature 01: [Con Ops] MissionOperator
+
+## Interface Requirements
+### 1. Test Data Shape
+```json
+{}
+```
+
+### 2. Validation & Constraints
+Custom authored validation constraints for MissionOperator.
+
+### 3. Visual Layout & Arrangement
+Custom authored visual layout tokens and @container rules.
+
+### 4. Interactive Flow & States
+Custom authored interactive flow and operator state transitions.
+
+### Layer 1: Domain State & Signal Model
+Custom authored Layer 1 domain state model.
+
+### Layer 2: Logic & Safety State Management
+Custom authored Layer 2 safety state management logic.
+
+### Layer 3: Presentation & Actuator Interface Binding
+Custom authored Layer 3 presentation actuator bindings.
+
+## Acceptance Criteria (BDD)
+- [x] AC-01: Given nominal MissionOperator domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
+"#;
+        std::fs::write(docs_dir.join("features/FEAT-01-MissionOperator.md"), existing_feat)?;
+
+        let stale_uc = r#"| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #42 |
+| **Title** | Use Case 01: Old Obsolete Slug |
+"#;
+        let stale_uc_path = docs_dir.join("use-cases/UC-01-OldObsoleteSlug.md");
+        std::fs::write(&stale_uc_path, stale_uc)?;
+
+        let mut root = PackageDef {
+            name: "SysML_Model".to_string(),
+            ..Default::default()
+        };
+
+        let mut conops = PackageDef {
+            name: "ConOps".to_string(),
+            ..Default::default()
+        };
+        conops.part_defs.push(PartDef {
+            name: "MissionOperator".to_string(),
+            ..Default::default()
+        });
+        conops.action_defs.push(ActionDef {
+            name: "ExecuteMissionPlanAction".to_string(),
+            ..Default::default()
+        });
+        conops.use_case_defs.push(UseCaseDef {
+            name: "UC_01_MissionPlanning".to_string(),
+            ..Default::default()
+        });
+        root.packages.push(conops);
+
+        let mut sensor_pkg = PackageDef {
+            name: "SensorSubsystem".to_string(),
+            ..Default::default()
+        };
+        let mut radar_part = PartDef {
+            name: "RadarSensor".to_string(),
+            ..Default::default()
+        };
+        radar_part.actions.push(ActionDef {
+            name: "CalibrateBeamAction".to_string(),
+            ..Default::default()
+        });
+        sensor_pkg.part_defs.push(radar_part);
+        sensor_pkg.use_case_defs.push(UseCaseDef {
+            name: "UC_02_CalibrateSensor".to_string(),
+            ..Default::default()
+        });
+        root.packages.push(sensor_pkg);
+
+        let mut comms_pkg = PackageDef {
+            name: "CommsSubsystem".to_string(),
+            ..Default::default()
+        };
+        comms_pkg.part_defs.push(PartDef {
+            name: "RadioLink".to_string(),
+            ..Default::default()
+        });
+        comms_pkg.interaction_defs.push(InteractionDef {
+            name: "EstablishLinkInteraction".to_string(),
+            lifelines: vec![
+                "op : MissionOperator".to_string(),
+                "radio : RadioLink".to_string(),
+            ],
+            messages: vec![
+                "OpenChannel from op to radio".to_string(),
+                "LinkEstablished from radio to op".to_string(),
+            ],
+            ..Default::default()
+        });
+        root.packages.push(comms_pkg);
+
+        let opts = ForwardSyncOptions {
+            schema_path: tmp_dir.join("schema/model.sysml"),
+            docs_dir: docs_dir.clone(),
+            out_dir: None,
+            dry_run: false,
+            force: false,
+        };
+
+        let generated = forward_sync_sysml_to_specs(&root, &opts)?;
+
+        // 1. ConOps UC and US must be projected
+        assert!(
+            generated.contains_key("use-cases/UC-01-MissionPlanning.md"),
+            "ConOps use case must be projected into UC-01-MissionPlanning.md"
+        );
+        assert!(
+            generated.contains_key("user-stories/US-01-ExecuteMissionPlanAction.md"),
+            "ConOps action must be projected into US-01-ExecuteMissionPlanAction.md"
+        );
+
+        // 2. PartDef::actions must be projected into User Story and paired with package Use Case
+        assert!(
+            generated.contains_key("user-stories/US-02-CalibrateBeamAction.md"),
+            "PartDef::actions on RadarSensor must be projected into US-02-CalibrateBeamAction.md"
+        );
+        let uc02 = generated
+            .get("use-cases/UC-02-CalibrateSensor.md")
+            .ok_or("expected UC-02-CalibrateSensor.md")?;
+        assert!(
+            uc02.contains("US-02-CalibrateBeamAction.md"),
+            "UC-02 realization matrix must link to US-02-CalibrateBeamAction.md"
+        );
+
+        // 3. Standalone PackageDef::interaction_defs must be projected into User Story
+        assert!(
+            generated.contains_key("user-stories/US-03-EstablishLinkInteraction.md"),
+            "Standalone interaction_defs on CommsSubsystem must be projected into US-03-EstablishLinkInteraction.md"
+        );
+
+        // 4. Authored EPIC-02-ConOps.md prose sections and [x] checkboxes must be preserved when !opts.force
+        let epic02 = generated
+            .get("epics/EPIC-02-ConOps.md")
+            .ok_or("expected epics/EPIC-02-ConOps.md")?;
+        assert!(
+            epic02.contains("Custom authored ConOps context narrative that must not be clobbered."),
+            "EPIC-02 ## 1. Context must be preserved when !opts.force"
+        );
+        assert!(
+            epic02.contains("Custom authored architecture narrative with detailed telemetry buses."),
+            "EPIC-02 ## 3. Architecture must be preserved when !opts.force"
+        );
+        assert!(
+            epic02.contains("Custom authored operational considerations for mission timing bounds."),
+            "EPIC-02 ## 4. Operational Considerations must be preserved when !opts.force"
+        );
+        assert!(
+            epic02.contains("Custom authored security and zero-trust governance controls."),
+            "EPIC-02 ## 5. Security & Governance must be preserved when !opts.force"
+        );
+        assert!(
+            epic02.contains("- [x] #12 - [Feature 01: [Con Ops] MissionOperator]"),
+            "EPIC-02 checked feature item must preserve [x] state"
+        );
+        assert!(
+            epic02.contains("- [x] #42 - [Use Case 01: Mission Planning]"),
+            "EPIC-02 checked use case item must preserve [x] state"
+        );
+        assert!(
+            !epic02.contains("CalibrateBeamAction"),
+            "EPIC-02 must only list ConOps user stories once ConOps has its own user stories"
+        );
+
+        // 5. Authored FEAT-01-MissionOperator.md prose sections and [x] checkboxes must be preserved when !opts.force
+        let feat01 = generated
+            .get("features/FEAT-01-MissionOperator.md")
+            .ok_or("expected features/FEAT-01-MissionOperator.md")?;
+        assert!(
+            feat01.contains("Custom authored validation constraints for MissionOperator."),
+            "FEAT-01 ### 2. Validation & Constraints must be preserved"
+        );
+        assert!(
+            feat01.contains("Custom authored visual layout tokens and @container rules."),
+            "FEAT-01 ### 3. Visual Layout & Arrangement must be preserved"
+        );
+        assert!(
+            feat01.contains("Custom authored interactive flow and operator state transitions."),
+            "FEAT-01 ### 4. Interactive Flow & States must be preserved"
+        );
+        assert!(
+            feat01.contains("Custom authored Layer 1 domain state model."),
+            "FEAT-01 ### Layer 1 must be preserved"
+        );
+        assert!(
+            feat01.contains("Custom authored Layer 2 safety state management logic."),
+            "FEAT-01 ### Layer 2 must be preserved"
+        );
+        assert!(
+            feat01.contains("Custom authored Layer 3 presentation actuator bindings."),
+            "FEAT-01 ### Layer 3 must be preserved"
+        );
+        assert!(
+            feat01.contains("- [x] AC-01:"),
+            "FEAT-01 checked AC-01 item must preserve [x] state"
+        );
+
+        // 6. Stale same-prefix slug collision file must be removed even when !opts.force
+        assert!(
+            !stale_uc_path.exists(),
+            "Stale colliding file UC-01-OldObsoleteSlug.md must be cleaned up"
+        );
+        assert!(
+            docs_dir.join("use-cases/UC-01-MissionPlanning.md").exists(),
+            "Active UC-01-MissionPlanning.md must exist on disk"
+        );
+
+        if tmp_dir.exists() {
+            std::fs::remove_dir_all(&tmp_dir)?;
+        }
         Ok(())
     }
 }
