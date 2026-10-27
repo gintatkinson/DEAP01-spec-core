@@ -979,26 +979,32 @@ pub fn inject_rust_file_docstrings(
                 pending_doc_indices.clear();
                 first_attr_idx = None;
             } else if brace_depth == 0 && pending_impl_target.is_some() {
-                if let Some((_, after_for)) = code
-                    .split_once(" for ")
-                    .or_else(|| code.strip_prefix("for ").map(|r| ("", r)))
-                {
-                    let before_brace = after_for
-                        .split_once('{')
+                let code_before_where = if code == "where" || code.starts_with("where ") {
+                    ""
+                } else {
+                    code.split_once(" where ")
                         .map(|(b, _)| b.trim())
-                        .unwrap_or(after_for);
-                    let before_where = before_brace
-                        .split_once(" where ")
-                        .map(|(b, _)| b.trim())
-                        .unwrap_or(before_brace)
+                        .unwrap_or(code)
                         .trim_end_matches(" where")
-                        .trim();
-                    let target_clean = before_where
-                        .trim_start_matches('&')
-                        .trim_start_matches("mut ")
-                        .trim();
-                    if let Some(updated_target) = extract_leading_ast_ident(target_clean) {
-                        pending_impl_target = Some(updated_target);
+                        .trim()
+                };
+                if let Some((_, after_for)) = code_before_where
+                    .split_once(" for ")
+                    .or_else(|| code_before_where.strip_prefix("for ").map(|r| ("", r)))
+                {
+                    let after_for_trimmed = after_for.trim_start();
+                    if !after_for_trimmed.starts_with('<') {
+                        let before_brace = after_for_trimmed
+                            .split_once('{')
+                            .map(|(b, _)| b.trim())
+                            .unwrap_or(after_for_trimmed);
+                        let target_clean = before_brace
+                            .trim_start_matches('&')
+                            .trim_start_matches("mut ")
+                            .trim();
+                        if let Some(updated_target) = extract_leading_ast_ident(target_clean) {
+                            pending_impl_target = Some(updated_target);
+                        }
                     }
                 }
                 if code.contains('{') && !code.contains('}') {
@@ -1045,7 +1051,21 @@ pub fn inject_rust_file_docstrings(
                             }
                         }
 
-                        let indent = leading_whitespace(raw_line);
+                        let inline_comment_split = if !started_in_normal
+                            && lex_state == RustStringScannerState::Normal
+                            && first_attr_idx.is_none()
+                        {
+                            raw_line
+                                .split_once("*/")
+                                .map(|(prefix, rest)| (format!("{}*/", prefix), rest.trim_start()))
+                        } else {
+                            None
+                        };
+                        let indent = if inline_comment_split.is_some() {
+                            ""
+                        } else {
+                            leading_whitespace(raw_line)
+                        };
                         let (params, return_type, fields_or_variants, invariants) =
                             inspect_rust_item_details(&raw_lines, idx, kind);
 
@@ -1067,7 +1087,16 @@ pub fn inject_rust_file_docstrings(
 
                         let new_doc = synthesize_7_section_docstring(&ctx, &mut seen_docblocks);
                         let target_insert_idx = first_attr_idx.unwrap_or(idx);
-                        if let Some(bucket) = insertions_before.get_mut(target_insert_idx) {
+                        if let Some((comment_prefix, decl_tail)) = inline_comment_split {
+                            if let Some(bucket) = insertions_before.get_mut(target_insert_idx) {
+                                bucket.push(comment_prefix);
+                                bucket.extend(new_doc);
+                                bucket.push(format!("{indent}{decl_tail}"));
+                            }
+                            if let Some(slot) = removed_line_flags.get_mut(idx) {
+                                *slot = true;
+                            }
+                        } else if let Some(bucket) = insertions_before.get_mut(target_insert_idx) {
                             bucket.extend(new_doc);
                         }
                         enriched_count = enriched_count.saturating_add(1);
@@ -2559,7 +2588,6 @@ fn resolve_schema_context(
 
     let mut matched_req: Option<String> = None;
     let mut matched_constraint: Option<String> = None;
-    let norm_ident = normalize_alnum(item_name);
     let active_part_ident = owner_name.unwrap_or(item_name);
     let item_is_other_part = all_parts
         .iter()
@@ -2578,13 +2606,34 @@ fn resolve_schema_context(
             }) || p.safety_realises.iter().any(|sr| {
                 schema_identifiers_match(sr, &r.name)
                     || (!r.req_id.is_empty() && schema_identifiers_match(sr, &r.req_id))
+            }) || p.requirements.iter().any(|pr| {
+                schema_identifiers_match(&pr.name, &r.name)
+                    || (!r.req_id.is_empty()
+                        && (schema_identifiers_match(&pr.req_id, &r.req_id)
+                            || schema_identifiers_match(&pr.name, &r.req_id)))
             }) || r
                 .satisfied_by
                 .iter()
                 .any(|sb| schema_identifiers_match(sb, &p.name));
             let np = normalize_alnum(&p.name);
-            let named_after_other = np.len() >= 4 && (nr.contains(&np) || nreq.contains(&np));
+            let named_after_other = np.len() >= 2 && (nr.contains(&np) || nreq.contains(&np));
             satisfied_by_other || named_after_other
+        })
+    };
+
+    let constraint_belongs_to_other_part = |c: &deap_core::sysml_ast::ConstraintDef| -> bool {
+        let nc = normalize_alnum(&c.name);
+        all_parts.iter().any(|p| {
+            if schema_identifiers_match(&p.name, active_part_ident) {
+                return false;
+            }
+            let owned_by_other = p
+                .constraints
+                .iter()
+                .any(|pc| schema_identifiers_match(&pc.name, &c.name));
+            let np = normalize_alnum(&p.name);
+            let named_after_other = np.len() >= 2 && nc.contains(&np);
+            owned_by_other || named_after_other
         })
     };
 
@@ -2600,15 +2649,16 @@ fn resolve_schema_context(
         {
             return true;
         }
-        if !item_is_other_part && norm_ident.len() >= 4 {
+        let norm_member = normalize_alnum(member_ident);
+        if !item_is_other_part && norm_member.len() >= 4 {
             let nr = normalize_alnum(&r.name);
             let nreq = normalize_alnum(&r.req_id);
             let r_upper = r.name.to_ascii_uppercase();
             let id_upper = r.req_id.to_ascii_uppercase();
             let looks_like_action_req = r_upper.starts_with("REQ")
                 || id_upper.starts_with("REQ")
-                || nr.contains(&norm_ident);
-            if looks_like_action_req && (nr.contains(&norm_ident) || nreq.contains(&norm_ident)) {
+                || nr.contains(&norm_member);
+            if looks_like_action_req && (nr.contains(&norm_member) || nreq.contains(&norm_member)) {
                 return true;
             }
         }
@@ -2713,11 +2763,10 @@ fn resolve_schema_context(
                             }
                         }
                         if matched_constraint.is_none() {
-                            if let Some(act_c) = pkg
-                                .constraint_defs
-                                .iter()
-                                .find(|c| constraint_matches_action(&c.name, &act.name))
-                            {
+                            if let Some(act_c) = pkg.constraint_defs.iter().find(|c| {
+                                !constraint_belongs_to_other_part(c)
+                                    && constraint_matches_action(&c.name, &act.name)
+                            }) {
                                 if let Some(formatted) =
                                     format_constraint(&act_c.name, &act_c.expression)
                                 {
@@ -2757,13 +2806,11 @@ fn resolve_schema_context(
                     matched_req = extract_doc_req(doc);
                 }
                 if matched_req.is_none() {
-                    if let Some(req_def) = pkg.requirement_defs.iter().find(|r| {
-                        schema_identifiers_match(&r.name, &act.name)
-                            || schema_identifiers_match(&r.req_id, &act.name)
-                            || r.satisfied_by
-                                .iter()
-                                .any(|s| schema_identifiers_match(s, &act.name))
-                    }) {
+                    if let Some(req_def) = pkg
+                        .requirement_defs
+                        .iter()
+                        .find(|r| req_matches_member(r, &act.name))
+                    {
                         let id = if !req_def.req_id.is_empty() {
                             req_def.req_id.clone()
                         } else {
@@ -2774,11 +2821,10 @@ fn resolve_schema_context(
                         }
                     }
                 }
-                if let Some(act_c) = pkg
-                    .constraint_defs
-                    .iter()
-                    .find(|c| constraint_matches_action(&c.name, &act.name))
-                {
+                if let Some(act_c) = pkg.constraint_defs.iter().find(|c| {
+                    !constraint_belongs_to_other_part(c)
+                        && constraint_matches_action(&c.name, &act.name)
+                }) {
                     if let Some(formatted) = format_constraint(&act_c.name, &act_c.expression) {
                         matched_constraint = Some(formatted);
                     }
@@ -2822,9 +2868,10 @@ fn resolve_schema_context(
     if matched_constraint.is_none() {
         for pkg in &all_pkgs {
             if let Some(c_def) = pkg.constraint_defs.iter().find(|c| {
-                schema_identifiers_match(&c.name, target_ident)
-                    || schema_identifiers_match(&c.name, item_name)
-                    || constraint_matches_action(&c.name, item_name)
+                !constraint_belongs_to_other_part(c)
+                    && (schema_identifiers_match(&c.name, target_ident)
+                        || schema_identifiers_match(&c.name, item_name)
+                        || constraint_matches_action(&c.name, item_name))
             }) {
                 if let Some(formatted) = format_constraint(&c_def.name, &c_def.expression) {
                     matched_constraint = Some(formatted);
@@ -3338,19 +3385,37 @@ mod tests {
             parts: vec![nested_child],
             ..Default::default()
         };
+        let imu_part = PartDef {
+            name: "Imu".to_string(),
+            is_def: true,
+            satisfied_requirements: vec!["REQ-IMU-003".to_string()],
+            ..Default::default()
+        };
         let pkg = PackageDef {
             name: "CorePackage".to_string(),
-            part_defs: vec![primary_part, secondary_part],
+            part_defs: vec![primary_part, secondary_part, imu_part],
             action_defs: vec![ActionDef {
                 name: "calibrate_element".to_string(),
                 is_def: true,
                 ..Default::default()
             }],
-            requirement_defs: vec![RequirementDef {
-                name: "PrimaryControllerLimitReq".to_string(),
-                req_id: "REQ-PC-001".to_string(),
-                ..Default::default()
-            }],
+            requirement_defs: vec![
+                RequirementDef {
+                    name: "PrimaryControllerLimitReq".to_string(),
+                    req_id: "REQ-PC-001".to_string(),
+                    ..Default::default()
+                },
+                RequirementDef {
+                    name: "ImuCalibrationReq".to_string(),
+                    req_id: "REQ-IMU-003".to_string(),
+                    ..Default::default()
+                },
+                RequirementDef {
+                    name: "NestedSubunitReq".to_string(),
+                    req_id: "REQ-NS-002".to_string(),
+                    ..Default::default()
+                },
+            ],
             constraint_defs: vec![limit_constraint],
             ..Default::default()
         };
@@ -3367,6 +3432,11 @@ mod tests {
             resolve_schema_context(Some(&pkg), None, "NestedSubunit"),
             (Some("REQ-NS-002".to_string()), None),
             "Nested child PartDef must resolve its inline requirement"
+        );
+        assert_eq!(
+            resolve_schema_context(Some(&pkg), None, "Imu"),
+            (Some("REQ-IMU-003".to_string()), None),
+            "Short 3-char PartDef Imu must resolve its satisfied requirement"
         );
         assert_eq!(
             resolve_schema_context(Some(&pkg), None, "SecondaryMonitor"),
@@ -3387,6 +3457,49 @@ mod tests {
             resolve_schema_context(Some(&pkg), Some("SecondaryMonitor"), "limit"),
             (None, None),
             "Method limit on SecondaryMonitor must not bleed REQ-PC-001 from PrimaryControllerLimitReq"
+        );
+        assert_eq!(
+            resolve_schema_context(Some(&pkg), Some("SecondaryMonitor"), "value_limit"),
+            (None, None),
+            "Method value_limit on SecondaryMonitor must not bleed PrimaryController's ValueLimit constraint"
+        );
+        assert_eq!(
+            resolve_schema_context(Some(&pkg), None, "value_limit"),
+            (None, None),
+            "Standalone fn value_limit must not bleed PrimaryController's ValueLimit constraint"
+        );
+        assert_eq!(
+            resolve_schema_context(Some(&pkg), Some("SecondaryMonitor"), "calibration"),
+            (None, None),
+            "Method calibration on SecondaryMonitor must not bleed REQ-IMU-003 from 3-char sibling PartDef Imu"
+        );
+        assert_eq!(
+            resolve_schema_context(Some(&pkg), Some("SecondaryMonitor"), "nested_subunit_req"),
+            (None, None),
+            "Method on SecondaryMonitor must not bleed inline requirement owned by NestedSubunit"
+        );
+        let mut st = RustStringScannerState::Normal;
+        let scanned_chars = scan_rust_line_preserving_lex_state(
+            "let a = '\\''; let b = '\\\"'; let c = '\\x7f'; let d = '\\u{10FFFF}'; pub fn after_chars() {}",
+            &mut st,
+        );
+        assert_eq!(st, RustStringScannerState::Normal);
+        assert!(
+            scanned_chars.contains("pub fn after_chars() {}"),
+            "Escaped char literals must not corrupt lex_state: {}",
+            scanned_chars
+        );
+        let scanned_lt = scan_rust_line_preserving_lex_state(
+            "pub fn select_lifetime<'a, 'b>(first: &'a str, second: &'b str) -> char { '\"' }",
+            &mut st,
+        );
+        assert_eq!(st, RustStringScannerState::Normal);
+        assert!(
+            scanned_lt.starts_with(
+                "pub fn select_lifetime<'a, 'b>(first: &'a str, second: &'b str) -> char"
+            ),
+            "Multi-lifetime signature must not be swallowed as a char literal: {}",
+            scanned_lt
         );
         assert_eq!(
             extract_balanced_rust_assert_cond("ch != '\\x29' && ch != '\\u{7d}', \"msg\");"),
@@ -3420,7 +3533,7 @@ mod tests {
             "}\n\n",
             "impl<T> PrimaryController<T>\n",
             "where\n",
-            "    T: Copy,\n",
+            "    for <'a> &'a T: Copy,\n",
             "{\n",
             "    pub fn read_metric(&self) -> T { self.metric }\n",
             "}\n\n",
@@ -3445,6 +3558,20 @@ mod tests {
             "Inline block-comment closed declaration post_comment_op must be enriched:\n{}",
             enriched
         );
+        let close_comment_pos = enriched
+            .find("closing inline before fn */")
+            .ok_or_else(|| "missing closing inline comment in enriched output".to_string())?;
+        let post_doc_pos = enriched
+            .find("SysML v2: ActionDef(post_comment_op)")
+            .ok_or_else(|| "missing post_comment_op docstring in enriched output".to_string())?;
+        let post_fn_pos = enriched
+            .find("pub fn post_comment_op")
+            .ok_or_else(|| "missing pub fn post_comment_op in enriched output".to_string())?;
+        assert!(
+            close_comment_pos < post_doc_pos && post_doc_pos < post_fn_pos,
+            "Docstring for post_comment_op must be injected AFTER `*/` and BEFORE `pub fn post_comment_op`:\n{}",
+            enriched
+        );
         assert!(
             enriched.contains("Realises: [REQ-PC-001] | SysML v2: ActionDef(PrimaryController::check_fn_bound)"),
             "Method inside impl<F: Fn(u32) -> bool> PrimaryController<F> must resolve owner PrimaryController:\n{}",
@@ -3460,6 +3587,18 @@ mod tests {
             "Unmatched function must synthesize deterministic module-scoped REQ tag:\n{}",
             enriched
         );
+        let (enriched_2, count_2) = inject_rust_file_docstrings(
+            &enriched,
+            "crates/core_module/src/codec.rs",
+            Some(&pkg),
+            false,
+        )?;
+        assert_eq!(
+            count_2, 0,
+            "Second pass of inject_rust_file_docstrings must be idempotent (count_2 == 0), got {}:\n{}",
+            count_2, enriched_2
+        );
+        assert_eq!(enriched_2, enriched);
 
         let self_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src")
@@ -3484,6 +3623,15 @@ mod tests {
         assert!(
             !prod_src.contains("(Some('\\\\'), Some(_)) =>"),
             "src/docstring.rs must delegate char literal scanning to single_char_literal_byte_len"
+        );
+        let test_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("docstring_injector_tests.rs");
+        let test_src = fs::read_to_string(&test_path)
+            .map_err(|e| format!("Failed to read {}: {}", test_path.display(), e))?;
+        assert!(
+            !test_src.contains(concat!("#![allow(", "clippy::")),
+            "tests/docstring_injector_tests.rs must not contain clippy suppression attributes"
         );
         Ok(())
     }
