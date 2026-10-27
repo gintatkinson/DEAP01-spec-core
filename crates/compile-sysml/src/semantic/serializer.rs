@@ -591,12 +591,12 @@ impl SysmlSerializable for StateDef {
                 lines.push(t_doc.trim_end().to_string());
             }
             let clause = crate::parser::grammar::SysmlParser::format_transition_clause(t);
-            let rendered = if clause.is_empty() {
-                "transition"
+            let stmt = if clause.is_empty() {
+                format!("{}    transition;", pad)
             } else {
-                clause.as_str()
+                format!("{}    transition {};", pad, clause)
             };
-            lines.push(format!("{}    transition {};", pad, rendered));
+            lines.push(stmt);
         }
         lines.push(format!("{}}}", pad));
         lines.join("\n")
@@ -834,6 +834,83 @@ impl SysmlSerializable for RiskDef {
     }
 }
 
+/// Checks whether `value` is a valid unquoted SysML v2 simple or qualified identifier.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `is_simple_sysml_identifier` in `crates/compile-sysml/src/semantic/serializer.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Evaluates deterministically whether `value` starts with an ASCII alphabetic or `_` character and contains only identifier/path characters (`[A-Za-z0-9_.:-]`) with zero early returns (SESE).
+///
+/// ## 3. Preconditions
+/// - `value: &str` is a borrowed string slice representing a candidate SysML clause token.
+///
+/// ## 4. Postconditions
+/// - Returns `true` if and only if `value.trim()` is a non-empty unquoted SysML identifier/path; returns `false` for multi-word phrases or punctuation-bearing strings.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) linear in byte length `L` of `value`.
+/// - Space Complexity: O(1) constant auxiliary memory.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total predicate over `&str` with zero panics.
+/// - State: Pure read-only inspection with zero mutation.
+/// - Action: Executes deterministically in a single character pass.
+/// - Resource: Zero heap allocations within `SEMANTIC-SERIALIZER`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SEMANTIC-SERIALIZER-USECASEDEF-TO-SYSML] | SysML v2: ActionDef(is_simple_sysml_identifier)
+fn is_simple_sysml_identifier(value: &str) -> bool {
+    let trimmed = value.trim();
+    let mut chars = trimmed.chars();
+    let valid_start = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
+    valid_start
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | ':' | '.' | '-'))
+}
+
+/// Normalizes a `UseCaseDef` clause value (`objective`, `precondition`, `include`, `extend`, `step`, `postcondition`) into canonical quoted or identifier SysML v2 notation.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `format_use_case_clause_value` in `crates/compile-sysml/src/semantic/serializer.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strips redundant outer double quotes, preserves unquoted simple identifiers when `always_quote` is `false` and the input was not explicitly quoted, and wraps multi-word or forced-string values in double quotes with zero early returns (SESE).
+///
+/// ## 3. Preconditions
+/// - `raw: &str` and `always_quote: bool` satisfy domain and type-safety constraints prior to invoking `format_use_case_clause_value`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` formatted as either a bare SysML identifier or a properly quoted string literal.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) linear in byte length `L` of `raw`.
+/// - Space Complexity: O(L) bounded output string allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total function over `&str` and `bool`.
+/// - State: Stateless pure transformation.
+/// - Action: Executes deterministically with zero recursion or blocking.
+/// - Resource: Bounded heap allocation proportional to `raw.len()`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SEMANTIC-SERIALIZER-USECASEDEF-TO-SYSML] | SysML v2: ActionDef(format_use_case_clause_value)
+fn format_use_case_clause_value(raw: &str, always_quote: bool) -> String {
+    let trimmed = raw.trim();
+    let was_quoted = trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2;
+    let inner = trimmed
+        .strip_prefix('"')
+        .and_then(|s| s.strip_suffix('"'))
+        .unwrap_or(trimmed)
+        .trim();
+    if always_quote || was_quoted || !is_simple_sysml_identifier(inner) {
+        format!("\"{}\"", inner.replace('"', "\\\""))
+    } else {
+        inner.to_string()
+    }
+}
+
 impl SysmlSerializable for UseCaseDef {
     /// Executes deterministic fn `UseCaseDef::to_sysml` within `crates/compile-sysml/src/semantic/serializer.rs`.
     ///
@@ -882,25 +959,48 @@ impl SysmlSerializable for UseCaseDef {
             }
         }
         if let Some(obj) = &self.objective {
-            let trimmed_obj = obj.trim().trim_matches('"');
-            lines.push(format!("{}    objective \"{}\";", pad, trimmed_obj));
+            lines.push(format!(
+                "{}    objective {};",
+                pad,
+                format_use_case_clause_value(obj, true)
+            ));
         }
         for pre in &self.preconditions {
-            lines.push(format!("{}    precondition {};", pad, pre));
+            lines.push(format!(
+                "{}    precondition {};",
+                pad,
+                format_use_case_clause_value(pre, false)
+            ));
         }
         for inc in &self.includes {
             let target = inc.trim().strip_prefix("use case").map(str::trim).unwrap_or(inc.trim());
-            lines.push(format!("{}    include {};", pad, target));
+            lines.push(format!(
+                "{}    include {};",
+                pad,
+                format_use_case_clause_value(target, false)
+            ));
         }
         for ext in &self.extends {
             let target = ext.trim().strip_prefix("use case").map(str::trim).unwrap_or(ext.trim());
-            lines.push(format!("{}    extend {};", pad, target));
+            lines.push(format!(
+                "{}    extend {};",
+                pad,
+                format_use_case_clause_value(target, false)
+            ));
         }
         for step in &self.steps {
-            lines.push(format!("{}    step {};", pad, step));
+            lines.push(format!(
+                "{}    step {};",
+                pad,
+                format_use_case_clause_value(step, true)
+            ));
         }
         for post in &self.postconditions {
-            lines.push(format!("{}    postcondition {};", pad, post));
+            lines.push(format!(
+                "{}    postcondition {};",
+                pad,
+                format_use_case_clause_value(post, false)
+            ));
         }
         lines.push(format!("{}}}", pad));
         lines.join("\n")
@@ -1730,9 +1830,9 @@ package FlightStateMachine {
             exit disengageAutopilot;
             state Climb;
             state Cruise;
-            transition Climb_to_Cruise;
+            transition Climb_to_Cruise first Climb accept AltitudeReached if climbComplete do levelOff then Cruise;
         }
-        transition GroundIdle_to_Airborne;
+        transition GroundIdle_to_Airborne first GroundIdle then Airborne;
     }
 }";
         let parsed = match crate::parser::grammar::SysmlParser::parse_source(src, "FlightStateMachine") {
@@ -1749,12 +1849,39 @@ package FlightStateMachine {
         assert!(serialized.contains("state def Airborne {"));
         assert!(serialized.contains("state Climb;"));
         assert!(serialized.contains("state Cruise;"));
+        assert!(
+            serialized.contains(
+                "transition Climb_to_Cruise first Climb accept AltitudeReached if climbComplete do levelOff then Cruise;"
+            ),
+            "expected full Climb_to_Cruise transition clause, got:\n{}",
+            serialized
+        );
+        assert!(
+            serialized.contains(
+                "transition GroundIdle_to_Airborne first GroundIdle then Airborne;"
+            ),
+            "expected full GroundIdle_to_Airborne transition clause, got:\n{}",
+            serialized
+        );
 
         let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&serialized, "FlightStateMachine") {
             Ok(p) => p,
             Err(e) => panic!("reparse failed: {}", e),
         };
         assert_eq!(reparsed, parsed);
+
+        let empty_transition_state = StateDef {
+            name: "MinimalState".to_string(),
+            transitions: vec![TransitionDef::default()],
+            ..Default::default()
+        };
+        let empty_serialized = empty_transition_state.to_sysml(0);
+        assert!(
+            empty_serialized.contains("    transition;"),
+            "empty transition clause must emit 'transition;', got:\n{}",
+            empty_serialized
+        );
+        assert!(!empty_serialized.contains("transition transition;"));
     }
 
     /// Executes deterministic fn `test_serialize_use_case_def_full_fields_roundtrip` within `crates/compile-sysml/src/semantic/serializer.rs`.
@@ -1823,6 +1950,46 @@ package MissionUseCases {
             Err(e) => panic!("reparse failed: {}", e),
         };
         assert_eq!(reparsed, parsed);
+
+        let unquoted_uc = UseCaseDef {
+            name: "ExecuteContingencySortie".to_string(),
+            subject: Some("Vehicle : AutonomousPlatform".to_string()),
+            actors: vec!["MissionOperator".to_string()],
+            objective: Some("Recover vehicle under degraded navigation".to_string()),
+            preconditions: vec![
+                "VehiclePreFlightCheckComplete".to_string(),
+                "Navigation link degraded".to_string(),
+            ],
+            includes: vec![
+                "use case ValidateFlightPlan".to_string(),
+                "use case Verify inertial fallback".to_string(),
+            ],
+            extends: vec![
+                "EmergencyAbortSortie".to_string(),
+                "Execute emergency landing".to_string(),
+            ],
+            steps: vec![
+                "Switch to inertial navigation".to_string(),
+                "\"Return to recovery zone\"".to_string(),
+            ],
+            postconditions: vec![
+                "TelemetryLogPersisted".to_string(),
+                "Vehicle safely recovered".to_string(),
+            ],
+            ..Default::default()
+        };
+        let uc_sysml = unquoted_uc.to_sysml(0);
+        assert!(uc_sysml.contains("objective \"Recover vehicle under degraded navigation\";"));
+        assert!(uc_sysml.contains("precondition VehiclePreFlightCheckComplete;"));
+        assert!(uc_sysml.contains("precondition \"Navigation link degraded\";"));
+        assert!(uc_sysml.contains("include ValidateFlightPlan;"));
+        assert!(uc_sysml.contains("include \"Verify inertial fallback\";"));
+        assert!(uc_sysml.contains("extend EmergencyAbortSortie;"));
+        assert!(uc_sysml.contains("extend \"Execute emergency landing\";"));
+        assert!(uc_sysml.contains("step \"Switch to inertial navigation\";"));
+        assert!(uc_sysml.contains("step \"Return to recovery zone\";"));
+        assert!(uc_sysml.contains("postcondition TelemetryLogPersisted;"));
+        assert!(uc_sysml.contains("postcondition \"Vehicle safely recovered\";"));
     }
 
     /// Verifies that `format_doc_comment` escapes both `/*` and `*/` so glob paths like `crates/*/tests/*.rs` roundtrip cleanly through `SysmlParser::parse_source`.

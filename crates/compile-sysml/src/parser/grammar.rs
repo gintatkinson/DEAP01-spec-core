@@ -2514,7 +2514,7 @@ impl<'a> SysmlParser<'a> {
     /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::format_transition_clause` in `crates/compile-sysml/src/parser/grammar.rs`.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves round-trip equivalence (`SysmlParser::parse_transition_clause(&SysmlParser::format_transition_clause(t))`) across `name`, `source`, `target`, `trigger`, `guard`, and `effect` fields while preserving legacy `{source}_to_{target}` shorthand identifiers when explicitly present in `t.name`.
+    /// - Preserves round-trip equivalence (`SysmlParser::parse_transition_clause(&SysmlParser::format_transition_clause(t))`) across `name`, `source`, `target`, `trigger`, `guard`, and `effect` fields with zero early returns (SESE).
     ///
     /// ## 3. Preconditions
     /// - `t: &TransitionDef` is a valid AST transition definition.
@@ -2535,25 +2535,6 @@ impl<'a> SysmlParser<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-FORMAT-TRANSITION-CLAUSE] | SysML v2: ActionDef(SysmlParser::format_transition_clause)
     pub fn format_transition_clause(t: &TransitionDef) -> String {
-        if let Some(n) = t.name.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-            let is_legacy_shorthand = matches!(
-                (t.source.as_deref(), t.target.as_deref()),
-                (Some(s), Some(tg))
-                    if (n == format!("{s}_to_{tg}")
-                        && t.trigger.is_none()
-                        && t.guard.is_none()
-                        && t.effect.is_none())
-                        || t.trigger.as_deref().is_some_and(|tr| {
-                            n == format!("{s}_to_{tg}_on_{tr}")
-                                && t.guard.is_none()
-                                && t.effect.is_none()
-                        })
-            );
-            if is_legacy_shorthand {
-                return n.to_string();
-            }
-        }
-
         let mut parts = Vec::new();
         if let Some(n) = t.name.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
             if !n.contains(char::is_whitespace) && !Self::is_transition_clause_keyword(n) {
