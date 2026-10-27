@@ -1234,56 +1234,26 @@ impl<'a> SysmlParser<'a> {
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PORT-DECL] | SysML v2: ActionDef(SysmlParser::parse_port_decl)
     fn parse_port_decl(&mut self, doc: Option<String>) -> Result<PortDef, ParseError> {
         let mut direction = "inout".to_string();
-        if self.check(&TokenKind::In) {
-            self.advance();
-            direction = "in".to_string();
-        } else if self.check(&TokenKind::Out) {
-            self.advance();
-            direction = "out".to_string();
-        } else if self.check(&TokenKind::Inout) {
-            self.advance();
-            direction = "inout".to_string();
+        for (tok, dir) in [(TokenKind::In, "in"), (TokenKind::Out, "out"), (TokenKind::Inout, "inout")] {
+            if self.check(&tok) { self.advance(); direction = dir.to_string(); break; }
         }
-
         self.expect(&TokenKind::Port)?;
-        if self.check(&TokenKind::Def) {
-            self.advance();
-        }
-
+        if self.check(&TokenKind::Def) { self.advance(); }
         if direction == "inout" {
-            if self.check(&TokenKind::In) {
-                self.advance();
-                direction = "in".to_string();
-            } else if self.check(&TokenKind::Out) {
-                self.advance();
-                direction = "out".to_string();
-            } else if self.check(&TokenKind::Inout) {
-                self.advance();
-                direction = "inout".to_string();
+            for (tok, dir) in [(TokenKind::In, "in"), (TokenKind::Out, "out"), (TokenKind::Inout, "inout")] {
+                if self.check(&tok) { self.advance(); direction = dir.to_string(); break; }
             }
         }
-
         let name = self.expect_ident()?;
         let mut is_conjugated = false;
         let type_name = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
             self.advance();
-            if self.check(&TokenKind::Tilde) {
-                self.advance();
-                is_conjugated = true;
-            }
+            if self.check(&TokenKind::Tilde) { self.advance(); is_conjugated = true; }
             self.parse_type_expr()?
         } else {
             name.clone()
         };
-        let mut port = PortDef {
-            name,
-            type_name,
-            direction,
-            is_conjugated,
-            doc,
-            ..Default::default()
-        };
-
+        let mut port = PortDef { name, type_name, direction, is_conjugated, doc, ..Default::default() };
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
@@ -1291,97 +1261,51 @@ impl<'a> SysmlParser<'a> {
                 let mut f_doc = self.take_inner_doc_comment();
                 self.skip_trivia();
                 while let Some(next_doc) = self.take_inner_doc_comment() {
-                    if port.doc.is_none() {
-                        port.doc = f_doc;
-                    }
+                    if port.doc.is_none() { port.doc = f_doc; }
                     f_doc = Some(next_doc);
                     self.skip_trivia();
                 }
                 if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
-                    if port.doc.is_none() {
-                        port.doc = f_doc;
-                    }
+                    if port.doc.is_none() { port.doc = f_doc; }
                     break;
                 }
                 if self.check(&TokenKind::Attribute) {
                     let attr = self.parse_attribute_decl(f_doc)?;
-                    let clean_val = attr
-                        .default_value
-                        .unwrap_or_default()
-                        .trim()
-                        .trim_matches('"')
-                        .to_string();
-                    if attr.name == "protocol_family" {
-                        port.protocol_family = clean_val;
-                    } else if attr.name == "port_category" {
-                        port.port_category = clean_val;
-                    } else {
-                        port.electrical_attributes.insert(attr.name, clean_val);
-                    }
-                } else if self.check(&TokenKind::Flow)
-                    || self.check(&TokenKind::In)
-                    || self.check(&TokenKind::Out)
-                    || self.check(&TokenKind::Inout)
+                    let clean_val = attr.default_value.unwrap_or_default().trim().trim_matches('"').to_string();
+                    if attr.name == "protocol_family" { port.protocol_family = clean_val; }
+                    else if attr.name == "port_category" { port.port_category = clean_val; }
+                    else { port.electrical_attributes.insert(attr.name, clean_val); }
+                } else if self.check(&TokenKind::Flow) || self.check(&TokenKind::Item)
+                    || self.check(&TokenKind::In) || self.check(&TokenKind::Out) || self.check(&TokenKind::Inout)
                 {
                     let mut flow_dir = "out".to_string();
-                    if self.check(&TokenKind::Flow) {
-                        self.advance();
-                        if self.check(&TokenKind::In) {
-                            self.advance();
-                            flow_dir = "in".to_string();
-                        } else if self.check(&TokenKind::Out) {
-                            self.advance();
-                            flow_dir = "out".to_string();
-                        } else if self.check(&TokenKind::Inout) {
-                            self.advance();
-                            flow_dir = "inout".to_string();
-                        }
-                    } else {
-                        if self.check(&TokenKind::In) {
-                            self.advance();
-                            flow_dir = "in".to_string();
-                        } else if self.check(&TokenKind::Out) {
-                            self.advance();
-                            flow_dir = "out".to_string();
-                        } else if self.check(&TokenKind::Inout) {
-                            self.advance();
-                            flow_dir = "inout".to_string();
-                        }
-                        if self.check(&TokenKind::Flow) {
-                            self.advance();
-                        }
+                    if (self.check(&TokenKind::Flow) || self.check(&TokenKind::Item))
+                        && !matches!(self.tokens.get(self.pos + 1).map(|t| &t.kind), Some(TokenKind::Colon | TokenKind::ColonGt | TokenKind::Semi))
+                    { self.advance(); }
+                    for (tok, dir) in [(TokenKind::In, "in"), (TokenKind::Out, "out"), (TokenKind::Inout, "inout")] {
+                        if self.check(&tok) { self.advance(); flow_dir = dir.to_string(); break; }
                     }
+                    while (self.check(&TokenKind::Flow) || self.check(&TokenKind::Item))
+                        && !matches!(self.tokens.get(self.pos + 1).map(|t| &t.kind), Some(TokenKind::Colon | TokenKind::ColonGt | TokenKind::Semi))
+                    { self.advance(); }
                     let flow_name = self.expect_ident()?;
                     let flow_type = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
-                        self.advance();
-                        self.parse_type_expr()?
-                    } else {
-                        "Item".to_string()
-                    };
+                        self.advance(); self.parse_type_expr()?
+                    } else { "Item".to_string() };
                     self.expect_semi()?;
                     port.item_flows.push(FlowDef {
-                        name: flow_name,
-                        direction: flow_dir,
-                        item_type: flow_type,
-                        doc: f_doc,
-                        ..Default::default()
+                        name: flow_name, direction: flow_dir, item_type: flow_type, doc: f_doc, ..Default::default()
                     });
                 } else {
                     let tok = self.peek();
                     return Err(ParseError {
-                        message: format!(
-                            "Unexpected token '{:?}' in port declaration body",
-                            tok.kind
-                        ),
+                        message: format!("Unexpected token '{:?}' in port declaration body", tok.kind),
                         span: tok.span,
                     });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
-        } else {
-            self.expect_semi()?;
-        }
-
+        } else { self.expect_semi()?; }
         Ok(port)
     }
 
@@ -2966,54 +2890,31 @@ impl<'a> SysmlParser<'a> {
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-USE-CASE-DECL] | SysML v2: ActionDef(SysmlParser::parse_use_case_decl)
     fn parse_use_case_decl(&mut self, doc: Option<String>) -> Result<UseCaseDef, ParseError> {
         self.expect(&TokenKind::UseCase)?;
-        if self.check(&TokenKind::Def) {
-            self.advance();
-        }
-
+        if self.check(&TokenKind::Def) { self.advance(); }
         let name = self.expect_ident()?;
-        let mut subject = None;
-        let mut actor = None;
-        let mut actors = Vec::new();
-        let mut objective = None;
-        let mut steps = Vec::new();
-        let mut includes = Vec::new();
-        let mut extends = Vec::new();
-        let mut preconditions = Vec::new();
-        let mut postconditions = Vec::new();
-        let mut uc_doc = doc;
-
+        let (mut subject, mut actor, mut objective, mut uc_doc) = (None, None, None, doc);
+        let (mut actors, mut steps, mut includes, mut extends, mut preconditions, mut postconditions) =
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
                 self.skip_trivia();
                 while let Some(inner_text) = self.take_inner_doc_comment() {
                     if !inner_text.trim().is_empty() {
-                        match &mut uc_doc {
-                            Some(existing) => {
-                                if !existing.trim().is_empty() {
-                                    existing.push_str("\n\n");
-                                }
-                                existing.push_str(&inner_text);
-                            }
-                            None => {
-                                uc_doc = Some(inner_text);
-                            }
-                        }
+                        let slot = uc_doc.get_or_insert_with(String::new);
+                        if !slot.trim().is_empty() { slot.push_str("\n\n"); }
+                        slot.push_str(&inner_text);
                     }
                     self.skip_trivia();
                 }
-                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
-                    break;
-                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() { break; }
                 if self.check(&TokenKind::Subject) {
                     self.advance();
                     subject = Some(self.read_until_semi());
                 } else if self.check(&TokenKind::Actor) {
                     self.advance();
                     let act = self.read_until_semi();
-                    if actor.is_none() {
-                        actor = Some(act.clone());
-                    }
+                    if actor.is_none() { actor = Some(act.clone()); }
                     actors.push(act);
                 } else if self.check(&TokenKind::Objective) {
                     self.advance();
@@ -3023,9 +2924,11 @@ impl<'a> SysmlParser<'a> {
                     steps.push(self.read_until_semi());
                 } else if self.check(&TokenKind::Include) {
                     self.advance();
+                    if self.check(&TokenKind::UseCase) { self.advance(); }
                     includes.push(self.read_until_semi());
                 } else if self.check(&TokenKind::Extend) {
                     self.advance();
+                    if self.check(&TokenKind::UseCase) { self.advance(); }
                     extends.push(self.read_until_semi());
                 } else if self.check(&TokenKind::Precondition) {
                     self.advance();
@@ -3036,10 +2939,7 @@ impl<'a> SysmlParser<'a> {
                 } else {
                     let tok = self.peek();
                     return Err(ParseError {
-                        message: format!(
-                            "Unexpected token '{:?}' in use case declaration body",
-                            tok.kind
-                        ),
+                        message: format!("Unexpected token '{:?}' in use case declaration body", tok.kind),
                         span: tok.span,
                     });
                 }
@@ -3048,19 +2948,9 @@ impl<'a> SysmlParser<'a> {
         } else {
             self.expect_semi()?;
         }
-
         Ok(UseCaseDef {
-            name,
-            doc: uc_doc,
-            subject,
-            actor,
-            actors,
-            objective,
-            includes,
-            extends,
-            steps,
-            preconditions,
-            postconditions,
+            name, doc: uc_doc, subject, actor, actors, objective,
+            includes, extends, steps, preconditions, postconditions,
         })
     }
 

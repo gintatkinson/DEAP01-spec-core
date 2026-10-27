@@ -289,7 +289,11 @@ impl SysmlSerializable for PortDef {
             if !doc.is_empty() {
                 lines.push(doc.trim_end().to_string());
             }
-            lines.push(format!("{}port {}{}{} : {} {{", pad, dir, conj, self.name, self.type_name));
+            if self.name == self.type_name {
+                lines.push(format!("{}port def {} {{", pad, self.name));
+            } else {
+                lines.push(format!("{}port {}{}{} : {} {{", pad, dir, conj, self.name, self.type_name));
+            }
             if !self.protocol_family.is_empty() {
                 lines.push(format!("{}    attribute protocol_family : String = \"{}\";", pad, self.protocol_family));
             }
@@ -885,10 +889,12 @@ impl SysmlSerializable for UseCaseDef {
             lines.push(format!("{}    precondition {};", pad, pre));
         }
         for inc in &self.includes {
-            lines.push(format!("{}    include {};", pad, inc));
+            let target = inc.trim().strip_prefix("use case").map(str::trim).unwrap_or(inc.trim());
+            lines.push(format!("{}    include {};", pad, target));
         }
         for ext in &self.extends {
-            lines.push(format!("{}    extend {};", pad, ext));
+            let target = ext.trim().strip_prefix("use case").map(str::trim).unwrap_or(ext.trim());
+            lines.push(format!("{}    extend {};", pad, target));
         }
         for step in &self.steps {
             lines.push(format!("{}    step {};", pad, step));
@@ -1857,6 +1863,129 @@ package MissionUseCases {
             Err(e) => panic!("expected clean parse of escaped glob doc comment, got: {}", e),
         };
         assert_eq!(parsed.part_defs.len(), 1);
+    }
+
+    /// Verifies that `port def` declarations with body blocks and `in/out/inout item` or `flow` members parse and round-trip as `port def <Name> { ... }` (Issue #476).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_port_def_with_body_and_item_flow_syntax_roundtrip` in `crates/compile-sysml/src/semantic/serializer.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves `name == type_name` `port def` header invariant when `has_body` is true and parses `in/out/inout item` port members deterministically.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked within a valid test execution context for `test_port_def_with_body_and_item_flow_syntax_roundtrip`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `PortDef::to_sysml` emits `port def TelemetryPort {` and round-trips through `SysmlParser::parse_source` without syntax errors or AST drift.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over input source length.
+    /// - Space Complexity: O(N) bounded auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `test_port_def_with_body_and_item_flow_syntax_roundtrip`.
+    /// - State: Maintains consistent state invariants without partial mutation on error.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `SEMANTIC-SERIALIZER`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SEMANTIC-SERIALIZER-PORTDEF-TO-SYSML] | SysML v2: TestCaseDef(test_port_def_with_body_and_item_flow_syntax_roundtrip)
+    #[test]
+    fn test_port_def_with_body_and_item_flow_syntax_roundtrip() {
+        let src = "\
+package PortPkg {
+    port def TelemetryPort {
+        attribute protocol_family : String = \"CAN_FD\";
+        in item cmd : CommandFrame;
+        out item status : StatusFrame;
+        inout item diag : DiagFrame;
+        flow inout bus : BusPayload;
+    }
+}";
+        let parsed = match crate::parser::grammar::SysmlParser::parse_source(src, "PortPkg") {
+            Ok(p) => p,
+            Err(e) => panic!("initial port def parse failed: {}", e),
+        };
+        assert_eq!(parsed.port_defs.len(), 1);
+        if let Some(port) = parsed.port_defs.first() {
+            assert_eq!(port.name, "TelemetryPort");
+            assert_eq!(port.type_name, "TelemetryPort");
+            assert_eq!(port.item_flows.len(), 4);
+            assert_eq!(port.item_flows[0].direction, "in");
+            assert_eq!(port.item_flows[0].name, "cmd");
+            assert_eq!(port.item_flows[0].item_type, "CommandFrame");
+            assert_eq!(port.item_flows[1].direction, "out");
+            assert_eq!(port.item_flows[1].name, "status");
+            assert_eq!(port.item_flows[2].direction, "inout");
+            assert_eq!(port.item_flows[2].name, "diag");
+            assert_eq!(port.item_flows[3].direction, "inout");
+            assert_eq!(port.item_flows[3].name, "bus");
+        }
+        let serialized = parsed.to_sysml(0);
+        assert!(serialized.contains("port def TelemetryPort {"), "got:\n{}", serialized);
+        assert!(!serialized.contains("port inout TelemetryPort : TelemetryPort"));
+        let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&serialized, "PortPkg") {
+            Ok(p) => p,
+            Err(e) => panic!("reparse of serialized port def failed: {}", e),
+        };
+        assert_eq!(reparsed.port_defs, parsed.port_defs);
+    }
+
+    /// Verifies that `use case def` declarations with `include use case` and `extend use case` normalize target names and round-trip cleanly (Issue #476).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_use_case_def_include_and_extend_use_case_keyword_roundtrip` in `crates/compile-sysml/src/semantic/serializer.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Normalizes `include use case <Target>` and `extend use case <Target>` to canonical `<Target>` identifiers across both parser and serializer.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked within a valid test execution context for `test_use_case_def_include_and_extend_use_case_keyword_roundtrip`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `includes` and `extends` store bare target identifiers and `UseCaseDef::to_sysml` strips any residual `use case` prefix.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) bounded over input source length.
+    /// - Space Complexity: O(N) bounded auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Validates boundary inputs and types for `test_use_case_def_include_and_extend_use_case_keyword_roundtrip`.
+    /// - State: Maintains consistent state invariants without partial mutation on error.
+    /// - Action: Executes deterministically with zero unbounded recursion or blocking.
+    /// - Resource: Bounds stack and heap allocations within `SEMANTIC-SERIALIZER`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SEMANTIC-SERIALIZER-USECASEDEF-TO-SYSML] | SysML v2: TestCaseDef(test_use_case_def_include_and_extend_use_case_keyword_roundtrip)
+    #[test]
+    fn test_use_case_def_include_and_extend_use_case_keyword_roundtrip() {
+        let src = "\
+package MissionUseCases {
+    use case def ExecuteSortie {
+        include use case ValidateFlightPlan;
+        extend use case EmergencyAbortSortie;
+    }
+}";
+        let parsed = match crate::parser::grammar::SysmlParser::parse_source(src, "MissionUseCases") {
+            Ok(p) => p,
+            Err(e) => panic!("initial use case parse failed: {}", e),
+        };
+        assert_eq!(parsed.use_case_defs.len(), 1);
+        if let Some(uc) = parsed.use_case_defs.first() {
+            assert_eq!(uc.includes, vec!["ValidateFlightPlan".to_string()]);
+            assert_eq!(uc.extends, vec!["EmergencyAbortSortie".to_string()]);
+        }
+        let serialized = parsed.to_sysml(0);
+        assert!(serialized.contains("include ValidateFlightPlan;"), "got:\n{}", serialized);
+        assert!(serialized.contains("extend EmergencyAbortSortie;"), "got:\n{}", serialized);
+        assert!(!serialized.contains("include use case"));
+        assert!(!serialized.contains("extend use case"));
+        let reparsed = match crate::parser::grammar::SysmlParser::parse_source(&serialized, "MissionUseCases") {
+            Ok(p) => p,
+            Err(e) => panic!("reparse failed: {}", e),
+        };
+        assert_eq!(reparsed, parsed);
     }
 }
 
