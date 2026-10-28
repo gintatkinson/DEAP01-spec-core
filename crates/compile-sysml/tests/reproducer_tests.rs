@@ -41,8 +41,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use compile_sysml::sync::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
 use compile_sysml::FmecaScoringConfig;
 use deap_core::sysml_ast::{
-    ActionDef, AttributeDef, CalcDef, ConstraintDef, OperationDef, PackageDef, PartDef, PortDef,
-    RequirementDef, StateDef, UseCaseDef,
+    ActionDef, AttributeDef, CalcDef, ConstraintDef, InteractionDef, OperationDef, PackageDef,
+    PartDef, PortDef, RequirementDef, StateDef, TransitionDef, UseCaseDef,
 };
 
 /// Verifies that `forward_sync_sysml_to_specs` does not emit hardcoded colliding fallback issue IDs
@@ -1983,6 +1983,575 @@ fn test_issue_697_upstream_sysml_model_transpiles_safety_suite_with_zero_pending
             content
         );
     }
+
+    Ok(())
+}
+
+/// Constructs a domain-neutral distributed transaction ledger `PackageDef` (`DistributedLedgerSystem`
+/// -> `JournalCommitSubsystem`) exercising AST-derived User Story synthesis for GitHub Issue #696.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C deterministic
+/// test fixture construction objectives for fn `build_issue_696_distributed_ledger_fixture` in
+/// `crates/compile-sysml/tests/reproducer_tests.rs` (refs #696).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Domain-Neutrality Invariant: Every identifier, port, state, constraint, interaction, and
+///   requirement belongs strictly to a distributed storage / transaction journal ledger domain
+///   with zero domain-specific hardware or vehicle tokens.
+/// - Dual-Action Coverage Invariant: Populates both a documented package-level `ActionDef`
+///   (`CommitJournalBatchAction` with `doc: Some(...)`) and an undocumented inline `PartDef`
+///   `ActionDef` (`VerifyReplicaQuorumAction` with `doc: None`) alongside `InteractionDef`,
+///   `StateDef` transitions, `ConstraintDef`, and `RequirementDef` bindings.
+///
+/// ## 3. Preconditions
+/// - Pure in-memory construction with zero external filesystem or environment prerequisites.
+///
+/// ## 4. Postconditions
+/// - Returns a deterministic `PackageDef` rooted at `"DistributedLedgerSystem"` containing
+///   subpackage `"JournalCommitSubsystem"` with `"JournalCoordinatorEngine"`,
+///   `"CommitJournalBatchAction"`, `"VerifyReplicaQuorumAction"`, `"CommitJournalInteraction"`,
+///   `"JournalEpochState"`, and `"DurableQuorumRequirement"` (`"REQ-JRN-01"`).
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ bounded AST struct construction.
+/// - Space Complexity: $O(1)$ bounded heap allocations for fixed AST vectors.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total pure constructor taking zero parameters and returning `PackageDef`.
+/// - State: Allocates fresh owned `PackageDef` instances with zero shared mutable state.
+/// - Action: Executes with zero fallible unwrapping, panics, regular expressions, or byte-range slicing.
+/// - Resource: Bounded heap memory owned by the caller.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-US-FIXTURE-LEDGER-AST] | SysML v2: VerificationCaseDef(build_issue_696_distributed_ledger_fixture)
+fn build_issue_696_distributed_ledger_fixture() -> PackageDef {
+    let coordinator = PartDef {
+        name: "JournalCoordinatorEngine".to_string(),
+        attributes: vec![AttributeDef {
+            name: "active_epoch_seq".to_string(),
+            type_name: "Integer".to_string(),
+            default_value: None,
+            doc: None,
+        }],
+        ports: vec![
+            PortDef {
+                name: "batch_req_in".to_string(),
+                type_name: "BatchRequestPort".to_string(),
+                direction: "in".to_string(),
+                ..Default::default()
+            },
+            PortDef {
+                name: "commit_ack_out".to_string(),
+                type_name: "CommitReceiptPort".to_string(),
+                direction: "out".to_string(),
+                ..Default::default()
+            },
+        ],
+        constraints: vec![ConstraintDef {
+            name: "QuorumWatermarkBound".to_string(),
+            expression: "replica_ack_count >= 3".to_string(),
+            ..Default::default()
+        }],
+        actions: vec![ActionDef {
+            name: "VerifyReplicaQuorumAction".to_string(),
+            in_params: vec![AttributeDef {
+                name: "candidate_batch".to_string(),
+                type_name: "JournalBatch".to_string(),
+                default_value: None,
+                doc: None,
+            }],
+            out_params: vec![AttributeDef {
+                name: "quorum_verified".to_string(),
+                type_name: "Boolean".to_string(),
+                default_value: None,
+                doc: None,
+            }],
+            doc: None,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let subpkg = PackageDef {
+        name: "JournalCommitSubsystem".to_string(),
+        part_defs: vec![coordinator],
+        action_defs: vec![ActionDef {
+            name: "CommitJournalBatchAction".to_string(),
+            in_params: vec![
+                AttributeDef {
+                    name: "epoch_id".to_string(),
+                    type_name: "EpochNumber".to_string(),
+                    default_value: None,
+                    doc: None,
+                },
+                AttributeDef {
+                    name: "entries".to_string(),
+                    type_name: "JournalEntryList".to_string(),
+                    default_value: None,
+                    doc: None,
+                },
+            ],
+            out_params: vec![AttributeDef {
+                name: "commit_receipt".to_string(),
+                type_name: "CommitToken".to_string(),
+                default_value: None,
+                doc: None,
+            }],
+            doc: Some(
+                "Actor: ClusterAdministrator\nPreconditions: Quorum lease is active and write-ahead log is open\nOutcome: journal batch is durably committed across quorum replicas"
+                    .to_string(),
+            ),
+            ..Default::default()
+        }],
+        interaction_defs: vec![InteractionDef {
+            name: "CommitJournalInteraction".to_string(),
+            lifelines: vec![
+                "admin : ClusterAdministrator".to_string(),
+                "coord : JournalCoordinatorEngine".to_string(),
+            ],
+            messages: vec![
+                "DispatchBatch from admin to coord".to_string(),
+                "CommitReceiptReady from coord to admin".to_string(),
+            ],
+            ..Default::default()
+        }],
+        state_defs: vec![StateDef {
+            name: "JournalEpochState".to_string(),
+            transitions: vec![TransitionDef {
+                source: Some("EpochIdle".to_string()),
+                target: Some("EpochCommitted".to_string()),
+                trigger: Some("CommitJournalBatchAction".to_string()),
+                guard: Some("quorum_lease_valid == true".to_string()),
+                effect: Some("EmitCommitReceipt".to_string()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        requirement_defs: vec![RequirementDef {
+            name: "DurableQuorumRequirement".to_string(),
+            req_id: "REQ-JRN-01".to_string(),
+            text: "Durable quorum commit".to_string(),
+            satisfied_by: vec!["JournalCoordinatorEngine".to_string()],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    PackageDef {
+        name: "DistributedLedgerSystem".to_string(),
+        packages: vec![subpkg],
+        ..Default::default()
+    }
+}
+
+/// Verifies that `forward_sync_sysml_to_specs` synthesizes User Stories (`US-01-CommitJournalBatchAction.md`
+/// and `US-02-VerifyReplicaQuorumAction.md`) with a canonical `## User Story` clause (`As a ..., I want to ..., so that ...`),
+/// complete 3-layer Definition of Done architecture bindings (`Layer 1`, `Layer 2`, `Layer 3`),
+/// AST-derived positive and negative BDD acceptance criteria, and zero hardcoded compiler self-description
+/// boilerplate (`"processes the AST"`, `"semantic validator"`, `"graceful recovery occurs without data loss"`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C specification
+/// derivation objectives for fn
+/// `test_issue_696_forward_sync_user_story_derives_ast_clause_3_layer_bdd_and_zero_compiler_boilerplate`
+/// in `crates/compile-sysml/tests/reproducer_tests.rs` (refs #696).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - AST-Derived User Story Clause Invariant: Every emitted `US-XX-*.md` artifact contains
+///   `"## User Story"` with `"As a "`, `", I want to "`, and `", so that "`, resolving explicit
+///   `doc` actor/outcome metadata on `US-01` (`ClusterAdministrator`, `CommitJournalBatchAction`,
+///   `epoch_id: EpochNumber`, `JournalCoordinatorEngine`,
+///   `"journal batch is durably committed across quorum replicas"`) and falling back to AST
+///   requirement/constraint bindings (`REQ-JRN-01`, `DurableQuorumRequirement`, or
+///   `QuorumWatermarkBound`) in the `so that` outcome of `US-02` (`doc: None`).
+/// - Three-Layer Architectural Binding Invariant: Both `US-01` and `US-02` declare
+///   `"Layer 1: Domain State & Data Model"`, `"Layer 2: Logic & State Management"`, and
+///   `"Layer 3: Presentation & Actuator Interface Binding"` referencing `"active_epoch_seq"`,
+///   `"batch_req_in"`, `"commit_ack_out"`, and `"QuorumWatermarkBound"`.
+/// - AST-Derived BDD & Zero-Boilerplate Invariant: `US-01` `## Acceptance Criteria (BDD)` cites
+///   AST preconditions, parameters, transition guards, target states, constraints, ports, and
+///   interaction messages alongside a negative boundary rejection criterion without partial state
+///   mutation, and neither `US-01` nor `US-02` emits compiler boilerplate substrings.
+///
+/// ## 3. Preconditions
+/// - `build_issue_696_distributed_ledger_fixture()` constructs the `DistributedLedgerSystem` AST
+///   and `TempDirGuard::new` provides an isolated RAII workspace path.
+///
+/// ## 4. Postconditions
+/// - All User Story clause, 3-layer binding, positive/negative BDD criterion, and zero-boilerplate
+///   assertions hold across `US-01` and `US-02`, and `TempDirGuard` removes temporary paths on drop.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ linear scan over the generated Markdown specification buffers.
+/// - Space Complexity: $O(N)$ bounded heap storage for the returned `BTreeMap<String, String>`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Invokes `forward_sync_sysml_to_specs` with `dry_run: true, force: true`.
+/// - State: Isolated via RAII `TempDirGuard` with zero shared global state.
+/// - Action: Executes with zero fallible unwrapping, panics, regular expressions, or byte-range slicing.
+/// - Resource: `TempDirGuard` Drop guarantees deterministic cleanup even during RED assertion unwinding.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-US-AST-CLAUSE-AND-3LAYER], [REQ-SYNC-US-BDD-ZERO-BOILERPLATE] | SysML v2: VerificationCaseDef(test_issue_696_forward_sync_user_story_derives_ast_clause_3_layer_bdd_and_zero_compiler_boilerplate)
+#[test]
+fn test_issue_696_forward_sync_user_story_derives_ast_clause_3_layer_bdd_and_zero_compiler_boilerplate(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let temp = TempDirGuard::new("deap_issue_696_us_ast_derivation")?;
+    let docs_dir = temp.path().join("docs");
+    fs::create_dir_all(&docs_dir)?;
+
+    let pkg = build_issue_696_distributed_ledger_fixture();
+    let opts = ForwardSyncOptions {
+        schema_path: PathBuf::from("schema/distributed_ledger.sysml"),
+        docs_dir: docs_dir.clone(),
+        out_dir: Some(docs_dir),
+        dry_run: true,
+        force: true,
+    };
+
+    let generated = forward_sync_sysml_to_specs(&pkg, &opts)?;
+    let us01 = generated
+        .get("user-stories/US-01-CommitJournalBatchAction.md")
+        .ok_or("Missing user-stories/US-01-CommitJournalBatchAction.md in forward sync output")?;
+    let us02 = generated
+        .get("user-stories/US-02-VerifyReplicaQuorumAction.md")
+        .ok_or("Missing user-stories/US-02-VerifyReplicaQuorumAction.md in forward sync output")?;
+
+    // 1. Both US-01 and US-02 contain "## User Story", "As a ", ", I want to ", and ", so that ".
+    for (us_name, us_md) in [
+        ("US-01-CommitJournalBatchAction.md", us01.as_str()),
+        ("US-02-VerifyReplicaQuorumAction.md", us02.as_str()),
+    ] {
+        for required_clause_token in ["## User Story", "As a ", ", I want to ", ", so that "] {
+            assert!(
+                us_md.contains(required_clause_token),
+                "{} must contain canonical User Story token {:?}:\n{}",
+                us_name,
+                required_clause_token,
+                us_md
+            );
+        }
+    }
+
+    // 2. US-01 contains AST doc actor/outcome, action, typed input parameter, and owning PartDef.
+    for expected_us01_token in [
+        "ClusterAdministrator",
+        "CommitJournalBatchAction",
+        "epoch_id: EpochNumber",
+        "JournalCoordinatorEngine",
+        "journal batch is durably committed across quorum replicas",
+    ] {
+        assert!(
+            us01.contains(expected_us01_token),
+            "US-01 must contain AST-derived token {:?}:\n{}",
+            expected_us01_token,
+            us01
+        );
+    }
+
+    // 3. US-02 (doc: None) contains action, typed input parameter, and cites REQ-JRN-01,
+    //    DurableQuorumRequirement, or QuorumWatermarkBound in its `so that` outcome.
+    for expected_us02_token in ["VerifyReplicaQuorumAction", "candidate_batch: JournalBatch"] {
+        assert!(
+            us02.contains(expected_us02_token),
+            "US-02 must contain AST-derived token {:?}:\n{}",
+            expected_us02_token,
+            us02
+        );
+    }
+    let (_, us02_after_story_heading) = us02
+        .split_once("## User Story")
+        .ok_or("US-02 missing '## User Story' section")?;
+    let us02_story_section =
+        if let Some((story_body, _)) = us02_after_story_heading.split_once("\n## ") {
+            story_body
+        } else {
+            us02_after_story_heading
+        };
+    let (_, us02_so_that_clause) = us02_story_section
+        .split_once(", so that ")
+        .ok_or("US-02 '## User Story' section missing ', so that ' outcome clause")?;
+    assert!(
+        us02_so_that_clause.contains("REQ-JRN-01")
+            || us02_so_that_clause.contains("DurableQuorumRequirement")
+            || us02_so_that_clause.contains("QuorumWatermarkBound"),
+        "US-02 (doc: None) 'so that' outcome must cite 'REQ-JRN-01', 'DurableQuorumRequirement', or 'QuorumWatermarkBound', got:\n{}",
+        us02_so_that_clause
+    );
+
+    // 4. Both US-01 and US-02 contain 3-layer sections referencing AST state, ports, and constraint.
+    for (us_name, us_md) in [
+        ("US-01-CommitJournalBatchAction.md", us01.as_str()),
+        ("US-02-VerifyReplicaQuorumAction.md", us02.as_str()),
+    ] {
+        for layer_heading in [
+            "Layer 1: Domain State & Data Model",
+            "Layer 2: Logic & State Management",
+            "Layer 3: Presentation & Actuator Interface Binding",
+        ] {
+            assert!(
+                us_md.contains(layer_heading),
+                "{} must contain 3-layer Definition of Done section {:?}:\n{}",
+                us_name,
+                layer_heading,
+                us_md
+            );
+        }
+        for ast_binding in [
+            "active_epoch_seq",
+            "batch_req_in",
+            "commit_ack_out",
+            "QuorumWatermarkBound",
+        ] {
+            assert!(
+                us_md.contains(ast_binding),
+                "{} must reference AST 3-layer member {:?}:\n{}",
+                us_name,
+                ast_binding,
+                us_md
+            );
+        }
+    }
+
+    // 5. US-01 `## Acceptance Criteria (BDD)` cites AST precondition, parameter, transition guard,
+    //    target state, constraint, output port, interaction response message, and negative boundary
+    //    rejection criterion without partial state mutation.
+    let (_, us01_after_ac_heading) = us01
+        .split_once("## Acceptance Criteria (BDD)")
+        .ok_or("US-01 missing '## Acceptance Criteria (BDD)' section")?;
+    let us01_ac_section = if let Some((ac_body, _)) = us01_after_ac_heading.split_once("\n## ") {
+        ac_body
+    } else {
+        us01_after_ac_heading
+    };
+
+    for expected_bdd_token in [
+        "Quorum lease is active and write-ahead log is open",
+        "epoch_id: EpochNumber",
+        "quorum_lease_valid == true",
+        "EpochCommitted",
+        "QuorumWatermarkBound",
+        "commit_ack_out",
+        "CommitReceiptReady",
+    ] {
+        assert!(
+            us01_ac_section.contains(expected_bdd_token),
+            "US-01 '## Acceptance Criteria (BDD)' must cite AST token {:?}:\n{}",
+            expected_bdd_token,
+            us01_ac_section
+        );
+    }
+
+    let has_negative_boundary_criterion = us01_ac_section.lines().any(|line| {
+        let lower = line.to_ascii_lowercase();
+        let cites_guard_or_constraint =
+            line.contains("quorum_lease_valid == true") || line.contains("QuorumWatermarkBound");
+        let cites_violation = lower.contains("violat")
+            || lower.contains("false")
+            || lower.contains("fails")
+            || lower.contains("unsatisfied")
+            || lower.contains("not satisfied");
+        let cites_rejection_without_partial_mutation = lower.contains("reject")
+            && (lower.contains("without partial state mutation")
+                || (lower.contains("without") && lower.contains("state mutation"))
+                || lower.contains("no partial state mutation"));
+        cites_guard_or_constraint && cites_violation && cites_rejection_without_partial_mutation
+    });
+    assert!(
+        has_negative_boundary_criterion,
+        "US-01 '## Acceptance Criteria (BDD)' must include a negative boundary criterion asserting rejection without partial state mutation when guard quorum_lease_valid == true or QuorumWatermarkBound is violated:\n{}",
+        us01_ac_section
+    );
+
+    // 6. Neither US-01 nor US-02 contains compiler self-description boilerplate.
+    for (us_name, us_md) in [
+        ("US-01-CommitJournalBatchAction.md", us01.as_str()),
+        ("US-02-VerifyReplicaQuorumAction.md", us02.as_str()),
+    ] {
+        for forbidden_boilerplate in [
+            "processes the AST",
+            "semantic validator",
+            "graceful recovery occurs without data loss",
+        ] {
+            assert!(
+                !us_md.contains(forbidden_boilerplate),
+                "{} must contain zero compiler boilerplate substring {:?}:\n{}",
+                us_name,
+                forbidden_boilerplate,
+                us_md
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Verifies that non-forced forward synchronization (`force: false, dry_run: false`) evicts legacy
+/// compiler-boilerplate User Story acceptance criteria and checked `[x]` state on stale boilerplate
+/// `AC-US-01-01` while preserving tracker-allocated `Issue ID` (`#419`) and non-boilerplate parent
+/// feature checklist state (`- [x] [Feature 01: ...]`), and subsequently preserves genuine custom
+/// non-boilerplate `## User Story` prose and checked `- [x] AC-US-01-01:` across re-synchronization.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C idempotent
+/// synchronization and stale-artifact remediation objectives for fn
+/// `test_issue_696_forward_sync_non_forced_evicts_stale_user_story_boilerplate_preserving_issue_id`
+/// in `crates/compile-sysml/tests/reproducer_tests.rs` (refs #696).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Stale Boilerplate Eviction Invariant: When an existing `US-01-*.md` on disk lacks
+///   `"## User Story"` and carries legacy compiler boilerplate (`"processes the AST"`,
+///   `"semantic validator"`, `"graceful recovery occurs without data loss"`), running
+///   `forward_sync_sysml_to_specs` with `force: false` evicts 100% of the boilerplate criteria and
+///   resets the stale boilerplate `- [x] AC-US-01-01:` checkbox to `- [ ] AC-US-01-01:`, injects
+///   the AST-derived `## User Story` (`ClusterAdministrator`), and preserves both
+///   `| **Issue ID** | #419 |` and `- [x] [Feature 01: ...]`.
+/// - Custom Authoring Preservation Invariant: Once `US-01-*.md` contains non-boilerplate custom
+///   `## User Story` prose (`StorageReliabilityOperator`) and a verified `- [x] AC-US-01-01:`
+///   checkbox on AST-derived criteria, re-running `forward_sync_sysml_to_specs` with `force: false`
+///   preserves `| **Issue ID** | #419 |`, `StorageReliabilityOperator`, and `- [x] AC-US-01-01:`.
+///
+/// ## 3. Preconditions
+/// - An isolated RAII `TempDirGuard` workspace seeds `docs/user-stories/US-01-CommitJournalBatchAction.md`
+///   with legacy defective boilerplate and `| **Issue ID** | #419 |`.
+///
+/// ## 4. Postconditions
+/// - Pass 1 (`force: false, dry_run: false`) evicts all boilerplate strings and stale `AC-US-01-01`
+///   completion mark while preserving `#419` and `- [x] [Feature 01:` and injecting `## User Story`.
+/// - Pass 2 (`force: false, dry_run: false`) preserves `#419`, `StorageReliabilityOperator`, and
+///   `- [x] AC-US-01-01:` on disk.
+/// - `TempDirGuard` removes temporary directories deterministically on drop.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ per synchronization pass over the fixture AST and Markdown file.
+/// - Space Complexity: $O(N)$ bounded auxiliary memory for Markdown serialization buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Exercises `forward_sync_sysml_to_specs` across two stateful `force: false` disk passes.
+/// - State: Scoped exclusively to `TempDirGuard::path()` with zero repository state mutation.
+/// - Action: Executes with zero fallible unwrapping, panics, regular expressions, or byte-range slicing.
+/// - Resource: `TempDirGuard` Drop reclaims ephemeral files even when unwinding on RED failure.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-US-EVICT-STALE-BOILERPLATE], [REQ-SYNC-US-PRESERVE-CUSTOM-EDITS] | SysML v2: VerificationCaseDef(test_issue_696_forward_sync_non_forced_evicts_stale_user_story_boilerplate_preserving_issue_id)
+#[test]
+fn test_issue_696_forward_sync_non_forced_evicts_stale_user_story_boilerplate_preserving_issue_id(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let temp = TempDirGuard::new("deap_issue_696_evict_boilerplate")?;
+    let docs_dir = temp.path().join("docs");
+    let user_stories_dir = docs_dir.join("user-stories");
+    fs::create_dir_all(&user_stories_dir)?;
+
+    let us01_disk_path = user_stories_dir.join("US-01-CommitJournalBatchAction.md");
+    let legacy_boilerplate_us01 = "\
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #419 |
+| **Title** | User Story 01: Commit Journal Batch Action |
+| **Type** | user-story |
+| **Parent Epic** | [EPIC-02-JournalCommitSubsystem](../epics/EPIC-02-JournalCommitSubsystem.md) |
+| **SysML Interaction** | `CommitJournalInteraction` |
+| **SysML Test Case** | `Test_CommitJournalBatchAction` |
+| **Generation Mode** | subagent |
+| **Specification Source** | [schema/distributed_ledger.sysml](../../schema/distributed_ledger.sysml) |
+
+# User Story 01: Commit Journal Batch Action
+
+## Acceptance Criteria (BDD)
+- [x] AC-US-01-01: Given operational environment initialized, When CommitJournalBatchAction executes, Then JournalCoordinatorEngine processes the AST within defined latency envelope.
+- [ ] AC-US-01-02: Given formal constraints, When semantic validator executes, Then asserts invariant satisfaction.
+- [ ] AC-US-01-03: Given exceptional conditions, When error recovery activates, Then graceful recovery occurs without data loss.
+
+## Required Features
+- [x] [Feature 01: [Journal Commit Subsystem] JournalCoordinatorEngine](../features/FEAT-01-JournalCoordinatorEngine.md)
+";
+    fs::write(&us01_disk_path, legacy_boilerplate_us01)?;
+
+    let pkg = build_issue_696_distributed_ledger_fixture();
+    let opts = ForwardSyncOptions {
+        schema_path: PathBuf::from("schema/distributed_ledger.sysml"),
+        docs_dir: docs_dir.clone(),
+        out_dir: Some(docs_dir),
+        dry_run: false,
+        force: false,
+    };
+
+    // Pass 1: Non-forced sync must evict legacy boilerplate and stale AC-US-01-01 `[x]` while
+    // preserving Issue ID #419 and parent Feature 01 `[x]`.
+    forward_sync_sysml_to_specs(&pkg, &opts)?;
+    let pass1_us01 = fs::read_to_string(&us01_disk_path)?;
+
+    assert!(
+        pass1_us01.contains("| **Issue ID** | #419 |"),
+        "Non-forced forward sync must preserve tracker Issue ID #419:\n{}",
+        pass1_us01
+    );
+    assert!(
+        pass1_us01.contains("## User Story") && pass1_us01.contains("ClusterAdministrator"),
+        "Non-forced forward sync must inject AST-derived '## User Story' referencing 'ClusterAdministrator':\n{}",
+        pass1_us01
+    );
+    for forbidden_boilerplate in [
+        "processes the AST",
+        "semantic validator",
+        "graceful recovery occurs without data loss",
+    ] {
+        assert!(
+            !pass1_us01.contains(forbidden_boilerplate),
+            "Non-forced forward sync must completely evict stale compiler boilerplate {:?}:\n{}",
+            forbidden_boilerplate,
+            pass1_us01
+        );
+    }
+    assert!(
+        pass1_us01.contains("- [ ] AC-US-01-01:") && !pass1_us01.contains("- [x] AC-US-01-01:"),
+        "Non-forced forward sync must evict stale '[x]' from replaced boilerplate AC-US-01-01:\n{}",
+        pass1_us01
+    );
+    assert!(
+        pass1_us01.contains("- [x] [Feature 01:"),
+        "Non-forced forward sync must preserve '- [x] [Feature 01:' parent traceability checkbox:\n{}",
+        pass1_us01
+    );
+
+    // Pass 2: Replace `## User Story` body on disk with custom non-boilerplate prose and mark
+    // `- [x] AC-US-01-01:`, then re-run non-forced forward sync and verify preservation.
+    let (before_story, after_story_heading) = pass1_us01
+        .split_once("## User Story\n")
+        .ok_or("Pass 1 US-01 missing '## User Story\\n' heading")?;
+    let custom_story_body = "As a `StorageReliabilityOperator`, I want to invoke `CommitJournalBatchAction` under maintenance fencing, so that quorum durability holds.";
+    let rebuilt_us01 = if let Some((_, rest_from_next_heading)) =
+        after_story_heading.split_once("\n## ")
+    {
+        format!(
+            "{}## User Story\n\n{}\n\n## {}",
+            before_story, custom_story_body, rest_from_next_heading
+        )
+    } else {
+        format!("{}## User Story\n\n{}\n", before_story, custom_story_body)
+    };
+    let custom_us01 = rebuilt_us01.replacen("- [ ] AC-US-01-01:", "- [x] AC-US-01-01:", 1);
+    fs::write(&us01_disk_path, &custom_us01)?;
+
+    forward_sync_sysml_to_specs(&pkg, &opts)?;
+    let pass2_us01 = fs::read_to_string(&us01_disk_path)?;
+
+    assert!(
+        pass2_us01.contains("| **Issue ID** | #419 |"),
+        "Second non-forced forward sync must preserve '| **Issue ID** | #419 |':\n{}",
+        pass2_us01
+    );
+    assert!(
+        pass2_us01.contains("StorageReliabilityOperator"),
+        "Second non-forced forward sync must preserve custom non-boilerplate User Story actor 'StorageReliabilityOperator':\n{}",
+        pass2_us01
+    );
+    assert!(
+        pass2_us01.contains("- [x] AC-US-01-01:"),
+        "Second non-forced forward sync must preserve checked '- [x] AC-US-01-01:' on non-boilerplate AC:\n{}",
+        pass2_us01
+    );
 
     Ok(())
 }

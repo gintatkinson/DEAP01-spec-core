@@ -12,7 +12,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use deap_core::sysml_ast::{
-    ActionDef, AttributeDef, ConnectionDef, PackageDef, PartDef, RequirementDef, UseCaseDef,
+    ActionDef, AttributeDef, ConnectionDef, ConstraintDef, InteractionDef, PackageDef, PartDef,
+    RequirementDef, StateDef, TransitionDef, UseCaseDef,
 };
 use walkdir::WalkDir;
 
@@ -1367,6 +1368,1527 @@ fn parse_use_case_doc(doc_opt: Option<&str>) -> ParsedUseCaseDoc {
     parsed
 }
 
+/// Canonical engineering parameter vocabulary checked when projecting `ConstraintDef` expressions into prose.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C factual grounding
+/// objectives for `ENGINEERING_PARAMETER_TERMS` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Enumerates the 26 dimensional engineering parameter terms whose numeric pairings require physical units.
+///
+/// ## 3. Preconditions
+/// - Accessed as an immutable compile-time slice by `is_provenance_safe_constraint_expr`.
+///
+/// ## 4. Postconditions
+/// - Guarantees deterministic, case-insensitive unitless-parameter screening for projected constraint expressions.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ static slice reference.
+/// - Space Complexity: $O(1)$ compile-time read-only storage.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Immutable `&[&str]` slice with zero runtime mutation.
+/// - State: Stateless constant table.
+/// - Action: Zero fallible operations.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-ENG-PARAM-TERMS] | SysML v2: AttributeDef(ENGINEERING_PARAMETER_TERMS)
+const ENGINEERING_PARAMETER_TERMS: &[&str] = &[
+    "payload",
+    "current",
+    "latency",
+    "delay",
+    "timeout",
+    "frequency",
+    "voltage",
+    "power",
+    "energy",
+    "bandwidth",
+    "throughput",
+    "velocity",
+    "speed",
+    "altitude",
+    "heading",
+    "acceleration",
+    "rate",
+    "clock",
+    "dimension",
+    "resistance",
+    "capacitance",
+    "mass",
+    "thrust",
+    "torque",
+    "pressure",
+    "temperature",
+];
+
+/// Checks whether a `ConstraintDef` expression can be safely embedded into specification prose
+/// without pairing an engineering parameter term with a unitless numeric literal or broken link token.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C provenance safety
+/// objectives for fn `is_provenance_safe_constraint_expr` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` if and only if `expr.trim()` is non-empty, contains zero `](` Markdown link sequences,
+///   and does not simultaneously contain an alphabetic token in `ENGINEERING_PARAMETER_TERMS` and an ASCII digit.
+///
+/// ## 3. Preconditions
+/// - `expr: &str` is a candidate SysML `ConstraintDef::expression` slice.
+///
+/// ## 4. Postconditions
+/// - Returns a deterministic `bool` verdict without mutating input state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|expr|)$ linear character and token scan.
+/// - Space Complexity: $O(1)$ auxiliary stack space.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts empty or arbitrary UTF-8 expressions gracefully.
+/// - State: Pure predicate with zero side effects.
+/// - Action: Uses linear `.split(...)` and `.chars()` iterators with zero regex or direct indexing.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-PROVENANCE-SAFE-EXPR] | SysML v2: ActionDef(is_provenance_safe_constraint_expr)
+fn is_provenance_safe_constraint_expr(expr: &str) -> bool {
+    let trimmed = expr.trim();
+    if trimmed.is_empty() || trimmed.contains("](") {
+        return false;
+    }
+    let has_digit = trimmed.chars().any(|c| c.is_ascii_digit());
+    if !has_digit {
+        return true;
+    }
+    let has_eng_term = trimmed
+        .split(|c: char| !c.is_alphabetic())
+        .filter(|w| !w.is_empty())
+        .any(|word| {
+            ENGINEERING_PARAMETER_TERMS
+                .iter()
+                .any(|term| word.eq_ignore_ascii_case(term))
+        });
+    !has_eng_term
+}
+
+/// Formats a `ConstraintDef` into a provenance-safe display label for User Story prose and BDD criteria.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C traceability
+/// objectives for fn `format_constraint_label` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Appends `({expression})` only when `is_provenance_safe_constraint_expr(&c.expression)` holds;
+///   otherwise emits `c.name.trim()` alone so unitless engineering literals never leak into prose.
+///
+/// ## 3. Preconditions
+/// - `c: &ConstraintDef` is a declared SysML constraint node.
+///
+/// ## 4. Postconditions
+/// - Returns a trimmed `String` label (empty only when `c.name.trim()` is empty).
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|c.name| + |c.expression|)$.
+/// - Space Complexity: $O(|c.name| + |c.expression|)$ bounded string allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles empty names and empty expressions deterministically.
+/// - State: Pure formatting helper.
+/// - Action: Zero panics, regexes, or unchecked slicing.
+/// - Resource: Single bounded `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-FORMAT-CONSTRAINT-LABEL] | SysML v2: ActionDef(format_constraint_label)
+fn format_constraint_label(c: &ConstraintDef) -> String {
+    let name = c.name.trim();
+    if name.is_empty() {
+        return String::new();
+    }
+    let expr = c.expression.trim();
+    if is_provenance_safe_constraint_expr(expr) {
+        format!("{name} ({expr})")
+    } else {
+        name.to_string()
+    }
+}
+
+/// Formats a `RequirementDef` identifier and name into a canonical traceability label.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C requirement
+/// traceability objectives for fn `format_requirement_label` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Combines non-empty distinct `req_id` and `name` as `"{req_id} ({name})"`, falling back to
+///   whichever field is non-empty.
+///
+/// ## 3. Preconditions
+/// - `req: &RequirementDef` is a declared SysML requirement node.
+///
+/// ## 4. Postconditions
+/// - Returns a trimmed `String` representation of the requirement identity.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|req.req_id| + |req.name|)$.
+/// - Space Complexity: $O(|req.req_id| + |req.name|)$ bounded string allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles missing `req_id` or `name` gracefully.
+/// - State: Pure formatting function.
+/// - Action: Zero fallible operations.
+/// - Resource: Single bounded `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-FORMAT-REQUIREMENT-LABEL] | SysML v2: ActionDef(format_requirement_label)
+fn format_requirement_label(req: &RequirementDef) -> String {
+    let id = req.req_id.trim();
+    let name = req.name.trim();
+    if !id.is_empty() && !name.is_empty() && id != name {
+        format!("{id} ({name})")
+    } else if !id.is_empty() {
+        id.to_string()
+    } else {
+        name.to_string()
+    }
+}
+
+/// Detects legacy hardcoded compiler-boilerplate User Story text for eviction during forward sync.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C domain-neutrality
+/// objectives for fn `is_stale_user_story_boilerplate` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` if `s` contains any of the three retired non-AST boilerplate phrases:
+///   `"processes the AST within defined latency envelope"`, `"When semantic validator executes"`,
+///   or `"graceful recovery occurs without data loss"`.
+///
+/// ## 3. Preconditions
+/// - `s: &str` is a line, section body, or full Markdown document under inspection.
+///
+/// ## 4. Postconditions
+/// - Returns `true` when stale compiler boilerplate is detected and `false` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|s|)$ linear substring search.
+/// - Space Complexity: $O(1)$ zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total pure predicate over `&str`.
+/// - State: Stateless evaluation.
+/// - Action: Deterministic substring matching with zero regex.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-STALE-US-BOILERPLATE] | SysML v2: ActionDef(is_stale_user_story_boilerplate)
+fn is_stale_user_story_boilerplate(s: &str) -> bool {
+    s.contains("processes the AST within defined latency envelope")
+        || s.contains("When semantic validator executes")
+        || s.contains("graceful recovery occurs without data loss")
+}
+
+/// Strips an ASCII prefix case-insensitively using bounds-checked `.get(...)` slicing.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C memory-safe parsing
+/// objectives for fn `strip_prefix_ignore_ascii_case` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `Some(rest)` when the leading `prefix.len()` bytes of `s` lie on UTF-8 char boundaries
+///   and match `prefix` under `eq_ignore_ascii_case`; returns `None` otherwise.
+///
+/// ## 3. Preconditions
+/// - `s: &str` and `prefix: &str` are valid UTF-8 string slices.
+///
+/// ## 4. Postconditions
+/// - Never panics on multi-byte UTF-8 boundaries or short strings because `.get(...)` checks char boundaries.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|prefix|)$.
+/// - Space Complexity: $O(1)$ zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `None` cleanly when `s` is shorter than `prefix` or misaligned on UTF-8 boundaries.
+/// - State: Pure borrowed slice projection.
+/// - Action: Zero direct indexing (`&s[a..b]` forbidden).
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-STRIP-PREFIX-CI] | SysML v2: ActionDef(strip_prefix_ignore_ascii_case)
+fn strip_prefix_ignore_ascii_case<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
+    let head = s.get(..prefix.len())?;
+    if head.eq_ignore_ascii_case(prefix) {
+        s.get(prefix.len()..)
+    } else {
+        None
+    }
+}
+
+/// Structured User Story doc-comment clauses extracted deterministically from an `ActionDef` or `InteractionDef`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C semantic traceability
+/// objectives for struct `ParsedStoryDoc` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Holds optional trimmed `actor`, `precondition`, and `outcome` clauses free of stale boilerplate.
+///
+/// ## 3. Preconditions
+/// - Populated exclusively by `parse_story_doc` and `merge_story_docs`.
+///
+/// ## 4. Postconditions
+/// - Every `Some(v)` field is non-empty and trimmed.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ field access.
+/// - Space Complexity: $O(|actor| + |precondition| + |outcome|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Defaults cleanly to `(None, None, None)`.
+/// - State: Owned immutable value semantics after parsing.
+/// - Action: Zero fallible methods.
+/// - Resource: Bounded heap strings.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-PARSED-STORY-DOC] | SysML v2: PartDef(ParsedStoryDoc)
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct ParsedStoryDoc {
+    actor: Option<String>,
+    precondition: Option<String>,
+    outcome: Option<String>,
+}
+
+/// Parses optional `Actor:`, `Preconditions:`/`Precondition:`, and `Outcome:`/`Postconditions:`/`Postcondition:`/`Objective:`
+/// clauses from a SysML doc comment without regular expressions.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C deterministic AST
+/// lowering objectives for fn `parse_story_doc` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Skips any line matching `is_stale_user_story_boilerplate`.
+/// - Strips surrounding backticks, quotes, and square brackets from `actor` so Markdown link syntax is never emitted.
+///
+/// ## 3. Preconditions
+/// - `doc_opt: Option<&str>` is an optional doc string attached to an `ActionDef` or `InteractionDef`.
+///
+/// ## 4. Postconditions
+/// - Returns a populated `ParsedStoryDoc` containing all recognized non-empty clauses.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|doc|)$ single linear pass over lines.
+/// - Space Complexity: $O(|doc|)$ bounded string allocations for extracted clauses.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `ParsedStoryDoc::default()` when `doc_opt` is `None` or whitespace-only.
+/// - State: Pure function with zero shared state.
+/// - Action: Uses `strip_prefix_ignore_ascii_case` with zero regex or direct slice indexing.
+/// - Resource: Bounded to at most three `String` allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-PARSE-STORY-DOC] | SysML v2: ActionDef(parse_story_doc)
+fn parse_story_doc(doc_opt: Option<&str>) -> ParsedStoryDoc {
+    let mut parsed = ParsedStoryDoc::default();
+    let Some(raw) = doc_opt.map(str::trim).filter(|s| !s.is_empty()) else {
+        return parsed;
+    };
+
+    for line in raw.lines() {
+        let trimmed = line
+            .trim()
+            .trim_start_matches('*')
+            .trim_start_matches('-')
+            .trim();
+        if trimmed.is_empty() || is_stale_user_story_boilerplate(trimmed) {
+            continue;
+        }
+        if let Some(rest) = strip_prefix_ignore_ascii_case(trimmed, "Actor:")
+            .or_else(|| strip_prefix_ignore_ascii_case(trimmed, "Actors:"))
+        {
+            let first_actor = rest
+                .split(',')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
+                .trim();
+            if !first_actor.is_empty() {
+                parsed.actor = Some(first_actor.to_string());
+            }
+        } else if let Some(rest) = strip_prefix_ignore_ascii_case(trimmed, "Preconditions:")
+            .or_else(|| strip_prefix_ignore_ascii_case(trimmed, "Precondition:"))
+        {
+            let val = rest.trim().trim_end_matches('.').trim();
+            if !val.is_empty() && !val.contains("](") {
+                parsed.precondition = Some(val.to_string());
+            }
+        } else if let Some(rest) = strip_prefix_ignore_ascii_case(trimmed, "Outcome:")
+            .or_else(|| strip_prefix_ignore_ascii_case(trimmed, "Postconditions:"))
+            .or_else(|| strip_prefix_ignore_ascii_case(trimmed, "Postcondition:"))
+            .or_else(|| strip_prefix_ignore_ascii_case(trimmed, "Objective:"))
+        {
+            let val = rest.trim().trim_end_matches('.').trim();
+            if !val.is_empty() && !val.contains("](") {
+                parsed.outcome = Some(val.to_string());
+            }
+        } else if parsed.outcome.is_none()
+            && !trimmed.contains("](")
+            && is_provenance_safe_constraint_expr(trimmed)
+        {
+            let val = trimmed.trim_end_matches('.').trim();
+            if !val.is_empty() {
+                parsed.outcome = Some(val.to_string());
+            }
+        }
+    }
+
+    parsed
+}
+
+/// Merges primary `ActionDef` doc clauses with fallback `InteractionDef` doc clauses field-by-field.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C behavioral metadata
+/// composition objectives for fn `merge_story_docs` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves every `Some` clause in `primary` while filling `None` fields from `fallback`.
+///
+/// ## 3. Preconditions
+/// - `primary` and `fallback` are outputs of `parse_story_doc`.
+///
+/// ## 4. Postconditions
+/// - Returns a composite `ParsedStoryDoc` without losing clauses present on either AST node.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ option move.
+/// - Space Complexity: $O(1)$ zero additional heap allocations.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Infallible value-to-value transformation.
+/// - State: Pure ownership transfer.
+/// - Action: Zero panics.
+/// - Resource: Reuses existing string buffers.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-MERGE-STORY-DOCS] | SysML v2: ActionDef(merge_story_docs)
+fn merge_story_docs(primary: ParsedStoryDoc, fallback: ParsedStoryDoc) -> ParsedStoryDoc {
+    ParsedStoryDoc {
+        actor: primary.actor.or(fallback.actor),
+        precondition: primary.precondition.or(fallback.precondition),
+        outcome: primary.outcome.or(fallback.outcome),
+    }
+}
+
+/// Extracts the first non-empty actor declared across a slice of `UseCaseDef` nodes.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C package-scoped actor
+/// resolution objectives for fn `extract_first_uc_actor` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Evaluates `parse_use_case_doc(uc.doc)`, then `uc.actors`, then `uc.actor` in deterministic AST order,
+///   stripping backticks, quotes, and brackets so actor labels never introduce broken Markdown links.
+///
+/// ## 3. Preconditions
+/// - `use_cases: &[UseCaseDef]` is a package-local or model-level slice of use cases.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(actor)` for the first non-empty actor or `None` if no actor is declared.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(U)$ over the `UseCaseDef` slice length $U$.
+/// - Space Complexity: $O(A)$ bounded to the extracted actor string length.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles empty slices and empty actor strings gracefully.
+/// - State: Pure read-only AST inspection.
+/// - Action: Zero panics or unchecked indexing.
+/// - Resource: Bounded heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-EXTRACT-FIRST-UC-ACTOR] | SysML v2: ActionDef(extract_first_uc_actor)
+fn extract_first_uc_actor(use_cases: &[UseCaseDef]) -> Option<String> {
+    for uc in use_cases {
+        let parsed = parse_use_case_doc(uc.doc.as_deref());
+        for candidate in parsed
+            .actors
+            .iter()
+            .chain(uc.actors.iter())
+            .chain(uc.actor.iter())
+        {
+            let clean = candidate
+                .trim()
+                .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
+                .trim();
+            if !clean.is_empty() {
+                return Some(clean.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Formats typed `in` and `out` parameters of an `ActionDef` as `ActionName(in p: T, ..., out q: U)`
+/// (or `ActionName()` when parameterless).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C behavioral signature
+/// traceability objectives for fn `format_action_call_with_params` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves every declared `in_params` and `out_params` name and type in exact AST declaration order.
+///
+/// ## 3. Preconditions
+/// - `action_name: &str` is non-empty and `act_opt: Option<&ActionDef>` is the resolved AST action node.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty call signature `String`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(P)$ over total parameter count $P$.
+/// - Space Complexity: $O(P)$ bounded string buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Emits `"{action_name}()"` when `act_opt` is `None` or parameter lists are empty.
+/// - State: Pure function.
+/// - Action: Zero panics or direct indexing.
+/// - Resource: Bounded vector and string allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-FORMAT-ACTION-CALL] | SysML v2: ActionDef(format_action_call_with_params)
+fn format_action_call_with_params(action_name: &str, act_opt: Option<&ActionDef>) -> String {
+    let Some(act) = act_opt else {
+        return format!("{action_name}()");
+    };
+    let mut args = Vec::new();
+    for p in &act.in_params {
+        let name = p.name.trim();
+        let ty = p.type_name.trim();
+        if ty.is_empty() {
+            args.push(format!("in {name}"));
+        } else {
+            args.push(format!("in {name}: {ty}"));
+        }
+    }
+    for p in &act.out_params {
+        let name = p.name.trim();
+        let ty = p.type_name.trim();
+        if ty.is_empty() {
+            args.push(format!("out {name}"));
+        } else {
+            args.push(format!("out {name}: {ty}"));
+        }
+    }
+    format!("{action_name}({})", args.join(", "))
+}
+
+/// Resolved `StateDef` transition endpoints and AST reference matched to a User Story action.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C state-transition
+/// traceability objectives for struct `MatchedStoryTransition` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `source` and `target` are normalized non-empty endpoint identifiers produced by `extract_transition_endpoints`.
+///
+/// ## 3. Preconditions
+/// - Constructed exclusively by `resolve_story_transition`.
+///
+/// ## 4. Postconditions
+/// - Provides direct borrowed access to `TransitionDef` `trigger`, `guard`, and `effect` fields.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ field access.
+/// - Space Complexity: $O(|source| + |target|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Strongly typed struct avoiding complex tuples (`clippy::type_complexity` compliant).
+/// - State: Immutable borrowed AST reference and endpoint strings.
+/// - Action: Zero fallible operations.
+/// - Resource: Two small `String` allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-MATCHED-STORY-TRANSITION] | SysML v2: PartDef(MatchedStoryTransition)
+struct MatchedStoryTransition<'a> {
+    transition: &'a TransitionDef,
+    source: String,
+    target: String,
+}
+
+/// Resolves the most specific `StateDef` transition governing `action_name` across `states`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C behavioral state
+/// matching objectives for fn `resolve_story_transition` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Prioritizes transitions whose `trigger`, `effect`, or `name` mentions `action_name` (case-insensitive),
+///   falling back to the first named-state transition (`source != "[*]"` and `target != "[*]"`), and finally
+///   to any valid transition endpoint pair.
+///
+/// ## 3. Preconditions
+/// - `action_name: &str` is the User Story action identifier and `states: &[&StateDef]` contains package and part states.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(MatchedStoryTransition)` if any parseable transition exists in `states`, or `None` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(T)$ over total transitions $T$ across `states`.
+/// - Space Complexity: $O(1)$ bounded endpoint strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `None` cleanly when `states` has zero transitions.
+/// - State: Pure read-only scan.
+/// - Action: Reuses bounds-checked `extract_transition_endpoints` with zero direct indexing.
+/// - Resource: Bounded allocations for matched endpoint names.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-RESOLVE-STORY-TRANSITION] | SysML v2: ActionDef(resolve_story_transition)
+fn resolve_story_transition<'a>(
+    action_name: &str,
+    states: &[&'a StateDef],
+) -> Option<MatchedStoryTransition<'a>> {
+    let action_lower = action_name.to_ascii_lowercase();
+    for st in states {
+        for tr in &st.transitions {
+            let matches_action = tr
+                .trigger
+                .as_deref()
+                .is_some_and(|t| t.to_ascii_lowercase().contains(&action_lower))
+                || tr
+                    .effect
+                    .as_deref()
+                    .is_some_and(|e| e.to_ascii_lowercase().contains(&action_lower))
+                || tr
+                    .name
+                    .as_deref()
+                    .is_some_and(|n| n.to_ascii_lowercase().contains(&action_lower));
+            if matches_action {
+                if let Some((source, target, _)) = extract_transition_endpoints(tr) {
+                    return Some(MatchedStoryTransition {
+                        transition: tr,
+                        source,
+                        target,
+                    });
+                }
+            }
+        }
+    }
+    for st in states {
+        for tr in &st.transitions {
+            if let Some((source, target, _)) = extract_transition_endpoints(tr) {
+                if source != "[*]" && target != "[*]" {
+                    return Some(MatchedStoryTransition {
+                        transition: tr,
+                        source,
+                        target,
+                    });
+                }
+            }
+        }
+    }
+    for st in states {
+        for tr in &st.transitions {
+            if let Some((source, target, _)) = extract_transition_endpoints(tr) {
+                return Some(MatchedStoryTransition {
+                    transition: tr,
+                    source,
+                    target,
+                });
+            }
+        }
+    }
+    None
+}
+
+/// Consolidated AST projection context for rendering a single User Story (`US-XX-*.md`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C specification
+/// projection objectives for struct `UserStoryProjectionCtx` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Bundles resolved actor, action signature, owning `PartDef`, package `PackageDef`, `StateDef` slice,
+///   matched transition, constraints, and requirements into a single borrowed value without parameter bloat.
+///
+/// ## 3. Preconditions
+/// - All borrowed AST nodes outlive the User Story Markdown rendering pass inside `forward_sync_sysml_to_specs`.
+///
+/// ## 4. Postconditions
+/// - Supplies deterministic inputs to `generate_user_story_statement`, `generate_user_story_three_layer_sections`,
+///   and `generate_user_story_bdd`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ struct construction.
+/// - Space Complexity: $O(1)$ borrowed references and precomputed strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Eliminates multi-argument positional confusion across User Story synthesis helpers.
+/// - State: Read-only view during rendering.
+/// - Action: Zero fallible operations.
+/// - Resource: Stack-allocated struct of references.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-US-PROJECTION-CTX] | SysML v2: PartDef(UserStoryProjectionCtx)
+struct UserStoryProjectionCtx<'a> {
+    s_num: usize,
+    story_actor: &'a str,
+    engine_name: &'a str,
+    action_name: &'a str,
+    interaction_name: &'a str,
+    reply_msg: &'a str,
+    pkg_name: &'a str,
+    call_sig: &'a str,
+    parsed_doc: &'a ParsedStoryDoc,
+    act_opt: Option<&'a ActionDef>,
+    curr_pkg: Option<&'a PackageDef>,
+    target_part: Option<&'a PartDef>,
+    states: &'a [&'a StateDef],
+    matched_transition: Option<&'a MatchedStoryTransition<'a>>,
+    constraints: &'a [&'a ConstraintDef],
+    reqs: &'a [&'a RequirementDef],
+}
+
+/// Synthesizes the constitutional `As a ..., I want to ..., so that ...` User Story statement from AST nodes.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C constitutional
+/// specification grammar objectives for fn `generate_user_story_statement` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Always emits ``As a `{story_actor}`, I want to invoke `{call_sig}` on `{engine_name}`, so that {outcome_clause}.``
+///   with backtick-quoted identifiers (never `[Actor](...)` links) and zero `ENGINEERING_PARAMETER_TERMS` prose leaks.
+/// - Resolves `outcome_clause` deterministically from: (1) `parsed_doc.outcome`, (2) satisfied/package `RequirementDef`,
+///   (3) `PartDef`/package `ConstraintDef`, (4) `ActionDef.out_params`, (5) `StateDef` target state, or
+///   (6) deterministic subsystem invariant preservation.
+///
+/// ## 3. Preconditions
+/// - `ctx: &UserStoryProjectionCtx<'_>` is populated from the active package and behavioral AST nodes.
+///
+/// ## 4. Postconditions
+/// - Returns a single constitutional User Story sentence containing `"As a "`, `", I want to "`, and `", so that "`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(P + C + R)$ bounded over action parameters, constraints, and requirements.
+/// - Space Complexity: $O(P)$ bounded output string.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles undocumented and parameterless actions via deterministic AST fallback cascade.
+/// - State: Pure function with zero side effects.
+/// - Action: Zero panics, regexes, or unchecked indexing.
+/// - Resource: Single bounded `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-STATEMENT] | SysML v2: ActionDef(generate_user_story_statement)
+fn generate_user_story_statement(ctx: &UserStoryProjectionCtx<'_>) -> String {
+    let engine_name = ctx.engine_name;
+    let action_name = ctx.action_name;
+    let story_actor = ctx.story_actor;
+    let call_sig = ctx.call_sig;
+
+    let first_req_label = ctx
+        .reqs
+        .iter()
+        .map(|r| format_requirement_label(r))
+        .find(|lbl| !lbl.is_empty());
+    let first_constraint_label = ctx
+        .constraints
+        .iter()
+        .map(|c| format_constraint_label(c))
+        .find(|lbl| !lbl.is_empty());
+
+    let outcome_clause = if let Some(ref outcome) = ctx.parsed_doc.outcome {
+        outcome.trim().trim_end_matches('.').to_string()
+    } else if let Some(req_label) = first_req_label {
+        if let Some(c_label) = first_constraint_label {
+            format!(
+                "`{engine_name}` satisfies formal requirement `{req_label}` while enforcing `{c_label}`"
+            )
+        } else {
+            format!("`{engine_name}` satisfies formal requirement `{req_label}`")
+        }
+    } else if let Some(c_label) = first_constraint_label {
+        format!("`{engine_name}` enforces declared invariant `{c_label}`")
+    } else if let Some(out_p) = ctx.act_opt.and_then(|a| a.out_params.first()) {
+        let p_name = out_p.name.trim();
+        let p_type = out_p.type_name.trim();
+        if p_type.is_empty() {
+            format!("`{engine_name}` produces verified output `{p_name}`")
+        } else {
+            format!("`{engine_name}` produces verified output `{p_name}: {p_type}`")
+        }
+    } else if let Some(tgt) = ctx
+        .matched_transition
+        .map(|m| m.target.as_str())
+        .filter(|t| *t != "[*]")
+    {
+        format!("`{engine_name}` transitions deterministically to declared state `{tgt}`")
+    } else {
+        format!(
+            "`{engine_name}` completes `{action_name}` deterministically while preserving declared subsystem state invariants"
+        )
+    };
+
+    format!(
+        "As a `{story_actor}`, I want to invoke `{call_sig}` on `{engine_name}`, so that {outcome_clause}."
+    )
+}
+
+/// Synthesizes the explicit 3-layer Definition of Done architectural binding sections for a User Story.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C 3-layer semantic
+/// closure objectives for fn `generate_user_story_three_layer_sections` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Always emits `### Layer 1: Domain State & Data Model`, `### Layer 2: Logic & State Management`,
+///   and `### Layer 3: Presentation & Actuator Interface Binding` with zero `"N/A"` placeholders and
+///   zero `ENGINEERING_PARAMETER_TERMS` template prose leaks.
+/// - Projects owning `PartDef.attributes`, `ActionDef` `in_params`/`out_params`, `PackageDef.attribute_defs`,
+///   `StateDef` lifecycle states/transitions, `ConstraintDef`/`RequirementDef` invariants, `PartDef.ports`,
+///   and `InteractionDef` request/reply bindings.
+///
+/// ## 3. Preconditions
+/// - `ctx: &UserStoryProjectionCtx<'_>` contains resolved AST nodes for the active User Story.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty Markdown string containing all three `### Layer 1..3` subsections.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(A + P + S + C + R)$ over attributes, ports, states, constraints, and requirements.
+/// - Space Complexity: $O(A + P + S + C + R)$ bounded output string buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Emits concrete component-scoped architectural bindings even when optional AST vectors are empty.
+/// - State: Pure function with zero side effects.
+/// - Action: Zero panics, regexes, or unchecked indexing.
+/// - Resource: Bounded heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-3LAYER] | SysML v2: ActionDef(generate_user_story_three_layer_sections)
+fn generate_user_story_three_layer_sections(ctx: &UserStoryProjectionCtx<'_>) -> String {
+    let engine_name = ctx.engine_name;
+    let action_name = ctx.action_name;
+    let pkg_name = ctx.pkg_name;
+    let story_actor = ctx.story_actor;
+    let reply_msg = ctx.reply_msg;
+    let interaction_name = ctx.interaction_name;
+    let call_sig = ctx.call_sig;
+
+    // Layer 1: Domain State & Data Model
+    let mut attr_items: Vec<String> = Vec::new();
+    if let Some(pt) = ctx.target_part {
+        for attr in &pt.attributes {
+            let n = attr.name.trim();
+            let t = attr.type_name.trim();
+            if !n.is_empty() {
+                if t.is_empty() {
+                    attr_items.push(format!("`{n}`"));
+                } else {
+                    attr_items.push(format!("`{n}: {t}`"));
+                }
+            }
+        }
+    }
+    if let Some(cp) = ctx.curr_pkg {
+        for attr in &cp.attribute_defs {
+            let n = attr.name.trim();
+            let t = attr.type_name.trim();
+            if !n.is_empty() {
+                let formatted = if t.is_empty() {
+                    format!("`{n}`")
+                } else {
+                    format!("`{n}: {t}`")
+                };
+                if !attr_items.contains(&formatted) {
+                    attr_items.push(formatted);
+                }
+            }
+        }
+    }
+    let layer1_attrs = if attr_items.is_empty() {
+        format!(
+            "- Domain state record: `{engine_name}` structural state representation within `{pkg_name}`."
+        )
+    } else {
+        format!(
+            "- Domain state attributes on `{engine_name}`: {}.",
+            attr_items.join(", ")
+        )
+    };
+
+    let layer1_params = if let Some(act) = ctx
+        .act_opt
+        .filter(|a| !a.in_params.is_empty() || !a.out_params.is_empty())
+    {
+        let ins: Vec<String> = act
+            .in_params
+            .iter()
+            .map(|p| {
+                let n = p.name.trim();
+                let t = p.type_name.trim();
+                if t.is_empty() {
+                    format!("`{n}`")
+                } else {
+                    format!("`{n}: {t}`")
+                }
+            })
+            .collect();
+        let outs: Vec<String> = act
+            .out_params
+            .iter()
+            .map(|p| {
+                let n = p.name.trim();
+                let t = p.type_name.trim();
+                if t.is_empty() {
+                    format!("`{n}`")
+                } else {
+                    format!("`{n}: {t}`")
+                }
+            })
+            .collect();
+        let in_desc = if ins.is_empty() {
+            "none".to_string()
+        } else {
+            ins.join(", ")
+        };
+        let out_desc = if outs.is_empty() {
+            "void".to_string()
+        } else {
+            outs.join(", ")
+        };
+        format!(
+            "- Action `{action_name}` typed data contract: input arguments ({in_desc}), output values ({out_desc})."
+        )
+    } else {
+        format!(
+            "- Action `{action_name}` invocation message envelope bound to `{engine_name}` typed domain schema."
+        )
+    };
+
+    let mut state_names: Vec<String> = Vec::new();
+    for st in ctx.states {
+        let st_name = st.name.trim();
+        if !st_name.is_empty() {
+            let entry = format!("`{st_name}`");
+            if !state_names.contains(&entry) {
+                state_names.push(entry);
+            }
+        }
+        for tr in &st.transitions {
+            if let Some((src, tgt, _)) = extract_transition_endpoints(tr) {
+                if src != "[*]" {
+                    let s_entry = format!("`{src}`");
+                    if !state_names.contains(&s_entry) {
+                        state_names.push(s_entry);
+                    }
+                }
+                if tgt != "[*]" {
+                    let t_entry = format!("`{tgt}`");
+                    if !state_names.contains(&t_entry) {
+                        state_names.push(t_entry);
+                    }
+                }
+            }
+        }
+    }
+    let layer1_states = if state_names.is_empty() {
+        format!(
+            "- Declared lifecycle state model: `{engine_name}` discrete operational state enumeration."
+        )
+    } else {
+        format!(
+            "- Declared lifecycle state model: {}.",
+            state_names.join(", ")
+        )
+    };
+
+    // Layer 2: Logic & State Management
+    let layer2_exec = format!(
+        "- Behavioral execution contract: invokes `{call_sig}` on `{engine_name}` with atomic precondition verification."
+    );
+    let layer2_transition = if let Some(m) = ctx.matched_transition {
+        let src_disp = if m.source == "[*]" {
+            "InitialEntry"
+        } else {
+            m.source.as_str()
+        };
+        let tgt_disp = if m.target == "[*]" {
+            "TerminalExit"
+        } else {
+            m.target.as_str()
+        };
+        let mut details: Vec<String> = Vec::new();
+        if let Some(trig) = m
+            .transition
+            .trigger
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            details.push(format!("trigger `{trig}`"));
+        }
+        if let Some(grd) = m
+            .transition
+            .guard
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            let clean_g = grd
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .trim();
+            if !clean_g.is_empty() && !clean_g.contains("](") {
+                details.push(format!("guard `[{clean_g}]`"));
+            }
+        }
+        if let Some(eff) = m
+            .transition
+            .effect
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            details.push(format!("effect `{eff}`"));
+        }
+        if details.is_empty() {
+            format!("- State transition management: `{src_disp} -> {tgt_disp}`.")
+        } else {
+            format!(
+                "- State transition management: `{src_disp} -> {tgt_disp}` ({}).",
+                details.join(", ")
+            )
+        }
+    } else {
+        format!(
+            "- State transition management: enforces deterministic state progression and rollback safety across `{engine_name}`."
+        )
+    };
+
+    let mut inv_items: Vec<String> = Vec::new();
+    for c in ctx.constraints {
+        let lbl = format_constraint_label(c);
+        if !lbl.is_empty() {
+            let formatted = format!("`{lbl}`");
+            if !inv_items.contains(&formatted) {
+                inv_items.push(formatted);
+            }
+        }
+    }
+    for r in ctx.reqs {
+        let lbl = format_requirement_label(r);
+        if !lbl.is_empty() {
+            let formatted = format!("`{lbl}`");
+            if !inv_items.contains(&formatted) {
+                inv_items.push(formatted);
+            }
+        }
+    }
+    let layer2_invariants = if inv_items.is_empty() {
+        format!(
+            "- Invariant enforcement: preserves `{engine_name}` structural invariants without partial state mutation on rejection."
+        )
+    } else {
+        format!(
+            "- Formal constraints and requirements enforced: {}.",
+            inv_items.join(", ")
+        )
+    };
+
+    // Layer 3: Presentation & Actuator Interface Binding
+    let mut port_items: Vec<String> = Vec::new();
+    if let Some(pt) = ctx.target_part {
+        for port in &pt.ports {
+            let n = port.name.trim();
+            let t = port.type_name.trim();
+            let d = if port.direction.trim().is_empty() {
+                "inout"
+            } else {
+                port.direction.trim()
+            };
+            if !n.is_empty() {
+                if t.is_empty() {
+                    port_items.push(format!("`{n} ({d})`"));
+                } else {
+                    port_items.push(format!("`{n}: {t} ({d})`"));
+                }
+            }
+        }
+    }
+    if port_items.is_empty() {
+        if let Some(cp) = ctx.curr_pkg {
+            for port in &cp.port_defs {
+                let n = port.name.trim();
+                let t = port.type_name.trim();
+                let d = if port.direction.trim().is_empty() {
+                    "inout"
+                } else {
+                    port.direction.trim()
+                };
+                if !n.is_empty() {
+                    if t.is_empty() {
+                        port_items.push(format!("`{n} ({d})`"));
+                    } else {
+                        port_items.push(format!("`{n}: {t} ({d})`"));
+                    }
+                }
+            }
+        }
+    }
+    let layer3_ports = if port_items.is_empty() {
+        format!(
+            "- Component interface endpoints: binds `{engine_name}` command ingress and completion notification egress channels."
+        )
+    } else {
+        format!(
+            "- Component port bindings on `{engine_name}`: {}.",
+            port_items.join(", ")
+        )
+    };
+    let layer3_interaction = format!(
+        "- Interaction binding (`{interaction_name}`): routes `{action_name}` invocation from `{story_actor}` to `{engine_name}` and returns `{reply_msg}`."
+    );
+    let layer3_fault_surface = format!(
+        "- Diagnostic fault surface: reports deterministic rejection diagnostics to `{story_actor}` across the declared interface boundary when guard or invariant checks fail."
+    );
+
+    format!(
+        "### Layer 1: Domain State & Data Model\n\
+         {layer1_attrs}\n\
+         {layer1_params}\n\
+         {layer1_states}\n\n\
+         ### Layer 2: Logic & State Management\n\
+         {layer2_exec}\n\
+         {layer2_transition}\n\
+         {layer2_invariants}\n\n\
+         ### Layer 3: Presentation & Actuator Interface Binding\n\
+         {layer3_ports}\n\
+         {layer3_interaction}\n\
+         {layer3_fault_surface}"
+    )
+}
+
+/// Synthesizes `4..=10` AST-grounded 3-layer Given-When-Then BDD acceptance criteria (`AC-US-XX-01..N`)
+/// including a mandatory negative boundary / fault-containment criterion with zero compiler boilerplate.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C BDD verification
+/// traceability objectives for fn `generate_user_story_bdd` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Emits `4..=10` criteria (`AC-US-{s_num:02}-01..N`) covering:
+///   (1) Layer 1 nominal data-model & precondition binding,
+///   (2) Layer 2 state-transition guard and formal `ConstraintDef`/`RequirementDef` invariants (`1..=5` items),
+///   (3) Layer 3 `PartDef.ports` + `out_params` + `{reply_msg}` interface delivery to `{story_actor}`, and
+///   (4) Mandatory negative boundary rejection without partial state mutation.
+/// - Emits zero words from `ENGINEERING_PARAMETER_TERMS` in template prose and zero legacy compiler boilerplate.
+///
+/// ## 3. Preconditions
+/// - `ctx: &UserStoryProjectionCtx<'_>` is populated for the active User Story.
+///
+/// ## 4. Postconditions
+/// - Returns newline-joined `- [ ] AC-US-{s_num:02}-XX: Given ..., When ..., Then ...` lines with cardinality in `4..=10`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(P + C + R)$ over action parameters, ports, constraints, and requirements.
+/// - Space Complexity: $O(P + C + R)$ bounded criteria vector.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Degrades gracefully to structural AST contracts when optional guards, ports, or docs are absent.
+/// - State: Pure function with zero side effects.
+/// - Action: Zero panics, regexes, or unchecked indexing.
+/// - Resource: Bounded vector of at most 10 strings.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-BDD] | SysML v2: ActionDef(generate_user_story_bdd)
+fn generate_user_story_bdd(ctx: &UserStoryProjectionCtx<'_>) -> String {
+    let s_num = ctx.s_num;
+    let story_actor = ctx.story_actor;
+    let engine_name = ctx.engine_name;
+    let action_name = ctx.action_name;
+    let interaction_name = ctx.interaction_name;
+    let reply_msg = ctx.reply_msg;
+
+    let mut criteria: Vec<String> = Vec::new();
+
+    let clean_src = ctx
+        .matched_transition
+        .map(|m| m.source.as_str())
+        .filter(|s| *s != "[*]");
+    let clean_tgt = ctx
+        .matched_transition
+        .map(|m| m.target.as_str())
+        .filter(|t| *t != "[*]");
+    let clean_guard = ctx
+        .matched_transition
+        .and_then(|m| m.transition.guard.as_deref())
+        .map(str::trim)
+        .map(|g| g.trim_start_matches('[').trim_end_matches(']').trim())
+        .filter(|g| !g.is_empty() && !g.contains("]("));
+
+    // 1. Layer 1: Nominal data-model & precondition criterion
+    let pre_state = match (&ctx.parsed_doc.precondition, clean_src) {
+        (Some(pre), Some(src)) => {
+            format!("{pre} and `{engine_name}` is in declared state `{src}`")
+        }
+        (Some(pre), None) => pre.clone(),
+        (None, Some(src)) => format!("`{engine_name}` is in declared state `{src}`"),
+        (None, None) => format!("`{engine_name}` is initialized in nominal operational state"),
+    };
+
+    let in_param_sigs: Vec<String> = ctx
+        .act_opt
+        .map(|a| {
+            a.in_params
+                .iter()
+                .filter_map(|p| {
+                    let n = p.name.trim();
+                    let t = p.type_name.trim();
+                    if n.is_empty() {
+                        None
+                    } else if t.is_empty() {
+                        Some(format!("`{n}`"))
+                    } else {
+                        Some(format!("`{n}: {t}`"))
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let part_attr_sigs: Vec<String> = ctx
+        .target_part
+        .map(|pt| {
+            pt.attributes
+                .iter()
+                .filter_map(|attr| {
+                    let n = attr.name.trim();
+                    let t = attr.type_name.trim();
+                    if n.is_empty() {
+                        None
+                    } else if t.is_empty() {
+                        Some(format!("`{n}`"))
+                    } else {
+                        Some(format!("`{n}: {t}`"))
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let in_data_clause = if !in_param_sigs.is_empty() {
+        format!(" with typed input arguments ({})", in_param_sigs.join(", "))
+    } else if !part_attr_sigs.is_empty() {
+        format!(" with domain state attributes ({})", part_attr_sigs.join(", "))
+    } else {
+        String::new()
+    };
+
+    let bind_clause = if !part_attr_sigs.is_empty() {
+        format!(
+            "validates and binds the request against `{engine_name}` domain state ({})",
+            part_attr_sigs.join(", ")
+        )
+    } else {
+        format!("validates and binds the typed request data model in `{engine_name}`")
+    };
+
+    let post_state_clause = if let Some(tgt) = clean_tgt {
+        format!(" and transitions to `{tgt}`")
+    } else if let Some(ref outcome) = ctx.parsed_doc.outcome {
+        format!(" so that {}", outcome.trim().trim_end_matches('.'))
+    } else {
+        String::new()
+    };
+
+    criteria.push(format!(
+        "- [ ] AC-US-{s_num:02}-01: Given {pre_state}{in_data_clause}, When `{story_actor}` invokes `{action_name}` on `{engine_name}`, Then `{engine_name}` {bind_clause}{post_state_clause}."
+    ));
+
+    // 2. Layer 2: State-transition guard and formal ConstraintDef / RequirementDef criteria (1..=5 deduplicated items)
+    let mut layer2_bodies: Vec<String> = Vec::new();
+    if let Some(guard) = clean_guard {
+        let guard_body = match (clean_src, clean_tgt) {
+            (Some(src), Some(tgt)) => format!(
+                "Given `{engine_name}` evaluates transition guard `[{guard}]` in state `{src}`, When guard condition `[{guard}]` holds true for `{action_name}`, Then `{engine_name}` authorizes state transition `{src} -> {tgt}` without invariant violation."
+            ),
+            (_, Some(tgt)) => format!(
+                "Given `{engine_name}` evaluates transition guard `[{guard}]` prior to `{action_name}`, When guard condition `[{guard}]` holds true, Then `{engine_name}` authorizes transition to `{tgt}` without invariant violation."
+            ),
+            _ => format!(
+                "Given `{engine_name}` evaluates transition guard `[{guard}]` prior to `{action_name}`, When guard condition `[{guard}]` holds true, Then `{engine_name}` authorizes state transition execution without invariant violation."
+            ),
+        };
+        layer2_bodies.push(guard_body);
+    }
+
+    let mut seen_invariants: BTreeSet<String> = BTreeSet::new();
+    let mut constraint_labels: Vec<String> = Vec::new();
+    for c in ctx.constraints {
+        let label = format_constraint_label(c);
+        if !label.is_empty() && seen_invariants.insert(label.clone()) {
+            constraint_labels.push(label.clone());
+            if layer2_bodies.len() < 5 {
+                layer2_bodies.push(format!(
+                    "Given `{engine_name}` active state management during `{action_name}`, When `{engine_name}` evaluates formal constraint `{label}`, Then `{engine_name}` verifies constraint satisfaction before committing state updates."
+                ));
+            }
+        }
+    }
+
+    for req in ctx.reqs {
+        for c in &req.constraints {
+            let label = format_constraint_label(c);
+            if !label.is_empty() && seen_invariants.insert(label.clone()) {
+                constraint_labels.push(label.clone());
+                if layer2_bodies.len() < 5 {
+                    layer2_bodies.push(format!(
+                        "Given `{engine_name}` active state management during `{action_name}`, When `{engine_name}` evaluates formal constraint `{label}`, Then `{engine_name}` verifies constraint satisfaction before committing state updates."
+                    ));
+                }
+            }
+        }
+        let req_label = format_requirement_label(req);
+        if !req_label.is_empty()
+            && seen_invariants.insert(req_label.clone())
+            && layer2_bodies.len() < 5
+        {
+            layer2_bodies.push(format!(
+                "Given `{engine_name}` requirement allocation for `{action_name}`, When `{engine_name}` verifies formal requirement `{req_label}`, Then `{engine_name}` confirms normative requirement satisfaction across execution."
+            ));
+        }
+    }
+
+    if layer2_bodies.is_empty() {
+        if let (Some(src), Some(tgt)) = (clean_src, clean_tgt) {
+            layer2_bodies.push(format!(
+                "Given `{engine_name}` state machine lifecycle for `{action_name}`, When `{engine_name}` executes transition `{src} -> {tgt}`, Then `{engine_name}` preserves deterministic state conservation across execution."
+            ));
+        } else {
+            layer2_bodies.push(format!(
+                "Given `{engine_name}` behavioral contract for `{action_name}`, When `{engine_name}` executes state management logic, Then `{engine_name}` preserves deterministic state conservation without invariant violation."
+            ));
+        }
+    }
+
+    for body in &layer2_bodies {
+        let ac_idx = criteria.len() + 1;
+        criteria.push(format!("- [ ] AC-US-{s_num:02}-{ac_idx:02}: {body}"));
+    }
+
+    // 3. Layer 3: Interface binding criterion (PartDef.ports + out_params + reply_msg delivery to story_actor)
+    let mut in_ports: Vec<String> = Vec::new();
+    let mut out_ports: Vec<String> = Vec::new();
+    if let Some(pt) = ctx.target_part {
+        for port in &pt.ports {
+            let n = port.name.trim();
+            if n.is_empty() {
+                continue;
+            }
+            let t = port.type_name.trim();
+            let formatted = if t.is_empty() {
+                format!("`{n}`")
+            } else {
+                format!("`{n}: {t}`")
+            };
+            let dir = port.direction.trim();
+            if dir == "out" {
+                out_ports.push(formatted);
+            } else if dir == "in" {
+                in_ports.push(formatted);
+            } else {
+                in_ports.push(formatted.clone());
+                out_ports.push(formatted);
+            }
+        }
+    }
+
+    let out_param_sigs: Vec<String> = ctx
+        .act_opt
+        .map(|a| {
+            a.out_params
+                .iter()
+                .filter_map(|p| {
+                    let n = p.name.trim();
+                    let t = p.type_name.trim();
+                    if n.is_empty() {
+                        None
+                    } else if t.is_empty() {
+                        Some(format!("`{n}`"))
+                    } else {
+                        Some(format!("`{n}: {t}`"))
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let given_interface = if !in_ports.is_empty() {
+        format!(
+            "`{engine_name}` ingress port binding ({})",
+            in_ports.join(", ")
+        )
+    } else if !out_ports.is_empty() {
+        format!(
+            "`{engine_name}` declared port interface ({})",
+            out_ports.join(", ")
+        )
+    } else {
+        format!("`{engine_name}` interface binding for `{interaction_name}`")
+    };
+
+    let out_value_clause = if !out_param_sigs.is_empty() {
+        format!(
+            "materializes verified output ({}) and ",
+            out_param_sigs.join(", ")
+        )
+    } else {
+        String::new()
+    };
+
+    let egress_port_clause = if !out_ports.is_empty() {
+        format!(" across egress port ({})", out_ports.join(", "))
+    } else {
+        String::new()
+    };
+
+    let l3_idx = criteria.len() + 1;
+    criteria.push(format!(
+        "- [ ] AC-US-{s_num:02}-{l3_idx:02}: Given {given_interface}, When `{engine_name}` completes `{action_name}`, Then `{engine_name}` {out_value_clause}delivers `{reply_msg}`{egress_port_clause} to `{story_actor}`."
+    ));
+
+    // 4. Mandatory negative boundary / fault-containment criterion
+    let neg_trigger = if let Some(guard) = clean_guard {
+        if let Some(first_c) = constraint_labels.first() {
+            format!("unsatisfied transition guard `[{guard}]` or violated constraint `{first_c}`")
+        } else {
+            format!("unsatisfied transition guard `[{guard}]`")
+        }
+    } else if let Some(first_c) = constraint_labels.first() {
+        format!("violated formal constraint `{first_c}`")
+    } else if let Some(first_in_param) = in_param_sigs.first() {
+        format!("invalid or out-of-bounds input argument {first_in_param}")
+    } else if let Some(first_in_port) = in_ports.first() {
+        format!("malformed ingress signal on port {first_in_port}")
+    } else {
+        format!("unsatisfied operational precondition or malformed request frame on `{action_name}`")
+    };
+
+    let neg_idx = criteria.len() + 1;
+    criteria.push(format!(
+        "- [ ] AC-US-{s_num:02}-{neg_idx:02}: Given {neg_trigger}, When `{story_actor}` invokes `{action_name}` on `{engine_name}`, Then `{engine_name}` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic fault diagnostic across the interface binding."
+    ));
+
+    criteria.join("\n")
+}
+
+/// Discriminates the originating SysML v2 behavioral AST node backing a projected User Story.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C AST retention
+/// objectives for enum `BehaviorSource` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves direct borrowed references to `PackageDef::action_defs`, `PartDef::actions` (with owning
+///   `part_name`), and standalone `PackageDef::interaction_defs` without premature string truncation.
+///
+/// ## 3. Preconditions
+/// - Referenced AST nodes belong to the `PackageDef` passed to `forward_sync_sysml_to_specs`.
+///
+/// ## 4. Postconditions
+/// - Enables lossless downstream access to `ActionDef` parameters/docs and `InteractionDef` lifelines/messages.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ variant construction and pattern matching.
+/// - Space Complexity: $O(1)$ stack-allocated fat/thin pointer references.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Exhaustive 3-variant enum replacing untyped `(String, Option<String>)` pairs.
+/// - State: Immutable borrowed AST references.
+/// - Action: Zero fallible operations.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-BEHAVIOR-SOURCE] | SysML v2: EnumerationDef(BehaviorSource)
+enum BehaviorSource<'a> {
+    PackageAction(&'a ActionDef),
+    PartAction {
+        part_name: &'a str,
+        action: &'a ActionDef,
+    },
+    StandaloneInteraction(&'a InteractionDef),
+}
+
+/// Deduplicated behavioral item pairing a stripped action/interaction identifier with its `BehaviorSource`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C AST collection
+/// objectives for struct `PkgBehaviorItem` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `clean_name` is non-empty and unique (case-insensitively) within its owning package.
+///
+/// ## 3. Preconditions
+/// - Constructed during per-package behavioral enumeration in `forward_sync_sysml_to_specs`.
+///
+/// ## 4. Postconditions
+/// - Preserves both the canonical stripped action name and the underlying `BehaviorSource<'a>`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ field access.
+/// - Space Complexity: $O(|clean\_name|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Strongly typed struct avoiding complex tuples.
+/// - State: Owned `clean_name` plus borrowed `BehaviorSource`.
+/// - Action: Zero fallible operations.
+/// - Resource: Single `String` allocation for `clean_name`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-PKG-BEHAVIOR-ITEM] | SysML v2: PartDef(PkgBehaviorItem)
+struct PkgBehaviorItem<'a> {
+    clean_name: String,
+    source: BehaviorSource<'a>,
+}
+
+/// Borrowed package, `ActionDef`, and `InteractionDef` AST handles paired 1:1 with `StoryMeta`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C AST-to-Markdown
+/// traceability objectives for struct `StoryAstContext` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Indexed identically to `story_metas` (`story_ast_contexts.get(s_meta.s_num - 1)`), keeping `StoryMeta`
+///   `'static` while retaining full borrowed AST fidelity for `US-*.md` synthesis.
+///
+/// ## 3. Preconditions
+/// - Constructed in lockstep with every `story_metas.push(...)` call in `forward_sync_sysml_to_specs`.
+///
+/// ## 4. Postconditions
+/// - Supplies `curr_pkg`, `act_opt`, and `inter_opt` to the User Story rendering loop in $O(1)$ time.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ construction and lookup via `.get(...)`.
+/// - Space Complexity: $O(1)$ three borrowed optional references.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accessed strictly via bounds-checked `.get(...)`.
+/// - State: Read-only AST references.
+/// - Action: Zero panics.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-STORY-AST-CTX] | SysML v2: PartDef(StoryAstContext)
+struct StoryAstContext<'a> {
+    pkg: &'a PackageDef,
+    act_opt: Option<&'a ActionDef>,
+    inter_opt: Option<&'a InteractionDef>,
+}
+
 /// Metadata associating a PartDef with its owning package context.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1406,17 +2928,17 @@ struct PartContext<'a> {
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `StoryMeta` in `crates/compile-sysml/src/sync/forward.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `StoryMeta` across member set `[action_name: String, engine_name: String, caller_engine: String, reply_msg: String, interaction_name: String]`.
+/// - Preserves structural type invariants for struct `StoryMeta` across member set `[action_name: String, engine_name: String, caller_engine: String, initiator_actor: Option<String>, reply_msg: String, interaction_name: String]`, retaining external lifeline initiator actors prior to clamping `caller_engine` to package-local `PartDef`s.
 ///
 /// ## 3. Preconditions
-/// - Caller supplies well-formed values for `StoryMeta` members (`action_name: String, engine_name: String, caller_engine: String, reply_msg: String, interaction_name: String`).
+/// - Caller supplies well-formed values for `StoryMeta` members (`action_name: String, engine_name: String, caller_engine: String, initiator_actor: Option<String>, reply_msg: String, interaction_name: String`).
 ///
 /// ## 4. Postconditions
 /// - Defines the authoritative `StoryMeta` representation for struct `StoryMeta`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(5)) bounded over input/member dimension of `StoryMeta`.
-/// - Space Complexity: O(M(5)) bounded auxiliary memory for `StoryMeta`.
+/// - Time Complexity: O(M(6)) bounded over input/member dimension of `StoryMeta`.
+/// - Space Complexity: O(M(6)) bounded auxiliary memory for `StoryMeta`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Validates boundary inputs and types for `StoryMeta` (`StoryMeta`).
@@ -1431,6 +2953,7 @@ pub struct StoryMeta {
     pub action_name: String,
     pub engine_name: String,
     pub caller_engine: String,
+    pub initiator_actor: Option<String>,
     pub reply_msg: String,
     pub interaction_name: String,
     pub subsys_display: String,
@@ -1593,6 +3116,7 @@ pub fn forward_sync_sysml_to_specs(
 
     // Pre-calculate user story and use case allocations per package (excluding root and conops)
     let mut story_metas: Vec<StoryMeta> = Vec::new();
+    let mut story_ast_contexts: Vec<StoryAstContext<'_>> = Vec::new();
     for p in &part_packages {
         let subsys_display = if p.name == pkg.name || p.name == "SysML_Model" {
             "System Architecture".to_string()
@@ -1607,20 +3131,29 @@ pub fn forward_sync_sysml_to_specs(
             to_snake_case(&p.name)
         };
 
-        let mut pkg_behavior_items: Vec<(String, Option<String>)> = Vec::new();
+        let mut pkg_behavior_items: Vec<PkgBehaviorItem<'_>> = Vec::new();
         let mut seen_behavior_names: BTreeSet<String> = BTreeSet::new();
 
         for action_def in &p.action_defs {
             let clean = strip_use_case_prefix(&action_def.name).to_string();
             if !clean.is_empty() && seen_behavior_names.insert(clean.to_ascii_lowercase()) {
-                pkg_behavior_items.push((clean, None));
+                pkg_behavior_items.push(PkgBehaviorItem {
+                    clean_name: clean,
+                    source: BehaviorSource::PackageAction(action_def),
+                });
             }
         }
         for part in &p.part_defs {
             for action_def in &part.actions {
                 let clean = strip_use_case_prefix(&action_def.name).to_string();
                 if !clean.is_empty() && seen_behavior_names.insert(clean.to_ascii_lowercase()) {
-                    pkg_behavior_items.push((clean, Some(part.name.clone())));
+                    pkg_behavior_items.push(PkgBehaviorItem {
+                        clean_name: clean,
+                        source: BehaviorSource::PartAction {
+                            part_name: &part.name,
+                            action: action_def,
+                        },
+                    });
                 }
             }
         }
@@ -1628,11 +3161,40 @@ pub fn forward_sync_sysml_to_specs(
         for inter in p.interaction_defs.iter().skip(non_inter_len) {
             let clean = strip_use_case_prefix(&inter.name).to_string();
             if !clean.is_empty() && seen_behavior_names.insert(clean.to_ascii_lowercase()) {
-                pkg_behavior_items.push((clean, None));
+                pkg_behavior_items.push(PkgBehaviorItem {
+                    clean_name: clean,
+                    source: BehaviorSource::StandaloneInteraction(inter),
+                });
             }
         }
 
-        for (a_idx, (action_name, owner_part)) in pkg_behavior_items.into_iter().enumerate() {
+        for (a_idx, item) in pkg_behavior_items.into_iter().enumerate() {
+            let action_name = item.clean_name;
+            let (owner_part, act_opt, explicit_inter) = match item.source {
+                BehaviorSource::PackageAction(act) => (None, Some(act), None),
+                BehaviorSource::PartAction { part_name, action } => {
+                    (Some(part_name.to_string()), Some(action), None)
+                }
+                BehaviorSource::StandaloneInteraction(inter) => {
+                    let matched_act = p
+                        .action_defs
+                        .iter()
+                        .find(|a| {
+                            strip_use_case_prefix(&a.name).eq_ignore_ascii_case(&action_name)
+                        })
+                        .or_else(|| {
+                            p.part_defs
+                                .iter()
+                                .flat_map(|pt| pt.actions.iter())
+                                .find(|a| {
+                                    strip_use_case_prefix(&a.name)
+                                        .eq_ignore_ascii_case(&action_name)
+                                })
+                        });
+                    (None, matched_act, Some(inter))
+                }
+            };
+
             let default_engine_name = owner_part
                 .or_else(|| {
                     p.part_defs
@@ -1643,13 +3205,34 @@ pub fn forward_sync_sysml_to_specs(
                 })
                 .unwrap_or_else(|| sanitize_id(&p.name));
 
+            let mut initiator_actor: Option<String> = None;
             let mut caller_engine = sanitize_id(&pkg.name);
             let mut target_engine = default_engine_name.clone();
             let mut reply_msg = "OperationComplete".to_string();
+            let mut has_inter_reply = false;
             let mut interaction_name = action_name.clone();
 
-            if let Some(inter) = p.interaction_defs.get(a_idx).or_else(|| p.interaction_defs.first()) {
+            let inter_opt = explicit_inter
+                .or_else(|| p.interaction_defs.get(a_idx))
+                .or_else(|| p.interaction_defs.first());
+
+            if let Some(inter) = inter_opt {
                 interaction_name = inter.name.clone();
+                if let Some(l0) = inter.lifelines.first() {
+                    let raw_init = if let Some((_, type_name)) = l0.split_once(':') {
+                        type_name.trim()
+                    } else {
+                        l0.trim()
+                    };
+                    let clean_init = raw_init
+                        .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
+                        .trim();
+                    if !clean_init.is_empty()
+                        && !p.part_defs.iter().any(|pt| pt.name == clean_init)
+                    {
+                        initiator_actor = Some(clean_init.to_string());
+                    }
+                }
                 if let [l0, l1, ..] = inter.lifelines.as_slice() {
                     if let Some((_, type_name)) = l0.split_once(':') {
                         caller_engine = type_name.trim().to_string();
@@ -1660,7 +3243,21 @@ pub fn forward_sync_sysml_to_specs(
                 }
                 if let Some(m1) = inter.messages.get(1) {
                     if let Some(first_word) = m1.split_whitespace().next() {
-                        reply_msg = first_word.to_string();
+                        reply_msg = sanitize_id(first_word);
+                        has_inter_reply = true;
+                    }
+                }
+            }
+
+            if !has_inter_reply {
+                if let Some(out_p) = act_opt.and_then(|a| a.out_params.first()) {
+                    let candidate = if !out_p.type_name.trim().is_empty() {
+                        out_p.type_name.trim()
+                    } else {
+                        out_p.name.trim()
+                    };
+                    if !candidate.is_empty() {
+                        reply_msg = sanitize_id(candidate);
                     }
                 }
             }
@@ -1714,6 +3311,7 @@ pub fn forward_sync_sysml_to_specs(
                 action_name,
                 engine_name: target_engine,
                 caller_engine,
+                initiator_actor,
                 reply_msg,
                 interaction_name,
                 subsys_display: subsys_display.clone(),
@@ -1722,6 +3320,11 @@ pub fn forward_sync_sysml_to_specs(
                 engine_feat_num,
                 caller_feat_num,
                 s_num,
+            });
+            story_ast_contexts.push(StoryAstContext {
+                pkg: p,
+                act_opt,
+                inter_opt,
             });
         }
     }
@@ -2261,6 +3864,10 @@ Component behavior and interface definitions derive from `schema/model.sysml` pu
     }
 
     // 3. User Stories (US-*.md) dynamically lowered from subsystem actions and engines
+    let global_uc_actor = all_packages
+        .iter()
+        .find_map(|p| extract_first_uc_actor(&p.use_case_defs));
+
     for s_meta in &story_metas {
         let s_num = s_meta.s_num;
         let story_slug = sanitize_id(&s_meta.action_name);
@@ -2282,46 +3889,201 @@ Component behavior and interface definitions derive from `schema/model.sysml` pu
         let subsys_display = &s_meta.subsys_display;
         let subsys_dir = &s_meta.subsys_dir;
 
-        let default_actor = all_packages
-            .iter()
-            .flat_map(|p| p.use_case_defs.iter())
-            .flat_map(|uc| {
-                let parsed = parse_use_case_doc(uc.doc.as_deref());
-                if !parsed.actors.is_empty() {
-                    parsed.actors
-                } else if !uc.actors.is_empty() {
-                    uc.actors.clone()
-                } else if let Some(ref a) = uc.actor {
-                    vec![a.clone()]
+        let story_ctx = story_ast_contexts.get(s_num.saturating_sub(1));
+        let curr_pkg = story_ctx.map(|c| c.pkg).or_else(|| {
+            part_packages
+                .iter()
+                .copied()
+                .find(|p| p.name == s_meta.pkg_name)
+                .or_else(|| {
+                    all_packages
+                        .iter()
+                        .copied()
+                        .find(|p| p.name == s_meta.pkg_name)
+                })
+        });
+        let act_opt = story_ctx.and_then(|c| c.act_opt).or_else(|| {
+            curr_pkg.and_then(|cp| {
+                cp.action_defs
+                    .iter()
+                    .find(|a| strip_use_case_prefix(&a.name).eq_ignore_ascii_case(action_name))
+                    .or_else(|| {
+                        cp.part_defs
+                            .iter()
+                            .flat_map(|pt| pt.actions.iter())
+                            .find(|a| {
+                                strip_use_case_prefix(&a.name).eq_ignore_ascii_case(action_name)
+                            })
+                    })
+            })
+        });
+        let inter_opt = story_ctx.and_then(|c| c.inter_opt);
+
+        let parsed_doc = merge_story_docs(
+            parse_story_doc(act_opt.and_then(|a| a.doc.as_deref())),
+            parse_story_doc(inter_opt.and_then(|i| i.doc.as_deref())),
+        );
+
+        let curr_pkg_uc_actor = curr_pkg.and_then(|cp| extract_first_uc_actor(&cp.use_case_defs));
+
+        let raw_story_actor = parsed_doc
+            .actor
+            .as_deref()
+            .or(s_meta.initiator_actor.as_deref())
+            .or(curr_pkg_uc_actor.as_deref())
+            .or_else(|| {
+                if caller_engine != engine_name {
+                    Some(caller_engine.as_str())
                 } else {
-                    Vec::new()
+                    None
                 }
             })
-            .next()
-            .unwrap_or_else(|| "Operator".to_string());
+            .or(global_uc_actor.as_deref())
+            .unwrap_or("Operator");
+        let trimmed_story_actor = raw_story_actor
+            .trim()
+            .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
+            .trim();
+        let story_actor = if trimmed_story_actor.is_empty() {
+            "Operator"
+        } else {
+            trimmed_story_actor
+        };
+
+        let raw_seq_actor = parsed_doc
+            .actor
+            .as_deref()
+            .or(s_meta.initiator_actor.as_deref())
+            .or(curr_pkg_uc_actor.as_deref())
+            .or(global_uc_actor.as_deref())
+            .unwrap_or("Operator");
+        let seq_actor = sanitize_id(raw_seq_actor);
+        let seq_caller = sanitize_id(caller_engine);
+        let seq_engine = sanitize_id(engine_name);
+        let seq_action = sanitize_id(action_name);
+        let seq_reply = sanitize_id(reply_msg);
 
         let seq_diagram = if caller_engine == engine_name {
             format!(
                 r#"sequenceDiagram
     autonumber
-    actor {default_actor}
-    participant {engine_name}
-    {default_actor}->>{engine_name}: {action_name}()
-    {engine_name}-->>{default_actor}: {reply_msg}"#
+    actor {seq_actor}
+    participant {seq_engine}
+    {seq_actor}->>{seq_engine}: {seq_action}()
+    {seq_engine}-->>{seq_actor}: {seq_reply}"#
             )
         } else {
             format!(
                 r#"sequenceDiagram
     autonumber
-    actor {default_actor}
-    participant {caller_engine}
-    participant {engine_name}
-    {default_actor}->>{caller_engine}: {action_name}()
-    {caller_engine}->>{engine_name}: {action_name}()
-    {engine_name}-->>{caller_engine}: {reply_msg}
-    {caller_engine}-->>{default_actor}: StatusReport"#
+    actor {seq_actor}
+    participant {seq_caller}
+    participant {seq_engine}
+    {seq_actor}->>{seq_caller}: {seq_action}()
+    {seq_caller}->>{seq_engine}: {seq_action}()
+    {seq_engine}-->>{seq_caller}: {seq_reply}
+    {seq_caller}-->>{seq_actor}: StatusReport"#
             )
         };
+
+        let target_part = curr_pkg
+            .and_then(|cp| {
+                cp.part_defs
+                    .iter()
+                    .find(|pt| pt.name == *engine_name)
+                    .or_else(|| cp.part_defs.first())
+            })
+            .or_else(|| {
+                part_contexts
+                    .iter()
+                    .find(|ctx| ctx.part.name == *engine_name)
+                    .map(|ctx| ctx.part)
+            });
+
+        let mut story_reqs: Vec<&RequirementDef> = Vec::new();
+        let mut seen_reqs: BTreeSet<(&str, &str)> = BTreeSet::new();
+        if let Some(pt) = target_part {
+            for r in &pt.requirements {
+                if seen_reqs.insert((r.req_id.as_str(), r.name.as_str())) {
+                    story_reqs.push(r);
+                }
+            }
+        }
+        if let Some(cp) = curr_pkg {
+            for r in &cp.requirement_defs {
+                let satisfies_target = r
+                    .satisfied_by
+                    .iter()
+                    .any(|s| s == engine_name || s == action_name);
+                if satisfies_target && seen_reqs.insert((r.req_id.as_str(), r.name.as_str())) {
+                    story_reqs.push(r);
+                }
+            }
+            for r in &cp.requirement_defs {
+                if seen_reqs.insert((r.req_id.as_str(), r.name.as_str())) {
+                    story_reqs.push(r);
+                }
+            }
+        }
+        for r in &all_requirements {
+            let satisfies_target = r
+                .satisfied_by
+                .iter()
+                .any(|s| s == engine_name || s == action_name);
+            if satisfies_target && seen_reqs.insert((r.req_id.as_str(), r.name.as_str())) {
+                story_reqs.push(r);
+            }
+        }
+
+        let mut story_constraints: Vec<&ConstraintDef> = Vec::new();
+        let mut seen_constraints: BTreeSet<(&str, &str)> = BTreeSet::new();
+        if let Some(pt) = target_part {
+            for c in &pt.constraints {
+                if seen_constraints.insert((c.name.as_str(), c.expression.as_str())) {
+                    story_constraints.push(c);
+                }
+            }
+        }
+        if let Some(cp) = curr_pkg {
+            for c in &cp.constraint_defs {
+                if seen_constraints.insert((c.name.as_str(), c.expression.as_str())) {
+                    story_constraints.push(c);
+                }
+            }
+        }
+
+        let mut pkg_states: Vec<&StateDef> = Vec::new();
+        if let Some(pt) = target_part {
+            pkg_states.extend(pt.states.iter());
+        }
+        if let Some(cp) = curr_pkg {
+            pkg_states.extend(cp.state_defs.iter());
+        }
+        let matched_transition = resolve_story_transition(action_name, &pkg_states);
+        let call_sig = format_action_call_with_params(action_name, act_opt);
+
+        let proj_ctx = UserStoryProjectionCtx {
+            s_num,
+            story_actor,
+            engine_name,
+            action_name,
+            interaction_name,
+            reply_msg,
+            pkg_name: &s_meta.pkg_name,
+            call_sig: &call_sig,
+            parsed_doc: &parsed_doc,
+            act_opt,
+            curr_pkg,
+            target_part,
+            states: &pkg_states,
+            matched_transition: matched_transition.as_ref(),
+            constraints: &story_constraints,
+            reqs: &story_reqs,
+        };
+
+        let user_story_statement = generate_user_story_statement(&proj_ctx);
+        let three_layer_sections = generate_user_story_three_layer_sections(&proj_ctx);
+        let bdd_criteria = generate_user_story_bdd(&proj_ctx);
 
         let mut req_features_list = Vec::new();
         if let Some(c_num) = s_meta.caller_feat_num {
@@ -2407,6 +4169,14 @@ Authoritative user story flows and interaction lifelines derive from `schema/sub
 
 # {title}
 
+## User Story
+
+{user_story_statement}
+
+## Architectural Realization (3-Layer Definition of Done)
+
+{three_layer_sections}
+
 ## UML Sequence Diagram
 
 ```mermaid
@@ -2414,9 +4184,7 @@ Authoritative user story flows and interaction lifelines derive from `schema/sub
 ```
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-US-{s_num:02}-01: Given operational environment initialized, When {action_name} executes, Then {engine_name} processes the AST within defined latency envelope.
-- [ ] AC-US-{s_num:02}-02: Given formal constraints, When semantic validator executes, Then asserts invariant satisfaction.
-- [ ] AC-US-{s_num:02}-03: Given exceptional conditions, When error recovery activates, Then graceful recovery occurs without data loss.
+{bdd_criteria}
 
 ## Required Features
 {req_features}
@@ -2427,13 +4195,14 @@ Operational concept definitions and system sequence interaction models:
 "#,
             title = title,
             action_name = action_name,
-            engine_name = engine_name,
             us_issue_id = us_issue_id,
             parent_epic_link = parent_epic_link,
             interaction_name = interaction_name,
             spec_source = spec_source,
+            user_story_statement = user_story_statement,
+            three_layer_sections = three_layer_sections,
             seq_diagram = seq_diagram,
-            s_num = s_num,
+            bdd_criteria = bdd_criteria,
             req_features = req_features,
             source_refs = source_refs,
         );
@@ -3047,7 +4816,8 @@ fn replace_markdown_section_body(doc: &str, heading: &str, new_body: &str) -> St
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `merge_existing_spec_content` in `crates/compile-sysml/src/sync/forward.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves `- [x]` / `- [X]` completion states on matching checklist items (`FEAT-XX`, `UC-XX`, `US-XX`, `AC-XX`) and authored prose sections in `EPIC-*.md` and `FEAT-*.md`.
+/// - Preserves `- [x]` / `- [X]` completion states on matching non-boilerplate checklist items (`FEAT-XX`, `UC-XX`, `US-XX`, `AC-XX`) while evicting stale compiler-boilerplate User Story `AC-US-XX-YY` checkboxes.
+/// - Preserves authored prose sections in `EPIC-*.md`, `FEAT-*.md`, and custom non-boilerplate `## User Story` clauses (`As a`/`As an`, `I want`, `so that`) in `US-*.md`.
 ///
 /// ## 3. Preconditions
 /// - `rel_path: &str`, `generated: &str`, and `existing: &str` are valid specification strings.
@@ -3068,6 +4838,7 @@ fn replace_markdown_section_body(doc: &str, heading: &str, new_body: &str) -> St
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYNC-FORWARD-MERGE-EXISTING-SPEC] | SysML v2: ActionDef(merge_existing_spec_content)
 fn merge_existing_spec_content(rel_path: &str, generated: &str, existing: &str) -> String {
+    let is_user_story = rel_path.starts_with("user-stories/");
     let mut checked_keys: BTreeSet<String> = BTreeSet::new();
     for line in existing.lines() {
         let trimmed = line.trim_start();
@@ -3075,6 +4846,9 @@ fn merge_existing_spec_content(rel_path: &str, generated: &str, existing: &str) 
             .strip_prefix("- [x] ")
             .or_else(|| trimmed.strip_prefix("- [X] "))
         {
+            if is_user_story && is_stale_user_story_boilerplate(after) {
+                continue;
+            }
             checked_keys.insert(extract_checklist_item_key(after));
         }
     }
@@ -3127,6 +4901,18 @@ fn merge_existing_spec_content(rel_path: &str, generated: &str, existing: &str) 
         for heading in &feat_headings {
             if let Some(existing_body) = extract_markdown_section_body(existing, heading) {
                 merged = replace_markdown_section_body(&merged, heading, &existing_body);
+            }
+        }
+    } else if is_user_story && !is_stale_user_story_boilerplate(existing) {
+        if let Some(existing_story) = extract_markdown_section_body(existing, "## User Story") {
+            let has_actor_opening =
+                existing_story.contains("As a") || existing_story.contains("As an");
+            if !is_stale_user_story_boilerplate(&existing_story)
+                && has_actor_opening
+                && existing_story.contains("I want")
+                && existing_story.contains("so that")
+            {
+                merged = replace_markdown_section_body(&merged, "## User Story", &existing_story);
             }
         }
     }
