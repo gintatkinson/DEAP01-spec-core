@@ -429,7 +429,7 @@ impl Cli {
         if self.stpa_transpile {
             return CommandMode::StpaTranspile {
                 schema,
-                out_dir: self.out_dir.unwrap_or_else(|| PathBuf::from("docs/safety")),
+                out_dir: self.out_dir.unwrap_or_else(|| self.docs.join("safety")),
                 scoring_config: self.scoring_config,
                 dry_run: self.dry_run,
             };

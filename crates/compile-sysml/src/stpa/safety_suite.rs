@@ -18,7 +18,10 @@ use std::path::Path;
 
 use deap_core::sysml_ast::{ConstraintDef, PackageDef};
 use crate::semantic::digest::write_atomic;
-use super::fmeca::{generate_fmeca_matrix, FmecaRow, FmecaScoringConfig};
+use super::fmeca::{
+    generate_fmeca_matrix_with_registry, load_failure_mode_registry_for_out_dir, FmecaRow,
+    FmecaScoringConfig, RegistryFailureEntry,
+};
 use super::uca::{expand_cartesian_stpa, UnsafeControlAction, PENDING_PARAMETER};
 
 /// Parameterized proof template structure.
@@ -555,11 +558,46 @@ pub fn transpile_safety_suite(
     pkg: &PackageDef,
     scoring_config: Option<&FmecaScoringConfig>,
 ) -> BTreeMap<String, String> {
+    transpile_safety_suite_with_registry(pkg, scoring_config, &[])
+}
+
+/// Transpiles the complete 10-pillar STPA safety artifact suite integrating pre-loaded `FAILURE_MODE_REGISTRY.md` records.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `transpile_safety_suite_with_registry` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Propagates `registry_entries` into `generate_fmeca_matrix_with_registry` so both `05_FMECA_MATRIX.md` and `STPA_MATRIX.md` share identical SSOT/Derived FMECA rows and RPN calculations.
+/// - Emits a deterministic `BTreeMap<String, String>` covering all canonical STPA/FMECA/RTA/SLDV filenames.
+///
+/// ## 3. Preconditions
+/// - `pkg: &PackageDef` is a parsed SysML v2 package; `registry_entries` contains zero or more validated `RegistryFailureEntry` records.
+///
+/// ## 4. Postconditions
+/// - Returns an ordered `BTreeMap<String, String>` mapping each safety artifact filename to its rendered UTF-8 content.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(pkg) + R) over AST package cardinality and registry row count R.
+/// - Space Complexity: O(N(pkg) + R) across rendered Markdown and MATLAB artifact buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts empty `registry_entries` (`&[]`) and `None` scoring configurations cleanly.
+/// - State: Pure functional transpilation with zero filesystem side effects.
+/// - Action: Deterministic `BTreeMap` construction with zero panics or unbounded loops.
+/// - Resource: Bounded memory proportional to rendered safety documentation size.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-SAFETY-SUITE-TRANSPILE-WITH-REGISTRY] | SysML v2: ActionDef(transpile_safety_suite_with_registry)
+pub fn transpile_safety_suite_with_registry(
+    pkg: &PackageDef,
+    scoring_config: Option<&FmecaScoringConfig>,
+    registry_entries: &[RegistryFailureEntry],
+) -> BTreeMap<String, String> {
     let mut artifacts = BTreeMap::new();
     let tokens = collect_parameter_tokens(pkg);
     let ucas = expand_cartesian_stpa(pkg);
     let constraints = collect_all_constraints(pkg);
-    let fmeca_rows = generate_fmeca_matrix(pkg, scoring_config);
+    let fmeca_rows = generate_fmeca_matrix_with_registry(pkg, scoring_config, registry_entries);
 
     // 1. 01_LOSSES_HAZARDS_TOPOLOGY.md
     artifacts.insert(
@@ -629,23 +667,21 @@ pub fn transpile_safety_suite(
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `emit_safety_suite` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `emit_safety_suite` (declaration #7) within `STPA-SAFETY-SUITE`.
+/// - Loads `FAILURE_MODE_REGISTRY.md` scoped relative to `out_dir` via `load_failure_mode_registry_for_out_dir` before invoking `transpile_safety_suite_with_registry` and writing each artifact atomically.
 ///
 /// ## 3. Preconditions
-/// - `pkg: &PackageDef` must satisfy domain and type-safety constraints prior to invoking `emit_safety_suite`.
-/// - `out_dir: &Path` must satisfy domain and type-safety constraints prior to invoking `emit_safety_suite`.
-/// - `scoring_config: Option<&FmecaScoringConfig>` must satisfy domain and type-safety constraints prior to invoking `emit_safety_suite`.
+/// - `pkg: &PackageDef`, `out_dir: &Path`, and `scoring_config: Option<&FmecaScoringConfig>` satisfy type-safety constraints.
 ///
 /// ## 4. Postconditions
-/// - Returns `Result<(), String>` from `emit_safety_suite` with deterministic post-execution state.
+/// - Returns `Result<(), String>` after persisting all 10 safety artifacts under `out_dir`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(pkg)) bounded over input/member dimension of `emit_safety_suite`.
-/// - Space Complexity: O(N(pkg)) bounded auxiliary memory for `emit_safety_suite`.
+/// - Time Complexity: O(N(pkg) + R) bounded over AST package size and registry entries R.
+/// - Space Complexity: O(N(pkg) + R) bounded auxiliary memory for `emit_safety_suite`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Validates boundary inputs and types for `emit_safety_suite` (`Result<(), String>`).
-/// - State: Maintains consistent state invariants across `emit_safety_suite` without partial mutation on error.
+/// - State: Uses `write_atomic` per destination file to prevent partial or torn artifact writes on I/O failure.
 /// - Action: Executes `emit_safety_suite` deterministically with zero unbounded recursion or blocking.
 /// - Resource: Bounds stack and heap allocations within `emit_safety_suite` (`STPA-SAFETY-SUITE`).
 ///
@@ -659,7 +695,8 @@ pub fn emit_safety_suite(
     fs::create_dir_all(out_dir)
         .map_err(|e| format!("Failed to create output directory '{}': {}", out_dir.display(), e))?;
 
-    let artifacts = transpile_safety_suite(pkg, scoring_config);
+    let registry_entries = load_failure_mode_registry_for_out_dir(out_dir);
+    let artifacts = transpile_safety_suite_with_registry(pkg, scoring_config, &registry_entries);
     for (filename, content) in artifacts {
         let dest = out_dir.join(&filename);
         write_atomic(&dest, &content)

@@ -1196,7 +1196,17 @@ fn handle_stpa_transpile(
     let scoring_config = load_scoring_config(scoring_config_path).map_err(|e| (1, e))?;
     let (_, pkg, _) = load_and_validate_schema(schema, true).map_err(|e| (1, e))?;
     if dry_run {
-        let _suite = transpile_safety_suite(&pkg, scoring_config.as_ref());
+        let registry_entries =
+            crate::stpa::fmeca::load_failure_mode_registry_for_out_dir(out_dir);
+        let _suite = if registry_entries.is_empty() {
+            transpile_safety_suite(&pkg, scoring_config.as_ref())
+        } else {
+            crate::stpa::safety_suite::transpile_safety_suite_with_registry(
+                &pkg,
+                scoring_config.as_ref(),
+                &registry_entries,
+            )
+        };
         println!(
             "[STPA Transpile] [DRY RUN] Would emit safety artifact suite to '{}'",
             out_dir.display()
