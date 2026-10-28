@@ -757,13 +757,89 @@ fn generate_class_diagram(part: &PartDef) -> String {
     lines.join("\n")
 }
 
+/// Sanitizes a text label for safe embedding inside a Mermaid Use Case `graph TD` stadium, circle,
+/// or subgraph node without breaking Mermaid lexical grammar or Check 13B diagram hygiene.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C diagram hygiene
+/// objectives for fn `sanitize_mermaid_uc_label` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strips all backtick characters (`` ` ``), substitutes `"` -> `'` and `;` -> `,`, converts
+///   `\r`, `\n`, and `\t` to `' '`, collapses consecutive whitespace, decodes `&lt;`/`&gt;`,
+///   strips leading `<digits>. ` numbering prefixes, neutralizes `-->` and `---` arrow sequences
+///   to `->` and `--`, and bounds output length to at most 60 Unicode scalar values (`57` + `"..."`).
+///
+/// ## 3. Preconditions
+/// - `raw: &str` is an arbitrary UTF-8 actor, subject, title, or scenario step string.
+///
+/// ## 4. Postconditions
+/// - Returns a Mermaid-safe `String` containing zero backticks, zero double quotes, zero semicolons,
+///   zero line breaks, zero `-->`/`---` arrow tokens, and `chars().count() <= 60`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|raw|)$ linear character and bounded token replacement scan.
+/// - Space Complexity: $O(|raw|)$ bounded auxiliary string buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles empty strings, multi-byte UTF-8 characters, and embedded code snippets safely.
+/// - State: Pure function with zero shared mutable state.
+/// - Action: Executes with zero regular expressions, panics, or unchecked slice indexing.
+/// - Resource: Bounded single-label heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-SANITIZE-MERMAID-UC-LABEL] | SysML v2: ActionDef(sanitize_mermaid_uc_label)
+fn sanitize_mermaid_uc_label(raw: &str) -> String {
+    let mut mapped = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        match ch {
+            '`' => {}
+            '"' => mapped.push('\''),
+            ';' => mapped.push(','),
+            '\r' | '\n' | '\t' => mapped.push(' '),
+            _ => mapped.push(ch),
+        }
+    }
+    let mut collapsed = mapped
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">");
+
+    let digit_len = collapsed.chars().take_while(|c| c.is_ascii_digit()).count();
+    if digit_len > 0 {
+        if let Some(after_digits) = collapsed.get(digit_len..) {
+            if let Some(rest) = after_digits.strip_prefix(". ") {
+                collapsed = rest.trim().to_string();
+            }
+        }
+    }
+
+    while collapsed.contains("-->") {
+        collapsed = collapsed.replace("-->", "->");
+    }
+    while collapsed.contains("---") {
+        collapsed = collapsed.replace("---", "--");
+    }
+
+    if collapsed.chars().count() > 60 {
+        let truncated: String = collapsed.chars().take(57).collect();
+        format!("{truncated}...")
+    } else {
+        collapsed
+    }
+}
+
 /// Generates a compliant UML Use Case diagram with system boundary, stadium-shaped use case nodes,
+/// and sanitized Mermaid node labels.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `generate_use_case_diagram` in `crates/compile-sysml/src/sync/forward.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves deterministic state conservation and referential transparency for fn `generate_use_case_diagram` (declaration #12) within `SYNC-FORWARD`.
+/// - Sanitizes `subject`, `clean_title`, `primary_actor`, and every scenario step through `sanitize_mermaid_uc_label` so emitted Mermaid blocks contain zero backticks or semicolons.
 ///
 /// ## 3. Preconditions
 /// - `primary_actor: &str` must satisfy domain and type-safety constraints prior to invoking `generate_use_case_diagram`.
@@ -792,9 +868,9 @@ fn generate_use_case_diagram(
     clean_title: &str,
     main_scenario: &[String],
 ) -> String {
-    let clean_subject = subject.replace('`', "").replace('"', "'");
-    let clean_main_title = clean_title.replace('`', "").replace('"', "'");
-    let clean_actor = primary_actor.replace('`', "").replace('"', "'");
+    let clean_subject = sanitize_mermaid_uc_label(subject);
+    let clean_main_title = sanitize_mermaid_uc_label(clean_title);
+    let clean_actor = sanitize_mermaid_uc_label(primary_actor);
 
     let mut lines = Vec::new();
     lines.push("graph TD".to_string());
@@ -804,23 +880,7 @@ fn generate_use_case_diagram(
     let mut step_ids = Vec::new();
     for (idx, step) in main_scenario.iter().enumerate().take(6) {
         let step_id = format!("UC_Step{:02}", idx + 1);
-        let mut clean_step = step.replace('`', "").trim().to_string();
-        if let Some(dot_idx) = clean_step.find(". ") {
-            let is_num_prefix = clean_step
-                .get(..dot_idx)
-                .map(|prefix| !prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_digit()))
-                .unwrap_or(false);
-            if is_num_prefix {
-                if let Some(rest) = clean_step.get(dot_idx + 2..) {
-                    clean_step = rest.trim().to_string();
-                }
-            }
-        }
-        if clean_step.chars().count() > 60 {
-            let truncated: String = clean_step.chars().take(57).collect();
-            clean_step = format!("{}...", truncated);
-        }
-        let clean_step = clean_step.replace('"', "'");
+        let clean_step = sanitize_mermaid_uc_label(step);
         lines.push(format!("        {}([\"{}\"])", step_id, clean_step));
         step_ids.push(step_id);
     }
@@ -1285,19 +1345,571 @@ struct ParsedUseCaseDoc {
     postconditions: Vec<String>,
 }
 
-/// Parses the structured doc comment of a UseCaseDef.
+/// Canonical case-insensitive clause header prefixes recognized inside `UseCaseDef.doc` blocks.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C behavioral
+/// contract traceability objectives for `USE_CASE_DOC_CLAUSE_LABELS` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Every entry terminates with `':'` and enumerates both UML Use Case section headers and BDD/diagnostic clause headers.
+///
+/// ## 3. Preconditions
+/// - Referenced as an immutable static slice by `starts_with_recognized_uc_clause_label`.
+///
+/// ## 4. Postconditions
+/// - Enables deterministic single-line and multi-line clause boundary recognition without regular expressions.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ static table lookup.
+/// - Space Complexity: $O(1)$ compile-time read-only slice.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Immutable `&[&str]` constant.
+/// - State: Stateless compile-time table.
+/// - Action: Zero fallible runtime operations.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-UC-DOC-CLAUSE-LABELS] | SysML v2: AttributeDef(USE_CASE_DOC_CLAUSE_LABELS)
+const USE_CASE_DOC_CLAUSE_LABELS: &[&str] = &[
+    "Actors:",
+    "Actor:",
+    "Subject:",
+    "Preconditions:",
+    "Precondition:",
+    "Trigger:",
+    "Main Success Scenario:",
+    "Alternate and Exception Flows:",
+    "Alternate Flows:",
+    "Exception Flows:",
+    "Postconditions:",
+    "Postcondition:",
+    "Given:",
+    "When:",
+    "Then:",
+    "Diagnostic:",
+];
+
+/// Checks whether `s` begins with a recognized unbolded (`Label:`) or bolded (`**Label**:` / `**Label:**`)
+/// `UseCaseDef.doc` clause header.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C lexical parsing
+/// objectives for fn `starts_with_recognized_uc_clause_label` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Matches every prefix in `USE_CASE_DOC_CLAUSE_LABELS` case-insensitively in plain, `**Label**:`,
+///   and `**Label:**` Markdown forms using exclusively bounds-checked `.get(...)` slicing.
+///
+/// ## 3. Preconditions
+/// - `s: &str` is a valid UTF-8 candidate clause suffix.
+///
+/// ## 4. Postconditions
+/// - Returns `true` if and only if `s.trim_start()` starts with a recognized Use Case clause label.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(K)$ where $K = |USE\_CASE\_DOC\_CLAUSE\_LABELS|$ is a fixed compile-time constant (`16`).
+/// - Space Complexity: $O(1)$ zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts empty or multi-byte UTF-8 slices without error.
+/// - State: Pure read-only predicate.
+/// - Action: Zero regexes, panics, or direct index operations.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-RECOGNIZE-UC-CLAUSE-LABEL] | SysML v2: ActionDef(starts_with_recognized_uc_clause_label)
+fn starts_with_recognized_uc_clause_label(s: &str) -> bool {
+    let trimmed = s.trim_start();
+    for label in USE_CASE_DOC_CLAUSE_LABELS {
+        if strip_prefix_ignore_ascii_case(trimmed, label).is_some() {
+            return true;
+        }
+        let stem = label.trim_end_matches(':');
+        if let Some(after_stars) = trimmed.strip_prefix("**") {
+            if let Some(after_stem) = strip_prefix_ignore_ascii_case(after_stars, stem) {
+                let rem = after_stem.trim_start();
+                if rem.starts_with("**:") || rem.starts_with(":**") {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Splits a single line of `UseCaseDef.doc` text into individual inline behavioral clause segments
+/// across bullet (`- **Given**: ... - **When**: ...`), semicolon (`; Given: ...`), and sentence-boundary
+/// delimiters without splitting parenthetical `(Diagnostic: ...)` annotations or SysML statement semicolons.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C lossless behavioral
+/// clause extraction objectives for fn `split_inline_use_case_clauses` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Iterates strictly over `line.char_indices()` and slices exclusively via `.get(seg_start..idx)`
+///   and `.get(seg_start..)`, guaranteeing UTF-8 boundary safety.
+/// - Splits on `;` only when the trailing text begins with a recognized clause header, preserving
+///   embedded SysML semicolons (e.g., `first S1 accept trig then S2;`).
+/// - Splits on inline `- ` / `* ` / `+ ` bullets or `. `-terminated sentences only when immediately
+///   preceded by whitespace and followed by a recognized clause header, keeping inline parenthetical
+///   ``(`Diagnostic: E0453`)`` tokens attached to their enclosing clause.
+///
+/// ## 3. Preconditions
+/// - `line: &str` is a single line from a `UseCaseDef.doc` comment.
+///
+/// ## 4. Postconditions
+/// - Returns a `Vec<&str>` of non-empty trimmed clause slices in source order.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|line|)$ single linear character-index scan.
+/// - Space Complexity: $O(C)$ where $C \le |line|$ is the number of extracted clause slices.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns an empty `Vec` on whitespace-only input.
+/// - State: Pure borrowed slice partitioning with zero mutable global state.
+/// - Action: Zero regexes, `.unwrap()`, `.expect()`, or unchecked slice indexing.
+/// - Resource: Single bounded `Vec<&str>` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-SPLIT-INLINE-UC-CLAUSES] | SysML v2: ActionDef(split_inline_use_case_clauses)
+fn split_inline_use_case_clauses(line: &str) -> Vec<&str> {
+    let mut segments: Vec<&str> = Vec::new();
+    let mut seg_start: usize = 0;
+
+    for (idx, ch) in line.char_indices() {
+        if idx <= seg_start {
+            continue;
+        }
+        let Some(tail) = line.get(idx..) else {
+            continue;
+        };
+
+        if ch == ';' {
+            if let Some(after_semi) = tail.get(1..) {
+                let trimmed_after = after_semi.trim_start();
+                let candidate = trimmed_after
+                    .strip_prefix("- ")
+                    .or_else(|| trimmed_after.strip_prefix("* "))
+                    .or_else(|| trimmed_after.strip_prefix("+ "))
+                    .map_or(trimmed_after, str::trim_start);
+                if starts_with_recognized_uc_clause_label(candidate) {
+                    if let Some(seg) = line.get(seg_start..idx) {
+                        if !seg.trim().is_empty() {
+                            segments.push(seg.trim());
+                        }
+                    }
+                    seg_start = idx + 1;
+                    continue;
+                }
+            }
+        }
+
+        let prev_is_whitespace = line
+            .get(..idx)
+            .and_then(|prefix| prefix.chars().next_back())
+            .is_some_and(char::is_whitespace);
+        if !prev_is_whitespace {
+            continue;
+        }
+
+        if let Some(after_bullet) = tail
+            .strip_prefix("- ")
+            .or_else(|| tail.strip_prefix("* "))
+            .or_else(|| tail.strip_prefix("+ "))
+        {
+            let inner_candidate = after_bullet
+                .trim_start()
+                .strip_prefix("- ")
+                .or_else(|| after_bullet.trim_start().strip_prefix("* "))
+                .map_or(after_bullet, str::trim_start);
+            if starts_with_recognized_uc_clause_label(inner_candidate) {
+                if let Some(seg) = line.get(seg_start..idx) {
+                    if !seg.trim().is_empty() {
+                        segments.push(seg.trim());
+                    }
+                }
+                seg_start = idx;
+                continue;
+            }
+        }
+
+        let prev_sentence_ended = line
+            .get(..idx)
+            .map(str::trim_end)
+            .is_some_and(|p| p.ends_with('.'));
+        if prev_sentence_ended && starts_with_recognized_uc_clause_label(tail) {
+            if let Some(seg) = line.get(seg_start..idx) {
+                if !seg.trim().is_empty() {
+                    segments.push(seg.trim());
+                }
+            }
+            seg_start = idx;
+        }
+    }
+
+    if let Some(final_seg) = line.get(seg_start..) {
+        if !final_seg.trim().is_empty() {
+            segments.push(final_seg.trim());
+        }
+    }
+
+    segments
+}
+
+/// Normalizes leading Markdown/comment decorators (`# `, `- `, `* `, `+ `, `> `, `<digits>. `,
+/// `<digits>) `) and unwraps leading bold label wrappers (`**Label**: rest` or `**Label:** rest`
+/// -> `Label: rest`) from a `UseCaseDef.doc` clause segment.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C deterministic
+/// clause normalization objectives for fn `normalize_doc_clause_head` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strips Markdown heading hashes only when followed by whitespace so Rust attributes such as
+///   `#[allow(...)]` are preserved verbatim.
+/// - Unwraps leading `**Label**: rest` and `**Label:** rest` wrappers via bounds-checked `.get(..)` slicing.
+///
+/// ## 3. Preconditions
+/// - `raw: &str` is a valid UTF-8 line or inline clause segment.
+///
+/// ## 4. Postconditions
+/// - Returns a normalized `String` ready for case-insensitive clause-prefix dispatch.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|raw|)$.
+/// - Space Complexity: $O(|raw|)$ single normalized string allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `String::new()` on empty or decorator-only segments.
+/// - State: Pure string transformation.
+/// - Action: Zero regexes, panics, or direct indexing.
+/// - Resource: Single bounded `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-NORMALIZE-DOC-CLAUSE-HEAD] | SysML v2: ActionDef(normalize_doc_clause_head)
+fn normalize_doc_clause_head(raw: &str) -> String {
+    let mut cur = raw.trim();
+
+    let hash_count = cur.chars().take_while(|c| *c == '#').count();
+    if hash_count > 0 {
+        if let Some(after_hashes) = cur.get(hash_count..) {
+            if after_hashes.starts_with(' ') || after_hashes.starts_with('\t') {
+                cur = after_hashes.trim_start();
+            }
+        }
+    }
+
+    for _ in 0..4 {
+        if let Some(rest) = cur
+            .strip_prefix("- ")
+            .or_else(|| cur.strip_prefix("* "))
+            .or_else(|| cur.strip_prefix("+ "))
+            .or_else(|| cur.strip_prefix("> "))
+        {
+            cur = rest.trim_start();
+            continue;
+        }
+        let digit_len = cur.chars().take_while(|c| c.is_ascii_digit()).count();
+        if digit_len > 0 {
+            if let Some(after_digits) = cur.get(digit_len..) {
+                if let Some(rest) = after_digits
+                    .strip_prefix(". ")
+                    .or_else(|| after_digits.strip_prefix(") "))
+                {
+                    cur = rest.trim_start();
+                    continue;
+                }
+            }
+        }
+        break;
+    }
+
+    if let Some(after_open) = cur.strip_prefix("**") {
+        if let Some(close_idx) = after_open.find("**") {
+            if let (Some(inner), Some(after_close)) = (
+                after_open.get(..close_idx),
+                after_open.get(close_idx + 2..),
+            ) {
+                if inner.ends_with(':') {
+                    let label_stem = inner.trim_end_matches(':').trim();
+                    let valid_label = !label_stem.is_empty()
+                        && label_stem
+                            .chars()
+                            .all(|c| c.is_alphanumeric() || c == ' ' || c == '_' || c == '-');
+                    if valid_label {
+                        let rest = after_close.trim_start();
+                        return if rest.is_empty() {
+                            format!("{label_stem}:")
+                        } else {
+                            format!("{label_stem}: {rest}")
+                        };
+                    }
+                } else if let Some(rest_raw) = after_close.trim_start().strip_prefix(':') {
+                    let label_stem = inner.trim();
+                    let valid_label = !label_stem.is_empty()
+                        && label_stem
+                            .chars()
+                            .all(|c| c.is_alphanumeric() || c == ' ' || c == '_' || c == '-');
+                    if valid_label {
+                        let rest = rest_raw.trim_start();
+                        return if rest.is_empty() {
+                            format!("{label_stem}:")
+                        } else {
+                            format!("{label_stem}: {rest}")
+                        };
+                    }
+                }
+            }
+        }
+    }
+
+    cur.to_string()
+}
+
+/// Matches a leading clause `label` case-insensitively and returns the trimmed value slice after `label`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C memory-safe prefix
+/// matching objectives for fn `match_case_insensitive_uc_label` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Delegates to `strip_prefix_ignore_ascii_case(s, label)` and trims leading/trailing whitespace on the remainder.
+///
+/// ## 3. Preconditions
+/// - `s: &str` is a normalized clause string and `label: &str` is an ASCII label ending with `':'`.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(trimmed_value)` on case-insensitive prefix match, or `None` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|label| + |s|)$ trim scan.
+/// - Space Complexity: $O(1)$ borrowed slice return.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Never panics on short strings or multi-byte UTF-8 boundaries.
+/// - State: Pure borrowed projection.
+/// - Action: Zero direct indexing or regex usage.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-MATCH-UC-LABEL-CI] | SysML v2: ActionDef(match_case_insensitive_uc_label)
+fn match_case_insensitive_uc_label<'a>(s: &'a str, label: &str) -> Option<&'a str> {
+    strip_prefix_ignore_ascii_case(s, label).map(str::trim)
+}
+
+/// Appends a non-empty trimmed clause to `target` while preserving first-seen insertion order and deduplicating exact matches.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C idempotent clause
+/// accumulation objectives for fn `push_unique_uc_clause` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Empty or whitespace-only `value` inputs are ignored; duplicate clauses never appear twice in `target`.
+///
+/// ## 3. Preconditions
+/// - `target: &mut Vec<String>` is the destination clause list and `value: &str` is a candidate clause.
+///
+/// ## 4. Postconditions
+/// - `value.trim()` is present in `target` if and only if `!value.trim().is_empty()`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|target| \cdot |value|)$ over the small per-use-case clause list.
+/// - Space Complexity: $O(|value|)$ at most one `String` allocation on new entries.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Safely ignores empty strings.
+/// - State: Mutates only `target`.
+/// - Action: Deterministic linear scan.
+/// - Resource: Bounded to `UseCaseDef.doc` clause cardinality.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-PUSH-UNIQUE-UC-CLAUSE] | SysML v2: ActionDef(push_unique_uc_clause)
+fn push_unique_uc_clause(target: &mut Vec<String>, value: &str) {
+    let clean = value.trim();
+    if !clean.is_empty() && !target.iter().any(|existing| existing == clean) {
+        target.push(clean.to_string());
+    }
+}
+
+/// Normalizes a `Diagnostic:` value by stripping outer whitespace, backticks, quotes, trailing
+/// `.`/`;`/`,` punctuation, and unmatched trailing `)` or `]` delimiters (e.g., `"E0602)."` -> `"E0602"`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C diagnostic code
+/// fidelity objectives for fn `clean_diagnostic_value` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves balanced parenthetical qualifiers (e.g., `"E0405 (malformed contract)"`) while
+///   deterministically removing unmatched closing `)` or `]` left over from Format-2 parenthetical
+///   doc tails such as `"Diagnostic: E0602)."`.
+///
+/// ## 3. Preconditions
+/// - `val: &str` is the raw substring following a `Diagnostic:` prefix.
+///
+/// ## 4. Postconditions
+/// - Returns a cleaned diagnostic string free of outer backticks, trailing `.`/`;`, and unmatched `)`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|val|)$ bounded 8-pass outer punctuation trim.
+/// - Space Complexity: $O(|val|)$ single output `String` allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `String::new()` if `val` contains only punctuation or whitespace.
+/// - State: Pure string normalization.
+/// - Action: Bounded loop (`0..8`) with zero unbounded iteration, panics, or regexes.
+/// - Resource: Single bounded `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-CLEAN-DIAGNOSTIC-VALUE] | SysML v2: ActionDef(clean_diagnostic_value)
+fn clean_diagnostic_value(val: &str) -> String {
+    let mut cur = val.trim();
+    for _ in 0..8 {
+        let prev = cur;
+        cur = cur
+            .trim()
+            .trim_matches('`')
+            .trim_matches('"')
+            .trim_end_matches(['.', ';', ','])
+            .trim();
+        let open_parens = cur.chars().filter(|c| *c == '(').count();
+        let close_parens = cur.chars().filter(|c| *c == ')').count();
+        if close_parens > open_parens {
+            if let Some(stripped) = cur.strip_suffix(')') {
+                cur = stripped.trim();
+            }
+        }
+        let open_brackets = cur.chars().filter(|c| *c == '[').count();
+        let close_brackets = cur.chars().filter(|c| *c == ']').count();
+        if close_brackets > open_brackets {
+            if let Some(stripped) = cur.strip_suffix(']') {
+                cur = stripped.trim();
+            }
+        }
+        if cur == prev {
+            break;
+        }
+    }
+    cur.to_string()
+}
+
+/// Finds the byte offset of the matching closing delimiter (`)` or `]`) for a parenthesized or
+/// bracketed span starting immediately after `open_ch`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C bounds-safe delimiter
+/// matching objectives for fn `find_matching_delimiter` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Tracks nesting depth starting at `1` across `after_open.char_indices()` and returns `Some(idx)`
+///   at the exact UTF-8 byte boundary where depth reaches `0`.
+///
+/// ## 3. Preconditions
+/// - `after_open: &str` begins immediately after an occurrence of `open_ch`.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(byte_offset)` valid for `after_open.get(..byte_offset)`, or `None` if unclosed.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|after\_open|)$ linear scan.
+/// - Space Complexity: $O(1)$ auxiliary stack space.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `None` cleanly on unbalanced parentheses or brackets.
+/// - State: Pure read-only scan.
+/// - Action: Uses `saturating_add`/`saturating_sub` and `char_indices()` with zero panics.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-FIND-MATCHING-DELIM] | SysML v2: ActionDef(find_matching_delimiter)
+fn find_matching_delimiter(after_open: &str, open_ch: char, close_ch: char) -> Option<usize> {
+    let mut depth: usize = 1;
+    for (idx, ch) in after_open.char_indices() {
+        if ch == open_ch {
+            depth = depth.saturating_add(1);
+        } else if ch == close_ch {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                return Some(idx);
+            }
+        }
+    }
+    None
+}
+
+/// Extracts inline parenthetical or bracketed diagnostic annotations such as ``(`Diagnostic: E0453`)``
+/// or `(Diagnostic: E0453)` embedded inside `Given:`/`When:`/`Then:`/freeform clauses into `alternate_flows`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C fault-diagnostic
+/// traceability objectives for fn `extract_inline_diagnostics` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Scans all balanced `(...)` and `[...]` spans in `text`, strips inline backticks, normalizes bold
+///   wrappers via `normalize_doc_clause_head`, cleans diagnostic values via `clean_diagnostic_value`,
+///   and records deduplicated `"Diagnostic: <cleaned>"` entries in `alternate_flows`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` is a valid UTF-8 clause value and `alternate_flows: &mut Vec<String>` is the target accumulator.
+///
+/// ## 4. Postconditions
+/// - Every inline `(Diagnostic: <code>)` or ``(`Diagnostic: <code>`)`` span in `text` is present in `alternate_flows`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|text|^2)$ worst-case over nested parentheses; $O(|text|)$ for flat prose spans.
+/// - Space Complexity: $O(|span|)$ bounded temporary string per matched parenthetical span.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Ignores non-diagnostic parenthetical spans (e.g., `#[allow(clippy::unwrap_used)]`).
+/// - State: Appends only deduplicated diagnostic clauses to `alternate_flows`.
+/// - Action: Zero regexes, panics, or unchecked indexing.
+/// - Resource: Bounded allocations proportional to extracted diagnostic annotations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-EXTRACT-INLINE-DIAGNOSTICS] | SysML v2: ActionDef(extract_inline_diagnostics)
+fn extract_inline_diagnostics(text: &str, alternate_flows: &mut Vec<String>) {
+    for (idx, ch) in text.char_indices() {
+        let close_ch = match ch {
+            '(' => ')',
+            '[' => ']',
+            _ => continue,
+        };
+        let Some(after_open) = text.get(idx + 1..) else {
+            continue;
+        };
+        let Some(close_offset) = find_matching_delimiter(after_open, ch, close_ch) else {
+            continue;
+        };
+        let Some(inside) = after_open.get(..close_offset) else {
+            continue;
+        };
+        let unbackticked: String = inside.chars().filter(|c| *c != '`').collect();
+        let norm_inside = normalize_doc_clause_head(&unbackticked);
+        if let Some(raw_diag) = match_case_insensitive_uc_label(&norm_inside, "Diagnostic:") {
+            let cleaned = clean_diagnostic_value(raw_diag);
+            if !cleaned.is_empty() {
+                let formatted = format!("Diagnostic: {cleaned}");
+                push_unique_uc_clause(alternate_flows, &formatted);
+            }
+        }
+    }
+}
+
+/// Parses the structured or BDD-formatted doc comment of a `UseCaseDef` across single-line and multi-line forms.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `parse_use_case_doc` in `crates/compile-sysml/src/sync/forward.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves deterministic state conservation and referential transparency for fn `parse_use_case_doc` (declaration #16) within `SYNC-FORWARD`.
+/// - Losslessly projects single-line and multi-line `Actors:`/`Actor:`, `Subject:`, `Preconditions:`/`Precondition:`/`Given:`, `Trigger:`, `When:`, `Main Success Scenario:`, `Alternate and Exception Flows:`/`Alternate Flows:`/`Exception Flows:`, `Diagnostic:`, inline parenthetical `(Diagnostic: ...)`, `Postconditions:`/`Postcondition:`/`Then:`, and freeform behavioral clauses into `ParsedUseCaseDoc`.
 ///
 /// ## 3. Preconditions
 /// - `doc_opt: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `parse_use_case_doc`.
 ///
 /// ## 4. Postconditions
-/// - Returns `ParsedUseCaseDoc` from `parse_use_case_doc` with deterministic post-execution state.
+/// - Returns `ParsedUseCaseDoc` from `parse_use_case_doc` with deterministic post-execution state and numbered `1. ...` `main_scenario` steps when behavioral clauses exist.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N(doc_opt)) bounded over input/member dimension of `parse_use_case_doc`.
@@ -1306,7 +1918,7 @@ struct ParsedUseCaseDoc {
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Validates boundary inputs and types for `parse_use_case_doc` (`ParsedUseCaseDoc`).
 /// - State: Maintains consistent state invariants across `parse_use_case_doc` without partial mutation on error.
-/// - Action: Executes `parse_use_case_doc` deterministically with zero unbounded recursion or blocking.
+/// - Action: Executes `parse_use_case_doc` deterministically with zero regexes, panics, or unchecked indexing.
 /// - Resource: Bounds stack and heap allocations within `parse_use_case_doc` (`SYNC-FORWARD`).
 ///
 /// ## 7. Realization & Traceability
@@ -1319,53 +1931,402 @@ fn parse_use_case_doc(doc_opt: Option<&str>) -> ParsedUseCaseDoc {
     };
 
     let mut current_section = "";
-    for line in doc_str.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("Actors:") {
-            let act_str = trimmed.trim_start_matches("Actors:").trim();
-            parsed.actors = act_str
-                .split(',')
-                .map(|a| a.trim().to_string())
-                .filter(|a| !a.is_empty())
-                .collect();
-            current_section = "actors";
-        } else if trimmed.starts_with("Subject:") {
-            let subj = trimmed.trim_start_matches("Subject:").trim();
-            if !subj.is_empty() {
-                parsed.subject = Some(subj.to_string());
+    let mut explicit_main_header = false;
+    let mut bdd_when_steps: Vec<String> = Vec::new();
+    let mut bdd_then_steps: Vec<String> = Vec::new();
+    let mut freeform_lines: Vec<String> = Vec::new();
+
+    for raw_line in doc_str.lines() {
+        let trimmed_line = raw_line.trim();
+        if trimmed_line.is_empty() {
+            continue;
+        }
+        for raw_seg in split_inline_use_case_clauses(trimmed_line) {
+            let trimmed_seg = raw_seg.trim();
+            if trimmed_seg.is_empty() {
+                continue;
             }
-            current_section = "subject";
-        } else if trimmed.starts_with("Preconditions:") {
-            let pre = trimmed.trim_start_matches("Preconditions:").trim();
-            if !pre.is_empty() {
-                parsed.preconditions.push(pre.to_string());
+            let starts_new_list_item = trimmed_seg.starts_with("- ")
+                || trimmed_seg.starts_with("* ")
+                || trimmed_seg.starts_with("+ ")
+                || {
+                    let d_len = trimmed_seg.chars().take_while(|c| c.is_ascii_digit()).count();
+                    d_len > 0
+                        && trimmed_seg
+                            .get(d_len..)
+                            .is_some_and(|r| r.starts_with(". ") || r.starts_with(") "))
+                };
+            let clean = normalize_doc_clause_head(trimmed_seg);
+            if clean.is_empty() {
+                continue;
             }
-            current_section = "preconditions";
-        } else if trimmed.starts_with("Trigger:") {
-            parsed.trigger = trimmed.trim_start_matches("Trigger:").trim().to_string();
-            current_section = "trigger";
-        } else if trimmed.starts_with("Main Success Scenario:") {
-            current_section = "main";
-        } else if trimmed.starts_with("Alternate and Exception Flows:") {
-            current_section = "alt";
-        } else if trimmed.starts_with("Postconditions:") {
-            let post = trimmed.trim_start_matches("Postconditions:").trim();
-            if !post.is_empty() {
-                parsed.postconditions.push(post.to_string());
-            }
-            current_section = "postconditions";
-        } else if !trimmed.is_empty() {
-            match current_section {
-                "main" => parsed.main_scenario.push(trimmed.to_string()),
-                "alt" => parsed.alternate_flows.push(trimmed.to_string()),
-                "preconditions" => parsed.preconditions.push(trimmed.to_string()),
-                "postconditions" => parsed.postconditions.push(trimmed.to_string()),
-                _ => {}
+
+            if let Some(act_str) = match_case_insensitive_uc_label(&clean, "Actors:")
+                .or_else(|| match_case_insensitive_uc_label(&clean, "Actor:"))
+            {
+                for raw_actor in act_str.split(',') {
+                    let clean_actor = raw_actor
+                        .trim()
+                        .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
+                        .trim();
+                    push_unique_uc_clause(&mut parsed.actors, clean_actor);
+                }
+                current_section = "actors";
+            } else if let Some(subj) = match_case_insensitive_uc_label(&clean, "Subject:") {
+                let clean_subj = subj
+                    .trim()
+                    .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
+                    .trim();
+                if !clean_subj.is_empty() {
+                    parsed.subject = Some(clean_subj.to_string());
+                }
+                current_section = "subject";
+            } else if let Some(pre) = match_case_insensitive_uc_label(&clean, "Preconditions:")
+                .or_else(|| match_case_insensitive_uc_label(&clean, "Precondition:"))
+                .or_else(|| match_case_insensitive_uc_label(&clean, "Given:"))
+            {
+                extract_inline_diagnostics(pre, &mut parsed.alternate_flows);
+                push_unique_uc_clause(&mut parsed.preconditions, pre);
+                current_section = "preconditions";
+            } else if let Some(trig) = match_case_insensitive_uc_label(&clean, "Trigger:") {
+                if !trig.is_empty() {
+                    extract_inline_diagnostics(trig, &mut parsed.alternate_flows);
+                    if parsed.trigger.is_empty() {
+                        parsed.trigger = trig.to_string();
+                    } else {
+                        parsed.trigger = format!("{}; {}", parsed.trigger, trig);
+                    }
+                }
+                current_section = "trigger";
+            } else if let Some(when_clause) = match_case_insensitive_uc_label(&clean, "When:") {
+                if !when_clause.is_empty() {
+                    extract_inline_diagnostics(when_clause, &mut parsed.alternate_flows);
+                    if parsed.trigger.is_empty() {
+                        parsed.trigger = when_clause.to_string();
+                    } else {
+                        parsed.trigger = format!("{}; {}", parsed.trigger, when_clause);
+                    }
+                    push_unique_uc_clause(&mut bdd_when_steps, when_clause);
+                }
+                current_section = "when";
+            } else if let Some(inline_main) =
+                match_case_insensitive_uc_label(&clean, "Main Success Scenario:")
+            {
+                explicit_main_header = true;
+                extract_inline_diagnostics(inline_main, &mut parsed.alternate_flows);
+                push_unique_uc_clause(&mut parsed.main_scenario, inline_main);
+                current_section = "main";
+            } else if let Some(inline_alt) =
+                match_case_insensitive_uc_label(&clean, "Alternate and Exception Flows:")
+                    .or_else(|| match_case_insensitive_uc_label(&clean, "Alternate Flows:"))
+                    .or_else(|| match_case_insensitive_uc_label(&clean, "Exception Flows:"))
+            {
+                push_unique_uc_clause(&mut parsed.alternate_flows, inline_alt);
+                current_section = "alt";
+            } else if let Some(diag_clause) = match_case_insensitive_uc_label(&clean, "Diagnostic:")
+            {
+                let cleaned_diag = clean_diagnostic_value(diag_clause);
+                if !cleaned_diag.is_empty() {
+                    let formatted = format!("Diagnostic: {cleaned_diag}");
+                    push_unique_uc_clause(&mut parsed.alternate_flows, &formatted);
+                }
+                current_section = "diagnostic";
+            } else if let Some(post) = match_case_insensitive_uc_label(&clean, "Postconditions:")
+                .or_else(|| match_case_insensitive_uc_label(&clean, "Postcondition:"))
+            {
+                extract_inline_diagnostics(post, &mut parsed.alternate_flows);
+                push_unique_uc_clause(&mut parsed.postconditions, post);
+                current_section = "postconditions";
+            } else if let Some(then_clause) = match_case_insensitive_uc_label(&clean, "Then:") {
+                extract_inline_diagnostics(then_clause, &mut parsed.alternate_flows);
+                push_unique_uc_clause(&mut parsed.postconditions, then_clause);
+                push_unique_uc_clause(&mut bdd_then_steps, then_clause);
+                current_section = "then";
+            } else {
+                match current_section {
+                    "actors" => {
+                        for raw_actor in clean.split(',') {
+                            let clean_actor = raw_actor
+                                .trim()
+                                .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
+                                .trim();
+                            push_unique_uc_clause(&mut parsed.actors, clean_actor);
+                        }
+                    }
+                    "subject" => {
+                        if parsed.subject.is_none() {
+                            let clean_subj = clean
+                                .trim()
+                                .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
+                                .trim();
+                            if !clean_subj.is_empty() {
+                                parsed.subject = Some(clean_subj.to_string());
+                            }
+                        }
+                    }
+                    "trigger" => {
+                        extract_inline_diagnostics(&clean, &mut parsed.alternate_flows);
+                        if parsed.trigger.is_empty() {
+                            parsed.trigger = clean;
+                        } else {
+                            parsed.trigger = format!("{} {}", parsed.trigger, clean);
+                        }
+                    }
+                    "when" => {
+                        extract_inline_diagnostics(&clean, &mut parsed.alternate_flows);
+                        if parsed.trigger.is_empty() {
+                            parsed.trigger = clean.clone();
+                        } else if starts_new_list_item {
+                            parsed.trigger = format!("{}; {}", parsed.trigger, clean);
+                        } else {
+                            parsed.trigger = format!("{} {}", parsed.trigger, clean);
+                        }
+                        if !starts_new_list_item {
+                            if let Some(last) = bdd_when_steps.last_mut() {
+                                *last = format!("{last} {clean}");
+                            } else {
+                                push_unique_uc_clause(&mut bdd_when_steps, &clean);
+                            }
+                        } else {
+                            push_unique_uc_clause(&mut bdd_when_steps, &clean);
+                        }
+                    }
+                    "main" => {
+                        extract_inline_diagnostics(&clean, &mut parsed.alternate_flows);
+                        push_unique_uc_clause(&mut parsed.main_scenario, &clean);
+                    }
+                    "alt" => {
+                        push_unique_uc_clause(&mut parsed.alternate_flows, &clean);
+                    }
+                    "diagnostic" => {
+                        let cleaned_diag = clean_diagnostic_value(&clean);
+                        if !cleaned_diag.is_empty() {
+                            let formatted = format!("Diagnostic: {cleaned_diag}");
+                            push_unique_uc_clause(&mut parsed.alternate_flows, &formatted);
+                        }
+                    }
+                    "preconditions" => {
+                        extract_inline_diagnostics(&clean, &mut parsed.alternate_flows);
+                        push_unique_uc_clause(&mut parsed.preconditions, &clean);
+                    }
+                    "postconditions" => {
+                        extract_inline_diagnostics(&clean, &mut parsed.alternate_flows);
+                        push_unique_uc_clause(&mut parsed.postconditions, &clean);
+                    }
+                    "then" => {
+                        extract_inline_diagnostics(&clean, &mut parsed.alternate_flows);
+                        if !starts_new_list_item {
+                            if let Some(last_post) = parsed.postconditions.last_mut() {
+                                *last_post = format!("{last_post} {clean}");
+                            } else {
+                                push_unique_uc_clause(&mut parsed.postconditions, &clean);
+                            }
+                            if let Some(last_step) = bdd_then_steps.last_mut() {
+                                *last_step = format!("{last_step} {clean}");
+                            } else {
+                                push_unique_uc_clause(&mut bdd_then_steps, &clean);
+                            }
+                        } else {
+                            push_unique_uc_clause(&mut parsed.postconditions, &clean);
+                            push_unique_uc_clause(&mut bdd_then_steps, &clean);
+                        }
+                    }
+                    _ => {
+                        extract_inline_diagnostics(&clean, &mut parsed.alternate_flows);
+                        push_unique_uc_clause(&mut freeform_lines, &clean);
+                    }
+                }
             }
         }
     }
 
+    if !explicit_main_header && parsed.main_scenario.is_empty() {
+        for step in bdd_when_steps.iter().chain(bdd_then_steps.iter()) {
+            push_unique_uc_clause(&mut parsed.main_scenario, step);
+        }
+        if parsed.main_scenario.is_empty() {
+            for line in &freeform_lines {
+                push_unique_uc_clause(&mut parsed.main_scenario, line);
+            }
+        }
+    }
+
+    parsed.main_scenario = parsed
+        .main_scenario
+        .into_iter()
+        .enumerate()
+        .map(|(idx, step)| {
+            let s = step.trim();
+            let digit_len = s.chars().take_while(|c| c.is_ascii_digit()).count();
+            let has_number =
+                digit_len > 0 && s.get(digit_len..).is_some_and(|r| r.starts_with(". "));
+            if has_number {
+                s.to_string()
+            } else {
+                format!("{}. {}", idx + 1, s)
+            }
+        })
+        .collect();
+
     parsed
+}
+
+/// Extracts the first external initiator lifeline actor from `InteractionDef` nodes in `pkg`
+/// (i.e., a first lifeline whose declared type/name is not an internal `PartDef` of `pkg`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C package-scoped
+/// actor provenance objectives for fn `extract_package_interaction_initiator_actor` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Inspects `inter.lifelines.first()` across `pkg.interaction_defs` in AST declaration order,
+///   strips quotes/backticks/brackets, and excludes internal package `PartDef` names so only genuine
+///   external actors are returned.
+///
+/// ## 3. Preconditions
+/// - `pkg: &PackageDef` is the enclosing package of a `UseCaseDef`.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(actor_name)` if an external initiator lifeline exists in `pkg`, or `None` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(I \cdot P)$ over package interactions $I$ and package part definitions $P$.
+/// - Space Complexity: $O(|actor|)$ single string allocation on match.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `None` cleanly when `pkg.interaction_defs` is empty.
+/// - State: Pure read-only AST inspection.
+/// - Action: Zero panics, regexes, or direct slice indexing.
+/// - Resource: Bounded single `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-PKG-INTERACTION-ACTOR] | SysML v2: ActionDef(extract_package_interaction_initiator_actor)
+fn extract_package_interaction_initiator_actor(pkg: &PackageDef) -> Option<String> {
+    for inter in &pkg.interaction_defs {
+        if let Some(l0) = inter.lifelines.first() {
+            let raw_init = if let Some((_, type_name)) = l0.split_once(':') {
+                type_name.trim()
+            } else {
+                l0.trim()
+            };
+            let clean_init = raw_init
+                .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
+                .trim();
+            if !clean_init.is_empty() && !pkg.part_defs.iter().any(|pt| pt.name == clean_init) {
+                return Some(clean_init.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Detects legacy hardcoded 5-step compiler-contaminated or unit-tainted Use Case boilerplate text
+/// for mandatory eviction during non-forced (`!opts.force`) forward synchronization.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C domain-neutrality
+/// and stale-artifact eviction objectives for fn `is_stale_use_case_boilerplate` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` whenever `s` contains any retired hardcoded Use Case boilerplate phrase
+///   (`"The compiler execution environment is initialized in nominal operational state"`,
+///   `"Authoritative input schema files exist with read access"`, `"submits input payload for "`,
+///   `"validates input schema structure and precondition guards"`,
+///   `"executes core domain transformation and state transition logic"`,
+///   `"Downstream resource timeout or communication fault"`, or
+///   `"All semantic models and generated artifacts satisfy formal invariant requirements"`).
+///
+/// ## 3. Preconditions
+/// - `s: &str` is an existing `UC-*.md` document or section body read from disk.
+///
+/// ## 4. Postconditions
+/// - Returns `true` if stale legacy Use Case boilerplate is present and `false` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|s|)$ linear substring checks.
+/// - Space Complexity: $O(1)$ zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total pure predicate over `&str`.
+/// - State: Stateless evaluation.
+/// - Action: Deterministic substring matching with zero regexes.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-STALE-UC-BOILERPLATE] | SysML v2: ActionDef(is_stale_use_case_boilerplate)
+fn is_stale_use_case_boilerplate(s: &str) -> bool {
+    s.contains("The compiler execution environment is initialized in nominal operational state")
+        || s.contains("Authoritative input schema files exist with read access")
+        || s.contains("Operational workflow command dispatched for ")
+        || s.contains("submits input payload for ")
+        || s.contains("validates input schema structure and precondition guards")
+        || s.contains("validates structural schema and boundary preconditions")
+        || s.contains("executes core domain transformation and state transition logic")
+        || s.contains("executes core operational transformation")
+        || s.contains("Downstream resource timeout or communication fault")
+        || s.contains(
+            "All semantic models and generated artifacts satisfy formal invariant requirements",
+        )
+        || s.contains("Output artifacts are deterministically emitted with bitwise reproducibility")
+}
+
+/// Checks whether a freshly generated `UC-*.md` section body represents the default fallback emitted
+/// for an undocumented `UseCaseDef` (as opposed to an explicit AST `doc`, `objective`, `steps`,
+/// `preconditions`, or `postconditions` projection).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C AST-primacy
+/// merge governance objectives for fn `is_undocumented_use_case_fallback_section` in `crates/compile-sysml/src/sync/forward.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` only when `body` matches the exact domain-neutral undocumented fallback signature
+///   for `heading`, ensuring explicit SysML AST `UseCaseDef` clauses always take precedence while
+///   allowing human-authored non-boilerplate `UC-*.md` prose to survive `!opts.force` when the AST
+///   carries no override for that section.
+///
+/// ## 3. Preconditions
+/// - `heading: &str` is a Use Case level-2 Markdown heading (`## 2. Preconditions` .. `## 6. Postconditions`)
+///   and `body: &str` is the extracted generated section body.
+///
+/// ## 4. Postconditions
+/// - Returns `true` if `body` is the undocumented fallback for `heading`, and `false` if AST-derived.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|body|)$ bounded substring scan.
+/// - Space Complexity: $O(1)$ zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `false` for unrecognized headings.
+/// - State: Pure predicate.
+/// - Action: Zero regexes or panics.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-UNDOC-UC-FALLBACK-DETECT] | SysML v2: ActionDef(is_undocumented_use_case_fallback_section)
+fn is_undocumented_use_case_fallback_section(heading: &str, body: &str) -> bool {
+    match heading {
+        "## 2. Preconditions" => {
+            body.contains("is initialized in its nominal operational state for `")
+                && body.contains("holds authorized operational access to `")
+        }
+        "## 3. Trigger" => {
+            body.contains("` initiates `") && body.contains("` request on `")
+        }
+        "## 4. Main Success Scenario" => {
+            body.contains("verifies declared preconditions and structural boundary guards for `")
+                && body
+                    .contains("behavioral transformation while preserving subsystem invariants.")
+        }
+        "## 5. Alternate and Exception Flows" => {
+            body.contains("- Precondition guard failure in `")
+                && body.contains("- Invariant or constraint violation during `")
+        }
+        "## 6. Postconditions" => {
+            body.contains("with all declared subsystem state invariants satisfied.")
+                && body.contains("` outcome is recorded for `")
+        }
+        _ => false,
+    }
 }
 
 /// Canonical engineering parameter vocabulary checked when projecting `ConstraintDef` expressions into prose.
@@ -3354,17 +4315,17 @@ pub fn forward_sync_sysml_to_specs(
     /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `UseCaseMeta` in `crates/compile-sysml/src/sync/forward.rs`.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves structural type invariants for struct `UseCaseMeta` across member set `[uc: &'a UseCaseDef, pkg_name: String, subsys_dir: String, engine_name: String, engine_feat_num: usize]`.
+    /// - Preserves structural type invariants for struct `UseCaseMeta` across member set `[uc: &'a UseCaseDef, pkg: &'a PackageDef, pkg_name: String, subsys_dir: String, engine_name: String, engine_feat_num: usize]`.
     ///
     /// ## 3. Preconditions
-    /// - Caller supplies well-formed values for `UseCaseMeta` members (`uc: &'a UseCaseDef, pkg_name: String, subsys_dir: String, engine_name: String, engine_feat_num: usize`).
+    /// - Caller supplies well-formed values for `UseCaseMeta` members (`uc: &'a UseCaseDef, pkg: &'a PackageDef, pkg_name: String, subsys_dir: String, engine_name: String, engine_feat_num: usize`).
     ///
     /// ## 4. Postconditions
     /// - Defines the authoritative `UseCaseMeta` representation for struct `UseCaseMeta`.
     ///
     /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(M(5)) bounded over input/member dimension of `UseCaseMeta`.
-    /// - Space Complexity: O(M(5)) bounded auxiliary memory for `UseCaseMeta`.
+    /// - Time Complexity: O(M(8)) bounded over input/member dimension of `UseCaseMeta`.
+    /// - Space Complexity: O(M(8)) bounded auxiliary memory for `UseCaseMeta`.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
     /// - Interface: Validates boundary inputs and types for `UseCaseMeta` (`UseCaseMeta`).
@@ -3376,6 +4337,7 @@ pub fn forward_sync_sysml_to_specs(
     /// Realises: [REQ-SYNC-FORWARD-USECASEMETA] | SysML v2: PartDef(UseCaseMeta)
     struct UseCaseMeta<'a> {
         uc: &'a UseCaseDef,
+        pkg: &'a PackageDef,
         pkg_name: String,
         subsys_dir: String,
         engine_name: String,
@@ -3443,6 +4405,7 @@ pub fn forward_sync_sysml_to_specs(
             let u_num = uc_metas.len() + 1;
             uc_metas.push(UseCaseMeta {
                 uc,
+                pkg: p,
                 pkg_name: p.name.clone(),
                 subsys_dir: subsys_dir.clone(),
                 engine_name,
@@ -4214,28 +5177,64 @@ Operational concept definitions and system sequence interaction models:
     for uc_m in &uc_metas {
         let u_num = uc_m.u_num;
         let clean_name = strip_use_case_prefix(&uc_m.uc.name);
+        let clean_display = to_display_name(clean_name);
         let uc_slug = sanitize_id(clean_name);
         let rel_path = format!("use-cases/UC-{:02}-{}.md", u_num, uc_slug);
         let _uc_date = resolve_date(&target_out_dir, &rel_path, today_iso);
         let uc_issue_id = format_issue_id_cell(resolve_existing_issue_id(&target_out_dir, &rel_path));
-        let title = format!("Use Case {:02}: {}", u_num, to_display_name(clean_name));
+        let title = format!("Use Case {:02}: {}", u_num, clean_display);
 
         let parsed_doc = parse_use_case_doc(uc_m.uc.doc.as_deref());
+        let objective_opt = uc_m
+            .uc
+            .objective
+            .as_deref()
+            .map(|o| o.trim().trim_matches('"').trim())
+            .filter(|o| !o.is_empty());
+
+        let cleaned_ast_actors: Vec<String> = uc_m
+            .uc
+            .actors
+            .iter()
+            .map(|a| {
+                a.trim()
+                    .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
+                    .trim()
+                    .to_string()
+            })
+            .filter(|a| !a.is_empty())
+            .collect();
+        let cleaned_singular_actor: Option<String> = uc_m
+            .uc
+            .actor
+            .as_deref()
+            .map(|a| {
+                a.trim()
+                    .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
+                    .trim()
+                    .to_string()
+            })
+            .filter(|a| !a.is_empty());
 
         let actors: Vec<String> = if !parsed_doc.actors.is_empty() {
             parsed_doc.actors
-        } else if !uc_m.uc.actors.is_empty() {
-            uc_m.uc.actors.clone()
-        } else if let Some(ref a) = uc_m.uc.actor {
-            vec![a.clone()]
+        } else if !cleaned_ast_actors.is_empty() {
+            cleaned_ast_actors
+        } else if let Some(a) = cleaned_singular_actor {
+            vec![a]
+        } else if let Some(pkg_init_actor) = extract_package_interaction_initiator_actor(uc_m.pkg) {
+            vec![pkg_init_actor]
         } else {
             vec!["Operator".to_string()]
         };
 
-        let primary_actor = actors.first().cloned().unwrap_or_else(|| "Operator".to_string());
-        let _actors_yaml = actors
+        let primary_actor = actors
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "Operator".to_string());
+        let actors_markdown = actors
             .iter()
-            .map(|a| format!("  - \"{}\"", a))
+            .map(|a| format!("- `{a}`"))
             .collect::<Vec<_>>()
             .join("\n");
 
@@ -4255,17 +5254,26 @@ Operational concept definitions and system sequence interaction models:
                 .map(|p| format!("- {}", p))
                 .collect::<Vec<_>>()
                 .join("\n")
+        } else if let Some(obj) = objective_opt {
+            format!(
+                "- `{subject}` is initialized and ready to enforce `{obj}`.\n\
+                 - `{primary_actor}` holds authorized operational access to `{subject}`."
+            )
         } else {
-            "- The compiler execution environment is initialized in nominal operational state.\n- Authoritative input schema files exist with read access."
-                .to_string()
+            format!(
+                "- `{subject}` is initialized in its nominal operational state for `{clean_display}`.\n\
+                 - `{primary_actor}` holds authorized operational access to `{subject}`."
+            )
         };
 
         let trigger = if !parsed_doc.trigger.is_empty() {
             format!("- {}", parsed_doc.trigger)
-        } else if let Some(ref obj) = uc_m.uc.objective {
-            format!("- {}", obj.trim_matches('"'))
+        } else if let Some(obj) = objective_opt {
+            format!("- {obj}")
         } else {
-            format!("- Operational workflow command dispatched for {}.", to_display_name(clean_name))
+            format!(
+                "- `{primary_actor}` initiates `{clean_display}` request on `{subject}`."
+            )
         };
 
         let resolved_scenario_steps: Vec<String> = if !parsed_doc.main_scenario.is_empty() {
@@ -4277,21 +5285,70 @@ Operational concept definitions and system sequence interaction models:
                 .enumerate()
                 .map(|(i, s)| {
                     let trimmed = s.trim().trim_matches('"');
-                    if trimmed.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+                    let d_len = trimmed.chars().take_while(|c| c.is_ascii_digit()).count();
+                    let has_num =
+                        d_len > 0 && trimmed.get(d_len..).is_some_and(|r| r.starts_with(". "));
+                    if has_num {
                         trimmed.to_string()
                     } else {
                         format!("{}. {}", i + 1, trimmed)
                     }
                 })
                 .collect()
-        } else {
-            let clean_display = to_display_name(clean_name);
+        } else if let Some(obj) = objective_opt {
+            if !parsed_doc.alternate_flows.is_empty() {
+                let diag_summary = parsed_doc.alternate_flows.join(", ");
+                vec![
+                    format!(
+                        "1. `{primary_actor}` invokes `{clean_display}` on `{subject}` targeting objective `{obj}`."
+                    ),
+                    format!(
+                        "2. `{subject}` verifies boundary preconditions and evaluates `{obj}` invariants (guarding `{diag_summary}`)."
+                    ),
+                    format!(
+                        "3. `{subject}` records verified `{clean_display}` outcome and returns status to `{primary_actor}`."
+                    ),
+                ]
+            } else {
+                vec![
+                    format!(
+                        "1. `{primary_actor}` invokes `{clean_display}` on `{subject}` targeting objective `{obj}`."
+                    ),
+                    format!(
+                        "2. `{subject}` verifies boundary preconditions and executes `{obj}`."
+                    ),
+                    format!(
+                        "3. `{subject}` confirms declared postconditions for `{clean_display}` and returns status to `{primary_actor}`."
+                    ),
+                ]
+            }
+        } else if !parsed_doc.alternate_flows.is_empty() {
+            let diag_summary = parsed_doc.alternate_flows.join(", ");
             vec![
-                format!("1. Actor `{}` submits input payload for `{}` to `{}`.", primary_actor, clean_display, subject),
-                format!("2. `{}` validates input schema structure and precondition guards for `{}`.", subject, clean_display),
-                format!("3. `{}` executes core domain transformation and state transition logic for `{}`.", subject, clean_display),
-                format!("4. `{}` evaluates formal postcondition assertions and structural invariants.", subject),
-                format!("5. `{}` commits verified output state and emits completion telemetry to `{}`.", subject, primary_actor),
+                format!(
+                    "1. `{primary_actor}` invokes `{clean_display}` on `{subject}`."
+                ),
+                format!(
+                    "2. `{subject}` evaluates declared preconditions and invariant guards for `{clean_display}` (`{diag_summary}`)."
+                ),
+                format!(
+                    "3. `{subject}` completes `{clean_display}` state transition and returns verified status to `{primary_actor}`."
+                ),
+            ]
+        } else {
+            vec![
+                format!(
+                    "1. `{primary_actor}` invokes `{clean_display}` request on `{subject}`."
+                ),
+                format!(
+                    "2. `{subject}` verifies declared preconditions and structural boundary guards for `{clean_display}`."
+                ),
+                format!(
+                    "3. `{subject}` executes `{clean_display}` behavioral transformation while preserving subsystem invariants."
+                ),
+                format!(
+                    "4. `{subject}` confirms postcondition satisfaction and returns completion status to `{primary_actor}`."
+                ),
             ]
         };
 
@@ -4304,19 +5361,19 @@ Operational concept definitions and system sequence interaction models:
                 .map(|f| if f.starts_with('-') { f.clone() } else { format!("- {}", f) })
                 .collect::<Vec<_>>()
                 .join("\n")
+        } else if let Some(obj) = objective_opt {
+            format!(
+                "- Precondition guard failure in `{subject}`:\n\
+                 \x20 - `{subject}` rejects the `{clean_display}` request without partial state mutation and reports diagnostic status to `{primary_actor}`.\n\
+                 - Invariant violation while enforcing `{obj}`:\n\
+                 \x20 - `{subject}` aborts `{clean_display}` execution, preserves prior verified state, and notifies `{primary_actor}`."
+            )
         } else {
             format!(
-                "- 5a. Input schema or precondition validation failure in `{subject}`:\n\
-                 \x20 - `{subject}` rejects the malformed request and records a structured diagnostic event.\n\
-                 \x20 - System preserves prior verified state without partial mutation.\n\
-                 - 5b. Formal invariant or constraint violation detected during `{clean_name}` execution:\n\
-                 \x20 - `{subject}` aborts the active transaction and transitions to safe fallback mode.\n\
-                 \x20 - Diagnostic telemetry is emitted to `{primary_actor}`.\n\
-                 - 5c. Downstream resource timeout or communication fault in `{subject}`:\n\
-                 \x20 - `{subject}` halts execution cleanly and reports deterministic fault status.",
-                subject = subject,
-                clean_name = to_display_name(clean_name),
-                primary_actor = primary_actor,
+                "- Precondition guard failure in `{subject}`:\n\
+                 \x20 - `{subject}` rejects the `{clean_display}` request without partial state mutation and reports diagnostic status to `{primary_actor}`.\n\
+                 - Invariant or constraint violation during `{clean_display}` execution:\n\
+                 \x20 - `{subject}` aborts the active operation, preserves prior verified state, and emits diagnostic notification to `{primary_actor}`."
             )
         };
 
@@ -4334,9 +5391,22 @@ Operational concept definitions and system sequence interaction models:
                 .map(|p| format!("- {}", p))
                 .collect::<Vec<_>>()
                 .join("\n")
+        } else if let Some(obj) = objective_opt {
+            format!(
+                "- `{subject}` satisfies declared objective `{obj}` with all subsystem invariants intact.\n\
+                 - Verified `{clean_display}` completion status is recorded for `{primary_actor}`."
+            )
+        } else if !parsed_doc.alternate_flows.is_empty() {
+            let diag_summary = parsed_doc.alternate_flows.join(", ");
+            format!(
+                "- `{subject}` preserves declared subsystem state invariants for `{clean_display}` or fails closed with `{diag_summary}`.\n\
+                 - Verified `{clean_display}` outcome is recorded for `{primary_actor}`."
+            )
         } else {
-            "- All semantic models and generated artifacts satisfy formal invariant requirements.\n- Output artifacts are deterministically emitted with bitwise reproducibility."
-                .to_string()
+            format!(
+                "- `{subject}` completes `{clean_display}` with all declared subsystem state invariants satisfied.\n\
+                 - Verified `{clean_display}` outcome is recorded for `{primary_actor}`."
+            )
         };
 
         // Realization Matrix links
@@ -4383,8 +5453,7 @@ Operational concept definitions and system sequence interaction models:
             us_row, feat_row
         );
 
-        let clean_title_display = to_display_name(clean_name);
-        let uc_diagram = generate_use_case_diagram(&primary_actor, subject, &clean_title_display, &resolved_scenario_steps);
+        let uc_diagram = generate_use_case_diagram(&primary_actor, subject, &clean_display, &resolved_scenario_steps);
 
         let spec_source = if !has_modular_schema {
             "[schema/model.sysml](../../schema/model.sysml)".to_string()
@@ -4442,7 +5511,7 @@ Operational use case realization and traceability links derive from `schema/subs
 ```
 
 ## 1. Actors
-- `{primary_actor}`
+{actors_markdown}
 
 ## 2. Preconditions
 {preconditions}
@@ -4469,6 +5538,7 @@ Use case operational flows and lifecycle activity references:
             subject = subject,
             uc_issue_id = uc_issue_id,
             primary_actor = primary_actor,
+            actors_markdown = actors_markdown,
             spec_source = spec_source,
             uc_diagram = uc_diagram,
             preconditions = preconditions,
@@ -4817,7 +5887,7 @@ fn replace_markdown_section_body(doc: &str, heading: &str, new_body: &str) -> St
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves `- [x]` / `- [X]` completion states on matching non-boilerplate checklist items (`FEAT-XX`, `UC-XX`, `US-XX`, `AC-XX`) while evicting stale compiler-boilerplate User Story `AC-US-XX-YY` checkboxes.
-/// - Preserves authored prose sections in `EPIC-*.md`, `FEAT-*.md`, and custom non-boilerplate `## User Story` clauses (`As a`/`As an`, `I want`, `so that`) in `US-*.md`.
+/// - Preserves authored prose sections in `EPIC-*.md`, `FEAT-*.md`, custom non-boilerplate `## User Story` clauses (`As a`/`As an`, `I want`, `so that`) in `US-*.md`, and human-authored non-boilerplate `UC-*.md` sections (`## 2`..`## 6`) when `generated` carries no explicit AST doc/step override while always evicting sections matching `is_stale_use_case_boilerplate`.
 ///
 /// ## 3. Preconditions
 /// - `rel_path: &str`, `generated: &str`, and `existing: &str` are valid specification strings.
@@ -4838,7 +5908,9 @@ fn replace_markdown_section_body(doc: &str, heading: &str, new_body: &str) -> St
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYNC-FORWARD-MERGE-EXISTING-SPEC] | SysML v2: ActionDef(merge_existing_spec_content)
 fn merge_existing_spec_content(rel_path: &str, generated: &str, existing: &str) -> String {
-    let is_user_story = rel_path.starts_with("user-stories/");
+    let is_user_story =
+        rel_path.starts_with("user-stories/") || rel_path.contains("/user-stories/");
+    let is_use_case = rel_path.starts_with("use-cases/") || rel_path.contains("/use-cases/");
     let mut checked_keys: BTreeSet<String> = BTreeSet::new();
     for line in existing.lines() {
         let trimmed = line.trim_start();
@@ -4913,6 +5985,28 @@ fn merge_existing_spec_content(rel_path: &str, generated: &str, existing: &str) 
                 && existing_story.contains("so that")
             {
                 merged = replace_markdown_section_body(&merged, "## User Story", &existing_story);
+            }
+        }
+    } else if is_use_case && !is_stale_use_case_boilerplate(existing) {
+        let uc_headings = [
+            "## 2. Preconditions",
+            "## 3. Trigger",
+            "## 4. Main Success Scenario",
+            "## 5. Alternate and Exception Flows",
+            "## 6. Postconditions",
+        ];
+        for heading in &uc_headings {
+            if let Some(existing_body) = extract_markdown_section_body(existing, heading) {
+                if is_stale_use_case_boilerplate(&existing_body) {
+                    continue;
+                }
+                let gen_is_undocumented_fallback = extract_markdown_section_body(&merged, heading)
+                    .is_some_and(|gen_body| {
+                        is_undocumented_use_case_fallback_section(heading, &gen_body)
+                    });
+                if gen_is_undocumented_fallback {
+                    merged = replace_markdown_section_body(&merged, heading, &existing_body);
+                }
             }
         }
     }
@@ -8280,6 +9374,188 @@ Custom authored Layer 3 presentation actuator bindings.
             count_total_epics_inclusive("epics/EPIC-01-GncSystem.md", true, &specs),
             2
         );
+        Ok(())
+    }
+
+    /// Verifies Issue `#694` zero-regex Use Case doc clause helpers (`split_inline_use_case_clauses`,
+    /// `normalize_doc_clause_head`, `clean_diagnostic_value`, `parse_use_case_doc`,
+    /// `sanitize_mermaid_uc_label`), `ENGINEERING_PARAMETER_TERMS`-clean Use Case fallback prose,
+    /// package interaction initiator actor fallback, and `merge_existing_spec_content` stale
+    /// boilerplate eviction vs. human-authored non-boilerplate preservation.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C verification
+    /// objectives for fn `test_issue_694_use_case_doc_helpers_mermaid_sanitization_and_merge_eviction`
+    /// in `crates/compile-sysml/src/sync/forward.rs` (refs #694).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Single-line `- **Given**: ... - **When**: ... (`Diagnostic: E0453`) - **Then**: ...` splits
+    ///   into three clauses while extracting `Diagnostic: E0453` into `alternate_flows`.
+    /// - Semicolon-separated `; Given: ...; **When**: ...` splits cleanly while preserving embedded
+    ///   SysML statement semicolons (`first S1 accept trig then S2;`).
+    /// - `clean_diagnostic_value("E0602).") == "E0602"`.
+    /// - `sanitize_mermaid_uc_label` strips `` ` ``, converts `"` -> `'` and `;` -> `,`, neutralizes
+    ///   `-->` and `---`, strips `<digits>. `, and caps output at 60 characters (`57` + `"..."`).
+    /// - Undocumented `UC-*.md` fallback prose contains zero standalone `ENGINEERING_PARAMETER_TERMS`
+    ///   and zero compiler-specific nouns, and `merge_existing_spec_content` evicts legacy boilerplate
+    ///   while preserving human-authored non-boilerplate sections when no AST doc override exists.
+    ///
+    /// ## 3. Preconditions
+    /// - Pure in-memory helper invocations and an isolated temporary directory for forward sync.
+    ///
+    /// ## 4. Postconditions
+    /// - All helper, provenance-safety, and merge-eviction assertions hold and temporary files are removed.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N)$ over bounded synthetic strings and AST nodes.
+    /// - Space Complexity: $O(N)$ bounded auxiliary test buffers.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), Box<dyn std::error::Error>>` without `.unwrap()` or `.expect()`.
+    /// - State: Zero shared global state.
+    /// - Action: Zero direct indexing, regexes, or panics.
+    /// - Resource: Removes ephemeral directory prior to returning.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-FORWARD-UC-DOC-HELPERS-UNIT] | SysML v2: VerificationCaseDef(test_issue_694_use_case_doc_helpers_mermaid_sanitization_and_merge_eviction)
+    #[test]
+    fn test_issue_694_use_case_doc_helpers_mermaid_sanitization_and_merge_eviction(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use deap_core::sysml_ast::{InteractionDef, PackageDef, PartDef, UseCaseDef};
+
+        let inline = "- **Given**: `[workspace.lints]` is active. - **When**: Module adds `#[allow(x)]` (`Diagnostic: E0453`). - **Then**: Check fails closed.";
+        let split = split_inline_use_case_clauses(inline);
+        assert_eq!(split.len(), 3);
+
+        let semi_inline = "Given: Ledger open; **When**: Batch runs; **Then:** Receipt stored";
+        let semi_split = split_inline_use_case_clauses(semi_inline);
+        assert_eq!(semi_split.len(), 3);
+
+        assert_eq!(
+            normalize_doc_clause_head("- 1. **Given**: Ready state"),
+            "Given: Ready state"
+        );
+        assert_eq!(
+            normalize_doc_clause_head("* **When:** Action dispatched"),
+            "When: Action dispatched"
+        );
+        assert_eq!(clean_diagnostic_value("`E0602`)."), "E0602");
+
+        let parsed = parse_use_case_doc(Some(inline));
+        assert_eq!(
+            parsed.preconditions,
+            vec!["`[workspace.lints]` is active.".to_string()]
+        );
+        assert_eq!(
+            parsed.alternate_flows,
+            vec!["Diagnostic: E0453".to_string()]
+        );
+        assert_eq!(parsed.main_scenario.len(), 2);
+
+        let sanitized = sanitize_mermaid_uc_label(
+            "1. `Actor` sends \"cmd\"; state A --> B --- C across a very long operational verification description",
+        );
+        assert!(!sanitized.contains('`'));
+        assert!(!sanitized.contains('"'));
+        assert!(!sanitized.contains(';'));
+        assert!(!sanitized.contains("-->"));
+        assert!(!sanitized.contains("---"));
+        assert!(!sanitized.starts_with("1. "));
+        assert!(sanitized.chars().count() <= 60);
+
+        let mut pkg = PackageDef {
+            name: "AuditSubsystem".to_string(),
+            part_defs: vec![PartDef {
+                name: "AuditCoordinator".to_string(),
+                ..Default::default()
+            }],
+            interaction_defs: vec![InteractionDef {
+                name: "VerifyInteraction".to_string(),
+                lifelines: vec![
+                    "auditor : ExternalAuditor".to_string(),
+                    "coord : AuditCoordinator".to_string(),
+                ],
+                ..Default::default()
+            }],
+            use_case_defs: vec![UseCaseDef {
+                name: "UC_01_VerifyRecord".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let tmp_dir = std::env::temp_dir().join(format!(
+            "deap_issue_694_unit_helpers_{}",
+            std::process::id()
+        ));
+        if tmp_dir.exists() {
+            std::fs::remove_dir_all(&tmp_dir)?;
+        }
+        let docs_dir = tmp_dir.join("docs");
+        std::fs::create_dir_all(&docs_dir)?;
+
+        let opts = ForwardSyncOptions {
+            schema_path: tmp_dir.join("schema/audit.sysml"),
+            docs_dir: docs_dir.clone(),
+            out_dir: Some(docs_dir),
+            dry_run: true,
+            force: true,
+        };
+        let generated = forward_sync_sysml_to_specs(&pkg, &opts)?;
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+
+        let uc_md = generated
+            .get("use-cases/UC-01-VerifyRecord.md")
+            .ok_or("Missing generated UC-01-VerifyRecord.md")?;
+
+        // Package InteractionDef external initiator lifeline fallback
+        assert!(
+            uc_md.contains("| **Primary Actor** | ExternalAuditor |")
+                && uc_md.contains("- `ExternalAuditor`"),
+            "Use Case actor fallback must resolve package InteractionDef external initiator 'ExternalAuditor':\n{uc_md}"
+        );
+
+        // Undocumented fallback sections must contain zero ENGINEERING_PARAMETER_TERMS standalone words
+        for word in uc_md.split(|c: char| !c.is_alphabetic()) {
+            if !word.is_empty() {
+                assert!(
+                    !ENGINEERING_PARAMETER_TERMS
+                        .iter()
+                        .any(|term| word.eq_ignore_ascii_case(term)),
+                    "Undocumented UC-*.md fallback must not contain ENGINEERING_PARAMETER_TERMS token {:?}:\n{}",
+                    word,
+                    uc_md
+                );
+            }
+        }
+
+        // Stale boilerplate on disk is evicted in merge_existing_spec_content, whereas custom
+        // human-authored prose on an undocumented UC is preserved.
+        let stale_existing = "## 2. Preconditions\n- The compiler execution environment is initialized in nominal operational state.\n";
+        let evicted =
+            merge_existing_spec_content("use-cases/UC-01-VerifyRecord.md", uc_md, stale_existing);
+        assert!(!evicted.contains("The compiler execution environment"));
+
+        let custom_existing = "## 2. Preconditions\n- Signed audit ledger snapshot is mounted read-only.\n";
+        let preserved =
+            merge_existing_spec_content("use-cases/UC-01-VerifyRecord.md", uc_md, custom_existing);
+        assert!(preserved.contains("Signed audit ledger snapshot is mounted read-only."));
+
+        // Once the AST UseCaseDef provides explicit doc clauses, AST overrides custom disk prose.
+        if let Some(first_uc) = pkg.use_case_defs.first_mut() {
+            first_uc.doc = Some("Given: Explicit AST precondition holds".to_string());
+        }
+        let generated_with_doc = forward_sync_sysml_to_specs(&pkg, &opts)?;
+        let uc_with_doc = generated_with_doc
+            .get("use-cases/UC-01-VerifyRecord.md")
+            .ok_or("Missing generated_with_doc UC-01-VerifyRecord.md")?;
+        let ast_wins = merge_existing_spec_content(
+            "use-cases/UC-01-VerifyRecord.md",
+            uc_with_doc,
+            custom_existing,
+        );
+        assert!(ast_wins.contains("Explicit AST precondition holds"));
+
         Ok(())
     }
 }

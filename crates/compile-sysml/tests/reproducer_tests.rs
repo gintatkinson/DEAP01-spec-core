@@ -2555,3 +2555,553 @@ fn test_issue_696_forward_sync_non_forced_evicts_stale_user_story_boilerplate_pr
 
     Ok(())
 }
+
+/// Extracts the body of a level-2 Markdown heading (`## ...`) up to the next `\n## ` boundary.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C deterministic
+/// specification verification objectives for fn `extract_markdown_h2_section` in
+/// `crates/compile-sysml/tests/reproducer_tests.rs` (refs #694).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Bounds-Free Structural Slice Invariant: Partitions `markdown` exclusively via UTF-8 safe
+///   `str::split_once` delimiters without direct byte-range indexing or regular expressions,
+///   returning the exact substring bounded by `heading` and the subsequent level-2 heading.
+///
+/// ## 3. Preconditions
+/// - `markdown` is a valid UTF-8 Markdown specification buffer and `heading` is a level-2 heading
+///   prefix such as `"## 2. Preconditions"`.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(body)` containing all content under `heading` prior to the next `\n## ` heading,
+///   or `Err(diagnostic)` if `heading` is absent from `markdown`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ where $L$ is the byte length of `markdown`.
+/// - Space Complexity: $O(1)$ borrowed slice on success; $O(L)$ only when formatting an error message.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Propagates missing-heading diagnostics explicitly via `Result<&'a str, String>`.
+/// - State: Pure read-only borrow with zero mutable state.
+/// - Action: Executes with zero `.unwrap()`, `.expect()`, `panic!`, `regex`, or direct slice indexing.
+/// - Resource: Zero heap allocation on the nominal `Ok` path.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-UC-H2-SECTION-SLICE] | SysML v2: VerificationCaseDef(extract_markdown_h2_section)
+fn extract_markdown_h2_section<'a>(markdown: &'a str, heading: &str) -> Result<&'a str, String> {
+    let (_before_heading, after_heading) = markdown
+        .split_once(heading)
+        .ok_or_else(|| format!("Missing heading {:?} in Markdown:\n{}", heading, markdown))?;
+    if let Some((section_body, _remaining_sections)) = after_heading.split_once("\n## ") {
+        Ok(section_body)
+    } else {
+        Ok(after_heading)
+    }
+}
+
+/// Verifies that a Markdown document contains at least one closed ```` ```mermaid ```` diagram fence
+/// and that every Mermaid block contains zero backticks (`` ` ``) and zero semicolons (`;`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C diagram hygiene
+/// verification objectives for fn `assert_mermaid_blocks_free_of_backticks_and_semicolons` in
+/// `crates/compile-sysml/tests/reproducer_tests.rs` (refs #694).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Mermaid Lexical Purity Invariant: Every fenced ```` ```mermaid ... ``` ```` block $B$ inside
+///   `markdown` is properly closed and satisfies $\text{'`'} \notin B \land \text{';'} \notin B$.
+///
+/// ## 3. Preconditions
+/// - `doc_name` identifies the specification artifact under verification and `markdown` holds its
+///   emitted UTF-8 content.
+///
+/// ## 4. Postconditions
+/// - Confirms at least one closed ```` ```mermaid ```` block exists and asserts zero backticks and
+///   zero semicolons inside every Mermaid block.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ single linear scan over `markdown` of byte length $L$.
+/// - Space Complexity: $O(1)$ auxiliary stack space over borrowed slices.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `Err(String)` if no ```` ```mermaid ```` block exists or if a fence is unclosed.
+/// - State: Pure read-only inspection with zero global state.
+/// - Action: Executes with zero `.unwrap()`, `.expect()`, `regex`, or direct slice indexing.
+/// - Resource: Zero heap allocation on valid Mermaid blocks.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-UC-MERMAID-TOKEN-SANITIZATION] | SysML v2: VerificationCaseDef(assert_mermaid_blocks_free_of_backticks_and_semicolons)
+fn assert_mermaid_blocks_free_of_backticks_and_semicolons(
+    doc_name: &str,
+    markdown: &str,
+) -> Result<(), String> {
+    let mut block_count: usize = 0;
+    for tail in markdown.split("```mermaid").skip(1) {
+        block_count += 1;
+        let (mermaid_body, _after_close) = tail.split_once("```").ok_or_else(|| {
+            format!(
+                "{} contains an unclosed ```mermaid fence:\n{}",
+                doc_name, markdown
+            )
+        })?;
+        assert!(
+            !mermaid_body.contains('`'),
+            "{} Mermaid diagram block must contain zero backticks ('`'):\n```mermaid{}```",
+            doc_name,
+            mermaid_body
+        );
+        assert!(
+            !mermaid_body.contains(';'),
+            "{} Mermaid diagram block must contain zero semicolons (';'):\n```mermaid{}```",
+            doc_name,
+            mermaid_body
+        );
+    }
+    if block_count == 0 {
+        return Err(format!(
+            "{} must contain at least one ```mermaid diagram block:\n{}",
+            doc_name, markdown
+        ));
+    }
+    Ok(())
+}
+
+/// Verifies that non-forced forward synchronization (`force: false, dry_run: false`) projects
+/// single-line bolded BDD clauses (`- **Given**: ... - **When**: ... - **Then**: ...`) and inline
+/// parenthetical diagnostics (`(Diagnostic: E0453)`) from `UseCaseDef.doc` into `UC-01-ForbidAttributeBypass.md`,
+/// sanitizes backticks and semicolons from its Mermaid block, preserves tracker-allocated `Issue ID`
+/// (`#512`), and completely evicts legacy 5-step hardcoded compiler boilerplate on disk.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C specification
+/// projection and stale-boilerplate eviction objectives for fn
+/// `test_issue_694_forward_sync_projects_single_line_bold_bdd_and_evicts_stale_use_case_boilerplate`
+/// in `crates/compile-sysml/tests/reproducer_tests.rs` (refs #694).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Single-Line Bolded BDD Clause Projection Invariant: Given a `UseCaseDef` whose `doc` encodes
+///   inline `- **Given**:`, `- **When**:` (with parenthetical ``(`Diagnostic: E0453`)``), and
+///   `- **Then**:` clauses on a single line, `forward_sync_sysml_to_specs` deterministically projects
+///   the `Given` predicate into `## 2. Preconditions`, the `When` stimulus into `## 3. Trigger` and
+///   step `1.` of `## 4. Main Success Scenario`, the `Then` outcome into step `2.` of
+///   `## 4. Main Success Scenario` and `## 6. Postconditions`, and `E0453` into
+///   `## 5. Alternate and Exception Flows`.
+/// - Stale Use Case Boilerplate Eviction & Issue-ID Preservation Invariant: Running with `force: false`
+///   over a pre-seeded legacy 5-step boilerplate `UC-01-ForbidAttributeBypass.md` preserves
+///   `| **Issue ID** | #512 |` while evicting 100% of `"The compiler execution environment"`,
+///   `"submits input payload"`, and `"Downstream resource timeout"`, and emitting zero `` ` `` or `;`
+///   characters inside ```` ```mermaid ```` blocks.
+///
+/// ## 3. Preconditions
+/// - An isolated RAII `TempDirGuard` workspace pre-seeds `docs/use-cases/UC-01-ForbidAttributeBypass.md`
+///   with `| **Issue ID** | #512 |` and legacy 5-step compiler boilerplate, paired with an in-memory
+///   `StaticPurityWorkspace` -> `PuritySubsystem` `PackageDef` containing `ClippyPurityGate` and
+///   `UC_AC_01_ForbidAttributeBypass`.
+///
+/// ## 4. Postconditions
+/// - Re-synchronized `docs/use-cases/UC-01-ForbidAttributeBypass.md` preserves `#512`, populates
+///   sections 2 through 6 from the single-line bolded BDD `doc`, contains zero backticks or
+///   semicolons in its Mermaid block, contains zero legacy boilerplate substrings, and cleans up
+///   its temporary directory via `TempDirGuard` on scope exit.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ linear pass over the synthetic `PackageDef` and emitted Markdown file.
+/// - Space Complexity: $O(N)$ bounded heap memory for AST and Markdown buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Invokes `forward_sync_sysml_to_specs` with `force: false, dry_run: false`.
+/// - State: Scoped strictly to `TempDirGuard::path()` with zero repository mutations.
+/// - Action: Executes with zero `.unwrap()`, `.expect()`, `panic!`, `regex`, or direct slice indexing.
+/// - Resource: `TempDirGuard` Drop guarantees deterministic cleanup even during RED assertion unwinding.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-UC-SINGLE-LINE-BOLD-BDD], [REQ-SYNC-UC-EVICT-STALE-BOILERPLATE] | SysML v2: VerificationCaseDef(test_issue_694_forward_sync_projects_single_line_bold_bdd_and_evicts_stale_use_case_boilerplate)
+#[test]
+fn test_issue_694_forward_sync_projects_single_line_bold_bdd_and_evicts_stale_use_case_boilerplate(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let temp = TempDirGuard::new("deap_issue_694_uc_single_line_bdd")?;
+    let docs_dir = temp.path().join("docs");
+    let use_cases_dir = docs_dir.join("use-cases");
+    fs::create_dir_all(&use_cases_dir)?;
+
+    let uc01_disk_path = use_cases_dir.join("UC-01-ForbidAttributeBypass.md");
+    let legacy_boilerplate_uc01 = "\
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #512 |
+| **Title** | Use Case 01: Forbid Attribute Bypass |
+| **Type** | use-case |
+| **Parent Epic** | [EPIC-02-PuritySubsystem](../epics/EPIC-02-PuritySubsystem.md) |
+| **SysML Use Case** | `UC_AC_01_ForbidAttributeBypass` |
+| **Generation Mode** | subagent |
+| **Specification Source** | [schema/static_purity.sysml](../../schema/static_purity.sysml) |
+
+# Use Case 01: Forbid Attribute Bypass
+
+## 1. Actors
+- **Primary Actor**: `Operator`
+- **Supporting System**: `ClippyPurityGate`
+
+## 2. Preconditions
+- The compiler execution environment is initialized in nominal operational state.
+- Authoritative input schema files exist with read access.
+
+## 3. Trigger
+- Actor `Operator` initiates `Forbid Attribute Bypass` execution request.
+
+## 4. Main Success Scenario
+1. Actor `Operator` submits input payload for `Forbid Attribute Bypass`.
+2. `ClippyPurityGate` validates structural schema and boundary preconditions.
+3. `ClippyPurityGate` executes core operational transformation.
+4. `ClippyPurityGate` verifies post-execution invariants.
+5. `ClippyPurityGate` emits deterministic completion acknowledgment to `Operator`.
+
+## 5. Alternate and Exception Flows
+- **2a. Boundary validation failure**: `ClippyPurityGate` rejects malformed request without state mutation.
+- **5c. Downstream resource timeout or communication fault:** `ClippyPurityGate` aborts transaction and logs diagnostic status.
+
+## 6. Postconditions
+- Target state invariants hold and audit receipt is persisted.
+";
+    fs::write(&uc01_disk_path, legacy_boilerplate_uc01)?;
+
+    let subpkg = PackageDef {
+        name: "PuritySubsystem".to_string(),
+        part_defs: vec![PartDef {
+            name: "ClippyPurityGate".to_string(),
+            ..Default::default()
+        }],
+        use_case_defs: vec![UseCaseDef {
+            name: "UC_AC_01_ForbidAttributeBypass".to_string(),
+            doc: Some(
+                "- **Given**: `[workspace.lints.clippy]` configures forbid rules across all crates. - **When**: A module introduces `#[allow(clippy::unwrap_used)]` (`Diagnostic: E0453`). - **Then**: `cargo clippy --workspace --all-targets` fails closed with non-zero exit status."
+                    .to_string(),
+            ),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let pkg = PackageDef {
+        name: "StaticPurityWorkspace".to_string(),
+        packages: vec![subpkg],
+        ..Default::default()
+    };
+
+    let opts = ForwardSyncOptions {
+        schema_path: PathBuf::from("schema/static_purity.sysml"),
+        docs_dir: docs_dir.clone(),
+        out_dir: Some(docs_dir),
+        dry_run: false,
+        force: false,
+    };
+
+    forward_sync_sysml_to_specs(&pkg, &opts)?;
+    let uc01_md = fs::read_to_string(&uc01_disk_path)?;
+
+    // 1. Preserve allocated Issue ID #512.
+    assert!(
+        uc01_md.contains("| **Issue ID** | #512 |"),
+        "UC-01 must preserve tracker Issue ID #512 across non-forced boilerplate eviction:\n{}",
+        uc01_md
+    );
+
+    // 2. ## 2. Preconditions contains Given clause tokens.
+    let preconditions = extract_markdown_h2_section(&uc01_md, "## 2. Preconditions")?;
+    assert!(
+        preconditions.contains("[workspace.lints.clippy]")
+            && preconditions.contains("configures forbid rules across all crates"),
+        "UC-01 '## 2. Preconditions' must contain '[workspace.lints.clippy]' and 'configures forbid rules across all crates':\n{}",
+        preconditions
+    );
+
+    // 3. ## 3. Trigger contains When stimulus token.
+    let trigger = extract_markdown_h2_section(&uc01_md, "## 3. Trigger")?;
+    assert!(
+        trigger.contains("#[allow(clippy::unwrap_used)]"),
+        "UC-01 '## 3. Trigger' must contain '#[allow(clippy::unwrap_used)]':\n{}",
+        trigger
+    );
+
+    // 4. ## 4. Main Success Scenario contains step 1 (When) and step 2 (Then).
+    let main_scenario = extract_markdown_h2_section(&uc01_md, "## 4. Main Success Scenario")?;
+    assert!(
+        main_scenario
+            .lines()
+            .any(|line| line.trim_start().starts_with("1. ")
+                && line.contains("#[allow(clippy::unwrap_used)]")),
+        "UC-01 '## 4. Main Success Scenario' step '1. ' must contain '#[allow(clippy::unwrap_used)]':\n{}",
+        main_scenario
+    );
+    assert!(
+        main_scenario
+            .lines()
+            .any(|line| line.trim_start().starts_with("2. ")
+                && line.contains("cargo clippy --workspace --all-targets")),
+        "UC-01 '## 4. Main Success Scenario' step '2. ' must contain 'cargo clippy --workspace --all-targets':\n{}",
+        main_scenario
+    );
+
+    // 5. ## 5. Alternate and Exception Flows contains inline parenthetical Diagnostic E0453.
+    let alt_flows = extract_markdown_h2_section(&uc01_md, "## 5. Alternate and Exception Flows")?;
+    assert!(
+        alt_flows.contains("E0453"),
+        "UC-01 '## 5. Alternate and Exception Flows' must contain extracted diagnostic code 'E0453':\n{}",
+        alt_flows
+    );
+
+    // 6. ## 6. Postconditions contains Then outcome.
+    let postconditions = extract_markdown_h2_section(&uc01_md, "## 6. Postconditions")?;
+    assert!(
+        postconditions.contains("fails closed with non-zero exit status"),
+        "UC-01 '## 6. Postconditions' must contain 'fails closed with non-zero exit status':\n{}",
+        postconditions
+    );
+
+    // 7. Mermaid block contains zero backticks and zero semicolons.
+    assert_mermaid_blocks_free_of_backticks_and_semicolons(
+        "UC-01-ForbidAttributeBypass.md",
+        &uc01_md,
+    )?;
+
+    // 8. Entire file contains zero legacy hardcoded boilerplate occurrences.
+    for forbidden_boilerplate in [
+        "The compiler execution environment",
+        "submits input payload",
+        "Downstream resource timeout",
+    ] {
+        assert!(
+            !uc01_md.contains(forbidden_boilerplate),
+            "UC-01-ForbidAttributeBypass.md must contain zero legacy boilerplate substring {:?}:\n{}",
+            forbidden_boilerplate,
+            uc01_md
+        );
+    }
+
+    Ok(())
+}
+
+/// Verifies multi-line unbolded/bulleted `UseCaseDef.doc` clause and actor extraction, package-local
+/// actor inheritance into sibling `ActionDef` User Stories via `extract_first_uc_actor`, Mermaid
+/// semicolon stripping on SysML statement syntax, and Format-2 trailing diagnostic-only (`Diagnostic: E0602).`)
+/// plus `objective` fallback projection in `forward_sync_sysml_to_specs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C deterministic
+/// model-to-specification traceability objectives for fn
+/// `test_issue_694_multiline_bdd_actor_extraction_and_diagnostic_only_use_case_projection`
+/// in `crates/compile-sysml/tests/reproducer_tests.rs` (refs #694).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Multi-Line Clause & Package Actor Inheritance Invariant: For a subpackage containing
+///   `UC_01_VerifyAuditDigest` with multi-line unbolded/bulleted `Actor:`, `Given:`, `When:` (carrying
+///   a semicolon-terminated statement `first S1 accept trig then S2;`), `Then:`, and `Diagnostic:`
+///   clauses alongside `ActionDef` `VerifyAuditDigestAction`, forward synchronization resolves
+///   `"AuditComplianceOfficer"` in `UC-01` `## 1. Actors`, propagates `"AuditComplianceOfficer"` to
+///   `US-01-VerifyAuditDigestAction.md` via `extract_first_uc_actor`, maps `Given`/`When`/`Then`/`Diagnostic`
+///   across sections 2 through 6 of `UC-01`, and strips `;` from `UC-01`'s Mermaid diagram block.
+/// - Diagnostic Punctuation Normalization & Objective Fallback Invariant: For `UC_02_EnforceSchemaParity`
+///   carrying `objective: Some("Deterministic Dual Schema Digest Parity Enforcement")` and Format-2
+///   trailing diagnostic-only `doc: Some("Diagnostic: E0602).")`, forward synchronization cleans
+///   `"E0602)."` to `"E0602"` in `## 5. Alternate and Exception Flows`, incorporates the `objective`
+///   text into its scenario/trigger, and emits zero legacy compiler boilerplate strings.
+///
+/// ## 3. Preconditions
+/// - An in-memory `LedgerAuditSystem` -> `AuditGateSubsystem` `PackageDef` containing
+///   `PartDef` `"AuditVerifierEngine"`, `ActionDef` `"VerifyAuditDigestAction"`,
+///   `UseCaseDef` `"UC_01_VerifyAuditDigest"`, and `UseCaseDef` `"UC_02_EnforceSchemaParity"` is
+///   synchronized into an isolated RAII `TempDirGuard` workspace with `force: true, dry_run: false`.
+///
+/// ## 4. Postconditions
+/// - `UC-01-VerifyAuditDigest.md`, `US-01-VerifyAuditDigestAction.md`, and
+///   `UC-02-EnforceSchemaParity.md` satisfy all actor, BDD section mapping, Mermaid sanitization,
+///   diagnostic punctuation stripping, objective projection, and zero-boilerplate assertions, and
+///   `TempDirGuard` removes temporary files on drop.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ linear pass over the synthetic `PackageDef` and generated Markdown artifacts.
+/// - Space Complexity: $O(N)$ bounded heap memory for AST fixtures and Markdown buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Invokes `forward_sync_sysml_to_specs` with `force: true, dry_run: false`.
+/// - State: Isolated to `TempDirGuard::path()` with zero shared global state.
+/// - Action: Executes with zero `.unwrap()`, `.expect()`, `panic!`, `regex`, or direct slice indexing.
+/// - Resource: `TempDirGuard` Drop reclaims ephemeral filesystem state even on RED assertion failure.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-UC-MULTILINE-ACTOR-INHERITANCE], [REQ-SYNC-UC-DIAGNOSTIC-ONLY-OBJECTIVE] | SysML v2: VerificationCaseDef(test_issue_694_multiline_bdd_actor_extraction_and_diagnostic_only_use_case_projection)
+#[test]
+fn test_issue_694_multiline_bdd_actor_extraction_and_diagnostic_only_use_case_projection(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let temp = TempDirGuard::new("deap_issue_694_uc_multiline_and_diag")?;
+    let docs_dir = temp.path().join("docs");
+    fs::create_dir_all(&docs_dir)?;
+
+    let subpkg = PackageDef {
+        name: "AuditGateSubsystem".to_string(),
+        part_defs: vec![PartDef {
+            name: "AuditVerifierEngine".to_string(),
+            ..Default::default()
+        }],
+        action_defs: vec![ActionDef {
+            name: "VerifyAuditDigestAction".to_string(),
+            ..Default::default()
+        }],
+        use_case_defs: vec![
+            UseCaseDef {
+                name: "UC_01_VerifyAuditDigest".to_string(),
+                doc: Some(
+                    "- Actor: AuditComplianceOfficer\n\
+                     - Given: Audit journal digest manifest is loaded on disk\n\
+                     - When: AuditComplianceOfficer invokes VerifyAuditDigestAction with statement first S1 accept trig then S2;\n\
+                     - Then: AuditVerifierEngine confirms digest parity across all committed records\n\
+                     - Diagnostic: E0601"
+                        .to_string(),
+                ),
+                ..Default::default()
+            },
+            UseCaseDef {
+                name: "UC_02_EnforceSchemaParity".to_string(),
+                objective: Some("Deterministic Dual Schema Digest Parity Enforcement".to_string()),
+                doc: Some("Diagnostic: E0602).".to_string()),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let pkg = PackageDef {
+        name: "LedgerAuditSystem".to_string(),
+        packages: vec![subpkg],
+        ..Default::default()
+    };
+
+    let opts = ForwardSyncOptions {
+        schema_path: PathBuf::from("schema/ledger_audit.sysml"),
+        docs_dir: docs_dir.clone(),
+        out_dir: Some(docs_dir.clone()),
+        dry_run: false,
+        force: true,
+    };
+
+    forward_sync_sysml_to_specs(&pkg, &opts)?;
+
+    let uc01_md = fs::read_to_string(docs_dir.join("use-cases/UC-01-VerifyAuditDigest.md"))?;
+    let us01_md =
+        fs::read_to_string(docs_dir.join("user-stories/US-01-VerifyAuditDigestAction.md"))?;
+    let uc02_md = fs::read_to_string(docs_dir.join("use-cases/UC-02-EnforceSchemaParity.md"))?;
+
+    // 1. UC-01-VerifyAuditDigest.md resolves actor, maps Given/When/Then/Diagnostic, and strips ';' from Mermaid.
+    let uc01_actors = extract_markdown_h2_section(&uc01_md, "## 1. Actors")?;
+    assert!(
+        uc01_actors.contains("AuditComplianceOfficer"),
+        "UC-01 '## 1. Actors' must resolve actor 'AuditComplianceOfficer':\n{}",
+        uc01_actors
+    );
+
+    let uc01_preconditions = extract_markdown_h2_section(&uc01_md, "## 2. Preconditions")?;
+    assert!(
+        uc01_preconditions.contains("Audit journal digest manifest is loaded on disk"),
+        "UC-01 '## 2. Preconditions' must project Given clause:\n{}",
+        uc01_preconditions
+    );
+
+    let uc01_trigger = extract_markdown_h2_section(&uc01_md, "## 3. Trigger")?;
+    assert!(
+        uc01_trigger.contains(
+            "AuditComplianceOfficer invokes VerifyAuditDigestAction with statement first S1 accept trig then S2"
+        ),
+        "UC-01 '## 3. Trigger' must project When clause:\n{}",
+        uc01_trigger
+    );
+
+    let uc01_mss = extract_markdown_h2_section(&uc01_md, "## 4. Main Success Scenario")?;
+    assert!(
+        uc01_mss.contains(
+            "AuditComplianceOfficer invokes VerifyAuditDigestAction with statement first S1 accept trig then S2"
+        ),
+        "UC-01 '## 4. Main Success Scenario' must project When clause:\n{}",
+        uc01_mss
+    );
+    assert!(
+        uc01_mss.contains(
+            "AuditVerifierEngine confirms digest parity across all committed records"
+        ),
+        "UC-01 '## 4. Main Success Scenario' must project Then clause:\n{}",
+        uc01_mss
+    );
+
+    let uc01_alt = extract_markdown_h2_section(&uc01_md, "## 5. Alternate and Exception Flows")?;
+    assert!(
+        uc01_alt.contains("E0601"),
+        "UC-01 '## 5. Alternate and Exception Flows' must project 'Diagnostic: E0601':\n{}",
+        uc01_alt
+    );
+
+    let uc01_post = extract_markdown_h2_section(&uc01_md, "## 6. Postconditions")?;
+    assert!(
+        uc01_post.contains(
+            "AuditVerifierEngine confirms digest parity across all committed records"
+        ),
+        "UC-01 '## 6. Postconditions' must project Then clause:\n{}",
+        uc01_post
+    );
+
+    assert_mermaid_blocks_free_of_backticks_and_semicolons(
+        "UC-01-VerifyAuditDigest.md",
+        &uc01_md,
+    )?;
+
+    // 2. US-01-VerifyAuditDigestAction.md inherits package-local actor "AuditComplianceOfficer" via extract_first_uc_actor.
+    let us01_story = extract_markdown_h2_section(&us01_md, "## User Story")?;
+    assert!(
+        us01_story.contains("AuditComplianceOfficer"),
+        "US-01-VerifyAuditDigestAction.md '## User Story' must inherit package-local actor 'AuditComplianceOfficer' via extract_first_uc_actor:\n{}",
+        us01_story
+    );
+
+    // 3. UC-02-EnforceSchemaParity.md cleans "E0602)." to "E0602" in ## 5. Alternate and Exception Flows,
+    //    incorporates objective in its scenario/trigger, and contains zero legacy boilerplate.
+    let uc02_alt = extract_markdown_h2_section(&uc02_md, "## 5. Alternate and Exception Flows")?;
+    assert!(
+        uc02_alt.contains("E0602")
+            && !uc02_alt.contains("E0602).")
+            && !uc02_alt.contains("E0602)"),
+        "UC-02 '## 5. Alternate and Exception Flows' must clean 'E0602).' to 'E0602':\n{}",
+        uc02_alt
+    );
+
+    let uc02_trigger = extract_markdown_h2_section(&uc02_md, "## 3. Trigger")?;
+    let uc02_mss = extract_markdown_h2_section(&uc02_md, "## 4. Main Success Scenario")?;
+    assert!(
+        uc02_trigger.contains("Deterministic Dual Schema Digest Parity Enforcement")
+            || uc02_mss.contains("Deterministic Dual Schema Digest Parity Enforcement"),
+        "UC-02 must incorporate objective 'Deterministic Dual Schema Digest Parity Enforcement' in its scenario/trigger:\nTrigger:\n{}\nMain Success Scenario:\n{}",
+        uc02_trigger,
+        uc02_mss
+    );
+
+    assert_mermaid_blocks_free_of_backticks_and_semicolons(
+        "UC-02-EnforceSchemaParity.md",
+        &uc02_md,
+    )?;
+
+    for (uc_name, uc_content) in [
+        ("UC-01-VerifyAuditDigest.md", uc01_md.as_str()),
+        ("UC-02-EnforceSchemaParity.md", uc02_md.as_str()),
+    ] {
+        for forbidden_boilerplate in [
+            "The compiler execution environment",
+            "submits input payload",
+            "Downstream resource timeout",
+        ] {
+            assert!(
+                !uc_content.contains(forbidden_boilerplate),
+                "{} must contain zero legacy boilerplate substring {:?}:\n{}",
+                uc_name,
+                forbidden_boilerplate,
+                uc_content
+            );
+        }
+    }
+
+    Ok(())
+}
