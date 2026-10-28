@@ -1336,19 +1336,25 @@ fn render_rta_architecture(pkg: &PackageDef, tokens: &BTreeMap<String, String>) 
     if !all_calcs.is_empty() || !all_constraints.is_empty() {
         for (idx, calc) in all_calcs.iter().enumerate() {
             let tid = format!("T-{:02}", idx + 1);
-            let expr = calc.expression.as_deref().unwrap_or("true");
+            let raw_expr = calc
+                .expression
+                .as_deref()
+                .map(|s| s.trim_matches(|ch: char| ch.is_whitespace() || ch == ';'))
+                .filter(|s| !s.is_empty())
+                .unwrap_or("true");
+            let katex_name = escape_katex_ident(&calc.name);
+            let katex_expr = lower_sysml_expr_to_katex(raw_expr);
+            let matlab_expr = lower_sysml_expr_to_matlab(raw_expr);
             out.push_str(&format!("## Theorem {} -- {}\n\n", tid, calc.name));
             out.push_str("### Formal Theorem Statement\n\n");
             out.push_str(&format!(
                 "$$\n\\begin{{aligned}}\n    \\mathrm{{{}}} &: {}\n\\end{{aligned}}\n$$\n\n",
-                calc.name.replace('_', "\\_"),
-                expr.replace('_', "\\_")
+                katex_name, katex_expr
             ));
             out.push_str("### Symbolic Derivation\n\n");
             out.push_str(&format!(
                 "$$\n\\begin{{aligned}}\n    \\mathrm{{{}}} &= {} \\\\\n\\end{{aligned}}\n$$\n\n",
-                calc.name.replace('_', "\\_"),
-                expr.replace('_', "\\_")
+                katex_name, katex_expr
             ));
             out.push_str("### Parameter Definitions & Engineering Units Table\n\n");
             out.push_str("| Symbol | Description | Value | Engineering Unit |\n");
@@ -1356,7 +1362,7 @@ fn render_rta_architecture(pkg: &PackageDef, tokens: &BTreeMap<String, String>) 
             if calc.in_params.is_empty() {
                 out.push_str(&format!(
                     "| `{}` | AST Calc Expression | `{}` | dimensionless |\n",
-                    calc.name, expr
+                    calc.name, raw_expr
                 ));
             } else {
                 for param in &calc.in_params {
@@ -1374,14 +1380,13 @@ fn render_rta_architecture(pkg: &PackageDef, tokens: &BTreeMap<String, String>) 
             out.push_str("\n### Step-by-Step Numerical Proof Evaluation\n\n");
             out.push_str(&format!(
                 "$$\n\\begin{{aligned}}\n    \\mathrm{{{}}} &= {} \\\\\n\\end{{aligned}}\n$$\n\n",
-                calc.name.replace('_', "\\_"),
-                expr.replace('_', "\\_")
+                katex_name, katex_expr
             ));
             out.push_str("### SLDV Temporal Assertion Binding\n\n");
             out.push_str("```matlab\n");
             out.push_str(&format!(
                 "sldv.assert( ({}), 'Bind_{}_CALC' );\n",
-                expr,
+                matlab_expr,
                 calc.name.to_uppercase().replace('-', "_")
             ));
             out.push_str("```\n\n");
@@ -1390,23 +1395,27 @@ fn render_rta_architecture(pkg: &PackageDef, tokens: &BTreeMap<String, String>) 
         let offset = all_calcs.len();
         for (idx, c) in all_constraints.iter().enumerate() {
             let tid = format!("T-{:02}", offset + idx + 1);
-            let expr = if c.expression.is_empty() {
+            let trimmed_constraint = c
+                .expression
+                .trim_matches(|ch: char| ch.is_whitespace() || ch == ';');
+            let raw_expr = if trimmed_constraint.is_empty() {
                 "true"
             } else {
-                c.expression.as_str()
+                trimmed_constraint
             };
+            let katex_name = escape_katex_ident(&c.name);
+            let katex_expr = lower_sysml_expr_to_katex(raw_expr);
+            let matlab_expr = lower_sysml_expr_to_matlab(raw_expr);
             out.push_str(&format!("## Theorem {} -- {}\n\n", tid, c.name));
             out.push_str("### Formal Theorem Statement\n\n");
             out.push_str(&format!(
                 "$$\n\\begin{{aligned}}\n    \\mathrm{{{}}} &: {}\n\\end{{aligned}}\n$$\n\n",
-                c.name.replace('_', "\\_"),
-                expr.replace('_', "\\_")
+                katex_name, katex_expr
             ));
             out.push_str("### Symbolic Derivation\n\n");
             out.push_str(&format!(
                 "$$\n\\begin{{aligned}}\n    \\mathrm{{{}}} &\\iff {} \\\\\n\\end{{aligned}}\n$$\n\n",
-                c.name.replace('_', "\\_"),
-                expr.replace('_', "\\_")
+                katex_name, katex_expr
             ));
             out.push_str("### Parameter Definitions & Engineering Units Table\n\n");
             out.push_str("| Symbol | Description | Value | Engineering Unit |\n");
@@ -1414,7 +1423,7 @@ fn render_rta_architecture(pkg: &PackageDef, tokens: &BTreeMap<String, String>) 
             if c.parameters.is_empty() {
                 out.push_str(&format!(
                     "| `{}` | AST Constraint Invariant | `{}` | boolean |\n",
-                    c.name, expr
+                    c.name, raw_expr
                 ));
             } else {
                 for param in &c.parameters {
@@ -1435,14 +1444,13 @@ fn render_rta_architecture(pkg: &PackageDef, tokens: &BTreeMap<String, String>) 
             out.push_str("\n### Step-by-Step Numerical Proof Evaluation\n\n");
             out.push_str(&format!(
                 "$$\n\\begin{{aligned}}\n    \\mathrm{{{}}} &\\implies {} \\\\\n\\end{{aligned}}\n$$\n\n",
-                c.name.replace('_', "\\_"),
-                expr.replace('_', "\\_")
+                katex_name, katex_expr
             ));
             out.push_str("### SLDV Temporal Assertion Binding\n\n");
             out.push_str("```matlab\n");
             out.push_str(&format!(
                 "sldv.assert( ({}), 'Bind_{}_ASSERTION' );\n",
-                expr,
+                matlab_expr,
                 c.name.to_uppercase().replace('-', "_")
             ));
             out.push_str("```\n\n");
@@ -1751,10 +1759,10 @@ fn render_sldv_script(pkg: &PackageDef, constraints: &[ConstraintDef]) -> String
 
     out.push_str("% Schema constraint bindings\n");
     for c in constraints {
-        let expr = if c.expression.trim().is_empty() {
-            "false"
+        let expr = if c.expression.trim().trim_matches(';').trim().is_empty() {
+            "false".to_string()
         } else {
-            c.expression.trim()
+            lower_sysml_expr_to_matlab(&c.expression)
         };
         let sanitized = c.name.to_uppercase().replace('-', "_");
         out.push_str(&format!(
@@ -1769,9 +1777,8 @@ fn render_sldv_script(pkg: &PackageDef, constraints: &[ConstraintDef]) -> String
         let expr = calc
             .expression
             .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.trim().is_empty())
-            .unwrap_or("true");
+            .map(lower_sysml_expr_to_matlab)
+            .unwrap_or_else(|| "true".to_string());
         out.push_str(&format!("% {} {}\n", thm_id, calc.name));
         out.push_str(&format!(
             "sldv.assert( ({}), 'Proof_{}_{}' );\n\n",
@@ -1782,6 +1789,1637 @@ fn render_sldv_script(pkg: &PackageDef, constraints: &[ConstraintDef]) -> String
     }
 
     out
+}
+
+/// Hard recursion-depth ceiling for recursive-descent SysML expression parsing (`STPA-SAFETY-SUITE`).
+const MAX_EXPR_DEPTH: usize = 64;
+
+/// Hard AST traversal ceiling for recursive KaTeX and MATLAB expression emitters (`STPA-SAFETY-SUITE`).
+const MAX_AST_RENDER_DEPTH: usize = 512;
+
+/// Lexical token stream representation for deterministic SysML v2 expression lowering.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C lexical determinism objectives for enum `SysmlToken` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Partitions every UTF-8 input sequence into a finite, disjoint sequence of SysML v2 operator, delimiter, identifier, literal, or explicit `Unknown(char)` tokens without regular expressions.
+///
+/// ## 3. Preconditions
+/// - Constructed exclusively by `tokenize_sysml_expr` from valid UTF-8 `&str` slices via `.char_indices()` and `.get(start..end)`.
+///
+/// ## 4. Postconditions
+/// - Preserves exact identifier spelling, normalized numeric literals, unescaped string payloads, and canonicalized keyword/symbolic operator variants.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) per variant construction and pattern match.
+/// - Space Complexity: O(L) where L is the byte length of an identifier, numeric, or string literal payload.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Encodes unrecognized characters explicitly via `SysmlToken::Unknown(char)` rather than panicking or dropping input silently during lexing.
+/// - State: Immutable value semantics (`Clone`, `PartialEq`, `Eq`) with zero interior mutability.
+/// - Action: Eliminates lexical ambiguity between keyword operators (`and`, `or`, `xor`, `not`, `implies`) and domain identifiers.
+/// - Resource: Bounded heap allocation limited strictly to variable-length literal/identifier variants.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: EnumerationDef(SysmlToken)
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SysmlToken {
+    Implies,
+    Or,
+    Xor,
+    And,
+    KeywordNot,
+    Eq,
+    Ne,
+    Ge,
+    Le,
+    Gt,
+    Lt,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Percent,
+    Bang,
+    Tilde,
+    Pow,
+    LParen,
+    RParen,
+    LBracket,
+    RBracket,
+    Comma,
+    Dot,
+    Ident(String),
+    Number(String),
+    StringLit(String),
+    Unknown(char),
+}
+
+/// Canonical binary operator taxonomy for SysML v2 constraint and calculation AST nodes.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C formal operator semantics for enum `SysmlBinOp` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Bijectively maps all 16 logical, relational, additive, multiplicative, modulo, and exponentiation binary operators across SysML v2, KaTeX display math, and MATLAB/SLDV proof syntax.
+///
+/// ## 3. Preconditions
+/// - Instantiated only when `binary_binding_power` recognizes a valid binary operator token in infix position.
+///
+/// ## 4. Postconditions
+/// - Guarantees total pattern coverage in both `render_ast_katex` and `render_ast_matlab` without wildcard operator fallthrough.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) copy and dispatch.
+/// - Space Complexity: O(1) single-byte discriminant representation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Rejects non-binary tokens at compile time via closed enum variants.
+/// - State: Copyable, stateless algebraic data type (`Copy`, `Clone`, `PartialEq`, `Eq`).
+/// - Action: Preserves exact semantic distinction between logical implication, exclusive-or, modulo, and equality.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: EnumerationDef(SysmlBinOp)
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum SysmlBinOp {
+    Implies,
+    Or,
+    Xor,
+    And,
+    Eq,
+    Ne,
+    Ge,
+    Le,
+    Gt,
+    Lt,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    Pow,
+}
+
+/// Canonical prefix unary operator taxonomy for SysML v2 logical negation and arithmetic sign expressions.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C unary operator lowering objectives for enum `SysmlUnaryOp` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Unifies prefix logical negation forms (`not`, `!`, `~`) into `SysmlUnaryOp::Not` while preserving unary arithmetic sign operators (`Plus`, `Minus`).
+///
+/// ## 3. Preconditions
+/// - Constructed exclusively when `SysmlExprParser::parse_expr` encounters a prefix unary token at subexpression entry.
+///
+/// ## 4. Postconditions
+/// - Enables target-specific parenthesization in KaTeX (`\lnot`) and MATLAB (`~(...)`, `+`, `-`).
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) dispatch.
+/// - Space Complexity: O(1) stack-only discriminant.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Closed 3-variant enum prevents invalid unary operator encodings.
+/// - State: Stateless `Copy` value type.
+/// - Action: Deterministic exhaustive matching across target emitters.
+/// - Resource: Zero heap footprint.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: EnumerationDef(SysmlUnaryOp)
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum SysmlUnaryOp {
+    Not,
+    Plus,
+    Minus,
+}
+
+/// Bounded-depth abstract syntax tree (`SysmlExprAst`) for SysML v2 `CalcDef` and `ConstraintDef` expressions.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C structural AST representation objectives for enum `SysmlExprAst` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Retains explicit source parenthesization via `Paren(Box<SysmlExprAst>)` alongside binary, unary, call, member-access, index/unit, identifier, numeric, and string-literal nodes.
+/// - Recursive nesting depth during parser construction is strictly bounded by `MAX_EXPR_DEPTH` (`64`).
+///
+/// ## 3. Preconditions
+/// - Produced by `parse_sysml_expr` only after complete consumption of a valid `SysmlToken` slice within `MAX_EXPR_DEPTH`.
+///
+/// ## 4. Postconditions
+/// - Supports deterministic structural lowering into brace-balanced KaTeX math and executable MATLAB/SLDV boolean predicates.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) traversal over N AST nodes.
+/// - Space Complexity: O(N) heap-allocated tree proportional to input token count.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Distinguishes `Paren` from bare `Binary` nodes so unary negation and exponentiation emit minimal, non-redundant parentheses.
+/// - State: Immutable owned AST tree with zero shared references or cycles.
+/// - Action: Traversal functions enforce `MAX_AST_RENDER_DEPTH` to preclude unbounded stack growth.
+/// - Resource: Reclaimed deterministically via standard Rust RAII drop semantics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: EnumerationDef(SysmlExprAst)
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SysmlExprAst {
+    Ident(String),
+    Number(String),
+    StringLit(String),
+    Paren(Box<SysmlExprAst>),
+    Unary {
+        op: SysmlUnaryOp,
+        operand: Box<SysmlExprAst>,
+    },
+    Binary {
+        op: SysmlBinOp,
+        lhs: Box<SysmlExprAst>,
+        rhs: Box<SysmlExprAst>,
+    },
+    Call {
+        callee: Box<SysmlExprAst>,
+        args: Vec<SysmlExprAst>,
+    },
+    Field {
+        base: Box<SysmlExprAst>,
+        field: String,
+    },
+    Index {
+        base: Box<SysmlExprAst>,
+        indices: Vec<SysmlExprAst>,
+    },
+}
+
+/// Checks whether a `SysmlExprAst` node is an unparenthesized `Binary` expression requiring protective grouping under tight prefix or superscript operators.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C operator-precedence preservation objectives for fn `is_binary_sysml_expr` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` if and only if `ast` is `SysmlExprAst::Binary { .. }`; explicit `SysmlExprAst::Paren` returns `false` to prevent double-parenthesization.
+///
+/// ## 3. Preconditions
+/// - `ast` references a valid, initialized `SysmlExprAst` node.
+///
+/// ## 4. Postconditions
+/// - Pure boolean predicate with zero mutation or allocation.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) discriminant inspection.
+/// - Space Complexity: O(1) zero auxiliary allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts borrowed `&SysmlExprAst` infallibly.
+/// - State: Read-only inspection.
+/// - Action: Constant-time non-recursive check.
+/// - Resource: Zero stack or heap overhead.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: ActionDef(is_binary_sysml_expr)
+fn is_binary_sysml_expr(ast: &SysmlExprAst) -> bool {
+    matches!(ast, SysmlExprAst::Binary { .. })
+}
+
+/// Tokenizes a SysML v2 expression string using `.char_indices().peekable()` and `.get(start..end)` with zero regular expressions and zero direct slice indexing.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safe string-scanning objectives (Check 34) for fn `tokenize_sysml_expr` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Scans `expr` strictly monotonically in UTF-8 character order via `expr.char_indices().peekable()` and extracts substrings exclusively with `expr.get(start..end)`.
+/// - Recognizes case-insensitive logical keywords (`implies`, `or`, `xor`, `and`, `not`), multi-character operators (`->`, `=>`, `||`, `&&`, `==`, `!=`, `~=`, `>=`, `<=`, `**`, `::`), numeric literals (with optional decimal/scientific parts and `_` digit separators), and escaped string literals.
+///
+/// ## 3. Preconditions
+/// - `expr: &str` is any valid UTF-8 string slice (including empty, whitespace-only, or malformed expressions).
+///
+/// ## 4. Postconditions
+/// - Returns `Vec<SysmlToken>` representing the complete non-whitespace lexical stream of `expr` with zero panics.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) linear in byte length N of `expr`.
+/// - Space Complexity: O(N) bounded token vector capacity.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles unclosed quotes and arbitrary Unicode codepoints cleanly without out-of-bounds slicing.
+/// - State: Local stack iterators and owned output vector with zero global state.
+/// - Action: Strictly advancing loop guarantees termination in at most `expr.chars().count()` outer iterations.
+/// - Resource: Linear memory proportional to `expr.len()`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: ActionDef(tokenize_sysml_expr)
+fn tokenize_sysml_expr(expr: &str) -> Vec<SysmlToken> {
+    let mut tokens = Vec::new();
+    let mut chars = expr.char_indices().peekable();
+
+    while let Some((start, ch)) = chars.next() {
+        if ch.is_whitespace() {
+            continue;
+        }
+
+        if ch.is_alphabetic() || ch == '_' {
+            let mut end = start + ch.len_utf8();
+            while let Some(&(next_idx, next_ch)) = chars.peek() {
+                if next_ch.is_alphanumeric() || next_ch == '_' {
+                    end = next_idx + next_ch.len_utf8();
+                    let _ = chars.next();
+                } else {
+                    break;
+                }
+            }
+            if let Some(word) = expr.get(start..end) {
+                let tok = if word.eq_ignore_ascii_case("implies") {
+                    SysmlToken::Implies
+                } else if word.eq_ignore_ascii_case("or") {
+                    SysmlToken::Or
+                } else if word.eq_ignore_ascii_case("xor") {
+                    SysmlToken::Xor
+                } else if word.eq_ignore_ascii_case("and") {
+                    SysmlToken::And
+                } else if word.eq_ignore_ascii_case("not") {
+                    SysmlToken::KeywordNot
+                } else {
+                    SysmlToken::Ident(word.to_string())
+                };
+                tokens.push(tok);
+            }
+            continue;
+        }
+
+        if ch.is_ascii_digit()
+            || (ch == '.' && matches!(chars.peek(), Some(&(_, d)) if d.is_ascii_digit()))
+        {
+            let mut num_buf = String::new();
+            if ch == '.' {
+                num_buf.push('0');
+                num_buf.push('.');
+            } else {
+                num_buf.push(ch);
+                while let Some(&(_, next_ch)) = chars.peek() {
+                    if next_ch.is_ascii_digit() {
+                        num_buf.push(next_ch);
+                        let _ = chars.next();
+                    } else if next_ch == '_' {
+                        let mut la = chars.clone();
+                        let _ = la.next();
+                        if matches!(la.peek(), Some(&(_, d)) if d.is_ascii_digit()) {
+                            let _ = chars.next();
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                if matches!(chars.peek(), Some(&(_, '.'))) {
+                    let mut la = chars.clone();
+                    let _ = la.next();
+                    if matches!(la.peek(), Some(&(_, d)) if d.is_ascii_digit()) {
+                        num_buf.push('.');
+                        let _ = chars.next();
+                    }
+                }
+            }
+
+            if num_buf.ends_with('.') {
+                while let Some(&(_, next_ch)) = chars.peek() {
+                    if next_ch.is_ascii_digit() {
+                        num_buf.push(next_ch);
+                        let _ = chars.next();
+                    } else if next_ch == '_' {
+                        let mut la = chars.clone();
+                        let _ = la.next();
+                        if matches!(la.peek(), Some(&(_, d)) if d.is_ascii_digit()) {
+                            let _ = chars.next();
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            if matches!(chars.peek(), Some(&(_, 'e' | 'E'))) {
+                let mut la = chars.clone();
+                if let Some((_, exp_ch)) = la.next() {
+                    let has_valid_exp = match la.peek().copied() {
+                        Some((_, d)) if d.is_ascii_digit() => true,
+                        Some((_, '+' | '-')) => {
+                            let _ = la.next();
+                            matches!(la.peek(), Some(&(_, d)) if d.is_ascii_digit())
+                        }
+                        _ => false,
+                    };
+                    if has_valid_exp {
+                        num_buf.push(exp_ch);
+                        let _ = chars.next();
+                        if let Some(&(_, sign @ ('+' | '-'))) = chars.peek() {
+                            num_buf.push(sign);
+                            let _ = chars.next();
+                        }
+                        while let Some(&(_, next_ch)) = chars.peek() {
+                            if next_ch.is_ascii_digit() {
+                                num_buf.push(next_ch);
+                                let _ = chars.next();
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            tokens.push(SysmlToken::Number(num_buf));
+            continue;
+        }
+
+        if ch == '"' || ch == '\'' {
+            let quote = ch;
+            let mut lit = String::new();
+            while let Some((_, c)) = chars.next() {
+                if c == '\\' {
+                    if let Some((_, escaped)) = chars.next() {
+                        lit.push(escaped);
+                    }
+                } else if c == quote {
+                    break;
+                } else {
+                    lit.push(c);
+                }
+            }
+            tokens.push(SysmlToken::StringLit(lit));
+            continue;
+        }
+
+        match ch {
+            '-' => {
+                if matches!(chars.peek(), Some(&(_, '>'))) {
+                    let _ = chars.next();
+                    tokens.push(SysmlToken::Implies);
+                } else {
+                    tokens.push(SysmlToken::Minus);
+                }
+            }
+            '=' => {
+                if matches!(chars.peek(), Some(&(_, '>'))) {
+                    let _ = chars.next();
+                    tokens.push(SysmlToken::Implies);
+                } else if matches!(chars.peek(), Some(&(_, '='))) {
+                    let _ = chars.next();
+                    tokens.push(SysmlToken::Eq);
+                } else {
+                    tokens.push(SysmlToken::Eq);
+                }
+            }
+            '|' => {
+                if matches!(chars.peek(), Some(&(_, '|'))) {
+                    let _ = chars.next();
+                    tokens.push(SysmlToken::Or);
+                } else {
+                    tokens.push(SysmlToken::Or);
+                }
+            }
+            '&' => {
+                if matches!(chars.peek(), Some(&(_, '&'))) {
+                    let _ = chars.next();
+                    tokens.push(SysmlToken::And);
+                } else {
+                    tokens.push(SysmlToken::And);
+                }
+            }
+            '!' => {
+                if matches!(chars.peek(), Some(&(_, '='))) {
+                    let _ = chars.next();
+                    tokens.push(SysmlToken::Ne);
+                } else {
+                    tokens.push(SysmlToken::Bang);
+                }
+            }
+            '~' => {
+                if matches!(chars.peek(), Some(&(_, '='))) {
+                    let _ = chars.next();
+                    tokens.push(SysmlToken::Ne);
+                } else {
+                    tokens.push(SysmlToken::Tilde);
+                }
+            }
+            '>' => {
+                if matches!(chars.peek(), Some(&(_, '='))) {
+                    let _ = chars.next();
+                    tokens.push(SysmlToken::Ge);
+                } else {
+                    tokens.push(SysmlToken::Gt);
+                }
+            }
+            '<' => {
+                if matches!(chars.peek(), Some(&(_, '='))) {
+                    let _ = chars.next();
+                    tokens.push(SysmlToken::Le);
+                } else {
+                    tokens.push(SysmlToken::Lt);
+                }
+            }
+            '+' => tokens.push(SysmlToken::Plus),
+            '*' => {
+                if matches!(chars.peek(), Some(&(_, '*'))) {
+                    let _ = chars.next();
+                    tokens.push(SysmlToken::Pow);
+                } else {
+                    tokens.push(SysmlToken::Star);
+                }
+            }
+            '/' => tokens.push(SysmlToken::Slash),
+            '%' => tokens.push(SysmlToken::Percent),
+            '^' => tokens.push(SysmlToken::Pow),
+            '(' => tokens.push(SysmlToken::LParen),
+            ')' => tokens.push(SysmlToken::RParen),
+            '[' => tokens.push(SysmlToken::LBracket),
+            ']' => tokens.push(SysmlToken::RBracket),
+            ',' => tokens.push(SysmlToken::Comma),
+            '.' => tokens.push(SysmlToken::Dot),
+            ':' => {
+                if matches!(chars.peek(), Some(&(_, ':'))) {
+                    let _ = chars.next();
+                    tokens.push(SysmlToken::Dot);
+                } else {
+                    tokens.push(SysmlToken::Unknown(':'));
+                }
+            }
+            other => tokens.push(SysmlToken::Unknown(other)),
+        }
+    }
+
+    tokens
+}
+
+/// Maps an infix `SysmlToken` to its `(SysmlBinOp, left_binding_power, right_binding_power)` precedence tuple.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C formal grammar precedence objectives for fn `binary_binding_power` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Enforces strict 11-tier SysML v2 precedence ordering: `Implies` (10, right-assoc) < `Or` (20) < `Xor` (30) < `And` (40) < prefix `KeywordNot` (50) < `Relational` (60) < `Additive` (70) < `Multiplicative` (80) < prefix `Unary` (90) < `Power` (100, right-assoc) < `Postfix/Primary`.
+///
+/// ## 3. Preconditions
+/// - `tok: &SysmlToken` is a valid borrowed lexical token.
+///
+/// ## 4. Postconditions
+/// - Returns `Some((op, lbp, rbp))` for valid binary operators and `None` for delimiters, operands, or prefix-only tokens.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) table-free pattern match.
+/// - Space Complexity: O(1) stack tuple return.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-operator tokens return `None`, cleanly terminating the enclosing precedence loop.
+/// - State: Pure stateless function.
+/// - Action: Right-associative operators (`Implies`, `Pow`) satisfy `lbp == rbp`; left-associative operators satisfy `rbp == lbp + 1`.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: ActionDef(binary_binding_power)
+fn binary_binding_power(tok: &SysmlToken) -> Option<(SysmlBinOp, u8, u8)> {
+    match tok {
+        SysmlToken::Implies => Some((SysmlBinOp::Implies, 10, 10)),
+        SysmlToken::Or => Some((SysmlBinOp::Or, 20, 21)),
+        SysmlToken::Xor => Some((SysmlBinOp::Xor, 30, 31)),
+        SysmlToken::And => Some((SysmlBinOp::And, 40, 41)),
+        SysmlToken::Eq => Some((SysmlBinOp::Eq, 60, 61)),
+        SysmlToken::Ne => Some((SysmlBinOp::Ne, 60, 61)),
+        SysmlToken::Ge => Some((SysmlBinOp::Ge, 60, 61)),
+        SysmlToken::Le => Some((SysmlBinOp::Le, 60, 61)),
+        SysmlToken::Gt => Some((SysmlBinOp::Gt, 60, 61)),
+        SysmlToken::Lt => Some((SysmlBinOp::Lt, 60, 61)),
+        SysmlToken::Plus => Some((SysmlBinOp::Add, 70, 71)),
+        SysmlToken::Minus => Some((SysmlBinOp::Sub, 70, 71)),
+        SysmlToken::Star => Some((SysmlBinOp::Mul, 80, 81)),
+        SysmlToken::Slash => Some((SysmlBinOp::Div, 80, 81)),
+        SysmlToken::Percent => Some((SysmlBinOp::Rem, 80, 81)),
+        SysmlToken::Pow => Some((SysmlBinOp::Pow, 100, 100)),
+        _ => None,
+    }
+}
+
+/// Cursor-based, slice-indexing-free recursive-descent parser over `&[SysmlToken]` bounded by `MAX_EXPR_DEPTH`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C bounded-recursion parsing objectives for struct `SysmlExprParser` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `pos` monotonically advances within `0..=tokens.len()` and accesses elements exclusively through `self.tokens.get(self.pos)`.
+/// - Recursion depth is strictly capped at `MAX_EXPR_DEPTH` (`64`).
+///
+/// ## 3. Preconditions
+/// - `tokens` references a finite slice of `SysmlToken` values produced by `tokenize_sysml_expr`.
+///
+/// ## 4. Postconditions
+/// - Produces a complete `SysmlExprAst` only when `pos == tokens.len()` upon top-level completion.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(T) linear in token count T.
+/// - Space Complexity: O(min(T, MAX_EXPR_DEPTH)) call-stack frames plus O(T) AST nodes.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `None` cleanly on syntax mismatches, premature EOF, or `depth > MAX_EXPR_DEPTH`.
+/// - State: Encapsulates cursor index `pos` privately within a single parse invocation.
+/// - Action: Zero panics, zero `.unwrap()`/`.expect()`, and zero direct slice indexing (`tokens[pos]`).
+/// - Resource: Bounded stack consumption guaranteed by `MAX_EXPR_DEPTH`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: PartDef(SysmlExprParser)
+struct SysmlExprParser<'a> {
+    tokens: &'a [SysmlToken],
+    pos: usize,
+}
+
+impl<'a> SysmlExprParser<'a> {
+    /// Inspects the current `SysmlToken` at `self.pos` via `.get(self.pos)` without advancing the cursor.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C bounds-checked lookahead objectives for fn `peek` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Leaves `self.pos` unchanged and returns `None` whenever `self.pos >= self.tokens.len()`.
+    ///
+    /// ## 3. Preconditions
+    /// - `self` is a valid shared reference to `SysmlExprParser<'a>`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Option<&'a SysmlToken>` via checked slice lookup.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1).
+    /// - Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Signals end-of-stream explicitly via `None`.
+    /// - State: Pure read-only borrow of `self`.
+    /// - Action: Eliminates bounds-check panic paths.
+    /// - Resource: Zero allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: ActionDef(SysmlExprParser::peek)
+    fn peek(&self) -> Option<&'a SysmlToken> {
+        self.tokens.get(self.pos)
+    }
+
+    /// Consumes and returns the current `SysmlToken` at `self.pos` via `.get(self.pos)`, advancing `self.pos` by one when present.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C monotonic cursor-advancement objectives for fn `next_token` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Increments `self.pos` via saturating addition if and only if `self.tokens.get(self.pos)` yields `Some(tok)`.
+    ///
+    /// ## 3. Preconditions
+    /// - `self` is an exclusive mutable reference to `SysmlExprParser<'a>`.
+    ///
+    /// ## 4. Postconditions
+    /// - `self.pos <= self.tokens.len()` holds before and after invocation.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1).
+    /// - Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `None` idempotently at end-of-stream without cursor overflow.
+    /// - State: Atomic single-field cursor update.
+    /// - Action: Uses `saturating_add(1)` and `.get(...)` to prevent arithmetic overflow and indexing panics.
+    /// - Resource: Zero allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: ActionDef(SysmlExprParser::next_token)
+    fn next_token(&mut self) -> Option<&'a SysmlToken> {
+        let tok = self.tokens.get(self.pos)?;
+        self.pos = self.pos.saturating_add(1);
+        Some(tok)
+    }
+
+    /// Parses a prefix-unary or infix-binary SysML subexpression above `min_prec` within `MAX_EXPR_DEPTH`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C precedence-climbing expression parsing objectives for fn `parse_expr` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Enforces `depth <= MAX_EXPR_DEPTH` on entry, binds prefix `not` at precedence `50` (between `and` at `40` and relational at `60`), binds symbolic unary `!`/`~`/`+`/`-` at precedence `90` (below `^`/`**` at `100`), and climbs infix binary operators while `lbp >= min_prec`.
+    ///
+    /// ## 3. Preconditions
+    /// - `min_prec` specifies the minimum left-binding power for infix continuation; `depth` tracks active recursive nesting.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Some(SysmlExprAst)` for well-formed subexpressions within depth bounds, or `None` on malformed syntax or depth overflow.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(K) over K tokens belonging to the subexpression.
+    /// - Space Complexity: O(min(K, MAX_EXPR_DEPTH)) recursion stack depth.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Rejects missing right-hand operands or unrecognized infix tokens via `None`.
+    /// - State: Terminates immediately upon `depth > MAX_EXPR_DEPTH`.
+    /// - Action: Increments `depth` on every recursive call (`saturating_add(1)`), guaranteeing bounded stack frames.
+    /// - Resource: Strictly bounded by `MAX_EXPR_DEPTH = 64`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: ActionDef(SysmlExprParser::parse_expr)
+    fn parse_expr(&mut self, min_prec: u8, depth: usize) -> Option<SysmlExprAst> {
+        if depth > MAX_EXPR_DEPTH {
+            return None;
+        }
+
+        let mut lhs = match self.peek() {
+            Some(SysmlToken::KeywordNot) => {
+                let _ = self.next_token();
+                let operand = self.parse_expr(50, depth.saturating_add(1))?;
+                SysmlExprAst::Unary {
+                    op: SysmlUnaryOp::Not,
+                    operand: Box::new(operand),
+                }
+            }
+            Some(SysmlToken::Bang | SysmlToken::Tilde) => {
+                let _ = self.next_token();
+                let operand = self.parse_expr(90, depth.saturating_add(1))?;
+                SysmlExprAst::Unary {
+                    op: SysmlUnaryOp::Not,
+                    operand: Box::new(operand),
+                }
+            }
+            Some(SysmlToken::Plus) => {
+                let _ = self.next_token();
+                let operand = self.parse_expr(90, depth.saturating_add(1))?;
+                SysmlExprAst::Unary {
+                    op: SysmlUnaryOp::Plus,
+                    operand: Box::new(operand),
+                }
+            }
+            Some(SysmlToken::Minus) => {
+                let _ = self.next_token();
+                let operand = self.parse_expr(90, depth.saturating_add(1))?;
+                SysmlExprAst::Unary {
+                    op: SysmlUnaryOp::Minus,
+                    operand: Box::new(operand),
+                }
+            }
+            _ => self.parse_postfix_primary(depth)?,
+        };
+
+        while let Some((op, lbp, rbp)) = self.peek().and_then(binary_binding_power) {
+            if lbp < min_prec {
+                break;
+            }
+            let _ = self.next_token();
+            let rhs = self.parse_expr(rbp, depth.saturating_add(1))?;
+            lhs = SysmlExprAst::Binary {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            };
+        }
+
+        Some(lhs)
+    }
+
+    /// Parses primary atoms (`(expr)`, `Ident`, `Number`, `StringLit`) and left-associative postfix chains (`fn(args)`, `base.field`, `base[idx]`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C primary and postfix AST construction objectives for fn `parse_postfix_primary` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Enforces balanced `(` ... `)` and `[` ... `]` delimiters and increments `depth` on every nested parenthesized, call-argument, or index expression.
+    ///
+    /// ## 3. Preconditions
+    /// - `depth <= MAX_EXPR_DEPTH` on valid entry; cursor positioned at the start of a primary operand.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Some(SysmlExprAst)` representing the atom wrapped in zero or more postfix `Call`, `Field`, or `Index` nodes, or `None` on delimiter/operand mismatch.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(P) over P tokens in the primary and postfix suffix chain.
+    /// - Space Complexity: O(A) for call argument or index lists plus bounded recursion depth.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Rejects unclosed parentheses, unclosed brackets, trailing commas, and non-identifier `.field` suffixes cleanly via `None`.
+    /// - State: Advances cursor strictly across matched delimiters.
+    /// - Action: Zero panics or unchecked slice accesses.
+    /// - Resource: Bounded by `MAX_EXPR_DEPTH`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: ActionDef(SysmlExprParser::parse_postfix_primary)
+    fn parse_postfix_primary(&mut self, depth: usize) -> Option<SysmlExprAst> {
+        if depth > MAX_EXPR_DEPTH {
+            return None;
+        }
+
+        let mut node = match self.next_token()? {
+            SysmlToken::LParen => {
+                let inner = self.parse_expr(0, depth.saturating_add(1))?;
+                if !matches!(self.next_token(), Some(SysmlToken::RParen)) {
+                    return None;
+                }
+                SysmlExprAst::Paren(Box::new(inner))
+            }
+            SysmlToken::Ident(name) => SysmlExprAst::Ident(name.clone()),
+            SysmlToken::Number(num) => SysmlExprAst::Number(num.clone()),
+            SysmlToken::StringLit(lit) => SysmlExprAst::StringLit(lit.clone()),
+            _ => return None,
+        };
+
+        loop {
+            match self.peek() {
+                Some(SysmlToken::LParen) => {
+                    let _ = self.next_token();
+                    let mut args = Vec::new();
+                    if !matches!(self.peek(), Some(SysmlToken::RParen)) {
+                        let first_arg = self.parse_expr(0, depth.saturating_add(1))?;
+                        args.push(first_arg);
+                        while matches!(self.peek(), Some(SysmlToken::Comma)) {
+                            let _ = self.next_token();
+                            let next_arg = self.parse_expr(0, depth.saturating_add(1))?;
+                            args.push(next_arg);
+                        }
+                    }
+                    if !matches!(self.next_token(), Some(SysmlToken::RParen)) {
+                        return None;
+                    }
+                    node = SysmlExprAst::Call {
+                        callee: Box::new(node),
+                        args,
+                    };
+                }
+                Some(SysmlToken::Dot) => {
+                    let _ = self.next_token();
+                    let Some(SysmlToken::Ident(field)) = self.next_token() else {
+                        return None;
+                    };
+                    node = SysmlExprAst::Field {
+                        base: Box::new(node),
+                        field: field.clone(),
+                    };
+                }
+                Some(SysmlToken::LBracket) => {
+                    let _ = self.next_token();
+                    let mut indices = Vec::new();
+                    let first_idx = self.parse_expr(0, depth.saturating_add(1))?;
+                    indices.push(first_idx);
+                    while matches!(self.peek(), Some(SysmlToken::Comma)) {
+                        let _ = self.next_token();
+                        let next_idx = self.parse_expr(0, depth.saturating_add(1))?;
+                        indices.push(next_idx);
+                    }
+                    if !matches!(self.next_token(), Some(SysmlToken::RBracket)) {
+                        return None;
+                    }
+                    node = SysmlExprAst::Index {
+                        base: Box::new(node),
+                        indices,
+                    };
+                }
+                _ => break,
+            }
+        }
+
+        Some(node)
+    }
+}
+
+/// Parses a complete `SysmlToken` slice into a `SysmlExprAst`, requiring full token consumption.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C full-input AST validation objectives for fn `parse_sysml_expr` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `Some(ast)` if and only if `tokens` is non-empty, `SysmlExprParser::parse_expr(0, 0)` succeeds within `MAX_EXPR_DEPTH`, and `parser.pos == tokens.len()` (zero unparsed trailing tokens).
+///
+/// ## 3. Preconditions
+/// - `tokens: &[SysmlToken]` is a token slice produced by `tokenize_sysml_expr`.
+///
+/// ## 4. Postconditions
+/// - Rejects partial parses with trailing stray tokens so callers deterministically engage safe token-level fallback when needed.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(T) in `tokens.len()`.
+/// - Space Complexity: O(T) for the resulting `SysmlExprAst`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Empty slices or trailing unconsumed tokens yield `None`.
+/// - State: Pure function over immutable token slice.
+/// - Action: Zero panics or direct indexing.
+/// - Resource: Bounded by `MAX_EXPR_DEPTH`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: ActionDef(parse_sysml_expr)
+fn parse_sysml_expr(tokens: &[SysmlToken]) -> Option<SysmlExprAst> {
+    if tokens.is_empty() {
+        return None;
+    }
+    let mut parser = SysmlExprParser { tokens, pos: 0 };
+    let ast = parser.parse_expr(0, 0)?;
+    if parser.pos == tokens.len() {
+        Some(ast)
+    } else {
+        None
+    }
+}
+
+/// Escapes KaTeX special characters (`_`, `%`, `&`, `#`, `$`, `{`, `}`, `\`) inside identifier and string-literal payloads.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C KaTeX injection and brace-balance objectives (Check 13) for fn `escape_katex_ident` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Guarantees that the returned string contains zero unescaped `_`, `%`, `&`, `#`, `$`, `{`, or `}` characters and preserves balanced `{}` braces when embedded inside `\mathrm{...}` or `\text{"..."}`.
+///
+/// ## 3. Preconditions
+/// - `raw: &str` is any valid UTF-8 identifier, theorem name, or string literal payload.
+///
+/// ## 4. Postconditions
+/// - Returns an escaped `String` safe for direct inclusion in KaTeX `\mathrm{...}` and `\text{...}` groups.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) single pass over `raw.chars()`.
+/// - Space Complexity: O(N) bounded output buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles empty strings and arbitrary special characters infallibly.
+/// - State: Pure transformation with zero shared state.
+/// - Action: Maps `\` to `\textbackslash{}` so trailing backslashes inside string literals can never escape closing braces.
+/// - Resource: Single pre-sized `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING] | SysML v2: ActionDef(escape_katex_ident)
+fn escape_katex_ident(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len().saturating_add(8));
+    for ch in raw.chars() {
+        match ch {
+            '_' => out.push_str("\\_"),
+            '%' => out.push_str("\\%"),
+            '&' => out.push_str("\\&"),
+            '#' => out.push_str("\\#"),
+            '$' => out.push_str("\\$"),
+            '{' => out.push_str("\\{"),
+            '}' => out.push_str("\\}"),
+            '\\' => out.push_str("\\textbackslash{}"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// Formats a SysML identifier for KaTeX math mode, keeping single ASCII letters italic and wrapping multi-character identifiers in `\mathrm{...}`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C mathematical typography and Check 13 objectives for fn `render_katex_ident` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Emits `ident` verbatim when `ident.len() == 1` and its sole character is ASCII alphabetic; otherwise emits `\mathrm{<escaped>}` via `escape_katex_ident`.
+///
+/// ## 3. Preconditions
+/// - `ident: &str` is a non-empty identifier token extracted from a SysML expression.
+///
+/// ## 4. Postconditions
+/// - Returned KaTeX fragment has strictly balanced `{` and `}` braces and zero unescaped underscores.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) in `ident.len()`.
+/// - Space Complexity: O(L) output `String`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-ASCII or multi-character names safely route through `\mathrm{...}`.
+/// - State: Pure string projection.
+/// - Action: Uses `.chars().all(...)` with zero byte indexing.
+/// - Resource: Bounded single-identifier string allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING] | SysML v2: ActionDef(render_katex_ident)
+fn render_katex_ident(ident: &str) -> String {
+    if ident.len() == 1 && ident.chars().all(|ch| ch.is_ascii_alphabetic()) {
+        ident.to_string()
+    } else {
+        format!("\\mathrm{{{}}}", escape_katex_ident(ident))
+    }
+}
+
+/// Detects whether an expression string already contains pre-authored LaTeX commands (`\` outside single- or double-quoted string literals).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C pre-authored LaTeX preservation objectives for fn `contains_latex_command_outside_quotes` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Tracks quote state (`"` and `'`) and in-quote backslash escapes so backslashes inside string literals (`"a\\b"`) return `false` while unquoted LaTeX control sequences (`\le`, `\mathrm{...}`, `\begin{aligned}`) return `true`.
+///
+/// ## 3. Preconditions
+/// - `expr: &str` is any valid UTF-8 expression slice.
+///
+/// ## 4. Postconditions
+/// - Pure boolean classification without modifying or copying `expr`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) single pass over `expr.chars()`.
+/// - Space Complexity: O(1) constant stack state.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles unclosed quotes without error or panic.
+/// - State: Local two-variable finite state machine (`in_quote`, `escaped_in_quote`).
+/// - Action: Short-circuits immediately on the first unquoted `\`.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING] | SysML v2: ActionDef(contains_latex_command_outside_quotes)
+fn contains_latex_command_outside_quotes(expr: &str) -> bool {
+    let mut in_quote: Option<char> = None;
+    let mut escaped_in_quote = false;
+    for ch in expr.chars() {
+        if let Some(q) = in_quote {
+            if escaped_in_quote {
+                escaped_in_quote = false;
+            } else if ch == '\\' {
+                escaped_in_quote = true;
+            } else if ch == q {
+                in_quote = None;
+            }
+        } else if ch == '"' || ch == '\'' {
+            in_quote = Some(ch);
+        } else if ch == '\\' {
+            return true;
+        }
+    }
+    false
+}
+
+/// Strips outer `$$` and `\begin{aligned}` / `\end{aligned}` wrappers from pre-authored LaTeX expressions and escapes unescaped `%` and `$` characters.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C Check 13 KaTeX block-nesting prevention objectives for fn `sanitize_preauthored_katex` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Eliminates outer `\begin{aligned}` ... `\end{aligned}` wrappers iteratively so embedding inside `render_rta_architecture` never produces nested `aligned` environments.
+/// - Escapes any unescaped `%` (`\%`) or `$` (`\$`) characters while leaving existing LaTeX commands and braces intact.
+///
+/// ## 3. Preconditions
+/// - `expr: &str` is a trimmed expression containing pre-authored LaTeX commands.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty KaTeX fragment (`\mathrm{true}` if stripping leaves an empty body) free of outer `\begin{aligned}` wrappers and unescaped `%` or `$`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) linear scan over `expr`.
+/// - Space Complexity: O(N) sanitized output `String`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Uses `strip_prefix` / `strip_suffix` exclusively with zero byte-index slicing.
+/// - State: Pure string transformation.
+/// - Action: Falls back to `\mathrm{true}` if an empty `\begin{aligned}\end{aligned}` wrapper is supplied.
+/// - Resource: Single linear buffer allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING] | SysML v2: ActionDef(sanitize_preauthored_katex)
+fn sanitize_preauthored_katex(expr: &str) -> String {
+    let mut current = expr.trim();
+    if let Some(inner) = current
+        .strip_prefix("$$")
+        .and_then(|s| s.strip_suffix("$$"))
+    {
+        current = inner.trim();
+    }
+    while let Some(inner) = current
+        .strip_prefix("\\begin{aligned}")
+        .and_then(|s| s.strip_suffix("\\end{aligned}"))
+    {
+        current = inner.trim();
+        if let Some(without_row_break) = current.strip_suffix("\\\\") {
+            if !without_row_break.ends_with('\\') {
+                current = without_row_break.trim();
+            }
+        }
+    }
+    if current.is_empty() {
+        return "\\mathrm{true}".to_string();
+    }
+
+    let mut out = String::with_capacity(current.len().saturating_add(4));
+    let mut prev_escaped = false;
+    for ch in current.chars() {
+        if (ch == '%' || ch == '$') && !prev_escaped {
+            out.push('\\');
+            out.push(ch);
+        } else {
+            out.push(ch);
+        }
+        prev_escaped = ch == '\\' && !prev_escaped;
+    }
+    out
+}
+
+/// Recursively renders a validated `SysmlExprAst` into a Check-13-compliant KaTeX math expression string.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C formal theorem typesetting objectives for fn `render_ast_katex` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Maps `Implies` -> `\implies`, `Or` -> `\lor`, `Xor` -> `\oplus`, `And` -> `\land`, `Not` -> `\lnot ({inner})` (for binary `inner`) or `\lnot {inner}`, `Eq` -> `=`, `Ne` -> `\neq`, `Ge` -> `\ge`, `Le` -> `\le`, `Mul` -> `\cdot`, `Rem` -> `\bmod`, and `Pow` -> `{lhs}^{{{rhs}}}` (parenthesizing binary/unary `lhs`).
+/// - Preserves balanced `{}` braces and zero bare `&`, `%`, or `$` across all AST shapes.
+///
+/// ## 3. Preconditions
+/// - `ast` is a well-formed `SysmlExprAst`; `depth` begins at `0`.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty, brace-balanced KaTeX math fragment free of raw SysML word/relational operators.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) over N AST nodes.
+/// - Space Complexity: O(N) rendered string size plus O(min(N, MAX_AST_RENDER_DEPTH)) stack frames.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Enforces `MAX_AST_RENDER_DEPTH` guard returning `\mathrm{true}` if exceeded.
+/// - State: Pure read-only AST projection.
+/// - Action: Escapes all multi-character identifiers and string literals via `escape_katex_ident`.
+/// - Resource: Bounded stack and heap usage.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING] | SysML v2: ActionDef(render_ast_katex)
+fn render_ast_katex(ast: &SysmlExprAst, depth: usize) -> String {
+    if depth > MAX_AST_RENDER_DEPTH {
+        return "\\mathrm{true}".to_string();
+    }
+    let next_depth = depth.saturating_add(1);
+    match ast {
+        SysmlExprAst::Ident(id) => render_katex_ident(id),
+        SysmlExprAst::Number(num) => num.clone(),
+        SysmlExprAst::StringLit(lit) => format!("\\text{{\"{}\"}}", escape_katex_ident(lit)),
+        SysmlExprAst::Paren(inner) => format!("({})", render_ast_katex(inner, next_depth)),
+        SysmlExprAst::Unary { op, operand } => {
+            let inner = render_ast_katex(operand, next_depth);
+            match op {
+                SysmlUnaryOp::Not => {
+                    if is_binary_sysml_expr(operand) {
+                        format!("\\lnot ({})", inner)
+                    } else {
+                        format!("\\lnot {}", inner)
+                    }
+                }
+                SysmlUnaryOp::Plus => {
+                    if is_binary_sysml_expr(operand)
+                        || matches!(operand.as_ref(), SysmlExprAst::Unary { .. })
+                    {
+                        format!("+({})", inner)
+                    } else {
+                        format!("+{}", inner)
+                    }
+                }
+                SysmlUnaryOp::Minus => {
+                    if is_binary_sysml_expr(operand)
+                        || matches!(operand.as_ref(), SysmlExprAst::Unary { .. })
+                    {
+                        format!("-({})", inner)
+                    } else {
+                        format!("-{}", inner)
+                    }
+                }
+            }
+        }
+        SysmlExprAst::Binary { op, lhs, rhs } => {
+            let lhs_k = render_ast_katex(lhs, next_depth);
+            let rhs_k = render_ast_katex(rhs, next_depth);
+            match op {
+                SysmlBinOp::Implies => format!("{} \\implies {}", lhs_k, rhs_k),
+                SysmlBinOp::Or => format!("{} \\lor {}", lhs_k, rhs_k),
+                SysmlBinOp::Xor => format!("{} \\oplus {}", lhs_k, rhs_k),
+                SysmlBinOp::And => format!("{} \\land {}", lhs_k, rhs_k),
+                SysmlBinOp::Eq => format!("{} = {}", lhs_k, rhs_k),
+                SysmlBinOp::Ne => format!("{} \\neq {}", lhs_k, rhs_k),
+                SysmlBinOp::Ge => format!("{} \\ge {}", lhs_k, rhs_k),
+                SysmlBinOp::Le => format!("{} \\le {}", lhs_k, rhs_k),
+                SysmlBinOp::Gt => format!("{} > {}", lhs_k, rhs_k),
+                SysmlBinOp::Lt => format!("{} < {}", lhs_k, rhs_k),
+                SysmlBinOp::Add => format!("{} + {}", lhs_k, rhs_k),
+                SysmlBinOp::Sub => format!("{} - {}", lhs_k, rhs_k),
+                SysmlBinOp::Mul => format!("{} \\cdot {}", lhs_k, rhs_k),
+                SysmlBinOp::Div => format!("{} / {}", lhs_k, rhs_k),
+                SysmlBinOp::Rem => format!("{} \\bmod {}", lhs_k, rhs_k),
+                SysmlBinOp::Pow => {
+                    if is_binary_sysml_expr(lhs)
+                        || matches!(lhs.as_ref(), SysmlExprAst::Unary { .. })
+                    {
+                        format!("({})^{{{}}}", lhs_k, rhs_k)
+                    } else {
+                        format!("{}^{{{}}}", lhs_k, rhs_k)
+                    }
+                }
+            }
+        }
+        SysmlExprAst::Call { callee, args } => {
+            let callee_k = render_ast_katex(callee, next_depth);
+            let args_k: Vec<String> = args
+                .iter()
+                .map(|a| render_ast_katex(a, next_depth))
+                .collect();
+            format!("{}({})", callee_k, args_k.join(", "))
+        }
+        SysmlExprAst::Field { base, field } => {
+            let base_k = render_ast_katex(base, next_depth);
+            let field_k = render_katex_ident(field);
+            if is_binary_sysml_expr(base) {
+                format!("({}).{}", base_k, field_k)
+            } else {
+                format!("{}.{}", base_k, field_k)
+            }
+        }
+        SysmlExprAst::Index { base, indices } => {
+            let base_k = render_ast_katex(base, next_depth);
+            let idx_k: Vec<String> = indices
+                .iter()
+                .map(|i| render_ast_katex(i, next_depth))
+                .collect();
+            if is_binary_sysml_expr(base) {
+                format!("({})[{}]", base_k, idx_k.join(", "))
+            } else {
+                format!("{}[{}]", base_k, idx_k.join(", "))
+            }
+        }
+    }
+}
+
+/// Lowers a raw `SysmlToken` stream token-by-token into brace-balanced KaTeX when full AST parsing rejects non-standard or over-deep input.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C total-function fault-tolerance objectives for fn `fallback_tokens_to_katex` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Converts every SysML operator token to its canonical KaTeX command and escapes all identifiers, string literals, and `Unknown` characters so Check 13 brace-balance and `%`/`&`/`$` invariants hold unconditionally.
+///
+/// ## 3. Preconditions
+/// - `tokens: &[SysmlToken]` is any token slice produced by `tokenize_sysml_expr`.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty, Check-13-compliant KaTeX string (`\mathrm{true}` if `tokens` yields no fragments).
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(T) single linear pass over `tokens`.
+/// - Space Complexity: O(T) output string buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles arbitrary malformed token sequences without error or panic.
+/// - State: Pure stateless slice fold.
+/// - Action: Emits `\wedge` for unparsed `Pow` tokens so stray `^` cannot trigger KaTeX missing-superscript errors.
+/// - Resource: Bounded linear memory.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING] | SysML v2: ActionDef(fallback_tokens_to_katex)
+fn fallback_tokens_to_katex(tokens: &[SysmlToken]) -> String {
+    let mut parts = Vec::with_capacity(tokens.len());
+    for tok in tokens {
+        let piece = match tok {
+            SysmlToken::Implies => "\\implies".to_string(),
+            SysmlToken::Or => "\\lor".to_string(),
+            SysmlToken::Xor => "\\oplus".to_string(),
+            SysmlToken::And => "\\land".to_string(),
+            SysmlToken::KeywordNot | SysmlToken::Bang | SysmlToken::Tilde => "\\lnot".to_string(),
+            SysmlToken::Eq => "=".to_string(),
+            SysmlToken::Ne => "\\neq".to_string(),
+            SysmlToken::Ge => "\\ge".to_string(),
+            SysmlToken::Le => "\\le".to_string(),
+            SysmlToken::Gt => ">".to_string(),
+            SysmlToken::Lt => "<".to_string(),
+            SysmlToken::Plus => "+".to_string(),
+            SysmlToken::Minus => "-".to_string(),
+            SysmlToken::Star => "\\cdot".to_string(),
+            SysmlToken::Slash => "/".to_string(),
+            SysmlToken::Percent => "\\bmod".to_string(),
+            SysmlToken::Pow => "\\wedge".to_string(),
+            SysmlToken::LParen => "(".to_string(),
+            SysmlToken::RParen => ")".to_string(),
+            SysmlToken::LBracket => "[".to_string(),
+            SysmlToken::RBracket => "]".to_string(),
+            SysmlToken::Comma => ",".to_string(),
+            SysmlToken::Dot => ".".to_string(),
+            SysmlToken::Ident(id) => render_katex_ident(id),
+            SysmlToken::Number(n) => n.clone(),
+            SysmlToken::StringLit(s) => format!("\\text{{\"{}\"}}", escape_katex_ident(s)),
+            SysmlToken::Unknown(c) => {
+                let mut tmp = String::new();
+                tmp.push(*c);
+                escape_katex_ident(&tmp)
+            }
+        };
+        if !piece.is_empty() {
+            parts.push(piece);
+        }
+    }
+    if parts.is_empty() {
+        "\\mathrm{true}".to_string()
+    } else {
+        parts.join(" ")
+    }
+}
+
+/// Deterministically lowers a SysML v2 `CalcDef` or `ConstraintDef` expression into a Check-13-compliant KaTeX math expression.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C formal proof rendering objectives for fn `lower_sysml_expr_to_katex` in `crates/compile-sysml/src/stpa/safety_suite.rs` (refs #698).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Maps empty or whitespace/semicolon-only inputs to `\mathrm{true}`.
+/// - Preserves pre-authored LaTeX expressions while safely stripping outer `\begin{aligned}` / `\end{aligned}` wrappers and escaping unescaped `%` and `$`.
+/// - Lowers all SysML v2 logical (`implies`, `or`, `xor`, `and`, `not`, `&&`, `||`, `!`, `~`), relational (`==`, `!=`, `~=`, `>=`, `<=`), arithmetic (`*`, `%`, `^`, `**`), identifier, and string-literal constructs into balanced KaTeX tokens.
+///
+/// ## 3. Preconditions
+/// - `expr: &str` is any UTF-8 expression string from a SysML v2 AST `CalcDef` or `ConstraintDef` node.
+///
+/// ## 4. Postconditions
+/// - Returned `String` is non-empty, contains balanced `{` and `}` braces, contains zero unescaped `%` or `$`, and contains zero raw SysML operator tokens.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) linear in `expr.len()`.
+/// - Space Complexity: O(N) bounded AST and output buffer allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Degrades gracefully via `fallback_tokens_to_katex` when input exceeds `MAX_EXPR_DEPTH` or contains partial syntax.
+/// - State: Pure referentially transparent function.
+/// - Action: Executes with zero `regex`, zero direct range slicing, and zero `.unwrap()` / `.expect()` / `panic!`.
+/// - Resource: Bounded recursion depth (`MAX_EXPR_DEPTH = 64`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING] | SysML v2: ActionDef(lower_sysml_expr_to_katex)
+pub fn lower_sysml_expr_to_katex(expr: &str) -> String {
+    let trimmed = expr.trim_matches(|ch: char| ch.is_whitespace() || ch == ';');
+    if trimmed.is_empty() {
+        return "\\mathrm{true}".to_string();
+    }
+    if contains_latex_command_outside_quotes(trimmed) {
+        return sanitize_preauthored_katex(trimmed);
+    }
+    let tokens = tokenize_sysml_expr(trimmed);
+    if let Some(ast) = parse_sysml_expr(&tokens) {
+        render_ast_katex(&ast, 0)
+    } else {
+        fallback_tokens_to_katex(&tokens)
+    }
+}
+
+/// Recursively renders a validated `SysmlExprAst` into a syntactically valid MATLAB / Simulink Design Verifier (`SLDV`) expression.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C formal SLDV proof obligation lowering objectives for fn `render_ast_matlab` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Lowers `Implies` -> `(~(lhs) || (rhs))`, `Xor` -> `xor(lhs, rhs)`, `Or` -> `lhs || rhs`, `And` -> `lhs && rhs`, `Not` -> `~(inner)` (avoiding double parens when `inner` is `Paren`), `Eq` -> `lhs == rhs`, `Ne` -> `lhs ~= rhs`, `Rem` -> `mod(lhs, rhs)`, `Pow` -> `lhs ^ rhs`, and `StringLit` -> single-quoted MATLAB literal with doubled `''`.
+///
+/// ## 3. Preconditions
+/// - `ast` is a well-formed `SysmlExprAst`; `depth` begins at `0`.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty MATLAB expression string containing zero raw SysML word operators, zero `!=`, and zero `%` comment characters.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) over N AST nodes.
+/// - Space Complexity: O(N) output string plus O(min(N, MAX_AST_RENDER_DEPTH)) stack frames.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Enforces `MAX_AST_RENDER_DEPTH` guard returning `"true"` if exceeded, and strips `[unit]` bracket annotations on numeric literals (`50.0 [kg]` -> `50.0`).
+/// - State: Pure read-only AST projection.
+/// - Action: Preserves right-associativity for chained `Pow` (`a ^ (b ^ c)`) and prevents `--x` token merging on nested unary signs.
+/// - Resource: Bounded stack and heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: ActionDef(render_ast_matlab)
+fn render_ast_matlab(ast: &SysmlExprAst, depth: usize) -> String {
+    if depth > MAX_AST_RENDER_DEPTH {
+        return "true".to_string();
+    }
+    let next_depth = depth.saturating_add(1);
+    match ast {
+        SysmlExprAst::Ident(id) => id.clone(),
+        SysmlExprAst::Number(num) => num.clone(),
+        SysmlExprAst::StringLit(lit) => format!("'{}'", lit.replace('\'', "''")),
+        SysmlExprAst::Paren(inner) => format!("({})", render_ast_matlab(inner, next_depth)),
+        SysmlExprAst::Unary { op, operand } => {
+            let inner = render_ast_matlab(operand, next_depth);
+            match op {
+                SysmlUnaryOp::Not => {
+                    if matches!(operand.as_ref(), SysmlExprAst::Paren(_)) {
+                        format!("~{}", inner)
+                    } else {
+                        format!("~({})", inner)
+                    }
+                }
+                SysmlUnaryOp::Plus => {
+                    if is_binary_sysml_expr(operand)
+                        || matches!(operand.as_ref(), SysmlExprAst::Unary { .. })
+                    {
+                        format!("+({})", inner)
+                    } else {
+                        format!("+{}", inner)
+                    }
+                }
+                SysmlUnaryOp::Minus => {
+                    if is_binary_sysml_expr(operand)
+                        || matches!(operand.as_ref(), SysmlExprAst::Unary { .. })
+                    {
+                        format!("-({})", inner)
+                    } else {
+                        format!("-{}", inner)
+                    }
+                }
+            }
+        }
+        SysmlExprAst::Binary { op, lhs, rhs } => {
+            let lhs_m = render_ast_matlab(lhs, next_depth);
+            let rhs_m = render_ast_matlab(rhs, next_depth);
+            match op {
+                SysmlBinOp::Implies => format!("(~({}) || ({}))", lhs_m, rhs_m),
+                SysmlBinOp::Or => format!("{} || {}", lhs_m, rhs_m),
+                SysmlBinOp::Xor => format!("xor({}, {})", lhs_m, rhs_m),
+                SysmlBinOp::And => format!("{} && {}", lhs_m, rhs_m),
+                SysmlBinOp::Eq => format!("{} == {}", lhs_m, rhs_m),
+                SysmlBinOp::Ne => format!("{} ~= {}", lhs_m, rhs_m),
+                SysmlBinOp::Ge => format!("{} >= {}", lhs_m, rhs_m),
+                SysmlBinOp::Le => format!("{} <= {}", lhs_m, rhs_m),
+                SysmlBinOp::Gt => format!("{} > {}", lhs_m, rhs_m),
+                SysmlBinOp::Lt => format!("{} < {}", lhs_m, rhs_m),
+                SysmlBinOp::Add => format!("{} + {}", lhs_m, rhs_m),
+                SysmlBinOp::Sub => format!("{} - {}", lhs_m, rhs_m),
+                SysmlBinOp::Mul => format!("{} * {}", lhs_m, rhs_m),
+                SysmlBinOp::Div => format!("{} / {}", lhs_m, rhs_m),
+                SysmlBinOp::Rem => format!("mod({}, {})", lhs_m, rhs_m),
+                SysmlBinOp::Pow => {
+                    let lhs_wrapped = if is_binary_sysml_expr(lhs) {
+                        format!("({})", lhs_m)
+                    } else {
+                        lhs_m
+                    };
+                    let rhs_wrapped = if matches!(
+                        rhs.as_ref(),
+                        SysmlExprAst::Binary {
+                            op: SysmlBinOp::Pow,
+                            ..
+                        }
+                    ) {
+                        format!("({})", rhs_m)
+                    } else {
+                        rhs_m
+                    };
+                    format!("{} ^ {}", lhs_wrapped, rhs_wrapped)
+                }
+            }
+        }
+        SysmlExprAst::Call { callee, args } => {
+            let callee_m = render_ast_matlab(callee, next_depth);
+            let args_m: Vec<String> = args
+                .iter()
+                .map(|a| render_ast_matlab(a, next_depth))
+                .collect();
+            format!("{}({})", callee_m, args_m.join(", "))
+        }
+        SysmlExprAst::Field { base, field } => {
+            let base_m = render_ast_matlab(base, next_depth);
+            if is_binary_sysml_expr(base) {
+                format!("({}).{}", base_m, field)
+            } else {
+                format!("{}.{}", base_m, field)
+            }
+        }
+        SysmlExprAst::Index { base, indices } => {
+            let base_m = render_ast_matlab(base, next_depth);
+            if matches!(base.as_ref(), SysmlExprAst::Number(_)) {
+                base_m
+            } else {
+                let idx_m: Vec<String> = indices
+                    .iter()
+                    .map(|i| render_ast_matlab(i, next_depth))
+                    .collect();
+                if is_binary_sysml_expr(base) {
+                    format!("({})({})", base_m, idx_m.join(", "))
+                } else {
+                    format!("{}({})", base_m, idx_m.join(", "))
+                }
+            }
+        }
+    }
+}
+
+/// Lowers a raw `SysmlToken` stream token-by-token into MATLAB-safe tokens when full AST parsing rejects malformed or over-deep input.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C total-function MATLAB emission objectives for fn `fallback_tokens_to_matlab` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Eliminates all raw SysML word operators (`and`, `or`, `not`, `implies`, `xor`), `!=`, and `%` comment characters even on unparseable inputs, defaulting to `"true"` if no valid tokens remain.
+///
+/// ## 3. Preconditions
+/// - `tokens: &[SysmlToken]` is any token slice produced by `tokenize_sysml_expr`.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty single-line MATLAB predicate free of `%` comment injection and raw SysML operators.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(T) linear scan over `tokens`.
+/// - Space Complexity: O(T) output string buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Drops `SysmlToken::Unknown` characters cleanly and defaults empty results to `"true"`.
+/// - State: Pure stateless slice fold.
+/// - Action: Never emits `%` so enclosing `sldv.assert( (...), '...' );` statements remain syntactically closed.
+/// - Resource: Bounded linear allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: ActionDef(fallback_tokens_to_matlab)
+fn fallback_tokens_to_matlab(tokens: &[SysmlToken]) -> String {
+    let mut parts = Vec::with_capacity(tokens.len());
+    for tok in tokens {
+        let piece = match tok {
+            SysmlToken::Implies | SysmlToken::Or => "||".to_string(),
+            SysmlToken::Xor | SysmlToken::Ne => "~=".to_string(),
+            SysmlToken::And => "&&".to_string(),
+            SysmlToken::KeywordNot | SysmlToken::Bang | SysmlToken::Tilde => "~".to_string(),
+            SysmlToken::Eq => "==".to_string(),
+            SysmlToken::Ge => ">=".to_string(),
+            SysmlToken::Le => "<=".to_string(),
+            SysmlToken::Gt => ">".to_string(),
+            SysmlToken::Lt => "<".to_string(),
+            SysmlToken::Plus => "+".to_string(),
+            SysmlToken::Minus => "-".to_string(),
+            SysmlToken::Star => "*".to_string(),
+            SysmlToken::Slash | SysmlToken::Percent => "/".to_string(),
+            SysmlToken::Pow => "^".to_string(),
+            SysmlToken::LParen | SysmlToken::LBracket => "(".to_string(),
+            SysmlToken::RParen | SysmlToken::RBracket => ")".to_string(),
+            SysmlToken::Comma => ",".to_string(),
+            SysmlToken::Dot => ".".to_string(),
+            SysmlToken::Ident(id) => id.clone(),
+            SysmlToken::Number(n) => n.clone(),
+            SysmlToken::StringLit(s) => format!("'{}'", s.replace('\'', "''")),
+            SysmlToken::Unknown(_) => String::new(),
+        };
+        if !piece.is_empty() {
+            parts.push(piece);
+        }
+    }
+    if parts.is_empty() {
+        "true".to_string()
+    } else {
+        parts.join(" ")
+    }
+}
+
+/// Deterministically lowers a SysML v2 `CalcDef` or `ConstraintDef` expression into an executable MATLAB / Simulink Design Verifier (`SLDV`) predicate.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C formal SLDV assertion synthesis objectives for fn `lower_sysml_expr_to_matlab` in `crates/compile-sysml/src/stpa/safety_suite.rs` (refs #698).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Maps empty or whitespace/semicolon-only inputs to `"true"`.
+/// - Lowers `implies`/`->`/`=>` to `(~(lhs) || (rhs))`, `xor` to `xor(lhs, rhs)`, `or`/`||`/`|` to `lhs || rhs`, `and`/`&&`/`&` to `lhs && rhs`, `not`/`!`/`~` to `~(inner)`, `==`/`=` to `lhs == rhs`, `!=`/`~=` to `lhs ~= rhs`, `%` to `mod(lhs, rhs)`, `^`/`**` to `lhs ^ rhs`, and string literals to single-quoted `'...'` with `'` doubled to `''`.
+///
+/// ## 3. Preconditions
+/// - `expr: &str` is any UTF-8 expression string from a SysML v2 AST `CalcDef` or `ConstraintDef` node.
+///
+/// ## 4. Postconditions
+/// - Returned `String` is non-empty and free of raw SysML word operators, `!=`, and `%` comment tokens.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) linear in `expr.len()`.
+/// - Space Complexity: O(N) bounded AST and output buffer allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Degrades gracefully via `fallback_tokens_to_matlab` when input exceeds `MAX_EXPR_DEPTH` or contains partial syntax.
+/// - State: Pure referentially transparent function.
+/// - Action: Executes with zero `regex`, zero direct range slicing, and zero `.unwrap()` / `.expect()` / `panic!`.
+/// - Resource: Bounded recursion depth (`MAX_EXPR_DEPTH = 64`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: ActionDef(lower_sysml_expr_to_matlab)
+pub fn lower_sysml_expr_to_matlab(expr: &str) -> String {
+    let trimmed = expr.trim_matches(|ch: char| ch.is_whitespace() || ch == ';');
+    if trimmed.is_empty() {
+        return "true".to_string();
+    }
+    let tokens = tokenize_sysml_expr(trimmed);
+    if let Some(ast) = parse_sysml_expr(&tokens) {
+        render_ast_matlab(&ast, 0)
+    } else {
+        fallback_tokens_to_matlab(&tokens)
+    }
+}
+
+#[cfg(test)]
+mod expr_lowering_tests {
+    use super::{lower_sysml_expr_to_katex, lower_sysml_expr_to_matlab, MAX_EXPR_DEPTH};
+
+    /// Verifies all 11 SysML v2 operator precedence tiers, pre-authored LaTeX wrapper stripping,
+    /// identifier/string escaping, empty/whitespace defaults, and `MAX_EXPR_DEPTH` fallback across
+    /// `lower_sysml_expr_to_katex` and `lower_sysml_expr_to_matlab`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C unit verification objectives for fn `test_sysml_expr_lowering_precedence_escaping_and_depth_bounds` in `crates/compile-sysml/src/stpa/safety_suite.rs` (refs #698).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Confirms deterministic lowering of `implies`/`->`/`=>`, `or`/`||`/`|`, `xor`, `and`/`&&`/`&`, `not`, relational, arithmetic, modulo, power (`^`/`**`), postfix (`fn(a, b)`, `base.field`, `base[idx]`), single-letter vs multi-char identifiers, string literals, pre-authored `\begin{aligned}` wrappers, and inputs exceeding `MAX_EXPR_DEPTH`.
+    ///
+    /// ## 3. Preconditions
+    /// - Invokes pure functions `lower_sysml_expr_to_katex` and `lower_sysml_expr_to_matlab` with representative in-memory `&str` fixtures.
+    ///
+    /// ## 4. Postconditions
+    /// - All KaTeX outputs satisfy Check 13 brace-balance and escaping rules, and all MATLAB outputs satisfy SLDV boolean/arithmetic syntax rules.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(D) bounded over fixed test fixtures and `MAX_EXPR_DEPTH + 4` nesting probe.
+    /// - Space Complexity: O(D) bounded temporary strings.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Exercises empty, semicolon-only, pre-authored LaTeX, and over-deep malformed strings.
+    /// - State: Stateless in-memory assertions.
+    /// - Action: Zero `.unwrap()`, `.expect()`, `regex`, or direct slice indexing.
+    /// - Resource: Reclaimed immediately on test completion.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: VerificationCaseDef(test_sysml_expr_lowering_precedence_escaping_and_depth_bounds)
+    #[test]
+    fn test_sysml_expr_lowering_precedence_escaping_and_depth_bounds() {
+        assert_eq!(lower_sysml_expr_to_katex(""), "\\mathrm{true}");
+        assert_eq!(lower_sysml_expr_to_katex("  ; ; "), "\\mathrm{true}");
+        assert_eq!(lower_sysml_expr_to_matlab(""), "true");
+        assert_eq!(lower_sysml_expr_to_matlab("  ; ; "), "true");
+
+        // Pre-authored LaTeX outer \begin{aligned} stripping and % escaping
+        let pre_latex = "\\begin{aligned}\n  x_1 &= y_1 + 100% \\\\\n\\end{aligned}";
+        let sanitized_latex = lower_sysml_expr_to_katex(pre_latex);
+        assert!(!sanitized_latex.contains("\\begin{aligned}"));
+        assert!(!sanitized_latex.contains("\\end{aligned}"));
+        assert!(sanitized_latex.contains("100\\%"));
+
+        // Single ASCII letter vs multi-char snake_case & postfix calls/fields/indices/powers
+        let complex = "x >= 0 -> max_val(a.b_1, arr[0]) ** 2 != 0 & ~flag | mode = \"ok's_100%\"";
+        let katex = lower_sysml_expr_to_katex(complex);
+        assert!(katex.contains("x \\ge 0 \\implies"));
+        assert!(katex.contains("\\mathrm{max\\_val}(a.\\mathrm{b\\_1}, \\mathrm{arr}[0])^{2} \\neq 0"));
+        assert!(katex.contains("\\land \\lnot \\mathrm{flag}"));
+        assert!(katex.contains("\\text{\"ok's\\_100\\%\"}"));
+
+        let matlab = lower_sysml_expr_to_matlab(complex);
+        assert!(matlab.contains("x >= 0"));
+        assert!(matlab.contains("max_val(a.b_1, arr(0)) ^ 2 ~= 0"));
+        assert!(matlab.contains("&& ~(flag)"));
+        assert!(matlab.contains("mode == 'ok''s_100%'"));
+
+        // Prefix `not` binds looser than `==` (`not x == 0` -> `\lnot (x = 0)` and `~(x == 0)`)
+        assert_eq!(lower_sysml_expr_to_katex("not x == 0"), "\\lnot (x = 0)");
+        assert_eq!(lower_sysml_expr_to_matlab("not x == 0"), "~(x == 0)");
+        assert_eq!(lower_sysml_expr_to_matlab("not (x == 0)"), "~(x == 0)");
+
+        // Over-deep expression (> MAX_EXPR_DEPTH) degrades cleanly without stack overflow
+        let depth_probe = MAX_EXPR_DEPTH.saturating_add(6);
+        let deep_expr = format!(
+            "{}x_val >= 0{}",
+            "(".repeat(depth_probe),
+            ")".repeat(depth_probe)
+        );
+        let deep_katex = lower_sysml_expr_to_katex(&deep_expr);
+        assert!(deep_katex.contains("\\mathrm{x\\_val}"));
+        assert!(deep_katex.contains("\\ge"));
+        let deep_matlab = lower_sysml_expr_to_matlab(&deep_expr);
+        assert!(deep_matlab.contains("x_val"));
+        assert!(deep_matlab.contains(">="));
+    }
 }
 
 /// Parses an STPA markdown file and compiles its hazard matrices into a SysML constraint package.

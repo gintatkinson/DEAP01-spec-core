@@ -1335,3 +1335,252 @@ fn test_issue_695_safety_suite_derives_rta_proofs_sldv_and_regulatory_objectives
 
     Ok(())
 }
+
+/// Verifies that `transpile_safety_suite` deterministically lowers SysML v2 relational, logical,
+/// arithmetic-modulo, identifier, and whitespace-only expressions from `CalcDef` and `ConstraintDef`
+/// AST nodes into valid KaTeX display-math blocks (`07_RTA_ARCHITECTURE.md`, `STPA_MATRIX.md`) and
+/// valid MATLAB/Simulink Design Verifier `sldv.assert` proof obligations (`07_RTA_ARCHITECTURE.md`,
+/// `STPA_MATRIX.md`, `SLDV_FORMAL_PROOFS.m`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C formal proof
+/// transpilation objectives for fn `test_issue_698_stpa_lowers_sysml_operators_to_katex_and_matlab`
+/// in `crates/compile-sysml/tests/reproducer_tests.rs` (refs #698).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - KaTeX Operator & Identifier Lowering Invariant: Every `$$ ... $$` display-math block in
+///   `07_RTA_ARCHITECTURE.md` and `STPA_MATRIX.md` lowers SysML v2 operators (`and`, `or`, `not`,
+///   `implies`, `xor`, `>=`, `<=`, `!=`, `==`, `%`) to canonical KaTeX tokens (`\land`, `\lor`,
+///   `\lnot`, `\implies`, `\oplus`, `\ge`, `\le`, `\neq`, `=`, `\bmod`), escapes snake_case
+///   identifiers inside `\mathrm{...}`, maps whitespace-only expressions to `\mathrm{true}`,
+///   contains zero unescaped `%` comment characters, and preserves balanced `{` and `}` braces.
+/// - MATLAB/SLDV Operator Lowering Invariant: Every `sldv.assert(` statement across
+///   `07_RTA_ARCHITECTURE.md`, `STPA_MATRIX.md`, and `SLDV_FORMAL_PROOFS.m` lowers SysML v2
+///   boolean, implication, exclusive-or, inequality, modulo, and whitespace-only expressions to
+///   syntactically valid MATLAB constructs (`&&`, `||`, `~`, `~=`, `xor(`, `mod(`, `(true)`) with
+///   zero raw SysML word operators, zero `!=` or `%` tokens, and zero empty `sldv.assert( (),` calls.
+///
+/// ## 3. Preconditions
+/// - An in-memory `PackageDef` (`SafetyLoweringPkg`) is constructed containing `PartDef`
+///   (`InvariantSupervisor`) with `ActionDef` (`EvaluateGuards`), `CalcDef` (`Margin_Check`),
+///   `CalcDef` (`Whitespace_Calc`), and `ConstraintDef` (`Slice_Bound`).
+///
+/// ## 4. Postconditions
+/// - `07_RTA_ARCHITECTURE.md` and `STPA_MATRIX.md` contain non-empty, brace-balanced `$$ ... $$`
+///   math blocks free of raw SysML operators and unescaped `%`, with all expected KaTeX operators
+///   and `\mathrm{...}` lowered identifiers present in `07_RTA_ARCHITECTURE.md`.
+/// - All `sldv.assert(` lines across `07_RTA_ARCHITECTURE.md`, `STPA_MATRIX.md`, and
+///   `SLDV_FORMAL_PROOFS.m` contain zero raw SysML operators or empty `()` predicates, and
+///   `SLDV_FORMAL_PROOFS.m` contains `&&`, `||`, unary `~`, `~=`, `xor(`, `mod(`, and `(true)`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(A \cdot L)$ single linear scan over generated Markdown and MATLAB buffers.
+/// - Space Complexity: $O(A \cdot L)$ bounded in-memory `BTreeMap<String, String>` storage.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Invokes `compile_sysml::stpa::safety_suite::transpile_safety_suite(&pkg, None)` directly.
+/// - State: Pure in-memory AST fixture with zero shared mutable state or filesystem writes.
+/// - Action: Executes with zero `.unwrap()`, `.expect()`, `panic!`, `regex`, or direct slice indexing.
+/// - Resource: Bounded single-package AST allocation reclaimed at test scope exit.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: VerificationCaseDef(test_issue_698_stpa_lowers_sysml_operators_to_katex_and_matlab)
+#[test]
+fn test_issue_698_stpa_lowers_sysml_operators_to_katex_and_matlab(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut supervisor = PartDef {
+        name: "InvariantSupervisor".to_string(),
+        ..Default::default()
+    };
+    supervisor.actions.push(ActionDef {
+        name: "EvaluateGuards".to_string(),
+        ..Default::default()
+    });
+
+    let mut pkg = PackageDef {
+        name: "SafetyLoweringPkg".to_string(),
+        ..Default::default()
+    };
+    pkg.part_defs.push(supervisor);
+    pkg.calc_defs.push(CalcDef {
+        name: "Margin_Check".to_string(),
+        expression: Some(
+            "guard_active and not fault_latched implies (total_ticks % cycle_period) == 0"
+                .to_string(),
+        ),
+        ..Default::default()
+    });
+    pkg.calc_defs.push(CalcDef {
+        name: "Whitespace_Calc".to_string(),
+        expression: Some("   ".to_string()),
+        ..Default::default()
+    });
+    pkg.constraint_defs.push(ConstraintDef {
+        name: "Slice_Bound".to_string(),
+        expression: "direct_range_slice_count >= 0 and direct_range_slice_count <= 0 or (backup_ok xor override_flag != false)".to_string(),
+        ..Default::default()
+    });
+
+    let suite = compile_sysml::stpa::safety_suite::transpile_safety_suite(&pkg, None);
+    let rta_md = suite
+        .get("07_RTA_ARCHITECTURE.md")
+        .ok_or("Missing 07_RTA_ARCHITECTURE.md in transpiled safety suite")?;
+    let stpa_md = suite
+        .get("STPA_MATRIX.md")
+        .ok_or("Missing STPA_MATRIX.md in transpiled safety suite")?;
+    let sldv_m = suite
+        .get("SLDV_FORMAL_PROOFS.m")
+        .ok_or("Missing SLDV_FORMAL_PROOFS.m in transpiled safety suite")?;
+
+    let forbidden_katex_tokens = [
+        ">=",
+        "<=",
+        "!=",
+        "==",
+        "&&",
+        "||",
+        " and ",
+        " or ",
+        " not ",
+        " implies ",
+        " xor ",
+    ];
+
+    for (doc_name, doc_content) in [
+        ("07_RTA_ARCHITECTURE.md", rta_md.as_str()),
+        ("STPA_MATRIX.md", stpa_md.as_str()),
+    ] {
+        let split_count = doc_content.split("$$").count();
+        assert!(
+            split_count >= 3 && split_count % 2 == 1,
+            "{} must contain at least one properly closed $$ ... $$ display-math block (split count = {}):\n{}",
+            doc_name,
+            split_count,
+            doc_content
+        );
+
+        for math_block in doc_content.split("$$").skip(1).step_by(2) {
+            for forbidden in forbidden_katex_tokens {
+                assert!(
+                    !math_block.contains(forbidden),
+                    "{} KaTeX math block must not contain raw SysML operator {:?}:\n$${}$$",
+                    doc_name,
+                    forbidden,
+                    math_block
+                );
+            }
+
+            let mut prev_escaped = false;
+            let mut has_unescaped_percent = false;
+            let mut brace_depth: i64 = 0;
+            let mut negative_brace_depth = false;
+            for ch in math_block.chars() {
+                if ch == '{' && !prev_escaped {
+                    brace_depth += 1;
+                } else if ch == '}' && !prev_escaped {
+                    brace_depth -= 1;
+                    if brace_depth < 0 {
+                        negative_brace_depth = true;
+                    }
+                } else if ch == '%' && !prev_escaped {
+                    has_unescaped_percent = true;
+                }
+
+                prev_escaped = ch == '\\' && !prev_escaped;
+            }
+
+            assert!(
+                !has_unescaped_percent,
+                "{} KaTeX math block must not contain unescaped '%' comment character:\n$${}$$",
+                doc_name,
+                math_block
+            );
+            assert!(
+                !negative_brace_depth && brace_depth == 0,
+                "{} KaTeX math block must have balanced '{{' and '}}' braces (final depth = {}, negative = {}):\n$${}$$",
+                doc_name,
+                brace_depth,
+                negative_brace_depth,
+                math_block
+            );
+        }
+    }
+
+    let expected_katex_tokens = [
+        "\\land",
+        "\\lor",
+        "\\lnot",
+        "\\implies",
+        "\\oplus",
+        "\\ge",
+        "\\le",
+        "\\neq",
+        "\\bmod",
+        "\\mathrm{direct\\_range\\_slice\\_count}",
+        "\\mathrm{guard\\_active}",
+        "\\mathrm{true}",
+    ];
+    for expected in expected_katex_tokens {
+        assert!(
+            rta_md.contains(expected),
+            "07_RTA_ARCHITECTURE.md must contain lowered KaTeX token {:?}:\n{}",
+            expected,
+            rta_md
+        );
+    }
+
+    let forbidden_matlab_tokens = [
+        " and ",
+        " or ",
+        " not ",
+        " implies ",
+        " xor ",
+        "!=",
+        "%",
+        "sldv.assert( (),",
+    ];
+
+    for (doc_name, doc_content) in [
+        ("07_RTA_ARCHITECTURE.md", rta_md.as_str()),
+        ("STPA_MATRIX.md", stpa_md.as_str()),
+        ("SLDV_FORMAL_PROOFS.m", sldv_m.as_str()),
+    ] {
+        for line in doc_content.lines().filter(|l| l.contains("sldv.assert(")) {
+            for forbidden in forbidden_matlab_tokens {
+                assert!(
+                    !line.contains(forbidden),
+                    "{} sldv.assert line must not contain raw/invalid token {:?}:\n{}",
+                    doc_name,
+                    forbidden,
+                    line
+                );
+            }
+        }
+    }
+
+    assert!(
+        sldv_m.lines().any(|l| l.contains("sldv.assert(")),
+        "SLDV_FORMAL_PROOFS.m must contain sldv.assert( statements:\n{}",
+        sldv_m
+    );
+
+    let expected_matlab_tokens = ["&&", "||", "~", "~=", "xor(", "mod(", "(true)"];
+    for expected in expected_matlab_tokens {
+        assert!(
+            sldv_m.contains(expected),
+            "SLDV_FORMAL_PROOFS.m must contain lowered MATLAB operator/predicate {:?}:\n{}",
+            expected,
+            sldv_m
+        );
+    }
+    assert!(
+        sldv_m
+            .chars()
+            .zip(sldv_m.chars().skip(1))
+            .any(|(a, b)| a == '~' && b != '='),
+        "SLDV_FORMAL_PROOFS.m must contain unary MATLAB negation '~' distinct from '~=':\n{}",
+        sldv_m
+    );
+
+    Ok(())
+}
