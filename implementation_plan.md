@@ -1,39 +1,33 @@
-# Implementation Plan: Dispatch Dedicated `adversarial-code-auditor` Subagents to Deep-Audit & File All 9 Independent-Audit Defects
+# Implementation Plan -- Finalize Downstream `DEAP01-cuas-coa-engine` Check 33 Unblock, Commit & Push
 
-## 1. Atomic Scope & Objective
+## 1. Completed & Verified Scope So Far
 
-Decompose all four independent-audit categories (including every distinct contamination vector in Finding 4) into **9 atomic defect targets** and dispatch **9 dedicated, context-isolated `adversarial-code-auditor` subagents** (`1 problem = 1 auditor = 1 verified 7-section defect dossier = 1 live GitHub SSOT issue`).
-
-Per `skills/adversarial-code-auditor/SKILL.md` and `AGENTS.md` § *Mandatory Upstream Tooling Bug Reporting*:
-- Every subagent starts with a fresh context (`TypeName: "self"`, `Model: "inherit"`), executes `read_file` on `skills/adversarial-code-auditor/SKILL.md` as Step 1, inspects **only** its assigned target files, authors its 7-section defect dossier (starting on line 1 with `## 1. Context and References`, zero `# ` H1 header, valid Mermaid diagram in Section 4, Check 34 zero-regex & Check 19 zero-domain-token Proposed Correction in Section 6), and executes:
-  ```bash
-  ./target/release/verify-baseline check-defect .pipeline/defects/<NAME>.md --repo "gintatkinson/DEAP01-spec-core" --title "[AUDIT] <file>: <summary>" --publish
-  ```
-  to atomically pass all 12 schema/Mermaid gates, persist `.pipeline/defects/<NAME>.md`, create the GitHub issue, and pass `[CLOSED-LOOP VERIFIED]` payload parity.
-- Every spawned subagent is immediately terminated (`manage_subagents` `kill`) upon returning its `[CLOSED-LOOP VERIFIED]` GitHub issue URL and severity.
-
----
-
-## 2. Dedicated 1-to-1 Auditor Dispatch Matrix (9 Auditors)
-
-| Auditor # | Defect Dossier Target (`.pipeline/defects/`) | Audited Target File(s) | Pillar & Executable `Test-Target` | Specific Defect Scope |
-| :--- | :--- | :--- | :--- | :--- |
-| **Auditor 1** | `.pipeline/defects/defect-audit-01-missing-bp06-audit-code-subcommand.md` | • `crates/verify-baseline/src/main.rs`<br/>• `crates/verify-baseline/src/lib.rs`<br/>• `crates/verify-baseline/tests/blueprint_gate_tests.rs`<br/>• `docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md` | `Semantic Traceability`<br/>`crates/verify-baseline/tests/blueprint_gate_tests.rs` | Approved `BP-06` (`REQ-0606`) and upstream issues (`#690`, `#680`–`#684`, `#649`–`#654`, `#611`–`#623`) specify `crates/verify-baseline/src/audit_code.rs` (`DeterministicStaticDefectAuditor`, `E0601`–`E0605`, `Subcommands::AuditCode`), but `audit_code.rs`, `Subcommands::AuditCode`, and `REQ-0606` (`AC-01`..`AC-06`) gate tests are completely unimplemented. |
-| **Auditor 2** | `.pipeline/defects/defect-audit-02-ingest-sequence-diagram-single-token-actions.md` | • `crates/ingest-sysml/src/translators/markdown.rs` | `Semantic Traceability`<br/>`crates/ingest-sysml/tests/reproducer_tests.rs` | `extract_behavioral_ast_nodes` (`L1959-L1998`) treats dashed return arrows (`-->>`, `-->`) as command actions and splits message labels on `' '` taking only the first token, emitting 62 bogus `action def` nodes (`Vec`, `Ok`, `gh`, `Masked`, `Exit_item`, `C_PURITY_03`) that polluted `blueprint-01..06.sysml`, `US-01..US-62.md`, `STPA_MATRIX.md`, and `#562`–`#623`. |
-| **Auditor 3** | `.pipeline/defects/defect-audit-03-forward-sync-user-story-boilerplate.md` | • `crates/compile-sysml/src/sync/forward.rs` | `Semantic Traceability`<br/>`crates/compile-sysml/tests/reproducer_tests.rs` | Forward-sync User Story generator (`US-*.md`) omits the mandatory constitutional `As a [Actor/Subsystem], I want to [Action/Command], so that [Outcome/Safety Constraint]` clause (`.pipeline/constitution.md:127`) and emits identical 3-line placeholder BDD (`When <Action> executes...`) instead of AST-derived actor/parameter/invariant scenarios. |
-| **Auditor 4** | `.pipeline/defects/defect-audit-04-forward-sync-use-case-doc-clause-loss.md` | • `crates/compile-sysml/src/sync/forward.rs` | `Semantic Traceability`<br/>`crates/compile-sysml/tests/reproducer_tests.rs` | `parse_use_case_doc` (`L1313-L1368`) ignores `Given:` / `When:` / `Then:` / `Diagnostic:` behavioral clauses stored in `UseCaseDef.doc`, causing all generated `UC-*.md` specs (`#624`–`#654`) to drop blueprint preconditions/postconditions and fall back to identical 5-step placeholder prose. |
-| **Auditor 5** | `.pipeline/defects/defect-audit-05-forward-sync-feature-css-container-boilerplate.md` | • `crates/compile-sysml/src/sync/forward.rs` | `Semantic Traceability`<br/>`crates/compile-sysml/tests/reproducer_tests.rs` | Forward-sync Feature generator (`FEAT-*.md`) emits hardcoded CSS `@container` viewport boilerplate (`Container boundaries enforce @container isolation rules`) and generic 4-line BDD on backend compiler `PartDef`s instead of projecting AST `AttributeDef`s, `PortDef`s, `ConstraintDef`s, and `RequirementDef` criteria. |
-| **Auditor 6** | `.pipeline/defects/defect-audit-06-fmeca-hardcoded-hardware-templates-and-fake-ssot.md` | • `crates/compile-sysml/src/stpa/fmeca.rs` | `Semantic Traceability`<br/>`crates/compile-sysml/tests/reproducer_tests.rs` | `DIMENSION_TEMPLATES` (`L226-L263`) and `generate_fmeca_matrix` (`L374-L478`) hardcode physical avionics failure strings (`Dual-redundant serial bus with CRC-32`, `Uncommanded deflection`, `Passive thermal sink margin and low-voltage cutoff interlock`) onto software AST structs and falsify `basis = "SSOT"` whenever any port or attribute exists. |
-| **Auditor 7** | `.pipeline/defects/defect-audit-07-stpa-hardcoded-uav-sora-and-physics-templates.md` | • `crates/compile-sysml/src/stpa/safety_suite.rs` | `Semantic Traceability`<br/>`crates/compile-sysml/tests/reproducer_tests.rs` | `PROOF_TEMPLATES` (`L60-L265`) and `render_regulatory_objectives_assessment` (`L1105-L1176`) hardcode UAV flight-physics theorems (`Kinetic Energy Dissipation Bound`, `LiftToDragRatio`, `SinkRate`, `StallSpeed`) and drone SORA regulatory rows (`Ground Risk Class (GRC)`, `Air Risk Class (ARC)`, `SAIL`, `OSO`), violating the Pure Schema-Driven Compiler Invariant (`Check 19`). |
-| **Auditor 8** | `.pipeline/defects/defect-audit-08-stpa-uca-and-loss-scenario-pending-parameter.md` | • `crates/compile-sysml/src/stpa/uca.rs`<br/>• `crates/compile-sysml/src/stpa/safety_suite.rs` | `Semantic Traceability`<br/>`crates/compile-sysml/tests/reproducer_tests.rs` | `expand_cartesian_stpa` (`uca.rs:17,84-154`) unconditionally hardcodes `severity: PENDING_PARAMETER`, `sail: PENDING_PARAMETER`, and fallback controller `"DEAPCompilerSystem"`, while `render_loss_scenarios` (`safety_suite.rs:955-973`) emits `Loss scenario skeleton ... | PENDING_PARAMETER` across every UCA row. |
-| **Auditor 9** | `.pipeline/defects/defect-audit-09-stpa-latex-katex-and-sldv-raw-sysml-operators.md` | • `crates/compile-sysml/src/stpa/safety_suite.rs` | `Semantic Traceability`<br/>`crates/compile-sysml/tests/reproducer_tests.rs` | `render_rta_architecture` (`L1260-L1377`) and `render_sldv_script` (`L1691-L1739`) inject raw SysML `ConstraintDef` / `CalcDef` expressions into KaTeX `\begin{aligned}` math blocks without translating `and`/`or`/`>=`/`<=` to `\land`/`\lor`/`\ge`/`\le` (`rules/latex-katex-integrity.md`) and emit invalid `and`/`or` keywords instead of `&&`/`||` in MATLAB `sldv.assert(...)`. |
+1. **Upstream `DEAP01-spec-core` (100% Complete & Pushed -- Commit `bf91127`)**:
+   - Removed the 3 misplaced C-UAS domain blueprints (`DEAP_CUAS_COA_FLUTTER_BLUEPRINT.md`, `DEAP_CUAS_COA_GENERATION_BLUEPRINT.md`, `DUAL_USE_DRONE_ORCHESTRATION_AND_CUAS_BLUEPRINT.md`) from `docs/architecture/blueprints/`.
+   - Verified `./target/release/verify-baseline . --no-domain` (Checks 10--41) and `cargo test --workspace` both passed (`exit code 0`).
+   - Committed (`bf91127`) and pushed to `origin/main` (`git diff origin/main -- docs/architecture/blueprints` empty).
+2. **Downstream `../DEAP01-cuas-coa-engine` (Files Restored & Purged; Awaiting Check 33 Unblock on Concurrent Untracked File)**:
+   - Restored, sanitized, and verified all 4 C-UAS / Dual-Use documents in `../DEAP01-cuas-coa-engine/docs/architecture/`:
+     - `DEAP_CUAS_COA_GENERATION_BLUEPRINT.md`
+     - `DEAP_CUAS_COA_FLUTTER_BLUEPRINT.md`
+     - `DUAL_USE_DRONE_ORCHESTRATION_AND_CUAS_BLUEPRINT.md`
+     - `DUAL_USE_DRONE_ORCHESTRATION_AND_CUAS_REVIEW.md`
+   - Indexed all 4 documents in `../DEAP01-cuas-coa-engine/README.md` (`### 1.3 Domain Architecture & Solution Blueprints`).
+   - Purged `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md`, `docs/audit/THREE_WAY_CRATE_DOCSTRING_COMPARISON.md`, stale `implementation_plan.md`, `scratch/`, and `.DS_Store`.
+   - Verified `cargo test --workspace` passed (`14/14` tests) and Checks 10--32 passed across all 4 restored documents.
 
 ---
 
-## 3. Execution Protocol & Verification Gates
+## 2. Remaining Atomic Unblock & Commit Steps (`../DEAP01-cuas-coa-engine`)
 
-1. **Serial Single-Problem Dispatch & Cleanup**:
-   - Dispatch Auditors 1 through 9 serially (`rules/serial-execution.md`) with curated prompts terminating in `---GOVERNANCE-END---` + `PROCEED`, verifying each subagent returns a `[CLOSED-LOOP VERIFIED]` GitHub issue URL and terminating each subagent immediately via `manage_subagents(Action: "kill")`.
-2. **Repository Persistence & Quality Gates**:
-   - Dispatch a single commit subagent to stage and commit `.pipeline/defects/defect-audit-01..09-*.md` using neutral citations `chore(audit): persist verified defect dossiers for 9 compiler audit findings (refs #<id1>, ..., #<id9>)` (zero auto-closing keywords).
-   - Run `./target/release/verify-baseline . --no-domain` and `cargo test --workspace` at the coordinator level (`exit code == 0`), push to `origin/main`, and verify `git status --short` and `git diff origin/main` are empty.
+### 2.1 Resolve 1-Line Check 33 Blocker in Concurrent Untracked Pitch-Deck Annex
+- **Blocking Diagnostic**:
+  - `./target/release/verify-baseline . --no-domain` in `../DEAP01-cuas-coa-engine` stopped at Check 33 solely on an untracked file created by another session (`docs/management/PITCH_DECK_AND_CAP_VISTA_COMMERCIAL_ANNEX_2026.md`, line 177), which wrote literal ``.py`` without a negative prohibition keyword (`0 .sh, 0 .py, 0 regex, 0 mocks`).
+- **Target File (Single-Item Subagent Surgical Edit)**:
+  - `../DEAP01-cuas-coa-engine/docs/management/PITCH_DECK_AND_CAP_VISTA_COMMERCIAL_ANNEX_2026.md` (line 177):
+    - Replace `` `0` `.sh`, `0` `.py`, `0` `regex`, `0` mocks `` with `` `0` shell or Python scripts (`prohibited`), `0` `regex`, `0` mocks `` (preserving identical table semantics while satisfying Check 32/33 lexical rules) and remove any untracked `.pipeline/defects/defect_*` dump if generated.
+
+### 2.2 Full Downstream Baseline Verification, Scoped Commit & Remote Push
+1. Re-run `./target/release/verify-baseline . --no-domain` and `cargo test --workspace` inside `../DEAP01-cuas-coa-engine` (must exit `0` across all checks 10--41).
+2. Stage and commit **only** our 7 atomic architecture relocation & decontamination paths (`docs/architecture/DEAP_CUAS_COA_GENERATION_BLUEPRINT.md`, `docs/architecture/DEAP_CUAS_COA_FLUTTER_BLUEPRINT.md`, `docs/architecture/DUAL_USE_DRONE_ORCHESTRATION_AND_CUAS_BLUEPRINT.md`, `docs/architecture/DUAL_USE_DRONE_ORCHESTRATION_AND_CUAS_REVIEW.md`, `README.md`, `docs/audit/THREE_WAY_CRATE_DOCSTRING_COMPARISON.md`, `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md`) via path-scoped `git add` and `git commit --only` (`docs(architecture): restore 4 C-UAS COA and dual-use architecture docs and purge Tier-0 artifacts`), leaving the other session's untracked `docs/management/*` and toolchain sync files untouched.
+3. Push `../DEAP01-cuas-coa-engine` `main` to `origin/main` and verify `git diff origin/main -- docs/architecture README.md docs/audit docs/designs` is empty.
