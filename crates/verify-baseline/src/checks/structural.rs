@@ -11,17 +11,64 @@ use deap_core::workspace::{
     is_upstream_compiler,
 };
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+
+/// Resolves the enclosing upstream compiler root when `repo_root` points to `<root>/.pipeline/upstream`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C configuration management controls.
+/// Enables self-hosted dogfood verification of `<root>/.pipeline/upstream` against shared root-level
+/// governance and tooling artifacts without weakening fail-closed checks on standalone downstream workspaces.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Returns `Some(parent_repo)` if and only if `repo_root` has terminal path components `.pipeline/upstream`
+/// and `is_upstream_compiler(&parent_repo)` evaluates to `true`. All standalone downstream workspaces
+/// evaluate deterministically to `None`.
+///
+/// ## 3. Preconditions
+/// `repo_root` is a valid filesystem path reference.
+///
+/// ## 4. Postconditions
+/// Returns `Some(PathBuf)` pointing to the verified enclosing upstream compiler root, or `None`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(1) bounded path component inspection. Space Complexity: O(P) where P is path length.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Pure path inspection plus `is_upstream_compiler` directory check; returns `None` on any mismatch.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-UPSTREAM-DOGFOOD-ROOT-RESOLUTION].
+pub fn enclosing_upstream_compiler_root(repo_root: &Path) -> Option<PathBuf> {
+    if repo_root.file_name().and_then(|n| n.to_str()) != Some("upstream") {
+        return None;
+    }
+    let pipeline_dir = repo_root.parent()?;
+    if pipeline_dir.file_name().and_then(|n| n.to_str()) != Some(".pipeline") {
+        return None;
+    }
+    let raw_parent = pipeline_dir.parent()?;
+    let parent_repo = if raw_parent.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        raw_parent
+    };
+    if is_upstream_compiler(parent_repo) {
+        Some(parent_repo.to_path_buf())
+    } else {
+        None
+    }
+}
 
 /// Check 10: Verify .gitignore exists in repository root.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ECSS-E-ST-40C configuration management controls.
-/// Ensures `.gitignore` is present at the repository root.
+/// Ensures `.gitignore` is present at the repository root (or enclosing upstream compiler root for `<root>/.pipeline/upstream`).
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// `repo_root.join(".gitignore")` must resolve to an existing regular file.
+/// `repo_root.join(".gitignore")` (or `parent_repo.join(".gitignore")` for verified `<root>/.pipeline/upstream`) must resolve to an existing regular file.
 ///
 /// ## 3. Preconditions
 /// `repo_root` must be an accessible directory path.
@@ -38,7 +85,16 @@ use walkdir::WalkDir;
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-10-GITIGNORE-EXISTS].
 pub fn check_gitignore_exists(repo_root: &Path) -> Result<(), String> {
-    core_check_gitignore_exists(repo_root)
+    match core_check_gitignore_exists(repo_root) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            if let Some(parent_repo) = enclosing_upstream_compiler_root(repo_root) {
+                core_check_gitignore_exists(&parent_repo)
+            } else {
+                Err(err)
+            }
+        }
+    }
 }
 
 /// Check 11: Verify zero .DS_Store files exist in the working tree.
@@ -119,14 +175,23 @@ pub fn check_no_duplicate_master_blueprints(repo_root: &Path) -> Result<(), Vec<
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-14-DOWNSTREAM-INSTRUCTIONS].
 pub fn check_downstream_instructions_exist(repo_root: &Path) -> Result<(), Vec<String>> {
-    core_check_downstream_instructions_exist(repo_root)
+    match core_check_downstream_instructions_exist(repo_root) {
+        Ok(()) => Ok(()),
+        Err(errs) => {
+            if let Some(parent_repo) = enclosing_upstream_compiler_root(repo_root) {
+                core_check_downstream_instructions_exist(&parent_repo)
+            } else {
+                Err(errs)
+            }
+        }
+    }
 }
 
 /// Check 15: Verify reconcile-backlog tooling exists and is executable/buildable.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ECSS-E-ST-40C traceability tooling controls.
-/// Ensures backlog reconciliation tooling is present in the workspace.
+/// Ensures backlog reconciliation tooling is present in the workspace (or enclosing upstream compiler root for `<root>/.pipeline/upstream`).
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// Either compiled `reconcile-backlog` binary or its Rust crate manifest must exist.
@@ -146,7 +211,16 @@ pub fn check_downstream_instructions_exist(repo_root: &Path) -> Result<(), Vec<S
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-15-RECONCILE-BACKLOG-TOOLING].
 pub fn check_reconcile_backlog_tooling_exists(repo_root: &Path) -> Result<(), Vec<String>> {
-    core_check_reconcile_backlog_tooling_exists(repo_root)
+    match core_check_reconcile_backlog_tooling_exists(repo_root) {
+        Ok(()) => Ok(()),
+        Err(errs) => {
+            if let Some(parent_repo) = enclosing_upstream_compiler_root(repo_root) {
+                core_check_reconcile_backlog_tooling_exists(&parent_repo)
+            } else {
+                Err(errs)
+            }
+        }
+    }
 }
 
 /// Check 16: Upstream Template Clean Landing Zone Gate.
@@ -5102,6 +5176,104 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         assert!(
             res_missing.is_err(),
             "check_compiler_ast_purity must fail closed when audited files are missing"
+        );
+        Ok(())
+    }
+
+    /// Verifies that `enclosing_upstream_compiler_root` resolves `<root>` for `<root>/.pipeline/upstream`
+    /// so Checks 10, 14, and 15 pass when `<root>` provides the canonical root files, while standalone
+    /// downstream directories continue to fail closed (`Err`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C configuration management controls for
+    /// `test_enclosing_upstream_compiler_root_resolves_dogfood_and_fails_closed_standalone`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `enclosing_upstream_compiler_root(<root>/.pipeline/upstream) == Some(<root>)` iff `is_upstream_compiler(<root>)`.
+    /// - Checks 10, 14, and 15 succeed on `<root>/.pipeline/upstream` when `<root>` contains `.gitignore`,
+    ///   `README.md`, `AGENTS.md`, `rules/sysml-ssot-completeness.md`, and `crates/reconcile-backlog`.
+    /// - Standalone downstream workspaces missing those artifacts evaluate to `None` and fail closed (`Err`).
+    ///
+    /// ## 3. Preconditions
+    /// Temporary filesystem directories are writable.
+    ///
+    /// ## 4. Postconditions
+    /// Asserts `Ok(())` on verified upstream dogfood workspace and `Err` on standalone downstream directories.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) bounded fixture file count. Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Propagates unexpected setup I/O errors via `Result`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-UPSTREAM-DOGFOOD-ROOT-RESOLUTION], [REQ-CHECK-10-GITIGNORE-EXISTS], [REQ-CHECK-14-DOWNSTREAM-INSTRUCTIONS], [REQ-CHECK-15-RECONCILE-BACKLOG-TOOLING].
+    #[test]
+    fn test_enclosing_upstream_compiler_root_resolves_dogfood_and_fails_closed_standalone(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let root_tmp = TempDir::new("upstream_dogfood_root")?;
+        let dogfood_dir = root_tmp.path.join(".pipeline").join("upstream");
+        fs::create_dir_all(&dogfood_dir)?;
+
+        fs::write(root_tmp.path.join(".gitignore"), "target/\n")?;
+        fs::write(
+            root_tmp.path.join("README.md"),
+            "# Upstream Compiler\n## Operator Prompt Catalog\n",
+        )?;
+        fs::write(root_tmp.path.join("AGENTS.md"), "# Agent Governance\n")?;
+        let rules_dir = root_tmp.path.join("rules");
+        fs::create_dir_all(&rules_dir)?;
+        fs::write(
+            rules_dir.join("sysml-ssot-completeness.md"),
+            "# SysML SSOT Completeness\n",
+        )?;
+        let reconcile_crate = root_tmp.path.join("crates").join("reconcile-backlog");
+        fs::create_dir_all(reconcile_crate.join("src"))?;
+        fs::write(
+            reconcile_crate.join("Cargo.toml"),
+            "[package]\nname = \"reconcile-backlog\"\nversion = \"0.1.0\"\n",
+        )?;
+        fs::write(reconcile_crate.join("src").join("main.rs"), "fn main() {}\n")?;
+
+        assert_eq!(
+            enclosing_upstream_compiler_root(&dogfood_dir),
+            Some(root_tmp.path.clone()),
+            "enclosing_upstream_compiler_root must resolve <root> for <root>/.pipeline/upstream"
+        );
+        assert_eq!(
+            enclosing_upstream_compiler_root(&root_tmp.path),
+            None,
+            "enclosing_upstream_compiler_root must return None for <root> itself"
+        );
+
+        assert!(
+            check_gitignore_exists(&dogfood_dir).is_ok(),
+            "Check 10 must pass for <root>/.pipeline/upstream when <root>/.gitignore exists"
+        );
+        assert!(
+            check_downstream_instructions_exist(&dogfood_dir).is_ok(),
+            "Check 14 must pass for <root>/.pipeline/upstream when <root> instructions exist: {:?}",
+            check_downstream_instructions_exist(&dogfood_dir)
+        );
+        assert!(
+            check_reconcile_backlog_tooling_exists(&dogfood_dir).is_ok(),
+            "Check 15 must pass for <root>/.pipeline/upstream when <root>/crates/reconcile-backlog exists: {:?}",
+            check_reconcile_backlog_tooling_exists(&dogfood_dir)
+        );
+
+        let standalone_tmp = TempDir::new("standalone_downstream_fail_closed")?;
+        assert_eq!(enclosing_upstream_compiler_root(&standalone_tmp.path), None);
+        assert!(
+            check_gitignore_exists(&standalone_tmp.path).is_err(),
+            "Standalone downstream directory without .gitignore must fail Check 10 closed"
+        );
+        assert!(
+            check_downstream_instructions_exist(&standalone_tmp.path).is_err(),
+            "Standalone downstream directory without instructions must fail Check 14 closed"
+        );
+        assert!(
+            check_reconcile_backlog_tooling_exists(&standalone_tmp.path).is_err(),
+            "Standalone downstream directory without reconcile-backlog must fail Check 15 closed"
         );
         Ok(())
     }

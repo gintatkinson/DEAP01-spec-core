@@ -3,7 +3,7 @@
 | **Issue ID** | #653 |
 | **Title** | Use Case 30: Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
+| **Primary Actor** | Operator_Or_CI_Pipeline |
 | **Scope** | ClosedLoopDefectPublisherGate |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
@@ -16,56 +16,43 @@
 ```mermaid
 graph TD
     subgraph "ClosedLoopDefectPublisherGate System Boundary"
-        UC_Main(["Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence"])
-        UC_Step01(["Actor Operator submits input payload for Fail Closed Reje..."])
-        UC_Step02(["ClosedLoopDefectPublisherGate validates input schema stru..."])
-        UC_Step03(["ClosedLoopDefectPublisherGate executes core domain transf..."])
-        UC_Step04(["ClosedLoopDefectPublisherGate evaluates formal postcondit..."])
-        UC_Step05(["ClosedLoopDefectPublisherGate commits verified output sta..."])
+        UC_Main(["Fail Closed Rejection on Malformed Dossier Schema Ephemer..."])
+        UC_Step01(["Operator_Or_CI_Pipeline invokes Fail Closed Rejection on ..."])
+        UC_Step02(["ClosedLoopDefectPublisherGate verifies boundary precondit..."])
+        UC_Step03(["ClosedLoopDefectPublisherGate records verified Fail Close..."])
     end
-    Operator(("Operator")) --- UC_Main
+    Operator_Or_CI_Pipeline(("Operator_Or_CI_Pipeline")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
     UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `Operator_Or_CI_Pipeline`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- `ClosedLoopDefectPublisherGate` is initialized and ready to enforce `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence`.
+- `Operator_Or_CI_Pipeline` holds authorized operational access to `ClosedLoopDefectPublisherGate`.
 
 ## 3. Trigger
 - Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence` to `ClosedLoopDefectPublisherGate`.
-2. `ClosedLoopDefectPublisherGate` validates input schema structure and precondition guards for `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence`.
-3. `ClosedLoopDefectPublisherGate` executes core domain transformation and state transition logic for `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence`.
-4. `ClosedLoopDefectPublisherGate` evaluates formal postcondition assertions and structural invariants.
-5. `ClosedLoopDefectPublisherGate` commits verified output state and emits completion telemetry to `Operator`.
+1. `Operator_Or_CI_Pipeline` invokes `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence` on `ClosedLoopDefectPublisherGate` targeting objective `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence`.
+2. `ClosedLoopDefectPublisherGate` verifies boundary preconditions and evaluates `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence` invariants (guarding `Diagnostic: E0605`).
+3. `ClosedLoopDefectPublisherGate` records verified `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence` outcome and returns status to `Operator_Or_CI_Pipeline`.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `ClosedLoopDefectPublisherGate`:
-  - `ClosedLoopDefectPublisherGate` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence` execution:
-  - `ClosedLoopDefectPublisherGate` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `ClosedLoopDefectPublisherGate`:
-  - `ClosedLoopDefectPublisherGate` halts execution cleanly and reports deterministic fault status.
+- Diagnostic: E0605
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- `ClosedLoopDefectPublisherGate` satisfies declared objective `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence` with all subsystem invariants intact.
+- Verified `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence` completion status is recorded for `Operator_Or_CI_Pipeline`.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#610** | User Story | [User Story 49: verify baseline](../user-stories/US-49-verify_baseline.md) |
+| **#617** | User Story | [User Story 41: run check defect](../user-stories/US-41-run_check_defect.md) |
 | **#680** | Feature | [Feature 26: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] ClosedLoopDefectPublisherGate](../features/FEAT-26-ClosedLoopDefectPublisherGate.md) |
 
 ## Source References

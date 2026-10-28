@@ -1,25 +1,25 @@
 {
-  "sha256": "107f5b126fdfe28aa10275e43026b7e5372555087a5c22bf4801c19166896006",
-  "total_lines": 1120,
+  "sha256": "5a06e10908d7de86bddec24dddfe2dc9f2d6469502cacf982f8bd490a634019e",
+  "total_lines": 1075,
   "node_counts": {
-    "action_defs": 62,
-    "attribute_defs": 74,
+    "action_defs": 44,
+    "attribute_defs": 70,
     "calc_defs": 0,
     "capability_defs": 0,
     "connection_defs": 0,
-    "constraint_defs": 13,
+    "constraint_defs": 0,
     "containers": 30,
     "groupings": 0,
     "hazard_defs": 0,
     "identities": 0,
     "interaction_defs": 6,
     "item_defs": 0,
-    "leaves": 74,
-    "lists": 62,
+    "leaves": 70,
+    "lists": 44,
     "operation_defs": 0,
     "packages": 7,
     "part_defs": 30,
-    "port_defs": 48,
+    "port_defs": 44,
     "requirement_defs": 6,
     "risk_defs": 0,
     "state_defs": 6,
@@ -30,7 +30,7 @@
   "schema_nodes": [
     "AgileSpecForwardProjector",
     "AntiGamingTestBodyAuditor",
-    "Assert_item",
+    "AssertAstOrigEqualsAstReparsed",
     "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
     "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_LifecycleState",
     "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_SequenceInteraction",
@@ -53,54 +53,49 @@
     "BidirectionalBacklogReconciler",
     "BijectiveDiffDiagnosticPort",
     "BijectiveSysmlSerializer",
-    "Bind",
-    "Bit_identical",
-    "CLOSED_LOOP",
-    "C_PURITY_03",
-    "C_PURITY_04",
-    "Canonical",
+    "BindAllPackageStoriesToUse",
     "CargoManifestInputPort",
     "Check34AstPurityAndAntiGamingGate",
     "Check34GateStatusPort",
     "Check36AstCompletenessVerifier",
-    "Check36VerificationReportPort",
     "ClippyAttributeAstScanner",
     "ClosedLoopDefectPublisherGate",
     "ClosedLoopTrackerPublishPort",
+    "CompileSysmlEmitIcdDocsInterfaces",
+    "CompileSysmlEmitWbsDocsManagement",
+    "CompileSysmlForwardSyncDocs",
+    "CompileSysmlReverseSyncDocs",
     "CompilerDiagnosticOutputPort",
     "CompilerLintEnforcementGate",
     "CompilerRoundtripVerificationGate",
-    "Compliant",
     "CrateRootAttributeSanitizer",
-    "Created",
     "DefectDossierArtifactPort",
-    "Deterministic",
     "DeterministicDossierSynthesizer",
     "DeterministicSpecIcdWbsForwardCompiler",
     "DeterministicStaticDefectAuditor",
-    "Emit",
-    "EnrichedSourceOutputPort",
-    "Epics",
-    "Execute",
-    "Exit_item",
+    "EmitSymmetricActionDefSignaturesAndE1",
+    "EvaluateSourceFilePillarsAcross5",
+    "Execute12CheckValidateDefectDossier",
+    "ExecuteCargoClippyWorkspaceAllTargets",
+    "ExecuteIngestSysmlSchemaBlueprint01",
+    "ExecuteVerifyBaselineNoDomain",
     "FailClosedIoAstVerifier",
     "FailClosedRecursiveDescentParser",
     "FivePillarStaticAstAnalyzer",
+    "GhIssueCreateOrGhIssue",
+    "GhIssueViewJsonTitleBody",
     "GitHubIssueSsotQueryPort",
-    "ICD_01",
     "IcdMatrixArtifactPort",
-    "Line_exact",
-    "Live",
     "LogicalIcdMatrixCompiler",
     "MarkdownSpecSuiteOutputPort",
-    "Masked",
-    "Merge",
+    "MergeExtractedEntitiesIntoOwningSubpackages",
     "MermaidUmlDiagramGenerator",
     "MilStd881eWbsExporter",
     "NativeSigilAndLifetimeLexer",
-    "Ok",
-    "Parse",
-    "Project",
+    "ParseCommonMarkTablesWithInHtml",
+    "ParseRustSourceAstAndParse",
+    "ParseTypeExprAndParseTransition",
+    "ProjectNxNConnectionDefMatrixAndFlowDef",
     "PurityViolationDiagnosticPort",
     "REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
     "REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint",
@@ -110,30 +105,30 @@
     "REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
     "RangeSliceAstDetector",
     "RawSysmlSourceInputPort",
-    "Read",
-    "Reconcile",
-    "Reparsed",
-    "Resolve",
-    "Return",
-    "Run",
+    "ReadWorkspaceLintsClippyForbidTable",
+    "ReconcileBacklogReconcileDocsDirDocs",
+    "ReconcileChecklistsWithParentInclusiveEpic",
+    "ResolveParentEpicByPkgName",
+    "ResolveSchemaContextViaCollectAll",
+    "RunCompileSysmlInjectSafetyDocstrings",
+    "RunIngestSysmlSchemaBlueprint05",
+    "RunScanClippyAllowTokensOn",
+    "RunVerifyBaselineNoDomain",
     "RustSourceTokenStreamPort",
-    "Scan",
+    "ScanSourceLinesViaRustDartLexStateAnd",
     "ScopedSchemaContextResolver",
     "SerializedSysmlOutputPort",
     "SevenSectionDocstringGenerator",
-    "Sorted",
-    "SourceCodeFileInputPort",
     "SsotSymbolDeduplicationGate",
-    "Synthesize",
+    "SynthesizeMilStd881eTreeAnd",
     "SysML_Model",
     "SysmlBijectiveRoundtripCompilerGate",
     "SysmlPackageAstInputPort",
-    "SysmlSchemaTraceabilityPort",
     "TargetSourceAstInputPort",
     "TestFunctionAstStreamPort",
     "TestTargetLintEnforcer",
     "TokenStreamChannelPort",
-    "Tokenize",
+    "TokenizeRsAndDartFilesUsing",
     "UC_AC_01_Deterministic_Multi_Story_Use_Case_and_ConOps_Parent_Epic_Projection",
     "UC_AC_01_General_Direct_Range_Slice_Indexing_Rejection",
     "UC_AC_01_Native_Lexer_Sigil_and_Lifetime_Tokenization",
@@ -167,29 +162,12 @@
     "UC_AC_06_Dogfood_SysML_v2_Markdown_Ingestion_and_Blueprint_Gate_Conformance",
     "UnifiedRustDartLexicalScanner",
     "UnifiedSafetyDocstringSynthesizer",
-    "Vec",
-    "Verify_item",
-    "WBS_01_03",
+    "VerifyBaselineAuditCodePathCrates",
     "WbsEnterpriseExportPort",
     "WorkspaceManifestForbidGate",
     "WorkspaceSourceAstPort",
-    "Write",
-    "Zero",
     "activePillarCount",
     "allowed_suppression_count",
-    "assert_direct_range_slice_count_range",
-    "assert_docstring_idempotency_diff_bytes_range",
-    "assert_dropped_ast_field_count_range",
-    "assert_duplicate_lexer_impl_count_range",
-    "assert_duplicate_sha256_impl_count_range",
-    "assert_fail_open_io_site_count_range",
-    "assert_false_attribution_count_range",
-    "assert_lexer_duplication_count_range",
-    "assert_magic_offset_constant_count_range",
-    "assert_roundtrip_ast_mismatch_count_range",
-    "assert_silent_skip_branch_count_range",
-    "assert_span_offset_drift_bytes_range",
-    "assert_vacuous_test_count_range",
     "astStreamInPort",
     "ast_node_coverage_percent",
     "ast_orig_to_sysml",
@@ -201,20 +179,16 @@
     "check_compiler_ast_purity",
     "closed_loop_mismatch_bytes",
     "cmd_in",
-    "compile_sysml",
     "contains_direct_range_slice",
     "crates_enforced_count",
     "direct_range_slice_count",
-    "docstring_idempotency_diff_bytes",
     "dossierCandidateInPort",
     "dossierMarkdownOutPort",
     "dossier_schema_check_count",
     "dropped_ast_field_count",
     "duplicate_lexer_impl_count",
     "duplicate_sha256_impl_count",
-    "evaluate_source_file_pillars",
     "fail_open_io_site_count",
-    "false_attribution_count",
     "findingInPort",
     "findingStreamOutPort",
     "forbidSemicolons",
@@ -226,13 +200,10 @@
     "forbid_type_complexity",
     "forbid_unwrap_used",
     "forward_reverse_drift_count",
-    "gh",
     "icdMarkdownOutPort",
     "interconnectAstInPort",
-    "lexer_duplication_count",
     "lexicographicalSort",
     "llm_subagent_invocation_count",
-    "magic_offset_constant_count",
     "mandatorySectionCount",
     "mask_literals_and_comments",
     "maxForwardLatencyMs",
@@ -243,12 +214,9 @@
     "packageAstInPort",
     "parentInclusiveEpics",
     "parse_package_or_file",
-    "parse_rust_source_ast",
-    "parse_type_expr",
     "pillar_coverage_count",
     "preserveTypedActionParams",
     "quantity",
-    "reconcile_backlog",
     "requireByteParity",
     "roundtrip_ast_mismatch_count",
     "run_check_defect",
@@ -266,7 +234,6 @@
     "umlSpecInPort",
     "vacuous_test_count",
     "verifiedReceiptOutPort",
-    "verify_baseline",
     "verify_bijective_ast_roundtrip",
     "wbsArtifactsOutPort",
     "wbsAstMetadataInPort",
@@ -277,7 +244,7 @@
   "operational_activities": [
     {
       "id": "OA-01",
-      "name": "Execute",
+      "name": "ExecuteCargoClippyWorkspaceAllTargets",
       "doc": "Execute cargo clippy --workspace --all-targets",
       "performer": "",
       "inputs": [],
@@ -285,7 +252,7 @@
     },
     {
       "id": "OA-02",
-      "name": "Read",
+      "name": "ReadWorkspaceLintsClippyForbidTable",
       "doc": "Read [workspace.lints.clippy] forbid table",
       "performer": "",
       "inputs": [],
@@ -293,24 +260,24 @@
     },
     {
       "id": "OA-03",
-      "name": "Return",
-      "doc": "Return forbid rules for unwrap, expect, panic, indexing",
+      "name": "ExecuteVerifyBaselineNoDomain",
+      "doc": "Execute verify-baseline . --no-domain",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
       "id": "OA-04",
-      "name": "Emit",
-      "doc": "Emit E0453 hard error if any allow(clippy::) exists",
+      "name": "RunScanClippyAllowTokensOn",
+      "doc": "Run scan_clippy_allow_tokens on all crates/ ** / *.rs",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
       "id": "OA-05",
-      "name": "Run",
-      "doc": "Run scan_clippy_allow_tokens on all crates/**/*.rs",
+      "name": "ExecuteIngestSysmlSchemaBlueprint01",
+      "doc": "Execute ingest-sysml --schema blueprint-01 --format markdown",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -333,14 +300,6 @@
     },
     {
       "id": "OA-08",
-      "name": "Masked",
-      "doc": "Masked code lines and RustFnAst stream",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-09",
       "name": "contains_direct_range_slice",
       "doc": "contains_direct_range_slice(code_line)",
       "performer": "",
@@ -348,7 +307,7 @@
       "outputs": []
     },
     {
-      "id": "OA-10",
+      "id": "OA-09",
       "name": "audit_fail_closed_io_patterns",
       "doc": "audit_fail_closed_io_patterns(code_line)",
       "performer": "",
@@ -356,7 +315,7 @@
       "outputs": []
     },
     {
-      "id": "OA-11",
+      "id": "OA-10",
       "name": "audit_test_integrity_and_anti_gaming",
       "doc": "audit_test_integrity_and_anti_gaming(test_fn)",
       "performer": "",
@@ -364,15 +323,7 @@
       "outputs": []
     },
     {
-      "id": "OA-12",
-      "name": "C_PURITY_03",
-      "doc": "C-PURITY-03 test integrity diagnostics",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-13",
+      "id": "OA-11",
       "name": "audit_ssot_symbol_deduplication",
       "doc": "audit_ssot_symbol_deduplication(file_rel, source)",
       "performer": "",
@@ -380,23 +331,7 @@
       "outputs": []
     },
     {
-      "id": "OA-14",
-      "name": "C_PURITY_04",
-      "doc": "C-PURITY-04 and C-PURITY-05 diagnostics",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-15",
-      "name": "Sorted",
-      "doc": "Sorted Result verdict (Ok or Err diagnostics)",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-16",
+      "id": "OA-12",
       "name": "scan_all",
       "doc": "scan_all(raw_sysml_source)",
       "performer": "",
@@ -404,15 +339,7 @@
       "outputs": []
     },
     {
-      "id": "OA-17",
-      "name": "Vec",
-      "doc": "Vec of Token with zero span drift",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-18",
+      "id": "OA-13",
       "name": "parse_package_or_file",
       "doc": "parse_package_or_file(tokens)",
       "performer": "",
@@ -420,23 +347,15 @@
       "outputs": []
     },
     {
-      "id": "OA-19",
-      "name": "parse_type_expr",
+      "id": "OA-14",
+      "name": "ParseTypeExprAndParseTransition",
       "doc": "parse_type_expr and parse_transition_decl_tokens",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-20",
-      "name": "Canonical",
-      "doc": "Canonical PackageDef AST (ast_orig)",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-21",
+      "id": "OA-15",
       "name": "verify_bijective_ast_roundtrip",
       "doc": "verify_bijective_ast_roundtrip(ast_orig)",
       "performer": "",
@@ -444,7 +363,7 @@
       "outputs": []
     },
     {
-      "id": "OA-22",
+      "id": "OA-16",
       "name": "ast_orig_to_sysml",
       "doc": "ast_orig.to_sysml(0)",
       "performer": "",
@@ -452,255 +371,191 @@
       "outputs": []
     },
     {
-      "id": "OA-23",
-      "name": "Reparsed",
-      "doc": "Reparsed token stream",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-24",
-      "name": "Assert_item",
+      "id": "OA-17",
+      "name": "AssertAstOrigEqualsAstReparsed",
       "doc": "Assert ast_orig equals ast_reparsed",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-25",
-      "name": "Ok",
-      "doc": "Ok or Err(E0400 Structural AST Diff)",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-26",
-      "name": "compile_sysml",
+      "id": "OA-18",
+      "name": "CompileSysmlForwardSyncDocs",
       "doc": "compile-sysml --forward-sync docs",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-27",
-      "name": "Resolve",
+      "id": "OA-19",
+      "name": "ResolveParentEpicByPkgName",
       "doc": "Resolve Parent Epic by pkg_name == ConOps",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-28",
-      "name": "Bind",
+      "id": "OA-20",
+      "name": "BindAllPackageStoriesToUse",
       "doc": "Bind all package stories to Use Case matrices",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-29",
-      "name": "Emit",
+      "id": "OA-21",
+      "name": "EmitSymmetricActionDefSignaturesAndE1",
       "doc": "Emit symmetric ActionDef signatures and E1-E5 Mermaid",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-30",
-      "name": "Epics",
-      "doc": "Epics, Features, Stories, and Use Cases written",
+      "id": "OA-22",
+      "name": "CompileSysmlEmitIcdDocsInterfaces",
+      "doc": "compile-sysml --emit-icd docs/interfaces",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-31",
-      "name": "Project",
+      "id": "OA-23",
+      "name": "ProjectNxNConnectionDefMatrixAndFlowDef",
       "doc": "Project NxN ConnectionDef matrix and FlowDef signals",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-32",
-      "name": "ICD_01",
-      "doc": "ICD_01 and ICD_02 written deterministically",
+      "id": "OA-24",
+      "name": "CompileSysmlEmitWbsDocsManagement",
+      "doc": "compile-sysml --emit-wbs docs/management",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-33",
-      "name": "Synthesize",
+      "id": "OA-25",
+      "name": "SynthesizeMilStd881eTreeAnd",
       "doc": "Synthesize MIL-STD-881E tree and CSV/JSON exports",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-34",
-      "name": "WBS_01_03",
-      "doc": "WBS_01..03 and enterprise exports written",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-35",
-      "name": "reconcile_backlog",
+      "id": "OA-26",
+      "name": "ReconcileBacklogReconcileDocsDirDocs",
       "doc": "reconcile-backlog reconcile --docs-dir docs",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-36",
-      "name": "Parse",
+      "id": "OA-27",
+      "name": "ParseCommonMarkTablesWithInHtml",
       "doc": "Parse CommonMark tables with in_html_comment guard",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-37",
-      "name": "Reconcile",
+      "id": "OA-28",
+      "name": "ReconcileChecklistsWithParentInclusiveEpic",
       "doc": "Reconcile checklists with parent-inclusive epic count",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-38",
-      "name": "Zero",
-      "doc": "Zero unpopulated placeholders or spoofed IDs",
+      "id": "OA-29",
+      "name": "CompileSysmlReverseSyncDocs",
+      "doc": "compile-sysml --reverse-sync docs",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-39",
-      "name": "Merge",
+      "id": "OA-30",
+      "name": "MergeExtractedEntitiesIntoOwningSubpackages",
       "doc": "Merge extracted entities into owning subpackages",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-40",
-      "name": "Bit_identical",
-      "doc": "Bit-identical SysML v2 AST and SHA-256 digest",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-41",
-      "name": "Run",
+      "id": "OA-31",
+      "name": "RunCompileSysmlInjectSafetyDocstrings",
       "doc": "Run compile-sysml --inject-safety-docstrings <DIR>",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-42",
-      "name": "Scan",
+      "id": "OA-32",
+      "name": "ScanSourceLinesViaRustDartLexStateAnd",
       "doc": "Scan source lines via RustDartLexState and ScopedItemScannerState",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-43",
-      "name": "Return",
-      "doc": "Return declaration items, owner_name, params, fields, invariants",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-44",
-      "name": "Resolve",
+      "id": "OA-33",
+      "name": "ResolveSchemaContextViaCollectAll",
       "doc": "Resolve schema context via collect_all_parts without .first() fallback",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-45",
-      "name": "Write",
-      "doc": "Write 7-section docstrings atomically with 0 diff on second pass",
+      "id": "OA-34",
+      "name": "RunVerifyBaselineNoDomain",
+      "doc": "Run verify-baseline . --no-domain (Check 36 & Check 34)",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-46",
-      "name": "Tokenize",
+      "id": "OA-35",
+      "name": "TokenizeRsAndDartFilesUsing",
       "doc": "Tokenize .rs and .dart files using shared deap-core lexical state",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-47",
-      "name": "Verify_item",
-      "doc": "Verify 7 sections, non-empty Realises tag, and unique normalized body",
+      "id": "OA-36",
+      "name": "RunIngestSysmlSchemaBlueprint05",
+      "doc": "Run ingest-sysml --schema blueprint-05 --format markdown",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-48",
-      "name": "Emit",
-      "doc": "Emit canonical SysML v2 AST for REQ-0605 and SHA-256 digest",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-49",
-      "name": "verify_baseline",
+      "id": "OA-37",
+      "name": "VerifyBaselineAuditCodePathCrates",
       "doc": "verify-baseline audit-code --path crates/ --publish",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-50",
-      "name": "parse_rust_source_ast",
+      "id": "OA-38",
+      "name": "ParseRustSourceAstAndParse",
       "doc": "parse_rust_source_ast and parse_dart_source_ast",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-51",
-      "name": "Deterministic",
-      "doc": "Deterministic Vec of SourceAstItem nodes",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-52",
-      "name": "evaluate_source_file_pillars",
+      "id": "OA-39",
+      "name": "EvaluateSourceFilePillarsAcross5",
       "doc": "evaluate_source_file_pillars across 5 pillars",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-53",
-      "name": "Line_exact",
-      "doc": "Line-exact AuditFinding records",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-54",
+      "id": "OA-40",
       "name": "synthesize_defect_dossier_markdown",
       "doc": "synthesize_defect_dossier_markdown(finding)",
       "performer": "",
@@ -708,15 +563,7 @@
       "outputs": []
     },
     {
-      "id": "OA-55",
-      "name": "Compliant",
-      "doc": "Compliant 7-section DEFECT-SLUG.md payload",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-56",
+      "id": "OA-41",
       "name": "run_check_defect",
       "doc": "run_check_defect(DefectDossierArgs)",
       "performer": "",
@@ -724,49 +571,25 @@
       "outputs": []
     },
     {
-      "id": "OA-57",
-      "name": "Execute",
+      "id": "OA-42",
+      "name": "Execute12CheckValidateDefectDossier",
       "doc": "Execute 12-check validate_defect_dossier gate",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-58",
-      "name": "gh",
+      "id": "OA-43",
+      "name": "GhIssueCreateOrGhIssue",
       "doc": "gh issue create or gh issue edit with body-file",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-59",
-      "name": "Created",
-      "doc": "Created or updated GitHub Issue URL",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-60",
-      "name": "Live",
-      "doc": "Live remote payload for byte-for-byte comparison",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-61",
-      "name": "CLOSED_LOOP",
-      "doc": "CLOSED-LOOP VERIFIED receipt (0 mismatch bytes)",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-62",
-      "name": "Exit_item",
-      "doc": "Exit code 0 with verified issue URLs",
+      "id": "OA-44",
+      "name": "GhIssueViewJsonTitleBody",
+      "doc": "gh issue view --json title,body,url",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -1020,19 +843,7 @@
     {
       "name": "TestTargetLintEnforcer",
       "node_type": "Part",
-      "doc": "Enforces identical forbid lint discipline across unit tests (#[cfg(test)]) and integration tests (tests/*.rs).",
-      "allocated_activities": []
-    },
-    {
-      "name": "RangeSliceAstDetector",
-      "node_type": "Part",
-      "doc": "Zero-regex token-stream analyzer that detects panicking Rust bracket range indexing (`expr[a..b]`, `expr[..b]`, `expr[a..]`) outside string literals, comments, and `.get(..)` calls",
-      "allocated_activities": []
-    },
-    {
-      "name": "FailClosedIoAstVerifier",
-      "node_type": "Part",
-      "doc": "AST pattern verifier that rejects fail-open iterator flattening, `.filter_map(Result::ok)`, `.unwrap_or_default()` on filesystem reads, and `let _ = fs::` error discarding",
+      "doc": "Enforces identical forbid lint discipline across unit tests (#[cfg(test)]) and integration tests (tests/ *.rs).",
       "allocated_activities": []
     },
     {
@@ -1042,27 +853,27 @@
       "allocated_activities": []
     },
     {
-      "name": "SsotSymbolDeduplicationGate",
-      "node_type": "Part",
-      "doc": "Workspace-wide AST symbol scanner enforcing single-module residency for SHA-256 constants (`0x428a2f98`) and Rust lexical state machines",
-      "allocated_activities": []
-    },
-    {
       "name": "Check34AstPurityAndAntiGamingGate",
       "node_type": "Part",
       "doc": "",
       "allocated_activities": []
     },
     {
-      "name": "NativeSigilAndLifetimeLexer",
+      "name": "FailClosedIoAstVerifier",
       "node_type": "Part",
-      "doc": "Zero-rewrite scanner emitting native `Ampersand`, `Question`, `Lifetime`, and `DoubleColon` tokens with exact byte spans",
+      "doc": "AST pattern verifier that rejects fail-open iterator flattening, `.filter_map(Result::ok)`, `.unwrap_or_default()` on filesystem reads, and `let _ = fs::` error discarding",
       "allocated_activities": []
     },
     {
-      "name": "FailClosedRecursiveDescentParser",
+      "name": "RangeSliceAstDetector",
       "node_type": "Part",
-      "doc": "Strict token-stream parser for all 12 inner declaration blocks, composite type expressions, and nested state transitions",
+      "doc": "Zero-regex token-stream analyzer that detects panicking Rust bracket range indexing (`expr[a..b]`, `expr[..b]`, `expr[a..]`) outside string literals, comments, and `.get(..)` calls",
+      "allocated_activities": []
+    },
+    {
+      "name": "SsotSymbolDeduplicationGate",
+      "node_type": "Part",
+      "doc": "Workspace-wide AST symbol scanner enforcing single-module residency for SHA-256 constants (`0x428a2f98`) and Rust lexical state machines",
       "allocated_activities": []
     },
     {
@@ -1078,9 +889,21 @@
       "allocated_activities": []
     },
     {
+      "name": "FailClosedRecursiveDescentParser",
+      "node_type": "Part",
+      "doc": "Strict token-stream parser for all 12 inner declaration blocks, composite type expressions, and nested state transitions",
+      "allocated_activities": []
+    },
+    {
+      "name": "NativeSigilAndLifetimeLexer",
+      "node_type": "Part",
+      "doc": "Zero-rewrite scanner emitting native `Ampersand`, `Question`, `Lifetime`, and `DoubleColon` tokens with exact byte spans",
+      "allocated_activities": []
+    },
+    {
       "name": "SysmlBijectiveRoundtripCompilerGate",
       "node_type": "Part",
-      "doc": "---",
+      "doc": "",
       "allocated_activities": []
     },
     {
@@ -1114,9 +937,9 @@
       "allocated_activities": []
     },
     {
-      "name": "UnifiedRustDartLexicalScanner",
+      "name": "Check36AstCompletenessVerifier",
       "node_type": "Part",
-      "doc": "Canonical zero-regex lexical state machine in `deap_core::source_ast` handling nested `/* */`, `r#\"...\"#`, Dart `${...}` frames, and exact char-literal vs. lifetime disambiguation",
+      "doc": "Baseline verification gate in `verify-baseline` auditing 100% per-item 7-section docstring coverage and Check 34 normalized body uniqueness using `deap_core::source_ast`",
       "allocated_activities": []
     },
     {
@@ -1132,15 +955,15 @@
       "allocated_activities": []
     },
     {
-      "name": "Check36AstCompletenessVerifier",
+      "name": "UnifiedRustDartLexicalScanner",
       "node_type": "Part",
-      "doc": "Baseline verification gate in `verify-baseline` auditing 100% per-item 7-section docstring coverage and Check 34 normalized body uniqueness using `deap_core::source_ast`",
+      "doc": "Canonical zero-regex lexical state machine in `deap_core::source_ast` handling nested `/ * * /`, `r#\"...\"#`, Dart `${...}` frames, and exact char-literal vs. lifetime disambiguation",
       "allocated_activities": []
     },
     {
       "name": "UnifiedSafetyDocstringSynthesizer",
       "node_type": "Part",
-      "doc": "---",
+      "doc": "",
       "allocated_activities": []
     },
     {

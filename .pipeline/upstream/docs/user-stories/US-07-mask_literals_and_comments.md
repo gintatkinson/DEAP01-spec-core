@@ -11,28 +11,52 @@
 
 # User Story 07: mask literals and comments
 
+## User Story
+
+As a `VerifyBaselineCLI`, I want to invoke `mask_literals_and_comments()` on `Check34AstPurityAndAntiGamingGate`, so that mask_literals_and_comments(source).
+
+## Architectural Realization (3-Layer Definition of Done)
+
+### Layer 1: Domain State & Data Model
+- Domain state attributes on `Check34AstPurityAndAntiGamingGate`: `direct_range_slice_count: Integer`, `fail_open_io_site_count: Integer`, `vacuous_test_count: Integer`, `duplicate_sha256_impl_count: Integer`, `duplicate_lexer_impl_count: Integer`.
+- Action `mask_literals_and_comments` invocation message envelope bound to `Check34AstPurityAndAntiGamingGate` typed domain schema.
+- Declared lifecycle state model: `BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint_LifecycleState`, `AntiGamingTestBodyAuditor_State`, `Check34AstPurityAndAntiGamingGate_State`, `FailClosedIoAstVerifier_State`.
+
+### Layer 2: Logic & State Management
+- Behavioral execution contract: invokes `mask_literals_and_comments()` on `Check34AstPurityAndAntiGamingGate` with atomic precondition verification.
+- State transition management: `Check34AstPurityAndAntiGamingGate_State -> FailClosedIoAstVerifier_State` (trigger `mask_literals_and_comments`).
+- Formal constraints and requirements enforced: `REQ-0602 (REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint)`.
+
+### Layer 3: Presentation & Actuator Interface Binding
+- Component port bindings on `Check34AstPurityAndAntiGamingGate`: `WorkspaceSourceAstPort: String (in)`, `TestFunctionAstStreamPort: String (in)`, `PurityViolationDiagnosticPort: String (out)`, `Check34GateStatusPort: Integer (out)`.
+- Interaction binding (`BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint_SequenceInteraction`): routes `mask_literals_and_comments` invocation from `VerifyBaselineCLI` to `Check34AstPurityAndAntiGamingGate` and returns `mask_literals_and_comments`.
+- Diagnostic fault surface: reports deterministic rejection diagnostics to `VerifyBaselineCLI` across the declared interface boundary when guard or invariant checks fail.
+
 ## UML Sequence Diagram
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Operator
-    participant RangeSliceAstDetector
-    participant FailClosedIoAstVerifier
-    Operator->>RangeSliceAstDetector: mask_literals_and_comments()
-    RangeSliceAstDetector->>FailClosedIoAstVerifier: mask_literals_and_comments()
-    FailClosedIoAstVerifier-->>RangeSliceAstDetector: mask_literals_and_comments
-    RangeSliceAstDetector-->>Operator: StatusReport
+    actor VerifyBaselineCLI
+    participant AntiGamingTestBodyAuditor
+    participant Check34AstPurityAndAntiGamingGate
+    VerifyBaselineCLI->>AntiGamingTestBodyAuditor: mask_literals_and_comments()
+    AntiGamingTestBodyAuditor->>Check34AstPurityAndAntiGamingGate: mask_literals_and_comments()
+    Check34AstPurityAndAntiGamingGate-->>AntiGamingTestBodyAuditor: mask_literals_and_comments
+    AntiGamingTestBodyAuditor-->>VerifyBaselineCLI: StatusReport
 ```
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-US-07-01: Given operational environment initialized, When mask_literals_and_comments executes, Then FailClosedIoAstVerifier processes the AST within defined latency envelope.
-- [ ] AC-US-07-02: Given formal constraints, When semantic validator executes, Then asserts invariant satisfaction.
-- [ ] AC-US-07-03: Given exceptional conditions, When error recovery activates, Then graceful recovery occurs without data loss.
+- [ ] AC-US-07-01: Given `Check34AstPurityAndAntiGamingGate` is in declared state `Check34AstPurityAndAntiGamingGate_State` with domain state attributes (`direct_range_slice_count: Integer`, `fail_open_io_site_count: Integer`, `vacuous_test_count: Integer`, `duplicate_sha256_impl_count: Integer`, `duplicate_lexer_impl_count: Integer`), When `VerifyBaselineCLI` invokes `mask_literals_and_comments` on `Check34AstPurityAndAntiGamingGate`, Then `Check34AstPurityAndAntiGamingGate` validates and binds the request against `Check34AstPurityAndAntiGamingGate` domain state (`direct_range_slice_count: Integer`, `fail_open_io_site_count: Integer`, `vacuous_test_count: Integer`, `duplicate_sha256_impl_count: Integer`, `duplicate_lexer_impl_count: Integer`) and transitions to `FailClosedIoAstVerifier_State`.
+- [ ] AC-US-07-02: Given `Check34AstPurityAndAntiGamingGate` active state management during `mask_literals_and_comments`, When `Check34AstPurityAndAntiGamingGate` evaluates formal constraint `Invariant_REQ_0602_SC_01`, Then `Check34AstPurityAndAntiGamingGate` verifies constraint satisfaction before committing state updates.
+- [ ] AC-US-07-03: Given `Check34AstPurityAndAntiGamingGate` active state management during `mask_literals_and_comments`, When `Check34AstPurityAndAntiGamingGate` evaluates formal constraint `Invariant_REQ_0602_SC_02`, Then `Check34AstPurityAndAntiGamingGate` verifies constraint satisfaction before committing state updates.
+- [ ] AC-US-07-04: Given `Check34AstPurityAndAntiGamingGate` requirement allocation for `mask_literals_and_comments`, When `Check34AstPurityAndAntiGamingGate` verifies formal requirement `REQ-0602 (REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint)`, Then `Check34AstPurityAndAntiGamingGate` confirms normative requirement satisfaction across execution.
+- [ ] AC-US-07-05: Given `Check34AstPurityAndAntiGamingGate` ingress port binding (`WorkspaceSourceAstPort: String`, `TestFunctionAstStreamPort: String`), When `Check34AstPurityAndAntiGamingGate` completes `mask_literals_and_comments`, Then `Check34AstPurityAndAntiGamingGate` delivers `mask_literals_and_comments` across egress port (`PurityViolationDiagnosticPort: String`, `Check34GateStatusPort: Integer`) to `VerifyBaselineCLI`.
+- [ ] AC-US-07-06: Given violated formal constraint `Invariant_REQ_0602_SC_01`, When `VerifyBaselineCLI` invokes `mask_literals_and_comments` on `Check34AstPurityAndAntiGamingGate`, Then `Check34AstPurityAndAntiGamingGate` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic fault diagnostic across the interface binding.
 
 ## Required Features
-- [ ] #660 - [Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] RangeSliceAstDetector](../features/FEAT-06-RangeSliceAstDetector.md)
-- [ ] #661 - [Feature 07: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] FailClosedIoAstVerifier](../features/FEAT-07-FailClosedIoAstVerifier.md)
+- [ ] #662 - [Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] AntiGamingTestBodyAuditor](../features/FEAT-06-AntiGamingTestBodyAuditor.md)
+- [ ] #664 - [Feature 07: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] Check34AstPurityAndAntiGamingGate](../features/FEAT-07-Check34AstPurityAndAntiGamingGate.md)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:

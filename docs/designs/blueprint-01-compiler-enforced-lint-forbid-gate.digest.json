@@ -38,14 +38,14 @@
     "CompilerDiagnosticOutputPort",
     "CompilerLintEnforcementGate",
     "CrateRootAttributeSanitizer",
-    "Emit",
-    "Execute",
+    "ExecuteCargoClippyWorkspaceAllTargets",
+    "ExecuteIngestSysmlSchemaBlueprint01",
+    "ExecuteVerifyBaselineNoDomain",
     "Generation_Mode",
     "REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
-    "Read",
+    "ReadWorkspaceLintsClippyForbidTable",
     "Requirement_ID",
-    "Return",
-    "Run",
+    "RunScanClippyAllowTokensOn",
     "RustSourceTokenStreamPort",
     "Specification_Source",
     "Status",
@@ -75,7 +75,7 @@
   "operational_activities": [
     {
       "id": "OA-01",
-      "name": "Execute",
+      "name": "ExecuteCargoClippyWorkspaceAllTargets",
       "doc": "Execute cargo clippy --workspace --all-targets",
       "performer": "",
       "inputs": [],
@@ -83,7 +83,7 @@
     },
     {
       "id": "OA-02",
-      "name": "Read",
+      "name": "ReadWorkspaceLintsClippyForbidTable",
       "doc": "Read [workspace.lints.clippy] forbid table",
       "performer": "",
       "inputs": [],
@@ -91,24 +91,24 @@
     },
     {
       "id": "OA-03",
-      "name": "Return",
-      "doc": "Return forbid rules for unwrap, expect, panic, indexing",
+      "name": "ExecuteVerifyBaselineNoDomain",
+      "doc": "Execute verify-baseline . --no-domain",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
       "id": "OA-04",
-      "name": "Emit",
-      "doc": "Emit E0453 hard error if any allow(clippy::) exists",
+      "name": "RunScanClippyAllowTokensOn",
+      "doc": "Run scan_clippy_allow_tokens on all crates/ ** / *.rs",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
       "id": "OA-05",
-      "name": "Run",
-      "doc": "Run scan_clippy_allow_tokens on all crates/ ** / *.rs",
+      "name": "ExecuteIngestSysmlSchemaBlueprint01",
+      "doc": "Execute ingest-sysml --schema blueprint-01 --format markdown",
       "performer": "",
       "inputs": [],
       "outputs": []

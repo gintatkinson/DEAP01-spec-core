@@ -1,71 +1,56 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #628 |
-| **Title** | Use Case 05: Dogfood Ingestion and Sys ML v2 Compilation of REQ 0601 |
+| **Title** | Use Case 05: Dogfood Ingestion and SysML v2 Compilation of REQ 0601 |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
+| **Primary Actor** | Compiler_Engineer_CI |
 | **Scope** | CompilerLintEnforcementGate |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# Use Case 05: Dogfood Ingestion and Sys ML v2 Compilation of REQ 0601
+# Use Case 05: Dogfood Ingestion and SysML v2 Compilation of REQ 0601
 
 ## UML Diagrams
 
 ```mermaid
 graph TD
     subgraph "CompilerLintEnforcementGate System Boundary"
-        UC_Main(["Dogfood Ingestion and Sys ML v2 Compilation of REQ 0601"])
-        UC_Step01(["Actor Operator submits input payload for Dogfood Ingestio..."])
-        UC_Step02(["CompilerLintEnforcementGate validates input schema struct..."])
-        UC_Step03(["CompilerLintEnforcementGate executes core domain transfor..."])
-        UC_Step04(["CompilerLintEnforcementGate evaluates formal postconditio..."])
-        UC_Step05(["CompilerLintEnforcementGate commits verified output state..."])
+        UC_Main(["Dogfood Ingestion and SysML v2 Compilation of REQ 0601"])
+        UC_Step01(["./target/release/verify-baseline check-blueprint docs/des..."])
+        UC_Step02(["All 12 mechanical blueprint verification gates pass, and ..."])
     end
-    Operator(("Operator")) --- UC_Main
+    Compiler_Engineer_CI(("Compiler_Engineer_CI")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
-    UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `Compiler_Engineer_CI`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- This blueprint specification docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md.
 
 ## 3. Trigger
-- Dogfood Ingestion and SysML v2 Compilation of REQ 0601
+- ./target/release/verify-baseline check-blueprint docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --dry-run is executed.
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Dogfood Ingestion and Sys ML v2 Compilation of REQ 0601` to `CompilerLintEnforcementGate`.
-2. `CompilerLintEnforcementGate` validates input schema structure and precondition guards for `Dogfood Ingestion and Sys ML v2 Compilation of REQ 0601`.
-3. `CompilerLintEnforcementGate` executes core domain transformation and state transition logic for `Dogfood Ingestion and Sys ML v2 Compilation of REQ 0601`.
-4. `CompilerLintEnforcementGate` evaluates formal postcondition assertions and structural invariants.
-5. `CompilerLintEnforcementGate` commits verified output state and emits completion telemetry to `Operator`.
+1. ./target/release/verify-baseline check-blueprint docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --dry-run is executed.
+2. All 12 mechanical blueprint verification gates pass, and the translator synthesizes REQ-0601, CompilerLintEnforcementGate, its interface ports, state attributes, formal constraints (C-LINT-01..C-LINT-03), and AC-01..AC-05 into docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.sysml and.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `CompilerLintEnforcementGate`:
-  - `CompilerLintEnforcementGate` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Dogfood Ingestion and Sys ML v2 Compilation of REQ 0601` execution:
-  - `CompilerLintEnforcementGate` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `CompilerLintEnforcementGate`:
-  - `CompilerLintEnforcementGate` halts execution cleanly and reports deterministic fault status.
+- Precondition guard failure in `CompilerLintEnforcementGate`:
+  - `CompilerLintEnforcementGate` rejects the `Dogfood Ingestion and SysML v2 Compilation of REQ 0601` request without partial state mutation and reports diagnostic status to `Compiler_Engineer_CI`.
+- Invariant violation while enforcing `Dogfood Ingestion and SysML v2 Compilation of REQ 0601`:
+  - `CompilerLintEnforcementGate` aborts `Dogfood Ingestion and SysML v2 Compilation of REQ 0601` execution, preserves prior verified state, and notifies `Compiler_Engineer_CI`.
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- All 12 mechanical blueprint verification gates pass, and the translator synthesizes REQ-0601, CompilerLintEnforcementGate, its interface ports, state attributes, formal constraints (C-LINT-01..C-LINT-03), and AC-01..AC-05 into docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.sysml and.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#562** | User Story | [User Story 01: [CompilerLintEnforcementGate] Execute](../user-stories/US-01-Execute.md) |
+| **#704** | User Story | [User Story 05: Execute Ingest Sysml Schema Blueprint01](../user-stories/US-05-ExecuteIngestSysmlSchemaBlueprint01.md) |
 | **#655** | Feature | [Feature 01: [BP 01 Compiler Enforced Forbid Lint Gate and Zero Suppression AST Architecture Blueprint] CompilerLintEnforcementGate](../features/FEAT-01-CompilerLintEnforcementGate.md) |
 
 ## Source References

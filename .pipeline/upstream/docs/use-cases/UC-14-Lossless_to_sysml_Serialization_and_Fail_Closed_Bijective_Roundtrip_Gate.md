@@ -3,8 +3,8 @@
 | **Issue ID** | #637 |
 | **Title** | Use Case 14: Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
-| **Scope** | NativeSigilAndLifetimeLexer |
+| **Primary Actor** | Compiler_CLI_Caller |
+| **Scope** | BijectiveSysmlSerializer |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
@@ -15,58 +15,43 @@
 
 ```mermaid
 graph TD
-    subgraph "NativeSigilAndLifetimeLexer System Boundary"
-        UC_Main(["Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate"])
-        UC_Step01(["Actor Operator submits input payload for Lossless to sysm..."])
-        UC_Step02(["NativeSigilAndLifetimeLexer validates input schema struct..."])
-        UC_Step03(["NativeSigilAndLifetimeLexer executes core domain transfor..."])
-        UC_Step04(["NativeSigilAndLifetimeLexer evaluates formal postconditio..."])
-        UC_Step05(["NativeSigilAndLifetimeLexer commits verified output state..."])
+    subgraph "BijectiveSysmlSerializer System Boundary"
+        UC_Main(["Lossless to sysml Serialization and Fail Closed Bijective..."])
+        UC_Step01(["verify_bijective_ast_roundtrip(&pkg) executes during comp..."])
+        UC_Step02(["pkg.to_sysml(0) emits valid un-double-quoted SysML v2 tex..."])
     end
-    Operator(("Operator")) --- UC_Main
+    Compiler_CLI_Caller(("Compiler_CLI_Caller")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
-    UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `Compiler_CLI_Caller`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- A populated PackageDef AST containing StateDef transitions (source, trigger, guard, effect, target, doc), PortDef / HazardDef / RiskDef attributes, and UseCaseDef / ConnectionDef / RequirementDef / ActionDef blocks (#493, #497, #505), or a mutated AST with a simulated field divergence.
 
 ## 3. Trigger
-- Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate
+- verify_bijective_ast_roundtrip(&pkg) executes during compile-sysml.
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate` to `NativeSigilAndLifetimeLexer`.
-2. `NativeSigilAndLifetimeLexer` validates input schema structure and precondition guards for `Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate`.
-3. `NativeSigilAndLifetimeLexer` executes core domain transformation and state transition logic for `Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate`.
-4. `NativeSigilAndLifetimeLexer` evaluates formal postcondition assertions and structural invariants.
-5. `NativeSigilAndLifetimeLexer` commits verified output state and emits completion telemetry to `Operator`.
+1. verify_bijective_ast_roundtrip(&pkg) executes during compile-sysml.
+2. pkg.to_sysml(0) emits valid un-double-quoted SysML v2 text, SysmlParser::parse_source(&pkg.to_sysml(0), &pkg.name) returns a PackageDef structurally equal to pkg (roundtrip_ast_mismatch_count == 0), and any.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `NativeSigilAndLifetimeLexer`:
-  - `NativeSigilAndLifetimeLexer` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate` execution:
-  - `NativeSigilAndLifetimeLexer` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `NativeSigilAndLifetimeLexer`:
-  - `NativeSigilAndLifetimeLexer` halts execution cleanly and reports deterministic fault status.
+- Precondition guard failure in `BijectiveSysmlSerializer`:
+  - `BijectiveSysmlSerializer` rejects the `Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate` request without partial state mutation and reports diagnostic status to `Compiler_CLI_Caller`.
+- Invariant violation while enforcing `Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate`:
+  - `BijectiveSysmlSerializer` aborts `Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate` execution, preserves prior verified state, and notifies `Compiler_CLI_Caller`.
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- pkg.to_sysml(0) emits valid un-double-quoted SysML v2 text, SysmlParser::parse_source(&pkg.to_sysml(0), &pkg.name) returns a PackageDef structurally equal to pkg (roundtrip_ast_mismatch_count == 0), and any.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#577** | User Story | [User Story 16: scan all](../user-stories/US-16-scan_all.md) |
-| **#665** | Feature | [Feature 11: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] NativeSigilAndLifetimeLexer](../features/FEAT-11-NativeSigilAndLifetimeLexer.md) |
+| **#582** | User Story | [User Story 15: verify bijective ast roundtrip](../user-stories/US-15-verify_bijective_ast_roundtrip.md) |
+| **#667** | Feature | [Feature 11: [BP 03 SysML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] BijectiveSysmlSerializer](../features/FEAT-11-BijectiveSysmlSerializer.md) |
 
 ## Source References
 Use case operational flows and lifecycle activity references:

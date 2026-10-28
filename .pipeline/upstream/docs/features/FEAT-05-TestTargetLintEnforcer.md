@@ -40,7 +40,9 @@ classDiagram
     },
     "quantity": {
       "type": "integer",
-      "description": "Subsystem attribute quantity"
+      "x-sysml-type": "Integer",
+      "description": "Declared attribute quantity (Integer)",
+      "default": 1
     },
     "cmd_in": {
       "type": "object",
@@ -62,7 +64,6 @@ classDiagram
   "required": [
     "part",
     "status",
-    "quantity",
     "cmd_in",
     "status_out"
   ],
@@ -71,27 +72,34 @@ classDiagram
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by TestTargetLintEnforcer.
+Declared structural attributes, boundary ports, invariants, and allocated requirements for classifier `TestTargetLintEnforcer`:
+
+| AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |
+| :--- | :--- | :--- | :--- |
+| Attribute | `quantity` | `Integer` | Default `1` |
+| Port | `cmd_in` | `in String` | Boundary interface contract |
+| Port | `status_out` | `out String` | Boundary interface contract |
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for TestTargetLintEnforcer conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+Structural composition and boundary topology for classifier `TestTargetLintEnforcer` organize no nested subparts declared in schema paired with boundary ports `in cmd_in : String`, `out status_out : String`.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for TestTargetLintEnforcer.
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing TestTargetLintEnforcer status, AST references, and typed signal models.
+Classifier `TestTargetLintEnforcer` encapsulates typed domain state attributes `quantity : Integer` alongside operational lifecycle status.
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for TestTargetLintEnforcer.
+Classifier `TestTargetLintEnforcer` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for TestTargetLintEnforcer.
+Classifier `TestTargetLintEnforcer` binds external and behavioral interfaces across port `in cmd_in : String`, port `out status_out : String`.
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-01: Given nominal TestTargetLintEnforcer domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-- [ ] AC-02: Given operational state, When TestTargetLintEnforcer evaluates constraint 'operational_invariants', Then asserts invariant satisfaction without violation.
-- [ ] AC-03: Given malformed input signals or boundary condition violation, When TestTargetLintEnforcer error handling is invoked, Then transitions safely to failsafe fallback state without corruption.
+- [ ] AC-01: Given valid `TestTargetLintEnforcer` initialization inputs for `quantity` (`Integer`) (no additional constraints specified in schema), When `TestTargetLintEnforcer` commits typed domain state, Then declared state attributes hold verified values.
+- [ ] AC-02: Given malformed or out-of-domain input values for `quantity` (`Integer`), When `TestTargetLintEnforcer` validates incoming state updates, Then `TestTargetLintEnforcer` rejects the invalid state update and emits a diagnostic via diagnostic port `status_out`.
+- [ ] AC-03: Given nominal signal arrival across `cmd_in` (`in String`), `status_out` (`out String`), When `TestTargetLintEnforcer` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
+- [ ] AC-04: Given an invalid or unrecognized interface frame across `cmd_in` (`in String`), `status_out` (`out String`), When `TestTargetLintEnforcer` boundary validation executes, Then `TestTargetLintEnforcer` refuses the malformed frame via diagnostic port `status_out` and preserves prior verified state.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:

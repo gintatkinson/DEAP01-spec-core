@@ -16,8 +16,8 @@
 ```mermaid
 classDiagram
     class DeterministicDossierSynthesizer {
-        +String findingInPort (inout)
-        +String dossierMarkdownOutPort (inout)
+        +String findingInPort (in)
+        +String dossierMarkdownOutPort (out)
         +Integer mandatorySectionCount
         +Integer whysChainDepth
     }
@@ -41,16 +41,20 @@ classDiagram
     },
     "mandatorySectionCount": {
       "type": "integer",
-      "description": "Subsystem attribute mandatorySectionCount"
+      "x-sysml-type": "Integer",
+      "description": "Declared attribute mandatorySectionCount (Integer)",
+      "default": 7
     },
     "whysChainDepth": {
       "type": "integer",
-      "description": "Subsystem attribute whysChainDepth"
+      "x-sysml-type": "Integer",
+      "description": "Enforces 5 numbered causal `Why ...? Because ...` root-cause steps in Section 2. [unit: steps]",
+      "default": 5
     },
     "findingInPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "in" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -58,7 +62,7 @@ classDiagram
     "dossierMarkdownOutPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -67,8 +71,6 @@ classDiagram
   "required": [
     "part",
     "status",
-    "mandatorySectionCount",
-    "whysChainDepth",
     "findingInPort",
     "dossierMarkdownOutPort"
   ],
@@ -77,22 +79,29 @@ classDiagram
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by DeterministicDossierSynthesizer.
+Declared structural attributes, boundary ports, invariants, and allocated requirements for classifier `DeterministicDossierSynthesizer`:
+
+| AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |
+| :--- | :--- | :--- | :--- |
+| Attribute | `mandatorySectionCount` | `Integer` | Default `7` |
+| Attribute | `whysChainDepth` | `Integer` | Default `5` |
+| Port | `findingInPort` | `in String` | Boundary interface contract |
+| Port | `dossierMarkdownOutPort` | `out String` | Boundary interface contract |
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for DeterministicDossierSynthesizer conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+Structural composition and boundary topology for classifier `DeterministicDossierSynthesizer` organize no nested subparts declared in schema paired with boundary ports `in findingInPort : String`, `out dossierMarkdownOutPort : String`.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for DeterministicDossierSynthesizer.
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing DeterministicDossierSynthesizer status, AST references, and typed signal models.
+Classifier `DeterministicDossierSynthesizer` encapsulates typed domain state attributes `mandatorySectionCount : Integer`, `whysChainDepth : Integer` alongside operational lifecycle status.
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for DeterministicDossierSynthesizer.
+Classifier `DeterministicDossierSynthesizer` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for DeterministicDossierSynthesizer.
+Classifier `DeterministicDossierSynthesizer` binds external and behavioral interfaces across port `in findingInPort : String`, port `out dossierMarkdownOutPort : String`.
 
 ### Associated Use Cases & User Stories
 
@@ -100,25 +109,20 @@ Presentation interface binding and diagnostic event routing for DeterministicDos
 - None allocated (structural subsystem component)
 
 #### Associated User Stories
-- [ ] #610 - [User Story 49: verify baseline](../user-stories/US-49-verify_baseline.md)
-- [ ] #611 - [User Story 50: parse rust source ast](../user-stories/US-50-parse_rust_source_ast.md)
-- [ ] #612 - [User Story 51: Deterministic](../user-stories/US-51-Deterministic.md)
-- [ ] #613 - [User Story 52: evaluate source file pillars](../user-stories/US-52-evaluate_source_file_pillars.md)
-- [ ] #614 - [User Story 53: Line exact](../user-stories/US-53-Line_exact.md)
-- [ ] #615 - [User Story 54: synthesize defect dossier markdown](../user-stories/US-54-synthesize_defect_dossier_markdown.md)
-- [ ] #616 - [User Story 55: Compliant](../user-stories/US-55-Compliant.md)
-- [ ] #617 - [User Story 56: run check defect](../user-stories/US-56-run_check_defect.md)
-- [ ] #618 - [User Story 57: [ClosedLoopDefectPublisherGate] Execute](../user-stories/US-57-Execute.md)
-- [ ] #619 - [User Story 58: gh](../user-stories/US-58-gh.md)
-- [ ] #620 - [User Story 59: Created](../user-stories/US-59-Created.md)
-- [ ] #621 - [User Story 60: Live](../user-stories/US-60-Live.md)
-- [ ] #622 - [User Story 61: CLOSED LOOP](../user-stories/US-61-CLOSED_LOOP.md)
-- [ ] #623 - [User Story 62: Exit item](../user-stories/US-62-Exit_item.md)
+- [ ] #726 - [User Story 37: Verify Baseline Audit Code Path Crates](../user-stories/US-37-VerifyBaselineAuditCodePathCrates.md)
+- [ ] #727 - [User Story 38: Parse Rust Source Ast And Parse](../user-stories/US-38-ParseRustSourceAstAndParse.md)
+- [ ] #728 - [User Story 39: Evaluate Source File Pillars Across5](../user-stories/US-39-EvaluateSourceFilePillarsAcross5.md)
+- [ ] #615 - [User Story 40: synthesize defect dossier markdown](../user-stories/US-40-synthesize_defect_dossier_markdown.md)
+- [ ] #617 - [User Story 41: run check defect](../user-stories/US-41-run_check_defect.md)
+- [ ] #729 - [User Story 42: Execute12 Check Validate Defect Dossier](../user-stories/US-42-Execute12CheckValidateDefectDossier.md)
+- [ ] #730 - [User Story 43: Gh Issue Create Or Gh Issue](../user-stories/US-43-GhIssueCreateOrGhIssue.md)
+- [ ] #731 - [User Story 44: Gh Issue View Json Title Body](../user-stories/US-44-GhIssueViewJsonTitleBody.md)
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-01: Given nominal DeterministicDossierSynthesizer domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-- [ ] AC-02: Given operational state, When DeterministicDossierSynthesizer evaluates constraint 'operational_invariants', Then asserts invariant satisfaction without violation.
-- [ ] AC-03: Given malformed input signals or boundary condition violation, When DeterministicDossierSynthesizer error handling is invoked, Then transitions safely to failsafe fallback state without corruption.
+- [ ] AC-01: Given valid `DeterministicDossierSynthesizer` initialization inputs for `mandatorySectionCount` (`Integer`), `whysChainDepth` (`Integer`) (no additional constraints specified in schema), When `DeterministicDossierSynthesizer` commits typed domain state, Then declared state attributes hold verified values.
+- [ ] AC-02: Given malformed or out-of-domain input values for `mandatorySectionCount` (`Integer`), `whysChainDepth` (`Integer`), When `DeterministicDossierSynthesizer` validates incoming state updates, Then `DeterministicDossierSynthesizer` rejects the invalid state update and emits a diagnostic via diagnostic port `dossierMarkdownOutPort`.
+- [ ] AC-03: Given nominal signal arrival across `findingInPort` (`in String`), `dossierMarkdownOutPort` (`out String`), When `DeterministicDossierSynthesizer` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
+- [ ] AC-04: Given an invalid or unrecognized interface frame across `findingInPort` (`in String`), `dossierMarkdownOutPort` (`out String`), When `DeterministicDossierSynthesizer` boundary validation executes, Then `DeterministicDossierSynthesizer` refuses the malformed frame via diagnostic port `dossierMarkdownOutPort` and preserves prior verified state.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:

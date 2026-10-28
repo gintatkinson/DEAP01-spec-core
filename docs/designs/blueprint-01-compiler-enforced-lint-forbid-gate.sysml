@@ -9,15 +9,15 @@ package BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Archit
     attribute Generation_Mode : String = "subagent";
     attribute Specification_Source : String = "Cargo.toml:1-25 / crates/verify-baseline/src/checks/structural.rs:1-120 / #491";
     doc /* Execute cargo clippy --workspace --all-targets */
-    action def Execute;
+    action def ExecuteCargoClippyWorkspaceAllTargets;
     doc /* Read [workspace.lints.clippy] forbid table */
-    action def Read;
-    doc /* Return forbid rules for unwrap, expect, panic, indexing */
-    action def Return;
-    doc /* Emit E0453 hard error if any allow(clippy::) exists */
-    action def Emit;
+    action def ReadWorkspaceLintsClippyForbidTable;
+    doc /* Execute verify-baseline . --no-domain */
+    action def ExecuteVerifyBaselineNoDomain;
     doc /* Run scan_clippy_allow_tokens on all crates/ ** / *.rs */
-    action def Run;
+    action def RunScanClippyAllowTokensOn;
+    doc /* Execute ingest-sysml --schema blueprint-01 --format markdown */
+    action def ExecuteIngestSysmlSchemaBlueprint01;
     doc /* UUIDv5:  | Complexity: Class P | Standard: IEEE 29148-2018 / RFC 2119 | Diagnostics: E0100 */
     requirement def REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint {
         id = "REQ-0601";
@@ -28,7 +28,7 @@ package BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Archit
         attribute diagnostic_codes : String = "E0100";
         attribute ac_01_rustc_e0453_hard_rejection_of_inner_and_outer_clippy_allow_attributes : String = "- **Given**: [workspace.lints.clippy] in root Cargo.toml configures unwrap_used = \"forbid\", expect_used = \"forbid\", panic = \"forbid\", indexing_slicing = \"forbid\", disallowed_types = \"forbid\", and type_complexity = \"forbid\". - **When**: Any production or test module in crates/ introduces #![allow(clippy::unwrap_used)] or #[allow(clippy::indexing_slicing)]. - **Then**: cargo check --workspace --all-targets and cargo clippy --workspace --all-targets fail closed with non-zero exit status and emit error[E0453]: allow(clippy::...) overruled by outer forbid(clippy::...).";
         attribute ac_02_check_34_multi_line_whitespace_insensitive_suppression_rejection : String = "- **Given**: The Check 34 zero-regex token-stream scanner scan_clippy_allow_tokens in crates/verify-baseline/src/checks/structural.rs. - **When**: A Rust file contains a single-line or multi-line whitespace-split attribute such as #[ allow ( clippy :: expect_used ) ] or #![ cfg_attr ( test , allow ( clippy :: panic ) ) ]. - **Then**: ./target/release/verify-baseline . --no-domain detects the normalized #![allow(clippy::...)] or #[allow(clippy::...)] token sequence, reports the exact file path and starting 1-based line number, and fails closed with exit code 1.";
-        attribute ac_03_unconditional_test_target_enforcement_without_conditional_exemption : String = "- **Given**: Unit test modules (#[cfg(test)] mod tests) and integration test files (crates/*/tests/*.rs) across all six workspace crates. - **When**: cargo test --workspace and ./target/release/verify-baseline . --no-domain are executed. - **Then**: Zero #![cfg_attr(test, allow(...))] exemptions exist, all test assertions use fallible Result return signatures or pattern matching instead of .unwrap(), .expect(), or direct slice indexing, and all workspace tests pass.";
+        attribute ac_03_unconditional_test_target_enforcement_without_conditional_exemption : String = "- **Given**: Unit test modules (#[cfg(test)] mod tests) and integration test files (crates/ * /tests/ *.rs) across all six workspace crates. - **When**: cargo test --workspace and ./target/release/verify-baseline . --no-domain are executed. - **Then**: Zero #![cfg_attr(test, allow(...))] exemptions exist, all test assertions use fallible Result return signatures or pattern matching instead of .unwrap(), .expect(), or direct slice indexing, and all workspace tests pass.";
         attribute ac_04_semantic_type_alias_replacement_for_type_complexity : String = "- **Given**: Complex nested return or collection signatures in crates/deap-core/src/source_ast.rs and crates/compile-sysml/src/lib.rs. - **When**: clippy::type_complexity = \"forbid\" is active across the workspace. - **Then**: All #[allow(clippy::type_complexity)] attributes are removed and replaced by documented semantic pub type aliases (ExtractedMethodSignature and ComponentMethodTable) or domain structs that compile with zero warnings under cargo clippy --workspace --all-targets -- -D warnings.";
         attribute ac_05_dogfood_ingestion_and_sysml_v2_compilation_of_req_0601 : String = "- **Given**: This blueprint specification docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --dry-run is executed. - **Then**: All 12 mechanical blueprint verification gates pass, and the translator synthesizes REQ-0601, CompilerLintEnforcementGate, its interface ports, state attributes, formal constraints (C-LINT-01..C-LINT-03), and AC-01..AC-05 into docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.sysml and.";
         doc /* \begin{aligned} T_{\text{scan}}(F, B) &= \sum_{i=1}^{F} O(B_i) = O(B_{\text{total}}) \\ S_{\text{scan}}(A_{\max}, V) &= O(A_{\max} + V) \\ E_{\text{suppression}} &= 0 \end{aligned} */
@@ -46,18 +46,24 @@ package BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Archit
     }
     doc /* Extracted from Mermaid stateDiagram specification. */
     state def BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_LifecycleState {
-        transition Initial_to_ScanningSource;
-        transition ScanningSource_to_SkippingLineComment_on_slashSlashDetected;
-        transition SkippingLineComment_to_ScanningSource_on_newlineReached;
-        transition ScanningSource_to_SkippingBlockComment_on_slashStarDetected;
-        transition SkippingBlockComment_to_ScanningSource_on_starSlashReached;
-        transition ScanningSource_to_InspectingAttribute_on_hashTokenDetected;
-        transition InspectingAttribute_to_NormalizingBracketBody_on_openingBracketDetected;
-        transition InspectingAttribute_to_ScanningSource_on_nonAttributeHash;
-        transition NormalizingBracketBody_to_ViolationRecorded_on_forbiddenNeedleMatched;
-        transition NormalizingBracketBody_to_ScanningSource_on_depthZeroClean;
-        transition ViolationRecorded_to_ScanningSource_on_continueLinearScan;
-        transition ScanningSource_to_Terminal_on_endOfStream;
+        state ScanningSource;
+        state SkippingLineComment;
+        state SkippingBlockComment;
+        state InspectingAttribute;
+        state NormalizingBracketBody;
+        state ViolationRecorded;
+        transition Initial_to_ScanningSource first Initial then ScanningSource;
+        transition ScanningSource_to_SkippingLineComment_on_slashSlashDetected first ScanningSource accept slashSlashDetected then SkippingLineComment;
+        transition SkippingLineComment_to_ScanningSource_on_newlineReached first SkippingLineComment accept newlineReached then ScanningSource;
+        transition ScanningSource_to_SkippingBlockComment_on_slashStarDetected first ScanningSource accept slashStarDetected then SkippingBlockComment;
+        transition SkippingBlockComment_to_ScanningSource_on_starSlashReached first SkippingBlockComment accept starSlashReached then ScanningSource;
+        transition ScanningSource_to_InspectingAttribute_on_hashTokenDetected first ScanningSource accept hashTokenDetected then InspectingAttribute;
+        transition InspectingAttribute_to_NormalizingBracketBody_on_openingBracketDetected first InspectingAttribute accept openingBracketDetected then NormalizingBracketBody;
+        transition InspectingAttribute_to_ScanningSource_on_nonAttributeHash first InspectingAttribute accept nonAttributeHash then ScanningSource;
+        transition NormalizingBracketBody_to_ViolationRecorded_on_forbiddenNeedleMatched first NormalizingBracketBody accept forbiddenNeedleMatched then ViolationRecorded;
+        transition NormalizingBracketBody_to_ScanningSource_on_depthZeroClean first NormalizingBracketBody accept depthZeroClean then ScanningSource;
+        transition ViolationRecorded_to_ScanningSource_on_continueLinearScan first ViolationRecorded accept continueLinearScan then ScanningSource;
+        transition ScanningSource_to_Terminal_on_endOfStream first ScanningSource accept endOfStream then Terminal;
     }
     doc /* - **Given**: [workspace.lints.clippy] in root Cargo.toml configures unwrap_used = \"forbid\", expect_used = \"forbid\", panic = \"forbid\", indexing_slicing = \"forbid\", disallowed_types = \"forbid\", and type_complexity = \"forbid\". - **When**: Any production or test module in crates/ introduces #![allow(clippy::unwrap_used)] or #[allow(clippy::indexing_slicing)]. - **Then**: cargo check --workspace --all-targets and cargo clippy --workspace --all-targets fail closed with non-zero exit status and emit error[E0453]: allow(clippy::...) overruled by outer forbid(clippy::...). */
     use case def UC_AC_01_Rustc_E0453_Hard_Rejection_of_Inner_and_Outer_Clippy_Allow_Attributes {
@@ -91,15 +97,15 @@ package BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Archit
         lifeline Manifest : Root_Cargo_toml;
         lifeline Check34 : verify_baseline;
         lifeline Ingest : ingest_sysml;
-        message Execute from Eng to Cargo;
-        message Read from Cargo to Manifest;
-        message Return from Manifest to Cargo;
-        message Emit from Cargo to Eng;
-        message Execute from Eng to Check34;
-        message Run from Check34 to Check34;
-        message Return from Check34 to Eng;
-        message Execute from Eng to Ingest;
-        message Emit from Ingest to Eng;
+        message ExecuteCargoClippyWorkspaceAllTargets from Eng to Cargo;
+        message ReadWorkspaceLintsClippyForbidTable from Cargo to Manifest;
+        message reply_ReturnForbidRulesForUnwrapExpect from Manifest to Cargo;
+        message reply_EmitE0453HardErrorIfAny from Cargo to Eng;
+        message ExecuteVerifyBaselineNoDomain from Eng to Check34;
+        message RunScanClippyAllowTokensOn from Check34 to Check34;
+        message reply_ReturnExitCode0WhenAllowed from Check34 to Eng;
+        message ExecuteIngestSysmlSchemaBlueprint01 from Eng to Ingest;
+        message reply_EmitCanonicalSysMLV2AstAnd from Ingest to Eng;
     }
     doc /* Configures `clippy::unwrap_used = "forbid"` across the workspace [unit: flag] */
     part def CompilerLintEnforcementGate {
@@ -121,13 +127,21 @@ package BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Archit
         doc /* Number of workspace member crates inheriting `[lints] workspace = true` (**C-LINT-03**) [unit: count] */
         attribute crates_enforced_count : Integer = 6;
         doc /* Ingests root `Cargo.toml` and member crate manifest files for `[workspace.lints]` verification [protocol: FilesystemUTF8] */
-        port inout CargoManifestInputPort : String;
+        port in CargoManifestInputPort : String {
+            flow in CargoManifestInputPort_flow : String;
+        }
         doc /* Streams UTF-8 bytes from production and test `.rs` files into the Check 34 attribute scanner [protocol: TokenStream] */
-        port inout RustSourceTokenStreamPort : String;
+        port in RustSourceTokenStreamPort : String {
+            flow in RustSourceTokenStreamPort_flow : String;
+        }
         doc /* Emits deterministic `rustc` `E0453` diagnostics when `allow(...)` conflicts with workspace `forbid(...)` [protocol: RustcDiagnostic] */
-        port inout CompilerDiagnosticOutputPort : String;
+        port out CompilerDiagnosticOutputPort : String {
+            flow out CompilerDiagnosticOutputPort_flow : String;
+        }
         doc /* Emits fail-closed Check 34 verification verdict (`Ok` or sorted `Err` violation vector) [protocol: GateVerdict] */
-        port inout BaselineGateVerdictPort : Boolean;
+        port out BaselineGateVerdictPort : Boolean {
+            flow out BaselineGateVerdictPort_flow : Boolean;
+        }
     }
     doc /* Enforces forbid lint levels in root Cargo.toml and workspace = true inheritance across all member crates. */
     part def WorkspaceManifestForbidGate {

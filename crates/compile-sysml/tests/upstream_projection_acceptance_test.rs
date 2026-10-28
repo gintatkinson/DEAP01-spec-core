@@ -6,12 +6,12 @@
 //! defect-free Agile specification hierarchy across Epics, Features, User Stories, and Use Cases.
 //!
 //! ## 2. Invariants & Mathematical Properties
-//! - Exact cardinality invariant: $|Epics| = 6 \land |Features| = 30 \land |UserStories| = 62 \land |UseCases| = 31$,
-//!   yielding $|Specs_{total}| = 129$.
+//! - Exact cardinality invariant: $|Epics| = 6 \land |Features| = 30 \land |UserStories| = 44 \land |UseCases| = 31$,
+//!   yielding $|Specs_{total}| = 111$.
 //! - Link closure invariant: $\forall d \in Specs_{total}, \forall l \in Links_{rel}(d): \text{exists}(\text{dir}(d) \oplus l) = \text{true}$.
 //! - Local purity invariant: $\forall d \in Specs_{total}: \text{https://github.com/} \notin d$.
 //! - Anti-stutter invariant: $\forall d \in Specs_{total}: \text{UC\_AC\_} \notin \text{name}(d) \land \text{US\_AC\_} \notin \text{name}(d)$.
-//! - Package isolation invariant: $\forall u \in \{US\text{-}06 \dots US\text{-}62\}: \text{FEAT-01-} \notin u$.
+//! - Package isolation invariant: $\forall u \in \{US\text{-}06 \dots US\text{-}44\}: \text{FEAT-01-} \notin u$.
 //! - Behavioral state-machine invariant: $\forall e \in Epics: \text{stateDiagram-v2} \in e \land \text{-->} \in e$.
 //!
 //! ## 3. Preconditions
@@ -19,11 +19,11 @@
 //! - The temporary filesystem directory is writable for isolated test execution.
 //!
 //! ## 4. Postconditions
-//! - All 129 specification files are synthesized and verified inside an isolated RAII directory.
+//! - All 111 specification files are synthesized and verified inside an isolated RAII directory.
 //! - The temporary directory is deterministically removed on test completion via `Drop`.
 //!
 //! ## 5. Algorithmic Complexity Bounds
-//! - Time Complexity: $O(N + L)$ where $N = 129$ generated specification files and $L$ is the total byte length of all generated markdown files.
+//! - Time Complexity: $O(N + L)$ where $N = 111$ generated specification files and $L$ is the total byte length of all generated markdown files.
 //! - Space Complexity: $O(L)$ bounded by the in-memory AST and generated specification strings.
 //!
 //! ## 6. Failure Modes & Fault Tolerance
@@ -237,7 +237,7 @@ fn collect_sorted_md_files(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn std::erro
     Ok(files)
 }
 
-/// Verifies end-to-end compilation of `.pipeline/upstream/schema/model.sysml` into 129 defect-free specifications.
+/// Verifies end-to-end compilation of `.pipeline/upstream/schema/model.sysml` into 111 defect-free specifications.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Acts as the primary regression and acceptance gate for upstream SysML-to-specification projection,
@@ -245,21 +245,21 @@ fn collect_sorted_md_files(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn std::erro
 /// zero cross-package `FEAT-01` feature link pollution, and non-empty Epic state diagrams.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Synthesizes 6 Epics, 30 Features, 62 User Stories, and 31 Use Cases (129 total markdown files).
+/// - Synthesizes 6 Epics, 30 Features, 44 User Stories, and 31 Use Cases (111 total markdown files).
 /// - Every relative link target resolves to an existing file on disk.
 /// - No generated markdown file contains `"https://github.com/"`.
 /// - No filename contains `"UC_AC_"` or `"US_AC_"`, and no heading title contains `"UC AC "` or `"US AC "`.
-/// - User Stories `US-06` through `US-62` do not reference `"FEAT-01-"`.
+/// - User Stories `US-06` through `US-44` do not reference `"FEAT-01-"`.
 /// - Every Epic file contains `"stateDiagram-v2"` and `"-->"`.
 ///
 /// ## 3. Preconditions
 /// - `.pipeline/upstream/schema/model.sysml` is present relative to the workspace root.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(())` only if all cardinality and content invariants hold across all 129 files.
+/// - Returns `Ok(())` only if all cardinality and content invariants hold across all 111 files.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N + L)$ over $N = 129$ files and $L$ total markdown bytes.
+/// - Time Complexity: $O(N + L)$ over $N = 111$ files and $L$ total markdown bytes.
 /// - Space Complexity: $O(L)$ bounded by the temporary workspace and in-memory verification buffers.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
@@ -295,9 +295,9 @@ fn test_upstream_blueprint_to_spec_and_github_projection_zero_defects(
         force: true,
     };
     let generated = compile_sysml::sync::forward::forward_sync_sysml_to_specs(&pkg, &opts)?;
-    if generated.len() < 129 {
+    if generated.len() < 111 {
         return Err(format!(
-            "Expected at least 129 forward-synced files, got {}",
+            "Expected at least 111 forward-synced files, got {}",
             generated.len()
         )
         .into());
@@ -319,22 +319,22 @@ fn test_upstream_blueprint_to_spec_and_github_projection_zero_defects(
     if feature_files.len() != 30 {
         return Err(format!("Expected 30 Features, found {}", feature_files.len()).into());
     }
-    if story_files.len() != 62 {
-        return Err(format!("Expected 62 User Stories, found {}", story_files.len()).into());
+    if story_files.len() != 44 {
+        return Err(format!("Expected 44 User Stories, found {}", story_files.len()).into());
     }
     if use_case_files.len() != 31 {
         return Err(format!("Expected 31 Use Cases, found {}", use_case_files.len()).into());
     }
 
-    let mut all_files = Vec::with_capacity(129);
+    let mut all_files = Vec::with_capacity(111);
     all_files.extend(epic_files.iter().cloned());
     all_files.extend(feature_files.iter().cloned());
     all_files.extend(story_files.iter().cloned());
     all_files.extend(use_case_files.iter().cloned());
 
-    if all_files.len() != 129 {
+    if all_files.len() != 111 {
         return Err(format!(
-            "Expected total of 129 specification files, found {}",
+            "Expected total of 111 specification files, found {}",
             all_files.len()
         )
         .into());
@@ -393,7 +393,7 @@ fn test_upstream_blueprint_to_spec_and_github_projection_zero_defects(
             }
         }
 
-        // 4. Zero Cross-Package FEAT-01 Pollution on BP_02..06 User Stories (US-06..US-62)
+        // 4. Zero Cross-Package FEAT-01 Pollution on BP_02..06 User Stories (US-06..US-44)
         if file_name.starts_with("US-") {
             let is_bp01_story = file_name.starts_with("US-01-")
                 || file_name.starts_with("US-02-")

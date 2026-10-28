@@ -3,7 +3,7 @@
 | **Issue ID** | #651 |
 | **Title** | Use Case 28: Idempotent Local and Remote SSOT Deduplication |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
+| **Primary Actor** | Operator_Or_CI_Pipeline |
 | **Scope** | ClosedLoopDefectPublisherGate |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
@@ -17,55 +17,42 @@
 graph TD
     subgraph "ClosedLoopDefectPublisherGate System Boundary"
         UC_Main(["Idempotent Local and Remote SSOT Deduplication"])
-        UC_Step01(["Actor Operator submits input payload for Idempotent Local..."])
-        UC_Step02(["ClosedLoopDefectPublisherGate validates input schema stru..."])
-        UC_Step03(["ClosedLoopDefectPublisherGate executes core domain transf..."])
-        UC_Step04(["ClosedLoopDefectPublisherGate evaluates formal postcondit..."])
-        UC_Step05(["ClosedLoopDefectPublisherGate commits verified output sta..."])
+        UC_Step01(["Operator_Or_CI_Pipeline invokes Idempotent Local and Remo..."])
+        UC_Step02(["ClosedLoopDefectPublisherGate verifies boundary precondit..."])
+        UC_Step03(["ClosedLoopDefectPublisherGate records verified Idempotent..."])
     end
-    Operator(("Operator")) --- UC_Main
+    Operator_Or_CI_Pipeline(("Operator_Or_CI_Pipeline")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
     UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `Operator_Or_CI_Pipeline`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- `ClosedLoopDefectPublisherGate` is initialized and ready to enforce `Idempotent Local and Remote SSOT Deduplication`.
+- `Operator_Or_CI_Pipeline` holds authorized operational access to `ClosedLoopDefectPublisherGate`.
 
 ## 3. Trigger
 - Idempotent Local and Remote SSOT Deduplication
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Idempotent Local and Remote SSOT Deduplication` to `ClosedLoopDefectPublisherGate`.
-2. `ClosedLoopDefectPublisherGate` validates input schema structure and precondition guards for `Idempotent Local and Remote SSOT Deduplication`.
-3. `ClosedLoopDefectPublisherGate` executes core domain transformation and state transition logic for `Idempotent Local and Remote SSOT Deduplication`.
-4. `ClosedLoopDefectPublisherGate` evaluates formal postcondition assertions and structural invariants.
-5. `ClosedLoopDefectPublisherGate` commits verified output state and emits completion telemetry to `Operator`.
+1. `Operator_Or_CI_Pipeline` invokes `Idempotent Local and Remote SSOT Deduplication` on `ClosedLoopDefectPublisherGate` targeting objective `Idempotent Local and Remote SSOT Deduplication`.
+2. `ClosedLoopDefectPublisherGate` verifies boundary preconditions and evaluates `Idempotent Local and Remote SSOT Deduplication` invariants (guarding `Diagnostic: E0603`).
+3. `ClosedLoopDefectPublisherGate` records verified `Idempotent Local and Remote SSOT Deduplication` outcome and returns status to `Operator_Or_CI_Pipeline`.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `ClosedLoopDefectPublisherGate`:
-  - `ClosedLoopDefectPublisherGate` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Idempotent Local and Remote SSOT Deduplication` execution:
-  - `ClosedLoopDefectPublisherGate` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `ClosedLoopDefectPublisherGate`:
-  - `ClosedLoopDefectPublisherGate` halts execution cleanly and reports deterministic fault status.
+- Diagnostic: E0603
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- `ClosedLoopDefectPublisherGate` satisfies declared objective `Idempotent Local and Remote SSOT Deduplication` with all subsystem invariants intact.
+- Verified `Idempotent Local and Remote SSOT Deduplication` completion status is recorded for `Operator_Or_CI_Pipeline`.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#610** | User Story | [User Story 49: verify baseline](../user-stories/US-49-verify_baseline.md) |
+| **#728** | User Story | [User Story 39: Evaluate Source File Pillars Across5](../user-stories/US-39-EvaluateSourceFilePillarsAcross5.md) |
 | **#680** | Feature | [Feature 26: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] ClosedLoopDefectPublisherGate](../features/FEAT-26-ClosedLoopDefectPublisherGate.md) |
 
 ## Source References

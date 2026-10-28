@@ -3,7 +3,7 @@
 | **Issue ID** | #627 |
 | **Title** | Use Case 04: Semantic Type Alias Replacement for Type Complexity |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
+| **Primary Actor** | Compiler_Engineer_CI |
 | **Scope** | CompilerLintEnforcementGate |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
@@ -17,55 +17,40 @@
 graph TD
     subgraph "CompilerLintEnforcementGate System Boundary"
         UC_Main(["Semantic Type Alias Replacement for Type Complexity"])
-        UC_Step01(["Actor Operator submits input payload for Semantic Type Al..."])
-        UC_Step02(["CompilerLintEnforcementGate validates input schema struct..."])
-        UC_Step03(["CompilerLintEnforcementGate executes core domain transfor..."])
-        UC_Step04(["CompilerLintEnforcementGate evaluates formal postconditio..."])
-        UC_Step05(["CompilerLintEnforcementGate commits verified output state..."])
+        UC_Step01(["clippy::type_complexity = \'forbid\' is active across the..."])
+        UC_Step02(["All #[allow(clippy::type_complexity)] attributes are remo..."])
     end
-    Operator(("Operator")) --- UC_Main
+    Compiler_Engineer_CI(("Compiler_Engineer_CI")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
-    UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `Compiler_Engineer_CI`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- Complex nested return or collection signatures in crates/deap-core/src/source_ast.rs and crates/compile-sysml/src/lib.rs.
 
 ## 3. Trigger
-- Semantic Type Alias Replacement for Type Complexity
+- clippy::type_complexity = \"forbid\" is active across the workspace.
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Semantic Type Alias Replacement for Type Complexity` to `CompilerLintEnforcementGate`.
-2. `CompilerLintEnforcementGate` validates input schema structure and precondition guards for `Semantic Type Alias Replacement for Type Complexity`.
-3. `CompilerLintEnforcementGate` executes core domain transformation and state transition logic for `Semantic Type Alias Replacement for Type Complexity`.
-4. `CompilerLintEnforcementGate` evaluates formal postcondition assertions and structural invariants.
-5. `CompilerLintEnforcementGate` commits verified output state and emits completion telemetry to `Operator`.
+1. clippy::type_complexity = \"forbid\" is active across the workspace.
+2. All #[allow(clippy::type_complexity)] attributes are removed and replaced by documented semantic pub type aliases (ExtractedMethodSignature and ComponentMethodTable) or domain structs that compile with zero warnings under cargo clippy --workspace --all-targets -- -D warnings.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `CompilerLintEnforcementGate`:
-  - `CompilerLintEnforcementGate` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Semantic Type Alias Replacement for Type Complexity` execution:
-  - `CompilerLintEnforcementGate` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `CompilerLintEnforcementGate`:
-  - `CompilerLintEnforcementGate` halts execution cleanly and reports deterministic fault status.
+- Precondition guard failure in `CompilerLintEnforcementGate`:
+  - `CompilerLintEnforcementGate` rejects the `Semantic Type Alias Replacement for Type Complexity` request without partial state mutation and reports diagnostic status to `Compiler_Engineer_CI`.
+- Invariant violation while enforcing `Semantic Type Alias Replacement for Type Complexity`:
+  - `CompilerLintEnforcementGate` aborts `Semantic Type Alias Replacement for Type Complexity` execution, preserves prior verified state, and notifies `Compiler_Engineer_CI`.
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- All #[allow(clippy::type_complexity)] attributes are removed and replaced by documented semantic pub type aliases (ExtractedMethodSignature and ComponentMethodTable) or domain structs that compile with zero warnings under cargo clippy --workspace --all-targets -- -D warnings.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#562** | User Story | [User Story 01: [CompilerLintEnforcementGate] Execute](../user-stories/US-01-Execute.md) |
+| **#703** | User Story | [User Story 04: Run Scan Clippy Allow Tokens On](../user-stories/US-04-RunScanClippyAllowTokensOn.md) |
 | **#655** | Feature | [Feature 01: [BP 01 Compiler Enforced Forbid Lint Gate and Zero Suppression AST Architecture Blueprint] CompilerLintEnforcementGate](../features/FEAT-01-CompilerLintEnforcementGate.md) |
 
 ## Source References

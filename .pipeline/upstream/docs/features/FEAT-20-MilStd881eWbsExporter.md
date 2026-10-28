@@ -16,8 +16,8 @@
 ```mermaid
 classDiagram
     class MilStd881eWbsExporter {
-        +String wbsAstMetadataInPort (inout)
-        +String wbsArtifactsOutPort (inout)
+        +String wbsAstMetadataInPort (in)
+        +String wbsArtifactsOutPort (out)
         +Integer wbsHierarchyDepth
         +Integer maxWbsLatencyMs
     }
@@ -41,16 +41,20 @@ classDiagram
     },
     "wbsHierarchyDepth": {
       "type": "integer",
-      "description": "Subsystem attribute wbsHierarchyDepth"
+      "x-sysml-type": "Integer",
+      "description": "Declared attribute wbsHierarchyDepth (Integer)",
+      "default": 4
     },
     "maxWbsLatencyMs": {
       "type": "integer",
-      "description": "Subsystem attribute maxWbsLatencyMs"
+      "x-sysml-type": "Integer",
+      "description": "Maximum deterministic execution bound for `--emit-wbs` Markdown and CSV/JSON export generation. [unit: ms]",
+      "default": 15
     },
     "wbsAstMetadataInPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "in" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -58,7 +62,7 @@ classDiagram
     "wbsArtifactsOutPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -67,8 +71,6 @@ classDiagram
   "required": [
     "part",
     "status",
-    "wbsHierarchyDepth",
-    "maxWbsLatencyMs",
     "wbsAstMetadataInPort",
     "wbsArtifactsOutPort"
   ],
@@ -77,27 +79,35 @@ classDiagram
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by MilStd881eWbsExporter.
+Declared structural attributes, boundary ports, invariants, and allocated requirements for classifier `MilStd881eWbsExporter`:
+
+| AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |
+| :--- | :--- | :--- | :--- |
+| Attribute | `wbsHierarchyDepth` | `Integer` | Default `4` |
+| Attribute | `maxWbsLatencyMs` | `Integer` | Default `15` |
+| Port | `wbsAstMetadataInPort` | `in String` | Boundary interface contract |
+| Port | `wbsArtifactsOutPort` | `out String` | Boundary interface contract |
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for MilStd881eWbsExporter conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+Structural composition and boundary topology for classifier `MilStd881eWbsExporter` organize no nested subparts declared in schema paired with boundary ports `in wbsAstMetadataInPort : String`, `out wbsArtifactsOutPort : String`.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for MilStd881eWbsExporter.
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing MilStd881eWbsExporter status, AST references, and typed signal models.
+Classifier `MilStd881eWbsExporter` encapsulates typed domain state attributes `wbsHierarchyDepth : Integer`, `maxWbsLatencyMs : Integer` alongside operational lifecycle status.
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for MilStd881eWbsExporter.
+Classifier `MilStd881eWbsExporter` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for MilStd881eWbsExporter.
+Classifier `MilStd881eWbsExporter` binds external and behavioral interfaces across port `in wbsAstMetadataInPort : String`, port `out wbsArtifactsOutPort : String`.
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-01: Given nominal MilStd881eWbsExporter domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-- [ ] AC-02: Given operational state, When MilStd881eWbsExporter evaluates constraint 'operational_invariants', Then asserts invariant satisfaction without violation.
-- [ ] AC-03: Given malformed input signals or boundary condition violation, When MilStd881eWbsExporter error handling is invoked, Then transitions safely to failsafe fallback state without corruption.
+- [ ] AC-01: Given valid `MilStd881eWbsExporter` initialization inputs for `wbsHierarchyDepth` (`Integer`), `maxWbsLatencyMs` (`Integer`) (no additional constraints specified in schema), When `MilStd881eWbsExporter` commits typed domain state, Then declared state attributes hold verified values.
+- [ ] AC-02: Given malformed or out-of-domain input values for `wbsHierarchyDepth` (`Integer`), `maxWbsLatencyMs` (`Integer`), When `MilStd881eWbsExporter` validates incoming state updates, Then `MilStd881eWbsExporter` rejects the invalid state update and emits a diagnostic via diagnostic port `wbsArtifactsOutPort`.
+- [ ] AC-03: Given nominal signal arrival across `wbsAstMetadataInPort` (`in String`), `wbsArtifactsOutPort` (`out String`), When `MilStd881eWbsExporter` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
+- [ ] AC-04: Given an invalid or unrecognized interface frame across `wbsAstMetadataInPort` (`in String`), `wbsArtifactsOutPort` (`out String`), When `MilStd881eWbsExporter` boundary validation executes, Then `MilStd881eWbsExporter` refuses the malformed frame via diagnostic port `wbsArtifactsOutPort` and preserves prior verified state.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:

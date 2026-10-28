@@ -3,8 +3,8 @@
 | **Issue ID** | #632 |
 | **Title** | Use Case 09: SSOT Cryptographic and Lexer Deduplication |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
-| **Scope** | RangeSliceAstDetector |
+| **Primary Actor** | VerifyBaselineCLI |
+| **Scope** | AntiGamingTestBodyAuditor |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
@@ -15,58 +15,43 @@
 
 ```mermaid
 graph TD
-    subgraph "RangeSliceAstDetector System Boundary"
+    subgraph "AntiGamingTestBodyAuditor System Boundary"
         UC_Main(["SSOT Cryptographic and Lexer Deduplication"])
-        UC_Step01(["Actor Operator submits input payload for SSOT Cryptograph..."])
-        UC_Step02(["RangeSliceAstDetector validates input schema structure an..."])
-        UC_Step03(["RangeSliceAstDetector executes core domain transformation..."])
-        UC_Step04(["RangeSliceAstDetector evaluates formal postcondition asse..."])
-        UC_Step05(["RangeSliceAstDetector commits verified output state and e..."])
+        UC_Step01(["Check 34 executes audit_ssot_symbol_deduplication (C-PURI..."])
+        UC_Step02(["The gate reports an SSOT duplication violation and exits ..."])
     end
-    Operator(("Operator")) --- UC_Main
+    VerifyBaselineCLI(("VerifyBaselineCLI")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
-    UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `VerifyBaselineCLI`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- A Rust source file outside crates/deap-core/src/digest.rs that defines SHA-256 round constant 0x428a2f98 or a file outside crates/deap-core/src/source_ast.rs that defines a duplicate Rust source tokenizer.
 
 ## 3. Trigger
-- SSOT Cryptographic and Lexer Deduplication
+- Check 34 executes audit_ssot_symbol_deduplication (C-PURITY-04 and C-PURITY-05).
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `SSOT Cryptographic and Lexer Deduplication` to `RangeSliceAstDetector`.
-2. `RangeSliceAstDetector` validates input schema structure and precondition guards for `SSOT Cryptographic and Lexer Deduplication`.
-3. `RangeSliceAstDetector` executes core domain transformation and state transition logic for `SSOT Cryptographic and Lexer Deduplication`.
-4. `RangeSliceAstDetector` evaluates formal postcondition assertions and structural invariants.
-5. `RangeSliceAstDetector` commits verified output state and emits completion telemetry to `Operator`.
+1. Check 34 executes audit_ssot_symbol_deduplication (C-PURITY-04 and C-PURITY-05).
+2. The gate reports an SSOT duplication violation and exits fail-closed with a non-zero status code.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `RangeSliceAstDetector`:
-  - `RangeSliceAstDetector` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `SSOT Cryptographic and Lexer Deduplication` execution:
-  - `RangeSliceAstDetector` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `RangeSliceAstDetector`:
-  - `RangeSliceAstDetector` halts execution cleanly and reports deterministic fault status.
+- Precondition guard failure in `AntiGamingTestBodyAuditor`:
+  - `AntiGamingTestBodyAuditor` rejects the `SSOT Cryptographic and Lexer Deduplication` request without partial state mutation and reports diagnostic status to `VerifyBaselineCLI`.
+- Invariant violation while enforcing `SSOT Cryptographic and Lexer Deduplication`:
+  - `AntiGamingTestBodyAuditor` aborts `SSOT Cryptographic and Lexer Deduplication` execution, preserves prior verified state, and notifies `VerifyBaselineCLI`.
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- The gate reports an SSOT duplication violation and exits fail-closed with a non-zero status code.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#567** | User Story | [User Story 06: check compiler ast purity](../user-stories/US-06-check_compiler_ast_purity.md) |
-| **#660** | Feature | [Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] RangeSliceAstDetector](../features/FEAT-06-RangeSliceAstDetector.md) |
+| **#571** | User Story | [User Story 09: audit fail closed io patterns](../user-stories/US-09-audit_fail_closed_io_patterns.md) |
+| **#662** | Feature | [Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] AntiGamingTestBodyAuditor](../features/FEAT-06-AntiGamingTestBodyAuditor.md) |
 
 ## Source References
 Use case operational flows and lifecycle activity references:

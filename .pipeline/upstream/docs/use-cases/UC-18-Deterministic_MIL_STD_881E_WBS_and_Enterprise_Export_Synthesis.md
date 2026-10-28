@@ -1,71 +1,58 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #641 |
-| **Title** | Use Case 18: Deterministic MIL STD 881E WBS and Enterprise Export Synthesis |
+| **Title** | Use Case 18: Deterministic MIL STD 881 E WBS and Enterprise Export Synthesis |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
+| **Primary Actor** | Operator_Or_CI_Runner |
 | **Scope** | AgileSpecForwardProjector |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# Use Case 18: Deterministic MIL STD 881E WBS and Enterprise Export Synthesis
+# Use Case 18: Deterministic MIL STD 881 E WBS and Enterprise Export Synthesis
 
 ## UML Diagrams
 
 ```mermaid
 graph TD
     subgraph "AgileSpecForwardProjector System Boundary"
-        UC_Main(["Deterministic MIL STD 881E WBS and Enterprise Export Synthesis"])
-        UC_Step01(["Actor Operator submits input payload for Deterministic MI..."])
-        UC_Step02(["AgileSpecForwardProjector validates input schema structur..."])
-        UC_Step03(["AgileSpecForwardProjector executes core domain transforma..."])
-        UC_Step04(["AgileSpecForwardProjector evaluates formal postcondition ..."])
-        UC_Step05(["AgileSpecForwardProjector commits verified output state a..."])
+        UC_Main(["Deterministic MIL STD 881 E WBS and Enterprise Export Syn..."])
+        UC_Step01(["Operator_Or_CI_Runner invokes Deterministic MIL STD 881 E..."])
+        UC_Step02(["AgileSpecForwardProjector verifies boundary preconditions..."])
+        UC_Step03(["AgileSpecForwardProjector records verified Deterministic ..."])
     end
-    Operator(("Operator")) --- UC_Main
+    Operator_Or_CI_Runner(("Operator_Or_CI_Runner")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
     UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `Operator_Or_CI_Runner`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- `AgileSpecForwardProjector` is initialized and ready to enforce `Deterministic MIL STD 881E WBS and Enterprise Export Synthesis`.
+- `Operator_Or_CI_Runner` holds authorized operational access to `AgileSpecForwardProjector`.
 
 ## 3. Trigger
 - Deterministic MIL STD 881E WBS and Enterprise Export Synthesis
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Deterministic MIL STD 881E WBS and Enterprise Export Synthesis` to `AgileSpecForwardProjector`.
-2. `AgileSpecForwardProjector` validates input schema structure and precondition guards for `Deterministic MIL STD 881E WBS and Enterprise Export Synthesis`.
-3. `AgileSpecForwardProjector` executes core domain transformation and state transition logic for `Deterministic MIL STD 881E WBS and Enterprise Export Synthesis`.
-4. `AgileSpecForwardProjector` evaluates formal postcondition assertions and structural invariants.
-5. `AgileSpecForwardProjector` commits verified output state and emits completion telemetry to `Operator`.
+1. `Operator_Or_CI_Runner` invokes `Deterministic MIL STD 881 E WBS and Enterprise Export Synthesis` on `AgileSpecForwardProjector` targeting objective `Deterministic MIL STD 881E WBS and Enterprise Export Synthesis`.
+2. `AgileSpecForwardProjector` verifies boundary preconditions and evaluates `Deterministic MIL STD 881E WBS and Enterprise Export Synthesis` invariants (guarding `Diagnostic: E0300`).
+3. `AgileSpecForwardProjector` records verified `Deterministic MIL STD 881 E WBS and Enterprise Export Synthesis` outcome and returns status to `Operator_Or_CI_Runner`.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `AgileSpecForwardProjector`:
-  - `AgileSpecForwardProjector` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Deterministic MIL STD 881E WBS and Enterprise Export Synthesis` execution:
-  - `AgileSpecForwardProjector` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `AgileSpecForwardProjector`:
-  - `AgileSpecForwardProjector` halts execution cleanly and reports deterministic fault status.
+- Diagnostic: E0300
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- `AgileSpecForwardProjector` satisfies declared objective `Deterministic MIL STD 881E WBS and Enterprise Export Synthesis` with all subsystem invariants intact.
+- Verified `Deterministic MIL STD 881 E WBS and Enterprise Export Synthesis` completion status is recorded for `Operator_Or_CI_Runner`.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#587** | User Story | [User Story 26: compile sysml](../user-stories/US-26-compile_sysml.md) |
+| **#709** | User Story | [User Story 20: Bind All Package Stories To Use](../user-stories/US-20-BindAllPackageStoriesToUse.md) |
 | **#670** | Feature | [Feature 16: [BP 04 Deterministic Specification ICD and WBS Forward Compiler Blueprint] AgileSpecForwardProjector](../features/FEAT-16-AgileSpecForwardProjector.md) |
 
 ## Source References

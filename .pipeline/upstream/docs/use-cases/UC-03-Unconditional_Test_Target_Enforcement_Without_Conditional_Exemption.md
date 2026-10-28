@@ -3,7 +3,7 @@
 | **Issue ID** | #626 |
 | **Title** | Use Case 03: Unconditional Test Target Enforcement Without Conditional Exemption |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
+| **Primary Actor** | Compiler_Engineer_CI |
 | **Scope** | CompilerLintEnforcementGate |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
@@ -16,56 +16,41 @@
 ```mermaid
 graph TD
     subgraph "CompilerLintEnforcementGate System Boundary"
-        UC_Main(["Unconditional Test Target Enforcement Without Conditional Exemption"])
-        UC_Step01(["Actor Operator submits input payload for Unconditional Te..."])
-        UC_Step02(["CompilerLintEnforcementGate validates input schema struct..."])
-        UC_Step03(["CompilerLintEnforcementGate executes core domain transfor..."])
-        UC_Step04(["CompilerLintEnforcementGate evaluates formal postconditio..."])
-        UC_Step05(["CompilerLintEnforcementGate commits verified output state..."])
+        UC_Main(["Unconditional Test Target Enforcement Without Conditional..."])
+        UC_Step01(["cargo test --workspace and ./target/release/verify-baseli..."])
+        UC_Step02(["Zero #![cfg_attr(test, allow(...))] exemptions exist, all..."])
     end
-    Operator(("Operator")) --- UC_Main
+    Compiler_Engineer_CI(("Compiler_Engineer_CI")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
-    UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `Compiler_Engineer_CI`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- Unit test modules (#[cfg(test)] mod tests) and integration test files (crates/ * /tests/ *.rs) across all six workspace crates.
 
 ## 3. Trigger
-- Unconditional Test Target Enforcement Without Conditional Exemption
+- cargo test --workspace and ./target/release/verify-baseline . --no-domain are executed.
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Unconditional Test Target Enforcement Without Conditional Exemption` to `CompilerLintEnforcementGate`.
-2. `CompilerLintEnforcementGate` validates input schema structure and precondition guards for `Unconditional Test Target Enforcement Without Conditional Exemption`.
-3. `CompilerLintEnforcementGate` executes core domain transformation and state transition logic for `Unconditional Test Target Enforcement Without Conditional Exemption`.
-4. `CompilerLintEnforcementGate` evaluates formal postcondition assertions and structural invariants.
-5. `CompilerLintEnforcementGate` commits verified output state and emits completion telemetry to `Operator`.
+1. cargo test --workspace and ./target/release/verify-baseline . --no-domain are executed.
+2. Zero #![cfg_attr(test, allow(...))] exemptions exist, all test assertions use fallible Result return signatures or pattern matching instead of .unwrap(), .expect(), or direct slice indexing, and all workspace tests pass.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `CompilerLintEnforcementGate`:
-  - `CompilerLintEnforcementGate` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Unconditional Test Target Enforcement Without Conditional Exemption` execution:
-  - `CompilerLintEnforcementGate` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `CompilerLintEnforcementGate`:
-  - `CompilerLintEnforcementGate` halts execution cleanly and reports deterministic fault status.
+- Precondition guard failure in `CompilerLintEnforcementGate`:
+  - `CompilerLintEnforcementGate` rejects the `Unconditional Test Target Enforcement Without Conditional Exemption` request without partial state mutation and reports diagnostic status to `Compiler_Engineer_CI`.
+- Invariant violation while enforcing `Unconditional Test Target Enforcement Without Conditional Exemption`:
+  - `CompilerLintEnforcementGate` aborts `Unconditional Test Target Enforcement Without Conditional Exemption` execution, preserves prior verified state, and notifies `Compiler_Engineer_CI`.
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- Zero #![cfg_attr(test, allow(...))] exemptions exist, all test assertions use fallible Result return signatures or pattern matching instead of .unwrap(), .expect(), or direct slice indexing, and all workspace tests pass.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#562** | User Story | [User Story 01: [CompilerLintEnforcementGate] Execute](../user-stories/US-01-Execute.md) |
+| **#702** | User Story | [User Story 03: Execute Verify Baseline No Domain](../user-stories/US-03-ExecuteVerifyBaselineNoDomain.md) |
 | **#655** | Feature | [Feature 01: [BP 01 Compiler Enforced Forbid Lint Gate and Zero Suppression AST Architecture Blueprint] CompilerLintEnforcementGate](../features/FEAT-01-CompilerLintEnforcementGate.md) |
 
 ## Source References

@@ -15,16 +15,7 @@
 
 ```mermaid
 classDiagram
-    class UnifiedSafetyDocstringSynthesizer {
-        +String SourceCodeFileInputPort (inout)
-        +PackageDef SysmlSchemaTraceabilityPort (inout)
-        +String EnrichedSourceOutputPort (inout)
-        +Boolean Check36VerificationReportPort (inout)
-        +Integer magic_offset_constant_count
-        +Integer lexer_duplication_count
-        +Integer false_attribution_count
-        +Integer docstring_idempotency_diff_bytes
-    }
+    class UnifiedSafetyDocstringSynthesizer
 ```
 
 ## Interface Requirements
@@ -42,97 +33,39 @@ classDiagram
     "status": {
       "type": "string",
       "enum": ["nominal", "degraded", "fault"]
-    },
-    "magic_offset_constant_count": {
-      "type": "integer",
-      "description": "Subsystem attribute magic_offset_constant_count"
-    },
-    "lexer_duplication_count": {
-      "type": "integer",
-      "description": "Subsystem attribute lexer_duplication_count"
-    },
-    "false_attribution_count": {
-      "type": "integer",
-      "description": "Subsystem attribute false_attribution_count"
-    },
-    "docstring_idempotency_diff_bytes": {
-      "type": "integer",
-      "description": "Subsystem attribute docstring_idempotency_diff_bytes"
-    },
-    "SourceCodeFileInputPort": {
-      "type": "object",
-      "properties": {
-        "direction": { "type": "string", "const": "inout" },
-        "port_type": { "type": "string", "const": "String" }
-      },
-      "required": ["direction", "port_type"]
-    },
-    "SysmlSchemaTraceabilityPort": {
-      "type": "object",
-      "properties": {
-        "direction": { "type": "string", "const": "inout" },
-        "port_type": { "type": "string", "const": "PackageDef" }
-      },
-      "required": ["direction", "port_type"]
-    },
-    "EnrichedSourceOutputPort": {
-      "type": "object",
-      "properties": {
-        "direction": { "type": "string", "const": "inout" },
-        "port_type": { "type": "string", "const": "String" }
-      },
-      "required": ["direction", "port_type"]
-    },
-    "Check36VerificationReportPort": {
-      "type": "object",
-      "properties": {
-        "direction": { "type": "string", "const": "inout" },
-        "port_type": { "type": "string", "const": "Boolean" }
-      },
-      "required": ["direction", "port_type"]
     }
   },
   "required": [
     "part",
-    "status",
-    "magic_offset_constant_count",
-    "lexer_duplication_count",
-    "false_attribution_count",
-    "docstring_idempotency_diff_bytes",
-    "SourceCodeFileInputPort",
-    "SysmlSchemaTraceabilityPort",
-    "EnrichedSourceOutputPort",
-    "Check36VerificationReportPort"
+    "status"
   ],
   "additionalProperties": false
 }
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by UnifiedSafetyDocstringSynthesizer.
+Classifier `UnifiedSafetyDocstringSynthesizer` declares no additional constraints specified in schema.
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for UnifiedSafetyDocstringSynthesizer conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+Structural composition and boundary topology for classifier `UnifiedSafetyDocstringSynthesizer` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for UnifiedSafetyDocstringSynthesizer.
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing UnifiedSafetyDocstringSynthesizer status, AST references, and typed signal models.
+Classifier `UnifiedSafetyDocstringSynthesizer` maintains typed lifecycle status (`nominal`, `degraded`, `fault`) with no additional value attributes declared in schema.
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for UnifiedSafetyDocstringSynthesizer.
+Classifier `UnifiedSafetyDocstringSynthesizer` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for UnifiedSafetyDocstringSynthesizer.
+Classifier `UnifiedSafetyDocstringSynthesizer` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-01: Given nominal UnifiedSafetyDocstringSynthesizer domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-- [ ] AC-02: Given operational state, When UnifiedSafetyDocstringSynthesizer evaluates constraint 'assert_magic_offset_constant_count_range', Then asserts invariant satisfaction without violation.
-- [ ] AC-03: Given operational state, When UnifiedSafetyDocstringSynthesizer evaluates constraint 'assert_lexer_duplication_count_range', Then asserts invariant satisfaction without violation.
-- [ ] AC-04: Given operational state, When UnifiedSafetyDocstringSynthesizer evaluates constraint 'assert_false_attribution_count_range', Then asserts invariant satisfaction without violation.
-- [ ] AC-05: Given operational state, When UnifiedSafetyDocstringSynthesizer evaluates constraint 'assert_docstring_idempotency_diff_bytes_range', Then asserts invariant satisfaction without violation.
-- [ ] AC-06: Given malformed input signals or boundary condition violation, When UnifiedSafetyDocstringSynthesizer error handling is invoked, Then transitions safely to failsafe fallback state without corruption.
+- [ ] AC-01: Given valid `UnifiedSafetyDocstringSynthesizer` initialization inputs for `UnifiedSafetyDocstringSynthesizer` state representation (no additional constraints specified in schema), When `UnifiedSafetyDocstringSynthesizer` commits typed domain state, Then declared state attributes hold verified values.
+- [ ] AC-02: Given malformed or out-of-domain input values for `UnifiedSafetyDocstringSynthesizer` state representation, When `UnifiedSafetyDocstringSynthesizer` validates incoming state updates, Then `UnifiedSafetyDocstringSynthesizer` rejects the invalid state update and emits a diagnostic via deterministic error diagnostic output.
+- [ ] AC-03: Given nominal signal arrival across `UnifiedSafetyDocstringSynthesizer` structural boundary, When `UnifiedSafetyDocstringSynthesizer` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
+- [ ] AC-04: Given an invalid or unrecognized interface frame across `UnifiedSafetyDocstringSynthesizer` structural boundary, When `UnifiedSafetyDocstringSynthesizer` boundary validation executes, Then `UnifiedSafetyDocstringSynthesizer` refuses the malformed frame via deterministic error diagnostic output and preserves prior verified state.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:

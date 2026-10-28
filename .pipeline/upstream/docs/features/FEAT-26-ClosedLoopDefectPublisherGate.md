@@ -16,8 +16,8 @@
 ```mermaid
 classDiagram
     class ClosedLoopDefectPublisherGate {
-        +String dossierCandidateInPort (inout)
-        +String verifiedReceiptOutPort (inout)
+        +String dossierCandidateInPort (in)
+        +String verifiedReceiptOutPort (out)
         +Integer schemaGateCount
         +Boolean requireByteParity
     }
@@ -41,16 +41,20 @@ classDiagram
     },
     "schemaGateCount": {
       "type": "integer",
-      "description": "Subsystem attribute schemaGateCount"
+      "x-sysml-type": "Integer",
+      "description": "Declared attribute schemaGateCount (Integer)",
+      "default": 12
     },
     "requireByteParity": {
       "type": "boolean",
-      "description": "Subsystem attribute requireByteParity"
+      "x-sysml-type": "Boolean",
+      "description": "Requires zero byte discrepancy between local `.pipeline/defects/` file and remote GitHub issue body. [unit: flag]",
+      "default": true
     },
     "dossierCandidateInPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "in" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -58,7 +62,7 @@ classDiagram
     "verifiedReceiptOutPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -67,8 +71,6 @@ classDiagram
   "required": [
     "part",
     "status",
-    "schemaGateCount",
-    "requireByteParity",
     "dossierCandidateInPort",
     "verifiedReceiptOutPort"
   ],
@@ -77,22 +79,37 @@ classDiagram
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by ClosedLoopDefectPublisherGate.
+Declared structural attributes, boundary ports, invariants, and allocated requirements for classifier `ClosedLoopDefectPublisherGate`:
+
+| AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |
+| :--- | :--- | :--- | :--- |
+| Attribute | `schemaGateCount` | `Integer` | Default `12` |
+| Attribute | `requireByteParity` | `Boolean` | Default `true` |
+| Port | `dossierCandidateInPort` | `in String` | Boundary interface contract |
+| Port | `verifiedReceiptOutPort` | `out String` | Boundary interface contract |
+| Constraint | `Invariant_REQ_0606_SC_01` | Invariant (`REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`) | Declared structural invariant |
+| Constraint | `Invariant_REQ_0606_SC_02` | Invariant (`REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`) | Declared structural invariant |
+| Requirement | `REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)` | Allocated Requirement | The DeterministicStaticDefectAuditor subsystem (**REQ-0606** / BP-06 / DEAP-BP-DET-06, deterministic UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c6, complexity class Class P linear single-pass token-stream and AST traversal, governed by DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and |
+
+```sysml
+constraint Invariant_REQ_0606_SC_01 {}
+constraint Invariant_REQ_0606_SC_02 {}
+```
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for ClosedLoopDefectPublisherGate conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+Structural composition and boundary topology for classifier `ClosedLoopDefectPublisherGate` organize no nested subparts declared in schema paired with boundary ports `in dossierCandidateInPort : String`, `out verifiedReceiptOutPort : String`.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for ClosedLoopDefectPublisherGate.
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing ClosedLoopDefectPublisherGate status, AST references, and typed signal models.
+Classifier `ClosedLoopDefectPublisherGate` encapsulates typed domain state attributes `schemaGateCount : Integer`, `requireByteParity : Boolean` alongside operational lifecycle status.
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for ClosedLoopDefectPublisherGate.
+Classifier `ClosedLoopDefectPublisherGate` governs stateless structural transition evaluation enforcing invariant obligations `Invariant_REQ_0606_SC_01`, `Invariant_REQ_0606_SC_02`.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for ClosedLoopDefectPublisherGate.
+Classifier `ClosedLoopDefectPublisherGate` binds external and behavioral interfaces across port `in dossierCandidateInPort : String`, port `out verifiedReceiptOutPort : String`.
 
 ### Associated Use Cases & User Stories
 
@@ -100,31 +117,27 @@ Presentation interface binding and diagnostic event routing for ClosedLoopDefect
 - [ ] #649 - [Use Case 26: Static Five Pillar AST Defect Detection](../use-cases/UC-26-Static_Five_Pillar_AST_Defect_Detection.md)
 - [ ] #650 - [Use Case 27: Deterministic Seven Section Dossier and Mermaid Synthesis](../use-cases/UC-27-Deterministic_Seven_Section_Dossier_and_Mermaid_Synthesis.md)
 - [ ] #651 - [Use Case 28: Idempotent Local and Remote SSOT Deduplication](../use-cases/UC-28-Idempotent_Local_and_Remote_SSOT_Deduplication.md)
-- [ ] #652 - [Use Case 29: Closed Loop Git Hub SSOT Publishing and Byte Parity Verification](../use-cases/UC-29-Closed_Loop_GitHub_SSOT_Publishing_and_Byte_Parity_Verification.md)
+- [ ] #652 - [Use Case 29: Closed Loop GitHub SSOT Publishing and Byte Parity Verification](../use-cases/UC-29-Closed_Loop_GitHub_SSOT_Publishing_and_Byte_Parity_Verification.md)
 - [ ] #653 - [Use Case 30: Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence](../use-cases/UC-30-Fail_Closed_Rejection_on_Malformed_Dossier_Schema_Ephemeral_Paths_or_Payload_Divergence.md)
-- [ ] #654 - [Use Case 31: Dogfood Sys ML v2 Markdown Ingestion and Blueprint Gate Conformance](../use-cases/UC-31-Dogfood_SysML_v2_Markdown_Ingestion_and_Blueprint_Gate_Conformance.md)
+- [ ] #654 - [Use Case 31: Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance](../use-cases/UC-31-Dogfood_SysML_v2_Markdown_Ingestion_and_Blueprint_Gate_Conformance.md)
 
 #### Associated User Stories
-- [ ] #610 - [User Story 49: verify baseline](../user-stories/US-49-verify_baseline.md)
-- [ ] #611 - [User Story 50: parse rust source ast](../user-stories/US-50-parse_rust_source_ast.md)
-- [ ] #612 - [User Story 51: Deterministic](../user-stories/US-51-Deterministic.md)
-- [ ] #613 - [User Story 52: evaluate source file pillars](../user-stories/US-52-evaluate_source_file_pillars.md)
-- [ ] #614 - [User Story 53: Line exact](../user-stories/US-53-Line_exact.md)
-- [ ] #615 - [User Story 54: synthesize defect dossier markdown](../user-stories/US-54-synthesize_defect_dossier_markdown.md)
-- [ ] #616 - [User Story 55: Compliant](../user-stories/US-55-Compliant.md)
-- [ ] #617 - [User Story 56: run check defect](../user-stories/US-56-run_check_defect.md)
-- [ ] #618 - [User Story 57: [ClosedLoopDefectPublisherGate] Execute](../user-stories/US-57-Execute.md)
-- [ ] #619 - [User Story 58: gh](../user-stories/US-58-gh.md)
-- [ ] #620 - [User Story 59: Created](../user-stories/US-59-Created.md)
-- [ ] #621 - [User Story 60: Live](../user-stories/US-60-Live.md)
-- [ ] #622 - [User Story 61: CLOSED LOOP](../user-stories/US-61-CLOSED_LOOP.md)
-- [ ] #623 - [User Story 62: Exit item](../user-stories/US-62-Exit_item.md)
+- [ ] #726 - [User Story 37: Verify Baseline Audit Code Path Crates](../user-stories/US-37-VerifyBaselineAuditCodePathCrates.md)
+- [ ] #727 - [User Story 38: Parse Rust Source Ast And Parse](../user-stories/US-38-ParseRustSourceAstAndParse.md)
+- [ ] #728 - [User Story 39: Evaluate Source File Pillars Across5](../user-stories/US-39-EvaluateSourceFilePillarsAcross5.md)
+- [ ] #615 - [User Story 40: synthesize defect dossier markdown](../user-stories/US-40-synthesize_defect_dossier_markdown.md)
+- [ ] #617 - [User Story 41: run check defect](../user-stories/US-41-run_check_defect.md)
+- [ ] #729 - [User Story 42: Execute12 Check Validate Defect Dossier](../user-stories/US-42-Execute12CheckValidateDefectDossier.md)
+- [ ] #730 - [User Story 43: Gh Issue Create Or Gh Issue](../user-stories/US-43-GhIssueCreateOrGhIssue.md)
+- [ ] #731 - [User Story 44: Gh Issue View Json Title Body](../user-stories/US-44-GhIssueViewJsonTitleBody.md)
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-01: Given nominal ClosedLoopDefectPublisherGate domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-- [ ] AC-02: Given operational state, When ClosedLoopDefectPublisherGate evaluates constraint 'Invariant_REQ_0606_SC_01', Then asserts invariant satisfaction without violation.
-- [ ] AC-03: Given operational state, When ClosedLoopDefectPublisherGate evaluates constraint 'Invariant_REQ_0606_SC_02', Then asserts invariant satisfaction without violation.
-- [ ] AC-04: Given malformed input signals or boundary condition violation, When ClosedLoopDefectPublisherGate error handling is invoked, Then transitions safely to failsafe fallback state without corruption.
+- [ ] AC-01: Given valid `ClosedLoopDefectPublisherGate` inputs satisfying `Invariant_REQ_0606_SC_01` [Req `REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`], When `ClosedLoopDefectPublisherGate` evaluates invariant `Invariant_REQ_0606_SC_01`, Then the invariant holds and verified state is committed.
+- [ ] AC-02: Given boundary inputs that violate `Invariant_REQ_0606_SC_01` [Req `REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`], When `ClosedLoopDefectPublisherGate` evaluates invariant `Invariant_REQ_0606_SC_01`, Then `ClosedLoopDefectPublisherGate` rejects the invalid transition and routes a diagnostic via diagnostic port `verifiedReceiptOutPort`.
+- [ ] AC-03: Given valid `ClosedLoopDefectPublisherGate` inputs satisfying `Invariant_REQ_0606_SC_02` [Req `REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`], When `ClosedLoopDefectPublisherGate` evaluates invariant `Invariant_REQ_0606_SC_02`, Then the invariant holds and verified state is committed.
+- [ ] AC-04: Given boundary inputs that violate `Invariant_REQ_0606_SC_02` [Req `REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`], When `ClosedLoopDefectPublisherGate` evaluates invariant `Invariant_REQ_0606_SC_02`, Then `ClosedLoopDefectPublisherGate` rejects the invalid transition and routes a diagnostic via diagnostic port `verifiedReceiptOutPort`.
+- [ ] AC-05: Given nominal typed values for `schemaGateCount` (`Integer`), `requireByteParity` (`Boolean`) across `dossierCandidateInPort` (`in String`), `verifiedReceiptOutPort` (`out String`), When `ClosedLoopDefectPublisherGate` executes structural interface processing, Then state and output ports conform to declared schema types.
+- [ ] AC-06: Given malformed input frames across `schemaGateCount` (`Integer`), `requireByteParity` (`Boolean`) or `dossierCandidateInPort` (`in String`), `verifiedReceiptOutPort` (`out String`), When `ClosedLoopDefectPublisherGate` boundary validation executes, Then `ClosedLoopDefectPublisherGate` rejects the malformed input via diagnostic port `verifiedReceiptOutPort`.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:

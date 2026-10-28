@@ -9,35 +9,31 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
     attribute Generation_Mode : String = "subagent";
     attribute Specification_Source : String = "crates/compile-sysml/src/sync/forward.rs:1585-2078 / #507";
     doc /* compile-sysml --forward-sync docs */
-    action def compile_sysml;
+    action def CompileSysmlForwardSyncDocs;
     doc /* Resolve Parent Epic by pkg_name == ConOps */
-    action def Resolve;
+    action def ResolveParentEpicByPkgName;
     doc /* Bind all package stories to Use Case matrices */
-    action def Bind;
+    action def BindAllPackageStoriesToUse;
     doc /* Emit symmetric ActionDef signatures and E1-E5 Mermaid */
-    action def Emit;
-    doc /* Epics, Features, Stories, and Use Cases written */
-    action def Epics;
+    action def EmitSymmetricActionDefSignaturesAndE1;
+    doc /* compile-sysml --emit-icd docs/interfaces */
+    action def CompileSysmlEmitIcdDocsInterfaces;
     doc /* Project NxN ConnectionDef matrix and FlowDef signals */
-    action def Project;
-    doc /* ICD_01 and ICD_02 written deterministically */
-    action def ICD_01;
+    action def ProjectNxNConnectionDefMatrixAndFlowDef;
+    doc /* compile-sysml --emit-wbs docs/management */
+    action def CompileSysmlEmitWbsDocsManagement;
     doc /* Synthesize MIL-STD-881E tree and CSV/JSON exports */
-    action def Synthesize;
-    doc /* WBS_01..03 and enterprise exports written */
-    action def WBS_01_03;
+    action def SynthesizeMilStd881eTreeAnd;
     doc /* reconcile-backlog reconcile --docs-dir docs */
-    action def reconcile_backlog;
+    action def ReconcileBacklogReconcileDocsDirDocs;
     doc /* Parse CommonMark tables with in_html_comment guard */
-    action def Parse;
+    action def ParseCommonMarkTablesWithInHtml;
     doc /* Reconcile checklists with parent-inclusive epic count */
-    action def Reconcile;
-    doc /* Zero unpopulated placeholders or spoofed IDs */
-    action def Zero;
+    action def ReconcileChecklistsWithParentInclusiveEpic;
+    doc /* compile-sysml --reverse-sync docs */
+    action def CompileSysmlReverseSyncDocs;
     doc /* Merge extracted entities into owning subpackages */
-    action def Merge;
-    doc /* Bit-identical SysML v2 AST and SHA-256 digest */
-    action def Bit_identical;
+    action def MergeExtractedEntitiesIntoOwningSubpackages;
     doc /* UUIDv5:  | Complexity: Class P | Standard: IEEE 29148-2018 / RFC 2119 | Diagnostics: E0100 */
     requirement def REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint {
         id = "REQ-0604";
@@ -66,17 +62,25 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
     }
     doc /* Extracted from Mermaid stateDiagram specification. */
     state def BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_LifecycleState {
-        transition Initial_to_AstLoaded;
-        transition AstLoaded_to_ForwardProjected_on_forwardSyncSpecs;
-        transition ForwardProjected_to_IcdSynthesized_on_emitLogicalIcd;
-        transition IcdSynthesized_to_WbsExported_on_emitMilStd881eWbs;
-        transition WbsExported_to_BacklogReconciled_on_reconcileBacklog;
-        transition BacklogReconciled_to_ReverseSynced_on_reverseSyncToSubpackages;
-        transition BacklogReconciled_to_Rejected_on_htmlCommentSpoofOrCardinalityError;
-        transition ReverseSynced_to_VerifiedRoundtrip_on_sha256DigestParityZero;
-        transition ReverseSynced_to_Rejected_on_rootAstPollutionOrDriftDetected;
-        transition Rejected_to_Terminal;
-        transition VerifiedRoundtrip_to_Terminal;
+        state AstLoaded;
+        state ForwardProjected;
+        state IcdSynthesized;
+        state WbsExported;
+        state BacklogReconciled;
+        state ReverseSynced;
+        state Rejected;
+        state VerifiedRoundtrip;
+        transition Initial_to_AstLoaded first Initial then AstLoaded;
+        transition AstLoaded_to_ForwardProjected_on_forwardSyncSpecs first AstLoaded accept forwardSyncSpecs then ForwardProjected;
+        transition ForwardProjected_to_IcdSynthesized_on_emitLogicalIcd first ForwardProjected accept emitLogicalIcd then IcdSynthesized;
+        transition IcdSynthesized_to_WbsExported_on_emitMilStd881eWbs first IcdSynthesized accept emitMilStd881eWbs then WbsExported;
+        transition WbsExported_to_BacklogReconciled_on_reconcileBacklog first WbsExported accept reconcileBacklog then BacklogReconciled;
+        transition BacklogReconciled_to_ReverseSynced_on_reverseSyncToSubpackages first BacklogReconciled accept reverseSyncToSubpackages then ReverseSynced;
+        transition BacklogReconciled_to_Rejected_on_htmlCommentSpoofOrCardinalityError first BacklogReconciled accept htmlCommentSpoofOrCardinalityError then Rejected;
+        transition ReverseSynced_to_VerifiedRoundtrip_on_sha256DigestParityZero first ReverseSynced accept sha256DigestParityZero then VerifiedRoundtrip;
+        transition ReverseSynced_to_Rejected_on_rootAstPollutionOrDriftDetected first ReverseSynced accept rootAstPollutionOrDriftDetected then Rejected;
+        transition Rejected_to_Terminal first Rejected then Terminal;
+        transition VerifiedRoundtrip_to_Terminal first VerifiedRoundtrip then Terminal;
     }
     doc /* Diagnostic: E0100). */
     use case def UC_AC_01_Deterministic_Multi_Story_Use_Case_and_ConOps_Parent_Epic_Projection {
@@ -111,24 +115,24 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
         lifeline Wbs : MilStd881eWbsExporter;
         lifeline Rec : reconcile_backlog_Tool;
         lifeline Rev : compile_sysml_Reverse;
-        message compile_sysml from CLI to Fwd;
-        message Resolve from Fwd to Fwd;
-        message Bind from Fwd to Fwd;
-        message Emit from Fwd to Fwd;
-        message Epics from Fwd to CLI;
-        message compile_sysml from CLI to Icd;
-        message Project from Icd to Icd;
-        message ICD_01 from Icd to CLI;
-        message compile_sysml from CLI to Wbs;
-        message Synthesize from Wbs to Wbs;
-        message WBS_01_03 from Wbs to CLI;
-        message reconcile_backlog from CLI to Rec;
-        message Parse from Rec to Rec;
-        message Reconcile from Rec to Rec;
-        message Zero from Rec to CLI;
-        message compile_sysml from CLI to Rev;
-        message Merge from Rev to Rev;
-        message Bit_identical from Rev to CLI;
+        message CompileSysmlForwardSyncDocs from CLI to Fwd;
+        message ResolveParentEpicByPkgName from Fwd to Fwd;
+        message BindAllPackageStoriesToUse from Fwd to Fwd;
+        message EmitSymmetricActionDefSignaturesAndE1 from Fwd to Fwd;
+        message reply_EpicsFeaturesStoriesAndUseCases from Fwd to CLI;
+        message CompileSysmlEmitIcdDocsInterfaces from CLI to Icd;
+        message ProjectNxNConnectionDefMatrixAndFlowDef from Icd to Icd;
+        message reply_Icd01AndIcd02Written from Icd to CLI;
+        message CompileSysmlEmitWbsDocsManagement from CLI to Wbs;
+        message SynthesizeMilStd881eTreeAnd from Wbs to Wbs;
+        message reply_Wbs0103AndEnterpriseExports from Wbs to CLI;
+        message ReconcileBacklogReconcileDocsDirDocs from CLI to Rec;
+        message ParseCommonMarkTablesWithInHtml from Rec to Rec;
+        message ReconcileChecklistsWithParentInclusiveEpic from Rec to Rec;
+        message reply_ZeroUnpopulatedPlaceholdersOrSpoofedIDs from Rec to CLI;
+        message CompileSysmlReverseSyncDocs from CLI to Rev;
+        message MergeExtractedEntitiesIntoOwningSubpackages from Rev to Rev;
+        message reply_BitIdenticalSysMLV2AstAnd from Rev to CLI;
     }
     doc /* Maximum deterministic execution bound for `--forward-sync` across all package subtrees. [unit: ms] */
     part def AgileSpecForwardProjector {
@@ -136,9 +140,13 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
         doc /* Enforces symmetric `in` and `out` `ActionDef` parameter emission across Mermaid and Markdown bullets. [unit: flag] */
         attribute preserveTypedActionParams : Boolean = true;
         doc /* Receives ordered `PackageDef`, `PartDef`, `InteractionDef`, and `UseCaseDef` AST slices. [protocol: MemoryBus] */
-        port inout packageAstInPort : String;
+        port in packageAstInPort : String {
+            flow in packageAstInPort_flow : String;
+        }
         doc /* Emits Check 13B E1-E5 compliant Epics, Features, User Stories, and Use Cases. [protocol: AtomicFsWrite] */
-        port inout specMarkdownOutPort : String;
+        port out specMarkdownOutPort : String {
+            flow out specMarkdownOutPort_flow : String;
+        }
     }
     doc /* Tracks multi-line `in_html_comment` state to prevent commented example tables from spoofing frontmatter issue IDs. [unit: flag] */
     part def BidirectionalBacklogReconciler {
@@ -148,7 +156,9 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
         doc /* Reads and reconciles CommonMark metadata tables and bidirectional Epic/Feature checklists under `docs/`. [protocol: AtomicFsWrite] */
         port inout specDocsInOutPort : String;
         doc /* Merges reverse-synchronized specification entities into their owning subsystem `PackageDef` subpackages. [protocol: AtomicFsWrite] */
-        port inout subpackageSyncOutPort : String;
+        port out subpackageSyncOutPort : String {
+            flow out subpackageSyncOutPort_flow : String;
+        }
     }
     doc /* Total number of generative LLM subagents invoked during specification, ICD, and WBS forward compilation (`C-FWD-01 == 0`). [unit: count] */
     part def DeterministicSpecIcdWbsForwardCompiler {
@@ -160,13 +170,21 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
         doc /* Count of AST structural or subpackage placement divergences after a forward-then-reverse synchronization cycle (`C-FWD-04 == 0`). [unit: count] */
         attribute forward_reverse_drift_count : Integer = 0;
         doc /* Receives the parsed, type-checked `SysmlPackage` (`PackageDef`) AST and SHA-256 `SchemaDigest` from `deap-core`. [protocol: MemoryBus] */
-        port inout SysmlPackageAstInputPort : String;
+        port in SysmlPackageAstInputPort : String {
+            flow in SysmlPackageAstInputPort_flow : String;
+        }
         doc /* Emits deterministic `SpecSuiteBundle` Markdown specifications across `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`. [protocol: AtomicFsWrite] */
-        port inout MarkdownSpecSuiteOutputPort : String;
+        port out MarkdownSpecSuiteOutputPort : String {
+            flow out MarkdownSpecSuiteOutputPort_flow : String;
+        }
         doc /* Emits `IcdDocumentPair` (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`) under `docs/interfaces/`. [protocol: AtomicFsWrite] */
-        port inout IcdMatrixArtifactPort : String;
+        port out IcdMatrixArtifactPort : String {
+            flow out IcdMatrixArtifactPort_flow : String;
+        }
         doc /* Emits `WbsExportBundle` (`WBS_01`..`WBS_03` Markdown artifacts and RFC 4180 CSV / JSON AST exports) under `docs/management/`. [protocol: AtomicFsWrite] */
-        port inout WbsEnterpriseExportPort : String;
+        port out WbsEnterpriseExportPort : String {
+            flow out WbsEnterpriseExportPort_flow : String;
+        }
     }
     doc /* Maximum deterministic execution bound for `--emit-icd` interface matrix and signal dictionary compilation. [unit: ms] */
     part def LogicalIcdMatrixCompiler {
@@ -174,9 +192,13 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
         doc /* Orders all `PartDef` matrix axes and `ConnectionDef` channels via `BTreeMap` deterministic traversal. [unit: flag] */
         attribute lexicographicalSort : Boolean = true;
         doc /* Receives `PartDef`, `PortDef`, `ConnectionDef`, `FlowDef`, and `ItemDef` AST nodes. [protocol: MemoryBus] */
-        port inout interconnectAstInPort : String;
+        port in interconnectAstInPort : String {
+            flow in interconnectAstInPort_flow : String;
+        }
         doc /* Emits `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`. [protocol: AtomicFsWrite] */
-        port inout icdMarkdownOutPort : String;
+        port out icdMarkdownOutPort : String {
+            flow out icdMarkdownOutPort_flow : String;
+        }
     }
     doc /* Canonical 4-level MIL-STD-881E decomposition depth (System, Subsystem, Work Package, Deliverable Task). [unit: levels] */
     part def MilStd881eWbsExporter {
@@ -184,8 +206,12 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
         doc /* Maximum deterministic execution bound for `--emit-wbs` Markdown and CSV/JSON export generation. [unit: ms] */
         attribute maxWbsLatencyMs : Integer = 15;
         doc /* Receives `PackageDef` AST hierarchy and synchronized `docs/` specification frontmatter metadata. [protocol: MemoryBus] */
-        port inout wbsAstMetadataInPort : String;
+        port in wbsAstMetadataInPort : String {
+            flow in wbsAstMetadataInPort_flow : String;
+        }
         doc /* Emits `WBS_01`..`WBS_03` Markdown registers and enterprise CSV/JSON AST exports. [protocol: AtomicFsWrite] */
-        port inout wbsArtifactsOutPort : String;
+        port out wbsArtifactsOutPort : String {
+            flow out wbsArtifactsOutPort_flow : String;
+        }
     }
 }

@@ -3,7 +3,7 @@
 | **Issue ID** | #650 |
 | **Title** | Use Case 27: Deterministic Seven Section Dossier and Mermaid Synthesis |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
+| **Primary Actor** | Operator_Or_CI_Pipeline |
 | **Scope** | ClosedLoopDefectPublisherGate |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
@@ -17,55 +17,42 @@
 graph TD
     subgraph "ClosedLoopDefectPublisherGate System Boundary"
         UC_Main(["Deterministic Seven Section Dossier and Mermaid Synthesis"])
-        UC_Step01(["Actor Operator submits input payload for Deterministic Se..."])
-        UC_Step02(["ClosedLoopDefectPublisherGate validates input schema stru..."])
-        UC_Step03(["ClosedLoopDefectPublisherGate executes core domain transf..."])
-        UC_Step04(["ClosedLoopDefectPublisherGate evaluates formal postcondit..."])
-        UC_Step05(["ClosedLoopDefectPublisherGate commits verified output sta..."])
+        UC_Step01(["Operator_Or_CI_Pipeline invokes Deterministic Seven Secti..."])
+        UC_Step02(["ClosedLoopDefectPublisherGate verifies boundary precondit..."])
+        UC_Step03(["ClosedLoopDefectPublisherGate records verified Determinis..."])
     end
-    Operator(("Operator")) --- UC_Main
+    Operator_Or_CI_Pipeline(("Operator_Or_CI_Pipeline")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
     UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `Operator_Or_CI_Pipeline`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- `ClosedLoopDefectPublisherGate` is initialized and ready to enforce `Deterministic Seven Section Dossier and Mermaid Synthesis`.
+- `Operator_Or_CI_Pipeline` holds authorized operational access to `ClosedLoopDefectPublisherGate`.
 
 ## 3. Trigger
 - Deterministic Seven Section Dossier and Mermaid Synthesis
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Deterministic Seven Section Dossier and Mermaid Synthesis` to `ClosedLoopDefectPublisherGate`.
-2. `ClosedLoopDefectPublisherGate` validates input schema structure and precondition guards for `Deterministic Seven Section Dossier and Mermaid Synthesis`.
-3. `ClosedLoopDefectPublisherGate` executes core domain transformation and state transition logic for `Deterministic Seven Section Dossier and Mermaid Synthesis`.
-4. `ClosedLoopDefectPublisherGate` evaluates formal postcondition assertions and structural invariants.
-5. `ClosedLoopDefectPublisherGate` commits verified output state and emits completion telemetry to `Operator`.
+1. `Operator_Or_CI_Pipeline` invokes `Deterministic Seven Section Dossier and Mermaid Synthesis` on `ClosedLoopDefectPublisherGate` targeting objective `Deterministic Seven Section Dossier and Mermaid Synthesis`.
+2. `ClosedLoopDefectPublisherGate` verifies boundary preconditions and evaluates `Deterministic Seven Section Dossier and Mermaid Synthesis` invariants (guarding `Diagnostic: E0602`).
+3. `ClosedLoopDefectPublisherGate` records verified `Deterministic Seven Section Dossier and Mermaid Synthesis` outcome and returns status to `Operator_Or_CI_Pipeline`.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `ClosedLoopDefectPublisherGate`:
-  - `ClosedLoopDefectPublisherGate` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Deterministic Seven Section Dossier and Mermaid Synthesis` execution:
-  - `ClosedLoopDefectPublisherGate` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `ClosedLoopDefectPublisherGate`:
-  - `ClosedLoopDefectPublisherGate` halts execution cleanly and reports deterministic fault status.
+- Diagnostic: E0602
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- `ClosedLoopDefectPublisherGate` satisfies declared objective `Deterministic Seven Section Dossier and Mermaid Synthesis` with all subsystem invariants intact.
+- Verified `Deterministic Seven Section Dossier and Mermaid Synthesis` completion status is recorded for `Operator_Or_CI_Pipeline`.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#610** | User Story | [User Story 49: verify baseline](../user-stories/US-49-verify_baseline.md) |
+| **#727** | User Story | [User Story 38: Parse Rust Source Ast And Parse](../user-stories/US-38-ParseRustSourceAstAndParse.md) |
 | **#680** | Feature | [Feature 26: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] ClosedLoopDefectPublisherGate](../features/FEAT-26-ClosedLoopDefectPublisherGate.md) |
 
 ## Source References

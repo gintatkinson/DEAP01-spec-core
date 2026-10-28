@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #669 |
-| **Title** | Feature 15: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] SysmlBijectiveRoundtripCompilerGate |
+| **Title** | Feature 15: [BP 03 SysML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] SysmlBijectiveRoundtripCompilerGate |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-03-BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint](../epics/EPIC-03-BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint.md) |
 | **Interface Type** | Physical / Structural / Internal Bus |
@@ -9,17 +9,17 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# Feature 15: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] SysmlBijectiveRoundtripCompilerGate
+# Feature 15: [BP 03 SysML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] SysmlBijectiveRoundtripCompilerGate
 
 ## UML Class Diagram
 
 ```mermaid
 classDiagram
     class SysmlBijectiveRoundtripCompilerGate {
-        +String RawSysmlSourceInputPort (inout)
+        +String RawSysmlSourceInputPort (in)
         +String TokenStreamChannelPort (inout)
-        +String SerializedSysmlOutputPort (inout)
-        +String BijectiveDiffDiagnosticPort (inout)
+        +String SerializedSysmlOutputPort (out)
+        +String BijectiveDiffDiagnosticPort (out)
         +Integer span_offset_drift_bytes
         +Integer silent_skip_branch_count
         +Integer dropped_ast_field_count
@@ -45,24 +45,32 @@ classDiagram
     },
     "span_offset_drift_bytes": {
       "type": "integer",
-      "description": "Subsystem attribute span_offset_drift_bytes"
+      "x-sysml-type": "Integer",
+      "description": "Declared attribute span_offset_drift_bytes (Integer)",
+      "default": 0
     },
     "silent_skip_branch_count": {
       "type": "integer",
-      "description": "Subsystem attribute silent_skip_branch_count"
+      "x-sysml-type": "Integer",
+      "description": "Count of `skip_until_semi_or_brace` silent erasure fallback branches in inner block parsers [unit: branches]",
+      "default": 0
     },
     "dropped_ast_field_count": {
       "type": "integer",
-      "description": "Subsystem attribute dropped_ast_field_count"
+      "x-sysml-type": "Integer",
+      "description": "Count of AST struct fields omitted during `SysmlSerializable::to_sysml` serialization [unit: fields]",
+      "default": 0
     },
     "roundtrip_ast_mismatch_count": {
       "type": "integer",
-      "description": "Subsystem attribute roundtrip_ast_mismatch_count"
+      "x-sysml-type": "Integer",
+      "description": "Count of structural AST nodes differing between `ast` and `parse_sysml(to_sysml(ast))` [unit: nodes]",
+      "default": 0
     },
     "RawSysmlSourceInputPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "in" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -78,7 +86,7 @@ classDiagram
     "SerializedSysmlOutputPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -86,7 +94,7 @@ classDiagram
     "BijectiveDiffDiagnosticPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -95,10 +103,6 @@ classDiagram
   "required": [
     "part",
     "status",
-    "span_offset_drift_bytes",
-    "silent_skip_branch_count",
-    "dropped_ast_field_count",
-    "roundtrip_ast_mismatch_count",
     "RawSysmlSourceInputPort",
     "TokenStreamChannelPort",
     "SerializedSysmlOutputPort",
@@ -109,30 +113,39 @@ classDiagram
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by SysmlBijectiveRoundtripCompilerGate.
+Declared structural attributes, boundary ports, invariants, and allocated requirements for classifier `SysmlBijectiveRoundtripCompilerGate`:
+
+| AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |
+| :--- | :--- | :--- | :--- |
+| Attribute | `span_offset_drift_bytes` | `Integer` | Default `0` |
+| Attribute | `silent_skip_branch_count` | `Integer` | Default `0` |
+| Attribute | `dropped_ast_field_count` | `Integer` | Default `0` |
+| Attribute | `roundtrip_ast_mismatch_count` | `Integer` | Default `0` |
+| Port | `RawSysmlSourceInputPort` | `in String` | Boundary interface contract |
+| Port | `TokenStreamChannelPort` | `inout String` | Boundary interface contract |
+| Port | `SerializedSysmlOutputPort` | `out String` | Boundary interface contract |
+| Port | `BijectiveDiffDiagnosticPort` | `out String` | Boundary interface contract |
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for SysmlBijectiveRoundtripCompilerGate conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+Structural composition and boundary topology for classifier `SysmlBijectiveRoundtripCompilerGate` organize no nested subparts declared in schema paired with boundary ports `in RawSysmlSourceInputPort : String`, `inout TokenStreamChannelPort : String`, `out SerializedSysmlOutputPort : String`, `out BijectiveDiffDiagnosticPort : String`.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for SysmlBijectiveRoundtripCompilerGate.
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing SysmlBijectiveRoundtripCompilerGate status, AST references, and typed signal models.
+Classifier `SysmlBijectiveRoundtripCompilerGate` encapsulates typed domain state attributes `span_offset_drift_bytes : Integer`, `silent_skip_branch_count : Integer`, `dropped_ast_field_count : Integer`, `roundtrip_ast_mismatch_count : Integer` alongside operational lifecycle status.
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for SysmlBijectiveRoundtripCompilerGate.
+Classifier `SysmlBijectiveRoundtripCompilerGate` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for SysmlBijectiveRoundtripCompilerGate.
+Classifier `SysmlBijectiveRoundtripCompilerGate` binds external and behavioral interfaces across port `in RawSysmlSourceInputPort : String`, port `inout TokenStreamChannelPort : String`, port `out SerializedSysmlOutputPort : String`, port `out BijectiveDiffDiagnosticPort : String`.
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-01: Given nominal SysmlBijectiveRoundtripCompilerGate domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-- [ ] AC-02: Given operational state, When SysmlBijectiveRoundtripCompilerGate evaluates constraint 'assert_span_offset_drift_bytes_range', Then asserts invariant satisfaction without violation.
-- [ ] AC-03: Given operational state, When SysmlBijectiveRoundtripCompilerGate evaluates constraint 'assert_silent_skip_branch_count_range', Then asserts invariant satisfaction without violation.
-- [ ] AC-04: Given operational state, When SysmlBijectiveRoundtripCompilerGate evaluates constraint 'assert_dropped_ast_field_count_range', Then asserts invariant satisfaction without violation.
-- [ ] AC-05: Given operational state, When SysmlBijectiveRoundtripCompilerGate evaluates constraint 'assert_roundtrip_ast_mismatch_count_range', Then asserts invariant satisfaction without violation.
-- [ ] AC-06: Given malformed input signals or boundary condition violation, When SysmlBijectiveRoundtripCompilerGate error handling is invoked, Then transitions safely to failsafe fallback state without corruption.
+- [ ] AC-01: Given valid `SysmlBijectiveRoundtripCompilerGate` initialization inputs for `span_offset_drift_bytes` (`Integer`), `silent_skip_branch_count` (`Integer`), `dropped_ast_field_count` (`Integer`), `roundtrip_ast_mismatch_count` (`Integer`) (no additional constraints specified in schema), When `SysmlBijectiveRoundtripCompilerGate` commits typed domain state, Then declared state attributes hold verified values.
+- [ ] AC-02: Given malformed or out-of-domain input values for `span_offset_drift_bytes` (`Integer`), `silent_skip_branch_count` (`Integer`), `dropped_ast_field_count` (`Integer`), `roundtrip_ast_mismatch_count` (`Integer`), When `SysmlBijectiveRoundtripCompilerGate` validates incoming state updates, Then `SysmlBijectiveRoundtripCompilerGate` rejects the invalid state update and emits a diagnostic via diagnostic port `TokenStreamChannelPort`.
+- [ ] AC-03: Given nominal signal arrival across `RawSysmlSourceInputPort` (`in String`), `TokenStreamChannelPort` (`inout String`), `SerializedSysmlOutputPort` (`out String`), `BijectiveDiffDiagnosticPort` (`out String`), When `SysmlBijectiveRoundtripCompilerGate` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
+- [ ] AC-04: Given an invalid or unrecognized interface frame across `RawSysmlSourceInputPort` (`in String`), `TokenStreamChannelPort` (`inout String`), `SerializedSysmlOutputPort` (`out String`), `BijectiveDiffDiagnosticPort` (`out String`), When `SysmlBijectiveRoundtripCompilerGate` boundary validation executes, Then `SysmlBijectiveRoundtripCompilerGate` refuses the malformed frame via diagnostic port `TokenStreamChannelPort` and preserves prior verified state.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:

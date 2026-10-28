@@ -1281,10 +1281,17 @@ impl<'a> SectionSlicer<'a> {
         }
         let path = self.repo_root.join(rel_path);
         if path.is_file() {
-            Some(path)
-        } else {
-            None
+            return Some(path);
         }
+        if let Some(parent_repo) =
+            crate::checks::structural::enclosing_upstream_compiler_root(self.repo_root)
+        {
+            let parent_target = parent_repo.join(rel_path);
+            if parent_target.is_file() {
+                return Some(parent_target);
+            }
+        }
+        None
     }
 
     /// Checks if a markdown heading line matches a targeted section identifier with exact word boundaries.
@@ -1469,10 +1476,13 @@ fn parse_citation_string(raw: &str, line_no: usize) -> Option<CitationRef> {
         .unwrap_or(slice.len());
 
     let path_slice = slice.get(..path_end)?;
+    if path_slice.ends_with('/') {
+        return None;
+    }
     let path = path_slice
         .trim_matches(|c: char| matches!(c, '.' | ':' | '`' | '\'' | '"'))
         .to_string();
-    if path.is_empty() {
+    if path.is_empty() || path.ends_with('/') {
         return None;
     }
 
@@ -1492,6 +1502,11 @@ fn parse_citation_string(raw: &str, line_no: usize) -> Option<CitationRef> {
         if !sec_val.is_empty() {
             section = Some(sec_val.to_string());
         }
+    }
+
+    let final_segment = path.rsplit('/').next().unwrap_or("");
+    if final_segment.is_empty() || (section.is_none() && !final_segment.contains('.')) {
+        return None;
     }
 
     Some(CitationRef {
@@ -1620,6 +1635,27 @@ pub fn extract_citations_from_line(line: &str, line_no: usize) -> Vec<CitationRe
 fn is_structural_protocol_token(token: &str) -> bool {
     if token.len() < 3 || !token.starts_with(|c: char| c.is_ascii_uppercase()) {
         return false;
+    }
+    let mbse_rest = token
+        .strip_prefix("SC-")
+        .or_else(|| token.strip_prefix("UCA-"))
+        .or_else(|| token.strip_prefix("REQ-"))
+        .or_else(|| token.strip_prefix("UC-"))
+        .or_else(|| token.strip_prefix("US-"))
+        .or_else(|| token.strip_prefix("FEAT-"))
+        .or_else(|| token.strip_prefix("EPIC-"))
+        .or_else(|| token.strip_prefix("LS-"))
+        .or_else(|| token.strip_prefix("BP-"))
+        .or_else(|| token.strip_prefix("H-"))
+        .or_else(|| token.strip_prefix("C-"));
+    if let Some(rest) = mbse_rest {
+        if !rest.is_empty()
+            && rest
+                .chars()
+                .all(|c| c.is_ascii_digit() || c.is_ascii_uppercase() || c == '-')
+        {
+            return false;
+        }
     }
     token.split('-').any(|seg| {
         (!seg.is_empty() && seg.chars().all(|c| c.is_ascii_digit()))
@@ -1883,6 +1919,91 @@ fn build_ast_model_ground_truth(model_str: &str) -> (BTreeSet<String>, BTreeSet<
     (symbols, claims)
 }
 
+/// Replaces inline Markdown links `[label](target)` with `label` via pure character scanning.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34 zero-regex purity invariants. Prevents relative
+/// Markdown link URL targets (e.g. `](../user-stories/US-32-...ViaCollectAll.md)`) from attaching
+/// path fragments to adjacent lexical tokens during Check 23 protocol extraction.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Every balanced `[label](target)` span is replaced deterministically by `label`.
+/// - Standalone bracketed qualifiers not followed immediately by `(` (such as `[tier-1: ...]`) are preserved verbatim.
+///
+/// ## 3. Preconditions
+/// `line` must be a valid UTF-8 string slice.
+///
+/// ## 4. Postconditions
+/// Returns a newly allocated `String` containing all prose text and link labels with link targets removed.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(L) amortized (O(L^2) worst-case on unbalanced nested brackets) where L is character count.
+/// Space Complexity: O(L).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Uses bounds-checked slice indexing (`.get()`) over `Vec<char>`; never panics on malformed or arbitrary UTF-8 input.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-PROTOCOL-TOKEN-EXTRACTION].
+fn strip_markdown_link_targets(line: &str) -> String {
+    if !line.contains("](") {
+        return line.to_string();
+    }
+    let chars: Vec<char> = line.chars().collect();
+    let mut out = String::with_capacity(line.len());
+    let mut idx = 0usize;
+    while let Some(&ch) = chars.get(idx) {
+        if ch == '[' {
+            let mut bracket_depth = 1usize;
+            let mut close_bracket = None;
+            let mut scan = idx.saturating_add(1);
+            while let Some(&c2) = chars.get(scan) {
+                if c2 == '[' {
+                    bracket_depth = bracket_depth.saturating_add(1);
+                } else if c2 == ']' {
+                    bracket_depth = bracket_depth.saturating_sub(1);
+                    if bracket_depth == 0 {
+                        close_bracket = Some(scan);
+                        break;
+                    }
+                }
+                scan = scan.saturating_add(1);
+            }
+            if let Some(cb) = close_bracket {
+                if chars.get(cb.saturating_add(1)) == Some(&'(') {
+                    let mut paren_depth = 1usize;
+                    let mut close_paren = None;
+                    let mut pscan = cb.saturating_add(2);
+                    while let Some(&c3) = chars.get(pscan) {
+                        if c3 == '(' {
+                            paren_depth = paren_depth.saturating_add(1);
+                        } else if c3 == ')' {
+                            paren_depth = paren_depth.saturating_sub(1);
+                            if paren_depth == 0 {
+                                close_paren = Some(pscan);
+                                break;
+                            }
+                        }
+                        pscan = pscan.saturating_add(1);
+                    }
+                    if let Some(cp) = close_paren {
+                        if let Some(label_chars) = chars.get(idx.saturating_add(1)..cb) {
+                            for &lc in label_chars {
+                                out.push(lc);
+                            }
+                        }
+                        idx = cp.saturating_add(1);
+                        continue;
+                    }
+                }
+            }
+        }
+        out.push(ch);
+        idx = idx.saturating_add(1);
+    }
+    out
+}
+
 /// Extracts candidate communication protocol or hardware interface identifiers from a line.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1890,7 +2011,8 @@ fn build_ast_model_ground_truth(model_str: &str) -> (BTreeSet<String>, BTreeSet<
 /// to verify grounding against the authoritative SysML AST and cited sections.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Scans structural protocol tokens following `over` / `via` prepositions or preceding `protocol` / `interface` / `bus`.
+/// - Strips Markdown link URL targets via `strip_markdown_link_targets` before lexical tokenization.
+/// - Scans structural protocol tokens following lowercase `over` / `via` prepositions or preceding `protocol` / `interface` / `bus`.
 /// - Uses pure morphological token classification (`is_structural_protocol_token`) with zero hardcoded word lists.
 ///
 /// ## 3. Preconditions
@@ -1915,7 +2037,8 @@ fn extract_candidate_protocol_tokens(line: &str) -> Vec<String> {
         return out;
     }
 
-    for segment in line.split('|') {
+    let sanitized_line = strip_markdown_link_targets(line);
+    for segment in sanitized_line.split('|') {
         let words: Vec<&str> = segment
             .split_whitespace()
             .map(|w| w.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-'))
@@ -1923,8 +2046,7 @@ fn extract_candidate_protocol_tokens(line: &str) -> Vec<String> {
             .collect();
 
         for (i, &w) in words.iter().enumerate() {
-            let wl = w.to_ascii_lowercase();
-            if wl == "over" || wl == "via" {
+            if w == "over" || w == "via" {
                 for j in i.saturating_add(1)..words.len() {
                     if let Some(&cand_w) = words.get(j) {
                         if is_valid_si_unit(cand_w) {
@@ -1948,6 +2070,7 @@ fn extract_candidate_protocol_tokens(line: &str) -> Vec<String> {
                     }
                 }
             }
+            let wl = w.to_ascii_lowercase();
             if (wl == "protocol" || wl == "interface" || wl == "bus") && i > 0 {
                 if let Some(&prev_w) = words.get(i.saturating_sub(1)) {
                     if is_structural_protocol_token(prev_w)
@@ -2045,16 +2168,29 @@ pub fn audit_spec_citations_and_protocols(
     let model_lower = model_str.to_ascii_lowercase();
     let has_model = !model_str.trim().is_empty();
 
+    let mut in_fence = false;
     for (idx, &line) in lines.iter().enumerate() {
         let line_no = idx.saturating_add(1);
         let trimmed = line.trim();
-        if trimmed.starts_with("```") || trimmed.is_empty() {
+        if trimmed.starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence || trimmed.is_empty() {
             continue;
         }
 
+        let is_explicit_source_comment = trimmed.to_ascii_lowercase().contains("<!-- source:");
         let line_citations = extract_citations_from_line(trimmed, line_no);
         for cit in &line_citations {
             if slicer.resolve_path(&cit.target_file).is_none() {
+                let grounded_in_sysml_model = cit.section.is_none()
+                    && !is_explicit_source_comment
+                    && has_model
+                    && model_lower.contains(&cit.target_file.to_ascii_lowercase());
+                if grounded_in_sysml_model {
+                    continue;
+                }
                 errors.push(format!(
                     "Check 23 failed: Citation fraud detected in '{}': cited source file '{}' does not exist in workspace.",
                     rel_path, cit.target_file
@@ -4040,6 +4176,53 @@ fn normalize_uc_token(s: &str) -> String {
     out.trim_matches('_').to_string()
 }
 
+/// Strips canonical SysML-to-Markdown use case numbering prefixes (`uc_ac_<digits>_` or `uc_<digits>_`)
+/// from a normalized use case identifier when followed by a non-empty descriptive slug.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D bidirectional traceability requirements.
+/// Aligns Check 30A `use case def` realization checks with `compile-sysml --forward-sync`, which
+/// projects per-package `UC_AC_<N>_<Slug>` declarations into globally numbered `UC-<M>-<Slug>.md` files.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strips `uc_ac_<digits>_` or `uc_<digits>_` if and only if `<digits>` contains at least one ASCII
+///   digit and the remaining descriptive slug is at least 4 characters long.
+/// - Identifiers without a numbered `uc_` / `uc_ac_` prefix are returned unchanged.
+///
+/// ## 3. Preconditions
+/// `norm` is a lowercase underscore-normalized token produced by `normalize_uc_token`.
+///
+/// ## 4. Postconditions
+/// Returns a sub-slice of `norm` representing its canonical realization slug.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(L) where L is byte length of `norm`.
+/// Space Complexity: O(1) zero-allocation string slice.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Uses checked prefix and character stripping; never panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COVERAGE-DIGEST-GATE].
+fn strip_uc_numbering_prefix(norm: &str) -> &str {
+    let after_prefix = if let Some(rest) = norm.strip_prefix("uc_ac_") {
+        Some(rest)
+    } else {
+        norm.strip_prefix("uc_")
+    };
+    if let Some(rest) = after_prefix {
+        let trimmed_digits = rest.trim_start_matches(|c: char| c.is_ascii_digit());
+        if trimmed_digits.len() < rest.len() {
+            if let Some(slug) = trimmed_digits.strip_prefix('_') {
+                if slug.len() >= 4 {
+                    return slug;
+                }
+            }
+        }
+    }
+    norm
+}
+
 /// Check 30A: Coverage Digest & Use Case Realization Gate (Gate 28A).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -4227,11 +4410,14 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
                 if norm.is_empty() {
                     continue;
                 }
+                let slug = strip_uc_numbering_prefix(&norm);
                 let norm_alnum = norm.replace('_', "");
                 let realized = normalized_uc_docs.iter().any(|(stem, body)| {
                     stem.contains(&norm)
                         || body.contains(&norm)
                         || (!norm_alnum.is_empty() && stem.replace('_', "").contains(&norm_alnum))
+                        || (slug != norm
+                            && (strip_uc_numbering_prefix(stem) == slug || body.contains(slug)))
                 });
                 if !realized {
                     errors.push(format!(
@@ -6383,6 +6569,148 @@ flowchart TD
             res_31_ok,
             Ok(ParityOutcome::DualSchemaIdentical),
             "Check 31 must return Ok(DualSchemaIdentical) when use case defs match across dual schemas"
+        );
+
+        Ok(())
+    }
+
+    /// Verifies that Check 23 ignores fenced Mermaid truncated paths (`docs/des...`), directory mentions
+    /// (`docs/epics/`, `docs/interfaces`), Markdown link URLs (`[... Via ... And](../user-stories/...)`),
+    /// and `SC-001` safety constraint identifiers, resolves enclosing upstream blueprint citations, and
+    /// still fails closed (`Err`) on nonexistent file citations (`docs/nonexistent_fraud.md`) and
+    /// ungrounded prose protocols (`transmitted via RS-485`).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ISO 26262 ASIL D factual grounding verification for
+    /// `test_check23_ignores_fences_directories_links_and_constraint_ids_while_failing_closed_on_fraud`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Fenced code/Mermaid blocks, directory-only paths, Markdown link URL targets, Titlecase `"Via"`,
+    ///   and MBSE identifier tokens (`SC-001`) produce zero false-positive Check 23 diagnostics.
+    /// - Enclosing upstream root files (`docs/designs/blueprint-01-core.md`) resolve for `<root>/.pipeline/upstream`.
+    /// - Nonexistent cited files (`docs/nonexistent_fraud.md`) and ungrounded prose protocols (`via RS-485`)
+    ///   deterministically fail closed with `Err`.
+    ///
+    /// ## 3. Preconditions
+    /// - Temporary filesystem directory is writable.
+    ///
+    /// ## 4. Postconditions
+    /// - Confirms `Ok(ParityOutcome::Verified)` on valid dogfood specification and `Err` on both citation
+    ///   fraud and ungrounded protocol mutations.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded fixture file count and payload size.
+    /// - Space Complexity: O(1) bounded fixture payload size.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Propagates unexpected filesystem setup errors via `Result`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARITY-GATE-23], [REQ-CITATION-FRAUD-AUDIT], [REQ-PROTOCOL-TOKEN-EXTRACTION]
+    #[test]
+    fn test_check23_ignores_fences_directories_links_and_constraint_ids_while_failing_closed_on_fraud(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let root_tmp = TempDir::new("check23_dogfood_fences_dirs_links")?;
+        let root_designs = root_tmp.path.join("docs").join("designs");
+        fs::create_dir_all(&root_designs)?;
+        fs::write(
+            root_designs.join("blueprint-01-core.md"),
+            "# Blueprint 01\n## 2.1 Core Contract\nDeterministic AST compilation rules.\n",
+        )?;
+
+        let dogfood = root_tmp.path.join(".pipeline").join("upstream");
+        let schema_dir = dogfood.join("schema");
+        let safety_dir = dogfood.join("docs").join("safety");
+        let uc_dir = dogfood.join("docs").join("use-cases");
+        fs::create_dir_all(&schema_dir)?;
+        fs::create_dir_all(&safety_dir)?;
+        fs::create_dir_all(&uc_dir)?;
+
+        let model_sysml = r#"package CompilerCore {
+  part def AstVerifier;
+  requirement def REQ_0604 {
+    doc /* Projects Logical Interface Control Documents (docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md) */
+  }
+  use case def UC_AC_01_Deterministic_Ast_Verification;
+}
+"#;
+        fs::write(schema_dir.join("compiler.sysml"), model_sysml)?;
+        fs::write(
+            uc_dir.join("UC-06-Deterministic_Ast_Verification.md"),
+            "# Use Case 06: Deterministic Ast Verification\n",
+        )?;
+
+        let clean_spec = r#"# Safety Hazard Log
+Grounded in `docs/designs/blueprint-01-core.md` §2.1.
+Clean landing zones `docs/epics/` and `docs/interfaces` remain intact.
+Requirement projects Logical Interface Control Documents (docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md).
+Traceable to [User Story 32: Aggregate Diagnostics Via CollectAll And](../user-stories/US-32-AggregateViaCollectAll.md).
+Hazard mitigation enforced via SC-001 and UCA-002 and REQ-101.
+
+```mermaid
+flowchart TD
+    UC_Step01(["Inspect docs/des..."]) -->|"via RS-485"| UC_Step02(["Emit report"])
+```
+"#;
+        let hazard_log_path = safety_dir.join("HAZARD_LOG.md");
+        fs::write(&hazard_log_path, clean_spec)?;
+
+        let res_clean = check_factual_grounding(&dogfood, false, true);
+        assert_eq!(
+            res_clean,
+            Ok(ParityOutcome::Verified),
+            "Check 23 must pass clean dogfood spec with fences, dirs, links, AST-grounded output paths, and SC-001, got: {:?}",
+            res_clean
+        );
+
+        let res_30a_clean = check_coverage_digest(&dogfood);
+        assert_eq!(
+            res_30a_clean,
+            Ok(ParityOutcome::Verified),
+            "Check 30A must match UC_AC_01_<Slug> against globally numbered UC-06-<Slug>.md, got: {:?}",
+            res_30a_clean
+        );
+
+        let unrealized_uc_sysml = format!(
+            "{}\npackage ExtraPkg {{\n  use case def UC_AC_99_Unrealized_Verification_Flow;\n}}\n",
+            model_sysml
+        );
+        fs::write(schema_dir.join("compiler.sysml"), unrealized_uc_sysml)?;
+        assert!(
+            check_coverage_digest(&dogfood).is_err(),
+            "Check 30A must fail closed when UC_AC_99_Unrealized_Verification_Flow is absent from docs/use-cases/"
+        );
+        fs::write(schema_dir.join("compiler.sysml"), model_sysml)?;
+
+        let fraud_file_spec = format!("{}\nSee `docs/nonexistent_fraud.md` for details.\n", clean_spec);
+        fs::write(&hazard_log_path, fraud_file_spec)?;
+        let res_fraud_file = check_factual_grounding(&dogfood, false, true);
+        assert!(
+            res_fraud_file.is_err(),
+            "Check 23 must fail closed on nonexistent file citation docs/nonexistent_fraud.md"
+        );
+        let errs_file = res_fraud_file.err().unwrap_or_default().join("\n");
+        assert!(
+            errs_file.contains("docs/nonexistent_fraud.md"),
+            "Expected Check 23 error citing docs/nonexistent_fraud.md, got: {}",
+            errs_file
+        );
+
+        let ungrounded_proto_spec = format!(
+            "{}\nFrames are transmitted via RS-485 across external link.\n",
+            clean_spec
+        );
+        fs::write(&hazard_log_path, ungrounded_proto_spec)?;
+        let res_proto = check_factual_grounding(&dogfood, false, true);
+        assert!(
+            res_proto.is_err(),
+            "Check 23 must fail closed on ungrounded prose protocol transmitted via RS-485"
+        );
+        let errs_proto = res_proto.err().unwrap_or_default().join("\n");
+        assert!(
+            errs_proto.contains("RS-485"),
+            "Expected Check 23 error citing ungrounded protocol RS-485, got: {}",
+            errs_proto
         );
 
         Ok(())

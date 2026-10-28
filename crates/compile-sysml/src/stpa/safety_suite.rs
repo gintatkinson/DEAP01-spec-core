@@ -2413,7 +2413,7 @@ fn render_hazard_log(
                     .unwrap_or_default()
             };
             let notes = format!(
-                "Controlled via {} ({}){}",
+                "Enforced by {} ({}){}",
                 sanitize_markdown_cell(&u.constraint),
                 sanitize_markdown_cell(&u.severity),
                 guard_suffix
@@ -2436,13 +2436,13 @@ fn render_hazard_log(
             .first()
             .map(|c| {
                 format!(
-                    "Controlled via ConstraintDef {} (Derived)",
+                    "Enforced by ConstraintDef {} (Derived)",
                     sanitize_markdown_cell(&c.name)
                 )
             })
             .unwrap_or_else(|| {
                 format!(
-                    "Controlled via {} baseline safety envelope (Derived)",
+                    "Enforced by {} baseline safety envelope (Derived)",
                     sanitize_markdown_cell(base_pkg)
                 )
             });
@@ -4705,6 +4705,76 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
         assert_eq!(count, 10, "emit_safety_suite must write all 10 safety suite artifacts");
 
         let _ = fs::remove_dir_all(&out_dir);
+        Ok(())
+    }
+
+    /// Verifies that `HAZARD_LOG.md` renders safety constraint bindings using `"Enforced by "`
+    /// rather than `"Controlled via "` so Check 23 protocol extraction never collides with `SC-*` IDs.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_hazard_log_uses_enforced_by_without_controlled_via` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Both UCA-derived hazard rows and baseline fallback hazard rows emit `"Enforced by "` and contain zero occurrences of `"Controlled via "`.
+    ///
+    /// ## 3. Preconditions
+    /// - Valid in-memory `PackageDef` AST instances (with and without explicit UCAs).
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts `HAZARD_LOG.md` contains `"Enforced by "` and excludes `"Controlled via "` across both rendering branches.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over rendered `HAZARD_LOG.md` byte length.
+    /// - Space Complexity: O(N) bounded in-memory suite output.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Pure in-memory assertion; returns `Err` if `HAZARD_LOG.md` is missing from transpiled suite.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-STPA-HAZARD-LOG-ENFORCED-BY] | SysML v2: VerificationCaseDef(test_hazard_log_uses_enforced_by_without_controlled_via)
+    #[test]
+    fn test_hazard_log_uses_enforced_by_without_controlled_via() -> Result<(), Box<dyn std::error::Error>> {
+        let mut fallback_pkg = PackageDef {
+            name: "BaselineEnvelopePkg".to_string(),
+            ..Default::default()
+        };
+        let fallback_suite = transpile_safety_suite(&fallback_pkg, None);
+        let fallback_log = fallback_suite
+            .get("HAZARD_LOG.md")
+            .ok_or("HAZARD_LOG.md missing in fallback suite")?;
+        assert!(
+            fallback_log.contains("Enforced by "),
+            "Fallback HAZARD_LOG.md must use 'Enforced by ', got:\n{}",
+            fallback_log
+        );
+        assert!(
+            !fallback_log.contains("Controlled via "),
+            "Fallback HAZARD_LOG.md must not contain 'Controlled via '"
+        );
+
+        let mut controller = PartDef {
+            name: "SupervisoryController".to_string(),
+            ..Default::default()
+        };
+        controller.actions.push(ActionDef {
+            name: "DispatchCommand".to_string(),
+            ..Default::default()
+        });
+        fallback_pkg.part_defs.push(controller);
+
+        let uca_suite = transpile_safety_suite(&fallback_pkg, None);
+        let uca_log = uca_suite
+            .get("HAZARD_LOG.md")
+            .ok_or("HAZARD_LOG.md missing in UCA suite")?;
+        assert!(
+            uca_log.contains("Enforced by "),
+            "UCA HAZARD_LOG.md must use 'Enforced by ', got:\n{}",
+            uca_log
+        );
+        assert!(
+            !uca_log.contains("Controlled via "),
+            "UCA HAZARD_LOG.md must not contain 'Controlled via '"
+        );
         Ok(())
     }
 }

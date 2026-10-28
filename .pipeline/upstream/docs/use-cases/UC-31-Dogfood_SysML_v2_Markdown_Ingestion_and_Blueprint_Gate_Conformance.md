@@ -1,71 +1,56 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #654 |
-| **Title** | Use Case 31: Dogfood Sys ML v2 Markdown Ingestion and Blueprint Gate Conformance |
+| **Title** | Use Case 31: Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
+| **Primary Actor** | Operator_Or_CI_Pipeline |
 | **Scope** | ClosedLoopDefectPublisherGate |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# Use Case 31: Dogfood Sys ML v2 Markdown Ingestion and Blueprint Gate Conformance
+# Use Case 31: Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance
 
 ## UML Diagrams
 
 ```mermaid
 graph TD
     subgraph "ClosedLoopDefectPublisherGate System Boundary"
-        UC_Main(["Dogfood Sys ML v2 Markdown Ingestion and Blueprint Gate Conformance"])
-        UC_Step01(["Actor Operator submits input payload for Dogfood Sys ML v..."])
-        UC_Step02(["ClosedLoopDefectPublisherGate validates input schema stru..."])
-        UC_Step03(["ClosedLoopDefectPublisherGate executes core domain transf..."])
-        UC_Step04(["ClosedLoopDefectPublisherGate evaluates formal postcondit..."])
-        UC_Step05(["ClosedLoopDefectPublisherGate commits verified output sta..."])
+        UC_Main(["Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Co..."])
+        UC_Step01(["./target/release/verify-baseline check-blueprint docs/des..."])
+        UC_Step02(["All 12 blueprint verification gates pass, DeterministicSt..."])
     end
-    Operator(("Operator")) --- UC_Main
+    Operator_Or_CI_Pipeline(("Operator_Or_CI_Pipeline")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
-    UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `Operator_Or_CI_Pipeline`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- This blueprint specification at docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md.
 
 ## 3. Trigger
-- Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance
+- ./target/release/verify-baseline check-blueprint docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md --dry-run is executed.
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Dogfood Sys ML v2 Markdown Ingestion and Blueprint Gate Conformance` to `ClosedLoopDefectPublisherGate`.
-2. `ClosedLoopDefectPublisherGate` validates input schema structure and precondition guards for `Dogfood Sys ML v2 Markdown Ingestion and Blueprint Gate Conformance`.
-3. `ClosedLoopDefectPublisherGate` executes core domain transformation and state transition logic for `Dogfood Sys ML v2 Markdown Ingestion and Blueprint Gate Conformance`.
-4. `ClosedLoopDefectPublisherGate` evaluates formal postcondition assertions and structural invariants.
-5. `ClosedLoopDefectPublisherGate` commits verified output state and emits completion telemetry to `Operator`.
+1. ./target/release/verify-baseline check-blueprint docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md --dry-run is executed.
+2. All 12 blueprint verification gates pass, DeterministicStaticDefectAuditor and its component metamodel are lowered into docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.sysml and .digest.json with bijective roundtrip parity, and the command exits with code 0.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `ClosedLoopDefectPublisherGate`:
-  - `ClosedLoopDefectPublisherGate` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Dogfood Sys ML v2 Markdown Ingestion and Blueprint Gate Conformance` execution:
-  - `ClosedLoopDefectPublisherGate` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `ClosedLoopDefectPublisherGate`:
-  - `ClosedLoopDefectPublisherGate` halts execution cleanly and reports deterministic fault status.
+- Precondition guard failure in `ClosedLoopDefectPublisherGate`:
+  - `ClosedLoopDefectPublisherGate` rejects the `Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance` request without partial state mutation and reports diagnostic status to `Operator_Or_CI_Pipeline`.
+- Invariant violation while enforcing `Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance`:
+  - `ClosedLoopDefectPublisherGate` aborts `Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance` execution, preserves prior verified state, and notifies `Operator_Or_CI_Pipeline`.
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- All 12 blueprint verification gates pass, DeterministicStaticDefectAuditor and its component metamodel are lowered into docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.sysml and .digest.json with bijective roundtrip parity, and the command exits with code 0.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#610** | User Story | [User Story 49: verify baseline](../user-stories/US-49-verify_baseline.md) |
+| **#729** | User Story | [User Story 42: Execute12 Check Validate Defect Dossier](../user-stories/US-42-Execute12CheckValidateDefectDossier.md) |
 | **#680** | Feature | [Feature 26: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] ClosedLoopDefectPublisherGate](../features/FEAT-26-ClosedLoopDefectPublisherGate.md) |
 
 ## Source References

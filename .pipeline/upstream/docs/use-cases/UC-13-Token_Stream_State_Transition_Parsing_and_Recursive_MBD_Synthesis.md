@@ -3,8 +3,8 @@
 | **Issue ID** | #636 |
 | **Title** | Use Case 13: Token Stream State Transition Parsing and Recursive MBD Synthesis |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
-| **Scope** | NativeSigilAndLifetimeLexer |
+| **Primary Actor** | Compiler_CLI_Caller |
+| **Scope** | BijectiveSysmlSerializer |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
@@ -15,58 +15,43 @@
 
 ```mermaid
 graph TD
-    subgraph "NativeSigilAndLifetimeLexer System Boundary"
-        UC_Main(["Token Stream State Transition Parsing and Recursive MBD Synthesis"])
-        UC_Step01(["Actor Operator submits input payload for Token Stream Sta..."])
-        UC_Step02(["NativeSigilAndLifetimeLexer validates input schema struct..."])
-        UC_Step03(["NativeSigilAndLifetimeLexer executes core domain transfor..."])
-        UC_Step04(["NativeSigilAndLifetimeLexer evaluates formal postconditio..."])
-        UC_Step05(["NativeSigilAndLifetimeLexer commits verified output state..."])
+    subgraph "BijectiveSysmlSerializer System Boundary"
+        UC_Main(["Token Stream State Transition Parsing and Recursive MBD S..."])
+        UC_Step01(["parse_state_decl and the MBD .sfx synthesizer execute."])
+        UC_Step02(["Transitions are parsed directly from the token stream wit..."])
     end
-    Operator(("Operator")) --- UC_Main
+    Compiler_CLI_Caller(("Compiler_CLI_Caller")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
-    UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `Compiler_CLI_Caller`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- A hierarchical state def containing anonymous and named transition statements (first S1 accept trig if grd do eff then S2;) and nested composite sub_states with their own transitions and doc blocks (#496, #509).
 
 ## 3. Trigger
-- Token Stream State Transition Parsing and Recursive MBD Synthesis
+- parse_state_decl and the MBD .sfx synthesizer execute.
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Token Stream State Transition Parsing and Recursive MBD Synthesis` to `NativeSigilAndLifetimeLexer`.
-2. `NativeSigilAndLifetimeLexer` validates input schema structure and precondition guards for `Token Stream State Transition Parsing and Recursive MBD Synthesis`.
-3. `NativeSigilAndLifetimeLexer` executes core domain transformation and state transition logic for `Token Stream State Transition Parsing and Recursive MBD Synthesis`.
-4. `NativeSigilAndLifetimeLexer` evaluates formal postcondition assertions and structural invariants.
-5. `NativeSigilAndLifetimeLexer` commits verified output state and emits completion telemetry to `Operator`.
+1. parse_state_decl and the MBD .sfx synthesizer execute.
+2. Transitions are parsed directly from the token stream without fabricating {s}_to_{t} names (name: None preserved when unnamed), sub-state doc blocks attach to their target StateDef or TransitionDef, and MBD .sfx synthesis recursively emits transitions across all nesting depths.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `NativeSigilAndLifetimeLexer`:
-  - `NativeSigilAndLifetimeLexer` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Token Stream State Transition Parsing and Recursive MBD Synthesis` execution:
-  - `NativeSigilAndLifetimeLexer` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `NativeSigilAndLifetimeLexer`:
-  - `NativeSigilAndLifetimeLexer` halts execution cleanly and reports deterministic fault status.
+- Precondition guard failure in `BijectiveSysmlSerializer`:
+  - `BijectiveSysmlSerializer` rejects the `Token Stream State Transition Parsing and Recursive MBD Synthesis` request without partial state mutation and reports diagnostic status to `Compiler_CLI_Caller`.
+- Invariant violation while enforcing `Token Stream State Transition Parsing and Recursive MBD Synthesis`:
+  - `BijectiveSysmlSerializer` aborts `Token Stream State Transition Parsing and Recursive MBD Synthesis` execution, preserves prior verified state, and notifies `Compiler_CLI_Caller`.
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- Transitions are parsed directly from the token stream without fabricating {s}_to_{t} names (name: None preserved when unnamed), sub-state doc blocks attach to their target StateDef or TransitionDef, and MBD .sfx synthesis recursively emits transitions across all nesting depths.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#577** | User Story | [User Story 16: scan all](../user-stories/US-16-scan_all.md) |
-| **#665** | Feature | [Feature 11: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] NativeSigilAndLifetimeLexer](../features/FEAT-11-NativeSigilAndLifetimeLexer.md) |
+| **#705** | User Story | [User Story 14: Parse Type Expr And Parse Transition](../user-stories/US-14-ParseTypeExprAndParseTransition.md) |
+| **#667** | Feature | [Feature 11: [BP 03 SysML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] BijectiveSysmlSerializer](../features/FEAT-11-BijectiveSysmlSerializer.md) |
 
 ## Source References
 Use case operational flows and lifecycle activity references:

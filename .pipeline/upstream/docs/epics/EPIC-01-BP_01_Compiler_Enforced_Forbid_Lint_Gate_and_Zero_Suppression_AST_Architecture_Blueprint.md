@@ -27,23 +27,23 @@ Subsystem package for BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppress
 - [ ] #625 - [Use Case 02: Check 34 Multi Line Whitespace Insensitive Suppression Rejection](../use-cases/UC-02-Check_34_Multi_Line_Whitespace_Insensitive_Suppression_Rejection.md)
 - [ ] #626 - [Use Case 03: Unconditional Test Target Enforcement Without Conditional Exemption](../use-cases/UC-03-Unconditional_Test_Target_Enforcement_Without_Conditional_Exemption.md)
 - [ ] #627 - [Use Case 04: Semantic Type Alias Replacement for Type Complexity](../use-cases/UC-04-Semantic_Type_Alias_Replacement_for_Type_Complexity.md)
-- [ ] #628 - [Use Case 05: Dogfood Ingestion and Sys ML v2 Compilation of REQ 0601](../use-cases/UC-05-Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0601.md)
+- [ ] #628 - [Use Case 05: Dogfood Ingestion and SysML v2 Compilation of REQ 0601](../use-cases/UC-05-Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0601.md)
 
 #### Associated User Stories
-- [ ] #562 - [User Story 01: [CompilerLintEnforcementGate] Execute](../user-stories/US-01-Execute.md)
-- [ ] #563 - [User Story 02: Read](../user-stories/US-02-Read.md)
-- [ ] #564 - [User Story 03: [CompilerLintEnforcementGate] Return](../user-stories/US-03-Return.md)
-- [ ] #565 - [User Story 04: [CompilerLintEnforcementGate] Emit](../user-stories/US-04-Emit.md)
-- [ ] #566 - [User Story 05: [CompilerLintEnforcementGate] Run](../user-stories/US-05-Run.md)
+- [ ] #700 - [User Story 01: Execute Cargo Clippy Workspace All Targets](../user-stories/US-01-ExecuteCargoClippyWorkspaceAllTargets.md)
+- [ ] #701 - [User Story 02: Read Workspace Lints Clippy Forbid Table](../user-stories/US-02-ReadWorkspaceLintsClippyForbidTable.md)
+- [ ] #702 - [User Story 03: Execute Verify Baseline No Domain](../user-stories/US-03-ExecuteVerifyBaselineNoDomain.md)
+- [ ] #703 - [User Story 04: Run Scan Clippy Allow Tokens On](../user-stories/US-04-RunScanClippyAllowTokensOn.md)
+- [ ] #704 - [User Story 05: Execute Ingest Sysml Schema Blueprint01](../user-stories/US-05-ExecuteIngestSysmlSchemaBlueprint01.md)
 
 ## 3. Architecture
-Subsystem structural composition, port allocations, and directional data connectors realized by CompilerLintEnforcementGate.
+Classifiers: `CompilerLintEnforcementGate` (ports: `in CargoManifestInputPort : String`, `in RustSourceTokenStreamPort : String`, `out CompilerDiagnosticOutputPort : String`, `out BaselineGateVerdictPort : Boolean`); `WorkspaceManifestForbidGate` (ports: `in cmd_in : String`, `out status_out : String`); `ClippyAttributeAstScanner` (ports: `in cmd_in : String`, `out status_out : String`); `CrateRootAttributeSanitizer` (ports: `in cmd_in : String`, `out status_out : String`); `TestTargetLintEnforcer` (ports: `in cmd_in : String`, `out status_out : String`).
 
 ## 4. Operational Considerations
-Deterministic compilation passes, error containment, and provable polynomial complexity execution.
+Lifecycle state machines: `BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_LifecycleState` (Initial -> ScanningSource; ScanningSource -> SkippingLineComment on slashSlashDetected; SkippingLineComment -> ScanningSource on newlineReached; ScanningSource -> SkippingBlockComment on slashStarDetected; SkippingBlockComment -> ScanningSource on starSlashReached; ScanningSource -> InspectingAttribute on hashTokenDetected; InspectingAttribute -> NormalizingBracketBody on openingBracketDetected; InspectingAttribute -> ScanningSource on nonAttributeHash; NormalizingBracketBody -> ViolationRecorded on forbiddenNeedleMatched; NormalizingBracketBody -> ScanningSource on depthZeroClean; ViolationRecorded -> ScanningSource on continueLinearScan; ScanningSource -> Terminal on endOfStream). Operational actions: `ExecuteCargoClippyWorkspaceAllTargets`, `ReadWorkspaceLintsClippyForbidTable`, `ExecuteVerifyBaselineNoDomain`, `RunScanClippyAllowTokensOn`, `ExecuteIngestSysmlSchemaBlueprint01`. Interaction sequences: `BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_SequenceInteraction`.
 
 ## 5. Security & Governance
-Safety-critical invariant satisfaction, formal trace matrix closure, and zero hardcoded domain semantics.
+Allocated requirements: `REQ-0601 (REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint)`. Enforced invariant constraints: `Invariant_REQ_0601_C_LINT_03`, `Invariant_REQ_0601_FormalInvariant`.
 
 ## 6. Source References
 - System Architecture Model: `schema/model.sysml`
@@ -56,10 +56,10 @@ Subsystem architectural composition and formal invariants derive from `schema/mo
 ```mermaid
 classDiagram
     class CompilerLintEnforcementGate {
-        +String CargoManifestInputPort (inout)
-        +String RustSourceTokenStreamPort (inout)
-        +String CompilerDiagnosticOutputPort (inout)
-        +Boolean BaselineGateVerdictPort (inout)
+        +String CargoManifestInputPort (in)
+        +String RustSourceTokenStreamPort (in)
+        +String CompilerDiagnosticOutputPort (out)
+        +Boolean BaselineGateVerdictPort (out)
         +Boolean forbid_unwrap_used
         +Boolean forbid_expect_used
         +Boolean forbid_panic

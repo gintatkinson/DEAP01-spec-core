@@ -3,8 +3,8 @@
 | **Issue ID** | #645 |
 | **Title** | Use Case 22: Strict Schema Context Resolution and Recursive Part Traversal |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
-| **Scope** | UnifiedRustDartLexicalScanner |
+| **Primary Actor** | Compiler_CLI_CI_Pipeline |
+| **Scope** | Check36AstCompletenessVerifier |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
@@ -15,58 +15,43 @@
 
 ```mermaid
 graph TD
-    subgraph "UnifiedRustDartLexicalScanner System Boundary"
-        UC_Main(["Strict Schema Context Resolution and Recursive Part Traversal"])
-        UC_Step01(["Actor Operator submits input payload for Strict Schema Co..."])
-        UC_Step02(["UnifiedRustDartLexicalScanner validates input schema stru..."])
-        UC_Step03(["UnifiedRustDartLexicalScanner executes core domain transf..."])
-        UC_Step04(["UnifiedRustDartLexicalScanner evaluates formal postcondit..."])
-        UC_Step05(["UnifiedRustDartLexicalScanner commits verified output sta..."])
+    subgraph "Check36AstCompletenessVerifier System Boundary"
+        UC_Main(["Strict Schema Context Resolution and Recursive Part Trave..."])
+        UC_Step01(["resolve_schema_context is invoked during compile-sysml --..."])
+        UC_Step02(["PrimaryController resolves REQ-PC-001 and ThermalLimit, N..."])
     end
-    Operator(("Operator")) --- UC_Main
+    Compiler_CLI_CI_Pipeline(("Compiler_CLI_CI_Pipeline")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
-    UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `Compiler_CLI_CI_Pipeline`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- A multi-part SysML v2 PackageDef containing PrimaryController (REQ-PC-001, constraint ThermalLimit), a nested PartDef NestedSubunit (REQ-NS-002) inside SecondaryMonitor.parts, and an unmapped Rust struct SecondaryMonitor with method pub fn primary_controller(&self) and free function pub fn unmapped_helper().
 
 ## 3. Trigger
-- Strict Schema Context Resolution and Recursive Part Traversal
+- resolve_schema_context is invoked during compile-sysml --inject-safety-docstrings.
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Strict Schema Context Resolution and Recursive Part Traversal` to `UnifiedRustDartLexicalScanner`.
-2. `UnifiedRustDartLexicalScanner` validates input schema structure and precondition guards for `Strict Schema Context Resolution and Recursive Part Traversal`.
-3. `UnifiedRustDartLexicalScanner` executes core domain transformation and state transition logic for `Strict Schema Context Resolution and Recursive Part Traversal`.
-4. `UnifiedRustDartLexicalScanner` evaluates formal postcondition assertions and structural invariants.
-5. `UnifiedRustDartLexicalScanner` commits verified output state and emits completion telemetry to `Operator`.
+1. resolve_schema_context is invoked during compile-sysml --inject-safety-docstrings.
+2. PrimaryController resolves REQ-PC-001 and ThermalLimit, NestedSubunit resolves REQ-NS-002 via collect_all_parts, and both SecondaryMonitor::primary_controller and.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `UnifiedRustDartLexicalScanner`:
-  - `UnifiedRustDartLexicalScanner` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Strict Schema Context Resolution and Recursive Part Traversal` execution:
-  - `UnifiedRustDartLexicalScanner` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `UnifiedRustDartLexicalScanner`:
-  - `UnifiedRustDartLexicalScanner` halts execution cleanly and reports deterministic fault status.
+- Precondition guard failure in `Check36AstCompletenessVerifier`:
+  - `Check36AstCompletenessVerifier` rejects the `Strict Schema Context Resolution and Recursive Part Traversal` request without partial state mutation and reports diagnostic status to `Compiler_CLI_CI_Pipeline`.
+- Invariant violation while enforcing `Strict Schema Context Resolution and Recursive Part Traversal`:
+  - `Check36AstCompletenessVerifier` aborts `Strict Schema Context Resolution and Recursive Part Traversal` execution, preserves prior verified state, and notifies `Compiler_CLI_CI_Pipeline`.
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- PrimaryController resolves REQ-PC-001 and ThermalLimit, NestedSubunit resolves REQ-NS-002 via collect_all_parts, and both SecondaryMonitor::primary_controller and.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#602** | User Story | [User Story 41: [UnifiedRustDartLexicalScanner] Run](../user-stories/US-41-Run.md) |
-| **#675** | Feature | [Feature 21: [BP 05 Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint] UnifiedRustDartLexicalScanner](../features/FEAT-21-UnifiedRustDartLexicalScanner.md) |
+| **#721** | User Story | [User Story 32: Scan Source Lines Via Rust Dart Lex State And](../user-stories/US-32-ScanSourceLinesViaRustDartLexStateAnd.md) |
+| **#678** | Feature | [Feature 21: [BP 05 Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint] Check36AstCompletenessVerifier](../features/FEAT-21-Check36AstCompletenessVerifier.md) |
 
 ## Source References
 Use case operational flows and lifecycle activity references:

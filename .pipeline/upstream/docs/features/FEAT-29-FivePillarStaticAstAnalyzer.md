@@ -16,8 +16,8 @@
 ```mermaid
 classDiagram
     class FivePillarStaticAstAnalyzer {
-        +String astStreamInPort (inout)
-        +String findingStreamOutPort (inout)
+        +String astStreamInPort (in)
+        +String findingStreamOutPort (out)
         +Integer activePillarCount
         +Boolean zeroRegexMode
     }
@@ -41,16 +41,20 @@ classDiagram
     },
     "activePillarCount": {
       "type": "integer",
-      "description": "Subsystem attribute activePillarCount"
+      "x-sysml-type": "Integer",
+      "description": "Declared attribute activePillarCount (Integer)",
+      "default": 5
     },
     "zeroRegexMode": {
       "type": "boolean",
-      "description": "Subsystem attribute zeroRegexMode"
+      "x-sysml-type": "Boolean",
+      "description": "Enforces linear token-stream and `SourceAstItem` slice traversal without regular expressions. [unit: flag]",
+      "default": true
     },
     "astStreamInPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "in" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -58,7 +62,7 @@ classDiagram
     "findingStreamOutPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -67,8 +71,6 @@ classDiagram
   "required": [
     "part",
     "status",
-    "activePillarCount",
-    "zeroRegexMode",
     "astStreamInPort",
     "findingStreamOutPort"
   ],
@@ -77,27 +79,35 @@ classDiagram
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by FivePillarStaticAstAnalyzer.
+Declared structural attributes, boundary ports, invariants, and allocated requirements for classifier `FivePillarStaticAstAnalyzer`:
+
+| AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |
+| :--- | :--- | :--- | :--- |
+| Attribute | `activePillarCount` | `Integer` | Default `5` |
+| Attribute | `zeroRegexMode` | `Boolean` | Default `true` |
+| Port | `astStreamInPort` | `in String` | Boundary interface contract |
+| Port | `findingStreamOutPort` | `out String` | Boundary interface contract |
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for FivePillarStaticAstAnalyzer conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+Structural composition and boundary topology for classifier `FivePillarStaticAstAnalyzer` organize no nested subparts declared in schema paired with boundary ports `in astStreamInPort : String`, `out findingStreamOutPort : String`.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for FivePillarStaticAstAnalyzer.
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing FivePillarStaticAstAnalyzer status, AST references, and typed signal models.
+Classifier `FivePillarStaticAstAnalyzer` encapsulates typed domain state attributes `activePillarCount : Integer`, `zeroRegexMode : Boolean` alongside operational lifecycle status.
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for FivePillarStaticAstAnalyzer.
+Classifier `FivePillarStaticAstAnalyzer` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for FivePillarStaticAstAnalyzer.
+Classifier `FivePillarStaticAstAnalyzer` binds external and behavioral interfaces across port `in astStreamInPort : String`, port `out findingStreamOutPort : String`.
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-01: Given nominal FivePillarStaticAstAnalyzer domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-- [ ] AC-02: Given operational state, When FivePillarStaticAstAnalyzer evaluates constraint 'operational_invariants', Then asserts invariant satisfaction without violation.
-- [ ] AC-03: Given malformed input signals or boundary condition violation, When FivePillarStaticAstAnalyzer error handling is invoked, Then transitions safely to failsafe fallback state without corruption.
+- [ ] AC-01: Given valid `FivePillarStaticAstAnalyzer` initialization inputs for `activePillarCount` (`Integer`), `zeroRegexMode` (`Boolean`) (no additional constraints specified in schema), When `FivePillarStaticAstAnalyzer` commits typed domain state, Then declared state attributes hold verified values.
+- [ ] AC-02: Given malformed or out-of-domain input values for `activePillarCount` (`Integer`), `zeroRegexMode` (`Boolean`), When `FivePillarStaticAstAnalyzer` validates incoming state updates, Then `FivePillarStaticAstAnalyzer` rejects the invalid state update and emits a diagnostic via diagnostic port `findingStreamOutPort`.
+- [ ] AC-03: Given nominal signal arrival across `astStreamInPort` (`in String`), `findingStreamOutPort` (`out String`), When `FivePillarStaticAstAnalyzer` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
+- [ ] AC-04: Given an invalid or unrecognized interface frame across `astStreamInPort` (`in String`), `findingStreamOutPort` (`out String`), When `FivePillarStaticAstAnalyzer` boundary validation executes, Then `FivePillarStaticAstAnalyzer` refuses the malformed frame via diagnostic port `findingStreamOutPort` and preserves prior verified state.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:

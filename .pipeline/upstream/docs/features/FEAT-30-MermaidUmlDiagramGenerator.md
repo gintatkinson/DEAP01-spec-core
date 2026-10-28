@@ -16,8 +16,8 @@
 ```mermaid
 classDiagram
     class MermaidUmlDiagramGenerator {
-        +String umlSpecInPort (inout)
-        +String mermaidBlockOutPort (inout)
+        +String umlSpecInPort (in)
+        +String mermaidBlockOutPort (out)
         +Boolean forbidSemicolons
         +Boolean check13bCompliant
     }
@@ -41,16 +41,20 @@ classDiagram
     },
     "forbidSemicolons": {
       "type": "boolean",
-      "description": "Subsystem attribute forbidSemicolons"
+      "x-sysml-type": "Boolean",
+      "description": "Declared attribute forbidSemicolons (Boolean)",
+      "default": true
     },
     "check13bCompliant": {
       "type": "boolean",
-      "description": "Subsystem attribute check13bCompliant"
+      "x-sysml-type": "Boolean",
+      "description": "Enforces Rules E1 through E5 across synthesized `sequenceDiagram` and `classDiagram` blocks. [unit: flag]",
+      "default": true
     },
     "umlSpecInPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "in" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -58,7 +62,7 @@ classDiagram
     "mermaidBlockOutPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -67,8 +71,6 @@ classDiagram
   "required": [
     "part",
     "status",
-    "forbidSemicolons",
-    "check13bCompliant",
     "umlSpecInPort",
     "mermaidBlockOutPort"
   ],
@@ -77,27 +79,35 @@ classDiagram
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by MermaidUmlDiagramGenerator.
+Declared structural attributes, boundary ports, invariants, and allocated requirements for classifier `MermaidUmlDiagramGenerator`:
+
+| AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |
+| :--- | :--- | :--- | :--- |
+| Attribute | `forbidSemicolons` | `Boolean` | Default `true` |
+| Attribute | `check13bCompliant` | `Boolean` | Default `true` |
+| Port | `umlSpecInPort` | `in String` | Boundary interface contract |
+| Port | `mermaidBlockOutPort` | `out String` | Boundary interface contract |
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for MermaidUmlDiagramGenerator conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+Structural composition and boundary topology for classifier `MermaidUmlDiagramGenerator` organize no nested subparts declared in schema paired with boundary ports `in umlSpecInPort : String`, `out mermaidBlockOutPort : String`.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for MermaidUmlDiagramGenerator.
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing MermaidUmlDiagramGenerator status, AST references, and typed signal models.
+Classifier `MermaidUmlDiagramGenerator` encapsulates typed domain state attributes `forbidSemicolons : Boolean`, `check13bCompliant : Boolean` alongside operational lifecycle status.
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for MermaidUmlDiagramGenerator.
+Classifier `MermaidUmlDiagramGenerator` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for MermaidUmlDiagramGenerator.
+Classifier `MermaidUmlDiagramGenerator` binds external and behavioral interfaces across port `in umlSpecInPort : String`, port `out mermaidBlockOutPort : String`.
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-01: Given nominal MermaidUmlDiagramGenerator domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-- [ ] AC-02: Given operational state, When MermaidUmlDiagramGenerator evaluates constraint 'operational_invariants', Then asserts invariant satisfaction without violation.
-- [ ] AC-03: Given malformed input signals or boundary condition violation, When MermaidUmlDiagramGenerator error handling is invoked, Then transitions safely to failsafe fallback state without corruption.
+- [ ] AC-01: Given valid `MermaidUmlDiagramGenerator` initialization inputs for `forbidSemicolons` (`Boolean`), `check13bCompliant` (`Boolean`) (no additional constraints specified in schema), When `MermaidUmlDiagramGenerator` commits typed domain state, Then declared state attributes hold verified values.
+- [ ] AC-02: Given malformed or out-of-domain input values for `forbidSemicolons` (`Boolean`), `check13bCompliant` (`Boolean`), When `MermaidUmlDiagramGenerator` validates incoming state updates, Then `MermaidUmlDiagramGenerator` rejects the invalid state update and emits a diagnostic via diagnostic port `mermaidBlockOutPort`.
+- [ ] AC-03: Given nominal signal arrival across `umlSpecInPort` (`in String`), `mermaidBlockOutPort` (`out String`), When `MermaidUmlDiagramGenerator` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
+- [ ] AC-04: Given an invalid or unrecognized interface frame across `umlSpecInPort` (`in String`), `mermaidBlockOutPort` (`out String`), When `MermaidUmlDiagramGenerator` boundary validation executes, Then `MermaidUmlDiagramGenerator` refuses the malformed frame via diagnostic port `mermaidBlockOutPort` and preserves prior verified state.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:

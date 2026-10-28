@@ -17,7 +17,7 @@
 classDiagram
     class BidirectionalBacklogReconciler {
         +String specDocsInOutPort (inout)
-        +String subpackageSyncOutPort (inout)
+        +String subpackageSyncOutPort (out)
         +Boolean trackHtmlCommentState
         +Boolean parentInclusiveEpics
     }
@@ -41,11 +41,15 @@ classDiagram
     },
     "trackHtmlCommentState": {
       "type": "boolean",
-      "description": "Subsystem attribute trackHtmlCommentState"
+      "x-sysml-type": "Boolean",
+      "description": "Declared attribute trackHtmlCommentState (Boolean)",
+      "default": true
     },
     "parentInclusiveEpics": {
       "type": "boolean",
-      "description": "Subsystem attribute parentInclusiveEpics"
+      "x-sysml-type": "Boolean",
+      "description": "Computes parent-inclusive Epic count so child-only slices never trigger single-epic wildcard matching. [unit: flag]",
+      "default": true
     },
     "specDocsInOutPort": {
       "type": "object",
@@ -58,7 +62,7 @@ classDiagram
     "subpackageSyncOutPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -67,8 +71,6 @@ classDiagram
   "required": [
     "part",
     "status",
-    "trackHtmlCommentState",
-    "parentInclusiveEpics",
     "specDocsInOutPort",
     "subpackageSyncOutPort"
   ],
@@ -77,22 +79,29 @@ classDiagram
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by BidirectionalBacklogReconciler.
+Declared structural attributes, boundary ports, invariants, and allocated requirements for classifier `BidirectionalBacklogReconciler`:
+
+| AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |
+| :--- | :--- | :--- | :--- |
+| Attribute | `trackHtmlCommentState` | `Boolean` | Default `true` |
+| Attribute | `parentInclusiveEpics` | `Boolean` | Default `true` |
+| Port | `specDocsInOutPort` | `inout String` | Boundary interface contract |
+| Port | `subpackageSyncOutPort` | `out String` | Boundary interface contract |
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for BidirectionalBacklogReconciler conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+Structural composition and boundary topology for classifier `BidirectionalBacklogReconciler` organize no nested subparts declared in schema paired with boundary ports `inout specDocsInOutPort : String`, `out subpackageSyncOutPort : String`.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for BidirectionalBacklogReconciler.
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing BidirectionalBacklogReconciler status, AST references, and typed signal models.
+Classifier `BidirectionalBacklogReconciler` encapsulates typed domain state attributes `trackHtmlCommentState : Boolean`, `parentInclusiveEpics : Boolean` alongside operational lifecycle status.
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for BidirectionalBacklogReconciler.
+Classifier `BidirectionalBacklogReconciler` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for BidirectionalBacklogReconciler.
+Classifier `BidirectionalBacklogReconciler` binds external and behavioral interfaces across port `inout specDocsInOutPort : String`, port `out subpackageSyncOutPort : String`.
 
 ### Associated Use Cases & User Stories
 
@@ -100,26 +109,25 @@ Presentation interface binding and diagnostic event routing for BidirectionalBac
 - None allocated (structural subsystem component)
 
 #### Associated User Stories
-- [ ] #587 - [User Story 26: compile sysml](../user-stories/US-26-compile_sysml.md)
-- [ ] #588 - [User Story 27: [AgileSpecForwardProjector] Resolve](../user-stories/US-27-Resolve.md)
-- [ ] #589 - [User Story 28: Bind](../user-stories/US-28-Bind.md)
-- [ ] #590 - [User Story 29: [AgileSpecForwardProjector] Emit](../user-stories/US-29-Emit.md)
-- [ ] #591 - [User Story 30: Epics](../user-stories/US-30-Epics.md)
-- [ ] #592 - [User Story 31: Project](../user-stories/US-31-Project.md)
-- [ ] #593 - [User Story 32: ICD 01](../user-stories/US-32-ICD_01.md)
-- [ ] #594 - [User Story 33: Synthesize](../user-stories/US-33-Synthesize.md)
-- [ ] #595 - [User Story 34: WBS 01 03](../user-stories/US-34-WBS_01_03.md)
-- [ ] #596 - [User Story 35: reconcile backlog](../user-stories/US-35-reconcile_backlog.md)
-- [ ] #597 - [User Story 36: Parse](../user-stories/US-36-Parse.md)
-- [ ] #598 - [User Story 37: Reconcile](../user-stories/US-37-Reconcile.md)
-- [ ] #599 - [User Story 38: Zero](../user-stories/US-38-Zero.md)
-- [ ] #600 - [User Story 39: Merge](../user-stories/US-39-Merge.md)
-- [ ] #601 - [User Story 40: Bit identical](../user-stories/US-40-Bit_identical.md)
+- [ ] #707 - [User Story 18: Compile Sysml Forward Sync Docs](../user-stories/US-18-CompileSysmlForwardSyncDocs.md)
+- [ ] #708 - [User Story 19: Resolve Parent Epic By Pkg Name](../user-stories/US-19-ResolveParentEpicByPkgName.md)
+- [ ] #709 - [User Story 20: Bind All Package Stories To Use](../user-stories/US-20-BindAllPackageStoriesToUse.md)
+- [ ] #710 - [User Story 21: Emit Symmetric Action Def Signatures And E1](../user-stories/US-21-EmitSymmetricActionDefSignaturesAndE1.md)
+- [ ] #711 - [User Story 22: Compile Sysml Emit Icd Docs Interfaces](../user-stories/US-22-CompileSysmlEmitIcdDocsInterfaces.md)
+- [ ] #712 - [User Story 23: Project Nx N Connection Def Matrix And Flow Def](../user-stories/US-23-ProjectNxNConnectionDefMatrixAndFlowDef.md)
+- [ ] #713 - [User Story 24: Compile Sysml Emit Wbs Docs Management](../user-stories/US-24-CompileSysmlEmitWbsDocsManagement.md)
+- [ ] #714 - [User Story 25: Synthesize Mil Std881 e Tree And](../user-stories/US-25-SynthesizeMilStd881eTreeAnd.md)
+- [ ] #715 - [User Story 26: Reconcile Backlog Reconcile Docs Dir Docs](../user-stories/US-26-ReconcileBacklogReconcileDocsDirDocs.md)
+- [ ] #716 - [User Story 27: Parse CommonMark Tables With In Html](../user-stories/US-27-ParseCommonMarkTablesWithInHtml.md)
+- [ ] #717 - [User Story 28: Reconcile Checklists With Parent Inclusive Epic](../user-stories/US-28-ReconcileChecklistsWithParentInclusiveEpic.md)
+- [ ] #718 - [User Story 29: Compile Sysml Reverse Sync Docs](../user-stories/US-29-CompileSysmlReverseSyncDocs.md)
+- [ ] #719 - [User Story 30: Merge Extracted Entities Into Owning Subpackages](../user-stories/US-30-MergeExtractedEntitiesIntoOwningSubpackages.md)
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-01: Given nominal BidirectionalBacklogReconciler domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-- [ ] AC-02: Given operational state, When BidirectionalBacklogReconciler evaluates constraint 'operational_invariants', Then asserts invariant satisfaction without violation.
-- [ ] AC-03: Given malformed input signals or boundary condition violation, When BidirectionalBacklogReconciler error handling is invoked, Then transitions safely to failsafe fallback state without corruption.
+- [ ] AC-01: Given valid `BidirectionalBacklogReconciler` initialization inputs for `trackHtmlCommentState` (`Boolean`), `parentInclusiveEpics` (`Boolean`) (no additional constraints specified in schema), When `BidirectionalBacklogReconciler` commits typed domain state, Then declared state attributes hold verified values.
+- [ ] AC-02: Given malformed or out-of-domain input values for `trackHtmlCommentState` (`Boolean`), `parentInclusiveEpics` (`Boolean`), When `BidirectionalBacklogReconciler` validates incoming state updates, Then `BidirectionalBacklogReconciler` rejects the invalid state update and emits a diagnostic via diagnostic port `specDocsInOutPort`.
+- [ ] AC-03: Given nominal signal arrival across `specDocsInOutPort` (`inout String`), `subpackageSyncOutPort` (`out String`), When `BidirectionalBacklogReconciler` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
+- [ ] AC-04: Given an invalid or unrecognized interface frame across `specDocsInOutPort` (`inout String`), `subpackageSyncOutPort` (`out String`), When `BidirectionalBacklogReconciler` boundary validation executes, Then `BidirectionalBacklogReconciler` refuses the malformed frame via diagnostic port `specDocsInOutPort` and preserves prior verified state.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:

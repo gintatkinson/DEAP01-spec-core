@@ -16,8 +16,8 @@
 ```mermaid
 classDiagram
     class LogicalIcdMatrixCompiler {
-        +String interconnectAstInPort (inout)
-        +String icdMarkdownOutPort (inout)
+        +String interconnectAstInPort (in)
+        +String icdMarkdownOutPort (out)
         +Integer maxIcdLatencyMs
         +Boolean lexicographicalSort
     }
@@ -41,16 +41,20 @@ classDiagram
     },
     "maxIcdLatencyMs": {
       "type": "integer",
-      "description": "Subsystem attribute maxIcdLatencyMs"
+      "x-sysml-type": "Integer",
+      "description": "Declared attribute maxIcdLatencyMs (Integer)",
+      "default": 10
     },
     "lexicographicalSort": {
       "type": "boolean",
-      "description": "Subsystem attribute lexicographicalSort"
+      "x-sysml-type": "Boolean",
+      "description": "Orders all `PartDef` matrix axes and `ConnectionDef` channels via `BTreeMap` deterministic traversal. [unit: flag]",
+      "default": true
     },
     "interconnectAstInPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "in" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -58,7 +62,7 @@ classDiagram
     "icdMarkdownOutPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -67,8 +71,6 @@ classDiagram
   "required": [
     "part",
     "status",
-    "maxIcdLatencyMs",
-    "lexicographicalSort",
     "interconnectAstInPort",
     "icdMarkdownOutPort"
   ],
@@ -77,27 +79,35 @@ classDiagram
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by LogicalIcdMatrixCompiler.
+Declared structural attributes, boundary ports, invariants, and allocated requirements for classifier `LogicalIcdMatrixCompiler`:
+
+| AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |
+| :--- | :--- | :--- | :--- |
+| Attribute | `maxIcdLatencyMs` | `Integer` | Default `10` |
+| Attribute | `lexicographicalSort` | `Boolean` | Default `true` |
+| Port | `interconnectAstInPort` | `in String` | Boundary interface contract |
+| Port | `icdMarkdownOutPort` | `out String` | Boundary interface contract |
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for LogicalIcdMatrixCompiler conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+Structural composition and boundary topology for classifier `LogicalIcdMatrixCompiler` organize no nested subparts declared in schema paired with boundary ports `in interconnectAstInPort : String`, `out icdMarkdownOutPort : String`.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for LogicalIcdMatrixCompiler.
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing LogicalIcdMatrixCompiler status, AST references, and typed signal models.
+Classifier `LogicalIcdMatrixCompiler` encapsulates typed domain state attributes `maxIcdLatencyMs : Integer`, `lexicographicalSort : Boolean` alongside operational lifecycle status.
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for LogicalIcdMatrixCompiler.
+Classifier `LogicalIcdMatrixCompiler` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for LogicalIcdMatrixCompiler.
+Classifier `LogicalIcdMatrixCompiler` binds external and behavioral interfaces across port `in interconnectAstInPort : String`, port `out icdMarkdownOutPort : String`.
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-01: Given nominal LogicalIcdMatrixCompiler domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-- [ ] AC-02: Given operational state, When LogicalIcdMatrixCompiler evaluates constraint 'operational_invariants', Then asserts invariant satisfaction without violation.
-- [ ] AC-03: Given malformed input signals or boundary condition violation, When LogicalIcdMatrixCompiler error handling is invoked, Then transitions safely to failsafe fallback state without corruption.
+- [ ] AC-01: Given valid `LogicalIcdMatrixCompiler` initialization inputs for `maxIcdLatencyMs` (`Integer`), `lexicographicalSort` (`Boolean`) (no additional constraints specified in schema), When `LogicalIcdMatrixCompiler` commits typed domain state, Then declared state attributes hold verified values.
+- [ ] AC-02: Given malformed or out-of-domain input values for `maxIcdLatencyMs` (`Integer`), `lexicographicalSort` (`Boolean`), When `LogicalIcdMatrixCompiler` validates incoming state updates, Then `LogicalIcdMatrixCompiler` rejects the invalid state update and emits a diagnostic via diagnostic port `icdMarkdownOutPort`.
+- [ ] AC-03: Given nominal signal arrival across `interconnectAstInPort` (`in String`), `icdMarkdownOutPort` (`out String`), When `LogicalIcdMatrixCompiler` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
+- [ ] AC-04: Given an invalid or unrecognized interface frame across `interconnectAstInPort` (`in String`), `icdMarkdownOutPort` (`out String`), When `LogicalIcdMatrixCompiler` boundary validation executes, Then `LogicalIcdMatrixCompiler` refuses the malformed frame via diagnostic port `icdMarkdownOutPort` and preserves prior verified state.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:

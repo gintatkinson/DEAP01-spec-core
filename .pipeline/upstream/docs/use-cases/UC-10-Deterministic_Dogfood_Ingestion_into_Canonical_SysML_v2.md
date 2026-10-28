@@ -1,72 +1,57 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #633 |
-| **Title** | Use Case 10: Deterministic Dogfood Ingestion into Canonical Sys ML v2 |
+| **Title** | Use Case 10: Deterministic Dogfood Ingestion into Canonical SysML v2 |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
-| **Scope** | RangeSliceAstDetector |
+| **Primary Actor** | VerifyBaselineCLI |
+| **Scope** | AntiGamingTestBodyAuditor |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# Use Case 10: Deterministic Dogfood Ingestion into Canonical Sys ML v2
+# Use Case 10: Deterministic Dogfood Ingestion into Canonical SysML v2
 
 ## UML Diagrams
 
 ```mermaid
 graph TD
-    subgraph "RangeSliceAstDetector System Boundary"
-        UC_Main(["Deterministic Dogfood Ingestion into Canonical Sys ML v2"])
-        UC_Step01(["Actor Operator submits input payload for Deterministic Do..."])
-        UC_Step02(["RangeSliceAstDetector validates input schema structure an..."])
-        UC_Step03(["RangeSliceAstDetector executes core domain transformation..."])
-        UC_Step04(["RangeSliceAstDetector evaluates formal postcondition asse..."])
-        UC_Step05(["RangeSliceAstDetector commits verified output state and e..."])
+    subgraph "AntiGamingTestBodyAuditor System Boundary"
+        UC_Main(["Deterministic Dogfood Ingestion into Canonical SysML v2"])
+        UC_Step01(["./target/release/verify-baseline check-blueprint docs/des..."])
+        UC_Step02(["The blueprint verifier passes all 12 mechanical gates, ex..."])
     end
-    Operator(("Operator")) --- UC_Main
+    VerifyBaselineCLI(("VerifyBaselineCLI")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
-    UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `VerifyBaselineCLI`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- This blueprint document (docs/designs/blueprint-02-check34-ast-purity-and-anti-gaming-gate.md).
 
 ## 3. Trigger
-- Deterministic Dogfood Ingestion into Canonical SysML v2
+- ./target/release/verify-baseline check-blueprint docs/designs/blueprint-02-check34-ast-purity-and-anti-gaming-gate.md --dry-run and ./target/release/ingest-sysml are executed.
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Deterministic Dogfood Ingestion into Canonical Sys ML v2` to `RangeSliceAstDetector`.
-2. `RangeSliceAstDetector` validates input schema structure and precondition guards for `Deterministic Dogfood Ingestion into Canonical Sys ML v2`.
-3. `RangeSliceAstDetector` executes core domain transformation and state transition logic for `Deterministic Dogfood Ingestion into Canonical Sys ML v2`.
-4. `RangeSliceAstDetector` evaluates formal postcondition assertions and structural invariants.
-5. `RangeSliceAstDetector` commits verified output state and emits completion telemetry to `Operator`.
+1. ./target/release/verify-baseline check-blueprint docs/designs/blueprint-02-check34-ast-purity-and-anti-gaming-gate.md --dry-run and ./target/release/ingest-sysml are executed.
+2. The blueprint verifier passes all 12 mechanical gates, extracts Check34AstPurityAndAntiGamingGate, its subcomponents, 4 typed ports, 5 state attributes, 5 formal constraints (C-PURITY-01 through C-PURITY-05), and 5 BDD acceptance criteria into valid SysML v2, and exits with code 0.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `RangeSliceAstDetector`:
-  - `RangeSliceAstDetector` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Deterministic Dogfood Ingestion into Canonical Sys ML v2` execution:
-  - `RangeSliceAstDetector` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `RangeSliceAstDetector`:
-  - `RangeSliceAstDetector` halts execution cleanly and reports deterministic fault status.
+- Precondition guard failure in `AntiGamingTestBodyAuditor`:
+  - `AntiGamingTestBodyAuditor` rejects the `Deterministic Dogfood Ingestion into Canonical SysML v2` request without partial state mutation and reports diagnostic status to `VerifyBaselineCLI`.
+- Invariant violation while enforcing `Deterministic Dogfood Ingestion into Canonical SysML v2`:
+  - `AntiGamingTestBodyAuditor` aborts `Deterministic Dogfood Ingestion into Canonical SysML v2` execution, preserves prior verified state, and notifies `VerifyBaselineCLI`.
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- The blueprint verifier passes all 12 mechanical gates, extracts Check34AstPurityAndAntiGamingGate, its subcomponents, 4 typed ports, 5 state attributes, 5 formal constraints (C-PURITY-01 through C-PURITY-05), and 5 BDD acceptance criteria into valid SysML v2, and exits with code 0.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#567** | User Story | [User Story 06: check compiler ast purity](../user-stories/US-06-check_compiler_ast_purity.md) |
-| **#660** | Feature | [Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] RangeSliceAstDetector](../features/FEAT-06-RangeSliceAstDetector.md) |
+| **#572** | User Story | [User Story 10: audit test integrity and anti gaming](../user-stories/US-10-audit_test_integrity_and_anti_gaming.md) |
+| **#662** | Feature | [Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] AntiGamingTestBodyAuditor](../features/FEAT-06-AntiGamingTestBodyAuditor.md) |
 
 ## Source References
 Use case operational flows and lifecycle activity references:

@@ -39,45 +39,53 @@ classDiagram
     },
     "quantity": {
       "type": "integer",
-      "description": "Subsystem attribute quantity"
+      "x-sysml-type": "Integer",
+      "description": "Declared attribute quantity (Integer)",
+      "default": 1
     },
     "type": {
       "type": "string",
-      "description": "Subsystem attribute type"
+      "x-sysml-type": "String",
+      "description": "Declared attribute type (String)",
+      "default": "Component"
     }
   },
   "required": [
     "part",
-    "status",
-    "quantity",
-    "type"
+    "status"
   ],
   "additionalProperties": false
 }
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by SevenSectionDocstringGenerator.
+Declared structural attributes, boundary ports, invariants, and allocated requirements for classifier `SevenSectionDocstringGenerator`:
+
+| AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |
+| :--- | :--- | :--- | :--- |
+| Attribute | `quantity` | `Integer` | Default `1` |
+| Attribute | `type` | `String` | Default `"Component"` |
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for SevenSectionDocstringGenerator conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+Structural composition and boundary topology for classifier `SevenSectionDocstringGenerator` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for SevenSectionDocstringGenerator.
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing SevenSectionDocstringGenerator status, AST references, and typed signal models.
+Classifier `SevenSectionDocstringGenerator` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status.
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for SevenSectionDocstringGenerator.
+Classifier `SevenSectionDocstringGenerator` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for SevenSectionDocstringGenerator.
+Classifier `SevenSectionDocstringGenerator` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-01: Given nominal SevenSectionDocstringGenerator domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-- [ ] AC-02: Given operational state, When SevenSectionDocstringGenerator evaluates constraint 'operational_invariants', Then asserts invariant satisfaction without violation.
-- [ ] AC-03: Given malformed input signals or boundary condition violation, When SevenSectionDocstringGenerator error handling is invoked, Then transitions safely to failsafe fallback state without corruption.
+- [ ] AC-01: Given valid `SevenSectionDocstringGenerator` initialization inputs for `quantity` (`Integer`), `type` (`String`) (no additional constraints specified in schema), When `SevenSectionDocstringGenerator` commits typed domain state, Then declared state attributes hold verified values.
+- [ ] AC-02: Given malformed or out-of-domain input values for `quantity` (`Integer`), `type` (`String`), When `SevenSectionDocstringGenerator` validates incoming state updates, Then `SevenSectionDocstringGenerator` rejects the invalid state update and emits a diagnostic via deterministic error diagnostic output.
+- [ ] AC-03: Given nominal signal arrival across `SevenSectionDocstringGenerator` structural boundary, When `SevenSectionDocstringGenerator` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
+- [ ] AC-04: Given an invalid or unrecognized interface frame across `SevenSectionDocstringGenerator` structural boundary, When `SevenSectionDocstringGenerator` boundary validation executes, Then `SevenSectionDocstringGenerator` refuses the malformed frame via deterministic error diagnostic output and preserves prior verified state.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:

@@ -16,10 +16,10 @@
 ```mermaid
 classDiagram
     class DeterministicSpecIcdWbsForwardCompiler {
-        +String SysmlPackageAstInputPort (inout)
-        +String MarkdownSpecSuiteOutputPort (inout)
-        +String IcdMatrixArtifactPort (inout)
-        +String WbsEnterpriseExportPort (inout)
+        +String SysmlPackageAstInputPort (in)
+        +String MarkdownSpecSuiteOutputPort (out)
+        +String IcdMatrixArtifactPort (out)
+        +String WbsEnterpriseExportPort (out)
         +Integer llm_subagent_invocation_count
         +Real ast_node_coverage_percent
         +Integer mermaid_e1_e5_violation_count
@@ -45,24 +45,32 @@ classDiagram
     },
     "llm_subagent_invocation_count": {
       "type": "integer",
-      "description": "Subsystem attribute llm_subagent_invocation_count"
+      "x-sysml-type": "Integer",
+      "description": "Declared attribute llm_subagent_invocation_count (Integer)",
+      "default": 0
     },
     "ast_node_coverage_percent": {
       "type": "number",
-      "description": "Subsystem attribute ast_node_coverage_percent"
+      "x-sysml-type": "Real",
+      "description": "Percentage of declared SysML v2 AST packages, parts, ports, flows, interactions, and use cases projected into specifications (`C-FWD-02 == 100.0`). [unit: percent]",
+      "default": 100
     },
     "mermaid_e1_e5_violation_count": {
       "type": "integer",
-      "description": "Subsystem attribute mermaid_e1_e5_violation_count"
+      "x-sysml-type": "Integer",
+      "description": "Count of Check 13B E1-E5 Mermaid syntax or layout violations across all compiler-synthesized diagrams (`C-FWD-03 == 0`). [unit: count]",
+      "default": 0
     },
     "forward_reverse_drift_count": {
       "type": "integer",
-      "description": "Subsystem attribute forward_reverse_drift_count"
+      "x-sysml-type": "Integer",
+      "description": "Count of AST structural or subpackage placement divergences after a forward-then-reverse synchronization cycle (`C-FWD-04 == 0`). [unit: count]",
+      "default": 0
     },
     "SysmlPackageAstInputPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "in" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -70,7 +78,7 @@ classDiagram
     "MarkdownSpecSuiteOutputPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -78,7 +86,7 @@ classDiagram
     "IcdMatrixArtifactPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -86,7 +94,7 @@ classDiagram
     "WbsEnterpriseExportPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -95,10 +103,6 @@ classDiagram
   "required": [
     "part",
     "status",
-    "llm_subagent_invocation_count",
-    "ast_node_coverage_percent",
-    "mermaid_e1_e5_violation_count",
-    "forward_reverse_drift_count",
     "SysmlPackageAstInputPort",
     "MarkdownSpecSuiteOutputPort",
     "IcdMatrixArtifactPort",
@@ -109,27 +113,39 @@ classDiagram
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by DeterministicSpecIcdWbsForwardCompiler.
+Declared structural attributes, boundary ports, invariants, and allocated requirements for classifier `DeterministicSpecIcdWbsForwardCompiler`:
+
+| AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |
+| :--- | :--- | :--- | :--- |
+| Attribute | `llm_subagent_invocation_count` | `Integer` | Default `0` |
+| Attribute | `ast_node_coverage_percent` | `Real` | Default `100` |
+| Attribute | `mermaid_e1_e5_violation_count` | `Integer` | Default `0` |
+| Attribute | `forward_reverse_drift_count` | `Integer` | Default `0` |
+| Port | `SysmlPackageAstInputPort` | `in String` | Boundary interface contract |
+| Port | `MarkdownSpecSuiteOutputPort` | `out String` | Boundary interface contract |
+| Port | `IcdMatrixArtifactPort` | `out String` | Boundary interface contract |
+| Port | `WbsEnterpriseExportPort` | `out String` | Boundary interface contract |
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for DeterministicSpecIcdWbsForwardCompiler conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+Structural composition and boundary topology for classifier `DeterministicSpecIcdWbsForwardCompiler` organize no nested subparts declared in schema paired with boundary ports `in SysmlPackageAstInputPort : String`, `out MarkdownSpecSuiteOutputPort : String`, `out IcdMatrixArtifactPort : String`, `out WbsEnterpriseExportPort : String`.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for DeterministicSpecIcdWbsForwardCompiler.
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing DeterministicSpecIcdWbsForwardCompiler status, AST references, and typed signal models.
+Classifier `DeterministicSpecIcdWbsForwardCompiler` encapsulates typed domain state attributes `llm_subagent_invocation_count : Integer`, `ast_node_coverage_percent : Real`, `mermaid_e1_e5_violation_count : Integer`, `forward_reverse_drift_count : Integer` alongside operational lifecycle status.
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for DeterministicSpecIcdWbsForwardCompiler.
+Classifier `DeterministicSpecIcdWbsForwardCompiler` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for DeterministicSpecIcdWbsForwardCompiler.
+Classifier `DeterministicSpecIcdWbsForwardCompiler` binds external and behavioral interfaces across port `in SysmlPackageAstInputPort : String`, port `out MarkdownSpecSuiteOutputPort : String`, port `out IcdMatrixArtifactPort : String`, port `out WbsEnterpriseExportPort : String`.
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-01: Given nominal DeterministicSpecIcdWbsForwardCompiler domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-- [ ] AC-02: Given operational state, When DeterministicSpecIcdWbsForwardCompiler evaluates constraint 'operational_invariants', Then asserts invariant satisfaction without violation.
-- [ ] AC-03: Given malformed input signals or boundary condition violation, When DeterministicSpecIcdWbsForwardCompiler error handling is invoked, Then transitions safely to failsafe fallback state without corruption.
+- [ ] AC-01: Given valid `DeterministicSpecIcdWbsForwardCompiler` initialization inputs for `llm_subagent_invocation_count` (`Integer`), `ast_node_coverage_percent` (`Real`), `mermaid_e1_e5_violation_count` (`Integer`), `forward_reverse_drift_count` (`Integer`) (no additional constraints specified in schema), When `DeterministicSpecIcdWbsForwardCompiler` commits typed domain state, Then declared state attributes hold verified values.
+- [ ] AC-02: Given malformed or out-of-domain input values for `llm_subagent_invocation_count` (`Integer`), `ast_node_coverage_percent` (`Real`), `mermaid_e1_e5_violation_count` (`Integer`), `forward_reverse_drift_count` (`Integer`), When `DeterministicSpecIcdWbsForwardCompiler` validates incoming state updates, Then `DeterministicSpecIcdWbsForwardCompiler` rejects the invalid state update and emits a diagnostic via diagnostic port `MarkdownSpecSuiteOutputPort`.
+- [ ] AC-03: Given nominal signal arrival across `SysmlPackageAstInputPort` (`in String`), `MarkdownSpecSuiteOutputPort` (`out String`), `IcdMatrixArtifactPort` (`out String`), `WbsEnterpriseExportPort` (`out String`), When `DeterministicSpecIcdWbsForwardCompiler` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
+- [ ] AC-04: Given an invalid or unrecognized interface frame across `SysmlPackageAstInputPort` (`in String`), `MarkdownSpecSuiteOutputPort` (`out String`), `IcdMatrixArtifactPort` (`out String`), `WbsEnterpriseExportPort` (`out String`), When `DeterministicSpecIcdWbsForwardCompiler` boundary validation executes, Then `DeterministicSpecIcdWbsForwardCompiler` refuses the malformed frame via diagnostic port `MarkdownSpecSuiteOutputPort` and preserves prior verified state.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:

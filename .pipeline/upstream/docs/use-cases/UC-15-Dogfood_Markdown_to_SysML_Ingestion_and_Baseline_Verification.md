@@ -1,72 +1,57 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #638 |
-| **Title** | Use Case 15: Dogfood Markdown to Sys ML Ingestion and Baseline Verification |
+| **Title** | Use Case 15: Dogfood Markdown to SysML Ingestion and Baseline Verification |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
-| **Scope** | NativeSigilAndLifetimeLexer |
+| **Primary Actor** | Compiler_CLI_Caller |
+| **Scope** | BijectiveSysmlSerializer |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# Use Case 15: Dogfood Markdown to Sys ML Ingestion and Baseline Verification
+# Use Case 15: Dogfood Markdown to SysML Ingestion and Baseline Verification
 
 ## UML Diagrams
 
 ```mermaid
 graph TD
-    subgraph "NativeSigilAndLifetimeLexer System Boundary"
-        UC_Main(["Dogfood Markdown to Sys ML Ingestion and Baseline Verification"])
-        UC_Step01(["Actor Operator submits input payload for Dogfood Markdown..."])
-        UC_Step02(["NativeSigilAndLifetimeLexer validates input schema struct..."])
-        UC_Step03(["NativeSigilAndLifetimeLexer executes core domain transfor..."])
-        UC_Step04(["NativeSigilAndLifetimeLexer evaluates formal postconditio..."])
-        UC_Step05(["NativeSigilAndLifetimeLexer commits verified output state..."])
+    subgraph "BijectiveSysmlSerializer System Boundary"
+        UC_Main(["Dogfood Markdown to SysML Ingestion and Baseline Verifica..."])
+        UC_Step01(["./target/release/verify-baseline check-blueprint docs/des..."])
+        UC_Step02(["verify-baseline check-blueprint passes all 12 mechanical ..."])
     end
-    Operator(("Operator")) --- UC_Main
+    Compiler_CLI_Caller(("Compiler_CLI_Caller")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
-    UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `Compiler_CLI_Caller`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- This blueprint document docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md (**REQ-0603**).
 
 ## 3. Trigger
-- Dogfood Markdown to SysML Ingestion and Baseline Verification
+- ./target/release/verify-baseline check-blueprint docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md --dry-run is executed.
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Dogfood Markdown to Sys ML Ingestion and Baseline Verification` to `NativeSigilAndLifetimeLexer`.
-2. `NativeSigilAndLifetimeLexer` validates input schema structure and precondition guards for `Dogfood Markdown to Sys ML Ingestion and Baseline Verification`.
-3. `NativeSigilAndLifetimeLexer` executes core domain transformation and state transition logic for `Dogfood Markdown to Sys ML Ingestion and Baseline Verification`.
-4. `NativeSigilAndLifetimeLexer` evaluates formal postcondition assertions and structural invariants.
-5. `NativeSigilAndLifetimeLexer` commits verified output state and emits completion telemetry to `Operator`.
+1. ./target/release/verify-baseline check-blueprint docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md --dry-run is executed.
+2. verify-baseline check-blueprint passes all 12 mechanical gates, extracts SysmlBijectiveRoundtripCompilerGate with all 4 BOM parts, 4 interface ports, 4 attributes, 4 parametric constraints (C-RT-01..C-RT-04), and REQ_0603 requirement definitions, persists.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `NativeSigilAndLifetimeLexer`:
-  - `NativeSigilAndLifetimeLexer` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Dogfood Markdown to Sys ML Ingestion and Baseline Verification` execution:
-  - `NativeSigilAndLifetimeLexer` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `NativeSigilAndLifetimeLexer`:
-  - `NativeSigilAndLifetimeLexer` halts execution cleanly and reports deterministic fault status.
+- Precondition guard failure in `BijectiveSysmlSerializer`:
+  - `BijectiveSysmlSerializer` rejects the `Dogfood Markdown to SysML Ingestion and Baseline Verification` request without partial state mutation and reports diagnostic status to `Compiler_CLI_Caller`.
+- Invariant violation while enforcing `Dogfood Markdown to SysML Ingestion and Baseline Verification`:
+  - `BijectiveSysmlSerializer` aborts `Dogfood Markdown to SysML Ingestion and Baseline Verification` execution, preserves prior verified state, and notifies `Compiler_CLI_Caller`.
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- verify-baseline check-blueprint passes all 12 mechanical gates, extracts SysmlBijectiveRoundtripCompilerGate with all 4 BOM parts, 4 interface ports, 4 attributes, 4 parametric constraints (C-RT-01..C-RT-04), and REQ_0603 requirement definitions, persists.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#577** | User Story | [User Story 16: scan all](../user-stories/US-16-scan_all.md) |
-| **#665** | Feature | [Feature 11: [BP 03 Sys ML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] NativeSigilAndLifetimeLexer](../features/FEAT-11-NativeSigilAndLifetimeLexer.md) |
+| **#583** | User Story | [User Story 16: ast orig to sysml](../user-stories/US-16-ast_orig_to_sysml.md) |
+| **#667** | Feature | [Feature 11: [BP 03 SysML v2 AST Bijective Roundtrip and Token Stream Parser Gate Blueprint] BijectiveSysmlSerializer](../features/FEAT-11-BijectiveSysmlSerializer.md) |
 
 ## Source References
 Use case operational flows and lifecycle activity references:

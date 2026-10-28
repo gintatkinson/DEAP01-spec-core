@@ -16,10 +16,10 @@
 ```mermaid
 classDiagram
     class DeterministicStaticDefectAuditor {
-        +String TargetSourceAstInputPort (inout)
-        +String GitHubIssueSsotQueryPort (inout)
-        +String DefectDossierArtifactPort (inout)
-        +String ClosedLoopTrackerPublishPort (inout)
+        +String TargetSourceAstInputPort (in)
+        +String GitHubIssueSsotQueryPort (in)
+        +String DefectDossierArtifactPort (out)
+        +String ClosedLoopTrackerPublishPort (out)
         +Integer auditor_subagent_count
         +Integer dossier_schema_check_count
         +Integer pillar_coverage_count
@@ -45,24 +45,32 @@ classDiagram
     },
     "auditor_subagent_count": {
       "type": "integer",
-      "description": "Subsystem attribute auditor_subagent_count"
+      "x-sysml-type": "Integer",
+      "description": "Declared attribute auditor_subagent_count (Integer)",
+      "default": 0
     },
     "dossier_schema_check_count": {
       "type": "integer",
-      "description": "Subsystem attribute dossier_schema_check_count"
+      "x-sysml-type": "Integer",
+      "description": "Number of deterministic structural, lexical, and Mermaid validation checks enforced per synthesized dossier. [unit: checks]",
+      "default": 12
     },
     "pillar_coverage_count": {
       "type": "integer",
-      "description": "Subsystem attribute pillar_coverage_count"
+      "x-sysml-type": "Integer",
+      "description": "Number of adversarial correctness risk pillars evaluated per source AST scan. [unit: pillars]",
+      "default": 5
     },
     "closed_loop_mismatch_bytes": {
       "type": "integer",
-      "description": "Subsystem attribute closed_loop_mismatch_bytes"
+      "x-sysml-type": "Integer",
+      "description": "Byte discrepancy between local `.pipeline/defects/` dossier and live GitHub issue body after CRLF normalization. [unit: B]",
+      "default": 0
     },
     "TargetSourceAstInputPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "in" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -70,7 +78,7 @@ classDiagram
     "GitHubIssueSsotQueryPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "in" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -78,7 +86,7 @@ classDiagram
     "DefectDossierArtifactPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -86,7 +94,7 @@ classDiagram
     "ClosedLoopTrackerPublishPort": {
       "type": "object",
       "properties": {
-        "direction": { "type": "string", "const": "inout" },
+        "direction": { "type": "string", "const": "out" },
         "port_type": { "type": "string", "const": "String" }
       },
       "required": ["direction", "port_type"]
@@ -95,10 +103,6 @@ classDiagram
   "required": [
     "part",
     "status",
-    "auditor_subagent_count",
-    "dossier_schema_check_count",
-    "pillar_coverage_count",
-    "closed_loop_mismatch_bytes",
     "TargetSourceAstInputPort",
     "GitHubIssueSsotQueryPort",
     "DefectDossierArtifactPort",
@@ -109,27 +113,39 @@ classDiagram
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by DeterministicStaticDefectAuditor.
+Declared structural attributes, boundary ports, invariants, and allocated requirements for classifier `DeterministicStaticDefectAuditor`:
+
+| AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |
+| :--- | :--- | :--- | :--- |
+| Attribute | `auditor_subagent_count` | `Integer` | Default `0` |
+| Attribute | `dossier_schema_check_count` | `Integer` | Default `12` |
+| Attribute | `pillar_coverage_count` | `Integer` | Default `5` |
+| Attribute | `closed_loop_mismatch_bytes` | `Integer` | Default `0` |
+| Port | `TargetSourceAstInputPort` | `in String` | Boundary interface contract |
+| Port | `GitHubIssueSsotQueryPort` | `in String` | Boundary interface contract |
+| Port | `DefectDossierArtifactPort` | `out String` | Boundary interface contract |
+| Port | `ClosedLoopTrackerPublishPort` | `out String` | Boundary interface contract |
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for DeterministicStaticDefectAuditor conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+Structural composition and boundary topology for classifier `DeterministicStaticDefectAuditor` organize no nested subparts declared in schema paired with boundary ports `in TargetSourceAstInputPort : String`, `in GitHubIssueSsotQueryPort : String`, `out DefectDossierArtifactPort : String`, `out ClosedLoopTrackerPublishPort : String`.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for DeterministicStaticDefectAuditor.
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing DeterministicStaticDefectAuditor status, AST references, and typed signal models.
+Classifier `DeterministicStaticDefectAuditor` encapsulates typed domain state attributes `auditor_subagent_count : Integer`, `dossier_schema_check_count : Integer`, `pillar_coverage_count : Integer`, `closed_loop_mismatch_bytes : Integer` alongside operational lifecycle status.
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for DeterministicStaticDefectAuditor.
+Classifier `DeterministicStaticDefectAuditor` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for DeterministicStaticDefectAuditor.
+Classifier `DeterministicStaticDefectAuditor` binds external and behavioral interfaces across port `in TargetSourceAstInputPort : String`, port `in GitHubIssueSsotQueryPort : String`, port `out DefectDossierArtifactPort : String`, port `out ClosedLoopTrackerPublishPort : String`.
 
 ## Acceptance Criteria (BDD)
-- [ ] AC-01: Given nominal DeterministicStaticDefectAuditor domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-- [ ] AC-02: Given operational state, When DeterministicStaticDefectAuditor evaluates constraint 'operational_invariants', Then asserts invariant satisfaction without violation.
-- [ ] AC-03: Given malformed input signals or boundary condition violation, When DeterministicStaticDefectAuditor error handling is invoked, Then transitions safely to failsafe fallback state without corruption.
+- [ ] AC-01: Given valid `DeterministicStaticDefectAuditor` initialization inputs for `auditor_subagent_count` (`Integer`), `dossier_schema_check_count` (`Integer`), `pillar_coverage_count` (`Integer`), `closed_loop_mismatch_bytes` (`Integer`) (no additional constraints specified in schema), When `DeterministicStaticDefectAuditor` commits typed domain state, Then declared state attributes hold verified values.
+- [ ] AC-02: Given malformed or out-of-domain input values for `auditor_subagent_count` (`Integer`), `dossier_schema_check_count` (`Integer`), `pillar_coverage_count` (`Integer`), `closed_loop_mismatch_bytes` (`Integer`), When `DeterministicStaticDefectAuditor` validates incoming state updates, Then `DeterministicStaticDefectAuditor` rejects the invalid state update and emits a diagnostic via diagnostic port `DefectDossierArtifactPort`.
+- [ ] AC-03: Given nominal signal arrival across `TargetSourceAstInputPort` (`in String`), `GitHubIssueSsotQueryPort` (`in String`), `DefectDossierArtifactPort` (`out String`), `ClosedLoopTrackerPublishPort` (`out String`), When `DeterministicStaticDefectAuditor` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
+- [ ] AC-04: Given an invalid or unrecognized interface frame across `TargetSourceAstInputPort` (`in String`), `GitHubIssueSsotQueryPort` (`in String`), `DefectDossierArtifactPort` (`out String`), `ClosedLoopTrackerPublishPort` (`out String`), When `DeterministicStaticDefectAuditor` boundary validation executes, Then `DeterministicStaticDefectAuditor` refuses the malformed frame via diagnostic port `DefectDossierArtifactPort` and preserves prior verified state.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:

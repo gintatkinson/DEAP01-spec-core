@@ -2,8 +2,8 @@
   "sha256": "b7b8eedc9f686de02a2123f4e3e776e30d62054441b3a7461cc23a0d5f522748",
   "total_lines": 1,
   "node_counts": {
-    "action_defs": 10,
-    "attribute_defs": 20,
+    "action_defs": 6,
+    "attribute_defs": 24,
     "calc_defs": 0,
     "capability_defs": 0,
     "connection_defs": 0,
@@ -14,8 +14,8 @@
     "identities": 0,
     "interaction_defs": 1,
     "item_defs": 0,
-    "leaves": 20,
-    "lists": 10,
+    "leaves": 24,
+    "lists": 6,
     "operation_defs": 0,
     "packages": 1,
     "part_defs": 5,
@@ -28,22 +28,24 @@
     "use_case_defs": 5
   },
   "schema_nodes": [
-    "Assert_item",
+    "AssertAstOrigEqualsAstReparsed",
     "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
     "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_LifecycleState",
     "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_SequenceInteraction",
     "BijectiveDiffDiagnosticPort",
     "BijectiveSysmlSerializer",
     "Blueprint_ID",
-    "Canonical",
+    "C_RT_01",
+    "C_RT_02",
+    "C_RT_03",
+    "C_RT_04",
     "CompilerRoundtripVerificationGate",
     "FailClosedRecursiveDescentParser",
     "Generation_Mode",
     "NativeSigilAndLifetimeLexer",
-    "Ok",
+    "ParseTypeExprAndParseTransition",
     "REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
     "RawSysmlSourceInputPort",
-    "Reparsed",
     "Requirement_ID",
     "SerializedSysmlOutputPort",
     "Specification_Source",
@@ -58,15 +60,9 @@
     "UC_AC_03_Token_Stream_State_Transition_Parsing_and_Recursive_MBD_Synthesis",
     "UC_AC_04_Lossless_to_sysml_Serialization_and_Fail_Closed_Bijective_Roundtrip_Gate",
     "UC_AC_05_Dogfood_Markdown_to_SysML_Ingestion_and_Baseline_Verification",
-    "Vec",
-    "assert_dropped_ast_field_count_range",
-    "assert_roundtrip_ast_mismatch_count_range",
-    "assert_silent_skip_branch_count_range",
-    "assert_span_offset_drift_bytes_range",
     "ast_orig_to_sysml",
     "dropped_ast_field_count",
     "parse_package_or_file",
-    "parse_type_expr",
     "quantity",
     "roundtrip_ast_mismatch_count",
     "scan_all",
@@ -86,14 +82,6 @@
     },
     {
       "id": "OA-02",
-      "name": "Vec",
-      "doc": "Vec of Token with zero span drift",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-03",
       "name": "parse_package_or_file",
       "doc": "parse_package_or_file(tokens)",
       "performer": "",
@@ -101,23 +89,15 @@
       "outputs": []
     },
     {
-      "id": "OA-04",
-      "name": "parse_type_expr",
+      "id": "OA-03",
+      "name": "ParseTypeExprAndParseTransition",
       "doc": "parse_type_expr and parse_transition_decl_tokens",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
-      "id": "OA-05",
-      "name": "Canonical",
-      "doc": "Canonical PackageDef AST (ast_orig)",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-06",
+      "id": "OA-04",
       "name": "verify_bijective_ast_roundtrip",
       "doc": "verify_bijective_ast_roundtrip(ast_orig)",
       "performer": "",
@@ -125,7 +105,7 @@
       "outputs": []
     },
     {
-      "id": "OA-07",
+      "id": "OA-05",
       "name": "ast_orig_to_sysml",
       "doc": "ast_orig.to_sysml(0)",
       "performer": "",
@@ -133,25 +113,9 @@
       "outputs": []
     },
     {
-      "id": "OA-08",
-      "name": "Reparsed",
-      "doc": "Reparsed token stream",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-09",
-      "name": "Assert_item",
+      "id": "OA-06",
+      "name": "AssertAstOrigEqualsAstReparsed",
       "doc": "Assert ast_orig equals ast_reparsed",
-      "performer": "",
-      "inputs": [],
-      "outputs": []
-    },
-    {
-      "id": "OA-10",
-      "name": "Ok",
-      "doc": "Ok or Err(E0400 Structural AST Diff)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -197,18 +161,6 @@
   ],
   "operational_nodes": [
     {
-      "name": "NativeSigilAndLifetimeLexer",
-      "node_type": "Part",
-      "doc": "Zero-rewrite scanner emitting native `Ampersand`, `Question`, `Lifetime`, and `DoubleColon` tokens with exact byte spans",
-      "allocated_activities": []
-    },
-    {
-      "name": "FailClosedRecursiveDescentParser",
-      "node_type": "Part",
-      "doc": "Strict token-stream parser for all 12 inner declaration blocks, composite type expressions, and nested state transitions",
-      "allocated_activities": []
-    },
-    {
       "name": "BijectiveSysmlSerializer",
       "node_type": "Part",
       "doc": "Canonical `SysmlSerializable::to_sysml` formatter preserving 100% of `PackageDef` AST fields without double-quoting",
@@ -221,9 +173,21 @@
       "allocated_activities": []
     },
     {
+      "name": "FailClosedRecursiveDescentParser",
+      "node_type": "Part",
+      "doc": "Strict token-stream parser for all 12 inner declaration blocks, composite type expressions, and nested state transitions",
+      "allocated_activities": []
+    },
+    {
+      "name": "NativeSigilAndLifetimeLexer",
+      "node_type": "Part",
+      "doc": "Zero-rewrite scanner emitting native `Ampersand`, `Question`, `Lifetime`, and `DoubleColon` tokens with exact byte spans",
+      "allocated_activities": []
+    },
+    {
       "name": "SysmlBijectiveRoundtripCompilerGate",
       "node_type": "Part",
-      "doc": "--- | Cumulative byte-offset drift between raw source character positions and emitted token spans [unit: bytes]",
+      "doc": "Cumulative byte-offset drift between raw source character positions and emitted token spans [unit: bytes]",
       "allocated_activities": []
     }
   ],

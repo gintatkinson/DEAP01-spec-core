@@ -3,8 +3,8 @@
 | **Issue ID** | #630 |
 | **Title** | Use Case 07: Fail Closed Filesystem and Walk Dir Enforcement |
 | **Type** | use-case |
-| **Primary Actor** | Operator |
-| **Scope** | RangeSliceAstDetector |
+| **Primary Actor** | VerifyBaselineCLI |
+| **Scope** | AntiGamingTestBodyAuditor |
 | **Level** | User Goal |
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
@@ -15,58 +15,43 @@
 
 ```mermaid
 graph TD
-    subgraph "RangeSliceAstDetector System Boundary"
+    subgraph "AntiGamingTestBodyAuditor System Boundary"
         UC_Main(["Fail Closed Filesystem and Walk Dir Enforcement"])
-        UC_Step01(["Actor Operator submits input payload for Fail Closed File..."])
-        UC_Step02(["RangeSliceAstDetector validates input schema structure an..."])
-        UC_Step03(["RangeSliceAstDetector executes core domain transformation..."])
-        UC_Step04(["RangeSliceAstDetector evaluates formal postcondition asse..."])
-        UC_Step05(["RangeSliceAstDetector commits verified output state and e..."])
+        UC_Step01(["Check 34 executes audit_fail_closed_io_patterns (C-PURITY..."])
+        UC_Step02(["The verifier fails closed, flags every fail-open error-sw..."])
     end
-    Operator(("Operator")) --- UC_Main
+    VerifyBaselineCLI(("VerifyBaselineCLI")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
-    UC_Main -. "<<include>>" .-> UC_Step03
-    UC_Main -. "<<include>>" .-> UC_Step04
-    UC_Main -. "<<include>>" .-> UC_Step05
 ```
 
 ## 1. Actors
-- `Operator`
+- `VerifyBaselineCLI`
 
 ## 2. Preconditions
-- The compiler execution environment is initialized in nominal operational state.
-- Authoritative input schema files exist with read access.
+- Any workspace Rust module containing .into_iter().flatten(), .filter_map(Result::ok), fs::read_to_string(...).unwrap_or_default(), or let _ = fs::remove_dir_all(...).
 
 ## 3. Trigger
-- Fail Closed Filesystem and WalkDir Enforcement
+- Check 34 executes audit_fail_closed_io_patterns (C-PURITY-02).
 
 ## 4. Main Success Scenario
-1. Actor `Operator` submits input payload for `Fail Closed Filesystem and Walk Dir Enforcement` to `RangeSliceAstDetector`.
-2. `RangeSliceAstDetector` validates input schema structure and precondition guards for `Fail Closed Filesystem and Walk Dir Enforcement`.
-3. `RangeSliceAstDetector` executes core domain transformation and state transition logic for `Fail Closed Filesystem and Walk Dir Enforcement`.
-4. `RangeSliceAstDetector` evaluates formal postcondition assertions and structural invariants.
-5. `RangeSliceAstDetector` commits verified output state and emits completion telemetry to `Operator`.
+1. Check 34 executes audit_fail_closed_io_patterns (C-PURITY-02).
+2. The verifier fails closed, flags every fail-open error-swallowing site with its exact line number, and terminates with a non-zero exit code.
 
 ## 5. Alternate and Exception Flows
-- 5a. Input schema or precondition validation failure in `RangeSliceAstDetector`:
-  - `RangeSliceAstDetector` rejects the malformed request and records a structured diagnostic event.
-  - System preserves prior verified state without partial mutation.
-- 5b. Formal invariant or constraint violation detected during `Fail Closed Filesystem and Walk Dir Enforcement` execution:
-  - `RangeSliceAstDetector` aborts the active transaction and transitions to safe fallback mode.
-  - Diagnostic telemetry is emitted to `Operator`.
-- 5c. Downstream resource timeout or communication fault in `RangeSliceAstDetector`:
-  - `RangeSliceAstDetector` halts execution cleanly and reports deterministic fault status.
+- Precondition guard failure in `AntiGamingTestBodyAuditor`:
+  - `AntiGamingTestBodyAuditor` rejects the `Fail Closed Filesystem and Walk Dir Enforcement` request without partial state mutation and reports diagnostic status to `VerifyBaselineCLI`.
+- Invariant violation while enforcing `Fail Closed Filesystem and WalkDir Enforcement`:
+  - `AntiGamingTestBodyAuditor` aborts `Fail Closed Filesystem and Walk Dir Enforcement` execution, preserves prior verified state, and notifies `VerifyBaselineCLI`.
 
 ## 6. Postconditions
-- All semantic models and generated artifacts satisfy formal invariant requirements.
-- Output artifacts are deterministically emitted with bitwise reproducibility.
+- The verifier fails closed, flags every fail-open error-swallowing site with its exact line number, and terminates with a non-zero exit code.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#567** | User Story | [User Story 06: check compiler ast purity](../user-stories/US-06-check_compiler_ast_purity.md) |
-| **#660** | Feature | [Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] RangeSliceAstDetector](../features/FEAT-06-RangeSliceAstDetector.md) |
+| **#568** | User Story | [User Story 07: mask literals and comments](../user-stories/US-07-mask_literals_and_comments.md) |
+| **#662** | Feature | [Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] AntiGamingTestBodyAuditor](../features/FEAT-06-AntiGamingTestBodyAuditor.md) |
 
 ## Source References
 Use case operational flows and lifecycle activity references:
