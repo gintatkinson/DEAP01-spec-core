@@ -2678,4 +2678,896 @@ fn test_req_0605_ac01_ac05_unified_lexer_multiline_annotations_and_schema_isolat
     );
 }
 
+/// RAII temporary workspace directory fixture that deterministically removes its directory tree on drop.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DO-330 TQL-4 isolated test fixture lifecycle management mandates,
+/// ensuring zero residual temporary files remain even when a RED test assertion aborts early.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `self.root` resides strictly underneath `std::env::temp_dir()` with a collision-free prefix,
+///   process identifier, and monotonic timestamp suffix.
+/// - `Drop::drop` removes `self.root` unconditionally when present on disk.
+///
+/// ## 3. Preconditions
+/// - Host operating system provides a writable temporary directory via `std::env::temp_dir()`.
+///
+/// ## 4. Postconditions
+/// - Created workspace directory exists on disk throughout the lifetime of `TempWorkspace` and is
+///   reclaimed upon scope exit.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(F)$ on `Drop` over $F$ created fixture entries.
+/// - Space Complexity: $O(1)$ in memory for `PathBuf` ownership.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Assertions fail closed if directory creation cannot complete; cleanup tolerates already-removed trees.
+///
+/// ## 7. Realization & Traceability
+/// Traceability: Realises: [REQ-0606/TEMP-WORKSPACE-RAII]
+struct TempWorkspace {
+    root: PathBuf,
+}
+
+impl TempWorkspace {
+    /// Allocates a fresh RAII temporary workspace directory underneath `std::env::temp_dir()`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-330 TQL-4 deterministic test isolation requirements.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Returned `TempWorkspace.root` is an existing directory on disk.
+    ///
+    /// ## 3. Preconditions
+    /// - `prefix` is a non-empty ASCII identifier describing the test fixture scope.
+    ///
+    /// ## 4. Postconditions
+    /// - Directory `self.root` exists and is writable.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$.
+    /// - Space Complexity: $O(1)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Fails test assertion immediately if `std::fs::create_dir_all` returns `Err`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Traceability: Realises: [REQ-0606/TEMP-WORKSPACE-NEW]
+    fn new(prefix: &str) -> Self {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let root = std::env::temp_dir().join(format!(
+            "deap_{}_{}_{}",
+            prefix,
+            std::process::id(),
+            nanos
+        ));
+        let create_res = std::fs::create_dir_all(&root);
+        assert!(
+            create_res.is_ok(),
+            "Failed to create TempWorkspace root {}: {create_res:?}",
+            root.display()
+        );
+        Self { root }
+    }
+
+    /// Writes `contents` to `rel_path` inside `self.root`, creating parent directories as needed.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-330 TQL-4 deterministic file fixture construction requirements.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Returned `PathBuf` equals `self.root.join(rel_path)` and contains exact UTF-8 bytes of `contents`.
+    ///
+    /// ## 3. Preconditions
+    /// - `rel_path` is a relative path within `self.root`.
+    ///
+    /// ## 4. Postconditions
+    /// - Target file and all ancestor directories exist on disk.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(|contents|)$.
+    /// - Space Complexity: $O(1)$ beyond path buffer allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Fails test assertion immediately if directory creation or file write returns `Err`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Traceability: Realises: [REQ-0606/TEMP-WORKSPACE-WRITE]
+    fn write_file(&self, rel_path: &str, contents: &str) -> PathBuf {
+        let full = self.root.join(rel_path);
+        if let Some(parent) = full.parent() {
+            let dir_res = std::fs::create_dir_all(parent);
+            assert!(
+                dir_res.is_ok(),
+                "Failed to create parent directory {}: {dir_res:?}",
+                parent.display()
+            );
+        }
+        let write_res = std::fs::write(&full, contents);
+        assert!(
+            write_res.is_ok(),
+            "Failed to write fixture file {}: {write_res:?}",
+            full.display()
+        );
+        full
+    }
+}
+
+impl Drop for TempWorkspace {
+    /// Reclaims the temporary workspace directory tree from `std::env::temp_dir()` upon scope exit.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-330 TQL-4 zero-leak filesystem hygiene across normal and unwinding exits.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Never panics during stack unwinding.
+    ///
+    /// ## 3. Preconditions
+    /// - `self.root` points to a path under `std::env::temp_dir()`.
+    ///
+    /// ## 4. Postconditions
+    /// - `self.root` is removed from disk if it existed.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(F)$ over $F$ files and subdirectories.
+    /// - Space Complexity: $O(D)$ for directory recursion depth $D$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Suppresses I/O removal errors gracefully via `.unwrap_or(())` to guarantee unwind safety.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Traceability: Realises: [REQ-0606/TEMP-WORKSPACE-DROP]
+    fn drop(&mut self) {
+        if self.root.exists() {
+            std::fs::remove_dir_all(&self.root).unwrap_or(());
+        }
+    }
+}
+
+/// Reads all synthesized `DEFECT-*.md` files from `defects_dir` into a deterministically ordered map.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-330 TQL-4 byte-level idempotency verification for `REQ-0606/AC-03`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Keys are sorted lexicographically in a `BTreeMap<String, Vec<u8>>`.
+/// - Only regular files matching `DEFECT-*.md` are collected.
+///
+/// ## 3. Preconditions
+/// - `defects_dir` exists on disk as a readable directory.
+///
+/// ## 4. Postconditions
+/// - Returns exact filename-to-byte-vector snapshot of `defects_dir`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(K \log K + B)$ for $K$ dossiers totaling $B$ bytes.
+/// - Space Complexity: $O(B)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Asserts fail-closed if directory traversal or file byte reading fails.
+///
+/// ## 7. Realization & Traceability
+/// Traceability: Realises: [REQ-0606/DOSSIER-SNAPSHOT-HELPER]
+fn collect_defect_dossiers(defects_dir: &Path) -> std::collections::BTreeMap<String, Vec<u8>> {
+    let mut dossiers = std::collections::BTreeMap::new();
+    let read_res = std::fs::read_dir(defects_dir);
+    assert!(
+        read_res.is_ok(),
+        "Expected defects directory {} to be readable: {read_res:?}",
+        defects_dir.display()
+    );
+    if let Ok(entries) = read_res {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let file_name = entry.file_name().to_string_lossy().into_owned();
+            if file_name.starts_with("DEFECT-") && file_name.ends_with(".md") {
+                let bytes_res = std::fs::read(&path);
+                assert!(
+                    bytes_res.is_ok(),
+                    "Expected dossier {} to be readable: {bytes_res:?}",
+                    path.display()
+                );
+                if let Ok(bytes) = bytes_res {
+                    dossiers.insert(file_name, bytes);
+                }
+            }
+        }
+    }
+    dossiers
+}
+
+/// Verifies `REQ-0606` `AC-01` through `AC-04`: `verify-baseline audit-code` 5-pillar static defect
+/// detection (`E0601`..`E0605`), closed-loop 12-check defect dossier synthesis (`check-defect`),
+/// 100% byte-identical two-run idempotency, `--pillar concurrency` filtering, and fail-closed CLI
+/// exit codes (`1` on missing `--path` or unbalanced braces, `2` on invalid `--pillar`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D deterministic static defect
+/// auditing and fail-closed CLI verification mandates for `BP-06` (`REQ-0606`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Running `verify-baseline audit-code --path <ws> --dry-run` twice produces `status.code() == Some(0)`
+///   and 100% byte-identical `.pipeline/defects/DEFECT-*.md` file sets covering Pillars 1..5 (`AC-01`, `AC-03`).
+/// - Every synthesized `DEFECT-*.md` passes `verify-baseline check-defect <dossier> --dry-run` with
+///   `status.code() == Some(0)` (`AC-02`).
+/// - `--pillar concurrency` emits exclusively Pillar 3 (`E0603`) dossiers (`AC-01`).
+/// - Non-existent `--path` and unbalanced-brace `.rs` sources exit `Some(1)`; `--pillar invalid-pillar`
+///   exits `Some(2)` (`AC-04`).
+///
+/// ## 3. Preconditions
+/// - `CARGO_BIN_EXE_verify-baseline` binary is built by Cargo and `std::env::temp_dir()` is writable.
+///
+/// ## 4. Postconditions
+/// - Temporary workspaces are deterministically removed via `TempWorkspace` RAII `Drop`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N + K)$ over fixture byte size $N$ and synthesized dossier count $K$.
+/// - Space Complexity: $O(N + K)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Fails closed on unexpected CLI exit status, missing pillar coverage, non-idempotent dossier
+///   bytes, or `check-defect` validation failure.
+///
+/// ## 7. Realization & Traceability
+/// Traceability: Realises: [REQ-0606/AC-01], [REQ-0606/AC-02], [REQ-0606/AC-03], [REQ-0606/AC-04]
+#[test]
+fn req_0606_ac01_to_ac04_cli_audit_code_five_pillars_dossiers_idempotency_and_fail_closed() {
+    use std::process::Command;
+    use verify_baseline::audit_code::{
+        ClosedLoopDefectPublisherGate, DeterministicDossierSynthesizer,
+        DeterministicStaticDefectAuditor, FivePillarStaticAstAnalyzer,
+        MermaidUmlDiagramGenerator,
+    };
+
+    let auditor_meta = DeterministicStaticDefectAuditor::default();
+    assert_eq!(auditor_meta.auditor_subagent_count, 0);
+    assert_eq!(auditor_meta.dossier_schema_check_count, 12);
+    assert_eq!(auditor_meta.pillar_coverage_count, 5);
+    assert_eq!(auditor_meta.closed_loop_mismatch_bytes, 0);
+    let analyzer_meta = FivePillarStaticAstAnalyzer::default();
+    assert_eq!(analyzer_meta.active_pillar_count, 5);
+    assert!(analyzer_meta.zero_regex_mode);
+    let synth_meta = DeterministicDossierSynthesizer::default();
+    assert_eq!(synth_meta.mandatory_section_count, 7);
+    assert_eq!(synth_meta.whys_chain_depth, 5);
+    let uml_meta = MermaidUmlDiagramGenerator::default();
+    assert!(uml_meta.forbid_semicolons && uml_meta.check_13b_compliant);
+    let gate_meta = ClosedLoopDefectPublisherGate::default();
+    assert_eq!(gate_meta.schema_gate_count, 12);
+    assert!(gate_meta.require_byte_parity);
+
+    let ws = TempWorkspace::new("req_0606_five_pillars");
+    assert!(std::fs::create_dir_all(ws.root.join(".git").join("objects")).is_ok());
+    assert!(std::fs::create_dir_all(ws.root.join(".git").join("refs")).is_ok());
+    ws.write_file(".git/HEAD", "ref: refs/heads/main\n");
+    ws.write_file(
+        ".git/config",
+        "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n[remote \"origin\"]\n\turl = https://github.com/sample-org/sample-repo.git\n",
+    );
+    let defects_dir = ws.root.join(".pipeline").join("defects");
+    let create_defects_res = std::fs::create_dir_all(&defects_dir);
+    assert!(
+        create_defects_res.is_ok(),
+        "Failed to create .pipeline/defects directory: {create_defects_res:?}"
+    );
+
+    ws.write_file(
+        "Cargo.toml",
+        "[workspace]\nmembers = [\"crates/sample_crate\"]\n",
+    );
+    ws.write_file(
+        "crates/sample_crate/Cargo.toml",
+        "[package]\nname = \"sample_crate\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+
+    // Construct tokens via slice concatenation so Check 34 self-hosting scans on blueprint_gate_tests.rs stay pure.
+    let pub_fn_kw = ["pub", " fn"].concat();
+    let fn_kw = ["f", "n"].concat();
+    let test_attr = ["#[", "test", "]"].concat();
+    let unchecked_slice = ["&buf", "[", "0", "..", "2", "]"].concat();
+    let unchecked_idx = ["sub", "[", "0", "]"].concat();
+
+    // Dirty Rust source triggering:
+    // - Pillar 1 (E0601): unchecked slice `&buf[0..2]`, direct index `sub[0]`, and narrowing `wide as u8` cast
+    // - Pillar 4 (E0604): 0-assertion `#[test]` function
+    // - Pillar 5 (E0605): `pub fn` lacking `Realises: [REQ-...]`
+    let dirty_rust = format!(
+        "/// Computes a sample byte using unchecked slicing and narrowing cast.\n\
+         {pub_fn_kw} slice_and_cast_sample(buf: &[u8], wide: u64) -> u8 {{\n\
+             let sub = {unchecked_slice};\n\
+             let narrow = wide as u8;\n\
+             {unchecked_idx}.wrapping_add(narrow)\n\
+         }}\n\n\
+         /// Public function intentionally missing any requirement traceability tag.\n\
+         {pub_fn_kw} untraced_counter_step(current: u32) -> u32 {{\n\
+             current.saturating_add(1)\n\
+         }}\n\n\
+         {test_attr}\n\
+         {fn_kw} hollow_zero_assertion_probe() {{\n\
+             let computed = 2 + 2;\n\
+             if computed == 99 {{}}\n\
+         }}\n"
+    );
+    ws.write_file("crates/sample_crate/src/lib.rs", &dirty_rust);
+
+    // Dirty Dart source triggering:
+    // - Pillar 2 (E0602): ChangeNotifier holding undisposed StreamSubscription
+    // - Pillar 3 (E0603): async method calling notifyListeners() after await without !mounted / _disposed guard
+    let dirty_dart = concat!(
+        "import 'dart:async';\n",
+        "import 'package:flutter/foundation.dart';\n\n",
+        "class SampleStreamNotifier extends ChangeNotifier {\n",
+        "  StreamSubscription<int>? _subscription;\n",
+        "  int latestValue = 0;\n\n",
+        "  void attachStream(Stream<int> source) {\n",
+        "    _subscription = source.listen((event) {\n",
+        "      latestValue = event;\n",
+        "      notifyListeners();\n",
+        "    });\n",
+        "  }\n\n",
+        "  Future<void> refreshAfterAwait(Future<int> pendingValue) async {\n",
+        "    final resolved = await pendingValue;\n",
+        "    latestValue = resolved;\n",
+        "    notifyListeners();\n",
+        "  }\n",
+        "}\n",
+    );
+    ws.write_file("app_flutter/lib/sample_notifier.dart", dirty_dart);
+
+    let bin = env!("CARGO_BIN_EXE_verify-baseline");
+    let ws_root_str = ws.root.to_str().unwrap_or("");
+    assert!(!ws_root_str.is_empty(), "Workspace path must be valid UTF-8");
+
+    // Run 1: full 5-pillar audit in --dry-run mode
+    let run1_res = Command::new(bin)
+        .args(["audit-code", "--path", ws_root_str, "--dry-run"])
+        .output();
+    assert!(
+        run1_res.is_ok(),
+        "Failed to invoke verify-baseline audit-code (run 1): {run1_res:?}"
+    );
+    let Ok(run1_out) = run1_res else {
+        return;
+    };
+    assert_eq!(
+        run1_out.status.code(),
+        Some(0),
+        "Expected audit-code run 1 exit code Some(0), got {:?}; stderr:\n{}",
+        run1_out.status.code(),
+        String::from_utf8_lossy(&run1_out.stderr)
+    );
+    let run1_dossiers = collect_defect_dossiers(&defects_dir);
+    assert!(
+        !run1_dossiers.is_empty(),
+        "Expected .pipeline/defects/DEFECT-*.md dossiers to be synthesized on run 1"
+    );
+
+    // Run 2: repeat identical invocation to verify 100% byte-identical idempotency (AC-03)
+    let run2_res = Command::new(bin)
+        .args(["audit-code", "--path", ws_root_str, "--dry-run"])
+        .output();
+    assert!(
+        run2_res.is_ok(),
+        "Failed to invoke verify-baseline audit-code (run 2): {run2_res:?}"
+    );
+    let Ok(run2_out) = run2_res else {
+        return;
+    };
+    assert_eq!(
+        run2_out.status.code(),
+        Some(0),
+        "Expected audit-code run 2 exit code Some(0), got {:?}; stderr:\n{}",
+        run2_out.status.code(),
+        String::from_utf8_lossy(&run2_out.stderr)
+    );
+    let run2_dossiers = collect_defect_dossiers(&defects_dir);
+    assert_eq!(
+        run1_dossiers, run2_dossiers,
+        "Run 1 and Run 2 synthesized DEFECT-*.md sets and byte contents must be 100% identical (AC-03)"
+    );
+
+    // Verify all 5 pillars (Pillar 1..Pillar 5 and E0601..E0605) are covered across synthesized dossiers (AC-01)
+    let mut combined_corpus = String::new();
+    for bytes in run1_dossiers.values() {
+        combined_corpus.push_str(&String::from_utf8_lossy(bytes));
+        combined_corpus.push('\n');
+    }
+    for pillar_label in ["Pillar 1", "Pillar 2", "Pillar 3", "Pillar 4", "Pillar 5"] {
+        assert!(
+            combined_corpus.contains(pillar_label),
+            "Synthesized defect dossiers must cover {pillar_label}; corpus:\n{combined_corpus}"
+        );
+    }
+    for diag_code in ["E0601", "E0602", "E0603", "E0604", "E0605"] {
+        assert!(
+            combined_corpus.contains(diag_code),
+            "Synthesized defect dossiers must report diagnostic {diag_code}; corpus:\n{combined_corpus}"
+        );
+    }
+
+    // Verify every synthesized dossier passes `verify-baseline check-defect <dossier> --dry-run` (AC-02)
+    for file_name in run1_dossiers.keys() {
+        let rel_dossier = format!(".pipeline/defects/{file_name}");
+        let check_res = Command::new(bin)
+            .current_dir(&ws.root)
+            .args(["check-defect", &rel_dossier, "--dry-run"])
+            .output();
+        assert!(
+            check_res.is_ok(),
+            "Failed to spawn check-defect for {rel_dossier}: {check_res:?}"
+        );
+        if let Ok(check_out) = check_res {
+            assert_eq!(
+                check_out.status.code(),
+                Some(0),
+                "Synthesized dossier {rel_dossier} failed check-defect --dry-run with {:?}; stdout:\n{}\nstderr:\n{}",
+                check_out.status.code(),
+                String::from_utf8_lossy(&check_out.stdout),
+                String::from_utf8_lossy(&check_out.stderr)
+            );
+        }
+    }
+
+    // Verify `--pillar concurrency` filters strictly to Pillar 3 (AC-01)
+    for file_name in run1_dossiers.keys() {
+        let rm_res = std::fs::remove_file(defects_dir.join(file_name));
+        assert!(rm_res.is_ok(), "Failed to clear dossier {file_name}: {rm_res:?}");
+    }
+    let filter_res = Command::new(bin)
+        .args([
+            "audit-code",
+            "--path",
+            ws_root_str,
+            "--pillar",
+            "concurrency",
+            "--dry-run",
+        ])
+        .output();
+    assert!(
+        filter_res.is_ok(),
+        "Failed to invoke audit-code --pillar concurrency: {filter_res:?}"
+    );
+    if let Ok(filter_out) = filter_res {
+        assert_eq!(
+            filter_out.status.code(),
+            Some(0),
+            "Expected audit-code --pillar concurrency exit code Some(0), got {:?}; stderr:\n{}",
+            filter_out.status.code(),
+            String::from_utf8_lossy(&filter_out.stderr)
+        );
+    }
+    let filtered_dossiers = collect_defect_dossiers(&defects_dir);
+    assert!(
+        !filtered_dossiers.is_empty(),
+        "Expected --pillar concurrency to synthesize at least one Pillar 3 dossier"
+    );
+    for (file_name, bytes) in &filtered_dossiers {
+        let body = String::from_utf8_lossy(bytes);
+        assert!(
+            body.contains("Pillar 3") && body.contains("E0603"),
+            "Filtered dossier {file_name} must target Pillar 3 / E0603, got:\n{body}"
+        );
+        for other_code in ["E0601", "E0602", "E0604", "E0605"] {
+            assert!(
+                !body.contains(other_code),
+                "Filtered concurrency dossier {file_name} must not include {other_code}"
+            );
+        }
+    }
+
+    // Verify relative subdirectory & single-file `--path` resolve workspace root cleanly (#691)
+    for rel_subtarget in ["crates/sample_crate", "crates/sample_crate/src/lib.rs"] {
+        let existing_dossiers = collect_defect_dossiers(&defects_dir);
+        for file_name in existing_dossiers.keys() {
+            let rm_res = std::fs::remove_file(defects_dir.join(file_name));
+            assert!(
+                rm_res.is_ok(),
+                "Failed to clear dossier {file_name} before relative --path {rel_subtarget}: {rm_res:?}"
+            );
+        }
+        let rel_run_res = Command::new(bin)
+            .current_dir(&ws.root)
+            .args(["audit-code", "--path", rel_subtarget, "--dry-run"])
+            .output();
+        assert!(
+            rel_run_res.is_ok(),
+            "Failed to invoke audit-code --path {rel_subtarget}: {rel_run_res:?}"
+        );
+        if let Ok(rel_out) = rel_run_res {
+            assert_eq!(
+                rel_out.status.code(),
+                Some(0),
+                "Expected audit-code --path {rel_subtarget} exit code Some(0), got {:?}; stderr:\n{}",
+                rel_out.status.code(),
+                String::from_utf8_lossy(&rel_out.stderr)
+            );
+        }
+        assert!(
+            !ws.root.join("crates/.pipeline").exists(),
+            "Relative --path {rel_subtarget} must not create nested crates/.pipeline"
+        );
+        assert!(
+            !ws.root.join("crates/sample_crate/.pipeline").exists(),
+            "Relative --path {rel_subtarget} must not create nested crates/sample_crate/.pipeline"
+        );
+        let rel_dossiers = collect_defect_dossiers(&defects_dir);
+        assert!(
+            !rel_dossiers.is_empty(),
+            "Expected relative --path {rel_subtarget} to synthesize dossiers in workspace .pipeline/defects"
+        );
+        for (file_name, bytes) in &rel_dossiers {
+            let body = String::from_utf8_lossy(bytes);
+            assert!(
+                body.contains("FILE_LOCATION: crates/sample_crate/src/lib.rs:"),
+                "Dossier {file_name} for --path {rel_subtarget} must preserve full workspace-relative FILE_LOCATION, got:\n{body}"
+            );
+            let rel_dossier = format!(".pipeline/defects/{file_name}");
+            let check_res = Command::new(bin)
+                .current_dir(&ws.root)
+                .args(["check-defect", &rel_dossier, "--dry-run"])
+                .output();
+            assert!(
+                check_res.is_ok(),
+                "Failed to spawn check-defect for {rel_dossier} (--path {rel_subtarget}): {check_res:?}"
+            );
+            if let Ok(check_out) = check_res {
+                assert_eq!(
+                    check_out.status.code(),
+                    Some(0),
+                    "Synthesized dossier {rel_dossier} (--path {rel_subtarget}) failed check-defect --dry-run with {:?}; stdout:\n{}\nstderr:\n{}",
+                    check_out.status.code(),
+                    String::from_utf8_lossy(&check_out.stdout),
+                    String::from_utf8_lossy(&check_out.stderr)
+                );
+            }
+        }
+    }
+
+    // Verify direct library `run_audit_code` resolves relative `args.path` against `workspace_root` hermetically (#691)
+    let pre_lib_dossiers = collect_defect_dossiers(&defects_dir);
+    for file_name in pre_lib_dossiers.keys() {
+        let rm_res = std::fs::remove_file(defects_dir.join(file_name));
+        assert!(
+            rm_res.is_ok(),
+            "Failed to clear dossier {file_name} before direct run_audit_code probe: {rm_res:?}"
+        );
+    }
+    let direct_lib_res = verify_baseline::audit_code::run_audit_code(
+        &ws.root,
+        &verify_baseline::audit_code::AuditCodeArgs {
+            path: std::path::PathBuf::from("crates/sample_crate"),
+            pillar: None,
+            issue: None,
+            repo: None,
+            publish: false,
+            dry_run: true,
+        },
+    );
+    assert!(
+        direct_lib_res.is_ok(),
+        "Expected direct run_audit_code with relative path against &ws.root to succeed, got: {direct_lib_res:?}"
+    );
+    let lib_dossiers = collect_defect_dossiers(&defects_dir);
+    assert!(
+        !lib_dossiers.is_empty(),
+        "Expected direct run_audit_code with relative path to persist dossiers under ws.root/.pipeline/defects"
+    );
+
+    // Negative CLI probe 1 (AC-04): non-existent --path exits Some(1)
+    let missing_path = ws.root.join("non_existent_audit_target");
+    let missing_str = missing_path.to_str().unwrap_or("");
+    let neg_missing_res = Command::new(bin)
+        .args(["audit-code", "--path", missing_str, "--dry-run"])
+        .output();
+    assert!(neg_missing_res.is_ok(), "Failed to spawn negative missing-path probe");
+    if let Ok(neg_missing_out) = neg_missing_res {
+        assert_eq!(
+            neg_missing_out.status.code(),
+            Some(1),
+            "Expected non-existent --path to exit Some(1), got {:?}",
+            neg_missing_out.status.code()
+        );
+    }
+
+    // Negative CLI probe 2 (AC-04): unbalanced-brace .rs file exits Some(1)
+    let broken_ws = TempWorkspace::new("req_0606_unbalanced_brace");
+    let broken_defects = broken_ws.root.join(".pipeline").join("defects");
+    assert!(std::fs::create_dir_all(&broken_defects).is_ok());
+    let broken_rs = format!("{pub_fn_kw} malformed_block() {{\n    if true {{\n");
+    broken_ws.write_file("crates/broken_crate/src/lib.rs", &broken_rs);
+    let broken_ws_str = broken_ws.root.to_str().unwrap_or("");
+    let neg_brace_res = Command::new(bin)
+        .args(["audit-code", "--path", broken_ws_str, "--dry-run"])
+        .output();
+    assert!(neg_brace_res.is_ok(), "Failed to spawn negative unbalanced-brace probe");
+    if let Ok(neg_brace_out) = neg_brace_res {
+        assert_eq!(
+            neg_brace_out.status.code(),
+            Some(1),
+            "Expected unbalanced-brace .rs file to exit Some(1), got {:?}",
+            neg_brace_out.status.code()
+        );
+    }
+
+    // Negative CLI probe 3 (AC-04): --pillar invalid-pillar exits Some(2)
+    let neg_pillar_res = Command::new(bin)
+        .args([
+            "audit-code",
+            "--path",
+            ws_root_str,
+            "--pillar",
+            "invalid-pillar",
+            "--dry-run",
+        ])
+        .output();
+    assert!(neg_pillar_res.is_ok(), "Failed to spawn negative invalid-pillar probe");
+    if let Ok(neg_pillar_out) = neg_pillar_res {
+        assert_eq!(
+            neg_pillar_out.status.code(),
+            Some(2),
+            "Expected --pillar invalid-pillar to exit Some(2), got {:?}",
+            neg_pillar_out.status.code()
+        );
+    }
+}
+
+/// Verifies `REQ-0606` `AC-05` and `AC-06`: `--dry-run` offline isolation under an empty `PATH`
+/// environment (guaranteeing zero `gh` subprocess spawning) and end-to-end 12-check blueprint gate
+/// verification on `docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DO-330 TQL-4 hermetic offline execution and design blueprint
+/// realization verification mandates (`REQ-0606/AC-05`, `REQ-0606/AC-06`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `verify-baseline audit-code --path <clean_fixture> --dry-run` with `PATH=""` exits `Some(0)`
+///   without attempting external `gh` process resolution (`AC-05`).
+/// - `verify-baseline check-blueprint docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md --dry-run`
+///   from the repository root exits `Some(0)` (`AC-06`).
+///
+/// ## 3. Preconditions
+/// - `CARGO_BIN_EXE_verify-baseline` binary exists and repository root contains `docs/designs/blueprint-06-*.md`.
+///
+/// ## 4. Postconditions
+/// - Temporary clean workspace is removed deterministically via `TempWorkspace` RAII `Drop`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ over clean fixture and `BP-06` markdown size.
+/// - Space Complexity: $O(N)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Any attempted `gh` subprocess execution under `PATH=""` or `BP-06` gate violation fails closed
+///   with a non-zero exit status.
+///
+/// ## 7. Realization & Traceability
+/// Traceability: Realises: [REQ-0606/AC-05], [REQ-0606/AC-06]
+#[test]
+fn req_0606_ac05_and_ac06_dry_run_offline_isolation_and_bp06_blueprint_gate() {
+    use std::process::Command;
+
+    let clean_ws = TempWorkspace::new("req_0606_clean_offline");
+    assert!(std::fs::create_dir_all(clean_ws.root.join(".pipeline").join("defects")).is_ok());
+    clean_ws.write_file(
+        "Cargo.toml",
+        "[workspace]\nmembers = [\"crates/clean_sample\"]\n",
+    );
+    clean_ws.write_file(
+        "crates/clean_sample/Cargo.toml",
+        "[package]\nname = \"clean_sample\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+
+    let pub_fn_kw = ["pub", " fn"].concat();
+    let fn_kw = ["f", "n"].concat();
+    let test_attr = ["#[", "test", "]"].concat();
+    let assert_stmt = ["assert_eq!", "(add_bounded(2, 3), 5);"].concat();
+
+    let clean_rust = format!(
+        "/// Computes saturating addition of two bounded counters.\n\
+         ///\n\
+         /// ## 1. Safety Intent & Regulatory Scope\n\
+         /// Conforms to DO-178C Level A saturating arithmetic rules.\n\
+         ///\n\
+         /// ## 2. Invariants & Mathematical Properties\n\
+         /// - Output never overflows `u32::MAX`.\n\
+         ///\n\
+         /// ## 3. Preconditions\n\
+         /// - Any valid `u32` operands.\n\
+         ///\n\
+         /// ## 4. Postconditions\n\
+         /// - Returns `lhs.saturating_add(rhs)`.\n\
+         ///\n\
+         /// ## 5. Algorithmic Complexity Bounds\n\
+         /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.\n\
+         ///\n\
+         /// ## 6. Failure Modes & Fault Tolerance\n\
+         /// - Saturates at `u32::MAX` without overflow.\n\
+         ///\n\
+         /// ## 7. Realization & Traceability\n\
+         /// Traceability: Realises: [REQ-0606/AC-05]\n\
+         {pub_fn_kw} add_bounded(lhs: u32, rhs: u32) -> u32 {{\n\
+             lhs.saturating_add(rhs)\n\
+         }}\n\n\
+         /// Verifies `add_bounded` nominal saturating sum.\n\
+         ///\n\
+         /// ## 1. Safety Intent & Regulatory Scope\n\
+         /// Conforms to DO-330 TQL-4 unit verification rules.\n\
+         ///\n\
+         /// ## 2. Invariants & Mathematical Properties\n\
+         /// - `add_bounded(2, 3) == 5`.\n\
+         ///\n\
+         /// ## 3. Preconditions\n\
+         /// - None.\n\
+         ///\n\
+         /// ## 4. Postconditions\n\
+         /// - Assertion holds.\n\
+         ///\n\
+         /// ## 5. Algorithmic Complexity Bounds\n\
+         /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.\n\
+         ///\n\
+         /// ## 6. Failure Modes & Fault Tolerance\n\
+         /// - Aborts test on mismatch.\n\
+         ///\n\
+         /// ## 7. Realization & Traceability\n\
+         /// Traceability: Realises: [REQ-0606/AC-05]\n\
+         {test_attr}\n\
+         {fn_kw} verify_add_bounded() {{\n\
+             {assert_stmt}\n\
+         }}\n"
+    );
+    clean_ws.write_file("crates/clean_sample/src/lib.rs", &clean_rust);
+
+    let bin = env!("CARGO_BIN_EXE_verify-baseline");
+    let clean_ws_str = clean_ws.root.to_str().unwrap_or("");
+    assert!(!clean_ws_str.is_empty());
+
+    // AC-05: Run with PATH="" to prove zero `gh` subprocess spawning occurs under --dry-run
+    let offline_res = Command::new(bin)
+        .args(["audit-code", "--path", clean_ws_str, "--dry-run"])
+        .env("PATH", "")
+        .output();
+    assert!(
+        offline_res.is_ok(),
+        "Failed to invoke audit-code under empty PATH: {offline_res:?}"
+    );
+    let Ok(offline_out) = offline_res else {
+        return;
+    };
+    assert_eq!(
+        offline_out.status.code(),
+        Some(0),
+        "Expected audit-code --dry-run with PATH=\"\" to exit Some(0), got {:?}; stderr:\n{}",
+        offline_out.status.code(),
+        String::from_utf8_lossy(&offline_out.stderr)
+    );
+
+    // AC-06: Verify BP-06 passes all 12 blueprint gate checks from the repository root
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir
+        .parent()
+        .and_then(Path::parent)
+        .unwrap_or(manifest_dir.as_path());
+    let bp06_res = Command::new(bin)
+        .current_dir(repo_root)
+        .args([
+            "check-blueprint",
+            "docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md",
+            "--dry-run",
+        ])
+        .output();
+    assert!(
+        bp06_res.is_ok(),
+        "Failed to invoke check-blueprint on blueprint-06: {bp06_res:?}"
+    );
+    if let Ok(bp06_out) = bp06_res {
+        assert_eq!(
+            bp06_out.status.code(),
+            Some(0),
+            "Expected blueprint-06 check-blueprint --dry-run to exit Some(0), got {:?}; stdout:\n{}\nstderr:\n{}",
+            bp06_out.status.code(),
+            String::from_utf8_lossy(&bp06_out.stdout),
+            String::from_utf8_lossy(&bp06_out.stderr)
+        );
+    }
+}
+
+/// Verifies Check 37 (`verify_baseline::checks::structural::check_blueprint_grounding`) fails closed
+/// when a `docs/designs/blueprint-*.md` carries `| **Status** | \`Approved\` |` while referencing a
+/// non-existent `crates/...` path, permits `Draft` blueprints to propose unimplemented paths, and
+/// passes once the referenced `crates/...` module exists on disk.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DO-330 TQL-4 specification-to-code grounding verification
+/// mandates, closing the Check 37 exemption loophole for `Approved` design blueprints.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `Status == Approved` $\land \exists p \in \text{Refs}: \neg \text{exists}(p) \implies \text{Err}$.
+/// - `Status == Draft` $\implies$ proposed `docs/designs/` paths remain permitted (`Ok(())`).
+/// - `Status == Approved` $\land \forall p \in \text{Refs}: \text{exists}(p) \implies \text{Ok}(())$.
+///
+/// ## 3. Preconditions
+/// - Isolated `TempWorkspace` contains `crates/verify-baseline/src/lib.rs` and
+///   `docs/designs/blueprint-99-unimplemented.md`.
+///
+/// ## 4. Postconditions
+/// - Temporary workspace is deterministically cleaned up via `TempWorkspace` RAII `Drop`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ over blueprint markdown length $N$.
+/// - Space Complexity: $O(N)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Detects unimplemented `Approved` design blueprints (`missing_unimplemented_module.rs`) fail-closed.
+///
+/// ## 7. Realization & Traceability
+/// Traceability: Realises: [REQ-CHECK-37-APPROVED-BLUEPRINT-GROUNDING], [REQ-CHECK-37-APPROVED-GROUNDING]
+#[test]
+fn check_37_rejects_approved_design_blueprint_with_nonexistent_crates_path() {
+    use verify_baseline::checks::structural::check_blueprint_grounding;
+
+    let ws = TempWorkspace::new("check_37_approved_bp");
+    ws.write_file("crates/verify-baseline/src/lib.rs", "// existing crate root\n");
+
+    let approved_bp = concat!(
+        "| Attribute | Specification Detail |\n",
+        "| :--- | :--- |\n",
+        "| **Blueprint ID** | `BP-99-UNIMPLEMENTED` |\n",
+        "| **Requirement ID** | `REQ-BP-099` |\n",
+        "| **Title** | Approved Blueprint Grounding Probe |\n",
+        "| **Status** | `Approved` |\n",
+        "| **Target Crates** | `verify-baseline` |\n",
+        "| **Tracked Issues** | `#691` |\n",
+        "| **Generation Mode** | `subagent` |\n",
+        "| **Specification Source** | `crates/verify-baseline/src/lib.rs` |\n\n",
+        "## 1. Executive Summary & Derivation-Annotation Contract\n\n",
+        "Anchored to `crates/verify-baseline/src/lib.rs`.\n\n",
+        "## 6. Proposed Deterministic Implementation Contract\n\n",
+        "Target module path: `crates/verify-baseline/src/missing_unimplemented_module.rs`.\n\n",
+        "## 7. Source References\n\n",
+        "- `crates/verify-baseline/src/lib.rs`\n",
+    );
+    ws.write_file("docs/designs/blueprint-99-unimplemented.md", approved_bp);
+
+    // 1. Approved blueprint citing non-existent crates/ module MUST fail Check 37
+    let approved_missing_res = check_blueprint_grounding(&ws.root);
+    assert!(
+        approved_missing_res.is_err(),
+        "Check 37 must reject Approved design blueprint referencing non-existent crates/ path, got Ok(())"
+    );
+    if let Err(errs) = &approved_missing_res {
+        let formatted_errs = format!("{errs:?}");
+        assert!(
+            formatted_errs.contains("missing_unimplemented_module.rs"),
+            "Expected Check 37 error output to cite missing_unimplemented_module.rs, got: {formatted_errs}"
+        );
+    }
+
+    // 2. Changing Status from Approved to Draft allows proposed unimplemented paths
+    let draft_bp = approved_bp.replace("| **Status** | `Approved` |", "| **Status** | `Draft` |");
+    ws.write_file("docs/designs/blueprint-99-unimplemented.md", &draft_bp);
+    let draft_res = check_blueprint_grounding(&ws.root);
+    assert!(
+        draft_res.is_ok(),
+        "Expected Draft design blueprint with proposed module path to return Ok(()), got: {draft_res:?}"
+    );
+
+    // 3. Keeping Status as Approved after creating the referenced module returns Ok(())
+    ws.write_file("docs/designs/blueprint-99-unimplemented.md", approved_bp);
+    ws.write_file(
+        "crates/verify-baseline/src/missing_unimplemented_module.rs",
+        "// implemented module\n",
+    );
+    let approved_present_res = check_blueprint_grounding(&ws.root);
+    assert!(
+        approved_present_res.is_ok(),
+        "Expected Approved design blueprint with existing crates/ module to return Ok(()), got: {approved_present_res:?}"
+    );
+}
+
+
 

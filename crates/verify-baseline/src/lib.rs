@@ -8,7 +8,7 @@
 //!
 //! ## 2. Invariants & Mathematical Properties
 //! - Re-exports only deterministic, side-effect-controlled verification entry points and data contracts.
-//! - Preserves strict module separation across `blueprint_gate`, `check_secrets`, `checks`,
+//! - Preserves strict module separation across `audit_code`, `blueprint_gate`, `check_secrets`, `checks`,
 //!   `commit_msg`, `defect_dossier`, `output_integrity`, `runner`, `setup_hooks`, and `spec_audit`.
 //!
 //! ## 3. Preconditions
@@ -31,6 +31,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-VERIFY-BASELINE-LIB], [DO-330-TQL-4-VERIFY-LIB]
 
+pub mod audit_code;
 pub mod blueprint_gate;
 pub mod check_secrets;
 pub mod checks;

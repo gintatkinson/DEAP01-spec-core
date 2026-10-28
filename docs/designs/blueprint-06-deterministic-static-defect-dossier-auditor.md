@@ -306,9 +306,9 @@ $$
 
 ## 5. Acceptance Criteria & Verification Matrix
 
-<!-- test-target: crates/verify-baseline/src/defect_dossier.rs -->
+<!-- test-target: crates/verify-baseline/tests/blueprint_gate_tests.rs -->
 
-- **Test-Target**: `crates/verify-baseline/src/defect_dossier.rs`
+- **Test-Target**: `crates/verify-baseline/tests/blueprint_gate_tests.rs`
 
 ### AC-01: Static Five-Pillar AST Defect Detection
 - **Given**: A target Rust (`.rs`) or Dart (`.dart`) source tree containing representative defects across the 5 pillars (an unchecked `as` cast in `Memory Safety` `E0601`, an undisposed controller in `Resource Lifecycle` `E0602`, a post-await `notifyListeners()` without a disposal guard in `Concurrency` `E0603`, a 0-assertion test in `Test Integrity` `E0604`, or a public function missing `Realises:` in `Semantic Traceability` `E0605`).
@@ -707,6 +707,8 @@ This blueprint is directly dogfood-ingestible by the native Rust Level 0 Markdow
 - **Governance Constitution**: `.pipeline/constitution.md:1-280` (Clause: Architecture -- Three-Tier Platform Isolation, Universal Quality Gates, Step 1.5 Derivation-Annotation Contract)
 - **Active Rules Bundle**: `.pipeline/ACTIVE_RULES_BUNDLE.md:1-120` (Clauses: Checks 13B, 19, 27, 28, 30, 34)
 - **Verify-Baseline CLI Entrypoint**: `crates/verify-baseline/src/main.rs:1-120` (Clause: `Cli` and `Subcommands` Dispatch Architecture)
+- **Deterministic 5-Pillar Static Code Auditor**: `crates/verify-baseline/src/audit_code.rs`
+- **Blueprint & Static Auditor Verification Suite**: `crates/verify-baseline/tests/blueprint_gate_tests.rs`
 - **Native 12-Check Defect Dossier Gate**: `crates/verify-baseline/src/defect_dossier.rs:1-2276` (Clause: `DossierSection`, `DossierSeverity`, `validate_defect_dossier`, `validate_defect_dossier_scoped`, `run_check_defect`)
 - **Zero-Regex Source AST Engine**: `crates/deap-core/src/source_ast.rs:1-120` (Clause: `SourceLanguage`, `SourceItemKind`, `SourceAstItem`, `parse_rust_source_ast`, `parse_dart_source_ast`)
 - **Level 0 Markdown SysML Translator**: `crates/ingest-sysml/src/translators/markdown.rs:1-120` (Clause: `MarkdownTranslator::translate`, BOM/Port/Property/Constraint Table Lowering)

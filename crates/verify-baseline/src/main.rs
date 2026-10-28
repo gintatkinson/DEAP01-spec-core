@@ -39,8 +39,9 @@
 //! Realises: [REQ-VERIFY-BASELINE-CLI], [DO-330-TQL-4-VERIFY-CLI]
 
 use clap::{Arg, ArgAction, Command};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
+use verify_baseline::audit_code::{self, AuditCodeArgs, AuditPillar};
 use verify_baseline::blueprint_gate::{self, BlueprintCliOptions};
 use verify_baseline::check_secrets::{self, CheckSecretsArgs};
 use verify_baseline::commit_msg::{self, CommitMsgArgs};
@@ -370,6 +371,62 @@ impl Cli {
                     ),
             )
             .subcommand(
+                Command::new("audit-code")
+                    .about("Deterministic 5-pillar static AST code auditor and 7-section defect dossier synthesizer")
+                    .arg(
+                        Arg::new("path")
+                            .long("path")
+                            .value_name("PATH")
+                            .required(true)
+                            .action(ArgAction::Set)
+                            .value_parser(clap::value_parser!(PathBuf))
+                            .help("Target file or directory path to audit (.rs and .dart sources)"),
+                    )
+                    .arg(
+                        Arg::new("pillar")
+                            .long("pillar")
+                            .value_name("PILLAR")
+                            .default_value("all")
+                            .action(ArgAction::Set)
+                            .value_parser([
+                                "memory-safety",
+                                "resource-lifecycle",
+                                "concurrency",
+                                "test-integrity",
+                                "semantic-traceability",
+                                "all",
+                            ])
+                            .help("Restrict audit to a single correctness risk pillar or all"),
+                    )
+                    .arg(
+                        Arg::new("issue")
+                            .long("issue")
+                            .value_name("ID")
+                            .action(ArgAction::Set)
+                            .value_parser(clap::value_parser!(u64))
+                            .help("Existing GitHub issue number to overwrite atomically and verify closed-loop"),
+                    )
+                    .arg(
+                        Arg::new("repo")
+                            .long("repo")
+                            .value_name("OWNER/REPO")
+                            .action(ArgAction::Set)
+                            .help("Target GitHub repository identifier (<owner>/<repo>)"),
+                    )
+                    .arg(
+                        Arg::new("publish")
+                            .long("publish")
+                            .action(ArgAction::SetTrue)
+                            .help("Publish deduplicated dossiers to remote GitHub SSOT tracker with closed-loop verification"),
+                    )
+                    .arg(
+                        Arg::new("dry_run")
+                            .long("dry-run")
+                            .action(ArgAction::SetTrue)
+                            .help("Validate and persist local defect dossiers without remote GitHub tracker calls"),
+                    ),
+            )
+            .subcommand(
                 Command::new("setup-hooks")
                     .about("Setup cross-platform git hooks natively")
                     .arg(
@@ -445,6 +502,24 @@ impl Cli {
                 publish: sub.get_flag("publish"),
                 dry_run: sub.get_flag("dry_run"),
             })),
+            Some(("audit-code", sub)) => {
+                let pillar_raw = sub
+                    .get_one::<String>("pillar")
+                    .map(String::as_str)
+                    .unwrap_or("all");
+                let pillar = AuditPillar::from_cli_token(pillar_raw).unwrap_or(None);
+                Some(Subcommands::AuditCode(AuditCodeArgs {
+                    path: sub
+                        .get_one::<PathBuf>("path")
+                        .cloned()
+                        .unwrap_or_default(),
+                    pillar,
+                    issue: sub.get_one::<u64>("issue").copied(),
+                    repo: sub.get_one::<String>("repo").cloned(),
+                    publish: sub.get_flag("publish"),
+                    dry_run: sub.get_flag("dry_run"),
+                }))
+            }
             Some(("setup-hooks", sub)) => Some(Subcommands::SetupHooks(SetupHooksArgs {
                 destination: sub
                     .get_one::<String>("destination")
@@ -525,11 +600,71 @@ enum Subcommands {
     /// Verify contract-bounded engineering design blueprint (Checks 1-12)
     Blueprint(BlueprintCliOptions),
 
+    /// Deterministic 5-pillar static AST code auditor and defect dossier synthesizer
+    AuditCode(AuditCodeArgs),
+
     /// Setup cross-platform git hooks natively
     SetupHooks(SetupHooksArgs),
 
     /// Check post-build assets for leaked credentials and secrets
     Secrets(CheckSecretsArgs),
+}
+
+/// Resolves the enclosing workspace root directory for `verify-baseline audit-code --path <PATH>`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Ensures `.pipeline/defects/` persistence and relative `FILE_LOCATION` paths anchor deterministically
+/// to the enclosing workspace root under DO-330 TQL-4 path resolution rules.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Prefers the nearest ancestor containing `.pipeline` or `.git`, then outermost `Cargo.toml`, else `target_path`.
+///
+/// ## 3. Preconditions
+/// - `target_path` is a CLI-supplied filesystem path.
+///
+/// ## 4. Postconditions
+/// - Returns a deterministic `PathBuf` representing the workspace root directory.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(D)$ over directory ancestor depth $D$.
+/// - Space Complexity: $O(|target\_path|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Gracefully falls back to `target_path` or `"."` without panicking when `target_path` does not exist.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0606-CLI-RESOLVE-WORKSPACE-ROOT]
+fn resolve_audit_workspace_root(target_path: &Path) -> PathBuf {
+    for anc in target_path.ancestors() {
+        if anc.as_os_str().is_empty() {
+            break;
+        }
+        if anc.join(".pipeline").is_dir() || anc.join(".git").exists() {
+            return anc.to_path_buf();
+        }
+    }
+    let mut outermost_cargo: Option<&Path> = None;
+    for anc in target_path.ancestors() {
+        if anc.as_os_str().is_empty() {
+            break;
+        }
+        if anc.join("Cargo.toml").is_file() {
+            outermost_cargo = Some(anc);
+        }
+    }
+    if let Some(cargo_root) = outermost_cargo {
+        return cargo_root.to_path_buf();
+    }
+    let fallback = if target_path.is_file() {
+        target_path.parent().unwrap_or(target_path)
+    } else {
+        target_path
+    };
+    if fallback.as_os_str().is_empty() {
+        PathBuf::from(".")
+    } else {
+        fallback.to_path_buf()
+    }
 }
 
 /// Executes the `verify-baseline` CLI entrypoint and dispatches subcommands.
@@ -590,6 +725,21 @@ fn main() {
                 let workspace_root = PathBuf::from(&cli.destination);
                 let code = blueprint_gate::run_blueprint_cli(&workspace_root, &opts);
                 if code != 0 {
+                    process::exit(code);
+                }
+            }
+            Subcommands::AuditCode(mut args) => {
+                let anchored_path = if args.path.is_absolute() {
+                    args.path
+                } else {
+                    match std::env::current_dir() {
+                        Ok(cwd) => cwd.join(&args.path),
+                        Err(_) => args.path,
+                    }
+                };
+                let workspace_root = resolve_audit_workspace_root(&anchored_path);
+                args.path = anchored_path;
+                if let Err(code) = audit_code::run_audit_code(&workspace_root, &args) {
                     process::exit(code);
                 }
             }

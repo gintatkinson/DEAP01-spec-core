@@ -3131,6 +3131,8 @@ fn scan_blueprint_markdown_file(
     };
 
     let is_design_blueprint = rel.starts_with("docs/designs/");
+    let allow_proposed_design_paths =
+        is_design_blueprint && !is_approved_design_blueprint(&content);
 
     for (idx, line) in content.lines().enumerate() {
         let line_no = idx.saturating_add(1);
@@ -3144,8 +3146,85 @@ fn scan_blueprint_markdown_file(
 
         check_blueprint_line_fictional_crates(&rel, line_no, line, violations);
         check_blueprint_line_retired_tools(&rel, line_no, line, violations);
-        check_blueprint_line_crates_paths(repo_root, &rel, line_no, line, violations);
+        check_blueprint_line_crates_paths(
+            repo_root,
+            &rel,
+            line_no,
+            line,
+            allow_proposed_design_paths,
+            violations,
+        );
     }
+}
+
+/// Determines whether a design blueprint markdown payload declares an `Approved` lifecycle status.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DO-330 TQL-4 specification-to-code grounding rules for Check 37.
+/// Ensures `Approved` blueprints under `docs/designs/` cannot cite non-existent `crates/...` modules,
+/// while preserving proposed-path flexibility for `Draft` design blueprints.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Scans non-fenced lines containing `"**Status**"` or `"Status:"` and normalizes cell/value tokens
+///   by stripping pipes, backticks, asterisks, and whitespace before ASCII case-insensitive comparison
+///   against `"approved"`.
+///
+/// ## 3. Preconditions
+/// - `content` is a valid UTF-8 markdown blueprint document.
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff an explicit `Approved` metadata status declaration is present outside code fences.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is byte length of `content`.
+/// - Space Complexity: O(1) auxiliary slice references.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Pure read-only string slice inspection without regular expressions.
+/// - State: Stateless evaluation with zero external side effects.
+/// - Action: Deterministic line-by-line fence tracking and cell stripping.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-37-APPROVED-BLUEPRINT-STATUS]
+fn is_approved_design_blueprint(content: &str) -> bool {
+    let mut in_fence = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+        if trimmed.contains("**Status**") && trimmed.contains('|') {
+            let mut seen_status_key = false;
+            for cell in trimmed.split('|') {
+                let clean = cell.trim().trim_matches(|c: char| c == '`' || c == '*');
+                if seen_status_key && !clean.is_empty() {
+                    if clean.eq_ignore_ascii_case("approved") {
+                        return true;
+                    }
+                    break;
+                }
+                if clean.eq_ignore_ascii_case("status") {
+                    seen_status_key = true;
+                }
+            }
+        } else if let Some((_, rhs)) = trimmed
+            .split_once("**Status**:")
+            .or_else(|| trimmed.split_once("Status:"))
+        {
+            let clean = rhs
+                .trim()
+                .trim_matches(|c: char| c == '|' || c == '`' || c == '*' || c.is_whitespace());
+            if clean.eq_ignore_ascii_case("approved") {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Checks whether `line` contains `token` bounded by non-identifier characters.
@@ -3477,6 +3556,7 @@ fn check_blueprint_line_crates_paths(
     rel_file: &str,
     line_no: usize,
     line: &str,
+    allow_proposed_design_paths: bool,
     violations: &mut Vec<String>,
 ) {
     let bytes = line.as_bytes();
@@ -3554,8 +3634,8 @@ fn check_blueprint_line_crates_paths(
             continue;
         }
 
-        let is_design_proposed_path = rel_file.starts_with("docs/designs/")
-            && repo_root.join("crates").join(crate_name).is_dir();
+        let is_design_proposed_path =
+            allow_proposed_design_paths && repo_root.join("crates").join(crate_name).is_dir();
         if !is_design_proposed_path && !repo_root.join(cleaned).exists() {
             violations.push(format!(
                 "{}:{}: non-existent workspace path '{}' referenced in architecture blueprint",
