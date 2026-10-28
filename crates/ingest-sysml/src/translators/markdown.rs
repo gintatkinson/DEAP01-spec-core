@@ -1788,6 +1788,203 @@ fn strip_ingested_action_prefix(raw: &str) -> &str {
     raw
 }
 
+/// Splits `s` once on the leftmost single `:` byte that is neither preceded nor followed by `:`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `split_once_single_colon` in `crates/ingest-sysml/src/translators/markdown.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Double-Colon Preservation Invariant: Multi-colon namespace qualifiers (`::` in Rust or SysML v2 paths such as `deap_core::source_ast`) are never treated as single-colon delimiters.
+/// - Safe Subslice Partitioning: When `Some((lhs, rhs))` is returned, `lhs` and `rhs` form an exact disjoint partition around the first isolated `b':'` byte using checked `.get(..)` bounds.
+///
+/// ## 3. Preconditions
+/// - `s: &str` is any valid UTF-8 string slice representing a Mermaid sequence line, receiver clause, or message prefix.
+///
+/// ## 4. Postconditions
+/// - Returns `Some((lhs, rhs))` split at the earliest isolated `:` delimiter, or `None` when `s` contains zero isolated `:` delimiters.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) single linear byte scan over `s.len()` bytes.
+/// - Space Complexity: O(1) constant stack space with zero heap allocations.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts arbitrary UTF-8 slices without assuming delimiter presence.
+/// - State: Pure stateless function with zero mutable external state.
+/// - Action: Uses `.checked_sub(1)`, `.saturating_add(1)`, and `.get(..)` exclusively with zero regex, panics, or slice indexing.
+/// - Resource: Zero dynamic memory allocation and bounded loop iteration count `s.len()`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0603] [REQ-SYSML-INGEST-MD/split_once_single_colon] | SysML v2: ActionDef(split_once_single_colon)
+fn split_once_single_colon(s: &str) -> Option<(&str, &str)> {
+    let bytes = s.as_bytes();
+    for (idx, &byte) in bytes.iter().enumerate() {
+        if byte == b':' {
+            let prev_is_colon = idx
+                .checked_sub(1)
+                .and_then(|prev_idx| bytes.get(prev_idx))
+                .is_some_and(|&prev| prev == b':');
+            let next_is_colon = bytes
+                .get(idx.saturating_add(1))
+                .is_some_and(|&next| next == b':');
+            if !prev_is_colon && !next_is_colon {
+                let lhs = s.get(..idx)?;
+                let rhs = s.get(idx.saturating_add(1)..)?;
+                return Some((lhs, rhs));
+            }
+        }
+    }
+    None
+}
+
+/// Matches the leftmost Mermaid `sequenceDiagram` arrow strictly within the lifeline header prior to any isolated `:` message delimiter.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `match_sequence_arrow` in `crates/ingest-sysml/src/translators/markdown.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Header-Scoped Left-to-Right Determinism: Scans strictly left-to-right inside the lifeline header (left of `split_once_single_colon(line)`), preventing CLI flags (`--body-file`) or arrow tokens inside message bodies from masquerading as lifeline arrows.
+/// - Reply Polarity Classification: Classifies dashed Mermaid return arrows (`-->>`, `-->`, `--x`, `--)`) with `is_reply == true` and solid command arrows (`->>`, `->`, `-x`, `-)`) with `is_reply == false`, matching longest arrow operators first at any given byte offset.
+///
+/// ## 3. Preconditions
+/// - `line: &str` is a trimmed line within a fenced Mermaid `sequenceDiagram` block after participant and control-flow directives have been filtered.
+///
+/// ## 4. Postconditions
+/// - Returns `Some((sender_raw, rhs_from_receiver_onward, is_reply))` when a valid sequence arrow exists in the lifeline header, or `None` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(H) bounded linear scan over lifeline header byte length `H <= line.len()` across a fixed 8-element operator table.
+/// - Space Complexity: O(1) constant auxiliary memory with zero heap allocations.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Gracefully skips non-UTF-8 character boundary offsets via `header.get(idx..)` and returns `None` on non-message lines.
+/// - State: Pure referentially transparent query with zero side effects.
+/// - Action: Uses `.get(..)` and `.saturating_add(..)` exclusively with zero regex, panics, or slice indexing.
+/// - Resource: Zero heap allocations and strictly bounded iteration count.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0603] [REQ-SYSML-INGEST-MD/match_sequence_arrow] | SysML v2: ActionDef(match_sequence_arrow)
+fn match_sequence_arrow(line: &str) -> Option<(&str, &str, bool)> {
+    const SEQUENCE_ARROWS: [(&str, bool); 8] = [
+        ("-->>", true),
+        ("->>", false),
+        ("-->", true),
+        ("->", false),
+        ("--x", true),
+        ("-x", false),
+        ("--)", true),
+        ("-)", false),
+    ];
+
+    let header = split_once_single_colon(line).map_or(line, |(hdr, _)| hdr);
+    for idx in 0..header.len() {
+        let Some(tail) = header.get(idx..) else {
+            continue;
+        };
+        for (arrow, is_reply) in SEQUENCE_ARROWS {
+            if tail.starts_with(arrow) {
+                let sender_raw = line.get(..idx)?;
+                let rhs_start = idx.saturating_add(arrow.len());
+                let rhs_from_receiver_onward = line.get(rhs_start..)?;
+                return Some((sender_raw, rhs_from_receiver_onward, is_reply));
+            }
+        }
+    }
+    None
+}
+
+/// Synthesizes a valid compound SysML v2 action identifier from a cleaned Mermaid `sequenceDiagram` message label.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `synthesize_sequence_action_name` in `crates/ingest-sysml/src/translators/markdown.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Single-Token & Qualified-Path Preservation: Single-token identifiers preserve snake_case/PascalCase structure (e.g., `US_02_StartEngine`, `evaluate_source_file_pillars`) while `::` namespace paths normalize deterministically to `_` (e.g., `deap_core::source_ast::lower_unit(ast)` -> `deap_core_source_ast_lower_unit`).
+/// - Compound Multi-Word Synthesis: Multi-word prose and CLI command payloads strip leading flag hyphens and formatting delimiters, folding up to 6 alphanumeric sub-words into `PascalCase` (e.g., `Execute gh issue edit --body-file` -> `ExecuteGhIssueEditBodyFile`, `Parse deap_core::source_ast(schema_path)` -> `ParseDeapCoreSourceAst`).
+///
+/// ## 3. Preconditions
+/// - `msg_clean: &str` is a trimmed Mermaid sequence message string with outer quotes/backticks removed.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty, syntactically valid SysML v2 identifier guaranteed by `sanitize_identifier(..., "ExecuteAction")`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M) single linear pass over `msg_clean.len()` bytes `M`.
+/// - Space Complexity: O(M) bounded heap allocation for the normalized identifier string.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles empty, punctuation-only, parenthesized, and flag-only inputs by falling back to `"ExecuteAction"`.
+/// - State: Pure deterministic transformation with zero shared mutable state.
+/// - Action: Executes with zero regex, `.unwrap()`, `.expect()`, `panic!`, or direct slice indexing.
+/// - Resource: Caps compound sub-word folding at 6 tokens with bounded string buffer growth.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0603] [REQ-SYSML-INGEST-MD/synthesize_sequence_action_name] | SysML v2: ActionDef(synthesize_sequence_action_name)
+fn synthesize_sequence_action_name(msg_clean: &str) -> String {
+    const SURROUNDING_DELIMS: [char; 7] = ['`', '"', '\'', '*', '[', ']', ','];
+    const MAX_COMPOUND_SUBWORDS: usize = 6;
+
+    let before_paren = msg_clean
+        .split_once('(')
+        .map_or(msg_clean, |(prefix, _)| prefix);
+    let before_colon =
+        split_once_single_colon(before_paren).map_or(before_paren, |(prefix, _)| prefix);
+    let trimmed_head = before_colon
+        .trim()
+        .trim_matches(SURROUNDING_DELIMS)
+        .trim();
+    let head = strip_ingested_action_prefix(trimmed_head);
+
+    if head.is_empty() {
+        return "ExecuteAction".to_string();
+    }
+
+    if !head.contains(char::is_whitespace) {
+        if head.contains("::") {
+            let normalized = head.replace("::", "_");
+            return sanitize_identifier(&normalized, "ExecuteAction");
+        }
+        return sanitize_identifier(head, "ExecuteAction");
+    }
+
+    let mut pascal = String::new();
+    let mut token_count: usize = 0;
+
+    'outer: for raw_word in head.split_whitespace() {
+        let stripped = raw_word
+            .trim_matches(SURROUNDING_DELIMS)
+            .trim_start_matches('-')
+            .trim_matches(SURROUNDING_DELIMS);
+        if stripped.is_empty() {
+            continue;
+        }
+        for seg in stripped.split(|c: char| !c.is_ascii_alphanumeric()) {
+            if seg.is_empty() {
+                continue;
+            }
+            let has_upper = seg.chars().any(|c| c.is_ascii_uppercase());
+            let has_lower = seg.chars().any(|c| c.is_ascii_lowercase());
+            let lowercase_tail = has_upper && !has_lower;
+            let mut chars = seg.chars();
+            if let Some(first) = chars.next() {
+                pascal.push(first.to_ascii_uppercase());
+                for ch in chars {
+                    if lowercase_tail {
+                        pascal.push(ch.to_ascii_lowercase());
+                    } else {
+                        pascal.push(ch);
+                    }
+                }
+            }
+            token_count = token_count.saturating_add(1);
+            if token_count >= MAX_COMPOUND_SUBWORDS {
+                break 'outer;
+            }
+        }
+    }
+
+    sanitize_identifier(&pascal, "ExecuteAction")
+}
+
 /// Extracts behavioral AST nodes (`ActionDef`, `InteractionDef`, `StateDef`, `UseCaseDef`) from Mermaid diagrams and `### AC-XX` sections.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1795,7 +1992,7 @@ fn strip_ingested_action_prefix(raw: &str) -> &str {
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves deterministic state conservation and referential transparency for fn `extract_behavioral_ast_nodes` within `TRANSLATORS-MARKDOWN`.
-/// - Maps fenced Mermaid `sequenceDiagram` blocks into `ActionDef` and `InteractionDef`, `stateDiagram-v2` blocks into `StateDef` (with populated `sub_states`), and `### AC-XX` acceptance criteria into `UseCaseDef`, synthesizing a fallback package `StateDef` when no `stateDiagram` block is present.
+/// - Maps fenced Mermaid `sequenceDiagram` solid command arrows into compound `ActionDef` and `InteractionDef` messages while recording dashed reply arrows (`-->>`, `-->`, `--x`, `--)`) exclusively as `reply_<Ident>` `InteractionDef` messages excluded from `ActionDef` and synthesized `StateDef` transition triggers; maps `stateDiagram-v2` blocks into `StateDef` (with populated `sub_states`) and `### AC-XX` acceptance criteria into `UseCaseDef`.
 ///
 /// ## 3. Preconditions
 /// - `content: &str` and `pkg: &mut PackageDef` must satisfy domain and type-safety constraints prior to invoking `extract_behavioral_ast_nodes`.
@@ -1814,7 +2011,7 @@ fn strip_ingested_action_prefix(raw: &str) -> &str {
 /// - Resource: Bounds stack and heap allocations within `extract_behavioral_ast_nodes` (`TRANSLATORS-MARKDOWN`).
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-INGEST-MD/extract_behavioral_ast_nodes] | SysML v2: ActionDef(extract_behavioral_ast_nodes)
+/// Realises: [REQ-0603] [REQ-SYSML-INGEST-MD/extract_behavioral_ast_nodes] | SysML v2: ActionDef(extract_behavioral_ast_nodes)
 fn extract_behavioral_ast_nodes(content: &str, pkg: &mut PackageDef) {
     let mut in_mermaid = false;
     let mut mermaid_mode = "";
@@ -1956,12 +2153,9 @@ fn extract_behavioral_ast_nodes(content: &str, pkg: &mut PackageDef) {
                 continue;
             }
 
-            let arrow_pair = ["-->>", "->>", "-->", "->", "--x", "-x", "--)", "-)"]
-                .into_iter()
-                .find_map(|arrow| trimmed.split_once(arrow));
-            if let Some((lhs, rhs)) = arrow_pair {
+            if let Some((lhs, rhs, is_reply)) = match_sequence_arrow(trimmed) {
                 let sender_raw = lhs.trim().trim_end_matches(['+', '-']).trim();
-                let (receiver_raw, msg_raw) = if let Some((r, m)) = rhs.split_once(':') {
+                let (receiver_raw, msg_raw) = if let Some((r, m)) = split_once_single_colon(rhs) {
                     (r.trim().trim_start_matches(['+', '-']).trim(), m.trim())
                 } else {
                     (
@@ -1972,28 +2166,33 @@ fn extract_behavioral_ast_nodes(content: &str, pkg: &mut PackageDef) {
                 let sender_id = sanitize_identifier(sender_raw, "Sender");
                 let receiver_id = sanitize_identifier(receiver_raw, "Receiver");
                 let msg_clean = msg_raw.trim_matches('"').trim_matches('`').trim();
-                let action_head = msg_clean
-                    .split(['(', ':', ' '])
-                    .find(|s| !s.trim().is_empty())
-                    .unwrap_or("ExecuteAction");
-                let action_name = sanitize_identifier(action_head, "ExecuteAction");
+                let action_name = synthesize_sequence_action_name(msg_clean);
                 let clean_action = strip_ingested_action_prefix(&action_name).to_string();
-                let doc_clean = clean_bdd_text(msg_clean);
-                if !pkg.action_defs.iter().any(|a| a.name == clean_action) {
-                    pkg.action_defs.push(ActionDef {
-                        name: clean_action.clone(),
-                        doc: if doc_clean.is_empty() {
-                            None
-                        } else {
-                            Some(doc_clean)
-                        },
-                        is_def: true,
-                        ..Default::default()
-                    });
-                }
-                let msg_stmt = format!("{clean_action} from {sender_id} to {receiver_id}");
-                if !seq_messages.contains(&msg_stmt) {
-                    seq_messages.push(msg_stmt);
+                if is_reply {
+                    let reply_ident =
+                        sanitize_identifier(&format!("reply_{clean_action}"), "reply_payload");
+                    let msg_stmt = format!("{reply_ident} from {sender_id} to {receiver_id}");
+                    if !seq_messages.contains(&msg_stmt) {
+                        seq_messages.push(msg_stmt);
+                    }
+                } else {
+                    let doc_clean = clean_bdd_text(msg_clean);
+                    if !pkg.action_defs.iter().any(|a| a.name == clean_action) {
+                        pkg.action_defs.push(ActionDef {
+                            name: clean_action.clone(),
+                            doc: if doc_clean.is_empty() {
+                                None
+                            } else {
+                                Some(doc_clean)
+                            },
+                            is_def: true,
+                            ..Default::default()
+                        });
+                    }
+                    let msg_stmt = format!("{clean_action} from {sender_id} to {receiver_id}");
+                    if !seq_messages.contains(&msg_stmt) {
+                        seq_messages.push(msg_stmt);
+                    }
                 }
             }
         } else if mermaid_mode == "state" {
@@ -5931,7 +6130,7 @@ sequenceDiagram
             .ok_or_else(|| "missing transition 3".to_string())?;
         assert_eq!(t0.source.as_deref(), Some("Initial"));
         assert_eq!(t1.trigger.as_deref(), Some("StartEngine"));
-        assert_eq!(t2.trigger.as_deref(), Some("ConfirmReady"));
+        assert_eq!(t2.trigger.as_deref(), Some("StartEngine"));
         assert_eq!(t3.target.as_deref(), Some("Terminal"));
         Ok(())
     }

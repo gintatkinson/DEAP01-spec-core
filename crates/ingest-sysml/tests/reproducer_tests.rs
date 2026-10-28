@@ -347,3 +347,273 @@ stateDiagram-v2
 
     Ok(())
 }
+
+/// Verifies that `MarkdownTranslator::translate` preserves compound solid-arrow commands across
+/// Rust `::` paths and CLI `--` flags while excluding dashed reply arrows (`-->>`, `-->`, `--x`,
+/// `--)`) from `PackageDef::action_defs` and synthesized `PackageDef::state_defs` transition
+/// triggers in `crates/ingest-sysml/tests/reproducer_tests.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `test_issue_692_sequence_diagram_excludes_reply_arrows_and_preserves_compound_actions` in
+/// `crates/ingest-sysml/tests/reproducer_tests.rs` (refs #692).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Compound Solid-Arrow Action Preservation: Solid Mermaid `sequenceDiagram` command arrows
+///   preserve multi-token compound action semantics across Rust `::` module/function paths and
+///   CLI `--` option flags without single-token prefix truncation.
+/// - Dashed Reply Exclusion Invariant: All four Mermaid dashed reply arrow forms (`-->>`, `-->`,
+///   `--x`, `--)`) are excluded from `PackageDef::action_defs` and synthesized
+///   `PackageDef::state_defs` transition triggers, while remaining recorded in
+///   `PackageDef::interaction_defs` as `reply_<Ident> from <Sender> to <Receiver>` messages with
+///   a single valid SysML identifier token preceding ` from `.
+///
+/// ## 3. Preconditions
+/// - Invoked within a valid test execution context for
+///   `test_issue_692_sequence_diagram_excludes_reply_arrows_and_preserves_compound_actions` with
+///   `MarkdownTranslator::new()` available.
+///
+/// ## 4. Postconditions
+/// - Returns `Result<(), String>` confirming `pkg.action_defs` contains the exact solid-command
+///   compound actions and zero dashed-reply or truncated tokens, `pkg.interaction_defs` contains
+///   one interaction with valid SysML identifier message tokens for both commands and `reply_*`
+///   responses, and `pkg.state_defs` transition triggers exclude dashed reply tokens.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ bounded over the synthetic Markdown blueprint byte length $N$.
+/// - Space Complexity: $O(N)$ bounded auxiliary memory for the translated `PackageDef` AST.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and `Result` return values from `MarkdownTranslator::translate`.
+/// - State: Operates purely in-memory on an immutable synthetic Markdown fixture with zero shared mutable state.
+/// - Action: Executes deterministically with zero `.unwrap()`, `.expect()`, `panic!`, or direct slice indexing.
+/// - Resource: Bounded stack and heap allocations proportional to the fixed fixture payload.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0603] [REQ-SYSML-INGEST-MD/test_issue_692_sequence_diagram_excludes_reply_arrows_and_preserves_compound_actions] | SysML v2: VerificationCaseDef(test_issue_692_sequence_diagram_excludes_reply_arrows_and_preserves_compound_actions)
+#[test]
+fn test_issue_692_sequence_diagram_excludes_reply_arrows_and_preserves_compound_actions(
+) -> Result<(), String> {
+    let md = "\
+# Blueprint 692: Sequence Diagram Compound Action and Reply Filtering
+
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Blueprint ID** | `BP-692` |
+| **Title** | Sequence Diagram Compound Action and Reply Filtering |
+
+## Part 1: Purpose & Architectural Scope
+Verifies deterministic SysML v2 action and interaction extraction from Mermaid sequence diagrams.
+
+## Part 2: Normative Requirements
+
+### REQ-0603: Deterministic Sequence Action Extraction
+The translator shall extract compound solid-arrow commands into `ActionDef` nodes and exclude dashed reply arrows from `ActionDef` and synthesized `StateDef` transition triggers.
+
+## Part 3: Structural Decomposition (SysML v2 Alignment)
+
+### Component: Coord
+
+| Port Name | Direction | Type | Description |
+| :--- | :--- | :--- | :--- |
+| `cmd_out` | `out` | `CommandPayload` | Outbound command port |
+
+## Part 4: Behavioral & Data Modeling
+
+```mermaid
+sequenceDiagram
+    participant Coord
+    participant Parser
+    participant Ast
+    participant Tracker
+    participant Compiler
+    Coord->>Parser: Parse deap_core::source_ast(schema_path)
+    Parser->>Ast: deap_core::source_ast::lower_unit(ast)
+    Ast-->>Parser: WBS_01_03
+    Parser-->>Coord: Ok(Vec<PackageDef>)
+    Coord->>Tracker: Execute gh issue edit --body-file
+    Tracker-->Coord: [CLOSED-LOOP VERIFIED]
+    Coord->>Compiler: compile-sysml --forward-sync docs
+    Compiler--xCoord: Exit 0
+    Coord->>Compiler: compile-sysml --reverse-sync docs
+    Compiler--)Coord: C-PURITY-03
+```
+";
+
+    let translator = MarkdownTranslator::new();
+    let pkg = translator
+        .translate(md, "Issue692Pkg")
+        .map_err(|e| format!("translate failed: {e}"))?;
+
+    let action_names: Vec<&str> = pkg.action_defs.iter().map(|a| a.name.as_str()).collect();
+
+    let forbidden_reply_tokens = [
+        "Ok",
+        "Vec",
+        "CLOSED_LOOP",
+        "CLOSED_LOOP_VERIFIED",
+        "ClosedLoopVerified",
+        "Exit_item",
+        "Exit",
+        "Exit0",
+        "C_PURITY_03",
+        "CPurity03",
+        "WBS_01_03",
+    ];
+    for reply_tok in forbidden_reply_tokens {
+        assert!(
+            !action_names.contains(&reply_tok),
+            "pkg.action_defs must NOT contain dashed-reply token '{reply_tok}', found action_defs: {action_names:?}"
+        );
+    }
+    assert!(
+        !action_names.iter().any(|name| name.starts_with("reply_")),
+        "pkg.action_defs must NOT contain reply_* tokens, found action_defs: {action_names:?}"
+    );
+
+    let forbidden_truncated_prefixes = [
+        "Parse",
+        "deap_core",
+        "Execute",
+        "gh",
+        "compile_sysml",
+        "CompileSysml",
+    ];
+    for truncated in forbidden_truncated_prefixes {
+        assert!(
+            !action_names.contains(&truncated),
+            "pkg.action_defs must NOT contain truncated single-word prefix '{truncated}', found action_defs: {action_names:?}"
+        );
+    }
+
+    let expected_actions = [
+        "ParseDeapCoreSourceAst",
+        "deap_core_source_ast_lower_unit",
+        "ExecuteGhIssueEditBodyFile",
+        "CompileSysmlForwardSyncDocs",
+        "CompileSysmlReverseSyncDocs",
+    ];
+    for expected in expected_actions {
+        assert!(
+            action_names.contains(&expected),
+            "Expected compound solid-command action '{expected}' in pkg.action_defs, found: {action_names:?}"
+        );
+    }
+    assert_eq!(
+        action_names.len(),
+        expected_actions.len(),
+        "Expected exact solid-command actions {expected_actions:?}, found: {action_names:?}"
+    );
+
+    assert_eq!(
+        pkg.interaction_defs.len(),
+        1,
+        "Expected exactly 1 InteractionDef for sequenceDiagram, found: {}",
+        pkg.interaction_defs.len()
+    );
+    let interaction = pkg
+        .interaction_defs
+        .first()
+        .ok_or_else(|| "missing interaction_def".to_string())?;
+
+    for msg in &interaction.messages {
+        let (msg_token, route_tail) = msg.split_once(" from ").ok_or_else(|| {
+            format!("interaction message missing ' from ' delimiter: '{msg}'")
+        })?;
+        let is_valid_sysml_ident = !msg_token.is_empty()
+            && msg_token
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && msg_token
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_');
+        assert!(
+            is_valid_sysml_ident,
+            "Interaction message token before ' from ' must be a single valid SysML identifier, got '{msg_token}' in message '{msg}'"
+        );
+        let (sender, receiver) = route_tail.split_once(" to ").ok_or_else(|| {
+            format!("interaction message missing ' to ' delimiter: '{msg}'")
+        })?;
+        assert!(
+            !sender.is_empty() && !receiver.is_empty(),
+            "Interaction message must have non-empty sender and receiver in '{msg}'"
+        );
+    }
+
+    let expected_solid_messages = [
+        "ParseDeapCoreSourceAst from Coord to Parser",
+        "deap_core_source_ast_lower_unit from Parser to Ast",
+        "ExecuteGhIssueEditBodyFile from Coord to Tracker",
+        "CompileSysmlForwardSyncDocs from Coord to Compiler",
+        "CompileSysmlReverseSyncDocs from Coord to Compiler",
+    ];
+    for expected_msg in expected_solid_messages {
+        assert!(
+            interaction.messages.iter().any(|m| m == expected_msg),
+            "Expected solid command message '{expected_msg}' in interaction.messages, found: {:?}",
+            interaction.messages
+        );
+    }
+
+    let reply_messages: Vec<&str> = interaction
+        .messages
+        .iter()
+        .map(String::as_str)
+        .filter(|m| m.starts_with("reply_"))
+        .collect();
+    assert_eq!(
+        reply_messages.len(),
+        5,
+        "Expected 5 reply_<Ident> messages for the 5 dashed reply arrows, found: {:?}",
+        interaction.messages
+    );
+    for (sender, receiver, expected_min_count) in [
+        ("Ast", "Parser", 1usize),
+        ("Parser", "Coord", 1usize),
+        ("Tracker", "Coord", 1usize),
+        ("Compiler", "Coord", 2usize),
+    ] {
+        let route_suffix = format!(" from {sender} to {receiver}");
+        let matching_count = reply_messages
+            .iter()
+            .filter(|m| {
+                m.strip_suffix(&route_suffix)
+                    .and_then(|ident| ident.strip_prefix("reply_"))
+                    .is_some_and(|suffix| !suffix.is_empty())
+            })
+            .count();
+        assert!(
+            matching_count >= expected_min_count,
+            "Expected at least {expected_min_count} 'reply_<Ident>{route_suffix}' message(s), found {matching_count} in {:?}",
+            interaction.messages
+        );
+    }
+    assert_eq!(
+        interaction.messages.len(),
+        10,
+        "Expected 10 total interaction messages (5 solid commands + 5 dashed replies), found: {:?}",
+        interaction.messages
+    );
+
+    for state_def in &pkg.state_defs {
+        for transition in &state_def.transitions {
+            if let Some(trigger_str) = transition.trigger.as_deref() {
+                for reply_tok in forbidden_reply_tokens {
+                    assert!(
+                        trigger_str != reply_tok,
+                        "Synthesized StateDef '{}' transition trigger must NOT reference dashed reply token '{reply_tok}'",
+                        state_def.name
+                    );
+                }
+                assert!(
+                    !trigger_str.starts_with("reply_"),
+                    "Synthesized StateDef '{}' transition trigger must NOT reference reply_* token '{trigger_str}'",
+                    state_def.name
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
