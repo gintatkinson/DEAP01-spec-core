@@ -42,7 +42,7 @@ use compile_sysml::sync::forward::{forward_sync_sysml_to_specs, ForwardSyncOptio
 use compile_sysml::FmecaScoringConfig;
 use deap_core::sysml_ast::{
     ActionDef, AttributeDef, CalcDef, ConstraintDef, OperationDef, PackageDef, PartDef, PortDef,
-    StateDef, UseCaseDef,
+    RequirementDef, StateDef, UseCaseDef,
 };
 
 /// Verifies that `forward_sync_sysml_to_specs` does not emit hardcoded colliding fallback issue IDs
@@ -1581,6 +1581,408 @@ fn test_issue_698_stpa_lowers_sysml_operators_to_katex_and_matlab(
         "SLDV_FORMAL_PROOFS.m must contain unary MATLAB negation '~' distinct from '~=':\n{}",
         sldv_m
     );
+
+    Ok(())
+}
+
+/// Verifies that `expand_cartesian_stpa` and `transpile_safety_suite` derive UCA controller
+/// ownership, severity/integrity levels, Class-1 and Class-2 loss scenarios, and hazard log rows
+/// purely from SysML v2 AST nodes without emitting `PENDING_PARAMETER`, `DEAPCompilerSystem`, or
+/// placeholder loss/hazard skeletons across both populated and minimal `PackageDef` models.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety analysis
+/// derivation objectives for fn
+/// `test_issue_697_stpa_derives_uca_loss_scenarios_and_hazard_log_from_ast_without_pending_parameter_or_deap_compiler_system`
+/// in `crates/compile-sysml/tests/reproducer_tests.rs` (refs #697).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - AST Controller & Integrity Resolution Invariant: When a `PackageDef` declares a `PartDef`
+///   (`TransactionSupervisor`) whose identifier neither contains `"System"` nor ends with
+///   `"Engine"`, `expand_cartesian_stpa` binds all $4 \times |\text{ActionDef}| = 8$ UCAs to
+///   `controller == "TransactionSupervisor"` (never `"DEAPCompilerSystem"`), resolves `sail` from
+///   `IntegrityLevel_Tier = "SIL-3"`, and emits zero `"PENDING_PARAMETER"` substrings in `severity`
+///   or `sail`. When `part_defs` is empty, `controller` falls back deterministically to the
+///   enclosing `PackageDef` name (`"SysML_Model"`).
+/// - Skeleton-Free Safety Suite Invariant: Across all 10 artifacts produced by
+///   `transpile_safety_suite`, zero occurrences of `"PENDING_PARAMETER"`, `"DEAPCompilerSystem"`,
+///   `"Loss scenario skeleton"`, `"Skeleton loss entry"`, or `"Compound hazard skeleton"` appear,
+///   even in the presence of unmatched constraint parameters, expressionless `ConstraintDef` /
+///   `CalcDef` nodes, and package-level `ActionDef` declarations.
+/// - AST-Derived Loss Scenario & Hazard Log Invariant: `03_LOSS_SCENARIOS.md` and `STPA_MATRIX.md`
+///   synthesize both `"Class-1"` and `"Class-2"` loss scenarios referencing
+///   `"TransactionSupervisor"`, AST ports (`"cmdIngress"` or `"ackEgress"`), AST states
+///   (`"Standby"` or `"Committing"`), `"WalCommitBound"`, and `"SC-001"`, while `HAZARD_LOG.md`
+///   synthesizes `"H-1"` and `"H-2"` rows and a resolved `"Resolution Authority"` without
+///   `"PENDING_PARAMETER"`.
+///
+/// ## 3. Preconditions
+/// - Fixture A constructs an in-memory `PackageDef` (`"SysML_Model"`) with `PartDef`
+///   `"TransactionSupervisor"` (2 ports, 2 states, 2 attributes, zero inline actions), 2
+///   package-level `ActionDef`s, 2 `ConstraintDef`s (one with unmatched parameter, one
+///   expressionless), 1 expressionless `CalcDef`, and 1 `RequirementDef`.
+/// - Fixture B constructs a minimal `PackageDef` (`"SysML_Model"`) with zero `PartDef`s, zero
+///   package attributes, and 1 package-level `ActionDef` (`"DispatchFrame"`).
+///
+/// ## 4. Postconditions
+/// - Fixture A produces 8 UCAs bound to `"TransactionSupervisor"` with `"SIL-3"` integrity, 10
+///   placeholder-free safety artifacts, AST-linked Class-1/Class-2 loss scenarios, and populated
+///   `H-1`/`H-2` hazard log entries.
+/// - Fixture B binds UCAs to `"SysML_Model"` and emits 10 safety artifacts with zero
+///   `"PENDING_PARAMETER"` and zero `"DEAPCompilerSystem"` occurrences.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(U + A \cdot L)$ where $U$ is UCA cardinality and $A = 10$ is the safety
+///   suite artifact count of bounded byte length $L$.
+/// - Space Complexity: $O(U + A \cdot L)$ for in-memory UCA vectors and safety artifact buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Invokes `compile_sysml::stpa::uca::expand_cartesian_stpa` and
+///   `compile_sysml::stpa::safety_suite::transpile_safety_suite` directly.
+/// - State: Pure in-memory deterministic fixtures with zero shared mutable state or disk I/O.
+/// - Action: Executes with zero fallible unwrapping, panics, regular expressions, or byte-range slicing.
+/// - Resource: Bounded heap allocations reclaimed automatically at function exit.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-AST-DERIVED-UCA-LOSS-SCENARIOS], [REQ-STPA-AST-DERIVED-HAZARD-LOG] | SysML v2: VerificationCaseDef(test_issue_697_stpa_derives_uca_loss_scenarios_and_hazard_log_from_ast_without_pending_parameter_or_deap_compiler_system)
+#[test]
+fn test_issue_697_stpa_derives_uca_loss_scenarios_and_hazard_log_from_ast_without_pending_parameter_or_deap_compiler_system(
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Fixture A: Rich domain-neutral SysML_Model with non-"System"/non-"Engine" PartDef,
+    // package-level actions, unmatched constraint parameter, and expressionless constraint/calc.
+    let mut supervisor = PartDef {
+        name: "TransactionSupervisor".to_string(),
+        ..Default::default()
+    };
+    supervisor.ports.push(PortDef {
+        name: "cmdIngress".to_string(),
+        ..Default::default()
+    });
+    supervisor.ports.push(PortDef {
+        name: "ackEgress".to_string(),
+        ..Default::default()
+    });
+    supervisor.states.push(StateDef {
+        name: "Standby".to_string(),
+        ..Default::default()
+    });
+    supervisor.states.push(StateDef {
+        name: "Committing".to_string(),
+        ..Default::default()
+    });
+    supervisor.attributes.push(AttributeDef {
+        name: "maxCommitJitterMs".to_string(),
+        type_name: "Integer".to_string(),
+        default_value: Some("15".to_string()),
+        doc: None,
+    });
+    supervisor.attributes.push(AttributeDef {
+        name: "IntegrityLevel_Tier".to_string(),
+        type_name: "String".to_string(),
+        default_value: Some("SIL-3".to_string()),
+        doc: None,
+    });
+
+    let mut pkg = PackageDef {
+        name: "SysML_Model".to_string(),
+        ..Default::default()
+    };
+    pkg.part_defs.push(supervisor);
+    pkg.action_defs.push(ActionDef {
+        name: "PrepareWalBatch".to_string(),
+        ..Default::default()
+    });
+    pkg.action_defs.push(ActionDef {
+        name: "AbortStaleEpoch".to_string(),
+        ..Default::default()
+    });
+    pkg.constraint_defs.push(ConstraintDef {
+        name: "WalCommitBound".to_string(),
+        expression: "commitJitterMs <= 15".to_string(),
+        is_assertion: true,
+        parameters: vec!["unmatchedParam: Integer".to_string()],
+        ..Default::default()
+    });
+    pkg.constraint_defs.push(ConstraintDef {
+        name: "QuorumGate".to_string(),
+        expression: String::new(),
+        ..Default::default()
+    });
+    pkg.calc_defs.push(CalcDef {
+        name: "EpochHeadroom".to_string(),
+        expression: None,
+        in_params: vec![AttributeDef {
+            name: "windowTicks".to_string(),
+            type_name: "Integer".to_string(),
+            default_value: None,
+            doc: None,
+        }],
+        ..Default::default()
+    });
+    pkg.requirement_defs.push(RequirementDef {
+        name: "ReqAtomicWal".to_string(),
+        req_id: "REQ-WAL-01".to_string(),
+        text: "Atomic WAL durability".to_string(),
+        ..Default::default()
+    });
+
+    let ucas = compile_sysml::stpa::uca::expand_cartesian_stpa(&pkg);
+    assert_eq!(
+        ucas.len(),
+        8,
+        "expand_cartesian_stpa must return 8 UCAs for 2 package-level ActionDefs, got {}: {:?}",
+        ucas.len(),
+        ucas
+    );
+    for uca in &ucas {
+        assert_eq!(
+            uca.controller, "TransactionSupervisor",
+            "UCA controller must resolve to AST PartDef 'TransactionSupervisor' (never 'DEAPCompilerSystem'): {:?}",
+            uca
+        );
+        assert!(
+            !uca.controller.contains("DEAPCompilerSystem"),
+            "UCA controller must never contain hardcoded 'DEAPCompilerSystem': {:?}",
+            uca
+        );
+        assert!(
+            !uca.severity.contains("PENDING_PARAMETER"),
+            "UCA severity must not contain 'PENDING_PARAMETER': {:?}",
+            uca
+        );
+        assert!(
+            !uca.sail.contains("PENDING_PARAMETER"),
+            "UCA sail/integrity must not contain 'PENDING_PARAMETER': {:?}",
+            uca
+        );
+        assert!(
+            uca.sail.contains("SIL-3"),
+            "UCA sail/integrity must derive 'SIL-3' from AST IntegrityLevel_Tier attribute: {:?}",
+            uca
+        );
+    }
+
+    let suite = compile_sysml::stpa::safety_suite::transpile_safety_suite(&pkg, None);
+    assert_eq!(
+        suite.len(),
+        10,
+        "transpile_safety_suite must emit 10 safety artifacts, got {}: {:?}",
+        suite.len(),
+        suite.keys().collect::<Vec<_>>()
+    );
+
+    let forbidden_skeleton_placeholders = [
+        "PENDING_PARAMETER",
+        "DEAPCompilerSystem",
+        "Loss scenario skeleton",
+        "Skeleton loss entry",
+        "Compound hazard skeleton",
+    ];
+    for (artifact_name, content) in &suite {
+        for forbidden in forbidden_skeleton_placeholders {
+            assert!(
+                !content.contains(forbidden),
+                "Safety artifact {} must contain zero placeholder/hardcoded substring {:?}:\n{}",
+                artifact_name,
+                forbidden,
+                content
+            );
+        }
+    }
+
+    let loss_scenarios_md = suite
+        .get("03_LOSS_SCENARIOS.md")
+        .ok_or("Missing 03_LOSS_SCENARIOS.md in transpiled safety suite")?;
+    let stpa_matrix_md = suite
+        .get("STPA_MATRIX.md")
+        .ok_or("Missing STPA_MATRIX.md in transpiled safety suite")?;
+
+    for (doc_name, doc_content) in [
+        ("03_LOSS_SCENARIOS.md", loss_scenarios_md.as_str()),
+        ("STPA_MATRIX.md", stpa_matrix_md.as_str()),
+    ] {
+        for required in [
+            "Class-1",
+            "Class-2",
+            "TransactionSupervisor",
+            "WalCommitBound",
+            "SC-001",
+        ] {
+            assert!(
+                doc_content.contains(required),
+                "{} must contain AST-derived loss scenario token {:?}:\n{}",
+                doc_name,
+                required,
+                doc_content
+            );
+        }
+        assert!(
+            doc_content.contains("cmdIngress") || doc_content.contains("ackEgress"),
+            "{} must reference AST PortDef 'cmdIngress' or 'ackEgress' in loss scenarios:\n{}",
+            doc_name,
+            doc_content
+        );
+        assert!(
+            doc_content.contains("Standby") || doc_content.contains("Committing"),
+            "{} must reference AST StateDef 'Standby' or 'Committing' in loss scenarios:\n{}",
+            doc_name,
+            doc_content
+        );
+    }
+
+    let hazard_log_md = suite
+        .get("HAZARD_LOG.md")
+        .ok_or("Missing HAZARD_LOG.md in transpiled safety suite")?;
+    assert!(
+        hazard_log_md
+            .lines()
+            .any(|line| line.starts_with('|') && line.contains("H-1")),
+        "HAZARD_LOG.md must contain an 'H-1' table row:\n{}",
+        hazard_log_md
+    );
+    assert!(
+        hazard_log_md
+            .lines()
+            .any(|line| line.starts_with('|') && line.contains("H-2")),
+        "HAZARD_LOG.md must contain an 'H-2' table row:\n{}",
+        hazard_log_md
+    );
+    assert!(
+        hazard_log_md.contains("Resolution Authority")
+            && !hazard_log_md.contains("PENDING_PARAMETER"),
+        "HAZARD_LOG.md must include a 'Resolution Authority' entry without 'PENDING_PARAMETER':\n{}",
+        hazard_log_md
+    );
+
+    // Fixture B: Minimal PackageDef with zero PartDefs, zero package attributes, and 1 ActionDef.
+    let mut minimal_pkg = PackageDef {
+        name: "SysML_Model".to_string(),
+        part_defs: Vec::new(),
+        attribute_defs: Vec::new(),
+        ..Default::default()
+    };
+    minimal_pkg.action_defs.push(ActionDef {
+        name: "DispatchFrame".to_string(),
+        ..Default::default()
+    });
+
+    let minimal_ucas = compile_sysml::stpa::uca::expand_cartesian_stpa(&minimal_pkg);
+    assert!(
+        !minimal_ucas.is_empty(),
+        "expand_cartesian_stpa on minimal PackageDef with 1 ActionDef must return non-empty UCAs"
+    );
+    for uca in &minimal_ucas {
+        assert_eq!(
+            uca.controller, "SysML_Model",
+            "Minimal PackageDef without PartDefs must assign controller == 'SysML_Model' (never 'DEAPCompilerSystem'): {:?}",
+            uca
+        );
+        assert!(
+            !uca.controller.contains("DEAPCompilerSystem"),
+            "Minimal PackageDef UCA controller must never contain 'DEAPCompilerSystem': {:?}",
+            uca
+        );
+    }
+
+    let minimal_suite =
+        compile_sysml::stpa::safety_suite::transpile_safety_suite(&minimal_pkg, None);
+    assert_eq!(
+        minimal_suite.len(),
+        10,
+        "transpile_safety_suite on minimal PackageDef must emit 10 artifacts, got {}",
+        minimal_suite.len()
+    );
+    for (artifact_name, content) in &minimal_suite {
+        assert!(
+            !content.contains("PENDING_PARAMETER"),
+            "Minimal PackageDef safety artifact {} must contain zero 'PENDING_PARAMETER':\n{}",
+            artifact_name,
+            content
+        );
+        assert!(
+            !content.contains("DEAPCompilerSystem"),
+            "Minimal PackageDef safety artifact {} must contain zero 'DEAPCompilerSystem':\n{}",
+            artifact_name,
+            content
+        );
+    }
+
+    Ok(())
+}
+
+/// Verifies that parsing the real upstream schema `.pipeline/upstream/schema/model.sysml` and
+/// running `transpile_safety_suite` produces all 10 safety artifacts with zero
+/// `"PENDING_PARAMETER"` placeholders and zero hardcoded `"DEAPCompilerSystem"` controller leaks.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C end-to-end
+/// model-to-safety-suite verification objectives for fn
+/// `test_issue_697_upstream_sysml_model_transpiles_safety_suite_with_zero_pending_parameter`
+/// in `crates/compile-sysml/tests/reproducer_tests.rs` (refs #697).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Upstream SSOT Complete Transpilation Invariant: For the canonical upstream SysML v2 package
+///   parsed from `.pipeline/upstream/schema/model.sysml`, every artifact $(k, v)$ in
+///   $\text{transpile\_safety\_suite}(P, \text{None})$ satisfies $|v| > 0$,
+///   $\text{"PENDING\_PARAMETER"} \notin v$, and $\text{"DEAPCompilerSystem"} \notin v$.
+///
+/// ## 3. Preconditions
+/// - `.pipeline/upstream/schema/model.sysml` exists relative to `CARGO_MANIFEST_DIR` and parses
+///   cleanly via `compile_sysml::parse_sysml`.
+///
+/// ## 4. Postconditions
+/// - `suite.len() == 10` and all 10 emitted safety artifacts contain zero `"PENDING_PARAMETER"`
+///   and zero `"DEAPCompilerSystem"` substrings.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|S| + A \cdot L)$ where $|S|$ is the byte size of `model.sysml` and
+///   $A \cdot L$ is total emitted safety suite byte size.
+/// - Space Complexity: $O(|S| + A \cdot L)$ bounded in-memory AST and Markdown/MATLAB buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Resolves `model.sysml` relative to `env!("CARGO_MANIFEST_DIR")` without hardcoded
+///   workstation paths and propagates file/parse errors via `Result`.
+/// - State: Read-only filesystem load with zero mutations to repository state.
+/// - Action: Executes with zero fallible unwrapping, panics, regular expressions, or byte-range slicing.
+/// - Resource: Reclaims parsed AST and generated suite buffers deterministically at scope exit.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-UPSTREAM-MODEL-ZERO-PENDING-PARAMETER] | SysML v2: VerificationCaseDef(test_issue_697_upstream_sysml_model_transpiles_safety_suite_with_zero_pending_parameter)
+#[test]
+fn test_issue_697_upstream_sysml_model_transpiles_safety_suite_with_zero_pending_parameter(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let model_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.pipeline/upstream/schema/model.sysml");
+    let model_src = fs::read_to_string(&model_path)?;
+    let pkg = compile_sysml::parse_sysml(&model_src)
+        .map_err(|err| format!("Failed to parse {}: {:?}", model_path.display(), err))?;
+
+    let suite = compile_sysml::stpa::safety_suite::transpile_safety_suite(&pkg, None);
+    assert_eq!(
+        suite.len(),
+        10,
+        "transpile_safety_suite on upstream model.sysml package {} must emit 10 safety artifacts, got {}: {:?}",
+        pkg.name,
+        suite.len(),
+        suite.keys().collect::<Vec<_>>()
+    );
+
+    for (artifact_name, content) in &suite {
+        assert!(
+            !content.contains("PENDING_PARAMETER"),
+            "Upstream model.sysml safety artifact {} (package {}) must contain zero 'PENDING_PARAMETER' occurrences:\n{}",
+            artifact_name,
+            pkg.name,
+            content
+        );
+        assert!(
+            !content.contains("DEAPCompilerSystem"),
+            "Upstream model.sysml safety artifact {} (package {}) must contain zero 'DEAPCompilerSystem' occurrences:\n{}",
+            artifact_name,
+            pkg.name,
+            content
+        );
+    }
 
     Ok(())
 }
