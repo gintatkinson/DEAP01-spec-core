@@ -6,7 +6,7 @@
 //! 3. 03_LOSS_SCENARIOS.md
 //! 4. 04_SAFETY_CONSTRAINTS.md
 //! 5. 05_FMECA_MATRIX.md
-//! 6. 06_REGULATORY_OBJECTIVES_ASSESSMENT.md (& 06_SORA_SAIL_ASSESSMENT.md)
+//! 6. 06_REGULATORY_OBJECTIVES_ASSESSMENT.md
 //! 7. 07_RTA_ARCHITECTURE.md
 //! 8. STPA_MATRIX.md
 //! 9. HAZARD_LOG.md
@@ -23,303 +23,6 @@ use super::fmeca::{
     FmecaScoringConfig, RegistryFailureEntry,
 };
 use super::uca::{expand_cartesian_stpa, UnsafeControlAction, PENDING_PARAMETER};
-
-/// Parameterized proof template structure.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ProofTemplate` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `ProofTemplate` across member set `[id: &'static str, name: &'static str, statement: &'static str, derivation: &'static [&'static str], params: &'static [(&'static str, &'static str, &'static str, &'static str)]]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `ProofTemplate` members (`id: &'static str, name: &'static str, statement: &'static str, derivation: &'static [&'static str], params: &'static [(&'static str, &'static str, &'static str, &'static str)]`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `ProofTemplate` representation for struct `ProofTemplate`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(5)) bounded over input/member dimension of `ProofTemplate`.
-/// - Space Complexity: O(M(5)) bounded auxiliary memory for `ProofTemplate`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `ProofTemplate` (`ProofTemplate`).
-/// - State: Maintains consistent state invariants across `ProofTemplate` without partial mutation on error.
-/// - Action: Executes `ProofTemplate` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `ProofTemplate` (`STPA-SAFETY-SUITE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-STPA-SAFETY-SUITE-PROOFTEMPLATE] | SysML v2: PartDef(ProofTemplate)
-pub struct ProofTemplate {
-    pub id: &'static str,
-    pub name: &'static str,
-    pub statement: &'static str,
-    pub derivation: &'static [&'static str],
-    pub params: &'static [(&'static str, &'static str, &'static str, &'static str)],
-    pub numeric: &'static [&'static str],
-    pub sldv: &'static str,
-}
-
-pub const PROOF_TEMPLATES: [ProofTemplate; 10] = [
-    ProofTemplate {
-        id: "T-01",
-        name: "Kinetic Energy Dissipation Bound",
-        statement: "$$ E_{\\mathrm{density}} \\le E_{\\mathrm{limit}} $$",
-        derivation: &[
-            "v_{\\mathrm{term}} &= \\sqrt{ \\frac{K_f \\cdot M \\cdot g}{\\rho \\cdot C_d \\cdot A_d} }",
-            "E_{\\mathrm{impact}} &= \\frac{M \\cdot M \\cdot g}{\\rho \\cdot C_d \\cdot A_d}",
-            "E_{\\mathrm{density}} &= \\frac{E_{\\mathrm{impact}}}{A_f}",
-        ],
-        params: &[
-            ("KineticFactor", "K_f", "Dimensionless kinetic term factor", "-"),
-            ("ParameterMass", "M", "System total mass", "kg"),
-            ("GravityAcceleration", "g", "Gravitational acceleration", "m/s"),
-            ("MediumDensity", "rho", "Ambient medium density", "kg per cubic metre"),
-            ("DragCoefficient", "C_d", "Aerodynamic drag coefficient", "-"),
-            ("DecelerationArea", "A_d", "Deceleration projected area", "square metre"),
-            ("FrontalArea", "A_f", "Frontal impact cross-section area", "square metre"),
-            ("EnergyDensityLimit", "E_limit", "Regulatory energy density ceiling", "J per square metre"),
-        ],
-        numeric: &[
-            "v_{\\mathrm{term}} &= \\sqrt{ (%%KineticFactor%% \\cdot %%ParameterMass%% \\cdot %%GravityAcceleration%%) / (%%MediumDensity%% \\cdot %%DragCoefficient%% \\cdot %%DecelerationArea%%) }",
-            "E_{\\mathrm{impact}} &= (%%ParameterMass%% \\cdot %%ParameterMass%% \\cdot %%GravityAcceleration%%) / (%%MediumDensity%% \\cdot %%DragCoefficient%% \\cdot %%DecelerationArea%%)",
-            "E_{\\mathrm{density}} &= E_{\\mathrm{impact}} / %%FrontalArea%% \\le %%EnergyDensityLimit%%",
-        ],
-        sldv: "sldv.assert( (ImpactEnergyDensity <= %%EnergyDensityLimit%%), 'Bind_KINETIC_ENERGY_DISSIPATION_BOUND' );",
-    },
-    ProofTemplate {
-        id: "T-02",
-        name: "Containment Reach Bound",
-        statement: "$$ R_{\\mathrm{glide}} \\le R_{\\mathrm{bound}} - R_{\\mathrm{buffer}} $$",
-        derivation: &[
-            "t_{\\mathrm{glide}} &= \\frac{H_a}{V_{\\mathrm{sink}}}",
-            "R_{\\mathrm{air}} &= H_a \\cdot (L/D)_{\\mathrm{max}}",
-            "R_{\\mathrm{drift}} &= V_{\\mathrm{wind}} \\cdot t_{\\mathrm{glide}}",
-            "R_{\\mathrm{glide}} &= R_{\\mathrm{air}} + R_{\\mathrm{drift}}",
-        ],
-        params: &[
-            ("InitialAltitude", "H_a", "Initial altitude above reference plane", "m"),
-            ("LiftToDragRatio", "(L/D)_max", "Maximum lift-to-drag ratio", "-"),
-            ("SinkRate", "V_sink", "Minimum sink rate", "m/s"),
-            ("WindDriftSpeed", "V_wind", "Wind drift component", "m/s"),
-            ("ContainmentRadius", "R_bound", "Operational containment radius", "m"),
-            ("BufferRadius", "R_buffer", "Contingency buffer radius", "m"),
-        ],
-        numeric: &[
-            "t_{\\mathrm{glide}} &= %%InitialAltitude%% / %%SinkRate%%",
-            "R_{\\mathrm{air}} &= %%InitialAltitude%% \\cdot %%LiftToDragRatio%%",
-            "R_{\\mathrm{drift}} &= %%WindDriftSpeed%% \\cdot t_{\\mathrm{glide}}",
-            "R_{\\mathrm{glide}} &= R_{\\mathrm{air}} + R_{\\mathrm{drift}} \\le %%ContainmentRadius%% - %%BufferRadius%%",
-        ],
-        sldv: "sldv.assert( (GlideDistance <= (ContainmentRadius - ContingencyBuffer)), 'Bind_CONTAINMENT_REACH_BOUND' );",
-    },
-    ProofTemplate {
-        id: "T-03",
-        name: "Barrier Forward Invariance Bound",
-        statement: "$$ \\dot{B}(\\mathbf{x}, \\mathbf{u}) + \\gamma(B(\\mathbf{x})) \\ge B_{\\mathrm{min}} $$",
-        derivation: &[
-            "B(\\mathbf{x}) &= d_b \\cdot d_b - \\|\\mathbf{p} - \\mathbf{p}_c\\| \\cdot \\|\\mathbf{p} - \\mathbf{p}_c\\| - \\frac{\\|\\mathbf{v}\\| \\cdot \\|\\mathbf{v}\\|}{K_f \\cdot a_{\\mathrm{max}}}",
-            "\\dot{B}(\\mathbf{x}, \\mathbf{u}) &= -K_f \\cdot (\\mathbf{p} - \\mathbf{p}_c)^T \\mathbf{v} + \\frac{\\mathbf{v}^T \\mathbf{u}}{a_{\\mathrm{max}}}",
-            "\\dot{B} + \\gamma B &= \\dot{B} + \\gamma_s \\cdot B(\\mathbf{x})",
-        ],
-        params: &[
-            ("BarrierRadius", "d_b", "Containment boundary radius", "m"),
-            ("PositionOffset", "p-p_c", "Current radial offset from centre", "m"),
-            ("GroundSpeed", "v", "Ground speed magnitude", "m/s"),
-            ("AccelerationLimit", "a_max", "Maximum certified acceleration", "m/s"),
-            ("BarrierGain", "gamma_s", "Extended class-K linear gain", "per second"),
-            ("KineticFactor", "K_f", "Dimensionless kinetic term factor", "-"),
-        ],
-        numeric: &[
-            "B(\\mathbf{x}) &= %%BarrierRadius%% \\cdot %%BarrierRadius%% - %%PositionOffset%% \\cdot %%PositionOffset%% - (%%GroundSpeed%% \\cdot %%GroundSpeed%%) / (%%KineticFactor%% \\cdot %%AccelerationLimit%%)",
-            "\\dot{B} &= -%%KineticFactor%% \\cdot %%PositionOffset%% \\cdot %%GroundSpeed%% + %%GroundSpeed%% \\cdot (%%AccelerationLimit%%/%%AccelerationLimit%%)",
-            "\\dot{B} + \\gamma B &= \\dot{B} + %%BarrierGain%% \\cdot B(\\mathbf{x}) \\ge B_{\\mathrm{min}}",
-        ],
-        sldv: "sldv.assert( (BarrierValue >= BarrierFloor) && (BarrierDerivative + BarrierGain * BarrierValue >= BarrierFloor), 'Bind_BARRIER_FORWARD_INVARIANCE_BOUND' );",
-    },
-    ProofTemplate {
-        id: "T-04",
-        name: "Exponential Discharge Bound",
-        statement: "$$ V_e(t) = V_a \\cdot \\exp\\left( -\\frac{t}{R_b \\cdot C_s} \\right) \\le V_{\\mathrm{safe}} $$",
-        derivation: &[
-            "\\tau_{\\mathrm{bleed}} &= R_b \\cdot C_s",
-            "V_e(t) &= V_a \\cdot \\exp\\left( -\\frac{t}{\\tau_{\\mathrm{bleed}}} \\right)",
-            "t_{\\mathrm{safe}} &= \\tau_{\\mathrm{bleed}} \\cdot \\ln\\left( \\frac{V_a}{V_{\\mathrm{safe}}} \\right)",
-        ],
-        params: &[
-            ("InitialPotential", "V_a", "Initial fully charged potential", "V"),
-            ("SafePotential", "V_safe", "Non-hazardous potential ceiling", "V"),
-            ("BleedResistance", "R_b", "Bleed-down resistance", "ohm"),
-            ("StorageCapacitance", "C_s", "Energy storage capacitance", "F"),
-        ],
-        numeric: &[
-            "\\tau_{\\mathrm{bleed}} &= %%BleedResistance%% \\cdot %%StorageCapacitance%%",
-            "t_{\\mathrm{safe}} &= \\tau_{\\mathrm{bleed}} \\cdot \\ln(%%InitialPotential%%/%%SafePotential%%)",
-            "V_e(t_{\\mathrm{safe}}) &= %%InitialPotential%% \\cdot \\exp(-t_{\\mathrm{safe}}/\\tau_{\\mathrm{bleed}}) \\le %%SafePotential%%",
-        ],
-        sldv: "sldv.assert( implies(DeactivationCommandActive && (ElapsedTime >= TauBleed), (StoredPotential <= %%SafePotential%%)), 'Bind_EXPONENTIAL_DISCHARGE_BOUND' );",
-    },
-    ProofTemplate {
-        id: "T-05",
-        name: "Energy Balance Separation Bound",
-        statement: "$$ V_{\\mathrm{sep}} = \\sqrt{ \\frac{K_f}{M} \\left( W_{\\mathrm{drive}} - W_{\\mathrm{friction}} \\right) } \\ge V_{\\mathrm{stall}} $$",
-        derivation: &[
-            "W_{\\mathrm{drive}} &= P_r \\cdot A_p \\cdot x_s",
-            "W_{\\mathrm{friction}} &= \\mu_k \\cdot M \\cdot g \\cdot \\cos(\\theta_s) \\cdot x_s",
-            "V_{\\mathrm{sep}} &= \\sqrt{ \\frac{K_f \\cdot (W_{\\mathrm{drive}} - W_{\\mathrm{friction}})}{M} }",
-        ],
-        params: &[
-            ("RailPressure", "P_r", "Mean drive pressure", "Pa"),
-            ("PistonArea", "A_p", "Drive piston cross-section area", "square metre"),
-            ("StrokeLength", "x_s", "Acceleration stroke length", "m"),
-            ("ParameterMass", "M", "System total mass", "kg"),
-            ("FrictionCoefficient", "mu_k", "Kinetic friction coefficient", "-"),
-            ("InclineAngle", "theta_s", "Stroke incline angle", "deg"),
-            ("StallSpeed", "V_stall", "Minimum stall velocity", "m/s"),
-            ("KineticFactor", "K_f", "Dimensionless kinetic term factor", "-"),
-            ("GravityAcceleration", "g", "Gravitational acceleration", "m/s"),
-        ],
-        numeric: &[
-            "W_{\\mathrm{drive}} &= %%RailPressure%% \\cdot %%PistonArea%% \\cdot %%StrokeLength%%",
-            "W_{\\mathrm{friction}} &= %%FrictionCoefficient%% \\cdot %%ParameterMass%% \\cdot %%GravityAcceleration%% \\cdot \\cos(%%InclineAngle%%) \\cdot %%StrokeLength%%",
-            "V_{\\mathrm{sep}} &= \\sqrt(%%KineticFactor%% \\cdot (W_{\\mathrm{drive}} - W_{\\mathrm{friction}})/%%ParameterMass%%) \\ge %%StallSpeed%%",
-        ],
-        sldv: "sldv.assert( implies(SeparationTrigger, (ReleaseSpeed >= %%StallSpeed%%)), 'Bind_ENERGY_BALANCE_SEPARATION_BOUND' );",
-    },
-    ProofTemplate {
-        id: "T-06",
-        name: "Link Margin Lower Bound",
-        statement: "$$ \\mathrm{LM} = P_{\\mathrm{rx}} - P_{\\mathrm{sens}} \\ge \\mathrm{LM}_{\\mathrm{min}} $$",
-        derivation: &[
-            "\\mathrm{FSPL} &= L_f \\cdot \\left( \\log(D) + \\log(f) + \\log(F_c) \\right)",
-            "P_{\\mathrm{rx}} &= P_{\\mathrm{tx}} + G_{\\mathrm{tx}} + G_{\\mathrm{rx}} - \\mathrm{FSPL} - L_{\\mathrm{misc}}",
-            "\\mathrm{LM} &= P_{\\mathrm{rx}} - P_{\\mathrm{sens}}",
-        ],
-        params: &[
-            ("TransmitPower", "P_tx", "Transmitter output power", "dBm"),
-            ("TransmitGain", "G_tx", "Transmitter antenna gain", "dBi"),
-            ("ReceiveGain", "G_rx", "Receiver antenna gain", "dBi"),
-            ("CarrierFrequency", "f", "Carrier frequency", "Hz"),
-            ("StandoffDistance", "D", "Maximum standoff distance", "m"),
-            ("InsertionLoss", "L_misc", "Insertion and atmospheric loss", "dB"),
-            ("ReceiveSensitivity", "P_sens", "Receiver detection sensitivity", "dBm"),
-            ("MinLinkMargin", "LM_min", "Minimum required link margin", "dB"),
-            ("LogFactor", "L_f", "Dimensionless decibel scaling factor", "-"),
-            ("PropagationFactor", "F_c", "Dimensionless propagation geometry factor", "-"),
-        ],
-        numeric: &[
-            "\\mathrm{FSPL} &= %%LogFactor%% \\cdot ( \\log(%%StandoffDistance%%) + \\log(%%CarrierFrequency%%) + \\log(%%PropagationFactor%%) )",
-            "P_{\\mathrm{rx}} &= %%TransmitPower%% + %%TransmitGain%% + %%ReceiveGain%% - \\mathrm{FSPL} - %%InsertionLoss%%",
-            "\\mathrm{LM} &= P_{\\mathrm{rx}} - %%ReceiveSensitivity%% \\ge %%MinLinkMargin%%",
-        ],
-        sldv: "sldv.assert( (LinkMargin >= %%MinLinkMargin%%), 'Bind_LINK_MARGIN_LOWER_BOUND' );",
-    },
-    ProofTemplate {
-        id: "T-07",
-        name: "Energy Reserve and Thermal Budget Bound",
-        statement: "$$ \\mathrm{SoC}(t) \\ge \\mathrm{SoC}_{\\mathrm{crit}} \\; \\wedge \\; T_{\\mathrm{cell}}(t) \\le T_{\\mathrm{max}} $$",
-        derivation: &[
-            "E_{\\mathrm{rtl}} &= \\left( \\frac{D}{V_{\\mathrm{cruise}}} \\right) \\cdot \\left( P_{\\mathrm{prop}} + P_{\\mathrm{av}} \\right)",
-            "\\mathrm{SoC}_{\\mathrm{crit}} &= \\frac{E_{\\mathrm{rtl}} + E_{\\mathrm{abort}}}{E_{\\mathrm{total}}}",
-            "\\Delta T &= \\frac{I_b \\cdot I_b \\cdot R_i}{h \\cdot A_p}",
-            "T_{\\mathrm{cell,max}} &= T_{\\mathrm{amb}} + \\Delta T",
-        ],
-        params: &[
-            ("TotalEnergy", "E_total", "Total energy storage capacity", "J"),
-            ("PropulsionPower", "P_prop", "Steady-state propulsion power", "W"),
-            ("AvionicsPower", "P_av", "Avionics power consumption", "W"),
-            ("CruiseSpeed", "V_cruise", "Cruise speed", "m/s"),
-            ("ReserveDistance", "D", "Standoff distance to recovery point", "m"),
-            ("AbortReserve", "E_abort", "Emergency abort energy reserve", "J"),
-            ("DischargeCurrent", "I_b", "Storage discharge current", "A"),
-            ("InternalResistance", "R_i", "Internal resistance", "ohm"),
-            ("DissipationProduct", "h_A_p", "Convective dissipation product", "W per K"),
-            ("AmbientTemperature", "T_amb", "Ambient temperature", "degC"),
-            ("ThermalLimit", "T_max", "Maximum certified temperature", "degC"),
-        ],
-        numeric: &[
-            "t_{\\mathrm{rtl}} &= %%ReserveDistance%%/%%CruiseSpeed%%",
-            "E_{\\mathrm{rtl}} &= t_{\\mathrm{rtl}} \\cdot (%%PropulsionPower%% + %%AvionicsPower%%)",
-            "\\mathrm{SoC}_{\\mathrm{crit}} &= (E_{\\mathrm{rtl}} + %%AbortReserve%%)/%%TotalEnergy%%",
-            "\\Delta T &= (%%DischargeCurrent%% \\cdot %%DischargeCurrent%% \\cdot %%InternalResistance%%)/%%DissipationProduct%%",
-            "T_{\\mathrm{cell,max}} &= %%AmbientTemperature%% + \\Delta T \\le %%ThermalLimit%%",
-        ],
-        sldv: "sldv.assert( (ReserveState >= DynamicReserveThreshold) && (CellTemperature <= %%ThermalLimit%%), 'Bind_ENERGY_RESERVE_THERMAL_BUDGET' );",
-    },
-    ProofTemplate {
-        id: "T-08",
-        name: "Separation and Miss Distance Bound",
-        statement: "$$ d_{\\mathrm{CPA}} \\ge D_{\\mathrm{mod}} \\; \\vee \\; H_{\\mathrm{sep}} \\ge H_{\\mathrm{thresh}} $$",
-        derivation: &[
-            "d_{\\mathrm{evade}} &= \\frac{a_{\\mathrm{evade}}}{K_f} \\cdot t_m \\cdot t_m",
-            "t_m &= \\tau_{\\mathrm{thresh}}",
-            "d_{\\mathrm{CPA}} &= d_{\\mathrm{evade}}",
-        ],
-        params: &[
-            ("WellClearRadius", "D_mod", "Horizontal well-clear boundary", "m"),
-            ("VerticalClearance", "H_thresh", "Vertical well-clear boundary", "m"),
-            ("WarnTime", "tau_thresh", "Warning time threshold", "s"),
-            ("RelativeVelocity", "v_rel", "Maximum relative velocity", "m/s"),
-            ("EvadeAcceleration", "a_evade", "Certified evasive acceleration", "m/s"),
-            ("KineticFactor", "K_f", "Dimensionless kinetic term factor", "-"),
-        ],
-        numeric: &[
-            "t_{\\mathrm{maneuver}} &= %%WarnTime%%",
-            "d_{\\mathrm{evade}} &= (%%EvadeAcceleration%%/%%KineticFactor%%) \\cdot %%WarnTime%% \\cdot %%WarnTime%%",
-            "d_{\\mathrm{evade}} &\\ge %%WellClearRadius%%",
-        ],
-        sldv: "sldv.assert( (HorizontalSeparationAtCPA >= %%WellClearRadius%%) || (VerticalSeparationAtCPA >= %%VerticalClearance%%), 'Bind_SEPARATION_MISS_DISTANCE_BOUND' );",
-    },
-    ProofTemplate {
-        id: "T-09",
-        name: "Loading Ceiling and Field of View Bound",
-        statement: "$$ q(t) \\le q_{\\mathrm{limit}} \\; \\wedge \\; \\eta_{\\mathrm{LOS}}(t) \\le \\theta_{\\mathrm{FOV}} $$",
-        derivation: &[
-            "q_{\\mathrm{max}} &= \\frac{M \\cdot g \\cdot \\sin(\\theta_d)}{C_d \\cdot S_r}",
-            "V_{\\mathrm{dive}} &= \\sqrt{ \\frac{K_f \\cdot q_{\\mathrm{max}}}{\\rho} }",
-            "\\eta_{\\mathrm{LOS}} &= \\arctan\\left( \\frac{r_{\\perp}}{r_{\\parallel}} \\right)",
-        ],
-        params: &[
-            ("TerminalMass", "M", "Terminal dive mass", "kg"),
-            ("DescentAngle", "theta_d", "Maximum dive path angle", "deg"),
-            ("DescentDragCoefficient", "C_d", "High-speed drag coefficient", "-"),
-            ("ReferenceArea", "S_r", "Reference surface area", "square metre"),
-            ("SeaLevelDensity", "rho", "Ambient medium density", "kg per cubic metre"),
-            ("DynamicPressureLimit", "q_limit", "Aeroelastic dynamic pressure limit", "Pa"),
-            ("FieldOfViewHalf", "theta_FOV", "Sensor half-angle field of view", "deg"),
-            ("GravityAcceleration", "g", "Gravitational acceleration", "m/s"),
-            ("KineticFactor", "K_f", "Dimensionless kinetic term factor", "-"),
-        ],
-        numeric: &[
-            "q_{\\mathrm{max}} &= (%%TerminalMass%% \\cdot %%GravityAcceleration%% \\cdot \\sin(%%DescentAngle%%))/(%%DescentDragCoefficient%% \\cdot %%ReferenceArea%%)",
-            "V_{\\mathrm{dive}} &= \\sqrt((%%KineticFactor%% \\cdot q_{\\mathrm{max}})/%%SeaLevelDensity%%)",
-            "q_{\\mathrm{max}} &\\le %%DynamicPressureLimit%%",
-            "\\eta_{\\mathrm{LOS}} &\\le %%FieldOfViewHalf%%",
-        ],
-        sldv: "sldv.assert( (DynamicPressure <= %%DynamicPressureLimit%%) && (LineOfSightTrackError <= %%FieldOfViewHalf%%), 'Bind_LOADING_CEILING_FOV_BOUND' );",
-    },
-    ProofTemplate {
-        id: "T-10",
-        name: "Markov Reliability Bound",
-        statement: "$$ P_{\\mathrm{cat}}(T) < \\epsilon_{\\mathrm{target}} $$",
-        derivation: &[
-            "P_{\\mathrm{cat}}(T) &= \\int_{t_a}^{T} \\lambda_c \\cdot P_{\\mathrm{single}}(t) \\, dt",
-            "P_{\\mathrm{cat}}(T) &\\approx \\frac{\\lambda_p \\cdot \\lambda_c}{\\mu_r} \\cdot T",
-        ],
-        params: &[
-            ("ChannelFailureRate1", "lambda_p", "Primary channel failure rate", "per hour"),
-            ("ChannelFailureRate2", "lambda_c", "Secondary channel common-cause rate", "per hour"),
-            ("SwitchRate", "mu_r", "Reconfiguration switch rate", "per hour"),
-            ("MissionDuration", "T", "Single mission operating duration", "hr"),
-            ("FailureCeiling", "epsilon_target", "Target catastrophic failure ceiling", "per operating hour"),
-        ],
-        numeric: &[
-            "P_{\\mathrm{cat}} &= (%%ChannelFailureRate1%% \\cdot %%ChannelFailureRate2%%)/%%SwitchRate%% \\cdot %%MissionDuration%%",
-            "P_{\\mathrm{cat}} &\\le %%FailureCeiling%%",
-        ],
-        sldv: "sldv.assert( (CatastrophicFailureProbability <= %%FailureCeiling%%), 'Bind_MARKOV_RELIABILITY_BOUND' );",
-    },
-];
 
 /// Collects symbolic parameter tokens from AST attribute defaults and constraint expressions.
 ///
@@ -411,26 +114,32 @@ pub fn collect_parameter_tokens(pkg: &PackageDef) -> BTreeMap<String, String> {
 fn extract_constraint_tokens(expr: &str, tokens: &mut BTreeMap<String, String>) {
     let operators = ["<=", ">=", "<", ">", "="];
     let mut idx = 0;
-    while idx < expr.len() {
-        let matched_op = operators.iter().find(|&&op| expr[idx..].starts_with(op));
+    while let Some(tail) = expr.get(idx..) {
+        if tail.is_empty() {
+            break;
+        }
+        let matched_op = operators.iter().find(|&&op| tail.starts_with(op));
         if let Some(&op) = matched_op {
-            let before = &expr[..idx];
+            let before = expr.get(..idx).unwrap_or("");
             let before_trimmed = before.trim_end();
             let id_start = before_trimmed
                 .rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
                 .map(|p| p + 1)
                 .unwrap_or(0);
-            let key = &before_trimmed[id_start..];
+            let key = before_trimmed.get(id_start..).unwrap_or("");
             let key_valid = !key.is_empty()
-                && key.as_bytes().first().is_some_and(|b| b.is_ascii_alphabetic() || *b == b'_')
+                && key
+                    .as_bytes()
+                    .first()
+                    .is_some_and(|b| b.is_ascii_alphabetic() || *b == b'_')
                 && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
 
-            let after = &expr[idx + op.len()..];
+            let after = expr.get(idx + op.len()..).unwrap_or("");
             let after_trimmed = after.trim_start();
             let val_len = after_trimmed
                 .find(|c: char| c.is_whitespace() || c == ';')
                 .unwrap_or(after_trimmed.len());
-            let val = &after_trimmed[..val_len];
+            let val = after_trimmed.get(..val_len).unwrap_or("");
 
             if key_valid && !val.is_empty() {
                 tokens.insert(key.to_string(), val.to_string());
@@ -439,62 +148,10 @@ fn extract_constraint_tokens(expr: &str, tokens: &mut BTreeMap<String, String>) 
             }
             idx += op.len();
         } else {
-            idx += 1;
+            let step = tail.chars().next().map_or(1, char::len_utf8);
+            idx += step;
         }
     }
-}
-
-/// Executes deterministic fn `resolve_template` within `crates/compile-sysml/src/stpa/safety_suite.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `resolve_template` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `resolve_template` (declaration #4) within `STPA-SAFETY-SUITE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `resolve_template`.
-/// - `tokens: &BTreeMap<String, String>` must satisfy domain and type-safety constraints prior to invoking `resolve_template`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `resolve_template` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `resolve_template`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `resolve_template`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `resolve_template` (`String`).
-/// - State: Maintains consistent state invariants across `resolve_template` without partial mutation on error.
-/// - Action: Executes `resolve_template` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `resolve_template` (`STPA-SAFETY-SUITE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-STPA-SAFETY-SUITE-RESOLVE-TEMPLATE] | SysML v2: ActionDef(resolve_template)
-fn resolve_template(text: &str, tokens: &BTreeMap<String, String>) -> String {
-    let mut result = String::with_capacity(text.len());
-    let mut idx = 0;
-    while let Some(start) = text[idx..].find("%%") {
-        let open_pos = idx + start;
-        result.push_str(&text[idx..open_pos]);
-        let param_start = open_pos + 2;
-        if let Some(close) = text[param_start..].find("%%") {
-            let key = &text[param_start..param_start + close];
-            if !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-                let val = tokens
-                    .get(key)
-                    .cloned()
-                    .unwrap_or_else(|| PENDING_PARAMETER.to_string());
-                result.push_str(&val);
-                idx = param_start + close + 2;
-                continue;
-            }
-        }
-        result.push_str("%%");
-        idx = open_pos + 2;
-    }
-    result.push_str(&text[idx..]);
-    result
 }
 
 /// Collects all constraint defs across package and part scopes.
@@ -620,7 +277,7 @@ pub fn transpile_safety_suite_with_registry(
     // 4. 04_SAFETY_CONSTRAINTS.md
     artifacts.insert(
         "04_SAFETY_CONSTRAINTS.md".to_string(),
-        render_safety_constraints(&ucas, &constraints),
+        render_safety_constraints(pkg, &ucas, &constraints),
     );
 
     // 5. 05_FMECA_MATRIX.md
@@ -629,13 +286,11 @@ pub fn transpile_safety_suite_with_registry(
         render_fmeca_matrix_doc(&fmeca_rows),
     );
 
-    // 6. 06_REGULATORY_OBJECTIVES_ASSESSMENT.md & 06_SORA_SAIL_ASSESSMENT.md
-    let reg_doc = render_regulatory_objectives_assessment(&tokens);
+    // 6. 06_REGULATORY_OBJECTIVES_ASSESSMENT.md
     artifacts.insert(
         "06_REGULATORY_OBJECTIVES_ASSESSMENT.md".to_string(),
-        reg_doc.clone(),
+        render_regulatory_objectives_assessment(pkg, &tokens),
     );
-    artifacts.insert("06_SORA_SAIL_ASSESSMENT.md".to_string(), reg_doc);
 
     // 7. 07_RTA_ARCHITECTURE.md
     artifacts.insert(
@@ -655,7 +310,7 @@ pub fn transpile_safety_suite_with_registry(
     // 10. SLDV_FORMAL_PROOFS.m
     artifacts.insert(
         "SLDV_FORMAL_PROOFS.m".to_string(),
-        render_sldv_script(pkg, &constraints, &tokens),
+        render_sldv_script(pkg, &constraints),
     );
 
     artifacts
@@ -943,7 +598,7 @@ fn render_uca_matrix(ucas: &[UnsafeControlAction]) -> String {
     out.push_str("# Unsafe Control Action Combinatorial Matrix\n\n");
     out.push_str("Cartesian product of controlling part-def control actions across the\n");
     out.push_str("four canonical STPA guide-word categories.\n\n");
-    out.push_str("| UCA ID | Controller | Control Action | Guide Word | Context | Hazard | Safety Constraint | Severity | SAIL |\n");
+    out.push_str("| UCA ID | Controller | Control Action | Guide Word | Context | Hazard | Safety Constraint | Severity | Integrity Level |\n");
     out.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
     for u in ucas {
         out.push_str(&format!(
@@ -1009,37 +664,82 @@ fn render_loss_scenarios(ucas: &[UnsafeControlAction]) -> String {
     out
 }
 
-/// Executes deterministic fn `render_safety_constraints` within `crates/compile-sysml/src/stpa/safety_suite.rs`.
+/// Sanitizes arbitrary AST text for single-line Markdown table cell embedding.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `sanitize_markdown_cell` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Normalizes embedded CR/LF line breaks into single spaces and replaces pipe delimiters (`|`) with `/` so Markdown column arity remains invariant.
+///
+/// ## 3. Preconditions
+/// - `raw: &str` is any valid UTF-8 slice originating from AST names, expressions, or documentation strings.
+///
+/// ## 4. Postconditions
+/// - Returns a trimmed single-line `String` containing zero `|` or newline characters.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(raw)) linear scan over character scalar values.
+/// - Space Complexity: O(N(raw)) bounded output string allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts empty or whitespace-only slices without error.
+/// - State: Pure string transformation with zero shared mutable state.
+/// - Action: Executes in a single bounded pass with zero panics, direct indexing, or regular expressions.
+/// - Resource: Pre-sizes output buffer to `raw.len()`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-SAFETY-SUITE-SANITIZE-MARKDOWN-CELL] | SysML v2: ActionDef(sanitize_markdown_cell)
+fn sanitize_markdown_cell(raw: &str) -> String {
+    let mut buf = String::with_capacity(raw.len());
+    for ch in raw.trim().chars() {
+        match ch {
+            '\r' | '\n' => buf.push(' '),
+            '|' => buf.push('/'),
+            _ => buf.push(ch),
+        }
+    }
+    buf
+}
+
+/// Renders formal safety constraint obligations derived purely from AST UCAs, `ConstraintDef`s,
+/// `CalcDef`s, and `RequirementDef`s across `pkg.get_all_packages()`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `render_safety_constraints` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `render_safety_constraints` (declaration #12) within `STPA-SAFETY-SUITE`.
+/// - Derives every safety constraint obligation strictly from `ucas`, `constraints`, `pkg.get_all_calcs()`, and AST `requirement_defs` with zero hardcoded domain physics templates.
 ///
 /// ## 3. Preconditions
-/// - `ucas: &[UnsafeControlAction]` must satisfy domain and type-safety constraints prior to invoking `render_safety_constraints`.
-/// - `constraints: &[ConstraintDef]` must satisfy domain and type-safety constraints prior to invoking `render_safety_constraints`.
+/// - `pkg: &PackageDef`, `ucas: &[UnsafeControlAction]`, and `constraints: &[ConstraintDef]` satisfy AST domain invariants.
 ///
 /// ## 4. Postconditions
-/// - Returns `String` from `render_safety_constraints` with deterministic post-execution state.
+/// - Returns `String` containing the Markdown `# Formal Safety Constraints` specification.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(ucas)) bounded over input/member dimension of `render_safety_constraints`.
-/// - Space Complexity: O(N(ucas)) bounded auxiliary memory for `render_safety_constraints`.
+/// - Time Complexity: O(N(pkg) + N(ucas)) bounded over package AST elements and UCA cardinality.
+/// - Space Complexity: O(N(pkg) + N(ucas)) bounded auxiliary memory for rendered Markdown.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `render_safety_constraints` (`String`).
-/// - State: Maintains consistent state invariants across `render_safety_constraints` without partial mutation on error.
-/// - Action: Executes `render_safety_constraints` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `render_safety_constraints` (`STPA-SAFETY-SUITE`).
+/// - Interface: Validates empty vs populated AST collections cleanly without fabricated domain templates.
+/// - State: Pure read-only AST projection with zero mutation.
+/// - Action: Executes deterministically with zero unbounded recursion, slicing, or panics.
+/// - Resource: Bounds heap allocations proportional to AST node cardinality.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-STPA-SAFETY-SUITE-RENDER-SAFETY-CONSTRAINTS] | SysML v2: ActionDef(render_safety_constraints)
 fn render_safety_constraints(
+    pkg: &PackageDef,
     ucas: &[UnsafeControlAction],
     constraints: &[ConstraintDef],
 ) -> String {
+    let base_pkg = if pkg.name.trim().is_empty() {
+        "System"
+    } else {
+        pkg.name.trim()
+    };
+
     let mut out = String::new();
     out.push_str("# Formal Safety Constraints\n\n");
     out.push_str("## Derived Safety Constraints per Unsafe Control Action\n\n");
@@ -1051,13 +751,88 @@ fn render_safety_constraints(
             u.constraint, u.id, u.control_action, u.guide_word
         ));
     }
+
     out.push_str("\n## Schema-Declared Constraint Defs (SysML v2 SSOT)\n\n");
-    out.push_str("| Constraint Def | Expression |\n");
-    out.push_str("| :--- | :--- |\n");
-    for c in constraints {
-        out.push_str(&format!("| {} | {} |\n", c.name, c.expression));
+    if constraints.is_empty() {
+        out.push_str(&format!(
+            "No `constraint def` invariants declared in package `{}`.\n",
+            base_pkg
+        ));
+    } else {
+        out.push_str("| Constraint Def | Expression |\n");
+        out.push_str("| :--- | :--- |\n");
+        for c in constraints {
+            let expr = if c.expression.trim().is_empty() {
+                PENDING_PARAMETER.to_string()
+            } else {
+                sanitize_markdown_cell(&c.expression)
+            };
+            out.push_str(&format!(
+                "| {} | {} |\n",
+                sanitize_markdown_cell(&c.name),
+                expr
+            ));
+        }
     }
-    out.push('\n');
+
+    let calcs = pkg.get_all_calcs();
+    out.push_str("\n## Schema-Declared Calculation Obligations (SysML v2 SSOT)\n\n");
+    if calcs.is_empty() {
+        out.push_str(&format!(
+            "No `calc def` expressions declared in package `{}`.\n",
+            base_pkg
+        ));
+    } else {
+        out.push_str("| Calc Def | Expression |\n");
+        out.push_str("| :--- | :--- |\n");
+        for calc in &calcs {
+            let expr = calc
+                .expression
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(sanitize_markdown_cell)
+                .unwrap_or_else(|| PENDING_PARAMETER.to_string());
+            out.push_str(&format!(
+                "| {} | {} |\n",
+                sanitize_markdown_cell(&calc.name),
+                expr
+            ));
+        }
+    }
+
+    let mut seen_reqs = BTreeSet::new();
+    let mut req_rows = Vec::new();
+    for sub_pkg in pkg.get_all_packages() {
+        for req in &sub_pkg.requirement_defs {
+            if seen_reqs.insert(req.name.clone()) {
+                let spec = req
+                    .doc
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(sanitize_markdown_cell)
+                    .unwrap_or_else(|| "Schema-declared safety requirement obligation".to_string());
+                req_rows.push((sanitize_markdown_cell(&req.name), spec));
+            }
+        }
+    }
+
+    out.push_str("\n## Schema-Declared Safety Requirement Obligations (SysML v2 SSOT)\n\n");
+    if req_rows.is_empty() {
+        out.push_str(&format!(
+            "No `requirement def` declarations present in package `{}`.\n\n",
+            base_pkg
+        ));
+    } else {
+        out.push_str("| Requirement Def | Specification |\n");
+        out.push_str("| :--- | :--- |\n");
+        for (req_name, spec) in &req_rows {
+            out.push_str(&format!("| {} | {} |\n", req_name, spec));
+        }
+        out.push('\n');
+    }
+
     out
 }
 
@@ -1113,102 +888,363 @@ fn render_fmeca_matrix_doc(rows: &[FmecaRow]) -> String {
     out
 }
 
-/// Executes deterministic fn `render_regulatory_objectives_assessment` within `crates/compile-sysml/src/stpa/safety_suite.rs`.
+/// Normalized regulatory safety objective record projected from AST attributes and definitions.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `RegulatoryObjectiveRow` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Encapsulates the 6 canonical columns (`objective_id`, `objective`, `robustness`, `integrity`, `assurance_level`, `evidence`) derived strictly from schema AST declarations.
+///
+/// ## 3. Preconditions
+/// - Member strings are single-line sanitized Markdown cell values derived from AST tokens or AST definition nodes.
+///
+/// ## 4. Postconditions
+/// - Preserves 1-to-1 structural fidelity between declared AST constructs and rendered regulatory objective table rows.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) constant-time field access across 6 owned strings.
+/// - Space Complexity: O(L) proportional to the combined string byte length L of the 6 fields.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Strongly typed owned fields forbid partial row construction.
+/// - State: Immutable value record once inserted into the ordered `BTreeMap`.
+/// - Action: Deterministic memory layout with zero dynamic dispatch.
+/// - Resource: Bounded heap allocation per declared AST objective.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-SAFETY-SUITE-REGULATORY-OBJECTIVE-ROW] | SysML v2: PartDef(RegulatoryObjectiveRow)
+struct RegulatoryObjectiveRow {
+    objective_id: String,
+    objective: String,
+    robustness: String,
+    integrity: String,
+    assurance_level: String,
+    evidence: String,
+}
+
+/// Parses an explicit token key (`OBJ<NN>_Objective` or `<PREFIX><NN>_Objective`) into its
+/// positive numeric index and key stem without regular expressions or direct slice indexing.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `parse_declared_objective_index` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Matches exclusively keys ending in `_Objective` whose leading stem equals `prefix_stem` or `"OBJ"` followed by one or more ASCII digits parsing to `idx >= 1`.
+///
+/// ## 3. Preconditions
+/// - `key: &'a str` is an AST attribute identifier; `prefix_stem: &str` is a non-empty normalized objective stem.
+///
+/// ## 4. Postconditions
+/// - Returns `Some((idx, stem_before_suffix))` for valid explicit objective keys, or `None` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(key)) linear prefix/suffix/digit scan.
+/// - Space Complexity: O(1) zero heap allocations.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Rejects malformed, zero-indexed, or non-matching keys by returning `None`.
+/// - State: Pure borrowed slice inspection with zero side effects.
+/// - Action: Deterministic prefix/digit scanning with zero regular expressions, range slicing, or unchecked unwrapping.
+/// - Resource: Constant stack frame footprint.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-SAFETY-SUITE-PARSE-DECLARED-OBJECTIVE-INDEX] | SysML v2: ActionDef(parse_declared_objective_index)
+fn parse_declared_objective_index<'a>(key: &'a str, prefix_stem: &str) -> Option<(usize, &'a str)> {
+    let before_suffix = key.strip_suffix("_Objective")?;
+    let rest = before_suffix
+        .strip_prefix(prefix_stem)
+        .or_else(|| before_suffix.strip_prefix("OBJ"))?;
+    let digits = rest.trim_start_matches(['-', '_']);
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let idx = digits.parse::<usize>().ok()?;
+    if idx == 0 {
+        return None;
+    }
+    Some((idx, before_suffix))
+}
+
+/// Renders the domain-agnostic regulatory objectives and integrity level assessment purely from
+/// SysML v2 AST structure, attribute tokens, `RequirementDef`s, `ConstraintDef`s, and `CalcDef`s.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `render_regulatory_objectives_assessment` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `render_regulatory_objectives_assessment` (declaration #14) within `STPA-SAFETY-SUITE`.
+/// - Emits zero unmodeled padding rows and zero domain-specific classification literals; every classification attribute and objective row derives deterministically from `pkg` and `tokens`.
 ///
 /// ## 3. Preconditions
-/// - `tokens: &BTreeMap<String, String>` must satisfy domain and type-safety constraints prior to invoking `render_regulatory_objectives_assessment`.
+/// - `pkg: &PackageDef` and `tokens: &BTreeMap<String, String>` represent the parsed SysML v2 model and extracted parameter map.
 ///
 /// ## 4. Postconditions
-/// - Returns `String` from `render_regulatory_objectives_assessment` with deterministic post-execution state.
+/// - Returns `String` containing the Markdown `# Domain Regulatory Objectives Assessment & Safety Objective Roster` document.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(tokens)) bounded over input/member dimension of `render_regulatory_objectives_assessment`.
-/// - Space Complexity: O(N(tokens)) bounded auxiliary memory for `render_regulatory_objectives_assessment`.
+/// - Time Complexity: O(N(pkg) + N(tokens) log N(tokens)) bounded over AST definitions and token map entries.
+/// - Space Complexity: O(N(pkg) + N(tokens)) bounded auxiliary storage for ordered objective rows.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `render_regulatory_objectives_assessment` (`String`).
-/// - State: Maintains consistent state invariants across `render_regulatory_objectives_assessment` without partial mutation on error.
-/// - Action: Executes `render_regulatory_objectives_assessment` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `render_regulatory_objectives_assessment` (`STPA-SAFETY-SUITE`).
+/// - Interface: Handles schemas with zero regulatory tokens or zero formal constraints by emitting truthful schema-grounded summaries.
+/// - State: Pure functional projection with zero global state mutation.
+/// - Action: Executes with zero regular expressions, zero direct slice indexing, and zero panics.
+/// - Resource: Bounded memory proportional to declared AST nodes.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-STPA-SAFETY-SUITE-RENDER-REGULATORY-OBJECTIVES-ASSESSMENT] | SysML v2: ActionDef(render_regulatory_objectives_assessment)
-fn render_regulatory_objectives_assessment(tokens: &BTreeMap<String, String>) -> String {
-    let prefix = tokens
-        .get("REGULATORY_OBJECTIVE_PREFIX")
-        .cloned()
-        .unwrap_or_else(|| "OBJ-".to_string());
-    let prefix_label = if prefix.ends_with('-') {
-        prefix
+fn render_regulatory_objectives_assessment(
+    pkg: &PackageDef,
+    tokens: &BTreeMap<String, String>,
+) -> String {
+    let base_pkg = if pkg.name.trim().is_empty() {
+        "System"
     } else {
-        format!("{}-", prefix)
+        pkg.name.trim()
     };
+    let all_parts = pkg.get_all_parts();
+    let part_count = all_parts.iter().filter(|p| !p.name.starts_with('_')).count();
+    let all_constraints = pkg.get_all_constraints();
+    let all_calcs = pkg.get_all_calcs();
+
+    let raw_prefix = tokens
+        .get("REGULATORY_OBJECTIVE_PREFIX")
+        .map(String::as_str)
+        .unwrap_or("OBJ-");
+    let trimmed_stem = raw_prefix.trim().trim_end_matches(['-', '_']);
+    let prefix_stem = if trimmed_stem.is_empty() {
+        "OBJ"
+    } else {
+        trimmed_stem
+    };
+    let display_prefix = format!("{}-", prefix_stem);
+
+    let mut classification_rows: Vec<(String, String)> = Vec::new();
+    let mut primary_integrity: Option<&str> = None;
+
+    for (key, val) in tokens {
+        if let Some(raw_field) = key.strip_prefix("RegulatoryClass_") {
+            let formatted = raw_field.replace('_', " ");
+            let clean_field = sanitize_markdown_cell(&formatted);
+            if !clean_field.is_empty() {
+                classification_rows.push((clean_field, sanitize_markdown_cell(val)));
+            }
+        } else if key == "RegulatoryClass" {
+            classification_rows.push((
+                "Regulatory Class".to_string(),
+                sanitize_markdown_cell(val),
+            ));
+        } else if let Some(raw_field) = key.strip_prefix("IntegrityLevel_") {
+            let formatted = raw_field.replace('_', " ");
+            let clean_field = sanitize_markdown_cell(&formatted);
+            if !clean_field.is_empty() {
+                if primary_integrity.is_none() {
+                    primary_integrity = Some(val.as_str());
+                }
+                classification_rows.push((clean_field, sanitize_markdown_cell(val)));
+            }
+        } else if key == "IntegrityLevel" {
+            if primary_integrity.is_none() {
+                primary_integrity = Some(val.as_str());
+            }
+            classification_rows.push((
+                "Integrity Level".to_string(),
+                sanitize_markdown_cell(val),
+            ));
+        }
+    }
 
     let mut out = String::new();
     out.push_str("# Domain Regulatory Objectives Assessment & Safety Objective Roster\n\n");
     out.push_str("| Assessment Field | Value |\n");
     out.push_str("| :--- | :--- |\n");
     out.push_str(&format!(
-        "| Ground Risk Class (GRC) | {} |\n",
-        tokens
-            .get("GroundRiskClass")
-            .unwrap_or(&PENDING_PARAMETER.to_string())
+        "| Target System Package | {} |\n",
+        sanitize_markdown_cell(base_pkg)
     ));
     out.push_str(&format!(
-        "| Air Risk Class (ARC) | {} |\n",
-        tokens
-            .get("AirRiskClass")
-            .unwrap_or(&PENDING_PARAMETER.to_string())
+        "| Declared Architectural Components | {} |\n",
+        part_count
     ));
     out.push_str(&format!(
-        "| Specific Assurance and Integrity Level (SAIL) | {} |\n\n",
-        tokens.get("SAIL").unwrap_or(&PENDING_PARAMETER.to_string())
+        "| Declared Formal Constraints & Calculations | {} constraints, {} calculations |\n",
+        all_constraints.len(),
+        all_calcs.len()
     ));
-
-    out.push_str("## Operational Safety Objectives\n\n");
-    out.push_str("| OSO ID | Objective | Robustness | Integrity | Assurance Level | Evidence |\n");
-    out.push_str("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
-
-    for i in 1..=10 {
-        let oso_id = format!("{}{:02}", prefix_label, i);
-        let obj = tokens
-            .get(&format!("OBJ{:02}_Objective", i))
-            .or_else(|| tokens.get(&format!("OSO{:02}_Objective", i)))
-            .map(|s| s.as_str())
-            .unwrap_or(PENDING_PARAMETER);
-        let rob = tokens
-            .get(&format!("OBJ{:02}_Robustness", i))
-            .or_else(|| tokens.get(&format!("OSO{:02}_Robustness", i)))
-            .map(|s| s.as_str())
-            .unwrap_or(PENDING_PARAMETER);
-        let int = tokens
-            .get(&format!("OBJ{:02}_Integrity", i))
-            .or_else(|| tokens.get(&format!("OSO{:02}_Integrity", i)))
-            .map(|s| s.as_str())
-            .unwrap_or(PENDING_PARAMETER);
-        let ass = tokens
-            .get(&format!("OBJ{:02}_Assurance_Level", i))
-            .or_else(|| tokens.get(&format!("OSO{:02}_Assurance_Level", i)))
-            .map(|s| s.as_str())
-            .unwrap_or(PENDING_PARAMETER);
-        let evi = tokens
-            .get(&format!("OBJ{:02}_Evidence", i))
-            .or_else(|| tokens.get(&format!("OSO{:02}_Evidence", i)))
-            .map(|s| s.as_str())
-            .unwrap_or(PENDING_PARAMETER);
-
-        out.push_str(&format!(
-            "| {} | {} | {} | {} | {} | {} |\n",
-            oso_id, obj, rob, int, ass, evi
-        ));
+    for (field, value) in &classification_rows {
+        out.push_str(&format!("| {} | {} |\n", field, value));
     }
     out.push('\n');
+
+    let default_assurance = primary_integrity
+        .map(sanitize_markdown_cell)
+        .unwrap_or_else(|| PENDING_PARAMETER.to_string());
+
+    let mut rows_by_idx: BTreeMap<usize, RegulatoryObjectiveRow> = BTreeMap::new();
+
+    for (key, val) in tokens {
+        if let Some((idx, key_stem)) = parse_declared_objective_index(key, prefix_stem) {
+            let rob = tokens
+                .get(&format!("{}_Robustness", key_stem))
+                .map(|s| sanitize_markdown_cell(s))
+                .unwrap_or_else(|| "Deterministic".to_string());
+            let int = tokens
+                .get(&format!("{}_Integrity", key_stem))
+                .map(|s| sanitize_markdown_cell(s))
+                .unwrap_or_else(|| "Schema-Declared".to_string());
+            let ass = tokens
+                .get(&format!("{}_Assurance_Level", key_stem))
+                .map(|s| sanitize_markdown_cell(s))
+                .unwrap_or_else(|| default_assurance.clone());
+            let evi = tokens
+                .get(&format!("{}_Evidence", key_stem))
+                .map(|s| sanitize_markdown_cell(s))
+                .unwrap_or_else(|| format!("AttributeDef({}_Objective)", sanitize_markdown_cell(key_stem)));
+
+            rows_by_idx.insert(
+                idx,
+                RegulatoryObjectiveRow {
+                    objective_id: format!("{}{:02}", display_prefix, idx),
+                    objective: sanitize_markdown_cell(val),
+                    robustness: rob,
+                    integrity: int,
+                    assurance_level: ass,
+                    evidence: evi,
+                },
+            );
+        }
+    }
+
+    let mut next_free_idx = 1usize;
+
+    let mut seen_reqs = BTreeSet::new();
+    for sub_pkg in pkg.get_all_packages() {
+        for req in &sub_pkg.requirement_defs {
+            if !seen_reqs.insert(req.name.clone()) {
+                continue;
+            }
+            let citation = format!("RequirementDef({})", sanitize_markdown_cell(&req.name));
+            let already_covered = rows_by_idx
+                .values()
+                .any(|r| r.evidence.contains(&citation) || r.objective.contains(&req.name));
+            if already_covered {
+                continue;
+            }
+            while rows_by_idx.contains_key(&next_free_idx) {
+                next_free_idx += 1;
+            }
+            let obj_text = req
+                .doc
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(sanitize_markdown_cell)
+                .unwrap_or_else(|| format!("Satisfy requirement {}", sanitize_markdown_cell(&req.name)));
+            rows_by_idx.insert(
+                next_free_idx,
+                RegulatoryObjectiveRow {
+                    objective_id: format!("{}{:02}", display_prefix, next_free_idx),
+                    objective: obj_text,
+                    robustness: "Verified".to_string(),
+                    integrity: "Requirement Bound".to_string(),
+                    assurance_level: default_assurance.clone(),
+                    evidence: citation,
+                },
+            );
+            next_free_idx += 1;
+        }
+    }
+
+    for con in &all_constraints {
+        let citation = format!("ConstraintDef({})", sanitize_markdown_cell(&con.name));
+        let already_covered = rows_by_idx
+            .values()
+            .any(|r| r.evidence.contains(&citation) || r.objective.contains(&con.name));
+        if already_covered {
+            continue;
+        }
+        while rows_by_idx.contains_key(&next_free_idx) {
+            next_free_idx += 1;
+        }
+        let obj_text = if con.expression.trim().is_empty() {
+            format!("Enforce constraint {}", sanitize_markdown_cell(&con.name))
+        } else {
+            format!(
+                "Enforce constraint {}: {}",
+                sanitize_markdown_cell(&con.name),
+                sanitize_markdown_cell(&con.expression)
+            )
+        };
+        rows_by_idx.insert(
+            next_free_idx,
+            RegulatoryObjectiveRow {
+                objective_id: format!("{}{:02}", display_prefix, next_free_idx),
+                objective: obj_text,
+                robustness: "Run-Time Monitored".to_string(),
+                integrity: "Formal Invariant".to_string(),
+                assurance_level: default_assurance.clone(),
+                evidence: citation,
+            },
+        );
+        next_free_idx += 1;
+    }
+
+    for calc in &all_calcs {
+        let citation = format!("CalcDef({})", sanitize_markdown_cell(&calc.name));
+        let already_covered = rows_by_idx
+            .values()
+            .any(|r| r.evidence.contains(&citation) || r.objective.contains(&calc.name));
+        if already_covered {
+            continue;
+        }
+        while rows_by_idx.contains_key(&next_free_idx) {
+            next_free_idx += 1;
+        }
+        let obj_text = match calc.expression.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            Some(expr) => format!(
+                "Evaluate calculation {}: {}",
+                sanitize_markdown_cell(&calc.name),
+                sanitize_markdown_cell(expr)
+            ),
+            None => format!("Evaluate calculation {}", sanitize_markdown_cell(&calc.name)),
+        };
+        rows_by_idx.insert(
+            next_free_idx,
+            RegulatoryObjectiveRow {
+                objective_id: format!("{}{:02}", display_prefix, next_free_idx),
+                objective: obj_text,
+                robustness: "Analytical".to_string(),
+                integrity: "Quantitative Bound".to_string(),
+                assurance_level: default_assurance.clone(),
+                evidence: citation,
+            },
+        );
+        next_free_idx += 1;
+    }
+
+    out.push_str("## Declared Regulatory Safety Objectives\n\n");
+    if rows_by_idx.is_empty() {
+        out.push_str(&format!(
+            "No regulatory safety objectives, `requirement def`, `constraint def`, or `calc def` declarations present in package `{}`.\n\n",
+            sanitize_markdown_cell(base_pkg)
+        ));
+    } else {
+        out.push_str("| Objective ID | Objective | Robustness | Integrity | Assurance Level | Evidence |\n");
+        out.push_str("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+        for row in rows_by_idx.values() {
+            out.push_str(&format!(
+                "| {} | {} | {} | {} | {} | {} |\n",
+                row.objective_id,
+                row.objective,
+                row.robustness,
+                row.integrity,
+                row.assurance_level,
+                row.evidence
+            ));
+        }
+        out.push('\n');
+    }
+
     out
 }
 
@@ -1412,40 +1448,10 @@ fn render_rta_architecture(pkg: &PackageDef, tokens: &BTreeMap<String, String>) 
             out.push_str("```\n\n");
         }
     } else {
-        for tmpl in &PROOF_TEMPLATES {
-            out.push_str(&format!("## Theorem {} -- {}\n\n", tmpl.id, tmpl.name));
-            out.push_str("### Formal Theorem Statement\n\n");
-            out.push_str(tmpl.statement);
-            out.push_str("\n\n### Symbolic Derivation\n\n");
-            out.push_str("$$\n\\begin{aligned}\n");
-            for line in tmpl.derivation {
-                out.push_str(&format!("    {} \\\\\n", line));
-            }
-            out.push_str("\\end{aligned}\n$$\n\n");
-
-            out.push_str("### Parameter Definitions & Engineering Units Table\n\n");
-            out.push_str("| Symbol | Description | Value | Engineering Unit |\n");
-            out.push_str("| :--- | :--- | :--- | :--- |\n");
-            for (key, symbol, desc, unit) in tmpl.params {
-                let val = tokens
-                    .get(*key)
-                    .cloned()
-                    .unwrap_or_else(|| PENDING_PARAMETER.to_string());
-                out.push_str(&format!("| {} | {} | {} | {} |\n", symbol, desc, val, unit));
-            }
-            out.push_str("\n### Step-by-Step Numerical Proof Evaluation\n\n");
-            out.push_str("$$\n\\begin{aligned}\n");
-            for line in tmpl.numeric {
-                let resolved = resolve_template(line, tokens);
-                out.push_str(&format!("    {} \\\\\n", resolved));
-            }
-            out.push_str("\\end{aligned}\n$$\n\n");
-
-            out.push_str("### SLDV Temporal Assertion Binding\n\n");
-            out.push_str("```matlab\n");
-            out.push_str(&resolve_template(tmpl.sldv, tokens));
-            out.push_str("\n```\n\n");
-        }
+        out.push_str(&format!(
+            "No `calc def` or `constraint def` expressions declared in package `{}`.\n\n",
+            base_pkg
+        ));
     }
 
     out
@@ -1491,7 +1497,7 @@ pub fn render_unified_stpa_matrix(
     let mut out = String::new();
     out.push_str("# Unified 8-Pillar STPA Safety & Risk Analysis Matrix\n\n");
     out.push_str("> **Primary Commercial Toolchain Integration Context:** MATLAB / Simulink / Stateflow / Embedded Coder\n");
-    out.push_str("> **Safety Standards:** ISO/IEC/IEEE 15026-3 | ASTM F3269-17 RTA | MIL-STD-882E | SAE ARP4761 | SORA SAIL\n\n");
+    out.push_str("> **Safety Standards:** ISO/IEC/IEEE 15026-3 | ASTM F3269-17 RTA | MIL-STD-882E | Domain Integrity Framework\n\n");
     out.push_str("---\n\n");
 
     // Pillar 1, 2, 3: System Losses, System Hazards, and Hierarchical Control Structure Topology
@@ -1534,7 +1540,7 @@ pub fn render_unified_stpa_matrix(
     // Pillar 6: Formal Safety Constraints (SC-1..N) & Stateflow Synthesis Hooks
     out.push_str("## 6. Formal Safety Constraints (**SC-1..N**) & Stateflow Synthesis Hooks\n\n");
     out.push_str("The formal safety constraints and Run-Time Assurance supervisory monitors (`RTA`) are synthesized directly into **MATLAB / Simulink / Stateflow** charts for envelope protection and SLDV verification.\n\n");
-    let sc_doc = render_safety_constraints(ucas, constraints);
+    let sc_doc = render_safety_constraints(pkg, ucas, constraints);
     let sc_body = if let Some(stripped) = sc_doc.strip_prefix("# Formal Safety Constraints\n\n") {
         stripped
     } else {
@@ -1554,9 +1560,9 @@ pub fn render_unified_stpa_matrix(
     out.push_str(fmeca_body);
     out.push_str("\n\n---\n\n");
 
-    // Pillar 8: Domain Regulatory Objectives & SORA SAIL Risk Mitigations
-    out.push_str("## 8. Domain Regulatory Objectives & SORA SAIL Risk Mitigations\n\n");
-    let reg_doc = render_regulatory_objectives_assessment(tokens);
+    // Pillar 8: Domain Regulatory Objectives & Integrity Level Mapping
+    out.push_str("## 8. Domain Regulatory Objectives & Integrity Level Mapping\n\n");
+    let reg_doc = render_regulatory_objectives_assessment(pkg, tokens);
     let reg_body = if let Some(stripped) = reg_doc.strip_prefix("# Domain Regulatory Objectives Assessment & Safety Objective Roster\n\n") {
         stripped
     } else {
@@ -1697,47 +1703,58 @@ fn render_hazard_log(pkg: &PackageDef) -> String {
     out
 }
 
-/// Executes deterministic fn `render_sldv_script` within `crates/compile-sysml/src/stpa/safety_suite.rs`.
+/// Renders the Simulink Design Verifier (`SLDV`) formal proof script derived strictly from
+/// AST `ConstraintDef` and `CalcDef` declarations in `pkg`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `render_sldv_script` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `render_sldv_script` (declaration #19) within `STPA-SAFETY-SUITE`.
+/// - Emits `sldv.assert(...)` bindings exclusively for AST-declared `ConstraintDef` and `CalcDef` nodes; emits zero assertions and a truthful package comment when both collections are empty.
 ///
 /// ## 3. Preconditions
-/// - `pkg: &PackageDef` must satisfy domain and type-safety constraints prior to invoking `render_sldv_script`.
-/// - `constraints: &[ConstraintDef]` must satisfy domain and type-safety constraints prior to invoking `render_sldv_script`.
-/// - `tokens: &BTreeMap<String, String>` must satisfy domain and type-safety constraints prior to invoking `render_sldv_script`.
+/// - `pkg: &PackageDef` and `constraints: &[ConstraintDef]` satisfy domain and type-safety constraints prior to invoking `render_sldv_script`.
 ///
 /// ## 4. Postconditions
-/// - Returns `String` from `render_sldv_script` with deterministic post-execution state.
+/// - Returns `String` containing valid MATLAB / Simulink Design Verifier proof script source.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(pkg)) bounded over input/member dimension of `render_sldv_script`.
-/// - Space Complexity: O(N(pkg)) bounded auxiliary memory for `render_sldv_script`.
+/// - Time Complexity: O(N(pkg)) bounded over AST `ConstraintDef` and `CalcDef` cardinality.
+/// - Space Complexity: O(N(pkg)) bounded auxiliary memory for rendered MATLAB script.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `render_sldv_script` (`String`).
-/// - State: Maintains consistent state invariants across `render_sldv_script` without partial mutation on error.
-/// - Action: Executes `render_sldv_script` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `render_sldv_script` (`STPA-SAFETY-SUITE`).
+/// - Interface: Handles packages with zero `ConstraintDef` and zero `CalcDef` declarations cleanly without fabricated domain templates.
+/// - State: Pure read-only projection with zero side effects.
+/// - Action: Executes deterministically with zero panics, regular expressions, or direct slice indexing.
+/// - Resource: Bounds heap allocation proportional to declared AST proof obligations.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-STPA-SAFETY-SUITE-RENDER-SLDV-SCRIPT] | SysML v2: ActionDef(render_sldv_script)
-fn render_sldv_script(
-    pkg: &PackageDef,
-    constraints: &[ConstraintDef],
-    tokens: &BTreeMap<String, String>,
-) -> String {
+fn render_sldv_script(pkg: &PackageDef, constraints: &[ConstraintDef]) -> String {
+    let base_pkg = if pkg.name.trim().is_empty() {
+        "System"
+    } else {
+        pkg.name.trim()
+    };
+    let all_calcs = pkg.get_all_calcs();
+
     let mut out = String::new();
     out.push_str("% SLDV Formal Proof Script\n");
+
+    if all_calcs.is_empty() && constraints.is_empty() {
+        out.push_str(&format!(
+            "% No calc def or constraint def assertions declared in package {}\n",
+            base_pkg
+        ));
+        return out;
+    }
+
     out.push_str("% Schema constraint bindings\n");
     for c in constraints {
-        let expr = if c.expression.is_empty() {
+        let expr = if c.expression.trim().is_empty() {
             "false"
         } else {
-            c.expression.as_str()
+            c.expression.trim()
         };
         let sanitized = c.name.to_uppercase().replace('-', "_");
         out.push_str(&format!(
@@ -1747,29 +1764,21 @@ fn render_sldv_script(
     }
 
     out.push_str("\n% Theorem proof bindings\n");
-    let all_calcs = pkg.get_all_calcs();
-    if all_calcs.is_empty() && constraints.is_empty() {
-        for tmpl in &PROOF_TEMPLATES {
-            out.push_str(&format!("% {} {}\n", tmpl.id, tmpl.name));
-            out.push_str(&resolve_template(tmpl.sldv, tokens));
-            out.push_str("\n\n");
-        }
-    } else {
-        for (idx, calc) in all_calcs.iter().enumerate() {
-            let thm_id = format!("THM-{:03}", idx + 1);
-            let expr = calc
-                .expression
-                .as_deref()
-                .filter(|s| !s.trim().is_empty())
-                .unwrap_or("true");
-            out.push_str(&format!("% {} {}\n", thm_id, calc.name));
-            out.push_str(&format!(
-                "sldv.assert( ({}), 'Proof_{}_{}' );\n\n",
-                expr,
-                thm_id.replace('-', "_"),
-                calc.name.replace('-', "_")
-            ));
-        }
+    for (idx, calc) in all_calcs.iter().enumerate() {
+        let thm_id = format!("THM-{:03}", idx + 1);
+        let expr = calc
+            .expression
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or("true");
+        out.push_str(&format!("% {} {}\n", thm_id, calc.name));
+        out.push_str(&format!(
+            "sldv.assert( ({}), 'Proof_{}_{}' );\n\n",
+            expr,
+            thm_id.replace('-', "_"),
+            calc.name.replace('-', "_")
+        ));
     }
 
     out
@@ -1877,10 +1886,10 @@ pub fn compile_stpa_to_constraints_filtered(
                 continue;
             }
             let sc_id = if let Some(pos) = sc_col.find("SC-") {
-                let rest = &sc_col[pos + 3..];
+                let rest = sc_col.get(pos + 3..).unwrap_or("");
                 let digit_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
                 if digit_len > 0 {
-                    &sc_col[pos..pos + 3 + digit_len]
+                    sc_col.get(pos..pos + 3 + digit_len).unwrap_or("")
                 } else {
                     ""
                 }
@@ -1969,6 +1978,35 @@ mod tests {
     use super::*;
     use deap_core::sysml_ast::{ActionDef, PartDef};
 
+    /// Verifies that `transpile_safety_suite` emits the exact 10 domain-agnostic safety artifacts,
+    /// renders isolated KaTeX aligned blocks from AST `ConstraintDef` nodes, and builds closed-loop
+    /// STPA control structure topology diagrams.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_transpile_safety_suite_produces_all_10_artifacts` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Asserts `suite.len() == 10` containing all 10 canonical domain-agnostic artifact keys and excluding legacy domain-specific keys.
+    /// - Verifies isolated `$$\n\begin{aligned}` .. `\end{aligned}\n$$` KaTeX rendering from AST `ConstraintDef`.
+    ///
+    /// ## 3. Preconditions
+    /// - In-memory `TestSystem` `PackageDef` contains `PrimaryController` with `ExecuteProcess` action and an AST `ConstraintDef`.
+    ///
+    /// ## 4. Postconditions
+    /// - All 10 safety artifacts exist in `suite` with expected topology and AST-derived KaTeX blocks.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over the synthetic `TestSystem` AST and 10 emitted buffers.
+    /// - Space Complexity: O(N) bounded in-memory `BTreeMap<String, String>`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Invokes `transpile_safety_suite(&pkg, None)` directly in memory.
+    /// - State: Pure in-memory verification with zero filesystem mutation.
+    /// - Action: Uses `Result` propagation (`?`) with zero unchecked unwrapping.
+    /// - Resource: Bounded single-package allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-STPA-SAFETY-SUITE-TEST-ALL-10-ARTIFACTS] | SysML v2: VerificationCaseDef(test_transpile_safety_suite_produces_all_10_artifacts)
     #[test]
     fn test_transpile_safety_suite_produces_all_10_artifacts() -> Result<(), Box<dyn std::error::Error>> {
         let mut pkg = PackageDef {
@@ -1986,24 +2024,31 @@ mod tests {
         };
         p.actions.push(act);
         pkg.part_defs.push(p);
+        pkg.constraint_defs.push(ConstraintDef {
+            name: "ExecutionDeadlineBound".to_string(),
+            expression: "cycleLatencyMs <= 25".to_string(),
+            ..Default::default()
+        });
 
         let suite = transpile_safety_suite(&pkg, None);
+        assert_eq!(suite.len(), 10);
         assert!(suite.contains_key("01_LOSSES_HAZARDS_TOPOLOGY.md"));
         assert!(suite.contains_key("02_UCA_COMBINATORIAL_MATRIX.md"));
         assert!(suite.contains_key("03_LOSS_SCENARIOS.md"));
         assert!(suite.contains_key("04_SAFETY_CONSTRAINTS.md"));
         assert!(suite.contains_key("05_FMECA_MATRIX.md"));
         assert!(suite.contains_key("06_REGULATORY_OBJECTIVES_ASSESSMENT.md"));
-        assert!(suite.contains_key("06_SORA_SAIL_ASSESSMENT.md"));
+        assert!(!suite.contains_key("06_SORA_SAIL_ASSESSMENT.md"));
         assert!(suite.contains_key("07_RTA_ARCHITECTURE.md"));
         assert!(suite.contains_key("STPA_MATRIX.md"));
         assert!(suite.contains_key("HAZARD_LOG.md"));
         assert!(suite.contains_key("SLDV_FORMAL_PROOFS.m"));
 
-        // Verify RTA architecture contains KaTeX aligned math
+        // Verify RTA architecture contains KaTeX aligned math from AST ConstraintDef
         let rta = suite.get("07_RTA_ARCHITECTURE.md").ok_or("expected value is absent")?;
         assert!(rta.contains("$$\n\\begin{aligned}"));
         assert!(rta.contains("\\end{aligned}\n$$"));
+        assert!(rta.contains("ExecutionDeadlineBound"));
 
         // Verify closed-loop STPA control structure topology
         let topo = suite.get("01_LOSSES_HAZARDS_TOPOLOGY.md").ok_or("expected value is absent")?;
@@ -2016,13 +2061,36 @@ mod tests {
         Ok(())
     }
 
+    /// Verifies that `compile_stpa_to_constraints` parses UCA Markdown tables with the
+    /// `Integrity Level` column into formal SysML `ConstraintDef` assertions.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_compile_stpa_markdown_to_constraints` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Compiles `UCA-001` linked to `SC-001` and `ComputeControlOutput` into assertion `SC_001_ComputeControlOutput`.
+    ///
+    /// ## 3. Preconditions
+    /// - Valid Markdown UCA table string is supplied to `compile_stpa_to_constraints`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returned `PackageDef` contains exactly 1 assertion `ConstraintDef` named `SC_001_ComputeControlOutput`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(L) linear over Markdown input byte length L.
+    /// - Space Complexity: O(C) proportional to compiled constraint definitions C.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Invokes `compile_stpa_to_constraints` on static Markdown fixture.
+    /// - State: Isolated in-memory `PackageDef`.
+    /// - Action: Deterministic parsing with zero unchecked unwrapping or direct slice indexing.
+    /// - Resource: Bounded single-fixture memory footprint.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-STPA-SAFETY-SUITE-TEST-COMPILE-CONSTRAINTS] | SysML v2: VerificationCaseDef(test_compile_stpa_markdown_to_constraints)
     #[test]
     fn test_compile_stpa_markdown_to_constraints() -> Result<(), Box<dyn std::error::Error>> {
-        let md = r#"
-| UCA ID | Controller | Control Action | Guide Word | Context | Hazard | Safety Constraint | Severity | SAIL |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| UCA-001 | PrimaryProcessor | ComputeControlOutput | Not providing | Operational | H-1 | SC-001 | High | IV |
-"#;
+        let md = "\n| UCA ID | Controller | Control Action | Guide Word | Context | Hazard | Safety Constraint | Severity | Integrity Level |\n| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n| UCA-001 | PrimaryProcessor | ComputeControlOutput | Not providing | Operational | H-1 | SC-001 | High | SIL-3 |\n";
         let pkg = compile_stpa_to_constraints(md, "SafetyConstraintsPackage");
         assert_eq!(pkg.name, "SafetyConstraintsPackage");
         assert_eq!(pkg.constraint_defs.len(), 1);
@@ -2031,12 +2099,39 @@ mod tests {
         Ok(())
     }
 
+    /// Verifies that `compile_stpa_to_constraints` suppresses FMECA constraint synthesis for
+    /// components negated by negative safety model invariants.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_249_compile_stpa_rejects_phantom_component_when_negated` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Retains `PrimaryProcessor` constraint synthesis while rejecting `AuxiliaryBackupUnit` negated by `backupEnabled = 0, backupSystem = "No"`.
+    ///
+    /// ## 3. Preconditions
+    /// - Markdown input declares both UCA/FMECA tables and negative backup invariants.
+    ///
+    /// ## 4. Postconditions
+    /// - Synthesized `constraint_defs` contain `PrimaryProcessor` and exclude `AuxiliaryBackupUnit`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(L) linear over Markdown lines and negated component tokens.
+    /// - Space Complexity: O(C) bounded over synthesized constraint definitions.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Invokes `compile_stpa_to_constraints` directly.
+    /// - State: Pure in-memory evaluation.
+    /// - Action: Deterministic filtering without panics or regular expressions.
+    /// - Resource: Minimal heap allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-STPA-SAFETY-SUITE-TEST-NEGATED-COMPONENT-FILTER] | SysML v2: VerificationCaseDef(test_issue_249_compile_stpa_rejects_phantom_component_when_negated)
     #[test]
     fn test_issue_249_compile_stpa_rejects_phantom_component_when_negated() -> Result<(), Box<dyn std::error::Error>> {
         let md = r#"
-| UCA ID | Controller | Control Action | Guide Word | Context | Hazard | Safety Constraint | Severity | SAIL |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| UCA-001 | PrimaryProcessor | ComputeControlOutput | Not providing | Operational | H-1 | SC-001 | High | IV |
+| UCA ID | Controller | Control Action | Guide Word | Context | Hazard | Safety Constraint | Severity | Integrity Level |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| UCA-001 | PrimaryProcessor | ComputeControlOutput | Not providing | Operational | H-1 | SC-001 | High | SIL-3 |
 
 Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
 
@@ -2052,6 +2147,33 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
         Ok(())
     }
 
+    /// Verifies that `compile_stpa_to_constraints_filtered` restricts FMECA integrity constraints
+    /// exclusively to components present in `valid_parts`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_issue_249_compile_stpa_filtered_by_valid_parts` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Components absent from `valid_parts` (`PhantomSubsystem`) produce zero `ConstraintDef` entries.
+    ///
+    /// ## 3. Preconditions
+    /// - `valid_parts` set contains `"PrimaryProcessor"` and omits `"PhantomSubsystem"`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returned `PackageDef` includes `PrimaryProcessor` and excludes `PhantomSubsystem`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(L * P) over Markdown rows and valid part set cardinality P.
+    /// - Space Complexity: O(C + P) bounded auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Exercises `compile_stpa_to_constraints_filtered` with `Some(&valid_parts)`.
+    /// - State: Isolated local `BTreeSet` and `PackageDef`.
+    /// - Action: Executes deterministically with zero panics.
+    /// - Resource: Bounded test fixture allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-STPA-SAFETY-SUITE-TEST-VALID-PARTS-FILTER] | SysML v2: VerificationCaseDef(test_issue_249_compile_stpa_filtered_by_valid_parts)
     #[test]
     fn test_issue_249_compile_stpa_filtered_by_valid_parts() -> Result<(), Box<dyn std::error::Error>> {
         let md = r#"
@@ -2070,15 +2192,42 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
         Ok(())
     }
 
+    /// Verifies that `STPA_MATRIX.md` integrates all unified STPA pillars including domain-neutral
+    /// regulatory objectives and integrity level mappings and ASTM F3269-17 RTA synthesis hooks.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_defect_333_stpa_matrix_embodies_unified_8_pillars` in `crates/compile-sysml/src/stpa/safety_suite.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Confirms presence of System Losses, System Hazards, Control Structure Topology, Unsafe Control Actions, Loss Scenarios, Safety Constraints, FMECA Criticality Matrix, `## 8. Domain Regulatory Objectives & Integrity Level Mapping`, and ASTM F3269-17 RTA sections.
+    ///
+    /// ## 3. Preconditions
+    /// - Domain-neutral `CoreControlSystemSafety` package with `SupervisoryController` and `ExecuteProcess` action is constructed.
+    ///
+    /// ## 4. Postconditions
+    /// - `STPA_MATRIX.md` contains all unified pillar sections and domain-neutral standards headers.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(N) over transpiled safety suite content.
+    /// - Space Complexity: O(N) bounded in-memory artifact map.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Queries `STPA_MATRIX.md` from `transpile_safety_suite(&pkg, None)`.
+    /// - State: Pure in-memory test execution.
+    /// - Action: Propagates lookup errors via `?` with zero panics.
+    /// - Resource: Bounded single-package memory allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-STPA-SAFETY-SUITE-TEST-UNIFIED-8-PILLARS] | SysML v2: VerificationCaseDef(test_defect_333_stpa_matrix_embodies_unified_8_pillars)
     #[test]
     fn test_defect_333_stpa_matrix_embodies_unified_8_pillars() -> Result<(), Box<dyn std::error::Error>> {
         let mut pkg = PackageDef {
-            name: "AvengerSystemSafety".to_string(),
+            name: "CoreControlSystemSafety".to_string(),
             ..Default::default()
         };
 
         let mut p = PartDef {
-            name: "FlightController".to_string(),
+            name: "SupervisoryController".to_string(),
             ..Default::default()
         };
         let act = ActionDef {
@@ -2091,7 +2240,6 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
         let suite = transpile_safety_suite(&pkg, None);
         let stpa = suite.get("STPA_MATRIX.md").ok_or("expected value is absent")?;
 
-        // Defect #333 RED probe: STPA_MATRIX.md must embody the unified 8 pillars
         assert!(stpa.contains("System Losses"), "STPA_MATRIX.md must contain Pillar 1 (System Losses)");
         assert!(stpa.contains("System Hazards"), "STPA_MATRIX.md must contain Pillar 2 (System Hazards)");
         assert!(stpa.contains("Control Structure Topology") || stpa.contains("Hierarchical Safety Control Structure"), "STPA_MATRIX.md must contain Pillar 3 (Topology)");
@@ -2099,7 +2247,10 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
         assert!(stpa.contains("Loss Scenarios"), "STPA_MATRIX.md must contain Pillar 5 (Loss Scenarios)");
         assert!(stpa.contains("Safety Constraints"), "STPA_MATRIX.md must contain Pillar 6 (Safety Constraints)");
         assert!(stpa.contains("FMECA Criticality Matrix") || stpa.contains("FMECA"), "STPA_MATRIX.md must contain Pillar 7 (FMECA Criticality Matrix)");
-        assert!(stpa.contains("Regulatory Objectives") || stpa.contains("SORA SAIL"), "STPA_MATRIX.md must contain Pillar 8 (Regulatory Objectives & Risk Mitigations)");
+        assert!(
+            stpa.contains("## 8. Domain Regulatory Objectives & Integrity Level Mapping"),
+            "STPA_MATRIX.md must contain Pillar 8 (Domain Regulatory Objectives & Integrity Level Mapping)"
+        );
         assert!(stpa.contains("ASTM F3269-17") || stpa.contains("Stateflow"), "STPA_MATRIX.md must contain ASTM F3269-17 RTA / Stateflow hooks");
         Ok(())
     }
@@ -2127,7 +2278,7 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
     /// - Cleans up temporary directory after verification.
     ///
     /// ## 7. Realization & Traceability
-    /// Realises: [REQ-STPA-SAFETY-SUITE-EMIT-SAFETY-SUITE] | SysML v2: VerificationCaseDef(test_arch_04_emit_safety_suite_writes_atomically)
+    /// Realises: [REQ-STPA-SAFETY-SUITE-TEST-EMIT-ATOMIC] | SysML v2: VerificationCaseDef(test_arch_04_emit_safety_suite_writes_atomically)
     #[test]
     fn test_arch_04_emit_safety_suite_writes_atomically() -> Result<(), Box<dyn std::error::Error>> {
         let mut pkg = PackageDef {
@@ -2157,7 +2308,7 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
             );
             count += 1;
         }
-        assert!(count >= 10, "emit_safety_suite must write all safety suite artifacts");
+        assert_eq!(count, 10, "emit_safety_suite must write all 10 safety suite artifacts");
 
         let _ = fs::remove_dir_all(&out_dir);
         Ok(())

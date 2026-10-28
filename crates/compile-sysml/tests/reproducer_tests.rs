@@ -41,7 +41,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use compile_sysml::sync::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
 use compile_sysml::FmecaScoringConfig;
 use deap_core::sysml_ast::{
-    ActionDef, AttributeDef, OperationDef, PackageDef, PartDef, PortDef, StateDef, UseCaseDef,
+    ActionDef, AttributeDef, CalcDef, ConstraintDef, OperationDef, PackageDef, PartDef, PortDef,
+    StateDef, UseCaseDef,
 };
 
 /// Verifies that `forward_sync_sysml_to_specs` does not emit hardcoded colliding fallback issue IDs
@@ -967,6 +968,370 @@ package QueryEnginePkg {
         "All unresearched AST-derived rows in 05_FMECA_MATRIX.md must carry | Derived | and never | SSOT |:\n{}",
         fmeca_md
     );
+
+    Ok(())
+}
+
+/// Verifies that transpiling and emitting the safety suite for a pure software `PackageDef`
+/// (`DatabaseTransactionPkg`) with zero `CalcDef` and zero `ConstraintDef` declarations produces
+/// `06_REGULATORY_OBJECTIVES_ASSESSMENT.md` (and never `06_SORA_SAIL_ASSESSMENT.md`), contains zero
+/// hardcoded UAV flight-physics `PROOF_TEMPLATES` or drone SORA/SAIL/GRC/ARC/OSO substrings across
+/// all 10 emitted safety artifacts, and emits zero `sldv.assert(` statements in `SLDV_FORMAL_PROOFS.m`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `test_issue_695_non_uav_safety_suite_eliminates_hardcoded_uav_physics_proofs_and_sora_tables`
+/// in `crates/compile-sysml/tests/reproducer_tests.rs` (refs #695).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Pure Schema-Driven Safety Suite Invariant: For any domain-neutral `PackageDef` $P$ containing
+///   zero UAV aerodynamic concepts, zero `CalcDef`, and zero `ConstraintDef` nodes,
+///   $\text{transpile\_safety\_suite}(P)$ emits exact cardinality $|\text{suite}| = 10$ keyed with
+///   `06_REGULATORY_OBJECTIVES_ASSESSMENT.md` rather than `06_SORA_SAIL_ASSESSMENT.md`, contains
+///   zero UAV flight-physics formulas or JARUS SORA/SAIL/GRC/ARC/OSO tables in any artifact value,
+///   and emits zero fabricated `sldv.assert(` obligations in `SLDV_FORMAL_PROOFS.m`.
+///
+/// ## 3. Preconditions
+/// - An in-memory `DatabaseTransactionPkg` containing `PartDef` `TransactionCoordinator` and
+///   `ActionDef` `CommitWriteBatch` (with `calc_defs.is_empty()` and `constraint_defs.is_empty()`)
+///   is constructed alongside an isolated `TempDirGuard` output directory.
+///
+/// ## 4. Postconditions
+/// - `suite.len() == 10`, `!suite.contains_key("06_SORA_SAIL_ASSESSMENT.md")`,
+///   `!temp.path().join("06_SORA_SAIL_ASSESSMENT.md").exists()`, and
+///   `suite.contains_key("06_REGULATORY_OBJECTIVES_ASSESSMENT.md")`.
+/// - All 10 artifacts contain zero UAV flight-physics substrings and zero SORA/SAIL/OSO substrings.
+/// - `SLDV_FORMAL_PROOFS.m` contains zero `"sldv.assert("` occurrences.
+/// - `TempDirGuard` cleans up the temporary directory deterministically on scope exit.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(A \cdot L)$ where $A = 10$ is the safety artifact count and $L$ is bounded artifact byte length.
+/// - Space Complexity: $O(A \cdot L)$ for the in-memory `BTreeMap<String, String>` safety suite.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Invokes both `transpile_safety_suite(&pkg, None)` and `emit_safety_suite(&pkg, temp.path(), None)`.
+/// - State: Isolated to in-memory buffers and an ephemeral `TempDirGuard` directory.
+/// - Action: Executes with zero `.unwrap()`, `.expect()`, `panic!`, `regex`, or direct slice indexing.
+/// - Resource: `TempDirGuard` Drop reclaims temporary files even when unwinding on RED failure.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-SAFETY-SUITE-NO-HARDCODED-UAV-PROOFS], [REQ-STPA-SAFETY-SUITE-NO-HARDCODED-SORA] | SysML v2: VerificationCaseDef(test_issue_695_non_uav_safety_suite_eliminates_hardcoded_uav_physics_proofs_and_sora_tables)
+#[test]
+fn test_issue_695_non_uav_safety_suite_eliminates_hardcoded_uav_physics_proofs_and_sora_tables(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut pkg = PackageDef {
+        name: "DatabaseTransactionPkg".to_string(),
+        ..Default::default()
+    };
+    pkg.part_defs.push(PartDef {
+        name: "TransactionCoordinator".to_string(),
+        ..Default::default()
+    });
+    pkg.action_defs.push(ActionDef {
+        name: "CommitWriteBatch".to_string(),
+        ..Default::default()
+    });
+
+    let temp = TempDirGuard::new("deap_issue_695_non_uav_safety_suite")?;
+    let suite = compile_sysml::stpa::safety_suite::transpile_safety_suite(&pkg, None);
+    compile_sysml::stpa::safety_suite::emit_safety_suite(&pkg, temp.path(), None)?;
+
+    assert_eq!(
+        suite.len(),
+        10,
+        "transpile_safety_suite must emit 10 safety artifacts, got {}: {:?}",
+        suite.len(),
+        suite.keys().collect::<Vec<_>>()
+    );
+    assert!(
+        !suite.contains_key("06_SORA_SAIL_ASSESSMENT.md"),
+        "Safety suite must not contain drone-specific 06_SORA_SAIL_ASSESSMENT.md, got keys: {:?}",
+        suite.keys().collect::<Vec<_>>()
+    );
+    assert!(
+        !temp.path().join("06_SORA_SAIL_ASSESSMENT.md").exists(),
+        "emit_safety_suite must not write 06_SORA_SAIL_ASSESSMENT.md to disk"
+    );
+    assert!(
+        suite.contains_key("06_REGULATORY_OBJECTIVES_ASSESSMENT.md"),
+        "Safety suite must contain domain-neutral 06_REGULATORY_OBJECTIVES_ASSESSMENT.md, got keys: {:?}",
+        suite.keys().collect::<Vec<_>>()
+    );
+    assert!(
+        temp.path()
+            .join("06_REGULATORY_OBJECTIVES_ASSESSMENT.md")
+            .is_file(),
+        "emit_safety_suite must write 06_REGULATORY_OBJECTIVES_ASSESSMENT.md to disk"
+    );
+
+    let forbidden_uav_physics = [
+        "LiftToDragRatio",
+        "SinkRate",
+        "StallSpeed",
+        "V_stall",
+        "Aerodynamic drag",
+        "PropulsionPower",
+        "AvionicsPower",
+        "GlideDistance",
+        "WellClearRadius",
+        "HorizontalSeparationAtCPA",
+        "Terminal dive mass",
+        "Aeroelastic dynamic pressure",
+        "Kinetic Energy Dissipation Bound",
+        "Containment Reach Bound",
+        "Energy Balance Separation Bound",
+    ];
+
+    let forbidden_sora_substrings = [
+        "SORA",
+        "Ground Risk Class",
+        "GRC",
+        "Air Risk Class",
+        "ARC",
+        "Specific Assurance and Integrity Level",
+        "| SAIL |",
+        "| OSO ID |",
+        "Operational Safety Objectives",
+        "SAE ARP4761",
+    ];
+
+    for (artifact_name, content) in &suite {
+        for needle in forbidden_uav_physics {
+            assert!(
+                !content.contains(needle),
+                "Non-UAV safety artifact {} must contain zero hardcoded UAV flight-physics substring {:?}:\n{}",
+                artifact_name,
+                needle,
+                content
+            );
+        }
+        for needle in forbidden_sora_substrings {
+            assert!(
+                !content.contains(needle),
+                "Non-UAV safety artifact {} must contain zero hardcoded drone SORA substring {:?}:\n{}",
+                artifact_name,
+                needle,
+                content
+            );
+        }
+    }
+
+    let sldv_content = suite
+        .get("SLDV_FORMAL_PROOFS.m")
+        .ok_or("Missing SLDV_FORMAL_PROOFS.m in transpiled safety suite")?;
+    assert!(
+        !sldv_content.contains("sldv.assert("),
+        "SLDV_FORMAL_PROOFS.m must contain zero sldv.assert( calls when PackageDef has zero CalcDef and zero ConstraintDef nodes:\n{}",
+        sldv_content
+    );
+
+    Ok(())
+}
+
+/// Verifies that `transpile_safety_suite` derives RTA mathematical proofs (`07_RTA_ARCHITECTURE.md`
+/// and `STPA_MATRIX.md`), Simulink Design Verifier proof obligations (`SLDV_FORMAL_PROOFS.m`), and
+/// domain regulatory objectives and integrity level mappings (`06_REGULATORY_OBJECTIVES_ASSESSMENT.md`
+/// and `STPA_MATRIX.md` Section 8) purely and deterministically from AST `ConstraintDef`, `CalcDef`,
+/// and `PartDef` `AttributeDef` declarations without fabricating UAV proofs or hardcoded OSO tables.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `test_issue_695_safety_suite_derives_rta_proofs_sldv_and_regulatory_objectives_purely_from_ast`
+/// in `crates/compile-sysml/tests/reproducer_tests.rs` (refs #695).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - AST-Derived Proof Obligation Invariant: Declared `ConstraintDef("LatencyCeiling")` and
+///   `CalcDef("HeadroomMargin")` nodes project deterministically into isolated `$$\n\begin{aligned}` ..
+///   `\end{aligned}\n$$` KaTeX aligned blocks in `07_RTA_ARCHITECTURE.md` and `STPA_MATRIX.md`, and
+///   into `sldv.assert(` obligations referencing `"LATENCYCEILING"` in `SLDV_FORMAL_PROOFS.m`, with
+///   zero hardcoded UAV `PROOF_TEMPLATES`.
+/// - AST-Derived Regulatory Mapping Invariant: Declared `AttributeDef` properties
+///   `IntegrityLevel_Service_Tier = "SIL-3"` and `OBJ01_Objective = "Deterministic rollback under arena exhaustion"`
+///   on `PartDef` `QuerySupervisor` project into `06_REGULATORY_OBJECTIVES_ASSESSMENT.md` and
+///   `STPA_MATRIX.md` (`"## 8. Domain Regulatory Objectives & Integrity Level Mapping"`), preserving
+///   `"Service Tier"`, `"SIL-3"`, `"OBJ-01"`, and `"Deterministic rollback under arena exhaustion"`
+///   without fabricating `"OSO"` rows or unmodeled `"OBJ-04"`..`"OBJ-10"` padding rows.
+///
+/// ## 3. Preconditions
+/// - An in-memory `QuerySafetyPkg` is constructed with `ConstraintDef` `LatencyCeiling`
+///   (`"queryLatencyMs <= 50"`), `CalcDef` `HeadroomMargin` (`Some("quotaMb - activeUsageMb")`),
+///   and `PartDef` `QuerySupervisor` carrying `IntegrityLevel_Service_Tier = "SIL-3"` and
+///   `OBJ01_Objective = "Deterministic rollback under arena exhaustion"`.
+///
+/// ## 4. Postconditions
+/// - `07_RTA_ARCHITECTURE.md` and `STPA_MATRIX.md` contain isolated aligned display-math blocks
+///   referencing `HeadroomMargin` and `LatencyCeiling` and zero UAV `PROOF_TEMPLATES`.
+/// - `SLDV_FORMAL_PROOFS.m` contains `"sldv.assert("` and `"LATENCYCEILING"` and zero UAV `PROOF_TEMPLATES`.
+/// - `06_REGULATORY_OBJECTIVES_ASSESSMENT.md` and `STPA_MATRIX.md` contain `"Service Tier"`, `"SIL-3"`,
+///   `"OBJ-01"`, and `"Deterministic rollback under arena exhaustion"`, `STPA_MATRIX.md` contains
+///   `"## 8. Domain Regulatory Objectives & Integrity Level Mapping"`, and neither fabricates `"OSO"`
+///   rows or `"OBJ-04"`..`"OBJ-10"`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(A \cdot L)$ over the 10 generated safety artifacts.
+/// - Space Complexity: $O(A \cdot L)$ for the in-memory `BTreeMap<String, String>`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Invokes `compile_sysml::stpa::safety_suite::transpile_safety_suite(&pkg, None)` directly.
+/// - State: Pure in-memory evaluation with zero global state or filesystem side effects.
+/// - Action: Executes with zero `.unwrap()`, `.expect()`, `panic!`, `regex`, or direct slice indexing.
+/// - Resource: Bounded to a single synthetic `PackageDef` and 10 in-memory Markdown/MATLAB strings.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STPA-AST-DERIVED-RTA-SLDV-PROOFS], [REQ-STPA-AST-DERIVED-REGULATORY-OBJECTIVES] | SysML v2: VerificationCaseDef(test_issue_695_safety_suite_derives_rta_proofs_sldv_and_regulatory_objectives_purely_from_ast)
+#[test]
+fn test_issue_695_safety_suite_derives_rta_proofs_sldv_and_regulatory_objectives_purely_from_ast(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut supervisor = PartDef {
+        name: "QuerySupervisor".to_string(),
+        ..Default::default()
+    };
+    supervisor.attributes.push(AttributeDef {
+        name: "IntegrityLevel_Service_Tier".to_string(),
+        default_value: Some("SIL-3".to_string()),
+        ..Default::default()
+    });
+    supervisor.attributes.push(AttributeDef {
+        name: "OBJ01_Objective".to_string(),
+        default_value: Some("Deterministic rollback under arena exhaustion".to_string()),
+        ..Default::default()
+    });
+
+    let mut pkg = PackageDef {
+        name: "QuerySafetyPkg".to_string(),
+        ..Default::default()
+    };
+    pkg.part_defs.push(supervisor);
+    pkg.constraint_defs.push(ConstraintDef {
+        name: "LatencyCeiling".to_string(),
+        expression: "queryLatencyMs <= 50".to_string(),
+        ..Default::default()
+    });
+    pkg.calc_defs.push(CalcDef {
+        name: "HeadroomMargin".to_string(),
+        expression: Some("quotaMb - activeUsageMb".to_string()),
+        ..Default::default()
+    });
+
+    let suite = compile_sysml::stpa::safety_suite::transpile_safety_suite(&pkg, None);
+
+    let forbidden_uav_physics = [
+        "LiftToDragRatio",
+        "SinkRate",
+        "StallSpeed",
+        "V_stall",
+        "Aerodynamic drag",
+        "PropulsionPower",
+        "AvionicsPower",
+        "GlideDistance",
+        "WellClearRadius",
+        "HorizontalSeparationAtCPA",
+        "Terminal dive mass",
+        "Aeroelastic dynamic pressure",
+        "Kinetic Energy Dissipation Bound",
+        "Containment Reach Bound",
+        "Energy Balance Separation Bound",
+    ];
+
+    for (artifact_name, content) in &suite {
+        for needle in forbidden_uav_physics {
+            assert!(
+                !content.contains(needle),
+                "AST-derived safety artifact {} must contain zero UAV PROOF_TEMPLATES substring {:?}:\n{}",
+                artifact_name,
+                needle,
+                content
+            );
+        }
+    }
+
+    let rta_md = suite
+        .get("07_RTA_ARCHITECTURE.md")
+        .ok_or("Missing 07_RTA_ARCHITECTURE.md in transpiled safety suite")?;
+    let stpa_md = suite
+        .get("STPA_MATRIX.md")
+        .ok_or("Missing STPA_MATRIX.md in transpiled safety suite")?;
+
+    for (doc_name, doc_content) in [
+        ("07_RTA_ARCHITECTURE.md", rta_md.as_str()),
+        ("STPA_MATRIX.md", stpa_md.as_str()),
+    ] {
+        assert!(
+            doc_content.contains("$$\n\\begin{aligned}")
+                && doc_content.contains("\\end{aligned}\n$$"),
+            "{} must emit isolated $$\\n\\begin{{aligned}} .. \\end{{aligned}}\\n$$ display math blocks:\n{}",
+            doc_name,
+            doc_content
+        );
+        assert!(
+            doc_content.contains("HeadroomMargin") || doc_content.contains("HEADROOMMARGIN"),
+            "{} must reference AST CalcDef HeadroomMargin:\n{}",
+            doc_name,
+            doc_content
+        );
+        assert!(
+            doc_content.contains("LatencyCeiling") || doc_content.contains("LATENCYCEILING"),
+            "{} must reference AST ConstraintDef LatencyCeiling:\n{}",
+            doc_name,
+            doc_content
+        );
+    }
+
+    let sldv_m = suite
+        .get("SLDV_FORMAL_PROOFS.m")
+        .ok_or("Missing SLDV_FORMAL_PROOFS.m in transpiled safety suite")?;
+    assert!(
+        sldv_m.contains("sldv.assert(") && sldv_m.contains("LATENCYCEILING"),
+        "SLDV_FORMAL_PROOFS.m must derive sldv.assert( proof obligations referencing LATENCYCEILING from AST ConstraintDef:\n{}",
+        sldv_m
+    );
+
+    let reg_md = suite
+        .get("06_REGULATORY_OBJECTIVES_ASSESSMENT.md")
+        .ok_or("Missing 06_REGULATORY_OBJECTIVES_ASSESSMENT.md in transpiled safety suite")?;
+
+    assert!(
+        stpa_md.contains("## 8. Domain Regulatory Objectives & Integrity Level Mapping"),
+        "STPA_MATRIX.md must contain '## 8. Domain Regulatory Objectives & Integrity Level Mapping':\n{}",
+        stpa_md
+    );
+
+    for (doc_name, doc_content) in [
+        ("06_REGULATORY_OBJECTIVES_ASSESSMENT.md", reg_md.as_str()),
+        ("STPA_MATRIX.md", stpa_md.as_str()),
+    ] {
+        for expected in [
+            "Service Tier",
+            "SIL-3",
+            "OBJ-01",
+            "Deterministic rollback under arena exhaustion",
+        ] {
+            assert!(
+                doc_content.contains(expected),
+                "{} must contain AST-derived regulatory mapping substring {:?}:\n{}",
+                doc_name,
+                expected,
+                doc_content
+            );
+        }
+        assert!(
+            !doc_content.contains("OSO-") && !doc_content.contains("| OSO ID |"),
+            "{} must not contain hardcoded drone SORA OSO rows:\n{}",
+            doc_name,
+            doc_content
+        );
+        for unmodeled_obj in [
+            "OBJ-04", "OBJ-05", "OBJ-06", "OBJ-07", "OBJ-08", "OBJ-09", "OBJ-10",
+        ] {
+            assert!(
+                !doc_content.contains(unmodeled_obj),
+                "{} must not fabricate unmodeled objective row {:?} beyond declared AST items:\n{}",
+                doc_name,
+                unmodeled_obj,
+                doc_content
+            );
+        }
+    }
 
     Ok(())
 }
