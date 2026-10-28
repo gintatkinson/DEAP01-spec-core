@@ -3105,3 +3105,706 @@ fn test_issue_694_multiline_bdd_actor_extraction_and_diagnostic_only_use_case_pr
 
     Ok(())
 }
+
+/// Constructs a domain-neutral distributed ledger governance `PackageDef` (`LedgerCoreSystem` ->
+/// `LedgerGovernance_SysML`) exercising acronym preservation, >8 constraint projection, AST-grounded
+/// Feature/Epic synthesis, and stale boilerplate merge eviction for GitHub Issue #699.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C deterministic
+/// test fixture construction objectives for fn `build_issue_699_ledger_governance_fixture` in
+/// `crates/compile-sysml/tests/reproducer_tests.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Domain-Neutrality Invariant: Every package, component, attribute, port, state, constraint,
+///   action, use case, and requirement belongs exclusively to distributed ledger snapshot governance
+///   and cryptographic digest verification with zero hardcoded domain-specific tokens.
+/// - Cardinality & Acronym Coverage Invariant: Populates 9 inline `PartDef` constraints
+///   (`C01_Bound`..`C09_NinthInvariant`) plus 1 satisfied `RequirementDef` constraint
+///   (`C10_TenthReqInvariant` on `REQ-0699`) to prove zero `.truncate(8)` loss, alongside mixed-case
+///   technical acronyms (`SysML`, `CommonMark`, `GitHub`, `OpenAPI`, `UUIDv5`, `STPA`, `FMECA`, `SHA256`).
+///
+/// ## 3. Preconditions
+/// - Pure in-memory AST construction with zero external filesystem or environment prerequisites.
+///
+/// ## 4. Postconditions
+/// - Returns an owned `PackageDef` (`LedgerCoreSystem`) containing subpackage `LedgerGovernance_SysML`
+///   with `PartDef` `SnapshotIntegrityValidator`, 2 `ActionDef`s, 1 `UseCaseDef`, and 1 `RequirementDef`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ bounded construction of fixed-cardinality AST nodes.
+/// - Space Complexity: $O(1)$ bounded heap allocations owned by the returned `PackageDef`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total pure constructor returning `PackageDef`.
+/// - State: Fresh owned allocations with zero shared mutable state.
+/// - Action: Executes with zero `.unwrap()`, `.expect()`, `panic!`, `regex`, or direct slice indexing.
+/// - Resource: Bounded heap memory reclaimed when the caller drops `PackageDef`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-ISSUE-699-LEDGER-FIXTURE] | SysML v2: VerificationCaseDef(build_issue_699_ledger_governance_fixture)
+fn build_issue_699_ledger_governance_fixture() -> PackageDef {
+    let part_constraints = [
+        ("C01_Bound", "c01_val >= 0"),
+        ("C02_EpochFloor", "c02_epoch >= 1"),
+        ("C03_ReplicaCount", "c03_replicas >= 3"),
+        ("C04_DigestLen", "c04_bytes == 32"),
+        ("C05_SkewLimit", "c05_skew_ms <= 50"),
+        ("C06_RetryCap", "c06_retries <= 4"),
+        ("C07_BatchQuota", "c07_items <= 1024"),
+        ("C08_QuorumRatio", "c08_ratio > 0"),
+        ("C09_NinthInvariant", "c09_margin > 1"),
+    ]
+    .into_iter()
+    .map(|(name, expression)| ConstraintDef {
+        name: name.to_string(),
+        expression: expression.to_string(),
+        ..Default::default()
+    })
+    .collect::<Vec<_>>();
+
+    let validator = PartDef {
+        name: "SnapshotIntegrityValidator".to_string(),
+        attributes: vec![
+            AttributeDef {
+                name: "checkpoint_digest".to_string(),
+                type_name: "CheckpointDigestVector".to_string(),
+                default_value: Some("sha256-zero".to_string()),
+                doc: None,
+            },
+            AttributeDef {
+                name: "mode_label".to_string(),
+                type_name: "String".to_string(),
+                default_value: None,
+                doc: None,
+            },
+        ],
+        ports: vec![
+            PortDef {
+                name: "snapshot_in".to_string(),
+                direction: "in".to_string(),
+                type_name: "SnapshotEnvelope".to_string(),
+                ..Default::default()
+            },
+            PortDef {
+                name: "fault_out".to_string(),
+                direction: "out".to_string(),
+                type_name: "IntegrityDiagnostic".to_string(),
+                ..Default::default()
+            },
+        ],
+        constraints: part_constraints,
+        states: vec![StateDef {
+            name: "ValidatorLifecycleState".to_string(),
+            transitions: vec![TransitionDef {
+                source: Some("Idle".to_string()),
+                target: Some("Verifying".to_string()),
+                trigger: Some("CompileSysMLToCommonMark".to_string()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let subpkg = PackageDef {
+        name: "LedgerGovernance_SysML".to_string(),
+        doc: Some("Authoritative distributed ledger replication governance subsystem.".to_string()),
+        part_defs: vec![validator],
+        action_defs: vec![
+            ActionDef {
+                name: "CompileSysMLToCommonMark".to_string(),
+                ..Default::default()
+            },
+            ActionDef {
+                name: "SyncGitHubOpenAPIWithUUIDv5".to_string(),
+                ..Default::default()
+            },
+        ],
+        use_case_defs: vec![UseCaseDef {
+            name: "UC_01_VerifySTPAAndFMECAWithSHA256".to_string(),
+            ..Default::default()
+        }],
+        requirement_defs: vec![RequirementDef {
+            name: "IntegrityAuditRequirement".to_string(),
+            req_id: "REQ-0699".to_string(),
+            text: "Verify deterministic ledger snapshot digest and invariant satisfaction."
+                .to_string(),
+            satisfied_by: vec!["SnapshotIntegrityValidator".to_string()],
+            constraints: vec![ConstraintDef {
+                name: "C10_TenthReqInvariant".to_string(),
+                expression: "c10_integrity == true".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    PackageDef {
+        name: "LedgerCoreSystem".to_string(),
+        packages: vec![subpkg],
+        ..Default::default()
+    }
+}
+
+/// Extracts the body of a Markdown heading line containing `title_keyword` up to the next heading
+/// of equal or shallower ATX `#` depth, falling back to `fallback_h2_prefix` when `title_keyword`
+/// appears inside the body of a numbered level-2 section rather than on an ATX heading line.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C structural
+/// specification verification objectives for fn `extract_markdown_section_by_keyword` in
+/// `crates/compile-sysml/tests/reproducer_tests.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Safe Delimiter Partitioning Invariant: Slices `markdown` strictly via `lines()` and UTF-8 safe
+///   `str::split_once` delimiters with zero direct byte-range indexing and zero regular expressions.
+///
+/// ## 3. Preconditions
+/// - `markdown` is a valid UTF-8 Markdown document, `title_keyword` is a non-empty section title
+///   token, and `fallback_h2_prefix` is a level-2 heading prefix such as `"## 1."` or `"## 2."`.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(section_slice)` bounded to the matching section, or `Err(String)` if neither an
+///   ATX heading containing `title_keyword` nor `fallback_h2_prefix` containing `title_keyword` exists.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ linear scan over `markdown` of byte length $L$.
+/// - Space Complexity: $O(1)$ borrowed slice on the nominal `Ok` path.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns descriptive `Err(String)` diagnostics when the requested section is absent.
+/// - State: Pure read-only borrow with zero shared mutable state.
+/// - Action: Executes with zero `.unwrap()`, `.expect()`, `panic!`, `regex`, or direct slice indexing.
+/// - Resource: Zero heap allocation on success.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-ISSUE-699-SECTION-SLICE] | SysML v2: VerificationCaseDef(extract_markdown_section_by_keyword)
+fn extract_markdown_section_by_keyword<'a>(
+    markdown: &'a str,
+    title_keyword: &str,
+    fallback_h2_prefix: &str,
+) -> Result<&'a str, String> {
+    if let Some(heading_line) = markdown.lines().find(|line| {
+        let trimmed = line.trim_start();
+        trimmed.starts_with('#') && trimmed.contains(title_keyword)
+    }) {
+        let heading_level = heading_line
+            .trim_start()
+            .chars()
+            .take_while(|&ch| ch == '#')
+            .count();
+        let (_before, after_heading) = markdown.split_once(heading_line).ok_or_else(|| {
+            format!(
+                "Failed to partition Markdown at heading {:?} in:\n{}",
+                heading_line, markdown
+            )
+        })?;
+        let next_boundary = after_heading.lines().skip(1).find(|line| {
+            let trimmed = line.trim_start();
+            let hashes = trimmed.chars().take_while(|&ch| ch == '#').count();
+            hashes > 0 && hashes <= heading_level && trimmed.chars().nth(hashes) == Some(' ')
+        });
+        if let Some(boundary_line) = next_boundary {
+            if let Some((section_body, _rest)) = after_heading.split_once(boundary_line) {
+                return Ok(section_body);
+            }
+        }
+        return Ok(after_heading);
+    }
+
+    let h2_body = extract_markdown_h2_section(markdown, fallback_h2_prefix)?;
+    if h2_body.contains(title_keyword) {
+        Ok(h2_body)
+    } else {
+        Err(format!(
+            "Section {:?} did not contain expected keyword {:?}:\n{}",
+            fallback_h2_prefix, title_keyword, h2_body
+        ))
+    }
+}
+
+/// Verifies that `forward_sync_sysml_to_specs` preserves technical acronyms and mixed-case tokens
+/// in generated titles, eliminates CSS container / compiler self-description boilerplate from
+/// `FEAT-01-SnapshotIntegrityValidator.md` and `EPIC-02-LedgerGovernance_SysML.md`, projects all
+/// 10 constraints without `.truncate(8)` data loss alongside `3..=10` positive and negative BDD
+/// acceptance criteria, grounds Epic sections 1, 3, 4, and 5 in AST declarations, and evicts stale
+/// boilerplate during non-forced (`force: false`) re-synchronization while preserving tracker
+/// `Issue ID` (`#699`), checked `- [x] AC-01:`, and custom human-authored Layer 3 prose.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C model-driven
+/// specification integrity objectives for fn
+/// `test_issue_699_forward_sync_ast_grounded_features_epics_acronyms_and_merge_eviction`
+/// in `crates/compile-sysml/tests/reproducer_tests.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Technical Acronym Tokenization Invariant: Humanized Epic, User Story, and Use Case titles
+///   preserve `"SysML"`, `"CommonMark"`, `"GitHub"`, `"OpenAPI"`, `"UUIDv5"`, `"STPA"`, `"FMECA"`,
+///   and `"SHA256"` intact and never fracture them into `"Sys ML"`, `"Common Mark"`, `"Git Hub"`,
+///   or `"Open API"`.
+/// - Zero-Boilerplate & Zero-Loss Feature Projection Invariant: `FEAT-01-SnapshotIntegrityValidator.md`
+///   emits zero occurrences of `"@container"`, `"viewport containment"`, `"AST references"`, or
+///   `"operational_invariants"`; preserves `"CheckpointDigestVector"` and `"sha256-zero"` in Section 1
+///   (`Test Data Shape` JSON Schema); projects `"CheckpointDigestVector"`, `"snapshot_in"`,
+///   `"fault_out"`, `"REQ-0699"`, and all 10 constraints and expressions (`"C01_Bound"` through
+///   `"C09_NinthInvariant"` and `"C10_TenthReqInvariant"`) in Section 2 (`Validation & Constraints`);
+///   and emits `3..=10` `- [ ] AC-` BDD items referencing all 10 constraints with both positive
+///   satisfaction and negative violation/rejection criteria.
+/// - AST-Grounded Epic Synthesis Invariant: `EPIC-02-LedgerGovernance_SysML.md` emits zero
+///   `"Deterministic compilation passes, error containment"` or `"zero hardcoded domain semantics"`
+///   boilerplate, grounding `## 1. Context` in `PackageDef.doc`, `## 3. Architecture` in
+///   `"SnapshotIntegrityValidator"` and `"snapshot_in"`, `## 4. Operational Considerations` in
+///   `"ValidatorLifecycleState"` (`"Idle"` / `"Verifying"`), and `## 5. Security & Governance` in
+///   `"REQ-0699"` and `"C09_NinthInvariant"` / `"C10_TenthReqInvariant"`.
+/// - Selective Stale-Boilerplate Merge Eviction Invariant: Under `force: false, dry_run: false`,
+///   stale `"@container"`, `"viewport containment"`, `"AST references"`, and
+///   `"Deterministic compilation passes"` sections on disk are evicted and replaced with AST-derived
+///   sections while `"| **Issue ID** | #699 |"`, `"- [x] AC-01:"`, and custom non-boilerplate
+///   `### Layer 3: Presentation & Actuator Interface Binding` prose survive intact.
+///
+/// ## 3. Preconditions
+/// - `build_issue_699_ledger_governance_fixture()` constructs the domain-neutral `LedgerCoreSystem`
+///   AST and two isolated RAII `TempDirGuard` workspaces are writable under `std::env::temp_dir()`.
+///
+/// ## 4. Postconditions
+/// - Both forced fresh-generation assertions and non-forced merge-eviction/preservation assertions
+///   hold, and both `TempDirGuard` instances deterministically clean up temporary files on drop.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ linear pass over the synthetic `PackageDef` and emitted Markdown buffers.
+/// - Space Complexity: $O(N)$ bounded heap memory for AST fixtures and Markdown strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Exercises `forward_sync_sysml_to_specs` under both `force: true` and `force: false`.
+/// - State: Isolated strictly to two RAII `TempDirGuard` directories with zero repository mutations.
+/// - Action: Executes with zero `.unwrap()`, `.expect()`, `panic!`, `regex`, or direct slice indexing.
+/// - Resource: `TempDirGuard` Drop guarantees deterministic cleanup even during RED assertion unwinding.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FEAT-EPIC-AST-GROUNDED-699], [REQ-SYNC-ACRONYM-PRESERVATION-699], [REQ-SYNC-MERGE-BOILERPLATE-EVICTION-699] | SysML v2: VerificationCaseDef(test_issue_699_forward_sync_ast_grounded_features_epics_acronyms_and_merge_eviction)
+#[test]
+fn test_issue_699_forward_sync_ast_grounded_features_epics_acronyms_and_merge_eviction(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let pkg = build_issue_699_ledger_governance_fixture();
+
+    // Pass A: Forced fresh synchronization into first RAII TempDirGuard.
+    let temp_fresh = TempDirGuard::new("deap_issue_699_fresh_sync")?;
+    let docs_fresh = temp_fresh.path().join("docs");
+    fs::create_dir_all(&docs_fresh)?;
+
+    let opts_fresh = ForwardSyncOptions {
+        schema_path: PathBuf::from("schema/ledger_governance.sysml"),
+        docs_dir: docs_fresh.clone(),
+        out_dir: Some(docs_fresh.clone()),
+        dry_run: false,
+        force: true,
+    };
+    let generated = forward_sync_sysml_to_specs(&pkg, &opts_fresh)?;
+
+    let epic_md = generated
+        .get("epics/EPIC-02-LedgerGovernance_SysML.md")
+        .ok_or("Missing epics/EPIC-02-LedgerGovernance_SysML.md")?;
+    let feat_md = generated
+        .get("features/FEAT-01-SnapshotIntegrityValidator.md")
+        .ok_or("Missing features/FEAT-01-SnapshotIntegrityValidator.md")?;
+    let us01_md = generated
+        .get("user-stories/US-01-CompileSysMLToCommonMark.md")
+        .ok_or("Missing user-stories/US-01-CompileSysMLToCommonMark.md")?;
+    let us02_md = generated
+        .get("user-stories/US-02-SyncGitHubOpenAPIWithUUIDv5.md")
+        .ok_or("Missing user-stories/US-02-SyncGitHubOpenAPIWithUUIDv5.md")?;
+    let uc01_md = generated
+        .get("use-cases/UC-01-VerifySTPAAndFMECAWithSHA256.md")
+        .ok_or("Missing use-cases/UC-01-VerifySTPAAndFMECAWithSHA256.md")?;
+
+    // 1. Acronym & Mixed-Case Preservation across Epic / User Story / Use Case titles.
+    for (doc_name, doc_md, expected_acronyms) in [
+        (
+            "EPIC-02-LedgerGovernance_SysML.md",
+            epic_md.as_str(),
+            ["SysML"].as_slice(),
+        ),
+        (
+            "US-01-CompileSysMLToCommonMark.md",
+            us01_md.as_str(),
+            ["SysML", "CommonMark"].as_slice(),
+        ),
+        (
+            "US-02-SyncGitHubOpenAPIWithUUIDv5.md",
+            us02_md.as_str(),
+            ["GitHub", "OpenAPI", "UUIDv5"].as_slice(),
+        ),
+        (
+            "UC-01-VerifySTPAAndFMECAWithSHA256.md",
+            uc01_md.as_str(),
+            ["STPA", "FMECA", "SHA256"].as_slice(),
+        ),
+    ] {
+        for forbidden_split in ["Sys ML", "Common Mark", "Git Hub", "Open API"] {
+            assert!(
+                !doc_md.contains(forbidden_split),
+                "{} must never fracture acronym into {:?}:\n{}",
+                doc_name,
+                forbidden_split,
+                doc_md
+            );
+        }
+        let h1_title = doc_md
+            .lines()
+            .find(|line| line.starts_with("# "))
+            .ok_or_else(|| format!("{} missing '# ' H1 title line:\n{}", doc_name, doc_md))?;
+        let meta_title = doc_md
+            .lines()
+            .find(|line| line.starts_with("| **Title** |"))
+            .ok_or_else(|| format!("{} missing '| **Title** |' row:\n{}", doc_name, doc_md))?;
+        for acronym in expected_acronyms {
+            let in_h1 = h1_title
+                .split(|ch: char| !ch.is_alphanumeric())
+                .any(|tok| tok == *acronym);
+            let in_meta = meta_title
+                .split(|ch: char| !ch.is_alphanumeric())
+                .any(|tok| tok == *acronym);
+            assert!(
+                in_h1 && in_meta,
+                "{} titles must preserve standalone acronym token {:?} intact (H1: {:?}, Meta: {:?})",
+                doc_name,
+                acronym,
+                h1_title,
+                meta_title
+            );
+        }
+    }
+
+    // 2. FEAT-01-SnapshotIntegrityValidator.md Purity, Zero-Loss Section 2 (>8 Constraints), & 3..=10 BDD.
+    for forbidden_feat_boilerplate in [
+        "@container",
+        "viewport containment",
+        "AST references",
+        "operational_invariants",
+    ] {
+        assert!(
+            !feat_md.contains(forbidden_feat_boilerplate),
+            "FEAT-01 must contain zero boilerplate substring {:?}:\n{}",
+            forbidden_feat_boilerplate,
+            feat_md
+        );
+    }
+
+    let feat_sec1 = extract_markdown_section_by_keyword(feat_md, "Test Data Shape", "## 1.")?;
+    for expected_sec1_token in ["CheckpointDigestVector", "sha256-zero"] {
+        assert!(
+            feat_sec1.contains(expected_sec1_token),
+            "FEAT-01 Section 1 (Test Data Shape JSON Schema) must preserve {:?}:\n{}",
+            expected_sec1_token,
+            feat_sec1
+        );
+    }
+
+    let feat_sec2 =
+        extract_markdown_section_by_keyword(feat_md, "Validation & Constraints", "## 2.")?;
+    let all_ten_constraints = [
+        ("C01_Bound", "c01_val >= 0"),
+        ("C02_EpochFloor", "c02_epoch >= 1"),
+        ("C03_ReplicaCount", "c03_replicas >= 3"),
+        ("C04_DigestLen", "c04_bytes == 32"),
+        ("C05_SkewLimit", "c05_skew_ms <= 50"),
+        ("C06_RetryCap", "c06_retries <= 4"),
+        ("C07_BatchQuota", "c07_items <= 1024"),
+        ("C08_QuorumRatio", "c08_ratio > 0"),
+        ("C09_NinthInvariant", "c09_margin > 1"),
+        ("C10_TenthReqInvariant", "c10_integrity == true"),
+    ];
+    for expected_sec2_member in [
+        "CheckpointDigestVector",
+        "snapshot_in",
+        "fault_out",
+        "REQ-0699",
+    ] {
+        assert!(
+            feat_sec2.contains(expected_sec2_member),
+            "FEAT-01 Section 2 (Validation & Constraints) must project {:?}:\n{}",
+            expected_sec2_member,
+            feat_sec2
+        );
+    }
+    for (constraint_name, constraint_expr) in all_ten_constraints {
+        assert!(
+            feat_sec2.contains(constraint_name) && feat_sec2.contains(constraint_expr),
+            "FEAT-01 Section 2 (Validation & Constraints) must project constraint {:?} and expression {:?} without .truncate(8) loss:\n{}",
+            constraint_name,
+            constraint_expr,
+            feat_sec2
+        );
+    }
+
+    let feat_bdd = extract_markdown_h2_section(feat_md, "## Acceptance Criteria (BDD)")?;
+    let ac_lines = feat_bdd
+        .lines()
+        .filter(|line| line.trim_start().starts_with("- [ ] AC-"))
+        .collect::<Vec<_>>();
+    assert!(
+        (3..=10).contains(&ac_lines.len()),
+        "FEAT-01 '## Acceptance Criteria (BDD)' must contain strictly 3..=10 '- [ ] AC-' items, got {}:\n{}",
+        ac_lines.len(),
+        feat_bdd
+    );
+    for (constraint_name, _constraint_expr) in all_ten_constraints {
+        assert!(
+            feat_bdd.contains(constraint_name),
+            "FEAT-01 '## Acceptance Criteria (BDD)' must reference constraint {:?}:\n{}",
+            constraint_name,
+            feat_bdd
+        );
+    }
+    let has_positive_bdd = ac_lines.iter().any(|line| {
+        let lower = line.to_ascii_lowercase();
+        let has_gwt =
+            lower.contains("given") && lower.contains("when") && lower.contains("then");
+        let is_positive = (lower.contains("satisf")
+            || lower.contains("valid")
+            || lower.contains("nominal")
+            || lower.contains("holds")
+            || lower.contains("conform")
+            || lower.contains("verif"))
+            && !lower.contains("violat");
+        has_gwt && is_positive
+    });
+    let has_negative_bdd = ac_lines.iter().any(|line| {
+        let lower = line.to_ascii_lowercase();
+        let has_gwt =
+            lower.contains("given") && lower.contains("when") && lower.contains("then");
+        let cites_violation = lower.contains("violat")
+            || lower.contains("invalid")
+            || lower.contains("malformed")
+            || lower.contains("unsatisfied")
+            || lower.contains("fails");
+        let cites_rejection = lower.contains("reject")
+            || lower.contains("fault_out")
+            || lower.contains("diagnostic")
+            || lower.contains("abort")
+            || lower.contains("refus")
+            || lower.contains("fail");
+        has_gwt && cites_violation && cites_rejection
+    });
+    assert!(
+        has_positive_bdd && has_negative_bdd,
+        "FEAT-01 '## Acceptance Criteria (BDD)' must include both positive satisfaction and negative violation/rejection Given/When/Then criteria:\n{}",
+        feat_bdd
+    );
+
+    // 3. EPIC-02-LedgerGovernance_SysML.md AST-Grounded Sections 1, 3, 4, 5.
+    for forbidden_epic_boilerplate in [
+        "Deterministic compilation passes, error containment",
+        "zero hardcoded domain semantics",
+    ] {
+        assert!(
+            !epic_md.contains(forbidden_epic_boilerplate),
+            "EPIC-02 must contain zero compiler boilerplate substring {:?}:\n{}",
+            forbidden_epic_boilerplate,
+            epic_md
+        );
+    }
+
+    let epic_sec1 = extract_markdown_h2_section(epic_md, "## 1. Context")?;
+    assert!(
+        epic_sec1.contains("Authoritative distributed ledger replication governance subsystem."),
+        "EPIC-02 '## 1. Context' must project PackageDef.doc:\n{}",
+        epic_sec1
+    );
+
+    let epic_sec3 = extract_markdown_h2_section(epic_md, "## 3. Architecture")?;
+    assert!(
+        epic_sec3.contains("SnapshotIntegrityValidator") && epic_sec3.contains("snapshot_in"),
+        "EPIC-02 '## 3. Architecture' must reference 'SnapshotIntegrityValidator' and 'snapshot_in':\n{}",
+        epic_sec3
+    );
+
+    let epic_sec4 = extract_markdown_h2_section(epic_md, "## 4. Operational Considerations")?;
+    assert!(
+        epic_sec4.contains("ValidatorLifecycleState")
+            || epic_sec4.contains("Idle")
+            || epic_sec4.contains("Verifying"),
+        "EPIC-02 '## 4. Operational Considerations' must reference AST lifecycle state 'ValidatorLifecycleState' ('Idle' / 'Verifying'):\n{}",
+        epic_sec4
+    );
+
+    let epic_sec5 = extract_markdown_h2_section(epic_md, "## 5. Security & Governance")?;
+    assert!(
+        epic_sec5.contains("REQ-0699")
+            && (epic_sec5.contains("C09_NinthInvariant")
+                || epic_sec5.contains("C10_TenthReqInvariant")),
+        "EPIC-02 '## 5. Security & Governance' must reference 'REQ-0699' and 'C09_NinthInvariant' (or 'C10_TenthReqInvariant'):\n{}",
+        epic_sec5
+    );
+
+    // 4. Non-Forced (force: false) Stale Boilerplate Eviction + Issue ID & Custom Prose Preservation.
+    let temp_merge = TempDirGuard::new("deap_issue_699_non_forced_merge")?;
+    let docs_merge = temp_merge.path().join("docs");
+    let features_merge_dir = docs_merge.join("features");
+    let epics_merge_dir = docs_merge.join("epics");
+    fs::create_dir_all(&features_merge_dir)?;
+    fs::create_dir_all(&epics_merge_dir)?;
+
+    let feat_merge_path = features_merge_dir.join("FEAT-01-SnapshotIntegrityValidator.md");
+    let epic_merge_path = epics_merge_dir.join("EPIC-02-LedgerGovernance_SysML.md");
+
+    let seeded_stale_feat = "\
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #699 |
+| **Title** | Feature 01: [Ledger Governance Sys ML] SnapshotIntegrityValidator |
+| **Type** | feature |
+| **Parent Epic** | [EPIC-02-LedgerGovernance_SysML](../epics/EPIC-02-LedgerGovernance_SysML.md) |
+| **Interface Type** | Physical / Structural / Internal Bus |
+| **Schema Containers** | `LedgerGovernance_SysML::SnapshotIntegrityValidator` |
+| **Generation Mode** | subagent |
+| **Specification Source** | [schema/ledger_governance.sysml](../../schema/ledger_governance.sysml) |
+
+# Feature 01: [Ledger Governance Sys ML] SnapshotIntegrityValidator
+
+## Interface Requirements
+### 1. Test Data Shape
+```json
+{
+  \"type\": \"object\",
+  \"properties\": {
+    \"operational_invariants\": { \"type\": \"string\" }
+  }
+}
+```
+
+### 2. Validation & Constraints
+Formal constraints and invariant guarantees enforced by SnapshotIntegrityValidator.
+
+### 3. Visual Layout & Arrangement
+Logical layout, viewport containment, and container structure for SnapshotIntegrityValidator conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+
+### 4. Interactive Flow & States
+Operational lifecycle events and discrete state transitions for SnapshotIntegrityValidator.
+
+### Layer 1: Domain State & Signal Model
+Domain state vector representing SnapshotIntegrityValidator status, AST references, and typed signal models.
+
+### Layer 2: Logic & Safety State Management
+Deterministic state machine solver and safety monitor logic for SnapshotIntegrityValidator.
+
+### Layer 3: Presentation & Actuator Interface Binding
+Custom authored quorum transport diagnostic routing narrative.
+
+## Acceptance Criteria (BDD)
+- [x] AC-01: Given valid ledger snapshot input, When SnapshotIntegrityValidator evaluates C01_Bound, Then verification succeeds.
+- [ ] AC-02: Given operational state, When SnapshotIntegrityValidator evaluates constraint 'C02_EpochFloor', Then asserts invariant satisfaction without violation.
+
+## Source References
+Formal component specifications and normative systems engineering requirements:
+- System Architecture Model: `schema/ledger_governance.sysml`
+";
+    fs::write(&feat_merge_path, seeded_stale_feat)?;
+
+    let seeded_stale_epic = "\
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #699 |
+| **Title** | Epic 02: Ledger Governance Sys ML |
+| **Type** | epic |
+| **Package** | LedgerGovernance_SysML |
+| **Subsystem** | Ledger Governance Sys ML |
+| **Generation Mode** | subagent |
+| **Specification Source** | [schema/ledger_governance.sysml](../../schema/ledger_governance.sysml) |
+
+# Epic 02: Ledger Governance Sys ML
+
+## 1. Context
+Authoritative distributed ledger replication governance subsystem.
+
+## 2. Requirements & Checklist
+- [ ] #699 - [Feature 01: [Ledger Governance Sys ML] SnapshotIntegrityValidator](../features/FEAT-01-SnapshotIntegrityValidator.md)
+
+## 3. Architecture
+Subsystem structural composition, port allocations, and directional data connectors realized by SnapshotIntegrityValidator.
+
+## 4. Operational Considerations
+Deterministic compilation passes, error containment, and provable polynomial complexity execution.
+
+## 5. Security & Governance
+Safety-critical invariant satisfaction, formal trace matrix closure, and zero hardcoded domain semantics.
+
+## 6. Source References
+- System Architecture Model: `schema/ledger_governance.sysml`
+";
+    fs::write(&epic_merge_path, seeded_stale_epic)?;
+
+    let opts_merge = ForwardSyncOptions {
+        schema_path: PathBuf::from("schema/ledger_governance.sysml"),
+        docs_dir: docs_merge.clone(),
+        out_dir: Some(docs_merge),
+        dry_run: false,
+        force: false,
+    };
+    forward_sync_sysml_to_specs(&pkg, &opts_merge)?;
+
+    let merged_feat = fs::read_to_string(&feat_merge_path)?;
+    let merged_epic = fs::read_to_string(&epic_merge_path)?;
+
+    // Issue ID #699, checked `- [x] AC-01:`, and custom Layer 3 narrative must survive.
+    assert!(
+        merged_feat.contains("| **Issue ID** | #699 |"),
+        "Non-forced FEAT-01 sync must preserve '| **Issue ID** | #699 |':\n{}",
+        merged_feat
+    );
+    assert!(
+        merged_epic.contains("| **Issue ID** | #699 |"),
+        "Non-forced EPIC-02 sync must preserve '| **Issue ID** | #699 |':\n{}",
+        merged_epic
+    );
+    assert!(
+        merged_feat.contains("- [x] AC-01:"),
+        "Non-forced FEAT-01 sync must preserve checked '- [x] AC-01:':\n{}",
+        merged_feat
+    );
+    assert!(
+        merged_feat.contains("Custom authored quorum transport diagnostic routing narrative."),
+        "Non-forced FEAT-01 sync must preserve custom non-boilerplate Layer 3 prose:\n{}",
+        merged_feat
+    );
+
+    // Stale boilerplate must be completely evicted (0 occurrences) and replaced by AST-derived sections.
+    for evicted_token in [
+        "@container",
+        "viewport containment",
+        "AST references",
+        "Deterministic compilation passes",
+    ] {
+        assert!(
+            !merged_feat.contains(evicted_token),
+            "Non-forced FEAT-01 sync must evict stale boilerplate {:?}:\n{}",
+            evicted_token,
+            merged_feat
+        );
+        assert!(
+            !merged_epic.contains(evicted_token),
+            "Non-forced EPIC-02 sync must evict stale boilerplate {:?}:\n{}",
+            evicted_token,
+            merged_epic
+        );
+    }
+
+    assert!(
+        merged_feat.contains("C09_NinthInvariant")
+            && merged_feat.contains("C10_TenthReqInvariant")
+            && merged_feat.contains("CheckpointDigestVector"),
+        "Non-forced FEAT-01 sync must replace evicted boilerplate with AST-derived constraints and types:\n{}",
+        merged_feat
+    );
+    assert!(
+        merged_epic.contains("Authoritative distributed ledger replication governance subsystem.")
+            && merged_epic.contains("SnapshotIntegrityValidator")
+            && merged_epic.contains("REQ-0699"),
+        "Non-forced EPIC-02 sync must replace evicted boilerplate with AST-derived sections:\n{}",
+        merged_epic
+    );
+
+    Ok(())
+}

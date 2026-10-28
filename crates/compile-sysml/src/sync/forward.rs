@@ -134,13 +134,242 @@ fn to_snake_case(s: &str) -> String {
     result
 }
 
-/// Converts PascalCase or snake_case identifier into a space-separated title display string.
+/// Canonical mixed-case technical identifiers preserved intact during title humanization.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C lexical fidelity
+/// objectives for `CANONICAL_MIXED_TOKENS` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Ordered longest-prefix-first (e.g., `"SysMLv2"` precedes `"SysML"`, `"UTF16"` precedes `"UTF8"`)
+///   so prefix-overlapping technical tokens resolve unambiguously in a single deterministic scan.
+/// - Intentionally omits `"ConOps"` so `to_display_name("ConOps") == "Con Ops"`.
+///
+/// ## 3. Preconditions
+/// - Referenced as an immutable compile-time table by `match_canonical_mixed_token`.
+///
+/// ## 4. Postconditions
+/// - Prevents `to_display_name` from fracturing mixed-case technical nouns into invalid split tokens
+///   such as `"Sys ML"`, `"Common Mark"`, `"Git Hub"`, or `"Open API"`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ static slice access.
+/// - Space Complexity: $O(1)$ compile-time read-only memory.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Immutable `&[&str]` constant.
+/// - State: Stateless compile-time table.
+/// - Action: Zero fallible runtime operations.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-CANONICAL-MIXED-TOKENS] | SysML v2: AttributeDef(CANONICAL_MIXED_TOKENS)
+const CANONICAL_MIXED_TOKENS: &[&str] = &[
+    "CommonMark",
+    "Stateflow",
+    "OpenAPI",
+    "GraphQL",
+    "SQLite",
+    "GitHub",
+    "GitLab",
+    "UUIDv5",
+    "UUIDv4",
+    "SHA256",
+    "SHA512",
+    "SysMLv2",
+    "SysML",
+    "KerML",
+    "UTF16",
+    "UTF8",
+    "IPv6",
+    "IPv4",
+];
+
+/// Matches a leading token from `CANONICAL_MIXED_TOKENS` at the start of `rem` when followed by a valid word boundary.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C lexical tokenization
+/// objectives for fn `match_canonical_mixed_token` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `Some(byte_len)` only when `rem` begins with an entry `tok` in `CANONICAL_MIXED_TOKENS`
+///   and the remainder `after` satisfies `after.is_empty() || after == "s" || next_char.is_ascii_uppercase() || !next_char.is_ascii_alphabetic()`.
+///
+/// ## 3. Preconditions
+/// - `rem: &str` is a valid UTF-8 suffix slice of an identifier segment.
+///
+/// ## 4. Postconditions
+/// - Returned byte length `len` satisfies `1 <= len <= rem.len()` and lies on a UTF-8 character boundary.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(K)$ where $K = |CANONICAL\_MIXED\_TOKENS| = 18$.
+/// - Space Complexity: $O(1)$ zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `None` cleanly on empty or non-matching slices.
+/// - State: Pure read-only predicate.
+/// - Action: Uses `strip_prefix` with zero regexes, panics, or unchecked indexing.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-MATCH-CANONICAL-MIXED-TOKEN] | SysML v2: ActionDef(match_canonical_mixed_token)
+fn match_canonical_mixed_token(rem: &str) -> Option<usize> {
+    for &tok in CANONICAL_MIXED_TOKENS {
+        if let Some(after) = rem.strip_prefix(tok) {
+            if after.is_empty() {
+                return Some(tok.len());
+            }
+            if after == "s" {
+                return Some(tok.len().saturating_add(1));
+            }
+            if after
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_uppercase() || !c.is_ascii_alphabetic())
+            {
+                return Some(tok.len());
+            }
+        }
+    }
+    None
+}
+
+/// Computes the UTF-8 byte length of the next logical word, acronym, or mixed-case token at the start of `rem`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C identifier humanization
+/// objectives for fn `next_display_subtoken_len` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Progress Invariant: For every non-empty `rem`, returns `len >= 1` aligned to a valid UTF-8 character boundary.
+/// - Acronym Boundary Invariant: Splits consecutive uppercase acronym runs before the final uppercase letter
+///   when followed by a lowercase letter (`"STPAAnd"` -> `"STPA"` + `"And"`, `"ASTStream"` -> `"AST"` + `"Stream"`),
+///   and stops immediately before any embedded `CANONICAL_MIXED_TOKENS` match (`"ASTSysML"` -> `"AST"` + `"SysML"`).
+///
+/// ## 3. Preconditions
+/// - `rem: &str` is a non-empty UTF-8 slice free of `'_'` and ASCII whitespace.
+///
+/// ## 4. Postconditions
+/// - Returns the exact byte count of the leading sub-token in `rem`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|rem|)$ linear character-index scan.
+/// - Space Complexity: $O(|rem|)$ bounded offset vector for uppercase runs.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `0` only when `rem.is_empty()`.
+/// - State: Pure function with zero shared mutable state.
+/// - Action: Uses `.get(...)` and `.char_indices()` exclusively with zero direct slice indexing or panics.
+/// - Resource: Bounded single small `Vec<usize>` for uppercase runs.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-NEXT-DISPLAY-SUBTOKEN-LEN] | SysML v2: ActionDef(next_display_subtoken_len)
+fn next_display_subtoken_len(rem: &str) -> usize {
+    if let Some(canon_len) = match_canonical_mixed_token(rem) {
+        return canon_len;
+    }
+    let Some(first_ch) = rem.chars().next() else {
+        return 0;
+    };
+    if first_ch == '-' {
+        return first_ch.len_utf8();
+    }
+    if first_ch.is_uppercase() {
+        let mut upper_offsets: Vec<usize> = Vec::new();
+        let mut end_of_uppers = rem.len();
+        for (rel_idx, ch) in rem.char_indices() {
+            if rel_idx > 0
+                && rem
+                    .get(rel_idx..)
+                    .and_then(match_canonical_mixed_token)
+                    .is_some()
+            {
+                end_of_uppers = rel_idx;
+                break;
+            }
+            if ch.is_uppercase() {
+                upper_offsets.push(rel_idx);
+            } else {
+                end_of_uppers = rel_idx;
+                break;
+            }
+        }
+        let after_uppers = rem.get(end_of_uppers..).unwrap_or("");
+        if upper_offsets.len() >= 2 {
+            if after_uppers == "s" {
+                return end_of_uppers.saturating_add(1);
+            }
+            if after_uppers.chars().next().is_some_and(char::is_lowercase) {
+                if let Some(&last_upper_off) = upper_offsets.last() {
+                    if last_upper_off > 0 {
+                        return last_upper_off;
+                    }
+                }
+            }
+            let digit_bytes = after_uppers
+                .bytes()
+                .take_while(u8::is_ascii_digit)
+                .count();
+            return end_of_uppers.saturating_add(digit_bytes);
+        }
+        let mut consumed = end_of_uppers;
+        for (rel_idx, ch) in after_uppers.char_indices() {
+            if ch.is_lowercase() {
+                consumed = end_of_uppers
+                    .saturating_add(rel_idx)
+                    .saturating_add(ch.len_utf8());
+            } else {
+                break;
+            }
+        }
+        let after_lowers = rem.get(consumed..).unwrap_or("");
+        let digit_bytes = after_lowers
+            .bytes()
+            .take_while(u8::is_ascii_digit)
+            .count();
+        return consumed.saturating_add(digit_bytes);
+    }
+    if first_ch.is_lowercase() {
+        let mut consumed = 0usize;
+        for (rel_idx, ch) in rem.char_indices() {
+            if ch.is_lowercase() {
+                consumed = rel_idx.saturating_add(ch.len_utf8());
+            } else {
+                break;
+            }
+        }
+        let after_lowers = rem.get(consumed..).unwrap_or("");
+        let digit_bytes = after_lowers
+            .bytes()
+            .take_while(u8::is_ascii_digit)
+            .count();
+        return consumed.saturating_add(digit_bytes);
+    }
+    if first_ch.is_ascii_digit() {
+        let digit_bytes = rem.bytes().take_while(u8::is_ascii_digit).count();
+        let after_digits = rem.get(digit_bytes..).unwrap_or("");
+        let mut lower_bytes = 0usize;
+        for (rel_idx, ch) in after_digits.char_indices() {
+            if ch.is_lowercase() {
+                lower_bytes = rel_idx.saturating_add(ch.len_utf8());
+            } else {
+                break;
+            }
+        }
+        return digit_bytes.saturating_add(lower_bytes);
+    }
+    first_ch.len_utf8()
+}
+
+/// Converts a PascalCase, camelCase, or snake_case identifier into a space-separated title display string
+/// while preserving technical acronyms and canonical mixed-case tokens intact.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `to_display_name` in `crates/compile-sysml/src/sync/forward.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves deterministic state conservation and referential transparency for fn `to_display_name` (declaration #4) within `SYNC-FORWARD`.
+/// - Preserves every entry in `CANONICAL_MIXED_TOKENS` (e.g., `"SysML"`, `"CommonMark"`, `"GitHub"`, `"OpenAPI"`, `"UUIDv5"`, `"SHA256"`) and uppercase acronym runs (`"STPA"`, `"FMECA"`, `"AST"`) as intact standalone tokens.
 ///
 /// ## 3. Preconditions
 /// - `s: &str` must satisfy domain and type-safety constraints prior to invoking `to_display_name`.
@@ -155,23 +384,43 @@ fn to_snake_case(s: &str) -> String {
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Validates boundary inputs and types for `to_display_name` (`String`).
 /// - State: Maintains consistent state invariants across `to_display_name` without partial mutation on error.
-/// - Action: Executes `to_display_name` deterministically with zero unbounded recursion or blocking.
+/// - Action: Executes `to_display_name` deterministically with zero unbounded recursion, regexes, or unchecked indexing.
 /// - Resource: Bounds stack and heap allocations within `to_display_name` (`SYNC-FORWARD`).
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYNC-FORWARD-TO-DISPLAY-NAME] | SysML v2: ActionDef(to_display_name)
 fn to_display_name(s: &str) -> String {
-    let clean = s.replace('_', " ");
-    let mut result = String::new();
-    let mut prev_is_lower = false;
-    for ch in clean.chars() {
-        if ch.is_uppercase() && prev_is_lower {
-            result.push(' ');
+    let mut rendered_segments: Vec<String> = Vec::new();
+    for seg in s
+        .split(|c: char| c == '_' || c.is_ascii_whitespace())
+        .filter(|part| !part.is_empty())
+    {
+        let mut seg_out = String::with_capacity(seg.len().saturating_add(4));
+        let mut pos = 0usize;
+        while pos < seg.len() {
+            let Some(rem) = seg.get(pos..) else {
+                break;
+            };
+            if rem.is_empty() {
+                break;
+            }
+            let step = next_display_subtoken_len(rem);
+            if step == 0 {
+                break;
+            }
+            if let Some(tok) = rem.get(..step) {
+                if !seg_out.is_empty() && !seg_out.ends_with('-') && !tok.starts_with('-') {
+                    seg_out.push(' ');
+                }
+                seg_out.push_str(tok);
+            }
+            pos = pos.saturating_add(step);
         }
-        prev_is_lower = ch.is_lowercase();
-        result.push(ch);
+        if !seg_out.is_empty() {
+            rendered_segments.push(seg_out);
+        }
     }
-    result.trim().to_string()
+    rendered_segments.join(" ")
 }
 
 /// Strips redundant leading prefixes (e.g., `UC_01_`, `UC-01-`, `UC01_`) from a Use Case name.
@@ -486,26 +735,123 @@ fn format_issue_id_cell(issue_id: Option<usize>) -> String {
     }
 }
 
-/// Generates a valid Draft 2020-12 JSON Schema payload from PartDef ports and attributes.
+/// Escapes a UTF-8 string slice for RFC 8259 JSON string literal embedding.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `escape_json_string` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Escapes `"`, `\`, `\n`, `\r`, `\t`, and control codepoints `U+0000..=U+001F` so the returned
+///   buffer is always valid inside double-quoted RFC 8259 JSON strings.
+///
+/// ## 3. Preconditions
+/// - `raw: &str` is any valid UTF-8 slice.
+///
+/// ## 4. Postconditions
+/// - Returns an escaped `String` preserving all non-control Unicode scalar values verbatim.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|raw|)$ single linear character pass.
+/// - Space Complexity: $O(|raw|)$ bounded output buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts empty and arbitrary Unicode strings cleanly.
+/// - State: Pure transformation with zero shared state.
+/// - Action: Zero panics, regexes, or unchecked indexing.
+/// - Resource: Single pre-sized `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-ESCAPE-JSON-STRING] | SysML v2: ActionDef(escape_json_string)
+fn escape_json_string(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => {
+                let code = c as u32;
+                out.push_str(&format!("\\u{code:04x}"));
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Formats an AST `AttributeDef::default_value` literal into a typed RFC 8259 JSON value token.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `format_json_default_literal` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Emits native JSON numeric/boolean literals when `json_type` is `"integer"`, `"number"`, or `"boolean"`
+///   and `raw_default` parses cleanly; otherwise strips optional outer double quotes and emits an escaped JSON string.
+///
+/// ## 3. Preconditions
+/// - `raw_default: &str` is a non-empty SysML attribute default expression and `json_type: &str` is the lowered JSON Schema type.
+///
+/// ## 4. Postconditions
+/// - Returns a syntactically valid RFC 8259 JSON value representation.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|raw\_default|)$.
+/// - Space Complexity: $O(|raw\_default|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Gracefully quotes symbolic or non-numeric SysML default expressions as JSON strings.
+/// - State: Pure value conversion.
+/// - Action: Rejects `NaN`/`Infinity` floats via `f64::is_finite` so invalid JSON numbers cannot be emitted.
+/// - Resource: Bounded single `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-FORMAT-JSON-DEFAULT-LITERAL] | SysML v2: ActionDef(format_json_default_literal)
+fn format_json_default_literal(raw_default: &str, json_type: &str) -> String {
+    let trimmed = raw_default.trim();
+    match json_type {
+        "integer" if trimmed.parse::<i64>().is_ok() || trimmed.parse::<u64>().is_ok() => {
+            return trimmed.to_string();
+        }
+        "number" if trimmed.parse::<f64>().is_ok_and(f64::is_finite) => {
+            return trimmed.to_string();
+        }
+        "boolean" if trimmed == "true" || trimmed == "false" => {
+            return trimmed.to_string();
+        }
+        _ => {}
+    }
+    let unquoted = trimmed
+        .strip_prefix('"')
+        .and_then(|s| s.strip_suffix('"'))
+        .unwrap_or(trimmed);
+    format!("\"{}\"", escape_json_string(unquoted))
+}
+
+/// Generates a valid Draft 2020-12 JSON Schema from `PartDef` attributes, ports, defaults, and constraints.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `generate_json_schema` in `crates/compile-sysml/src/sync/forward.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `generate_json_schema` (declaration #9) within `SYNC-FORWARD`.
+/// - Preserves custom SysML `AttributeDef::type_name` classifiers via `"x-sysml-type"`, preserves `AttributeDef::default_value`
+///   via `"default"` (omitting defaulted attributes from `"required"`), and projects `PartDef::constraints` via `"x-sysml-constraints"`.
 ///
 /// ## 3. Preconditions
 /// - `part: &PartDef` must satisfy domain and type-safety constraints prior to invoking `generate_json_schema`.
 ///
 /// ## 4. Postconditions
-/// - Returns `String` from `generate_json_schema` with deterministic post-execution state.
+/// - Returns a valid RFC 8259 / JSON Schema Draft 2020-12 `String` from `generate_json_schema`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N(part)) bounded over input/member dimension of `generate_json_schema`.
 /// - Space Complexity: O(N(part)) bounded auxiliary memory for `generate_json_schema`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `generate_json_schema` (`String`).
+/// - Interface: Escapes all AST identifiers, types, defaults, and constraint expressions via `escape_json_string`.
 /// - State: Maintains consistent state invariants across `generate_json_schema` without partial mutation on error.
 /// - Action: Executes `generate_json_schema` deterministically with zero unbounded recursion or blocking.
 /// - Resource: Bounds stack and heap allocations within `generate_json_schema` (`SYNC-FORWARD`).
@@ -515,10 +861,10 @@ fn format_issue_id_cell(issue_id: Option<usize>) -> String {
 fn generate_json_schema(part: &PartDef) -> String {
     let mut props = Vec::new();
     let mut required = Vec::new();
+    let escaped_part_name = escape_json_string(&part.name);
 
     props.push(format!(
-        "    \"part\": {{\n      \"type\": \"string\",\n      \"const\": \"{}\"\n    }}",
-        part.name
+        "    \"part\": {{\n      \"type\": \"string\",\n      \"const\": \"{escaped_part_name}\"\n    }}"
     ));
     required.push("\"part\"".to_string());
 
@@ -528,64 +874,437 @@ fn generate_json_schema(part: &PartDef) -> String {
     required.push("\"status\"".to_string());
 
     for attr in &part.attributes {
-        let json_type = match attr.type_name.as_str() {
-            "Integer" | "int" => "integer",
-            "Real" | "Float" | "float" | "double" => "number",
+        let raw_type = attr.type_name.trim();
+        let json_type = match raw_type {
+            "Integer" | "int" | "Nat" | "usize" | "u64" | "u32" | "i64" | "i32" => "integer",
+            "Real" | "Float" | "float" | "double" | "f64" | "f32" => "number",
             "Boolean" | "bool" => "boolean",
             _ => "string",
         };
+        let escaped_attr_name = escape_json_string(&attr.name);
+        let display_sysml_type = if raw_type.is_empty() {
+            "String"
+        } else {
+            raw_type
+        };
+        let escaped_sysml_type = escape_json_string(display_sysml_type);
+        let desc_raw = attr
+            .doc
+            .as_deref()
+            .map(str::trim)
+            .filter(|d| !d.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                format!(
+                    "Declared attribute {} ({})",
+                    attr.name.trim(),
+                    display_sysml_type
+                )
+            });
+        let escaped_desc = escape_json_string(&desc_raw);
+
+        let mut fields = vec![
+            format!("      \"type\": \"{json_type}\""),
+            format!("      \"x-sysml-type\": \"{escaped_sysml_type}\""),
+            format!("      \"description\": \"{escaped_desc}\""),
+        ];
+
+        let default_opt = attr
+            .default_value
+            .as_deref()
+            .map(str::trim)
+            .filter(|d| !d.is_empty());
+        if let Some(dv) = default_opt {
+            let default_lit = format_json_default_literal(dv, json_type);
+            fields.push(format!("      \"default\": {default_lit}"));
+        } else {
+            required.push(format!("\"{escaped_attr_name}\""));
+        }
+
         props.push(format!(
-            "    \"{}\": {{\n      \"type\": \"{}\",\n      \"description\": \"Subsystem attribute {}\"\n    }}",
-            attr.name, json_type, attr.name
+            "    \"{escaped_attr_name}\": {{\n{}\n    }}",
+            fields.join(",\n")
         ));
-        required.push(format!("\"{}\"", attr.name));
     }
 
     for port in &part.ports {
+        let escaped_port_name = escape_json_string(&port.name);
+        let escaped_dir = escape_json_string(if port.direction.trim().is_empty() {
+            "inout"
+        } else {
+            port.direction.trim()
+        });
+        let escaped_port_type = escape_json_string(if port.type_name.trim().is_empty() {
+            "Port"
+        } else {
+            port.type_name.trim()
+        });
         props.push(format!(
-            "    \"{}\": {{\n      \"type\": \"object\",\n      \"properties\": {{\n        \"direction\": {{ \"type\": \"string\", \"const\": \"{}\" }},\n        \"port_type\": {{ \"type\": \"string\", \"const\": \"{}\" }}\n      }},\n      \"required\": [\"direction\", \"port_type\"]\n    }}",
-            port.name, port.direction, port.type_name
+            "    \"{escaped_port_name}\": {{\n      \"type\": \"object\",\n      \"properties\": {{\n        \"direction\": {{ \"type\": \"string\", \"const\": \"{escaped_dir}\" }},\n        \"port_type\": {{ \"type\": \"string\", \"const\": \"{escaped_port_type}\" }}\n      }},\n      \"required\": [\"direction\", \"port_type\"]\n    }}"
         ));
-        required.push(format!("\"{}\"", port.name));
+        required.push(format!("\"{escaped_port_name}\""));
     }
 
+    let constraints_extension = if part.constraints.is_empty() {
+        String::new()
+    } else {
+        let entries: Vec<String> = part
+            .constraints
+            .iter()
+            .filter(|c| !c.name.trim().is_empty())
+            .map(|c| {
+                format!(
+                    "    {{ \"name\": \"{}\", \"expression\": \"{}\" }}",
+                    escape_json_string(c.name.trim()),
+                    escape_json_string(c.expression.trim())
+                )
+            })
+            .collect();
+        if entries.is_empty() {
+            String::new()
+        } else {
+            format!(
+                ",\n  \"x-sysml-constraints\": [\n{}\n  ]",
+                entries.join(",\n")
+            )
+        }
+    };
+
     format!(
-        r#"{{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "{name}PayloadSchema",
-  "type": "object",
-  "properties": {{
-{props}
-  }},
-  "required": [
-    {reqs}
-  ],
-  "additionalProperties": false
-}}"#,
-        name = part.name,
+        "{{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"title\": \"{name}PayloadSchema\",\n  \"type\": \"object\",\n  \"properties\": {{\n{props}\n  }},\n  \"required\": [\n    {reqs}\n  ]{constraints_ext},\n  \"additionalProperties\": false\n}}",
+        name = escaped_part_name,
         props = props.join(",\n"),
-        reqs = required.join(",\n    ")
+        reqs = required.join(",\n    "),
+        constraints_ext = constraints_extension,
     )
 }
 
-/// Generates Acceptance Criteria (BDD) dynamically from PartDef constraints and matching RequirementDef nodes.
+/// Deduplicated AST invariant or requirement obligation bound to a `PartDef` Feature specification.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C traceability objectives
+/// for struct `FeatureConstraintObligation` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `name` is always non-empty and trimmed; `safe_expr` is `Some` iff the underlying SysML expression passes
+///   `is_provenance_safe_constraint_expr`; `req_trace` preserves the owning `RequirementDef` identity when present.
+///
+/// ## 3. Preconditions
+/// - Constructed exclusively by `collect_feature_constraint_obligations`.
+///
+/// ## 4. Postconditions
+/// - Provides lossless, provenance-safe obligation metadata for BDD and validation table lowering.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ field access.
+/// - Space Complexity: $O(|name| + |safe\_expr| + |req\_trace|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Immutable value record after collection.
+/// - State: Zero shared mutable state.
+/// - Action: Zero fallible operations.
+/// - Resource: Bounded heap strings.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-FEATURE-CONSTRAINT-OBLIGATION] | SysML v2: PartDef(FeatureConstraintObligation)
+#[derive(Debug, Clone)]
+struct FeatureConstraintObligation {
+    name: String,
+    safe_expr: Option<String>,
+    req_trace: Option<String>,
+}
+
+/// Borrowed `ConstraintDef` paired with an optional owning `RequirementDef` traceability label.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C traceability objectives
+/// for struct `ScopedConstraintRef` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Associates a borrowed `&'a ConstraintDef` with `Option<String>` requirement provenance without tuple type complexity.
+///
+/// ## 3. Preconditions
+/// - `constraint.name.trim()` is non-empty.
+///
+/// ## 4. Postconditions
+/// - Preserves exact verbatim `ConstraintDef` expression and requirement linkage for Feature Section 2 rendering.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ construction and field projection.
+/// - Space Complexity: $O(|req\_trace|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Borrowed AST lifetime `'a` prevents dangling references.
+/// - State: Immutable record.
+/// - Action: Zero fallible operations.
+/// - Resource: Optional single `String`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-SCOPED-CONSTRAINT-REF] | SysML v2: PartDef(ScopedConstraintRef)
+struct ScopedConstraintRef<'a> {
+    constraint: &'a ConstraintDef,
+    req_trace: Option<String>,
+}
+
+/// Collects 100% of deduplicated constraint and requirement obligations for a `PartDef` without `.truncate(8)` loss.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `collect_feature_constraint_obligations` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves AST declaration order across `part.constraints`, `part.requirements`, and `reqs`.
+/// - Deduplicates by obligation `name` while enriching previously collected constraints with `req_trace`
+///   if a `RequirementDef` also scopes the same constraint.
+/// - Never truncates obligations regardless of cardinality $K$.
+///
+/// ## 3. Preconditions
+/// - `part: &PartDef` and `reqs: &[&RequirementDef]` are valid borrowed AST references.
+///
+/// ## 4. Postconditions
+/// - Returns `Vec<FeatureConstraintObligation>` containing every distinct obligation declared for `part`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O((|part.constraints| + |reqs|) \log K)$ via `BTreeMap` index lookup.
+/// - Space Complexity: $O(K)$ auxiliary index and output vector.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Ignores empty/whitespace-only names cleanly.
+/// - State: Pure deterministic collection.
+/// - Action: Uses `Vec::get_mut` bounds-checked access with zero direct slice indexing.
+/// - Resource: Bounded to AST constraint + requirement count.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-COLLECT-FEATURE-OBLIGATIONS] | SysML v2: ActionDef(collect_feature_constraint_obligations)
+fn collect_feature_constraint_obligations(
+    part: &PartDef,
+    reqs: &[&RequirementDef],
+) -> Vec<FeatureConstraintObligation> {
+    let mut obligations: Vec<FeatureConstraintObligation> = Vec::new();
+    let mut index_by_name: BTreeMap<String, usize> = BTreeMap::new();
+
+    for c in &part.constraints {
+        let name = c.name.trim();
+        if name.is_empty() || index_by_name.contains_key(name) {
+            continue;
+        }
+        let expr = c.expression.trim();
+        let safe_expr = if is_provenance_safe_constraint_expr(expr) {
+            Some(expr.to_string())
+        } else {
+            None
+        };
+        let idx = obligations.len();
+        obligations.push(FeatureConstraintObligation {
+            name: name.to_string(),
+            safe_expr,
+            req_trace: None,
+        });
+        index_by_name.insert(name.to_string(), idx);
+    }
+
+    for req in part.requirements.iter().chain(reqs.iter().copied()) {
+        let req_label = format_requirement_label(req);
+        let req_trace = if req_label.is_empty() {
+            None
+        } else {
+            Some(req_label.clone())
+        };
+
+        if !req.constraints.is_empty() {
+            for c in &req.constraints {
+                let name = c.name.trim();
+                if name.is_empty() {
+                    continue;
+                }
+                if let Some(&existing_idx) = index_by_name.get(name) {
+                    if let Some(existing) = obligations.get_mut(existing_idx) {
+                        if existing.req_trace.is_none() {
+                            existing.req_trace.clone_from(&req_trace);
+                        }
+                        if existing.safe_expr.is_none() {
+                            let expr = c.expression.trim();
+                            if is_provenance_safe_constraint_expr(expr) {
+                                existing.safe_expr = Some(expr.to_string());
+                            }
+                        }
+                    }
+                    continue;
+                }
+                let expr = c.expression.trim();
+                let safe_expr = if is_provenance_safe_constraint_expr(expr) {
+                    Some(expr.to_string())
+                } else {
+                    None
+                };
+                let idx = obligations.len();
+                obligations.push(FeatureConstraintObligation {
+                    name: name.to_string(),
+                    safe_expr,
+                    req_trace: req_trace.clone(),
+                });
+                index_by_name.insert(name.to_string(), idx);
+            }
+        } else if !req_label.is_empty() && !index_by_name.contains_key(&req_label) {
+            let safe_expr = if is_provenance_safe_constraint_expr(&req.text) {
+                Some(req.text.trim().to_string())
+            } else {
+                None
+            };
+            let idx = obligations.len();
+            obligations.push(FeatureConstraintObligation {
+                name: req_label.clone(),
+                safe_expr,
+                req_trace,
+            });
+            index_by_name.insert(req_label, idx);
+        }
+    }
+
+    obligations
+}
+
+/// Formats a `FeatureConstraintObligation` into a provenance-safe inline clause for Feature BDD criteria.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C traceability objectives
+/// for fn `format_feature_obligation_clause` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Emits `` `name` (`expr`) [Req `req_trace`] `` when `safe_expr` and distinct `req_trace` are available,
+///   degrading cleanly without unitless engineering literals or duplicate requirement labels.
+///
+/// ## 3. Preconditions
+/// - `ob: &FeatureConstraintObligation` has a non-empty `name`.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty CommonMark inline code clause free of broken links.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|ob.name| + |ob.safe\_expr| + |ob.req\_trace|)$.
+/// - Space Complexity: $O(|ob.name| + |ob.safe\_expr| + |ob.req\_trace|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles absent expressions and requirement traces deterministically.
+/// - State: Pure string formatting.
+/// - Action: Zero panics or direct indexing.
+/// - Resource: Single bounded `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-FORMAT-FEATURE-OBLIGATION] | SysML v2: ActionDef(format_feature_obligation_clause)
+fn format_feature_obligation_clause(ob: &FeatureConstraintObligation) -> String {
+    let base = match &ob.safe_expr {
+        Some(expr) => format!("`{}` (`{}`)", ob.name, sanitize_prose_links(expr)),
+        None => format!("`{}`", ob.name),
+    };
+    match &ob.req_trace {
+        Some(rt) if rt != &ob.name => format!("{base} [Req `{rt}`]"),
+        _ => base,
+    }
+}
+
+/// Summarizes a `PartDef`'s declared attributes, ports, and diagnostic rejection channel for Feature BDD prose.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `summarize_part_interface_identifiers` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Projects declared `AttributeDef` and `PortDef` identifiers into backticked CommonMark summaries and
+///   selects the first `out`/`inout` `PortDef` as the concrete diagnostic rejection channel when declared.
+///
+/// ## 3. Preconditions
+/// - `part: &PartDef` is a valid AST classifier reference.
+///
+/// ## 4. Postconditions
+/// - Returns `(attr_summary, port_summary, rejection_channel)` with non-empty domain-neutral fallbacks.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|part.attributes| + |part.ports|)$.
+/// - Space Complexity: $O(|part.attributes| + |part.ports|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Emits clean schema-absence notes when `attributes` or `ports` are empty.
+/// - State: Pure read-only AST projection.
+/// - Action: Zero panics, regexes, or direct indexing.
+/// - Resource: Bounded string buffers.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-SUMMARIZE-PART-INTERFACES] | SysML v2: ActionDef(summarize_part_interface_identifiers)
+fn summarize_part_interface_identifiers(part: &PartDef) -> (String, String, String) {
+    let attr_summary = if part.attributes.is_empty() {
+        format!("`{}` state representation", part.name)
+    } else {
+        let items: Vec<String> = part
+            .attributes
+            .iter()
+            .map(|a| {
+                let t = if a.type_name.trim().is_empty() {
+                    "String"
+                } else {
+                    a.type_name.trim()
+                };
+                format!("`{}` (`{}`)", a.name.trim(), t)
+            })
+            .collect();
+        items.join(", ")
+    };
+
+    let port_summary = if part.ports.is_empty() {
+        format!("`{}` structural boundary", part.name)
+    } else {
+        let items: Vec<String> = part
+            .ports
+            .iter()
+            .map(|p| {
+                let dir = if p.direction.trim().is_empty() {
+                    "inout"
+                } else {
+                    p.direction.trim()
+                };
+                let t = if p.type_name.trim().is_empty() {
+                    "Port"
+                } else {
+                    p.type_name.trim()
+                };
+                format!("`{}` (`{} {}`)", p.name.trim(), dir, t)
+            })
+            .collect();
+        items.join(", ")
+    };
+
+    let rejection_channel = part
+        .ports
+        .iter()
+        .find(|p| matches!(p.direction.trim(), "out" | "inout"))
+        .map(|p| format!("diagnostic port `{}`", p.name.trim()))
+        .unwrap_or_else(|| "deterministic error diagnostic output".to_string());
+
+    (attr_summary, port_summary, rejection_channel)
+}
+
+/// Generates Acceptance Criteria (BDD) dynamically from `PartDef` constraints, attributes, ports, and `RequirementDef` nodes.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `generate_feature_bdd` in `crates/compile-sysml/src/sync/forward.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `generate_feature_bdd` (declaration #10) within `SYNC-FORWARD`.
+/// - Zero Fabrication Invariant: Never emits synthetic `"operational_invariants"` placeholders.
+/// - Lossless Cardinality Invariant: Always emits `3..=10` `- [ ] AC-XX:` items while referencing 100% of
+///   deduplicated obligations $C_1 \dots C_K$ (via composite conjunction/disjunction grouping on `AC-07`/`AC-08` when $K \ge 5$).
+/// - Positive & Negative Verification Invariant: Emits both positive invariant-satisfaction criteria and negative
+///   boundary-violation/rejection criteria.
 ///
 /// ## 3. Preconditions
 /// - `part: &PartDef` must satisfy domain and type-safety constraints prior to invoking `generate_feature_bdd`.
 /// - `reqs: &[&RequirementDef]` must satisfy domain and type-safety constraints prior to invoking `generate_feature_bdd`.
 ///
 /// ## 4. Postconditions
-/// - Returns `String` from `generate_feature_bdd` with deterministic post-execution state.
+/// - Returns `String` containing between 3 and 10 `- [ ] AC-XX:` Given/When/Then lines.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(part)) bounded over input/member dimension of `generate_feature_bdd`.
-/// - Space Complexity: O(N(part)) bounded auxiliary memory for `generate_feature_bdd`.
+/// - Time Complexity: O(N(part) + N(reqs)) bounded over input/member dimension of `generate_feature_bdd`.
+/// - Space Complexity: O(N(part) + N(reqs)) bounded auxiliary memory for `generate_feature_bdd`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Validates boundary inputs and types for `generate_feature_bdd` (`String`).
@@ -596,83 +1315,1019 @@ fn generate_json_schema(part: &PartDef) -> String {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYNC-FORWARD-GENERATE-FEATURE-BDD] | SysML v2: ActionDef(generate_feature_bdd)
 fn generate_feature_bdd(part: &PartDef, reqs: &[&RequirementDef]) -> String {
-    let mut criteria = Vec::new();
+    let obligations = collect_feature_constraint_obligations(part, reqs);
+    let (attr_summary, port_summary, rejection_channel) = summarize_part_interface_identifiers(part);
+    let mut criteria: Vec<String> = Vec::new();
 
-    // Pattern A: Nominal domain state / signal handling
-    criteria.push(format!(
-        "- [ ] AC-01: Given nominal {} domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.",
-        part.name
-    ));
-
-    // Pattern B: Invariant / Constraint verification
-    let mut constraint_names: Vec<String> = Vec::new();
-    let mut seen_names = BTreeSet::new();
-
-    for c in &part.constraints {
-        let name = c.name.trim();
-        if !name.is_empty() && seen_names.insert(name.to_string()) {
-            constraint_names.push(name.to_string());
-        }
-    }
-
-    for req in reqs {
-        if !req.constraints.is_empty() {
-            for c in &req.constraints {
-                let name = c.name.trim();
-                if !name.is_empty() && seen_names.insert(name.to_string()) {
-                    constraint_names.push(name.to_string());
-                }
-            }
-        } else {
-            let name = req.name.trim();
-            if !name.is_empty() && seen_names.insert(name.to_string()) {
-                constraint_names.push(name.to_string());
-            } else if !req.req_id.trim().is_empty() && seen_names.insert(req.req_id.trim().to_string()) {
-                constraint_names.push(req.req_id.trim().to_string());
-            }
-        }
-    }
-
-    for req in &part.requirements {
-        if !req.constraints.is_empty() {
-            for c in &req.constraints {
-                let name = c.name.trim();
-                if !name.is_empty() && seen_names.insert(name.to_string()) {
-                    constraint_names.push(name.to_string());
-                }
-            }
-        } else {
-            let name = req.name.trim();
-            if !name.is_empty() && seen_names.insert(name.to_string()) {
-                constraint_names.push(name.to_string());
-            }
-        }
-    }
-
-    // Ensure granularity bounds: between 3 and 10 acceptance criteria total per feature.
-    // With Pattern A (1) and Pattern C (1), Pattern B must have between 1 and 8 criteria.
-    if constraint_names.is_empty() {
-        constraint_names.push("operational_invariants".to_string());
-    } else if constraint_names.len() > 8 {
-        constraint_names.truncate(8);
-    }
-
-    for c_name in &constraint_names {
-        let ac_num = criteria.len() + 1;
+    if obligations.is_empty() {
         criteria.push(format!(
-            "- [ ] AC-{:02}: Given operational state, When {} evaluates constraint '{}', Then asserts invariant satisfaction without violation.",
-            ac_num, part.name, c_name
+            "- [ ] AC-01: Given valid `{}` initialization inputs for {} (no additional constraints specified in schema), When `{}` commits typed domain state, Then declared state attributes hold verified values.",
+            part.name, attr_summary, part.name
+        ));
+        criteria.push(format!(
+            "- [ ] AC-02: Given malformed or out-of-domain input values for {}, When `{}` validates incoming state updates, Then `{}` rejects the invalid state update and emits a diagnostic via {}.",
+            attr_summary, part.name, part.name, rejection_channel
+        ));
+        criteria.push(format!(
+            "- [ ] AC-03: Given nominal signal arrival across {}, When `{}` processes the declared interface transaction, Then output state conforms to the structural classifier contract.",
+            port_summary, part.name
+        ));
+        criteria.push(format!(
+            "- [ ] AC-04: Given an invalid or unrecognized interface frame across {}, When `{}` boundary validation executes, Then `{}` refuses the malformed frame via {} and preserves prior verified state.",
+            port_summary, part.name, part.name, rejection_channel
+        ));
+    } else if obligations.len() <= 4 {
+        for ob in &obligations {
+            let clause = format_feature_obligation_clause(ob);
+            let pos_num = criteria.len() + 1;
+            criteria.push(format!(
+                "- [ ] AC-{pos_num:02}: Given valid `{}` inputs satisfying {clause}, When `{}` evaluates invariant `{}`, Then the invariant holds and verified state is committed.",
+                part.name, part.name, ob.name
+            ));
+            let neg_num = criteria.len() + 1;
+            criteria.push(format!(
+                "- [ ] AC-{neg_num:02}: Given boundary inputs that violate {clause}, When `{}` evaluates invariant `{}`, Then `{}` rejects the invalid transition and routes a diagnostic via {rejection_channel}.",
+                part.name, ob.name, part.name
+            ));
+        }
+        let iface_pos_num = criteria.len() + 1;
+        criteria.push(format!(
+            "- [ ] AC-{iface_pos_num:02}: Given nominal typed values for {attr_summary} across {port_summary}, When `{}` executes structural interface processing, Then state and output ports conform to declared schema types.",
+            part.name
+        ));
+        if criteria.len() < 10 {
+            let iface_neg_num = criteria.len() + 1;
+            criteria.push(format!(
+                "- [ ] AC-{iface_neg_num:02}: Given malformed input frames across {attr_summary} or {port_summary}, When `{}` boundary validation executes, Then `{}` rejects the malformed input via {rejection_channel}.",
+                part.name, part.name
+            ));
+        }
+    } else {
+        for ob in obligations.iter().take(3) {
+            let clause = format_feature_obligation_clause(ob);
+            let pos_num = criteria.len() + 1;
+            criteria.push(format!(
+                "- [ ] AC-{pos_num:02}: Given valid `{}` inputs satisfying {clause}, When `{}` evaluates invariant `{}`, Then the invariant holds and verified state is committed.",
+                part.name, part.name, ob.name
+            ));
+            let neg_num = criteria.len() + 1;
+            criteria.push(format!(
+                "- [ ] AC-{neg_num:02}: Given boundary inputs that violate {clause}, When `{}` evaluates invariant `{}`, Then `{}` rejects the invalid transition and routes a diagnostic via {rejection_channel}.",
+                part.name, ob.name, part.name
+            ));
+        }
+
+        let remaining_clauses: Vec<String> = obligations
+            .iter()
+            .skip(3)
+            .map(format_feature_obligation_clause)
+            .collect();
+        let composite_list = remaining_clauses.join("; ");
+
+        let comp_pos_num = criteria.len() + 1;
+        criteria.push(format!(
+            "- [ ] AC-{comp_pos_num:02}: Given valid `{}` state satisfying composite invariants ({composite_list}), When `{}` evaluates the remaining invariant conjunction, Then all declared invariants hold and verified state is committed.",
+            part.name, part.name
+        ));
+        let comp_neg_num = criteria.len() + 1;
+        criteria.push(format!(
+            "- [ ] AC-{comp_neg_num:02}: Given input state that violates any invariant in ({composite_list}), When `{}` evaluates the composite guard, Then `{}` rejects the invalid state transition and routes a diagnostic via {rejection_channel}.",
+            part.name, part.name
+        ));
+        let iface_pos_num = criteria.len() + 1;
+        criteria.push(format!(
+            "- [ ] AC-{iface_pos_num:02}: Given nominal typed values for {attr_summary} across {port_summary}, When `{}` executes structural interface processing, Then state and output ports conform to declared schema types.",
+            part.name
+        ));
+        let iface_neg_num = criteria.len() + 1;
+        criteria.push(format!(
+            "- [ ] AC-{iface_neg_num:02}: Given malformed input frames across {attr_summary} or {port_summary}, When `{}` boundary validation executes, Then `{}` rejects the malformed input via {rejection_channel}.",
+            part.name, part.name
         ));
     }
 
-    // Pattern C: Failsafe / negative error recovery
-    let ac_num = criteria.len() + 1;
-    criteria.push(format!(
-        "- [ ] AC-{:02}: Given malformed input signals or boundary condition violation, When {} error handling is invoked, Then transitions safely to failsafe fallback state without corruption.",
-        ac_num, part.name
-    ));
-
     criteria.join("\n")
+}
+
+/// Sanitizes AST doc comments or requirement text so raw Markdown link targets and hardcoded GitHub URLs cannot leak into prose.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C link-integrity objectives
+/// for fn `sanitize_prose_links` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Postcondition guarantees `!out.contains("](")` and `!out.contains("https://github.com/")`.
+///
+/// ## 3. Preconditions
+/// - `raw: &str` is any valid UTF-8 documentation or expression string.
+///
+/// ## 4. Postconditions
+/// - Returns a trimmed `String` preserving semantic prose while neutralizing link syntax.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|raw|)$.
+/// - Space Complexity: $O(|raw|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts empty strings cleanly.
+/// - State: Pure string sanitization.
+/// - Action: Zero regexes or panics.
+/// - Resource: Bounded heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-SANITIZE-PROSE-LINKS] | SysML v2: ActionDef(sanitize_prose_links)
+fn sanitize_prose_links(raw: &str) -> String {
+    raw.trim()
+        .replace("https://github.com/", "github-ref://")
+        .replace("](", "] (")
+}
+
+/// Escapes pipe delimiters and line breaks inside a CommonMark table cell value.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C CommonMark structural
+/// integrity objectives for fn `escape_markdown_table_cell` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Escapes `|` as `\|` and collapses `\r`/`\n` into single spaces so logical-OR expressions (`||`)
+///   cannot fracture CommonMark table columns.
+///
+/// ## 3. Preconditions
+/// - `raw: &str` is a candidate table cell text fragment.
+///
+/// ## 4. Postconditions
+/// - Returns a single-line CommonMark-safe cell `String`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|raw|)$.
+/// - Space Complexity: $O(|raw|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles empty strings and multi-line strings cleanly.
+/// - State: Pure transformation.
+/// - Action: Single-pass character loop with zero indexing or regex.
+/// - Resource: Single bounded `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-ESCAPE-MD-TABLE-CELL] | SysML v2: ActionDef(escape_markdown_table_cell)
+fn escape_markdown_table_cell(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    for ch in raw.trim().chars() {
+        match ch {
+            '|' => out.push_str("\\|"),
+            '\n' | '\r' => out.push(' '),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Projects `PartDef` attributes, ports, constraints, and requirements into `FEAT-*.md` Section 2 (`### 2. Validation & Constraints`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `render_feature_validation_and_constraints` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Zero-Loss Projection Invariant: Projects 100% of `part.attributes`, `part.ports`, `part.constraints`,
+///   and deduplicated `part.requirements` + `reqs` (including nested `req.constraints`) with zero `.truncate(8)`.
+/// - Provenance & Bullet-Safety Invariant: Emits a CommonMark table (`|` rows, zero `-`/`*`/`1.` bullets)
+///   plus a fenced ```` ```sysml ```` verbatim constraint block so `verify-baseline` Trap A and Trap B never false-trigger.
+///
+/// ## 3. Preconditions
+/// - `part: &PartDef` and `reqs: &[&RequirementDef]` are valid AST references.
+///
+/// ## 4. Postconditions
+/// - Returns CommonMark body for `### 2. Validation & Constraints`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|part.attributes| + |part.ports| + |part.constraints| + |reqs|)$.
+/// - Space Complexity: $O(|part.attributes| + |part.ports| + |part.constraints| + |reqs|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Emits a clean non-bulleted schema-absence sentence when all four AST collections are empty.
+/// - State: Pure read-only AST projection.
+/// - Action: Zero panics, regexes, or unchecked indexing.
+/// - Resource: Bounded output `String`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-RENDER-FEAT-VALIDATION] | SysML v2: ActionDef(render_feature_validation_and_constraints)
+fn render_feature_validation_and_constraints(part: &PartDef, reqs: &[&RequirementDef]) -> String {
+    let mut all_reqs: Vec<&RequirementDef> = Vec::new();
+    let mut seen_req_keys: BTreeSet<String> = BTreeSet::new();
+    for req in part.requirements.iter().chain(reqs.iter().copied()) {
+        let label = format_requirement_label(req);
+        if !label.is_empty() && seen_req_keys.insert(label) {
+            all_reqs.push(req);
+        }
+    }
+
+    let mut all_constraints: Vec<ScopedConstraintRef<'_>> = Vec::new();
+    let mut seen_constraints: BTreeSet<String> = BTreeSet::new();
+    for c in &part.constraints {
+        let cname = c.name.trim();
+        if !cname.is_empty() && seen_constraints.insert(cname.to_string()) {
+            all_constraints.push(ScopedConstraintRef {
+                constraint: c,
+                req_trace: None,
+            });
+        }
+    }
+    for req in &all_reqs {
+        let req_label = format_requirement_label(req);
+        let trace = if req_label.is_empty() {
+            None
+        } else {
+            Some(req_label)
+        };
+        for c in &req.constraints {
+            let cname = c.name.trim();
+            if !cname.is_empty() && seen_constraints.insert(cname.to_string()) {
+                all_constraints.push(ScopedConstraintRef {
+                    constraint: c,
+                    req_trace: trace.clone(),
+                });
+            }
+        }
+    }
+
+    if part.attributes.is_empty()
+        && part.ports.is_empty()
+        && all_constraints.is_empty()
+        && all_reqs.is_empty()
+    {
+        return format!(
+            "Classifier `{}` declares no additional constraints specified in schema.",
+            part.name
+        );
+    }
+
+    let mut lines: Vec<String> = Vec::new();
+    lines.push(format!(
+        "Declared structural attributes, boundary ports, invariants, and allocated requirements for classifier `{}`:",
+        part.name
+    ));
+    lines.push(String::new());
+    lines.push(
+        "| AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |"
+            .to_string(),
+    );
+    lines.push("| :--- | :--- | :--- | :--- |".to_string());
+
+    for attr in &part.attributes {
+        let a_name = escape_markdown_table_cell(attr.name.trim());
+        let a_type = if attr.type_name.trim().is_empty() {
+            "String".to_string()
+        } else {
+            escape_markdown_table_cell(attr.type_name.trim())
+        };
+        let default_col = match attr
+            .default_value
+            .as_deref()
+            .map(str::trim)
+            .filter(|d| !d.is_empty())
+        {
+            Some(dv) => {
+                let probe = format!("{} {}", attr.name.trim(), dv);
+                if is_provenance_safe_constraint_expr(&probe) {
+                    format!(
+                        "Default `{}`",
+                        escape_markdown_table_cell(&sanitize_prose_links(dv))
+                    )
+                } else {
+                    "Declared default in JSON Schema".to_string()
+                }
+            }
+            None => "Required (no default)".to_string(),
+        };
+        lines.push(format!(
+            "| Attribute | `{a_name}` | `{a_type}` | {default_col} |"
+        ));
+    }
+
+    for port in &part.ports {
+        let p_name = escape_markdown_table_cell(port.name.trim());
+        let p_dir = if port.direction.trim().is_empty() {
+            "inout".to_string()
+        } else {
+            escape_markdown_table_cell(port.direction.trim())
+        };
+        let p_type = if port.type_name.trim().is_empty() {
+            "Port".to_string()
+        } else {
+            escape_markdown_table_cell(port.type_name.trim())
+        };
+        lines.push(format!(
+            "| Port | `{p_name}` | `{p_dir} {p_type}` | Boundary interface contract |"
+        ));
+    }
+
+    for sc in &all_constraints {
+        let c = sc.constraint;
+        let c_name = escape_markdown_table_cell(c.name.trim());
+        let type_col = match &sc.req_trace {
+            Some(rt) => format!("Invariant (`{}`)", escape_markdown_table_cell(rt)),
+            None => "Invariant".to_string(),
+        };
+        let raw_expr = c.expression.trim();
+        let expr_col = if raw_expr.is_empty() {
+            "Declared structural invariant".to_string()
+        } else if is_provenance_safe_constraint_expr(raw_expr) {
+            format!(
+                "`{}`",
+                escape_markdown_table_cell(&sanitize_prose_links(raw_expr))
+            )
+        } else {
+            "See verbatim SysML invariant block below".to_string()
+        };
+        lines.push(format!(
+            "| Constraint | `{c_name}` | {type_col} | {expr_col} |"
+        ));
+    }
+
+    for req in &all_reqs {
+        let req_id_col = escape_markdown_table_cell(&format_requirement_label(req));
+        let clean_text = sanitize_prose_links(req.text.trim());
+        let contract_col = if !clean_text.is_empty() && is_provenance_safe_constraint_expr(&clean_text)
+        {
+            escape_markdown_table_cell(&clean_text)
+        } else {
+            "Allocated requirement obligation".to_string()
+        };
+        lines.push(format!(
+            "| Requirement | `{req_id_col}` | Allocated Requirement | {contract_col} |"
+        ));
+    }
+
+    if !all_constraints.is_empty() {
+        lines.push(String::new());
+        lines.push("```sysml".to_string());
+        for sc in &all_constraints {
+            let cname = sc.constraint.name.trim();
+            let cexpr = sanitize_prose_links(sc.constraint.expression.trim());
+            if cexpr.is_empty() {
+                lines.push(format!("constraint {cname} {{}}"));
+            } else {
+                lines.push(format!("constraint {cname} {{ {cexpr} }}"));
+            }
+        }
+        lines.push("```".to_string());
+    }
+
+    lines.join("\n")
+}
+
+/// Projects `PartDef` nested subparts and boundary ports into domain-neutral prose for `FEAT-*.md` Section 3.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C domain-neutrality objectives
+/// for fn `render_feature_logical_arrangement` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Zero CSS/UI Leakage Invariant: Never emits `@container`, `viewport containment`, or `platform design tokens`.
+/// - Non-Bulleted Prose Invariant: Emits a single prose paragraph so `verify-baseline` Trap A never counts layout lines as ACs.
+///
+/// ## 3. Preconditions
+/// - `part: &PartDef` is a valid AST classifier reference.
+///
+/// ## 4. Postconditions
+/// - Returns domain-neutral structural composition and port arrangement prose for `part`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|part.parts| + |part.ports|)$.
+/// - Space Complexity: $O(|part.parts| + |part.ports|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Emits explicit leaf-classifier prose when `part.parts` and `part.ports` are both empty.
+/// - State: Pure read-only AST projection.
+/// - Action: Zero panics, regexes, or unchecked indexing.
+/// - Resource: Bounded string allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-RENDER-FEAT-ARRANGEMENT] | SysML v2: ActionDef(render_feature_logical_arrangement)
+fn render_feature_logical_arrangement(part: &PartDef) -> String {
+    let subparts_clause = if part.parts.is_empty() {
+        "no nested subparts declared in schema".to_string()
+    } else {
+        let items: Vec<String> = part
+            .parts
+            .iter()
+            .map(|sp| {
+                let sp_type = sp.type_name.as_deref().map(str::trim).unwrap_or("");
+                if sp_type.is_empty() {
+                    format!("`{}`", sp.name.trim())
+                } else {
+                    format!("`{} : {}`", sp.name.trim(), sp_type)
+                }
+            })
+            .collect();
+        format!("nested subparts {}", items.join(", "))
+    };
+
+    let ports_clause = if part.ports.is_empty() {
+        "no external boundary ports declared in schema".to_string()
+    } else {
+        let items: Vec<String> = part
+            .ports
+            .iter()
+            .map(|p| {
+                let dir = if p.direction.trim().is_empty() {
+                    "inout"
+                } else {
+                    p.direction.trim()
+                };
+                let pt = if p.type_name.trim().is_empty() {
+                    "Port"
+                } else {
+                    p.type_name.trim()
+                };
+                format!("`{} {} : {}`", dir, p.name.trim(), pt)
+            })
+            .collect();
+        format!("boundary ports {}", items.join(", "))
+    };
+
+    format!(
+        "Structural composition and boundary topology for classifier `{}` organize {} paired with {}.",
+        part.name, subparts_clause, ports_clause
+    )
+}
+
+/// Projects `PartDef::attributes` into `FEAT-*.md` `### Layer 1: Domain State & Signal Model` without `"AST references"` boilerplate.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `render_feature_layer1_state_model` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Enumerates 100% of declared `AttributeDef` members (`name : Type`) in non-bulleted prose and contains zero `"AST references"` tokens.
+///
+/// ## 3. Preconditions
+/// - `part: &PartDef` is a valid AST classifier reference.
+///
+/// ## 4. Postconditions
+/// - Returns non-bulleted Layer 1 specification prose.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|part.attributes|)$.
+/// - Space Complexity: $O(|part.attributes|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Emits clean schema-grounded fallback prose when `part.attributes` is empty.
+/// - State: Pure read-only AST projection.
+/// - Action: Zero panics or direct indexing.
+/// - Resource: Bounded string allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-RENDER-FEAT-LAYER1] | SysML v2: ActionDef(render_feature_layer1_state_model)
+fn render_feature_layer1_state_model(part: &PartDef) -> String {
+    if part.attributes.is_empty() {
+        return format!(
+            "Classifier `{}` maintains typed lifecycle status (`nominal`, `degraded`, `fault`) with no additional value attributes declared in schema.",
+            part.name
+        );
+    }
+    let attrs: Vec<String> = part
+        .attributes
+        .iter()
+        .map(|a| {
+            let t = if a.type_name.trim().is_empty() {
+                "String"
+            } else {
+                a.type_name.trim()
+            };
+            format!("`{} : {}`", a.name.trim(), t)
+        })
+        .collect();
+    format!(
+        "Classifier `{}` encapsulates typed domain state attributes {} alongside operational lifecycle status.",
+        part.name,
+        attrs.join(", ")
+    )
+}
+
+/// Projects `PartDef` states, constraints, and requirements into `FEAT-*.md` `### Layer 2: Logic & Safety State Management`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `render_feature_layer2_logic_management` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Projects declared `StateDef` machines, transitions, `ConstraintDef` invariants, and `RequirementDef` obligations
+///   into non-bulleted prose with zero hardcoded solver boilerplate.
+///
+/// ## 3. Preconditions
+/// - `part: &PartDef` and `reqs: &[&RequirementDef]` are valid AST references.
+///
+/// ## 4. Postconditions
+/// - Returns non-bulleted Layer 2 specification prose.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|part.states| + |part.constraints| + |reqs|)$.
+/// - Space Complexity: $O(|part.states| + |part.constraints| + |reqs|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Emits declarative structural-evaluation prose when states and invariants are absent.
+/// - State: Pure read-only AST projection.
+/// - Action: Zero panics or direct indexing.
+/// - Resource: Bounded string allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-RENDER-FEAT-LAYER2] | SysML v2: ActionDef(render_feature_layer2_logic_management)
+fn render_feature_layer2_logic_management(part: &PartDef, reqs: &[&RequirementDef]) -> String {
+    let obligations = collect_feature_constraint_obligations(part, reqs);
+    let states_desc = if part.states.is_empty() {
+        "stateless structural transition evaluation".to_string()
+    } else {
+        let items: Vec<String> = part
+            .states
+            .iter()
+            .map(|st| {
+                let transitions: Vec<String> = st
+                    .transitions
+                    .iter()
+                    .filter_map(|tr| match (tr.source.as_deref(), tr.target.as_deref()) {
+                        (Some(s), Some(t)) if !s.trim().is_empty() && !t.trim().is_empty() => {
+                            Some(format!("{} -> {}", s.trim(), t.trim()))
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                if transitions.is_empty() {
+                    format!("`{}`", st.name.trim())
+                } else {
+                    format!("`{}` (`{}`)", st.name.trim(), transitions.join(", "))
+                }
+            })
+            .collect();
+        format!("lifecycle state machines {}", items.join(", "))
+    };
+
+    let inv_desc = if obligations.is_empty() {
+        "no additional invariant guards declared in schema".to_string()
+    } else {
+        let names: Vec<String> = obligations
+            .iter()
+            .map(|ob| format!("`{}`", ob.name))
+            .collect();
+        format!("invariant obligations {}", names.join(", "))
+    };
+
+    format!(
+        "Classifier `{}` governs {} enforcing {}.",
+        part.name, states_desc, inv_desc
+    )
+}
+
+/// Projects `PartDef` ports, operations, and actions into `FEAT-*.md` `### Layer 3: Presentation & Actuator Interface Binding`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `render_feature_layer3_interface_binding` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Projects declared `PortDef`, `OperationDef`, and `ActionDef` bindings into non-bulleted prose without generic presentation boilerplate.
+///
+/// ## 3. Preconditions
+/// - `part: &PartDef` is a valid AST classifier reference.
+///
+/// ## 4. Postconditions
+/// - Returns non-bulleted Layer 3 specification prose.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|part.ports| + |part.operations| + |part.actions|)$.
+/// - Space Complexity: $O(|part.ports| + |part.operations| + |part.actions|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Emits clean internal-component fallback prose when ports, operations, and actions are all empty.
+/// - State: Pure read-only AST projection.
+/// - Action: Zero panics or direct indexing.
+/// - Resource: Bounded string allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-RENDER-FEAT-LAYER3] | SysML v2: ActionDef(render_feature_layer3_interface_binding)
+fn render_feature_layer3_interface_binding(part: &PartDef) -> String {
+    let mut bindings: Vec<String> = Vec::new();
+    for port in &part.ports {
+        let dir = if port.direction.trim().is_empty() {
+            "inout"
+        } else {
+            port.direction.trim()
+        };
+        let pt = if port.type_name.trim().is_empty() {
+            "Port"
+        } else {
+            port.type_name.trim()
+        };
+        bindings.push(format!("port `{} {} : {}`", dir, port.name.trim(), pt));
+    }
+    for op in &part.operations {
+        let ret = op.return_type.as_deref().unwrap_or("void");
+        bindings.push(format!("operation `{}() : {}`", op.name.trim(), ret));
+    }
+    for act in &part.actions {
+        bindings.push(format!("action `{}`", act.name.trim()));
+    }
+
+    if bindings.is_empty() {
+        format!(
+            "Classifier `{}` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.",
+            part.name
+        )
+    } else {
+        format!(
+            "Classifier `{}` binds external and behavioral interfaces across {}.",
+            part.name,
+            bindings.join(", ")
+        )
+    }
+}
+
+/// Projects `PackageDef::doc` (sanitized of broken link syntax) or an AST member inventory into `EPIC-*.md` `## 1. Context`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `render_epic_context` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves `PackageDef::doc` when non-empty (sanitized via `sanitize_prose_links`); otherwise summarizes
+///   declared `PartDef`, `ActionDef`, and `UseCaseDef` AST identifiers without static boilerplate.
+///
+/// ## 3. Preconditions
+/// - `p: &PackageDef` and `subsys_display: &str` are valid inputs.
+///
+/// ## 4. Postconditions
+/// - Returns link-safe CommonMark prose for `EPIC-*.md` `## 1. Context`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|p.doc| + |p.part\_defs| + |p.action\_defs| + |p.use\_case\_defs|)$.
+/// - Space Complexity: $O(|p.doc| + |p.part\_defs| + |p.action\_defs| + |p.use\_case\_defs|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles absent `p.doc` and empty member collections cleanly.
+/// - State: Pure read-only AST projection.
+/// - Action: Zero panics, regexes, or unchecked indexing.
+/// - Resource: Bounded string allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-RENDER-EPIC-CONTEXT] | SysML v2: ActionDef(render_epic_context)
+fn render_epic_context(p: &PackageDef, subsys_display: &str) -> String {
+    if let Some(doc) = p.doc.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+        return sanitize_prose_links(doc);
+    }
+
+    let mut summary_clauses: Vec<String> = Vec::new();
+    if !p.part_defs.is_empty() {
+        let parts: Vec<String> = p
+            .part_defs
+            .iter()
+            .map(|pt| format!("`{}`", pt.name.trim()))
+            .collect();
+        summary_clauses.push(format!("structural classifiers ({})", parts.join(", ")));
+    }
+    if !p.action_defs.is_empty() {
+        let acts: Vec<String> = p
+            .action_defs
+            .iter()
+            .map(|a| format!("`{}`", a.name.trim()))
+            .collect();
+        summary_clauses.push(format!("operational actions ({})", acts.join(", ")));
+    }
+    if !p.use_case_defs.is_empty() {
+        let ucs: Vec<String> = p
+            .use_case_defs
+            .iter()
+            .map(|u| format!("`{}`", u.name.trim()))
+            .collect();
+        summary_clauses.push(format!("system use cases ({})", ucs.join(", ")));
+    }
+
+    if summary_clauses.is_empty() {
+        format!(
+            "Package `{}` (`{}`) defines the top-level structural namespace scope declared in the SysML v2 model.",
+            p.name, subsys_display
+        )
+    } else {
+        format!(
+            "Package `{}` (`{}`) defines {} within the SysML v2 model.",
+            p.name,
+            subsys_display,
+            summary_clauses.join(", ")
+        )
+    }
+}
+
+/// Projects `PackageDef` structural classifiers, boundary ports, and connectors into `EPIC-*.md` `## 3. Architecture`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `render_epic_architecture` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Projects every `PartDef` (including its `PortDef` allocations and nested `parts`), standalone `PackageDef::port_defs`,
+///   and `PackageDef::connection_defs` endpoints without static compiler boilerplate.
+///
+/// ## 3. Preconditions
+/// - `p: &PackageDef` is a valid AST package reference.
+///
+/// ## 4. Postconditions
+/// - Returns AST-grounded CommonMark prose for `EPIC-*.md` `## 3. Architecture`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|p.part\_defs| + |p.port\_defs| + |p.connection\_defs|)$.
+/// - Space Complexity: $O(|p.part\_defs| + |p.port\_defs| + |p.connection\_defs|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Emits explicit namespace-container prose when `p` declares zero structural members.
+/// - State: Pure read-only AST projection.
+/// - Action: Zero panics, regexes, or unchecked indexing.
+/// - Resource: Bounded string allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-RENDER-EPIC-ARCHITECTURE] | SysML v2: ActionDef(render_epic_architecture)
+fn render_epic_architecture(p: &PackageDef) -> String {
+    let mut clauses: Vec<String> = Vec::new();
+
+    if !p.part_defs.is_empty() {
+        let part_entries: Vec<String> = p
+            .part_defs
+            .iter()
+            .map(|pt| {
+                if pt.ports.is_empty() {
+                    format!("`{}`", pt.name.trim())
+                } else {
+                    let port_list: Vec<String> = pt
+                        .ports
+                        .iter()
+                        .map(|port| {
+                            let dir = if port.direction.trim().is_empty() {
+                                "inout"
+                            } else {
+                                port.direction.trim()
+                            };
+                            let ptype = if port.type_name.trim().is_empty() {
+                                "Port"
+                            } else {
+                                port.type_name.trim()
+                            };
+                            format!("`{} {} : {}`", dir, port.name.trim(), ptype)
+                        })
+                        .collect();
+                    format!("`{}` (ports: {})", pt.name.trim(), port_list.join(", "))
+                }
+            })
+            .collect();
+        clauses.push(format!("Classifiers: {}.", part_entries.join("; ")));
+    }
+
+    if !p.port_defs.is_empty() {
+        let pkg_ports: Vec<String> = p
+            .port_defs
+            .iter()
+            .map(|port| format!("`{}`", port.name.trim()))
+            .collect();
+        clauses.push(format!("Package port definitions: {}.", pkg_ports.join(", ")));
+    }
+
+    if !p.connection_defs.is_empty() {
+        let conns: Vec<String> = p
+            .connection_defs
+            .iter()
+            .map(|conn| {
+                let src = match &conn.source_part {
+                    Some(sp) if !sp.trim().is_empty() => {
+                        format!("{}.{}", sp.trim(), conn.source_port.trim())
+                    }
+                    _ => conn.source_port.trim().to_string(),
+                };
+                let dst = match &conn.target_part {
+                    Some(tp) if !tp.trim().is_empty() => {
+                        format!("{}.{}", tp.trim(), conn.target_port.trim())
+                    }
+                    _ => conn.target_port.trim().to_string(),
+                };
+                if conn.name.trim().is_empty() {
+                    format!("`{src} -> {dst}`")
+                } else {
+                    format!("`{}` (`{src} -> {dst}`)", conn.name.trim())
+                }
+            })
+            .collect();
+        clauses.push(format!("Structural connectors: {}.", conns.join(", ")));
+    }
+
+    if clauses.is_empty() {
+        format!(
+            "Package `{}` serves as a structural namespace container with no direct `PartDef`, `PortDef`, or `ConnectionDef` declarations.",
+            p.name
+        )
+    } else {
+        clauses.join(" ")
+    }
+}
+
+/// Projects `PackageDef` and `PartDef` state machines, actions, and interactions into `EPIC-*.md` `## 4. Operational Considerations`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `render_epic_operational_considerations` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Zero Compiler-Self-Description Invariant: Never emits `"Deterministic compilation passes, error containment"`
+///   or `"provable polynomial complexity execution"`.
+/// - Collects `StateDef` machines and transitions across both `p.state_defs` and `p.part_defs[*].states`,
+///   `ActionDef` behaviors across `p.action_defs` and `p.part_defs[*].actions`, and `p.interaction_defs`.
+///
+/// ## 3. Preconditions
+/// - `p: &PackageDef` is a valid AST package reference.
+///
+/// ## 4. Postconditions
+/// - Returns AST-grounded operational lifecycle prose for `EPIC-*.md` `## 4. Operational Considerations`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|states| + |actions| + |interactions|)$.
+/// - Space Complexity: $O(|states| + |actions| + |interactions|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Emits declarative structural-only prose when no behavioral AST nodes are declared in `p`.
+/// - State: Pure read-only AST projection.
+/// - Action: Zero panics, regexes, or unchecked indexing.
+/// - Resource: Bounded string allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-RENDER-EPIC-OPERATIONS] | SysML v2: ActionDef(render_epic_operational_considerations)
+fn render_epic_operational_considerations(p: &PackageDef) -> String {
+    let mut state_items: Vec<String> = Vec::new();
+    let mut seen_states: BTreeSet<String> = BTreeSet::new();
+    for st in p
+        .state_defs
+        .iter()
+        .chain(p.part_defs.iter().flat_map(|pt| pt.states.iter()))
+    {
+        let st_name = st.name.trim();
+        if st_name.is_empty() || !seen_states.insert(st_name.to_string()) {
+            continue;
+        }
+        let transitions: Vec<String> = st
+            .transitions
+            .iter()
+            .filter_map(|tr| match (tr.source.as_deref(), tr.target.as_deref()) {
+                (Some(s), Some(t)) if !s.trim().is_empty() && !t.trim().is_empty() => {
+                    match tr.trigger.as_deref().map(str::trim).filter(|g| !g.is_empty()) {
+                        Some(trig) => Some(format!("{} -> {} on {}", s.trim(), t.trim(), trig)),
+                        None => Some(format!("{} -> {}", s.trim(), t.trim())),
+                    }
+                }
+                _ => tr
+                    .name
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|n| !n.is_empty())
+                    .map(str::to_string),
+            })
+            .collect();
+        if transitions.is_empty() {
+            state_items.push(format!("`{st_name}`"));
+        } else {
+            state_items.push(format!("`{st_name}` ({})", transitions.join("; ")));
+        }
+    }
+
+    let mut action_items: Vec<String> = Vec::new();
+    let mut seen_actions: BTreeSet<String> = BTreeSet::new();
+    for act in p
+        .action_defs
+        .iter()
+        .chain(p.part_defs.iter().flat_map(|pt| pt.actions.iter()))
+    {
+        let act_name = act.name.trim();
+        if !act_name.is_empty() && seen_actions.insert(act_name.to_string()) {
+            action_items.push(format!("`{act_name}`"));
+        }
+    }
+
+    let inter_items: Vec<String> = p
+        .interaction_defs
+        .iter()
+        .filter(|i| !i.name.trim().is_empty())
+        .map(|i| format!("`{}`", i.name.trim()))
+        .collect();
+
+    let mut clauses: Vec<String> = Vec::new();
+    if !state_items.is_empty() {
+        clauses.push(format!("Lifecycle state machines: {}.", state_items.join(", ")));
+    }
+    if !action_items.is_empty() {
+        clauses.push(format!("Operational actions: {}.", action_items.join(", ")));
+    }
+    if !inter_items.is_empty() {
+        clauses.push(format!("Interaction sequences: {}.", inter_items.join(", ")));
+    }
+
+    if clauses.is_empty() {
+        format!(
+            "Package `{}` declares structural definitions with no direct `StateDef`, `ActionDef`, or `InteractionDef` behavioral nodes.",
+            p.name
+        )
+    } else {
+        clauses.join(" ")
+    }
+}
+
+/// Projects `PackageDef` and `PartDef` requirements and constraints into `EPIC-*.md` `## 5. Security & Governance`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+/// for fn `render_epic_security_and_governance` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Zero Compiler-Self-Description Invariant: Never emits `"Safety-critical invariant satisfaction, formal trace matrix closure"`
+///   or `"zero hardcoded domain semantics"`.
+/// - Collects 100% of deduplicated `RequirementDef` and `ConstraintDef` obligations declared in `p`, its `PartDef`s,
+///   and `all_requirements` satisfied by `p.part_defs`.
+///
+/// ## 3. Preconditions
+/// - `p: &PackageDef` and `all_requirements: &[RequirementDef]` are valid AST references.
+///
+/// ## 4. Postconditions
+/// - Returns provenance-safe CommonMark prose for `EPIC-*.md` `## 5. Security & Governance`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|p.requirement\_defs| + |p.constraint\_defs| + |all\_requirements|)$.
+/// - Space Complexity: $O(|p.requirement\_defs| + |p.constraint\_defs|)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Emits clean schema-absence prose when no requirements or constraints apply to `p`.
+/// - State: Pure read-only AST projection.
+/// - Action: Zero panics, regexes, or unchecked indexing.
+/// - Resource: Bounded string allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-RENDER-EPIC-GOVERNANCE] | SysML v2: ActionDef(render_epic_security_and_governance)
+fn render_epic_security_and_governance(
+    p: &PackageDef,
+    all_requirements: &[RequirementDef],
+) -> String {
+    let part_names: BTreeSet<&str> = p.part_defs.iter().map(|pt| pt.name.as_str()).collect();
+
+    let mut req_labels: Vec<String> = Vec::new();
+    let mut seen_reqs: BTreeSet<String> = BTreeSet::new();
+    let mut matched_reqs: Vec<&RequirementDef> = Vec::new();
+
+    for req in p
+        .requirement_defs
+        .iter()
+        .chain(p.part_defs.iter().flat_map(|pt| pt.requirements.iter()))
+        .chain(
+            all_requirements
+                .iter()
+                .filter(|r| r.satisfied_by.iter().any(|s| part_names.contains(s.as_str()))),
+        )
+    {
+        let label = format_requirement_label(req);
+        if !label.is_empty() && seen_reqs.insert(label.clone()) {
+            req_labels.push(format!("`{label}`"));
+            matched_reqs.push(req);
+        }
+    }
+
+    let mut constraint_labels: Vec<String> = Vec::new();
+    let mut seen_constraints: BTreeSet<String> = BTreeSet::new();
+    for c in p
+        .constraint_defs
+        .iter()
+        .chain(p.part_defs.iter().flat_map(|pt| pt.constraints.iter()))
+        .chain(matched_reqs.iter().flat_map(|r| r.constraints.iter()))
+    {
+        let cname = c.name.trim();
+        if cname.is_empty() || !seen_constraints.insert(cname.to_string()) {
+            continue;
+        }
+        let formatted = format_constraint_label(c);
+        if !formatted.is_empty() {
+            constraint_labels.push(format!("`{}`", sanitize_prose_links(&formatted)));
+        }
+    }
+
+    let mut clauses: Vec<String> = Vec::new();
+    if !req_labels.is_empty() {
+        clauses.push(format!("Allocated requirements: {}.", req_labels.join(", ")));
+    }
+    if !constraint_labels.is_empty() {
+        clauses.push(format!(
+            "Enforced invariant constraints: {}.",
+            constraint_labels.join(", ")
+        ));
+    }
+
+    if clauses.is_empty() {
+        format!(
+            "Package `{}` declares no package-scoped `RequirementDef` or `ConstraintDef` governance invariants in schema.",
+            p.name
+        )
+    } else {
+        clauses.join(" ")
+    }
 }
 
 /// Generates a valid Mermaid class diagram dynamically lowered from PartDef members and subparts.
@@ -2548,6 +4203,186 @@ fn is_stale_user_story_boilerplate(s: &str) -> bool {
     s.contains("processes the AST within defined latency envelope")
         || s.contains("When semantic validator executes")
         || s.contains("graceful recovery occurs without data loss")
+}
+
+/// Detects legacy hardcoded compiler-boilerplate Epic section text for eviction during non-forced forward sync.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C domain-neutrality
+/// objectives for fn `is_stale_epic_boilerplate` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` iff `s` contains any retired non-AST Epic compiler-boilerplate phrase across Sections 1, 3, 4, or 5.
+///
+/// ## 3. Preconditions
+/// - `s: &str` is an `EPIC-*.md` section body under inspection during `merge_existing_spec_content`.
+///
+/// ## 4. Postconditions
+/// - Returns deterministic `bool` verdict without mutating input state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|s|)$ linear substring scan.
+/// - Space Complexity: $O(1)$ zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts empty or arbitrary UTF-8 slices cleanly.
+/// - State: Stateless pure predicate.
+/// - Action: Zero regexes, panics, or unchecked indexing.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-STALE-EPIC-BOILERPLATE] | SysML v2: ActionDef(is_stale_epic_boilerplate)
+fn is_stale_epic_boilerplate(s: &str) -> bool {
+    s.contains("Deterministic compilation passes, error containment")
+        || s.contains("provable polynomial complexity execution")
+        || s.contains("zero hardcoded domain semantics")
+        || s.contains("Safety-critical invariant satisfaction, formal trace matrix closure")
+        || s.contains(
+            "Subsystem structural composition, port allocations, and directional data connectors realized by ",
+        )
+        || s.contains(
+            "establishing architectural layout, mathematical invariants, and verification criteria.",
+        )
+}
+
+/// Detects whether an `EPIC-*.md` section body matches the compiler's own empty-AST fallback template.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C AST-primacy objectives
+/// for fn `is_auto_epic_fallback_section` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Identifies empty-AST fallback strings emitted by `render_epic_*` so subsequent non-forced syncs upgrade
+///   fallback sections automatically once AST members are added, without clobbering custom human prose.
+///
+/// ## 3. Preconditions
+/// - `heading: &str` is an `EPIC-*.md` level-2 heading and `body: &str` is its extracted body.
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff `body` matches the canonical empty-AST fallback signature for `heading`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|body|)$.
+/// - Space Complexity: $O(1)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `false` for unrecognized headings.
+/// - State: Pure predicate.
+/// - Action: Zero regexes or panics.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-AUTO-EPIC-FALLBACK] | SysML v2: ActionDef(is_auto_epic_fallback_section)
+fn is_auto_epic_fallback_section(heading: &str, body: &str) -> bool {
+    match heading {
+        "## 1. Context" => {
+            body.contains("defines the top-level structural namespace scope declared in the SysML v2 model.")
+        }
+        "## 3. Architecture" => {
+            body.contains("serves as a structural namespace container with no direct")
+        }
+        "## 4. Operational Considerations" => {
+            body.contains("declares structural definitions with no direct")
+        }
+        "## 5. Security & Governance" => body.contains(
+            "declares no package-scoped `RequirementDef` or `ConstraintDef` governance invariants in schema.",
+        ),
+        _ => false,
+    }
+}
+
+/// Detects legacy hardcoded CSS/UI/compiler Feature boilerplate text for eviction during non-forced forward sync.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C domain-neutrality
+/// objectives for fn `is_stale_feature_boilerplate` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` iff `s` contains any retired CSS/UI/compiler boilerplate phrase (`@container`,
+///   `viewport containment`, `platform design tokens`, `AST references`, `operational_invariants`,
+///   or legacy static Feature section templates).
+///
+/// ## 3. Preconditions
+/// - `s: &str` is a `FEAT-*.md` section body or checklist line under inspection.
+///
+/// ## 4. Postconditions
+/// - Returns deterministic `bool` verdict without mutating input state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|s|)$ linear substring scan.
+/// - Space Complexity: $O(1)$ zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts empty or arbitrary UTF-8 slices cleanly.
+/// - State: Stateless pure predicate.
+/// - Action: Zero regexes, panics, or unchecked indexing.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-STALE-FEAT-BOILERPLATE] | SysML v2: ActionDef(is_stale_feature_boilerplate)
+fn is_stale_feature_boilerplate(s: &str) -> bool {
+    s.contains("@container")
+        || s.contains("viewport containment")
+        || s.contains("platform design tokens")
+        || s.contains("Formal constraints and invariant guarantees enforced by ")
+        || s.contains("AST references")
+        || s.contains("Deterministic state machine solver and safety monitor logic for ")
+        || s.contains("Presentation interface binding and diagnostic event routing for ")
+        || s.contains("operational_invariants")
+}
+
+/// Detects whether a `FEAT-*.md` section body matches the compiler's own empty-AST fallback template.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C AST-primacy objectives
+/// for fn `is_auto_feature_fallback_section` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Identifies empty-AST fallback strings emitted by `render_feature_*` so subsequent non-forced syncs upgrade
+///   fallback sections automatically when AST attributes, ports, constraints, or operations are added.
+///
+/// ## 3. Preconditions
+/// - `heading: &str` is a `FEAT-*.md` level-3 heading and `body: &str` is its extracted body.
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff `body` matches the canonical empty-AST fallback signature for `heading`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(|body|)$.
+/// - Space Complexity: $O(1)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `false` for unrecognized headings.
+/// - State: Pure predicate.
+/// - Action: Zero regexes or panics.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYNC-FORWARD-AUTO-FEAT-FALLBACK] | SysML v2: ActionDef(is_auto_feature_fallback_section)
+fn is_auto_feature_fallback_section(heading: &str, body: &str) -> bool {
+    match heading {
+        "### 2. Validation & Constraints" => {
+            body.contains("declares no additional constraints specified in schema.")
+        }
+        "### 3. Visual Layout & Arrangement" => body.contains(
+            "no nested subparts declared in schema paired with no external boundary ports declared in schema.",
+        ),
+        "### 4. Interactive Flow & States" => {
+            body.trim()
+                .starts_with("Operational lifecycle events and discrete state transitions for ")
+                && !body.contains("\n- ")
+        }
+        "### Layer 1: Domain State & Signal Model" => {
+            body.contains("with no additional value attributes declared in schema.")
+        }
+        "### Layer 2: Logic & Safety State Management" => body.contains(
+            "governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.",
+        ),
+        "### Layer 3: Presentation & Actuator Interface Binding" => {
+            body.contains("with no external ports, operations, or actions declared in schema.")
+        }
+        _ => false,
+    }
 }
 
 /// Strips an ASCII prefix case-insensitively using bounds-checked `.get(...)` slicing.
@@ -4562,10 +6397,10 @@ pub fn forward_sync_sysml_to_specs(
             assoc_us.join("\n")
         };
 
-        let context_text = p
-            .doc
-            .clone()
-            .unwrap_or_else(|| format!("Subsystem specification for {} establishing architectural layout, mathematical invariants, and verification criteria.", subsys_display));
+        let context_text = render_epic_context(p, &subsys_display);
+        let architecture_text = render_epic_architecture(p);
+        let operational_text = render_epic_operational_considerations(p);
+        let governance_text = render_epic_security_and_governance(p, &all_requirements);
 
         let source_refs = if !has_modular_schema {
             r#"- System Architecture Model: `schema/model.sysml`
@@ -4627,13 +6462,13 @@ Subsystem architectural composition and formal invariants derive from `schema/mo
 {assoc_us_text}
 
 ## 3. Architecture
-Subsystem structural composition, port allocations, and directional data connectors realized by {primary_engine}.
+{architecture_text}
 
 ## 4. Operational Considerations
-Deterministic compilation passes, error containment, and provable polynomial complexity execution.
+{operational_text}
 
 ## 5. Security & Governance
-Safety-critical invariant satisfaction, formal trace matrix closure, and zero hardcoded domain semantics.
+{governance_text}
 
 ## 6. Source References
 {source_refs}
@@ -4658,7 +6493,9 @@ Safety-critical invariant satisfaction, formal trace matrix closure, and zero ha
             feat_checklist_text = feat_checklist_text,
             assoc_uc_text = assoc_uc_text,
             assoc_us_text = assoc_us_text,
-            primary_engine = primary_engine,
+            architecture_text = architecture_text,
+            operational_text = operational_text,
+            governance_text = governance_text,
             source_refs = source_refs,
             class_diagram_block = class_diagram_block,
             state_diagram_block = state_diagram_block,
@@ -4680,16 +6517,35 @@ Safety-critical invariant satisfaction, formal trace matrix closure, and zero ha
 
         let json_schema = generate_json_schema(ctx.part);
 
-        // Find matching requirements
-        let matching_reqs: Vec<&RequirementDef> = all_requirements
+        // Find matching requirements explicitly satisfied by `part_name` or unscoped in owning package
+        let owning_pkg = all_packages
             .iter()
-            .filter(|r| {
-                r.satisfied_by.iter().any(|s| s == part_name)
-                    || r.name.to_lowercase().contains(&ctx.subsys_dir)
-            })
-            .collect();
+            .copied()
+            .find(|p| p.name == ctx.pkg_name);
+        let mut matching_reqs: Vec<&RequirementDef> = Vec::new();
+        let mut seen_matching_reqs: BTreeSet<String> = BTreeSet::new();
+        for r in all_requirements
+            .iter()
+            .filter(|r| r.satisfied_by.iter().any(|s| s == part_name))
+            .chain(
+                owning_pkg
+                    .into_iter()
+                    .flat_map(|p| p.requirement_defs.iter())
+                    .filter(|r| r.satisfied_by.is_empty()),
+            )
+        {
+            let key = format_requirement_label(r);
+            if !key.is_empty() && seen_matching_reqs.insert(key) {
+                matching_reqs.push(r);
+            }
+        }
 
         let bdd_criteria = generate_feature_bdd(ctx.part, &matching_reqs);
+        let validation_section = render_feature_validation_and_constraints(ctx.part, &matching_reqs);
+        let arrangement_section = render_feature_logical_arrangement(ctx.part);
+        let layer1_section = render_feature_layer1_state_model(ctx.part);
+        let layer2_section = render_feature_layer2_logic_management(ctx.part, &matching_reqs);
+        let layer3_section = render_feature_layer3_interface_binding(ctx.part);
 
         let mut emitted_part_ops = BTreeSet::new();
         let mut op_action_bullets = Vec::new();
@@ -4783,22 +6639,22 @@ Safety-critical invariant satisfaction, formal trace matrix closure, and zero ha
 ```
 
 ### 2. Validation & Constraints
-Formal constraints and invariant guarantees enforced by {part_name}.
+{validation_section}
 
 ### 3. Visual Layout & Arrangement
-Logical layout, viewport containment, and container structure for {part_name} conforming to platform design tokens. Container boundaries enforce @container isolation rules.
+{arrangement_section}
 
 ### 4. Interactive Flow & States
 {interactive_flow_section}
 
 ### Layer 1: Domain State & Signal Model
-Domain state vector representing {part_name} status, AST references, and typed signal models.
+{layer1_section}
 
 ### Layer 2: Logic & Safety State Management
-Deterministic state machine solver and safety monitor logic for {part_name}.
+{layer2_section}
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Presentation interface binding and diagnostic event routing for {part_name}.
+{layer3_section}
 
 ## Acceptance Criteria (BDD)
 {bdd_criteria}
@@ -4815,10 +6671,14 @@ Component behavior and interface definitions derive from `schema/model.sysml` pu
             interface_type = interface_type,
             schema_container = schema_container,
             spec_source = spec_source,
-            part_name = part_name,
             class_diagram_block = class_diagram_block,
             json_schema = json_schema,
+            validation_section = validation_section,
+            arrangement_section = arrangement_section,
             interactive_flow_section = interactive_flow_section,
+            layer1_section = layer1_section,
+            layer2_section = layer2_section,
+            layer3_section = layer3_section,
             bdd_criteria = bdd_criteria,
             source_refs = source_refs,
         );
@@ -5908,6 +7768,8 @@ fn replace_markdown_section_body(doc: &str, heading: &str, new_body: &str) -> St
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYNC-FORWARD-MERGE-EXISTING-SPEC] | SysML v2: ActionDef(merge_existing_spec_content)
 fn merge_existing_spec_content(rel_path: &str, generated: &str, existing: &str) -> String {
+    let is_epic = rel_path.starts_with("epics/") || rel_path.contains("/epics/");
+    let is_feature = rel_path.starts_with("features/") || rel_path.contains("/features/");
     let is_user_story =
         rel_path.starts_with("user-stories/") || rel_path.contains("/user-stories/");
     let is_use_case = rel_path.starts_with("use-cases/") || rel_path.contains("/use-cases/");
@@ -5919,6 +7781,9 @@ fn merge_existing_spec_content(rel_path: &str, generated: &str, existing: &str) 
             .or_else(|| trimmed.strip_prefix("- [X] "))
         {
             if is_user_story && is_stale_user_story_boilerplate(after) {
+                continue;
+            }
+            if is_feature && after.contains("operational_invariants") {
                 continue;
             }
             checked_keys.insert(extract_checklist_item_key(after));
@@ -5949,7 +7814,7 @@ fn merge_existing_spec_content(rel_path: &str, generated: &str, existing: &str) 
         s
     };
 
-    if rel_path.starts_with("epics/") {
+    if is_epic {
         let epic_headings = [
             "## 1. Context",
             "## 3. Architecture",
@@ -5958,10 +7823,15 @@ fn merge_existing_spec_content(rel_path: &str, generated: &str, existing: &str) 
         ];
         for heading in &epic_headings {
             if let Some(existing_body) = extract_markdown_section_body(existing, heading) {
+                if is_stale_epic_boilerplate(&existing_body)
+                    || is_auto_epic_fallback_section(heading, &existing_body)
+                {
+                    continue;
+                }
                 merged = replace_markdown_section_body(&merged, heading, &existing_body);
             }
         }
-    } else if rel_path.starts_with("features/") {
+    } else if is_feature {
         let feat_headings = [
             "### 2. Validation & Constraints",
             "### 3. Visual Layout & Arrangement",
@@ -5972,6 +7842,11 @@ fn merge_existing_spec_content(rel_path: &str, generated: &str, existing: &str) 
         ];
         for heading in &feat_headings {
             if let Some(existing_body) = extract_markdown_section_body(existing, heading) {
+                if is_stale_feature_boilerplate(&existing_body)
+                    || is_auto_feature_fallback_section(heading, &existing_body)
+                {
+                    continue;
+                }
                 merged = replace_markdown_section_body(&merged, heading, &existing_body);
             }
         }
@@ -7770,6 +9645,34 @@ mod tests {
         Ok(())
     }
 
+    /// Verifies `generate_feature_bdd` derives positive and negative BDD acceptance criteria from `PartDef` constraints and `RequirementDef` obligations within `3..=10` items.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+    /// for fn `test_feature_bdd_derived_from_constraints_and_requirements` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Emits zero `"operational_invariants"` placeholders, projects both `PartDef::constraints` and `RequirementDef::constraints`
+    ///   (with `REQ-0100` traceability), emits both positive satisfaction and negative violation criteria, and stays within `3..=10` items.
+    ///
+    /// ## 3. Preconditions
+    /// - Synthetic `PartDef` with `FrameRateLimit` and `RequirementDef` (`REQ-0100`) with `MaxLatencyInvariant`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when all BDD obligation, polarity, and cardinality assertions hold.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N)$ over synthetic AST fixture.
+    /// - Space Complexity: $O(N)$ bounded BDD output buffer.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), Box<dyn std::error::Error>>` with zero `.unwrap()` or `.expect()`.
+    /// - State: Stateless in-memory test.
+    /// - Action: Zero regexes, panics, or unchecked indexing.
+    /// - Resource: Bounded stack and heap allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED] | SysML v2: VerificationCaseDef(test_feature_bdd_derived_from_constraints_and_requirements)
     #[test]
     fn test_feature_bdd_derived_from_constraints_and_requirements() -> Result<(), Box<dyn std::error::Error>> {
         use deap_core::sysml_ast::{ConstraintDef, RequirementDef};
@@ -7797,36 +9700,36 @@ mod tests {
 
         let bdd = generate_feature_bdd(&part, &[&req]);
 
-        // Pattern A: Nominal domain state / signal handling
         assert!(
-            bdd.contains("Given nominal TelemetryProcessor domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds."),
-            "Must contain Pattern A nominal domain state criterion, got:\n{}",
-            bdd
-        );
-
-        // Pattern B: Invariant / constraint verification
-        assert!(
-            bdd.contains("Given operational state, When TelemetryProcessor evaluates constraint 'FrameRateLimit', Then asserts invariant satisfaction without violation."),
-            "Must contain part constraint FrameRateLimit in Pattern B, got:\n{}",
+            !bdd.contains("operational_invariants"),
+            "Must never fabricate 'operational_invariants', got:\n{}",
             bdd
         );
         assert!(
-            bdd.contains("Given operational state, When TelemetryProcessor evaluates constraint 'MaxLatencyInvariant', Then asserts invariant satisfaction without violation."),
-            "Must contain requirement constraint MaxLatencyInvariant in Pattern B, got:\n{}",
+            bdd.contains("evaluates invariant `FrameRateLimit`, Then the invariant holds and verified state is committed."),
+            "Must contain positive satisfaction criterion for FrameRateLimit, got:\n{}",
             bdd
         );
-
-        // Pattern C: Failsafe / negative error recovery
         assert!(
-            bdd.contains("Given malformed input signals or boundary condition violation, When TelemetryProcessor error handling is invoked, Then transitions safely to failsafe fallback state without corruption."),
-            "Must contain Pattern C failsafe criterion, got:\n{}",
+            bdd.contains("violate `FrameRateLimit`, When `TelemetryProcessor` evaluates invariant `FrameRateLimit`, Then `TelemetryProcessor` rejects"),
+            "Must contain negative violation/rejection criterion for FrameRateLimit, got:\n{}",
+            bdd
+        );
+        assert!(
+            bdd.contains("MaxLatencyInvariant") && bdd.contains("REQ-0100"),
+            "Must contain requirement constraint MaxLatencyInvariant and REQ-0100 trace, got:\n{}",
+            bdd
+        );
+        assert!(
+            bdd.contains("When `TelemetryProcessor` executes structural interface processing, Then state and output ports conform to declared schema types."),
+            "Must contain structural interface conformance criterion, got:\n{}",
             bdd
         );
 
         // Granularity bounds check (3 to 10 criteria)
         let lines: Vec<&str> = bdd.lines().filter(|l| l.trim().starts_with("- [ ] AC-")).collect();
         assert!(
-            lines.len() >= 3 && lines.len() <= 10,
+            (3..=10).contains(&lines.len()),
             "Criteria count must be between 3 and 10, got: {}",
             lines.len()
         );
@@ -8665,7 +10568,7 @@ Custom authored security and zero-trust governance controls.
 Custom authored validation constraints for MissionOperator.
 
 ### 3. Visual Layout & Arrangement
-Custom authored visual layout tokens and @container rules.
+Custom authored logical containment and structural arrangement rules.
 
 ### 4. Interactive Flow & States
 Custom authored interactive flow and operator state transitions.
@@ -8837,7 +10740,7 @@ Custom authored Layer 3 presentation actuator bindings.
             "FEAT-01 ### 2. Validation & Constraints must be preserved"
         );
         assert!(
-            feat01.contains("Custom authored visual layout tokens and @container rules."),
+            feat01.contains("Custom authored logical containment and structural arrangement rules."),
             "FEAT-01 ### 3. Visual Layout & Arrangement must be preserved"
         );
         assert!(
@@ -9555,6 +11458,182 @@ Custom authored Layer 3 presentation actuator bindings.
             custom_existing,
         );
         assert!(ast_wins.contains("Explicit AST precondition holds"));
+
+        Ok(())
+    }
+
+    /// Unit-tests Issue #699 helpers: acronym-aware `to_display_name`, JSON Schema `x-sysml-type`/default projection,
+    /// `generate_feature_bdd` across $K = 0$, $1 \le K \le 4$, and $K \ge 5$, and `verify-baseline` Trap A & Trap B guards.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
+    /// for fn `test_issue_699_unit_display_name_bdd_cardinality_and_provenance_traps` in `crates/compile-sysml/src/sync/forward.rs` (refs #699).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - `to_display_name` preserves `SysML`, `CommonMark`, `GitHub`, `OpenAPI`, `UUIDv5`, `STPA`, `FMECA`, `SHA256`, and `"Con Ops"`.
+    /// - `generate_feature_bdd` emits `3..=10` criteria with zero `"operational_invariants"` and 100% constraint coverage.
+    /// - `render_feature_validation_and_constraints`, `render_feature_logical_arrangement`, and `render_feature_layer1..3`
+    ///   contain zero `-`/`*`/`1.` bullet lines (Trap A) and zero unguarded unitless engineering literals outside code fences (Trap B).
+    ///
+    /// ## 3. Preconditions
+    /// - Pure in-memory synthetic `PartDef`, `AttributeDef`, `PortDef`, `ConstraintDef`, and `RequirementDef` fixtures.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` when all acronym, JSON Schema, BDD cardinality, and provenance assertions hold.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N)$ over bounded synthetic AST inputs.
+    /// - Space Complexity: $O(N)$ bounded test buffers.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Result<(), Box<dyn std::error::Error>>` without `.unwrap()` or `.expect()`.
+    /// - State: Pure in-memory execution with zero filesystem side effects.
+    /// - Action: Zero direct slice indexing, regexes, or panics.
+    /// - Resource: Bounded stack and heap allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYNC-FORWARD-TEST-ISSUE-699-UNIT] | SysML v2: VerificationCaseDef(test_issue_699_unit_display_name_bdd_cardinality_and_provenance_traps)
+    #[test]
+    fn test_issue_699_unit_display_name_bdd_cardinality_and_provenance_traps(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use deap_core::sysml_ast::{AttributeDef, ConstraintDef, PortDef, RequirementDef};
+
+        assert_eq!(
+            to_display_name("LedgerGovernance_SysML"),
+            "Ledger Governance SysML"
+        );
+        assert_eq!(
+            to_display_name("CompileSysMLToCommonMark"),
+            "Compile SysML To CommonMark"
+        );
+        assert_eq!(
+            to_display_name("SyncGitHubOpenAPIWithUUIDv5"),
+            "Sync GitHub OpenAPI With UUIDv5"
+        );
+        assert_eq!(
+            to_display_name("VerifySTPAAndFMECAWithSHA256"),
+            "Verify STPA And FMECA With SHA256"
+        );
+        assert_eq!(to_display_name("ConOps"), "Con Ops");
+
+        // K = 0 unconstrained part
+        let empty_part = PartDef {
+            name: "UnconstrainedRelay".to_string(),
+            attributes: vec![AttributeDef {
+                name: "channel_tag".to_string(),
+                type_name: "ChannelTag".to_string(),
+                default_value: Some("\"ch-0\"".to_string()),
+                doc: None,
+            }],
+            ports: vec![PortDef {
+                name: "relay_out".to_string(),
+                direction: "out".to_string(),
+                type_name: "RelayFrame".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let schema_json = generate_json_schema(&empty_part);
+        let parsed: serde_json::Value = serde_json::from_str(&schema_json)?;
+        assert_eq!(
+            parsed
+                .get("properties")
+                .and_then(|p| p.get("channel_tag"))
+                .and_then(|c| c.get("x-sysml-type"))
+                .and_then(serde_json::Value::as_str),
+            Some("ChannelTag")
+        );
+        assert_eq!(
+            parsed
+                .get("properties")
+                .and_then(|p| p.get("channel_tag"))
+                .and_then(|c| c.get("default"))
+                .and_then(serde_json::Value::as_str),
+            Some("ch-0")
+        );
+        let req_arr = parsed
+            .get("required")
+            .and_then(serde_json::Value::as_array)
+            .ok_or("missing required array")?;
+        assert!(
+            !req_arr.iter().any(|v| v.as_str() == Some("channel_tag")),
+            "Defaulted attribute channel_tag must be omitted from JSON Schema required[]"
+        );
+
+        let bdd_k0 = generate_feature_bdd(&empty_part, &[]);
+        assert!(!bdd_k0.contains("operational_invariants"));
+        let k0_count = bdd_k0
+            .lines()
+            .filter(|l| l.trim_start().starts_with("- [ ] AC-"))
+            .count();
+        assert!((3..=10).contains(&k0_count));
+        assert!(bdd_k0.contains("channel_tag") && bdd_k0.contains("relay_out"));
+
+        // K = 10 (>= 5) + Trap A + Trap B check with unitless engineering literal `latency < 5`
+        let mut heavy_part = empty_part.clone();
+        for idx in 1..=9_usize {
+            heavy_part.constraints.push(ConstraintDef {
+                name: format!("Inv_{idx:02}"),
+                expression: format!("val_{idx} >= {idx}"),
+                ..Default::default()
+            });
+        }
+        let unitless_req = RequirementDef {
+            name: "UnitlessGuardReq".to_string(),
+            req_id: "REQ-999".to_string(),
+            constraints: vec![ConstraintDef {
+                name: "Inv_10_Unitless".to_string(),
+                expression: "latency < 5".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let bdd_k10 = generate_feature_bdd(&heavy_part, &[&unitless_req]);
+        let k10_count = bdd_k10
+            .lines()
+            .filter(|l| l.trim_start().starts_with("- [ ] AC-"))
+            .count();
+        assert_eq!(k10_count, 10);
+        for idx in 1..=9_usize {
+            assert!(bdd_k10.contains(&format!("Inv_{idx:02}")));
+        }
+        assert!(bdd_k10.contains("Inv_10_Unitless") && bdd_k10.contains("REQ-999"));
+        assert!(
+            !bdd_k10.contains("latency < 5"),
+            "Trap B: unitless engineering expression 'latency < 5' must not leak inline into BDD prose:\n{bdd_k10}"
+        );
+
+        let sec2 = render_feature_validation_and_constraints(&heavy_part, &[&unitless_req]);
+        let sec3 = render_feature_logical_arrangement(&heavy_part);
+        let l1 = render_feature_layer1_state_model(&heavy_part);
+        let l2 = render_feature_layer2_logic_management(&heavy_part, &[&unitless_req]);
+        let l3 = render_feature_layer3_interface_binding(&heavy_part);
+
+        // Trap A: zero bullet lines outside code fences across Section 2, Section 3, and Layers 1..3
+        let mut in_fence = false;
+        for section in [&sec2, &sec3, &l1, &l2, &l3] {
+            for line in section.lines() {
+                let t = line.trim_start();
+                if t.starts_with("```") {
+                    in_fence = !in_fence;
+                    continue;
+                }
+                if !in_fence {
+                    assert!(
+                        !t.starts_with("- ") && !t.starts_with("* "),
+                        "Trap A: non-fenced Feature subsection line must not start with bullet: {line:?}"
+                    );
+                    assert!(
+                        !line.contains("latency < 5"),
+                        "Trap B: unitless engineering literal must reside strictly inside fenced ```sysml block: {line:?}"
+                    );
+                }
+            }
+        }
+        assert!(
+            sec2.contains("constraint Inv_10_Unitless { latency < 5 }"),
+            "Section 2 fenced ```sysml block must preserve verbatim 'latency < 5':\n{sec2}"
+        );
 
         Ok(())
     }
