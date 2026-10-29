@@ -96,6 +96,9 @@ pub struct Cli {
     /// Emit deterministic Flutter and C-ABI contracts (seeds, models, solver bridge, and UI tests)
     pub emit_flutter_contracts: Option<PathBuf>,
 
+    /// Emit deterministic 4-level modular multi-file Rust code to DIR
+    pub emit_modular_rust: Option<PathBuf>,
+
     /// Path to documentation directory
     pub docs: PathBuf,
 
@@ -176,6 +179,12 @@ pub enum CommandMode {
         schema: Option<PathBuf>,
         dry_run: bool,
     },
+    /// Emit deterministic 4-level modular multi-file Rust code for a target workspace directory.
+    EmitModularRust {
+        target_dir: PathBuf,
+        schema: Option<PathBuf>,
+        dry_run: bool,
+    },
     /// Transpile a SysML v2 AST model into the 10-pillar STPA safety artifact suite.
     StpaTranspile {
         schema: Option<PathBuf>,
@@ -250,6 +259,7 @@ impl Cli {
             + usize::from(self.export_mbd.is_some())
             + usize::from(self.slice_package.is_some())
             + usize::from(self.emit_flutter_contracts.is_some())
+            + usize::from(self.emit_modular_rust.is_some())
             + usize::from(self.stpa_transpile)
             + usize::from(self.stpa.is_some())
             + usize::from(self.forward_sync)
@@ -391,6 +401,13 @@ impl Cli {
         }
         if let Some(target_dir) = self.emit_flutter_contracts.take() {
             return Some(CommandMode::EmitFlutterContracts {
+                target_dir,
+                schema,
+                dry_run: self.dry_run,
+            });
+        }
+        if let Some(target_dir) = self.emit_modular_rust.take() {
+            return Some(CommandMode::EmitModularRust {
                 target_dir,
                 schema,
                 dry_run: self.dry_run,
@@ -627,6 +644,14 @@ impl Cli {
                     .help("Emit deterministic Flutter and C-ABI contracts (seeds, models, solver bridge, and UI tests)"),
             )
             .arg(
+                Arg::new("emit_modular_rust")
+                    .long("emit-modular-rust")
+                    .value_name("RUST_DIR")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Emit deterministic 4-level modular multi-file Rust code to RUST_DIR"),
+            )
+            .arg(
                 Arg::new("docs")
                     .long("docs")
                     .default_value("docs/")
@@ -722,6 +747,9 @@ impl Cli {
             emit_flutter_contracts: matches
                 .get_one::<PathBuf>("emit_flutter_contracts")
                 .cloned(),
+            emit_modular_rust: matches
+                .get_one::<PathBuf>("emit_modular_rust")
+                .cloned(),
             docs: matches
                 .get_one::<PathBuf>("docs")
                 .cloned()
@@ -800,6 +828,40 @@ impl Cli {
     {
         let matches = Self::build_command().get_matches_from(itr);
         Self::from_matches(&matches)
+    }
+
+    /// Fallibly parses an arbitrary iterator of argument tokens into `Cli` without terminating the process.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 non-terminating CLI parsing for deterministic
+    /// programmatic callers and test harnesses verifying modular Rust codegen flags.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Produces identical `Cli` field bindings as `Self::parse_from` on valid argument sequences while
+    ///   returning `Err(clap::Error)` instead of invoking `process::exit` on invalid syntax.
+    ///
+    /// ## 3. Preconditions
+    /// - `itr` yields argument tokens beginning with the binary name.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(Cli)` when `clap` grammar validation succeeds, or `Err(clap::Error)` otherwise.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(A)$ where $A$ is the number of tokens in `itr`.
+    /// - Space Complexity: $O(A)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Returns `Err(clap::Error)` cleanly without panicking or terminating the host process.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0607], [REQ-COMPILER-SYSML-CLI-PARSE-FROM]
+    pub fn try_parse_from<I, T>(itr: I) -> Result<Self, clap::Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<OsString> + Clone,
+    {
+        let matches = Self::build_command().try_get_matches_from(itr)?;
+        Ok(Self::from_matches(&matches))
     }
 }
 
@@ -916,6 +978,64 @@ mod tests {
                 dry_run: false,
             })
         );
+        Ok(())
+    }
+
+    /// Verifies `--emit-modular-rust` parses via `Cli::try_parse_from`, maps to `CommandMode::EmitModularRust`, and rejects `--compile` conflicts.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D deterministic CLI mode resolution for `test_cli_emit_modular_rust_flag`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Maps `--emit-modular-rust` 1-to-1 to `CommandMode::EmitModularRust` with `schema` and `dry_run` preserved.
+    /// - Rejects simultaneous `--emit-modular-rust` and `--compile` invocations (`active_modes > 1`).
+    ///
+    /// ## 3. Preconditions
+    /// - Synthetic CLI argument slices passed to `Cli::try_parse_from`.
+    ///
+    /// ## 4. Postconditions
+    /// - Asserts valid resolution to `CommandMode::EmitModularRust` and mutual-exclusivity rejection with `--compile`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Pure in-memory unit test returning `Result<(), String>` without `.unwrap()` or `.expect()`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0607]
+    #[test]
+    fn test_cli_emit_modular_rust_flag() -> Result<(), String> {
+        let cli = Cli::try_parse_from([
+            "compile-sysml",
+            "--emit-modular-rust",
+            "out/rust",
+            "--schema",
+            "s.sysml",
+            "--dry-run",
+        ])
+        .map_err(|e| e.to_string())?;
+        assert_eq!(
+            cli.into_mode(),
+            Ok(CommandMode::EmitModularRust {
+                target_dir: PathBuf::from("out/rust"),
+                schema: Some(PathBuf::from("s.sysml")),
+                dry_run: true,
+            })
+        );
+
+        let conflicting = Cli::try_parse_from([
+            "compile-sysml",
+            "--emit-modular-rust",
+            "out/rust",
+            "--compile",
+        ])
+        .map_err(|e| e.to_string())?;
+        let err = conflicting
+            .into_mode()
+            .err()
+            .ok_or("conflicting --emit-modular-rust and --compile must fail")?;
+        assert!(err.contains("Multiple operational mode flags specified"));
         Ok(())
     }
 }

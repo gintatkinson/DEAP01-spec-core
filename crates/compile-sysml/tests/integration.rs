@@ -39,4 +39,5 @@ pub mod docstring_injector_tests;
 pub mod flutter_codegen_tests;
 pub mod multi_file_compilation_tests;
 pub mod reproducer_tests;
+pub mod self_hosting_bootstrap;
 pub mod upstream_projection_acceptance_test;

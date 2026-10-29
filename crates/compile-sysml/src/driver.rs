@@ -1059,20 +1059,19 @@ fn handle_slice_package(
 /// Executes `--emit-flutter-contracts` mode (`CommandMode::EmitFlutterContracts`).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Validates the input SysML v2 schema via `load_schema_package_for_cli` (`ARCH-02`), delegates
-/// topology discovery to `flutter_codegen::emit_flutter_contracts` with zero silent `.ok()` masking (`ARCH-01`),
-/// and honors `dry_run` (`ARCH-04`).
+/// Validates the input SysML v2 schema via `load_schema_package_for_cli` (`ARCH-02`), preserves
+/// the unflattened `PackageDef` hierarchy alongside the flattened `SysmlModel`, delegates modular
+/// contract emission to `flutter_codegen::emit_modular_flutter_contracts` (`ARCH-01`), and honors `dry_run` (`ARCH-04`).
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Eliminates redundant inline `topology_data.json` probing in favor of `emit_flutter_contracts`'s
-///   fail-closed topology loader.
-/// - Performs zero filesystem writes when `dry_run` is `true`.
+/// - Preserves hierarchical `pkg` topology for modular Dart barrel and sub-module generation.
+/// - Performs zero filesystem writes when `dry_run` is `true` while still validating and computing `schema_hash`.
 ///
 /// ## 3. Preconditions
 /// - `target_dir` is the target Flutter workspace directory; `schema` is an optional schema path.
 ///
 /// ## 4. Postconditions
-/// - Emits all 4 deterministic Flutter/C-ABI contract files (when `!dry_run`) and returns `Ok(0)`,
+/// - Emits deterministic modular Flutter/C-ABI contract files (when `!dry_run`) and returns `Ok(0)`,
 ///   or returns `Err((1, String))` on validation/codegen error.
 ///
 /// ## 5. Algorithmic Complexity Bounds
@@ -1080,26 +1079,29 @@ fn handle_slice_package(
 /// - Space Complexity: $O(N)$ for generated Dart source buffers.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Semantic validation errors, corrupted `topology_data.json` files, or write failures return `Err((1, String))`.
+/// - Semantic validation errors, modularity bound violations, corrupted `topology_data.json` files, or write failures return `Err((1, String))`.
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-COMPILER-SYSML-HANDLE-FLUTTER-CONTRACTS]
+/// Realises: [REQ-COMPILER-SYSML-HANDLE-FLUTTER-CONTRACTS], [REQ-0607]
 fn handle_emit_flutter_contracts(
     target_dir: &Path,
     schema: Option<PathBuf>,
     dry_run: bool,
 ) -> Result<i32, (i32, String)> {
     let (_, pkg, _) = load_schema_package_for_cli(schema).map_err(|e| (1, e))?;
-    let model = flatten_package_to_model(pkg, None);
+    let model = flatten_package_to_model(pkg.clone(), None);
+    let report = crate::flutter_codegen::emit_modular_flutter_contracts(
+        target_dir, &pkg, &model, None, dry_run,
+    )
+    .map_err(|e| (1, format!("Error emitting Flutter contracts: {e}")))?;
     if dry_run {
         println!(
-            "[Flutter Codegen] [DRY RUN] Would emit contracts to '{}'",
+            "[Flutter Codegen] [DRY RUN] Would emit contracts (schema hash: 0x{:016X}) to '{}'",
+            report.schema_hash,
             target_dir.display()
         );
         return Ok(0);
     }
-    let report = crate::flutter_codegen::emit_flutter_contracts(target_dir, &model, None)
-        .map_err(|e| (1, format!("Error emitting Flutter contracts: {e}")))?;
     println!(
         "[Flutter Codegen] Successfully emitted contracts (schema hash: 0x{:016X}) to '{}':",
         report.schema_hash,
@@ -1115,6 +1117,72 @@ fn handle_emit_flutter_contracts(
         "  - UI contract test: {}",
         report.ui_contract_test_path.display()
     );
+    Ok(0)
+}
+
+/// Executes `--emit-modular-rust` mode (`CommandMode::EmitModularRust`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Validates the input SysML v2 schema via `load_schema_package_for_cli` (`ARCH-02`) and emits
+/// a bounded, hierarchical Rust module tree via `emit_modular_rust_tree` under DO-178C Level A,
+/// DO-330 TQL-4, and ISO 26262 ASIL D modularity rules (`ARCH-04`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Enforces canonical `ModularityBounds::canonical()` across all emitted Rust units.
+/// - Performs full tree planning, validation, and SHA-256 manifest verification with zero disk writes when `dry_run` is `true`.
+///
+/// ## 3. Preconditions
+/// - `target_dir` is the destination directory for generated Rust modules; `schema` is an optional schema path.
+///
+/// ## 4. Postconditions
+/// - Emits the modular Rust source tree (when `!dry_run`), prints the deterministic tree SHA-256 summary,
+///   and returns `Ok(0)`, or returns `Err((1, String))` with joined diagnostics on failure.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N \log N)$ over AST elements and emitted module files.
+/// - Space Complexity: $O(N)$ for planned unit buffers and manifest hashes.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Schema validation failures, modularity diagnostic violations, or atomic file write errors return `Err((1, String))`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0607]
+fn handle_emit_modular_rust(
+    target_dir: &Path,
+    schema: Option<PathBuf>,
+    dry_run: bool,
+) -> Result<i32, (i32, String)> {
+    let (_, pkg, _) = load_schema_package_for_cli(schema).map_err(|e| (1, e))?;
+    let opts = crate::modular_codegen::emitters::rust_emitter::ModularRustOptions {
+        target_dir: target_dir.to_path_buf(),
+        dry_run,
+        bounds: crate::modular_codegen::domain::ModularityBounds::canonical(),
+    };
+    let manifest =
+        crate::modular_codegen::emitters::rust_emitter::emit_modular_rust_tree(&pkg, &opts)
+            .map_err(|diags| {
+                let joined = diags
+                    .into_iter()
+                    .map(|d| d.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                (1, joined)
+            })?;
+    if dry_run {
+        println!(
+            "[Modular Rust Codegen] [DRY RUN] Verified {} unit(s) for '{}' (tree SHA-256: {})",
+            manifest.files.len(),
+            target_dir.display(),
+            manifest.tree_sha256
+        );
+    } else {
+        println!(
+            "[Modular Rust Codegen] Emitted {} unit(s) to '{}' (tree SHA-256: {})",
+            manifest.files.len(),
+            target_dir.display(),
+            manifest.tree_sha256
+        );
+    }
     Ok(0)
 }
 
@@ -1505,6 +1573,50 @@ fn dispatch_pipeline_mode(mode: CommandMode) -> Result<i32, (i32, String)> {
     }
 }
 
+/// Dispatches slicing and modular code-generation `CommandMode` variants, delegating remaining modes to `dispatch_pipeline_mode`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Partitioned codegen dispatcher preserving bounded per-function cyclomatic complexity ($v(G) \le 6$)
+/// across `execute` and downstream dispatchers under DO-178C Level A and DO-330 TQL-4 modularity standards.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Single-Entry/Single-Exit routing over `SlicePackage`, `EmitFlutterContracts`, and `EmitModularRust`,
+///   forwarding all pipeline and usage modes deterministically to `dispatch_pipeline_mode`.
+///
+/// ## 3. Preconditions
+/// - `mode` is a codegen, slicing, pipeline, or usage `CommandMode` variant.
+///
+/// ## 4. Postconditions
+/// - Returns `Result<i32, (i32, String)>` produced by the matched SESE handler.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N \log N)$ bounded by the invoked codegen or pipeline handler.
+/// - Space Complexity: $O(N)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Propagates handler errors directly as `Err((code, msg))` with zero `std::process::exit` calls.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0607], [REQ-COMPILER-SYSML-EXECUTE]
+fn dispatch_codegen_mode(mode: CommandMode) -> Result<i32, (i32, String)> {
+    match mode {
+        CommandMode::SlicePackage { target_pkg, schema } => {
+            handle_slice_package(&target_pkg, schema)
+        }
+        CommandMode::EmitFlutterContracts {
+            target_dir,
+            schema,
+            dry_run,
+        } => handle_emit_flutter_contracts(&target_dir, schema, dry_run),
+        CommandMode::EmitModularRust {
+            target_dir,
+            schema,
+            dry_run,
+        } => handle_emit_modular_rust(&target_dir, schema, dry_run),
+        other => dispatch_pipeline_mode(other),
+    }
+}
+
 /// Executes a parsed `Cli` configuration in-process without calling `std::process::exit`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1512,7 +1624,7 @@ fn dispatch_pipeline_mode(mode: CommandMode) -> Result<i32, (i32, String)> {
 /// and DO-330 TQL-4 Humble Object design rules.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Converts `cli` via `Cli::into_mode()` and dispatches to the corresponding SESE handler ($v(G) \le 8$).
+/// - Converts `cli` via `Cli::into_mode()` and dispatches to the corresponding SESE handler ($v(G) \le 6$).
 /// - Never invokes `std::process::exit`, enabling direct in-process unit and integration testing.
 ///
 /// ## 3. Preconditions
@@ -1550,15 +1662,7 @@ pub fn execute(cli: Cli) -> Result<i32, (i32, String)> {
             schema,
             dry_run,
         } => handle_export_mbd(&mbd_dir, schema, dry_run),
-        CommandMode::SlicePackage { target_pkg, schema } => {
-            handle_slice_package(&target_pkg, schema)
-        }
-        CommandMode::EmitFlutterContracts {
-            target_dir,
-            schema,
-            dry_run,
-        } => handle_emit_flutter_contracts(&target_dir, schema, dry_run),
-        other => dispatch_pipeline_mode(other),
+        other => dispatch_codegen_mode(other),
     }
 }
 

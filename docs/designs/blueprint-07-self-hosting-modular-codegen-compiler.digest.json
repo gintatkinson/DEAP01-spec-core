@@ -1,0 +1,213 @@
+{
+  "sha256": "14f204c5d3000575e36f471ef584fb55802e0f078ed50bab340bd440b434d69d",
+  "total_lines": 1,
+  "node_counts": {
+    "action_defs": 5,
+    "attribute_defs": 29,
+    "calc_defs": 0,
+    "capability_defs": 0,
+    "connection_defs": 0,
+    "constraint_defs": 5,
+    "containers": 5,
+    "groupings": 0,
+    "hazard_defs": 0,
+    "identities": 0,
+    "interaction_defs": 1,
+    "item_defs": 0,
+    "leaves": 29,
+    "lists": 5,
+    "operation_defs": 0,
+    "packages": 1,
+    "part_defs": 5,
+    "port_defs": 12,
+    "requirement_defs": 1,
+    "risk_defs": 0,
+    "state_defs": 1,
+    "test_case_defs": 0,
+    "typedefs": 0,
+    "use_case_defs": 6
+  },
+  "schema_nodes": [
+    "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+    "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint_LifecycleState",
+    "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint_SequenceInteraction",
+    "Blueprint_ID",
+    "C_MOD_01",
+    "C_MOD_02",
+    "C_MOD_03",
+    "C_MOD_04",
+    "C_MOD_05",
+    "FourLevelAstPartitionerAndHoister",
+    "Generation_Mode",
+    "ModularFlutterMultiFileEmitter",
+    "ModularRustMultiFileEmitter",
+    "REQ_0607_BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+    "Requirement_ID",
+    "SelfHostingModularCodegenCompiler",
+    "Specification_Source",
+    "Status",
+    "Target_Crates",
+    "Title",
+    "TopologicalLayerDagVerifier",
+    "Tracked_Issues",
+    "UC_AC_01_Fail_Closed_Rejection_on_Directed_Dependency_Cycles_and_Upward_Layer_Imports",
+    "UC_AC_02_Four_Level_Zero_Dead_End_Deterministic_Lowering_Within_Modularity_Bounds",
+    "UC_AC_03_Metacircular_Self_Hosting_Stage_1_to_Stage_2_SHA_256_Fixed_Point_Identity",
+    "UC_AC_04_Modular_Multi_File_Flutter_Contract_Emission_and_Monolith_Barrel_Decomposition",
+    "UC_AC_05_Zero_Regex_DO_178C_Seven_Section_Docstring_Clippy_Forbid_and_Audit_Code_Compliance",
+    "UC_AC_06_Dogfood_SysML_v2_Blueprint_Ingestion_and_Twelve_Gate_Closed_Loop_Conformance",
+    "anf_branch_budget",
+    "atomic_staging_enabled",
+    "dependency_edges_in",
+    "deterministic_uuid",
+    "diagnostic_out",
+    "emitModularFlutterTree",
+    "emitModularRustTree",
+    "emit_barrel_reexports",
+    "enforce_seven_section_docs",
+    "facade_max_lines",
+    "fail_closed_transactional",
+    "flutter_manifest_out",
+    "flutter_module_graph_in",
+    "flutter_tree_out",
+    "max_action_steps_per_stage",
+    "max_cyclomatic_complexity",
+    "max_file_lines",
+    "max_items_per_file",
+    "max_layer_tier",
+    "max_transitions_per_handler",
+    "module_graph_out",
+    "package_ast_in",
+    "partitionAndHoist",
+    "runtime_llm_subagent_count",
+    "rust_manifest_out",
+    "rust_module_graph_in",
+    "rust_tree_out",
+    "stage_fixed_point_mismatch_files",
+    "topological_order_out",
+    "validated_ast_in",
+    "verifyDagAndLayers",
+    "verifyFixedPointHash",
+    "zero_recursion_kahn"
+  ],
+  "operational_activities": [
+    {
+      "id": "OA-01",
+      "name": "verifyDagAndLayers",
+      "doc": "verifyDagAndLayers(pkg)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-02",
+      "name": "partitionAndHoist",
+      "doc": "partitionAndHoist(pkg)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-03",
+      "name": "emitModularRustTree",
+      "doc": "emitModularRustTree(graph)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-04",
+      "name": "emitModularFlutterTree",
+      "doc": "emitModularFlutterTree(graph)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-05",
+      "name": "verifyFixedPointHash",
+      "doc": "verifyFixedPointHash(stage1)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "operational_exchanges": [],
+  "operational_scenarios": [
+    {
+      "id": "SCN-01",
+      "name": "UC_AC_01_Fail_Closed_Rejection_on_Directed_Dependency_Cycles_and_Upward_Layer_Imports",
+      "actor": "",
+      "objective": "\"Fail Closed Rejection on Directed Dependency Cycles and Upward Layer Imports\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-02",
+      "name": "UC_AC_02_Four_Level_Zero_Dead_End_Deterministic_Lowering_Within_Modularity_Bounds",
+      "actor": "",
+      "objective": "\"Four Level Zero Dead End Deterministic Lowering Within Modularity Bounds\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-03",
+      "name": "UC_AC_03_Metacircular_Self_Hosting_Stage_1_to_Stage_2_SHA_256_Fixed_Point_Identity",
+      "actor": "",
+      "objective": "\"Metacircular Self Hosting Stage 1 to Stage 2 SHA 256 Fixed Point Identity\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-04",
+      "name": "UC_AC_04_Modular_Multi_File_Flutter_Contract_Emission_and_Monolith_Barrel_Decomposition",
+      "actor": "",
+      "objective": "\"Modular Multi File Flutter Contract Emission and Monolith Barrel Decomposition\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-05",
+      "name": "UC_AC_05_Zero_Regex_DO_178C_Seven_Section_Docstring_Clippy_Forbid_and_Audit_Code_Compliance",
+      "actor": "",
+      "objective": "\"Zero Regex DO 178C Seven Section Docstring Clippy Forbid and Audit Code Compliance\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-06",
+      "name": "UC_AC_06_Dogfood_SysML_v2_Blueprint_Ingestion_and_Twelve_Gate_Closed_Loop_Conformance",
+      "actor": "",
+      "objective": "\"Dogfood SysML v2 Blueprint Ingestion and Twelve Gate Closed Loop Conformance\"",
+      "steps": []
+    }
+  ],
+  "operational_nodes": [
+    {
+      "name": "FourLevelAstPartitionerAndHoister",
+      "node_type": "Part",
+      "doc": "Maximum sequential `ActionDef::steps` statements grouped into a single outlined stage function. [unit: steps]",
+      "allocated_activities": []
+    },
+    {
+      "name": "ModularFlutterMultiFileEmitter",
+      "node_type": "Part",
+      "doc": "Emits top-level Dart barrel facades re-exporting per-package and per-classifier `.g.dart` units. [unit: flag]",
+      "allocated_activities": []
+    },
+    {
+      "name": "ModularRustMultiFileEmitter",
+      "node_type": "Part",
+      "doc": "Emits unique Check 36 7-section DO-178C safety headers on every generated Rust module and item. [unit: flag]",
+      "allocated_activities": []
+    },
+    {
+      "name": "SelfHostingModularCodegenCompiler",
+      "node_type": "Part",
+      "doc": "Upper bound on physical lines of code permitted per generated compilation unit. [unit: LOC]",
+      "allocated_activities": []
+    },
+    {
+      "name": "TopologicalLayerDagVerifier",
+      "node_type": "Part",
+      "doc": "Maximum architectural layer ordinal (`Domain = 1`, `Application = 2`, `Presentation = 3`). [unit: tier]",
+      "allocated_activities": []
+    }
+  ],
+  "file_manifest": []
+}

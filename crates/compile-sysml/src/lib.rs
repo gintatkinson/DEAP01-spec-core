@@ -36,6 +36,7 @@ pub mod docstring;
 pub mod driver;
 pub mod flutter_codegen;
 pub mod lexer;
+pub mod modular_codegen;
 pub mod parser;
 #[allow(clippy::needless_lifetimes)]
 pub mod semantic;
