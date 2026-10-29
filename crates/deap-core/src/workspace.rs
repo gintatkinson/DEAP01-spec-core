@@ -1017,8 +1017,8 @@ mod tests {
             "AGENTS.md must explicitly reference ---GOVERNANCE-END--- bypass for curated subagents"
         );
         assert!(
-            agents_md.contains("NEVER run `verify-baseline`, `cargo test`, or `flutter test` on session startup/initialization"),
-            "AGENTS.md Step 5 must explicitly forbid running verify-baseline, cargo test, or flutter test on session startup/initialization"
+            agents_md.contains("NEVER run `verify-baseline`, `cargo test`, or `flutter test` on session startup"),
+            "AGENTS.md must explicitly forbid running verify-baseline, cargo test, or flutter test on session startup"
         );
 
         let rule_20 = fs::read_to_string(repo_root.join("rules/verification-required.md"))?;
@@ -1101,31 +1101,30 @@ mod tests {
         let agents_md = fs::read_to_string(repo_root.join("AGENTS.md"))?;
         let constitution_first = fs::read_to_string(repo_root.join("rules/constitution-first.md"))?;
 
-        let required_receipt_elements = [
+        let retired_receipt_ceremony_strings = [
             "| Step | Check / Gate | Status | Resolution / Details |",
-            "| **0** | **Repository Classification** | Verified |",
-            "| **1** | **Governance Constitution** | Verified |",
-            "| **2** | **Task Skill On-Demand** | Standby |",
-            "| **3** | **Governance Rules Bundle** | Verified |",
-            "| **4** | **Platform Profile** |",
-            "| **5** | **Baseline Gate** | Bypassed |",
-            "- **Branch**:",
-            "- **Working Tree**:",
-            "- **Role Invariant**:",
+            "Ready for instructions. What task or work package would you like to execute?",
+            "Unconditional Turn-0 Read-Only Initialization",
         ];
 
-        for elem in required_receipt_elements {
+        for retired in retired_receipt_ceremony_strings {
             assert!(
-                agents_md.contains(elem),
-                "AGENTS.md must contain canonical receipt element: '{}'",
-                elem
+                !agents_md.contains(retired),
+                "AGENTS.md must not contain retired per-turn initialization ceremony string: '{}'",
+                retired
             );
             assert!(
-                constitution_first.contains(elem),
-                "rules/constitution-first.md must contain canonical receipt element: '{}'",
-                elem
+                !constitution_first.contains(retired),
+                "rules/constitution-first.md must not contain retired per-turn initialization ceremony string: '{}'",
+                retired
             );
         }
+
+        assert!(
+            agents_md.contains("Lazy On-Demand Governance Loading")
+                && constitution_first.contains("Silent Once-Per-Session Lazy Loading"),
+            "AGENTS.md and rules/constitution-first.md must enforce silent once-per-session lazy governance loading"
+        );
 
         assert!(
             agents_md.contains("UPSTREAM_SPEC_CORE_COMPILER")
@@ -1152,6 +1151,7 @@ mod tests {
 
         let agents_md = fs::read_to_string(repo_root.join("AGENTS.md"))?;
         let user_auth_rule = fs::read_to_string(repo_root.join("rules/user-authorization-lock.md"))?;
+        let bundle = fs::read_to_string(repo_root.join(".pipeline/ACTIVE_RULES_BUNDLE.md"))?;
 
         let top_50_lines: String = agents_md
             .lines()
@@ -1160,29 +1160,48 @@ mod tests {
             .join("\n");
 
         assert!(
-            top_50_lines.contains("Strict Coordinator Tool Locking & 5-Point Compliance Check")
-                || top_50_lines.contains("5-Point Compliance Check"),
-            "AGENTS.md must define 5-Point Compliance Check in its top section before line 50"
+            top_50_lines.contains("Strict Coordinator Tool Locking & Pre-Action Compliance Rules"),
+            "AGENTS.md must define Strict Coordinator Tool Locking & Pre-Action Compliance Rules before line 50"
         );
 
-        let point_identifiers = [
+        for forbidden_boilerplate in [
+            "Every agent thought block MUST begin",
             "Turn-0 Initialization Gate",
+        ] {
+            assert!(
+                !agents_md.contains(forbidden_boilerplate),
+                "AGENTS.md must not contain thought-block boilerplate trigger '{}'",
+                forbidden_boilerplate
+            );
+            assert!(
+                !user_auth_rule.contains(forbidden_boilerplate),
+                "rules/user-authorization-lock.md must not contain thought-block boilerplate trigger '{}'",
+                forbidden_boilerplate
+            );
+            assert!(
+                !bundle.contains(forbidden_boilerplate),
+                ".pipeline/ACTIVE_RULES_BUNDLE.md must not contain thought-block boilerplate trigger '{}'",
+                forbidden_boilerplate
+            );
+        }
+
+        let pre_action_locks = [
             "Intent Classification",
             "User Authorization Lock",
             "Zero Silent Assumptions",
             "Coordinator Delegation & Shell Mutation Lock",
         ];
 
-        for point in point_identifiers {
+        for lock_name in pre_action_locks {
             assert!(
-                agents_md.contains(point),
-                "AGENTS.md must define compliance point '{}'",
-                point
+                agents_md.contains(lock_name),
+                "AGENTS.md must define pre-action lock '{}'",
+                lock_name
             );
             assert!(
-                user_auth_rule.contains(point),
-                "rules/user-authorization-lock.md must define compliance point '{}'",
-                point
+                user_auth_rule.contains(lock_name),
+                "rules/user-authorization-lock.md must define pre-action lock '{}'",
+                lock_name
             );
         }
 

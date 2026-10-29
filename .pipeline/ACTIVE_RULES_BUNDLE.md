@@ -77,7 +77,7 @@
 - **Scoped Profile Loading**: Platform profiles (`.pipeline/profiles/<platform>.md`) are read ONLY when implementing downstream features for the configured target platform. Spec workers and `UPSTREAM_SPEC_CORE_COMPILER` sessions MUST NOT read implementation profiles.
 - **Curated Subagent Bypass**: Spawned single-item subagents receiving prompts ending in `---GOVERNANCE-END---` execute their assigned `SKILL.md` directly without repeating coordinator startup ceremonies.
 - **Strict Planning Gate Overrides**: Root `AGENTS.md` states the strictest planning rule: an approved plan is required before modifying any files; authorization keywords alone are insufficient.
-- **Turn-0 Canonical Initialization Receipt**: Coordinator MUST execute Phase A on startup and emit the canonical session initialization receipt table before any output or file modifications.
+- **Silent Once-Per-Session Lazy Loading**: Conversational and diagnostic turns execute zero startup ceremony and never emit initialization receipt tables. Before writing an `implementation_plan.md` or running a pipeline task, silently load `.pipeline/constitution.md` and `.pipeline/ACTIVE_RULES_BUNDLE.md` at most once per session.
 
 ---
 
@@ -259,18 +259,17 @@
 ---
 
 <a id="rule-user-authorization-lock"></a>
-## 19. Rule: User Authorization Lock & Planning Gate (`rules/user-authorization-lock.md`)
+## 19. Rule: User Authorization Lock & Pre-Action Compliance Rules (`rules/user-authorization-lock.md`)
 
-**ALWAYS enforce:** The agent must run the 5-Point Thought-Block Compliance Check in every thought block and lock all modifying tools until authorized by the keyword `PROCEED`.
+**ALWAYS enforce:** Lock all modifying tools until authorized by an approved `implementation_plan.md` and the keyword `PROCEED`, and focus thought blocks directly on technical reasoning without repeating initialization or compliance checklists.
 
 ### Hard Constraints
-- **5-Point Compliance Check**: Every agent thought block MUST begin with the standardized 5-point check:
-  1. `Turn-0 Initialization Gate`: Verify Phase A execution (detecting `.pipeline/upstream/`, loading `.pipeline/constitution.md` and `.pipeline/ACTIVE_RULES_BUNDLE.md`, running `git status --short --branch`) and emission of the Canonical Session Initialization Receipt Table, or prompt ends with `---GOVERNANCE-END---`.
-  2. `Intent Classification`: Classify message as inquiry vs direct command.
-  3. `User Authorization Lock`: Verify exact target files are documented in an approved `implementation_plan.md` AND user message explicitly contains `PROCEED` (or `Approved` / `Approve plan`).
-  4. `Zero Silent Assumptions`: Confirm no silent assumptions about intent or workspace state.
-  5. `Coordinator Delegation & Shell Mutation Lock`: If active skill mandates subagent dispatch or turn mutates repository files other than `implementation_plan.md`, direct coordinator writing and shell mutations (`cp`, `mv`, `rm`, `tee`, output redirects) are strictly locked; writes must be delegated to subagents after `PROCEED`.
-- **Turn-0 Read-Only Whitelist**: Read-only commands (`git status`, `git status --short --branch`, `git branch --show-current`, `git rev-parse --show-toplevel`, `git diff`, `ls`, `test -d`, `test -e`) are authorized without prior `PROCEED`.
+- **4 Pre-Action Authorization Locks (Zero Thought-Block Boilerplate)**: Never prefix thought blocks with repetitive initialization or compliance checklists. Enforce these 4 locks prior to any modifying action:
+  1. `Intent Classification`: Distinguish questions/inquiries (read-only response only) from direct modification commands.
+  2. `User Authorization Lock`: Verify exact target files are documented in an approved `implementation_plan.md` AND user message explicitly contains `PROCEED` (or `Approved` / `Approve plan`).
+  3. `Zero Silent Assumptions`: Confirm no silent assumptions about intent or workspace state.
+  4. `Coordinator Delegation & Shell Mutation Lock`: If active skill mandates subagent dispatch or turn mutates repository files other than `implementation_plan.md`, direct coordinator writing and shell mutations (`cp`, `mv`, `rm`, `tee`, output redirects) are strictly locked; writes must be delegated to subagents after `PROCEED`.
+- **Read-Only Whitelist**: Read-only commands (`git status`, `git status --short --branch`, `git branch --show-current`, `git rev-parse --show-toplevel`, `git diff`, `ls`, `test -d`, `test -e`) are authorized without prior `PROCEED`.
 - **State-Mutating Shell Lock**: Mutating commands (`cp`, `mv`, `rm`, `tee`, `sed -i`, `>`, `>>`) and build/test commands are strictly locked until plan approval with `PROCEED`.
 - **Prohibition of Pre-Approval `walkthrough.md` Edits**: `walkthrough.md` is exclusively a post-implementation verification artifact and must never be created or edited prior to plan approval and subagent completion.
 - **Mandatory Empirical Physical Path Verification**: Before marking any issue resolved, verify target directories via `git status` and `git rev-parse --show-toplevel`.
