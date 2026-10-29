@@ -225,10 +225,11 @@
 <a id="rule-tdd-mandate"></a>
 ## 16. Rule: Test-Driven Development Mandate (`rules/tdd-mandate.md`)
 
-**ALWAYS enforce:** All software modifications and bug fixes MUST follow the strict RED-GREEN-REFACTOR TDD cycle.
+**ALWAYS enforce:** All executable product, compiler, and application code modifications and bug fixes MUST follow the strict RED-GREEN-REFACTOR TDD cycle.
 
 ### Hard Constraints
-- **RED Demonstration First**: Every fix or feature must ship a failing unit or mutation test demonstrated RED before implementation code is written.
+- **RED Demonstration First (Executable Code Scope)**: Every executable code fix or feature must ship a failing unit or mutation test demonstrated RED before implementation code is written.
+- **Zero Harness-Prose Theater Tests**: Agent harness Markdown files (`AGENTS.md`, `rules/*.md`, `skills/**`, `.pipeline/ACTIVE_RULES_BUNDLE.md`) are prompt instructions, not product features; adding `fs::read_to_string(...).contains(...)` substring tests in `crates/` for harness rule edits is strictly forbidden.
 - **Native Rust Tests**: All tests under `crates/` must be native Rust `#[test]` functions. Legacy Python/pytest is strictly prohibited under Check 33; shell scripts are prohibited under Check 32.
 - **Workspace Test Gate**: `cargo test --workspace` MUST pass with zero failures before declaring completion.
 

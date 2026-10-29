@@ -2,7 +2,7 @@
 
 # Rule: Test-Driven Development (TDD)
 
-**ALWAYS enforce:** All implementation MUST follow the RED-GREEN-REFACTOR cycle.
+**ALWAYS enforce:** All executable product, compiler, and application code implementation MUST follow the RED-GREEN-REFACTOR cycle.
 
 ## The cycle
 
@@ -12,6 +12,7 @@
 
 ## Hard constraints
 
+- **Executable Code Scope (Zero Harness-Prose Theater Tests):** TDD applies strictly to executable product, compiler, validator, and application code (`crates/`, `app_flutter/`, `web_react/`). Agent harness and governance Markdown files (`AGENTS.md`, `rules/*.md`, `skills/**`, `.pipeline/ACTIVE_RULES_BUNDLE.md`, `.pipeline/constitution.md`) are prompt instructions, not product features; fabricating `fs::read_to_string(...).contains(...)` substring tests in product crates to assert prompt wording is strictly forbidden.
 - Code written before its corresponding failing test must be deleted and re-implemented after the test.
 - Never skip the "confirm it fails" step -- a test that passes before implementation is not a valid driving test.
 - **A compile error is not a RED phase.** A test that does not compile has not run, so it evidences nothing: a correctly-failing test and a broken one are indistinguishable. RED means an executed test failing on an assertion, with the failure message recorded.
