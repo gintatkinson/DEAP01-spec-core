@@ -6,7 +6,7 @@
 
 ## Required reads
 
-1. **Agent operating rules** (root `AGENTS.md`; `.agents/AGENTS.md` is an optional alias, matching Check 14 in `crates/deap-core/src/workspace.rs`) -- project-scoped agent rules, including the **Strict Planning Gate** that governs when file writes are permitted. Read this FIRST, before the constitution. It states the strictest authorization rule in the repository, and omitting it leads agents to act on weaker rules found elsewhere.
+1. **Agent operating rules** (root `AGENTS.md`; `.agents/AGENTS.md` is an optional alias) -- project-scoped agent rules, including the **Strict Planning Gate** that governs when file writes are permitted. Read this FIRST, before the constitution. It states the strictest authorization rule in the repository, and omitting it leads agents to act on weaker rules found elsewhere.
 2. **Functional constitution** (located at the path resolved from configuration, e.g., `.pipeline/constitution.md`) -- domain rules, spec standards, agent behavior, quality gates. Read this before ANY task (specification or implementation).
 3. **Implementation profile** (located under the profiles directory, e.g., `.pipeline/profiles/<platform>.md`) -- platform-specific coding standards, testing mandates, build config. Read this ONLY when implementing features, not during spec generation.
 
@@ -24,7 +24,7 @@
 ## Silent Once-Per-Session Lazy Loading (Zero Receipt Ceremony)
 
 - **Zero Startup Ceremony on Conversational/Read-Only Turns**: Agents MUST NOT interrupt or halt a user's prompt to run startup ceremonies, MUST NOT re-initialize across turns, and MUST NOT emit session initialization receipt tables or `"Ready for instructions"` prompts unless explicitly requested.
-- **Once-Per-Session Pre-Plan Context Load**: Before writing an `implementation_plan.md` or executing a pipeline specification/implementation task for the first time in a session, the coordinator silently verifies `.pipeline/upstream/` presence, `git status --short --branch`, `.pipeline/constitution.md`, and `.pipeline/ACTIVE_RULES_BUNDLE.md` at most once per session (never re-reading files already present in conversation context).
+- **Once-Per-Session Pipeline Context Load**: Before executing a pipeline specification or feature-implementation skill workflow for the first time in a session, the coordinator silently verifies `.pipeline/upstream/` presence, `git status --short --branch`, `.pipeline/constitution.md`, and `.pipeline/ACTIVE_RULES_BUNDLE.md` at most once per session (never re-reading files already present in conversation context, and skipping `.pipeline/constitution.md` / `.pipeline/ACTIVE_RULES_BUNDLE.md` during diagnostic/read-only turns and bounded surgical edits).
 
 ## Why
 

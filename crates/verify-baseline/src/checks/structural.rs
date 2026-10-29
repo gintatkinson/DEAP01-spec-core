@@ -3061,21 +3061,15 @@ pub fn check_blueprint_grounding(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut md_files = Vec::new();
 
     if blueprints_dir.is_dir() {
-        for bp in CanonicalArchitectureBlueprint::ALL {
-            if !is_upstream_compiler(repo_root)
-                && matches!(
-                    bp,
-                    CanonicalArchitectureBlueprint::SysmlSsotBidirectionalSynchronizationArchitecture
-                )
-            {
-                continue;
-            }
-            let bp_path = blueprints_dir.join(bp.as_str());
-            if !bp_path.is_file() {
-                violations.push(format!(
-                    "Missing canonical architecture blueprint: docs/architecture/blueprints/{}",
-                    bp.as_str()
-                ));
+        if is_upstream_compiler(repo_root) {
+            for bp in CanonicalArchitectureBlueprint::ALL {
+                let bp_path = blueprints_dir.join(bp.as_str());
+                if !bp_path.is_file() {
+                    violations.push(format!(
+                        "Missing canonical architecture blueprint: docs/architecture/blueprints/{}",
+                        bp.as_str()
+                    ));
+                }
             }
         }
 
@@ -4669,6 +4663,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     #[test]
     fn test_check_37_rejects_fictional_crates_and_nonexistent_paths() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c37_mutations")?;
+        fs::create_dir_all(tmp.path.join(".pipeline").join("upstream"))?;
         let bp_dir = tmp.path.join("docs").join("architecture").join("blueprints");
         fs::create_dir_all(&bp_dir)?;
         fs::create_dir_all(tmp.path.join("crates").join("deap-core").join("src"))?;
@@ -4875,6 +4870,76 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             clean_res.is_ok(),
             "Valid docs/designs/blueprint-01-core.md must pass Check 37: {:?}",
             clean_res.err()
+        );
+        Ok(())
+    }
+
+    /// Verifies that Check 37 does not require upstream `CanonicalArchitectureBlueprint` files in downstream workspaces when `docs/architecture/blueprints/` exists (refs #743).
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, ECSS-E-ST-40C Single Source of Truth isolation, and DEAP-BLUEPRINT-POLYREPO-013
+    /// tier boundaries (`REQ-CHECK-37-DOWNSTREAM-CANONICAL-EXEMPTION`, refs #743). Prevents a contradictory fail-closed
+    /// deadlock between Check 12 (which forbids `.md` files in downstream `docs/architecture/blueprints/`) and Check 37
+    /// when `docs/architecture/blueprints/` exists as an empty or `.gitkeep` directory in a downstream repository.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - For any downstream workspace (`!is_upstream_compiler(repo_root)`) where `docs/architecture/blueprints/` exists
+    ///   without upstream `.md` files (e.g., containing `.gitkeep`), `check_blueprint_grounding` does not emit
+    ///   `"Missing canonical architecture blueprint"` diagnostics.
+    /// - Grounding checks (`scan_blueprint_markdown_file`) remain fail-closed on any `.md` blueprint present under
+    ///   `docs/designs/blueprint-*.md` or `docs/architecture/blueprints/`.
+    ///
+    /// ## 3. Preconditions
+    /// Temporary test directory is writable, lacks `.pipeline/upstream`, and contains `docs/architecture/blueprints/.gitkeep`.
+    ///
+    /// ## 4. Postconditions
+    /// Returns `Ok(())` after verifying clean acceptance on valid downstream blueprints and fail-closed rejection on ungrounded crate references.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) bounded fixture file count and byte size. Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Fails the test if Check 37 demands upstream canonical blueprints in a downstream fixture or fails open on ungrounded crate paths.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-37-DOWNSTREAM-CANONICAL-EXEMPTION].
+    #[test]
+    fn test_check_37_exempts_downstream_from_canonical_architecture_blueprints() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c37_downstream_blueprints_dir")?;
+        let bp_dir = tmp.path.join("docs").join("architecture").join("blueprints");
+        fs::create_dir_all(&bp_dir)?;
+        File::create(bp_dir.join(".gitkeep"))?;
+
+        let designs_dir = tmp.path.join("docs").join("designs");
+        fs::create_dir_all(&designs_dir)?;
+        let design_bp = designs_dir.join("blueprint-01-core.md");
+        {
+            let mut f = File::create(&design_bp)?;
+            writeln!(
+                f,
+                "# Design Blueprint 01\nPure downstream domain design specification."
+            )?;
+        }
+
+        let clean_res = check_blueprint_grounding(&tmp.path);
+        assert!(
+            clean_res.is_ok(),
+            "Downstream workspace with docs/architecture/blueprints/.gitkeep must not require upstream canonical blueprints (refs #743): {:?}",
+            clean_res.err()
+        );
+
+        {
+            let mut f = File::create(&design_bp)?;
+            writeln!(
+                f,
+                "# Design Blueprint 01\nReferences fictional `crates/deap-parser/src/lib.rs`."
+            )?;
+        }
+
+        let err_res = check_blueprint_grounding(&tmp.path);
+        assert!(
+            err_res.is_err(),
+            "Check 37 must still fail closed on ungrounded crate paths in downstream design blueprints"
         );
         Ok(())
     }
