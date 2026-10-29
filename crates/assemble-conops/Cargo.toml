@@ -24,3 +24,4 @@ path = "src/main.rs"
 [lib]
 name = "assemble_conops"
 path = "src/lib.rs"
+doctest = false

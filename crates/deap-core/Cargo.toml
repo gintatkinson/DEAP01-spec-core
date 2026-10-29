@@ -10,6 +10,9 @@ walkdir = "2.4"
 chrono = "0.4"
 uuid = { version = "1.6", features = ["v4"] }
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 

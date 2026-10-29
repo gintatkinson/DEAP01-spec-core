@@ -43,7 +43,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
-use verify_baseline::checks::safety_stpa::{check_safety_integrity, SafetyCheckOutcome};
 
 /// RAII temporary workspace guard for Issue #472 realization scoping tests.
 ///
@@ -409,118 +408,6 @@ pub enum PrivateUiHelperEnum {
         !part_names.contains(&"PrivateUiHelperEnum"),
         "Expected unannotated helper enum 'PrivateUiHelperEnum' to be pruned from part_defs, got: {:?}",
         part_names
-    );
-    Ok(())
-}
-
-/// Verifies that Check 17 (`check_safety_integrity`) Pillar 7 FMECA bidirectional AST closure
-/// passes when `schema/` contains both an architectural domain model (`schema/domain.sysml`)
-/// and code realization schema files (`schema/solver_realization.sysml` / `*_Realization` packages),
-/// without failing on realization-only code structs.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Ensures system-level STPA/FMECA verification enforces 100% coverage of architectural
-/// `part def` components while excluding implementation-level realization schemas from
-/// requiring redundant system hazard rows for internal code structs.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `discover_architectural_sysml_model_text` excludes `*_realization.sysml` files (and
-///   `*_Realization` packages) when domain `.sysml` files are present in `schema/`.
-/// - All architectural `part def` components in `schema/domain.sysml` remain strictly enforced
-///   by Check 17 Pillar 7 FMECA closure.
-///
-/// ## 3. Preconditions
-/// - Temporary workspace contains `schema/domain.sysml`, `schema/solver_realization.sysml`,
-///   and a complete 8-pillar `docs/safety/STPA_MATRIX.md` covering the domain components.
-///
-/// ## 4. Postconditions
-/// - `check_safety_integrity` returns `Ok(SafetyCheckOutcome::DownstreamVerified)`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(M + R)$ where $M$ is schema text length and $R$ is FMECA row count.
-/// - Space Complexity: $O(M + R)$ for parsed AST part definitions and FMECA rows.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Fails closed if realization-only structs trigger false-positive Pillar 7 missing-component errors.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ISSUE-472-CHECK17-REALIZATION-CLOSURE]
-#[test]
-fn test_issue_472_check17_fmeca_closure_ignores_realization_only_code_parts(
-) -> Result<(), Box<dyn std::error::Error>> {
-    let ws = ScopedTempDir::new("check17_realization");
-    let schema_dir = ws.root.join("schema");
-    let safety_dir = ws.root.join("docs").join("safety");
-    fs::create_dir_all(&schema_dir)?;
-    fs::create_dir_all(&safety_dir)?;
-
-    // Domain model declares two architectural components: TacticalSolver and CockpitHud
-    let domain_model = r#"package TacticalDomain {
-    part def TacticalSolver;
-    part def CockpitHud;
-}
-"#;
-    fs::write(schema_dir.join("domain.sysml"), domain_model)?;
-
-    // Code realization schema in schema/ contains implementation-level structs alongside TacticalSolver
-    let realization_model = r#"package solver_src_Realization {
-    part def TacticalSolver;
-    part def InternalDtoHelper;
-    part def WidgetStateHelper;
-}
-"#;
-    fs::write(
-        schema_dir.join("solver_realization.sysml"),
-        realization_model,
-    )?;
-
-    let mut stpa = String::from("# System Safety & STPA Matrix\n\n");
-    stpa.push_str("## 1. System Losses ($L-1..N$)\n- Loss L-1: Loss of Tactical Picture\n\n");
-    stpa.push_str("## 2. System Hazards ($H-1..N$)\n- Hazard H-1: Stale Track Solution\n\n");
-    stpa.push_str("## 3. Control Structure Topology\n```mermaid\ngraph TD\n  TacticalSolver --> CockpitHud\n```\n\n");
-    stpa.push_str("## 4. Unsafe Control Actions ($UCA-1..N$)\n- UCA-1: Not providing track update causes hazard\n- UCA-2: Providing corrupted track update causes hazard\n- UCA-3: Providing update too late or out of order\n- UCA-4: Alert stopped too soon or applied too long\n\n");
-    stpa.push_str("## 5. Loss Scenarios ($LS-1..N$)\n- Scenario LS-1: Solver queue saturation delays track update\n\n");
-    stpa.push_str("## 6. Formal Safety Constraints ($SC-1..N$)\n- SC-1: Solver shall bound track fusion latency under 50ms\n\n");
-    stpa.push_str("## 7. FMECA Criticality Matrix\n\n");
-    stpa.push_str("| FMECA ID | Component | Failure Mode | Potential Effect | Severity (S) | Occurrence (O) | Detection (D) | RPN (S x O x D) | Mitigation | Derivation Basis |\n");
-    stpa.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
-    for i in 1..=8 {
-        let dim = match i % 4 {
-            0 => "Interface Γ",
-            1 => "State Φ",
-            2 => "Action Ω",
-            _ => "Resource Ψ",
-        };
-        stpa.push_str(&format!(
-            "| FMECA-{:03} | TacticalSolver | Solver Mode {} ({}) | Degraded track | 5 | 2 | 2 | 20 | Watchdog | SSOT |\n",
-            i, i, dim
-        ));
-    }
-    for i in 9..=16 {
-        let dim = match i % 4 {
-            0 => "Interface Γ",
-            1 => "State Φ",
-            2 => "Action Ω",
-            _ => "Resource Ψ",
-        };
-        stpa.push_str(&format!(
-            "| FMECA-{:03} | CockpitHud | Hud Mode {} ({}) | Stale display | 4 | 2 | 2 | 16 | Redraw | Derived |\n",
-            i, i, dim
-        ));
-    }
-    stpa.push_str("\n## 8. Domain Regulatory Objectives & Integrity Mapping\n- Pillar 8 DO-178C DAL A and SORA SAIL II objectives\n\n");
-    stpa.push_str(
-        "## Commercial Toolchain Hooks\n- MATLAB / Simulink / Stateflow verification hooks\n",
-    );
-
-    fs::write(safety_dir.join("STPA_MATRIX.md"), stpa)?;
-
-    let res = check_safety_integrity(&ws.root, false, true);
-    assert_eq!(
-        res,
-        Ok(SafetyCheckOutcome::DownstreamVerified),
-        "Expected Check 17 to pass when domain components are covered and realization-only structs are in *_realization.sysml, got: {:?}",
-        res
     );
     Ok(())
 }

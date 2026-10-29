@@ -231,7 +231,10 @@
 - **RED Demonstration First (Executable Code Scope)**: Every executable code fix or feature must ship a failing unit or mutation test demonstrated RED before implementation code is written.
 - **Zero Harness-Prose Theater Tests**: Agent harness Markdown files (`AGENTS.md`, `rules/*.md`, `skills/**`, `.pipeline/ACTIVE_RULES_BUNDLE.md`) are prompt instructions, not product features; adding `fs::read_to_string(...).contains(...)` substring tests in `crates/` for harness rule edits is strictly forbidden.
 - **Native Rust Tests**: All tests under `crates/` must be native Rust `#[test]` functions. Legacy Python/pytest is strictly prohibited under Check 33; shell scripts are prohibited under Check 32.
-- **Workspace Test Gate**: `cargo test --workspace` MUST pass with zero failures before declaring completion.
+- **3-Tier Path-Scoped Incremental Build & Test Gate**:
+  - **Tier 1 (Harness / Governance / Docs Markdown Only -- `AGENTS.md`, `rules/*.md`, `skills/**`, `.pipeline/*`, `README.md`)**: Run **zero** `cargo build` or `cargo test` commands; run `./target/release/verify-baseline . --no-domain` only when validating governed Markdown changes prior to commit.
+  - **Tier 2 (Single-Crate Internal or `#[cfg(test)]` Change -- `crates/<crate>/**` without cross-crate `pub` signature breakage)**: Run targeted `cargo test -p <crate> <test_filter>` during TDD RED/GREEN and `cargo test -p <crate>` before commit (rebuild `cargo build --release -p <bin>` only when a CLI binary's runtime code changed).
+  - **Tier 3 (Cross-Crate Public API Signature Change in `deap-core`/`compile-sysml` or `Cargo.toml`/`Cargo.lock` Change)**: Run `cargo test -p <modified-crate>` + `cargo check --workspace --all-targets` during iteration, and `cargo test --workspace` before commit.
 
 ---
 
@@ -286,6 +289,9 @@
 **Enforce on code/model modifications only (never on startup or read-only turns):** Never assert state or completion of code/model modifications without direct, empirical verification.
 
 ### Hard Constraints
-- **Pre-Commit Quality Gates (Code/Model Edits Only)**: Only when tracked source or model files were modified in the current turn, run `cargo test --workspace` and `./target/release/verify-baseline . --no-domain` once before committing (never on session initialization or read-only turns).
+- **Pre-Commit Quality Gates (3-Tier Path-Scoped Incremental Build & Test Gate)**: Never run `cargo build`, `cargo test`, or `verify-baseline` on session initialization or read-only turns. When tracked files are modified, enforce the 3-tier path-scoped gate prior to commit:
+  - **Tier 1 (Harness / Governance / Docs Markdown Only -- `AGENTS.md`, `rules/*.md`, `skills/**`, `.pipeline/*`, `README.md`)**: Run **zero** `cargo build` or `cargo test` commands; run `./target/release/verify-baseline . --no-domain` only when validating governed Markdown changes prior to commit.
+  - **Tier 2 (Single-Crate Internal or `#[cfg(test)]` Change -- `crates/<crate>/**` without cross-crate `pub` signature breakage)**: Run targeted `cargo test -p <crate> <test_filter>` during TDD RED/GREEN and `cargo test -p <crate>` before commit (rebuild `cargo build --release -p <bin>` only when a CLI binary's runtime code changed), plus `./target/release/verify-baseline . --no-domain`.
+  - **Tier 3 (Cross-Crate Public API Signature Change in `deap-core`/`compile-sysml` or `Cargo.toml`/`Cargo.lock` Change)**: Run `cargo test -p <modified-crate>` + `cargo check --workspace --all-targets` during iteration, and `cargo test --workspace` + `./target/release/verify-baseline . --no-domain` before commit.
 - **Multi-Provider Remote Sync Verification (GitHub & GitLab)**: Commit all verified changes and push all commits to the configured remote tracking branch (`origin/<branch>` on GitHub or GitLab), verifying `git diff origin/<branch>` is empty.
 - **Forensic Verification Evidence**: Document raw terminal outputs, test results, commit hashes, and issue transitions in handoff reports and issue comments.

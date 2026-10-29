@@ -318,7 +318,6 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
- "verify-baseline",
  "walkdir",
 ]
 

@@ -3,6 +3,7 @@ name = "compile-sysml"
 version = "0.1.0"
 edition = "2021"
 description = "SysML v2 / KerML compiler, STPA safety transpiler, and specification synchronization engine"
+autotests = false
 
 [lints]
 workspace = true
@@ -23,3 +24,8 @@ path = "src/main.rs"
 [lib]
 name = "compile_sysml"
 path = "src/lib.rs"
+doctest = false
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

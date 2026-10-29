@@ -23,3 +23,12 @@ dbg_macro = "forbid"
 todo = "forbid"
 unimplemented = "forbid"
 
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.test]
+debug = "line-tables-only"
+

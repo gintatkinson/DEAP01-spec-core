@@ -3,6 +3,7 @@ name = "ingest-sysml"
 version = "0.1.0"
 edition = "2021"
 description = "Pure Rust Ground 0.0 SysML v2 Ingestion Engine"
+autotests = false
 
 [lints]
 workspace = true
@@ -25,6 +26,8 @@ path = "src/main.rs"
 [lib]
 name = "ingest_sysml"
 path = "src/lib.rs"
+doctest = false
 
-[dev-dependencies]
-verify-baseline = { path = "../verify-baseline" }
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

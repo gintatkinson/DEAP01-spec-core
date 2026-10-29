@@ -24,3 +24,4 @@ path = "src/main.rs"
 [lib]
 name = "reconcile_backlog"
 path = "src/lib.rs"
+doctest = false

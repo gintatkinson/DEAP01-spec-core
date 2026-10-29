@@ -1,4 +1,3 @@
-#![cfg_attr(test, allow(clippy::field_reassign_with_default))]
 //! Integration tests for deterministic Dart solver bridge codegen (`flutter_codegen.rs`).
 //!
 //! ## 1. Safety Intent & Regulatory Scope
