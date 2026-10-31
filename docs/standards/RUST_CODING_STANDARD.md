@@ -4,7 +4,7 @@
 | :--- | :--- |
 | Standard ID | `DEAP-RUST-CODING-STANDARD` |
 | Version | `2.0` |
-| Status | `Draft for review` |
+| Status | `Active / Normative` |
 | Supersedes | `1.0` |
 | Applies to | All Rust code in DEAP upstream compiler and downstream application repositories |
 | Target assurance | DO-178C DAL A readiness, DO-330 TQL-4 readiness, ARINC 653 partitioning readiness, ARINC 661 CDS boundary readiness |
@@ -49,50 +49,61 @@ If this standard and the current verifier disagree, the standard records the con
 
 ## 4. Documentation and Traceability: Eliminate Boilerplate Noise
 
-The v1.0 rule that every item must carry a 7-section docstring is rejected. It creates mechanical filler, obscures control flow, and is not acceptable DO-178C traceability.
+The v1.0 rule that every item must carry a 7-section docstring is rejected. It creates mechanical filler, obscures control flow, and is not acceptable DO-178C traceability. All production Rust items outside `#[cfg(test)]` follow the normative Tiered Documentation Model below.
 
-### 4.1 Documentation tiers
+### 4.1 Tiered Documentation Model
 
-**Tier A: Full 7-section Rustdoc**
+**Tier A: Public API and Module Surfaces**
 
-Required for:
+Applies to:
 
-- public safety-relevant domain types and functions;
-- FFI exports and C-ABI boundary types;
-- safety state machines, RTA monitors, and safety constraints;
-- functions that implement a requirement or a SysML action, state, or constraint;
-- functions with non-trivial failure modes or resource bounds.
+- module headers (`//!`);
+- `pub struct`, `pub enum`, and `pub trait`;
+- top-level `pub fn` and inherent `pub fn` methods (`impl Type { pub fn ... }`).
 
-The 7 sections are exactly:
+Every Tier A item must carry **either** the Full 7-Section Rustdoc **or** the Concise 4-Block Contract:
 
-1. `## 1. Safety Intent & Regulatory Scope`
-2. `## 2. Invariants & Mathematical Properties`
-3. `## 3. Preconditions`
-4. `## 4. Postconditions`
-5. `## 5. Algorithmic Complexity Bounds`
-6. `## 6. Failure Modes & Fault Tolerance`
-7. `## 7. Realization & Traceability`
+1. **Option A1 -- Full 7-Section Rustdoc** (recommended for safety-critical domain types and functions, FFI exports and C-ABI boundary types, safety state machines, RTA monitors, and complex SysML action/state/constraint realizations):
+   - `## 1. Safety Intent & Regulatory Scope`
+   - `## 2. Invariants & Mathematical Properties`
+   - `## 3. Preconditions`
+   - `## 4. Postconditions`
+   - `## 5. Algorithmic Complexity Bounds`
+   - `## 6. Failure Modes & Fault Tolerance`
+   - `## 7. Realization & Traceability` (must include `Realises: [REQ-ID]`)
+2. **Option A2 -- Concise 4-Block Contract** (permitted on any Tier A module header, public type, trait, constructor, accessor, or inherent `pub fn` where 7-section prose would add boilerplate noise):
+   - 1-sentence non-placeholder summary of the item's purpose;
+   - `Safety & Traceability: Realises: [REQ-ID]`;
+   - `Contract:` (preconditions, postconditions, and key invariants);
+   - `Bounds & Faults:` (resource/complexity bounds and deterministic error or fault behavior).
 
-**Tier B: Concise contract documentation**
+**Tier B/C: Internal Helpers, Private Types, and Trait Implementations**
 
-Required for public non-safety helpers and simple public constructors. It must state purpose, preconditions, postconditions, failure behavior, and traceability if one exists. It does not need the 7-section template.
+Applies to:
 
-**Tier C: Minimal or no documentation**
+- private `fn` and `pub(crate)` / `pub(super)` internal helper functions and methods;
+- private `struct` / `enum` and `pub(crate)` / `pub(super)` internal types;
+- trait implementation methods (`impl Trait for Type`, including standard traits such as `Default`, `Display`, `From`, `TryFrom`, `Deref`, and `Error`).
 
-Applies to private helpers, trivial getters and setters, derived `Default`/`Clone`/`Debug` implementations, and test helpers. A one-line doc is sufficient. No fabricated 7-section boilerplate is permitted.
+Every Tier B/C item outside `#[cfg(test)]` must carry:
+
+- a concise 1-3 line non-placeholder `///` summary stating purpose and any key invariant or fault behavior; and
+- `/// Realises: [REQ-ID]`.
+
+No 28-line 7-section boilerplate is required or permitted on private helpers, crate-internal items, or trait implementations. Test functions and helpers inside `#[cfg(test)]` require only clear, non-placeholder test naming or a 1-line `///` summary.
 
 ### 4.2 Traceability rules
 
-- Every traceability tag must point to a real requirement, SysML AST node, or approved design artifact.
-- If no traceability exists, state that explicitly. Do not invent an ID.
+- Every `Realises: [REQ-ID]` tag must point to a real requirement, SysML AST node, or approved design artifact.
+- If no upstream domain requirement applies to a foundational utility, cite the governing architecture/compiler requirement or approved design artifact explicitly. Never invent a fake ID.
 - Do not copy generic boilerplate such as "O(M(2)) bounded over input/member dimension" onto trivial code.
 - Do not duplicate docblocks.
 - Comments must explain why, safety intent, invariants, and failure behavior. They must not restate the code.
 - Comments and Rustdoc are excluded from the 500 SLOC limit. Do not reduce documentation to satisfy a line count.
 
-### 4.3 Verifier conflict
+### 4.3 Verifier alignment (Check 36)
 
-Check 36 currently enforces a 7-section docstring on every item. That rule is the direct cause of the boilerplate noise floor. The verifier must be upgraded to a tier-aware AST check based on visibility, safety annotation, requirement linkage, and complexity. Until that upgrade lands, do not add mechanical filler. Record the conflict in the issue and use the tiered rule above.
+Check 36 previously enforced a 7-section docstring on every item, directly causing the boilerplate noise floor. Check 36 must enforce the Tiered Documentation Model above via tier-aware AST inspection: accepting either the 7-section Rustdoc or the 4-Block Contract on Tier A items, and requiring a concise non-placeholder summary plus `Realises: [REQ-ID]` on Tier B/C items without forcing 7-section templates onto private helpers or `impl Trait for Type` methods. Until and after that verifier upgrade lands, mechanical filler remains forbidden.
 
 ## 5. Recursion, Stack, and Resource Determinism
 
