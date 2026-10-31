@@ -6,14 +6,17 @@
 | Version | `2.0` |
 | Status | `Active / Normative` |
 | Supersedes | `1.0` |
-| Applies to | All Rust code in DEAP upstream compiler and downstream application repositories |
+| Applies to | All Rust code in DEAP Tier-0 DO-330 offline compiler/verification crates and Track B discrete-time Rust simulation/FFI crates |
 | Target assurance | DO-178C DAL A readiness, DO-330 TQL-4 readiness, ARINC 653 partitioning readiness, ARINC 661 CDS boundary readiness |
+| Companion standards | [DART_FLUTTER_CODING_STANDARD.md](./DART_FLUTTER_CODING_STANDARD.md), [README.md](./README.md) |
 | Owner | DEAP Systems Engineering |
 | Review requirement | Fresh reviewer subagent and explicit user approval before adoption |
 
 ## 1. Purpose and Scope
 
-This standard defines mandatory Rust coding, design, testing, resource, and evidence rules for DEAP repositories. It is written for safety-critical avionics readiness without turning the codebase into an unreadable documentation or abstraction maze.
+This standard defines mandatory Rust coding, design, testing, resource, and evidence rules for DEAP repositories -- specifically Tier-0 DO-330 offline compiler and verification crates and Track B discrete-time Rust simulation engines and C-ABI adapters. It is written for safety-critical avionics readiness without turning the codebase into an unreadable documentation or abstraction maze.
+
+Client and operator console HMI targets are governed separately; see [DART_FLUTTER_CODING_STANDARD.md](./DART_FLUTTER_CODING_STANDARD.md) for Dart and Flutter client/HMI rules and [README.md](./README.md) for the cross-language certification and assurance index.
 
 This standard is subordinate to the project constitution and platform profiles. If a stricter constitutional, regulatory, or platform rule applies, the stricter rule wins. Conflicts must be resolved by an approved plan, never silently.
 
@@ -193,8 +196,8 @@ Unbounded recursion is forbidden in safety-critical paths.
 - ARINC 661 CDS/UA boundary:
   - explicit display data model and port contract;
   - read-only snapshot pages and bounded command ring buffers;
-  - no UI-induced corruption of the solver;
-  - 60 FPS frame budget and fault isolation evidence;
+  - no client-induced corruption of the Rust solver across the C-ABI boundary;
+  - non-blocking snapshot publication within the `16.67 ms` (60 FPS) display cycle and fault isolation evidence;
   - end-to-end harness tests, not design statements alone.
 - FFI and partitioning claims require evidence. A design document is not evidence.
 
@@ -261,21 +264,16 @@ cargo fmt --check
 ./target/release/verify-baseline . --no-domain
 ```
 
-For the C-ABI adapter:
+For downstream Track B C-ABI FFI adapter crates:
 
 ```bash
-CARGO_TARGET_DIR=target cargo test --manifest-path ffi/cuas-coa-engine-ffi/Cargo.toml
-CARGO_TARGET_DIR=target cargo clippy --manifest-path ffi/cuas-coa-engine-ffi/Cargo.toml --all-targets -- -D warnings
-CARGO_TARGET_DIR=target cargo fmt --check --manifest-path ffi/cuas-coa-engine-ffi/Cargo.toml
-CARGO_TARGET_DIR=target cargo build --release --manifest-path ffi/cuas-coa-engine-ffi/Cargo.toml
+CARGO_TARGET_DIR=target cargo test --manifest-path ffi/<engine-ffi-crate>/Cargo.toml
+CARGO_TARGET_DIR=target cargo clippy --manifest-path ffi/<engine-ffi-crate>/Cargo.toml --all-targets -- -D warnings
+CARGO_TARGET_DIR=target cargo fmt --check --manifest-path ffi/<engine-ffi-crate>/Cargo.toml
+CARGO_TARGET_DIR=target cargo build --release --manifest-path ffi/<engine-ffi-crate>/Cargo.toml
 ```
 
-For Flutter paths:
-
-```bash
-cd app_flutter && flutter analyze
-cd app_flutter && flutter test
-```
+Client and operator console HMI verification gates are defined in [DART_FLUTTER_CODING_STANDARD.md](./DART_FLUTTER_CODING_STANDARD.md).
 
 Enforcement must be AST-based or token-based. Substring scanners are not acceptable for code purity or documentation quality. A gate failure blocks the issue. Do not weaken the gate or hide the failure.
 
