@@ -82,8 +82,15 @@ pub fn detect_format(schema_path: &str, content: &str) -> Result<String, String>
     let has_table_header = content.lines().any(|line| {
         if line.contains('|') {
             const KEYWORDS: &[&str] = &[
-                "component", "part", "bom", "port", "signal", "parameter", "interface",
-                "property", "attribute",
+                "component",
+                "part",
+                "bom",
+                "port",
+                "signal",
+                "parameter",
+                "interface",
+                "property",
+                "attribute",
             ];
             line.split('|').any(|cell| {
                 let cell_clean = cell.trim().to_ascii_lowercase();
@@ -108,7 +115,9 @@ pub fn detect_format(schema_path: &str, content: &str) -> Result<String, String>
                     let inner = trimmed.trim_matches('|');
                     if !inner.is_empty()
                         && inner.contains('-')
-                        && inner.chars().all(|c| c == '-' || c == ':' || c == '|' || c.is_whitespace())
+                        && inner
+                            .chars()
+                            .all(|c| c == '-' || c == ':' || c == '|' || c.is_whitespace())
                     {
                         found = true;
                         break;
@@ -177,7 +186,8 @@ pub fn detect_format(schema_path: &str, content: &str) -> Result<String, String>
     {
         return Ok("yang".to_string());
     }
-    if content.contains("module ") || content.contains("interface ") || content.contains("struct ") {
+    if content.contains("module ") || content.contains("interface ") || content.contains("struct ")
+    {
         return Ok("idl".to_string());
     }
     if content.contains("<AUTOSAR") || content.contains("<AR-PACKAGE") {
@@ -362,11 +372,8 @@ pub fn discover_schema_targets(
 
     let mut last_result = ("unknown".to_string(), Vec::new());
     for candidate in [Path::new("schema"), Path::new("docs/designs")] {
-        let (fmt, files) = discover_schema_targets_in_dir(
-            candidate,
-            normalized_hint.as_deref(),
-            is_explicit,
-        )?;
+        let (fmt, files) =
+            discover_schema_targets_in_dir(candidate, normalized_hint.as_deref(), is_explicit)?;
         if !files.is_empty() {
             return Ok((fmt, files));
         }
@@ -457,8 +464,9 @@ fn discover_schema_targets_in_dir(
         matching_files.retain(|p| p.file_name().and_then(|s| s.to_str()) != Some("README.md"));
 
         if canonical_fmt == "sysml" {
-            let (non_output, output): (Vec<_>, Vec<_>) =
-                matching_files.into_iter().partition(|p| !is_output_sysml(p));
+            let (non_output, output): (Vec<_>, Vec<_>) = matching_files
+                .into_iter()
+                .partition(|p| !is_output_sysml(p));
             matching_files = if !non_output.is_empty() {
                 non_output
             } else {
@@ -614,7 +622,10 @@ mod tests {
         assert_eq!(detect_format("interface.yang", "").as_deref(), Ok("yang"));
         assert_eq!(detect_format("interface.idl", "").as_deref(), Ok("idl"));
         assert_eq!(detect_format("system.arxml", "").as_deref(), Ok("autosar"));
-        assert_eq!(detect_format("messages.proto", "").as_deref(), Ok("protobuf"));
+        assert_eq!(
+            detect_format("messages.proto", "").as_deref(),
+            Ok("protobuf")
+        );
         assert_eq!(detect_format("api.json", "").as_deref(), Ok("openapi"));
         assert_eq!(detect_format("api.yaml", "").as_deref(), Ok("openapi"));
         assert_eq!(detect_format("doc.pdf", "").as_deref(), Ok("raw"));
@@ -623,8 +634,11 @@ mod tests {
     #[test]
     fn test_detect_format_by_content() {
         assert_eq!(
-            detect_format("unknown_file", "package Package_0 { part def Classifier_Alpha; }")
-                .as_deref(),
+            detect_format(
+                "unknown_file",
+                "package Package_0 { part def Classifier_Alpha; }"
+            )
+            .as_deref(),
             Ok("sysml")
         );
         assert_eq!(
@@ -632,18 +646,27 @@ mod tests {
             Ok("yang")
         );
         assert_eq!(
-            detect_format("unknown_file", "module Module_0 { struct Struct_1 { long id; }; };")
-                .as_deref(),
+            detect_format(
+                "unknown_file",
+                "module Module_0 { struct Struct_1 { long id; }; };"
+            )
+            .as_deref(),
             Ok("idl")
         );
         assert_eq!(
-            detect_format("unknown_file", "<AUTOSAR><AR-PACKAGE></AR-PACKAGE></AUTOSAR>")
-                .as_deref(),
+            detect_format(
+                "unknown_file",
+                "<AUTOSAR><AR-PACKAGE></AR-PACKAGE></AUTOSAR>"
+            )
+            .as_deref(),
             Ok("autosar")
         );
         assert_eq!(
-            detect_format("unknown_file", "syntax = \"proto3\"; message Msg_0 { int32 val = 1; }")
-                .as_deref(),
+            detect_format(
+                "unknown_file",
+                "syntax = \"proto3\"; message Msg_0 { int32 val = 1; }"
+            )
+            .as_deref(),
             Ok("protobuf")
         );
         assert_eq!(
@@ -651,7 +674,11 @@ mod tests {
             Ok("openapi")
         );
         assert_eq!(
-            detect_format("unknown_file", "| Component | Part Number |\n| --- | --- |\n| Classifier_Alpha | 1 |").as_deref(),
+            detect_format(
+                "unknown_file",
+                "| Component | Part Number |\n| --- | --- |\n| Classifier_Alpha | 1 |"
+            )
+            .as_deref(),
             Ok("markdown")
         );
     }
@@ -696,7 +723,8 @@ mod tests {
     }
 
     #[test]
-    fn test_discover_schema_targets_auto_markdown_not_masked_by_model_sysml() -> Result<(), String> {
+    fn test_discover_schema_targets_auto_markdown_not_masked_by_model_sysml() -> Result<(), String>
+    {
         let schema_dir = get_schema_dir();
         assert!(schema_dir.exists());
         if !schema_dir.join("REQ-0001.md").exists() {
@@ -848,7 +876,10 @@ mod tests {
         fs::write(nested.join("notes.txt"), "not a schema")?;
 
         let found = find_files_with_ext(&guard.0, "yang");
-        assert!(!found.is_empty(), "fixture guard: recursive discovery found zero .yang files");
+        assert!(
+            !found.is_empty(),
+            "fixture guard: recursive discovery found zero .yang files"
+        );
         assert_eq!(
             found,
             vec![sibling_file.clone(), top_file.clone(), nested_file.clone()],
@@ -857,7 +888,11 @@ mod tests {
 
         let (fmt, files) = discover_schema_targets(Some(&guard.0), Some("auto"))?;
         assert_eq!(fmt, "yang");
-        assert_eq!(files.len(), 3, "auto-discovery must include nested .yang files: {files:?}");
+        assert_eq!(
+            files.len(),
+            3,
+            "auto-discovery must include nested .yang files: {files:?}"
+        );
         assert!(files.contains(&nested_file));
 
         let (hint_fmt, hint_files) = discover_schema_targets(Some(&guard.0), Some("yang"))?;
@@ -889,11 +924,10 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-0001/find_files_with_ext_recursive]
     #[test]
-    fn test_find_files_with_ext_excludes_build_and_generated_backlog_dirs() -> Result<(), Box<dyn std::error::Error>> {
-        let root = std::env::temp_dir().join(format!(
-            ".deap_find_ext_exclusion_{}",
-            std::process::id()
-        ));
+    fn test_find_files_with_ext_excludes_build_and_generated_backlog_dirs(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let root =
+            std::env::temp_dir().join(format!(".deap_find_ext_exclusion_{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let guard = TempDirGuard(root.clone());
 

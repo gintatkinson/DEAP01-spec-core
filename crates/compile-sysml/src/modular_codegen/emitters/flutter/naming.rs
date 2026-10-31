@@ -133,7 +133,11 @@ pub fn split_ident_into_words(s: &str) -> Vec<String> {
                 current = String::new();
             }
         } else {
-            let prev = if i > 0 { chars.get(i.saturating_sub(1)).copied() } else { None };
+            let prev = if i > 0 {
+                chars.get(i.saturating_sub(1)).copied()
+            } else {
+                None
+            };
             let next = chars.get(i.saturating_add(1)).copied();
             if let Some(p) = prev {
                 let is_transition = (p.is_ascii_lowercase() && ch.is_ascii_uppercase())
@@ -342,11 +346,20 @@ pub fn format_display_name(s: &str) -> String {
 /// Realises: [REQ-FLUTTER-EXTRACT-BOUNDS]
 pub fn extract_bounds_from_doc(doc: Option<&str>) -> (Option<f64>, Option<f64>) {
     let Some(text) = doc else { return (None, None) };
-    let Some((_, after_open)) = text.split_once('[') else { return (None, None) };
-    let Some((inner, _)) = after_open.split_once(']') else { return (None, None) };
+    let Some((_, after_open)) = text.split_once('[') else {
+        return (None, None);
+    };
+    let Some((inner, _)) = after_open.split_once(']') else {
+        return (None, None);
+    };
     let mut parts = inner.split(',');
-    let (Some(first), Some(second)) = (parts.next(), parts.next()) else { return (None, None) };
-    match (first.trim().parse::<f64>().ok(), second.trim().parse::<f64>().ok()) {
+    let (Some(first), Some(second)) = (parts.next(), parts.next()) else {
+        return (None, None);
+    };
+    match (
+        first.trim().parse::<f64>().ok(),
+        second.trim().parse::<f64>().ok(),
+    ) {
         (Some(min_val), Some(max_val)) => (Some(min_val), Some(max_val)),
         _ => (None, None),
     }

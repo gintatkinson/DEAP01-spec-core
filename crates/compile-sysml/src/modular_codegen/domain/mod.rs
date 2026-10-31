@@ -35,7 +35,7 @@ pub mod module_graph;
 pub use bounds::{ModularityBounds, ModularityDiagnostic, ModularityErrorCode};
 pub use layer_role::LayerRole;
 pub use module_graph::{
-    CompilationUnit, DependencyEdge, GeneratedFileDigest, GeneratedTreeManifest,
-    HoistedPredicate, ModuleGraph, OutlinedActionPlan, OutlinedActionStage,
-    OutlinedStateHandler, OutlinedStateMachinePlan, UnitKind,
+    CompilationUnit, DependencyEdge, GeneratedFileDigest, GeneratedTreeManifest, HoistedPredicate,
+    ModuleGraph, OutlinedActionPlan, OutlinedActionStage, OutlinedStateHandler,
+    OutlinedStateMachinePlan, UnitKind,
 };

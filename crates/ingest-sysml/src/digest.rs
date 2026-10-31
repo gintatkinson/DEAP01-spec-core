@@ -20,10 +20,10 @@
 //! - **Deterministic Traversal**: Filesystem iteration is sorted lexicographically to guarantee
 //!   cross-platform bitwise determinism.
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 
 /// Canonical truncation and summarization tokens strictly prohibited in input ingestion streams.
 ///
@@ -271,7 +271,12 @@ pub fn parse_input_file(file_path: &Path) -> Result<(DigestFileEntry, Vec<u8>), 
     let mut structural_section_markers = Vec::new();
 
     const YANG_KEYWORDS: &[&str] = &[
-        "container", "list", "typedef", "identity", "grouping", "module",
+        "container",
+        "list",
+        "typedef",
+        "identity",
+        "grouping",
+        "module",
     ];
 
     for line in &lines {
@@ -308,7 +313,11 @@ pub fn parse_input_file(file_path: &Path) -> Result<(DigestFileEntry, Vec<u8>), 
         }
     }
 
-    let bounds = if total_lines > 0 { (1, total_lines) } else { (0, 0) };
+    let bounds = if total_lines > 0 {
+        (1, total_lines)
+    } else {
+        (0, 0)
+    };
 
     Ok((
         DigestFileEntry {

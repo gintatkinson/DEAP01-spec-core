@@ -240,13 +240,9 @@ pub fn has_concatenated_title_metadata(val: &str) -> bool {
                     if let Ok(slice) = std::str::from_utf8(sub) {
                         if is_iso_date(slice) {
                             let before_ok = i == 0
-                                || bytes
-                                    .get(i - 1)
-                                    .is_none_or(|b| !b.is_ascii_alphanumeric());
+                                || bytes.get(i - 1).is_none_or(|b| !b.is_ascii_alphanumeric());
                             let after_ok = i + 10 == bytes.len()
-                                || bytes
-                                    .get(i + 10)
-                                    .is_none_or(|b| !b.is_ascii_alphanumeric());
+                                || bytes.get(i + 10).is_none_or(|b| !b.is_ascii_alphanumeric());
                             if before_ok && after_ok {
                                 return true;
                             }
@@ -478,7 +474,8 @@ pub fn check_filename_anti_stutter(filename: &str) -> Option<String> {
                     }
                     if let Some(rem_slug) = slug.strip_prefix(p) {
                         let rem_clean = rem_slug.trim_start_matches(['_', '-']);
-                        let slug_digits = rem_clean.bytes().take_while(|b| b.is_ascii_digit()).count();
+                        let slug_digits =
+                            rem_clean.bytes().take_while(|b| b.is_ascii_digit()).count();
                         if slug_digits > 0 {
                             return Some(format!(
                                 "Specification filename contains stuttering prefix (e.g. 'UC-01-UC01'): '{}'",
@@ -528,11 +525,17 @@ pub fn normalize_title(title: &str) -> String {
 
     let lower = trimmed.to_ascii_lowercase();
     const PREFIX_KEYWORDS: &[&str] = &[
-        "user-story", "user story", "user_story",
-        "use-case", "use case", "use_case",
-        "feature", "feat",
+        "user-story",
+        "user story",
+        "user_story",
+        "use-case",
+        "use case",
+        "use_case",
+        "feature",
+        "feat",
         "epic",
-        "us", "uc",
+        "us",
+        "uc",
     ];
 
     let mut matched_len = 0;
@@ -560,7 +563,10 @@ pub fn normalize_title(title: &str) -> String {
             // Case B: optional [- ]* followed by \d+
             let mut temp_rem = rem;
             let mut temp_consumed = consumed;
-            while temp_rem.starts_with('-') || temp_rem.starts_with(' ') || temp_rem.starts_with('_') {
+            while temp_rem.starts_with('-')
+                || temp_rem.starts_with(' ')
+                || temp_rem.starts_with('_')
+            {
                 temp_rem = temp_rem.get(1..).unwrap_or("");
                 temp_consumed += 1;
             }
@@ -695,21 +701,21 @@ pub fn validate_metadata(
     }
 
     let get_field = |key: &str| -> Option<&str> {
-        doc.table_metadata
-            .get(key)
-            .map(|s| s.as_str())
-            .or_else(|| {
-                doc.frontmatter
-                    .as_ref()
-                    .and_then(|fm| fm.get(key).map(|s| s.as_str()))
-            })
+        doc.table_metadata.get(key).map(|s| s.as_str()).or_else(|| {
+            doc.frontmatter
+                .as_ref()
+                .and_then(|fm| fm.get(key).map(|s| s.as_str()))
+        })
     };
 
     // 3. Mandatory issue_id
     match get_field("issue_id") {
         Some(val) if !val.trim().is_empty() => {}
         _ => {
-            errors.push(format!("{}: Missing mandatory metadata field 'issue_id'.", rel_path));
+            errors.push(format!(
+                "{}: Missing mandatory metadata field 'issue_id'.",
+                rel_path
+            ));
         }
     }
 
@@ -717,7 +723,10 @@ pub fn validate_metadata(
     match get_field("type") {
         Some(val) if !val.trim().is_empty() => {}
         _ => {
-            errors.push(format!("{}: Missing mandatory metadata field 'type'.", rel_path));
+            errors.push(format!(
+                "{}: Missing mandatory metadata field 'type'.",
+                rel_path
+            ));
         }
     }
 
@@ -791,70 +800,103 @@ pub fn validate_metadata(
         match get_field("package") {
             Some(val) if !val.trim().is_empty() => {}
             _ => {
-                errors.push(format!("{}: Epic is missing mandatory 'package' metadata.", rel_path));
+                errors.push(format!(
+                    "{}: Epic is missing mandatory 'package' metadata.",
+                    rel_path
+                ));
             }
         }
         match get_field("subsystem") {
             Some(val) if !val.trim().is_empty() => {}
             _ => {
-                errors.push(format!("{}: Epic is missing mandatory 'subsystem' metadata.", rel_path));
+                errors.push(format!(
+                    "{}: Epic is missing mandatory 'subsystem' metadata.",
+                    rel_path
+                ));
             }
         }
     } else if norm_type.contains("feature") {
         match get_field("parent_epic") {
             Some(val) if !val.trim().is_empty() => {}
             _ => {
-                errors.push(format!("{}: Feature is missing mandatory 'parent_epic' metadata.", rel_path));
+                errors.push(format!(
+                    "{}: Feature is missing mandatory 'parent_epic' metadata.",
+                    rel_path
+                ));
             }
         }
         match get_field("interface_type") {
             Some(val) if !val.trim().is_empty() => {}
             _ => {
-                errors.push(format!("{}: Feature is missing mandatory 'interface_type' metadata.", rel_path));
+                errors.push(format!(
+                    "{}: Feature is missing mandatory 'interface_type' metadata.",
+                    rel_path
+                ));
             }
         }
         match get_field("schema_containers") {
             Some(val) if !val.trim().is_empty() => {}
             _ => {
-                errors.push(format!("{}: Feature is missing mandatory 'schema_containers' metadata.", rel_path));
+                errors.push(format!(
+                    "{}: Feature is missing mandatory 'schema_containers' metadata.",
+                    rel_path
+                ));
             }
         }
     } else if norm_type.contains("user_story") || norm_type.contains("user-story") {
         match get_field("parent_epic") {
             Some(val) if !val.trim().is_empty() => {}
             _ => {
-                errors.push(format!("{}: User story is missing mandatory 'parent_epic' metadata.", rel_path));
+                errors.push(format!(
+                    "{}: User story is missing mandatory 'parent_epic' metadata.",
+                    rel_path
+                ));
             }
         }
         match get_field("sysml_interaction") {
             Some(val) if !val.trim().is_empty() => {}
             _ => {
-                errors.push(format!("{}: User story is missing mandatory 'sysml_interaction' metadata.", rel_path));
+                errors.push(format!(
+                    "{}: User story is missing mandatory 'sysml_interaction' metadata.",
+                    rel_path
+                ));
             }
         }
         match get_field("sysml_test_case") {
             Some(val) if !val.trim().is_empty() => {}
             _ => {
-                errors.push(format!("{}: User story is missing mandatory 'sysml_test_case' metadata.", rel_path));
+                errors.push(format!(
+                    "{}: User story is missing mandatory 'sysml_test_case' metadata.",
+                    rel_path
+                ));
             }
         }
     } else if norm_type.contains("use_case") || norm_type.contains("use-case") {
         match get_field("primary_actor") {
             Some(val) if !val.trim().is_empty() => {}
             _ => {
-                errors.push(format!("{}: Use case is missing mandatory 'primary_actor' metadata.", rel_path));
+                errors.push(format!(
+                    "{}: Use case is missing mandatory 'primary_actor' metadata.",
+                    rel_path
+                ));
             }
         }
         match get_field("scope") {
             Some(val) if !val.trim().is_empty() => {}
             _ => {
-                errors.push(format!("{}: Use case is missing mandatory 'scope' metadata.", rel_path));
+                errors.push(format!(
+                    "{}: Use case is missing mandatory 'scope' metadata.",
+                    rel_path
+                ));
             }
         }
         match get_field("level") {
             Some(val) if !val.trim().is_empty() => {}
             _ => {
-                errors.push(format!("{}: Use case is missing mandatory 'level' metadata.", rel_path));
+                errors.push(format!(
+                    "{}: Use case is missing mandatory 'level' metadata.",
+                    rel_path
+                ));
             }
         }
     }
@@ -1047,9 +1089,9 @@ pub fn validate_filenames(spec_type: &str, filenames: &[&str], dir_rel: &str) ->
         let valid_prefix = !prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_alphabetic());
         let valid_ordinal = !ordinal.is_empty() && ordinal.chars().all(|c| c.is_ascii_digit());
         let valid_kebab = !kebab_name.is_empty()
-            && kebab_name
-                .split('-')
-                .all(|seg| !seg.is_empty() && seg.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'));
+            && kebab_name.split('-').all(|seg| {
+                !seg.is_empty() && seg.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            });
 
         if !valid_prefix || !valid_ordinal || !valid_kebab {
             errors.push(format!(
@@ -1153,9 +1195,13 @@ mod tests {
 
     #[test]
     fn test_has_concatenated_title_metadata() {
-        assert!(has_concatenated_title_metadata("Core System Architecture v1.0.0"));
+        assert!(has_concatenated_title_metadata(
+            "Core System Architecture v1.0.0"
+        ));
         assert!(has_concatenated_title_metadata("Subsystem Spec 2026-10-10"));
-        assert!(has_concatenated_title_metadata("Navigation Module (DOC-NAV-001)"));
+        assert!(has_concatenated_title_metadata(
+            "Navigation Module (DOC-NAV-001)"
+        ));
         assert!(has_concatenated_title_metadata("Version: 2 Architecture"));
         assert!(!has_concatenated_title_metadata("Core System Architecture"));
     }
@@ -1220,13 +1266,23 @@ mod tests {
         let doc2 = parse_markdown(content2)?;
 
         let docs = vec![
-            ("epic".to_string(), "docs/epics/epic-01.md".to_string(), doc1),
-            ("epic".to_string(), "docs/epics/epic-02.md".to_string(), doc2),
+            (
+                "epic".to_string(),
+                "docs/epics/epic-01.md".to_string(),
+                doc1,
+            ),
+            (
+                "epic".to_string(),
+                "docs/epics/epic-02.md".to_string(),
+                doc2,
+            ),
         ];
 
         let errors = validate_title_uniqueness(&docs);
         assert_eq!(errors.len(), 1);
-        assert!(errors.first().is_some_and(|e| e.contains("duplicate epic title")));
+        assert!(errors
+            .first()
+            .is_some_and(|e| e.contains("duplicate epic title")));
         Ok(())
     }
 
@@ -1239,7 +1295,9 @@ mod tests {
         let duplicate_ordinal = ["feat-01-login.md", "feat-01-duplicate.md"];
         let errors = validate_filenames("feature", &duplicate_ordinal, "docs/features");
         assert_eq!(errors.len(), 1);
-        assert!(errors.first().is_some_and(|e| e.contains("duplicate ordinal")));
+        assert!(errors
+            .first()
+            .is_some_and(|e| e.contains("duplicate ordinal")));
 
         let mixed_padding = ["feat-01-login.md", "feat-002-logout.md"];
         let errors = validate_filenames("feature", &mixed_padding, "docs/features");
@@ -1261,10 +1319,17 @@ mod tests {
         assert!(check_title_anti_stutter("User Story 01: US 01 Bootstrap").is_some());
         assert!(check_title_anti_stutter("Use Case 01: Use Case 01 Workflow").is_some());
 
-        assert!(check_title_anti_stutter("Use Case 01: System Vision and Foundational Invariants").is_none());
+        assert!(
+            check_title_anti_stutter("Use Case 01: System Vision and Foundational Invariants")
+                .is_none()
+        );
         assert!(check_title_anti_stutter("Epic 01: SysML Model").is_none());
-        assert!(check_title_anti_stutter("Feature 06: [System Vision] SystemVisionEngine").is_none());
-        assert!(check_title_anti_stutter("User Story 01: Bootstrap System Vision Action").is_none());
+        assert!(
+            check_title_anti_stutter("Feature 06: [System Vision] SystemVisionEngine").is_none()
+        );
+        assert!(
+            check_title_anti_stutter("User Story 01: Bootstrap System Vision Action").is_none()
+        );
     }
 
     #[test]
@@ -1277,7 +1342,10 @@ mod tests {
         assert!(check_filename_anti_stutter("us-01-us_01_action.md").is_some());
         assert!(check_filename_anti_stutter("epic-01-epic_01_model.md").is_some());
 
-        assert!(check_filename_anti_stutter("UC-01-System_Vision_and_Foundational_Invariants.md").is_none());
+        assert!(
+            check_filename_anti_stutter("UC-01-System_Vision_and_Foundational_Invariants.md")
+                .is_none()
+        );
         assert!(check_filename_anti_stutter("FEAT-06-SystemVisionEngine.md").is_none());
         assert!(check_filename_anti_stutter("US-01-BootstrapSystemVisionAction.md").is_none());
         assert!(check_filename_anti_stutter("EPIC-03-SystemVision.md").is_none());
@@ -1285,8 +1353,9 @@ mod tests {
 
     #[test]
     fn test_validate_metadata_generation_mode_variants() -> Result<(), Box<dyn std::error::Error>> {
-        let template = |key: &str, val: &str| format!(
-            r#"| Attribute | Specification Detail |
+        let template = |key: &str, val: &str| {
+            format!(
+                r#"| Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #10 |
 | **Title** | Feature 01 Telemetry Stream |
@@ -1300,8 +1369,9 @@ mod tests {
 
 # Feature 01: Telemetry Stream
 "#,
-            key, val
-        );
+                key, val
+            )
+        };
 
         let variants = [
             ("Generation Mode", "subagent"),
@@ -1314,7 +1384,8 @@ mod tests {
         for (k, v) in variants {
             let md = template(k, v);
             let doc = parse_markdown(&md)?;
-            let errors = validate_metadata("feature", &doc, &md, "docs/features/feat-01-telemetry.md");
+            let errors =
+                validate_metadata("feature", &doc, &md, "docs/features/feat-01-telemetry.md");
             assert!(
                 errors.is_empty(),
                 "Variant '{}' failed with errors: {:?}",
@@ -1325,5 +1396,3 @@ mod tests {
         Ok(())
     }
 }
-
-

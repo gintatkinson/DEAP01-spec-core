@@ -21,6 +21,15 @@ pub use behavioral::{
     validate_behavioral_triggers, validate_behavioral_triggers_workspace, AuditedSpec,
     BehavioralRule, BehavioralTrigger,
 };
+pub use conops_audit::{
+    check_conops_dir_exists, extract_markdown_tables, validate_conops,
+    validate_conops_schema_contract, validate_conops_schema_file, validate_conops_workspace,
+    validate_emergency_decision_matrix, validate_moe_mop_metrics,
+    validate_operational_allocation_tags, validate_pace_plan, validate_subsystem_architecture,
+    validate_super_system_architecture, validate_system_interface_topology, validate_threat_matrix,
+    MarkdownTable, TableRow, ThreatDomainSpec, CANONICAL_EMERGENCY_TRIGGERS,
+    MANDATORY_THREAT_DOMAINS, MOE_MOP_RECOGNIZED_UNITS, PACE_TIERS,
+};
 pub use diagram_ast::{
     detect_diagram_type, parse_mermaid_diagram, validate_mermaid_invariants, ClassAttributeAst,
     ClassDefAst, ClassDiagramAst, ClassOperationAst, ClassRelationAst, ClassRelationType,
@@ -31,9 +40,9 @@ pub use diagram_ast::{
 };
 pub use logical_ui::{
     detect_dom_leaks, detect_framework_leaks, detect_pixel_dimensions,
-    find_pixel_dimensions_in_line, is_lumi_spec, validate_3layer_chain,
-    validate_container_queries, validate_layout_guidelines, validate_logical_ui,
-    validate_logical_ui_content, validate_platform_independence,
+    find_pixel_dimensions_in_line, is_lumi_spec, validate_3layer_chain, validate_container_queries,
+    validate_layout_guidelines, validate_logical_ui, validate_logical_ui_content,
+    validate_platform_independence,
 };
 pub use markdown_ast::{
     find_unresolved_placeholders, is_metadata_header_table_row, parse_markdown, HeadingNode,
@@ -44,25 +53,6 @@ pub use metadata::{
     is_iso_date, is_semver, normalize_title, validate_filenames, validate_metadata,
     validate_title_uniqueness,
 };
-pub use sections::{
-    validate_sections, validate_use_case_anti_boilerplate, SectionRule, SectionRules,
-};
-pub use uml_validator::{
-    validate_class_diagram, validate_document_uml, validate_epic_statechart_heterogeneity,
-    validate_feature_operation_coverage, validate_parent_epic_alignment, validate_sequence_diagram,
-    validate_source_references, validate_state_diagram, validate_use_case_diagram_compliance,
-    validate_user_story_test_cases, ClassifierSymbolInfo, SysmlSymbolIndex,
-};
-pub use conops_audit::{
-    check_conops_dir_exists, extract_markdown_tables, validate_conops, validate_conops_workspace,
-    validate_conops_schema_contract, validate_conops_schema_file,
-    validate_emergency_decision_matrix, validate_moe_mop_metrics,
-    validate_operational_allocation_tags, validate_pace_plan,
-    validate_subsystem_architecture, validate_super_system_architecture,
-    validate_system_interface_topology, validate_threat_matrix,
-    MarkdownTable, TableRow, ThreatDomainSpec, CANONICAL_EMERGENCY_TRIGGERS,
-    MANDATORY_THREAT_DOMAINS, MOE_MOP_RECOGNIZED_UNITS, PACE_TIERS,
-};
 pub use provenance::{
     count_epic_features, count_feature_acceptance_criteria, extract_source_references_section,
     find_engineering_parameter, find_naked_numeric_quantities, is_assertion_grounded,
@@ -71,6 +61,15 @@ pub use provenance::{
     validate_sequence_diagram_temporal_safety, validate_source_reference_clause_integrity,
     ENGINEERING_PARAMETER_TERMS, HITL_SENDER_TOKENS, NORMATIVE_STANDARDS,
     PHYSICAL_ARMING_TARGET_TOKENS, PROHIBITED_PLACEHOLDERS, RECOGNIZED_UNITS,
+};
+pub use sections::{
+    validate_sections, validate_use_case_anti_boilerplate, SectionRule, SectionRules,
+};
+pub use uml_validator::{
+    validate_class_diagram, validate_document_uml, validate_epic_statechart_heterogeneity,
+    validate_feature_operation_coverage, validate_parent_epic_alignment, validate_sequence_diagram,
+    validate_source_references, validate_state_diagram, validate_use_case_diagram_compliance,
+    validate_user_story_test_cases, ClassifierSymbolInfo, SysmlSymbolIndex,
 };
 
 use serde::{Deserialize, Serialize};
@@ -189,7 +188,11 @@ impl fmt::Display for SpecAuditFinding {
     /// Realises: [REQ-SPEC-AUDIT-MOD-SPECAUDITFINDING-FMT] | SysML v2: ActionDef(SpecAuditFinding::fmt)
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(line) = self.line {
-            write!(f, "{}:{}: [{}] {}", self.location, line, self.rule_id, self.message)
+            write!(
+                f,
+                "{}:{}: [{}] {}",
+                self.location, line, self.rule_id, self.message
+            )
         } else if !self.location.is_empty() {
             write!(f, "{}: [{}] {}", self.location, self.rule_id, self.message)
         } else {
@@ -197,7 +200,6 @@ impl fmt::Display for SpecAuditFinding {
         }
     }
 }
-
 
 /// Formal error type for the specification audit pipeline.
 ///
@@ -616,7 +618,10 @@ pub fn load_sysml_symbol_index(repo_root: &Path) -> Result<SysmlSymbolIndex, Spe
     let mut other_schema_files = Vec::new();
 
     if schema_dir.is_dir() {
-        let all_schemas = deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[&schema_dir]);
+        let all_schemas =
+            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[
+                &schema_dir,
+            ]);
         for p in all_schemas {
             if p.extension().is_some_and(|ext| ext == "sysml") {
                 sysml_files.push(p);
@@ -663,7 +668,10 @@ pub fn load_sysml_symbol_index(repo_root: &Path) -> Result<SysmlSymbolIndex, Spe
     let test_cases = deap_core::sysml_ast::parse_test_case_defs(&combined_content);
 
     if !other_schema_files.is_empty() {
-        let non_sysml_parts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts(&other_schema_files);
+        let non_sysml_parts =
+            deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts(
+                &other_schema_files,
+            );
         for nsp in non_sysml_parts {
             if !parts.iter().any(|p| p.name == nsp) {
                 parts.push(deap_core::sysml_ast::PartDef {
@@ -917,8 +925,13 @@ pub fn run_spec_audit(options: &SpecAuditOptions) -> Result<SpecAuditSummary, Sp
     let symbol_index = load_sysml_symbol_index(&options.repo_root)?;
 
     // 2. Load behavioral_triggers.json once into memory
-    let triggers_path = options.repo_root.join("rules").join("behavioral_triggers.json");
-    let triggers = if let Some(resolved_triggers_path) = resolve_behavioral_triggers_path(&options.repo_root) {
+    let triggers_path = options
+        .repo_root
+        .join("rules")
+        .join("behavioral_triggers.json");
+    let triggers = if let Some(resolved_triggers_path) =
+        resolve_behavioral_triggers_path(&options.repo_root)
+    {
         load_behavioral_triggers(&resolved_triggers_path)?
     } else if options.allow_missing_specs || !active_gates.behavioral {
         Vec::new()
@@ -1030,7 +1043,8 @@ pub fn run_spec_audit(options: &SpecAuditOptions) -> Result<SpecAuditSummary, Sp
                 }
 
                 if spec_type == "use_case" {
-                    let boilerplate_errors = validate_use_case_anti_boilerplate(&doc, &content, &rel_path);
+                    let boilerplate_errors =
+                        validate_use_case_anti_boilerplate(&doc, &content, &rel_path);
                     for err in boilerplate_errors {
                         findings.push(SpecAuditFinding::new(
                             "anti-boilerplate-gate",
@@ -1046,17 +1060,14 @@ pub fn run_spec_audit(options: &SpecAuditOptions) -> Result<SpecAuditSummary, Sp
             if active_gates.metadata {
                 let meta_errors = validate_metadata(&spec_type, &doc, &content, &rel_path);
                 for err in meta_errors {
-                    let rule_id = if err.contains("stuttering prefix") || err.contains("repeating title prefix") {
+                    let rule_id = if err.contains("stuttering prefix")
+                        || err.contains("repeating title prefix")
+                    {
                         "anti-stutter-gate"
                     } else {
                         "specification-metadata-integrity"
                     };
-                    findings.push(SpecAuditFinding::new(
-                        rule_id,
-                        err,
-                        &rel_path,
-                        None,
-                    ));
+                    findings.push(SpecAuditFinding::new(rule_id, err, &rel_path, None));
                 }
                 for ph in &doc.unresolved_placeholders {
                     findings.push(SpecAuditFinding::new(
@@ -1094,8 +1105,12 @@ pub fn run_spec_audit(options: &SpecAuditOptions) -> Result<SpecAuditSummary, Sp
                 }
 
                 if spec_type == "feature" {
-                    let feat_findings =
-                        validate_feature_operation_coverage(&doc, &content, &rel_path, &symbol_index);
+                    let feat_findings = validate_feature_operation_coverage(
+                        &doc,
+                        &content,
+                        &rel_path,
+                        &symbol_index,
+                    );
                     findings.extend(feat_findings);
                 }
 
@@ -1187,12 +1202,7 @@ pub fn run_spec_audit(options: &SpecAuditOptions) -> Result<SpecAuditSummary, Sp
                     } else {
                         "spec-filename-convention"
                     };
-                    all_findings.push(SpecAuditFinding::new(
-                        rule_id,
-                        err,
-                        dir_rel,
-                        None,
-                    ));
+                    all_findings.push(SpecAuditFinding::new(rule_id, err, dir_rel, None));
                 }
             }
         }
@@ -1308,8 +1318,14 @@ mod tests {
     fn test_infer_spec_type() {
         assert_eq!(infer_spec_type("docs/epics/epic-01-sysml.md"), "epic");
         assert_eq!(infer_spec_type("docs/features/feat-01-human.md"), "feature");
-        assert_eq!(infer_spec_type("docs/user-stories/us-01-telemetry.md"), "user_story");
-        assert_eq!(infer_spec_type("docs/use-cases/uc-01-mission.md"), "use_case");
+        assert_eq!(
+            infer_spec_type("docs/user-stories/us-01-telemetry.md"),
+            "user_story"
+        );
+        assert_eq!(
+            infer_spec_type("docs/use-cases/uc-01-mission.md"),
+            "use_case"
+        );
         assert_eq!(infer_spec_type("feat-02-foo.md"), "feature");
         assert_eq!(infer_spec_type("other/notes.md"), "generic");
     }
@@ -1354,7 +1370,8 @@ mod tests {
 
     #[test]
     fn test_empty_workspace_disallow_missing() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir = std::env::temp_dir().join(format!("spec_audit_test_strict_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("spec_audit_test_strict_{}", std::process::id()));
         let rules_dir = temp_dir.join("rules");
         let _ = fs::create_dir_all(&rules_dir);
         let _ = fs::write(rules_dir.join("behavioral_triggers.json"), "[]");
@@ -1380,10 +1397,16 @@ mod tests {
     fn test_gate_anti_stutter_detection() {
         assert!(check_title_anti_stutter("Use Case 01: UC 01 System Vision").is_some());
         assert!(check_title_anti_stutter("UC_XX_Workflow").is_some());
-        assert!(check_title_anti_stutter("Use Case 01: System Vision and Foundational Invariants").is_none());
+        assert!(
+            check_title_anti_stutter("Use Case 01: System Vision and Foundational Invariants")
+                .is_none()
+        );
 
         assert!(check_filename_anti_stutter("UC-01-UC_01_System_Vision.md").is_some());
-        assert!(check_filename_anti_stutter("UC-01-System_Vision_and_Foundational_Invariants.md").is_none());
+        assert!(
+            check_filename_anti_stutter("UC-01-System_Vision_and_Foundational_Invariants.md")
+                .is_none()
+        );
     }
 
     #[test]
@@ -1401,10 +1424,13 @@ mod tests {
 5a. Condition fails.
 "#;
         let bad_doc = parse_markdown(bad_content)?;
-        let errors = validate_use_case_anti_boilerplate(&bad_doc, bad_content, "docs/use-cases/uc-01.md");
+        let errors =
+            validate_use_case_anti_boilerplate(&bad_doc, bad_content, "docs/use-cases/uc-01.md");
         assert!(!errors.is_empty());
         assert!(errors.iter().any(|e| e.contains("fewer than 5 steps")));
-        assert!(errors.iter().any(|e| e.contains("fewer than 3 exception cases")));
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("fewer than 3 exception cases")));
         Ok(())
     }
 
@@ -1423,7 +1449,9 @@ flowchart LR
         let doc = parse_markdown(bad_diagram)?;
         let errors = validate_use_case_diagram_compliance(&doc, "docs/use-cases/uc-01.md");
         assert!(!errors.is_empty());
-        assert!(errors.iter().any(|e| e.contains("lacks a system boundary subgraph")));
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("lacks a system boundary subgraph")));
         Ok(())
     }
 
@@ -1453,7 +1481,9 @@ stateDiagram-v2
         ];
         let errors = validate_epic_statechart_heterogeneity(&epics);
         assert!(!errors.is_empty());
-        assert!(errors.iter().any(|e| e.contains("share identical canned pipeline lifecycle statecharts")));
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("share identical canned pipeline lifecycle statecharts")));
         Ok(())
     }
 
@@ -1488,12 +1518,15 @@ Links to [FEAT-06-SystemVisionEngine.md](../features/feat-06.md).
 
         let errors = validate_parent_epic_alignment(&stories, &features, &epics);
         assert!(!errors.is_empty());
-        assert!(errors.iter().any(|e| e.contains("Parent Epic Alignment Gate violation")));
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("Parent Epic Alignment Gate violation")));
         Ok(())
     }
 
     #[test]
-    fn test_load_sysml_symbol_index_with_heterogeneous_schemas() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_load_sysml_symbol_index_with_heterogeneous_schemas(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_nanos();
@@ -1549,7 +1582,8 @@ Links to [FEAT-06-SystemVisionEngine.md](../features/feat-06.md).
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SPEC-AUDIT-MOD-TEST-RESOLVE-BEHAVIORAL-TRIGGERS-PATH] | SysML v2: VerificationCaseDef(test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace)
     #[test]
-    fn test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_nanos();

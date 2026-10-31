@@ -31,6 +31,7 @@
 
 pub mod domain;
 pub mod emitters;
+#[rustfmt::skip]
 pub mod generated;
 pub mod lowering;
 

@@ -61,7 +61,11 @@ pub fn to_snake_slug(name: &str) -> String {
             prev_kind = 2;
         }
     }
-    let slug = raw.split('_').filter(|seg| !seg.is_empty()).collect::<Vec<_>>().join("_");
+    let slug = raw
+        .split('_')
+        .filter(|seg| !seg.is_empty())
+        .collect::<Vec<_>>()
+        .join("_");
     if slug.is_empty() {
         "unit".to_string()
     } else if slug.starts_with(|c: char| c.is_ascii_digit()) {
@@ -164,12 +168,22 @@ pub fn outline_action_def(action: &ActionDef, bounds: &ModularityBounds) -> Outl
     let in_params = action
         .in_params
         .iter()
-        .map(|p| (to_snake_slug(&p.name), map_sysml_type_to_rust(&p.type_name).to_string()))
+        .map(|p| {
+            (
+                to_snake_slug(&p.name),
+                map_sysml_type_to_rust(&p.type_name).to_string(),
+            )
+        })
         .collect();
     let out_params = action
         .out_params
         .iter()
-        .map(|p| (to_snake_slug(&p.name), map_sysml_type_to_rust(&p.type_name).to_string()))
+        .map(|p| {
+            (
+                to_snake_slug(&p.name),
+                map_sysml_type_to_rust(&p.type_name).to_string(),
+            )
+        })
         .collect();
     let stages = if action.steps.is_empty() {
         vec![OutlinedActionStage {
@@ -192,7 +206,12 @@ pub fn outline_action_def(action: &ActionDef, bounds: &ModularityBounds) -> Outl
             })
             .collect()
     };
-    OutlinedActionPlan { action_name: slug, in_params, out_params, stages }
+    OutlinedActionPlan {
+        action_name: slug,
+        in_params,
+        out_params,
+        stages,
+    }
 }
 
 /// Extracts deduplicated `PascalCase` operational state identifiers in declaration order alongside the resolved initial state.
@@ -215,10 +234,11 @@ fn collect_ordered_states(state_def: &StateDef) -> (Vec<String>, String) {
     let mut seen = BTreeSet::from(["Initial".to_string(), "Terminal".to_string()]);
     let mut states = Vec::new();
     let candidates = state_def.sub_states.iter().map(|s| s.name.as_str()).chain(
-        state_def
-            .transitions
-            .iter()
-            .flat_map(|tx| [tx.source.as_deref(), tx.target.as_deref()].into_iter().flatten()),
+        state_def.transitions.iter().flat_map(|tx| {
+            [tx.source.as_deref(), tx.target.as_deref()]
+                .into_iter()
+                .flatten()
+        }),
     );
     for raw in candidates {
         let ident = to_pascal_ident(raw);
@@ -235,7 +255,12 @@ fn collect_ordered_states(state_def: &StateDef) -> (Vec<String>, String) {
         .filter(|tx| tx.source.as_deref() == Some("Initial"))
         .find_map(|tx| tx.target.as_deref().map(to_pascal_ident))
         .filter(|init| states.contains(init))
-        .unwrap_or_else(|| states.first().cloned().unwrap_or_else(|| "Idle".to_string()));
+        .unwrap_or_else(|| {
+            states
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "Idle".to_string())
+        });
     (states, initial_state)
 }
 
@@ -255,7 +280,9 @@ fn collect_ordered_states(state_def: &StateDef) -> (Vec<String>, String) {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0607]
 /// Prepares deterministic per-source transition tables for `outline_state_def` handler chunking.
-fn group_transitions_by_source(transitions: &[TransitionDef]) -> BTreeMap<String, Vec<(String, String)>> {
+fn group_transitions_by_source(
+    transitions: &[TransitionDef],
+) -> BTreeMap<String, Vec<(String, String)>> {
     let mut grouped: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
     for tx in transitions {
         if let (Some(src), Some(dst)) = (tx.source.as_deref(), tx.target.as_deref()) {
@@ -268,7 +295,10 @@ fn group_transitions_by_source(transitions: &[TransitionDef]) -> BTreeMap<String
                     .filter(|t| !t.is_empty())
                     .unwrap_or("tick")
                     .to_string();
-                grouped.entry(src_ident).or_default().push((trigger, to_pascal_ident(dst)));
+                grouped
+                    .entry(src_ident)
+                    .or_default()
+                    .push((trigger, to_pascal_ident(dst)));
             }
         }
     }
@@ -292,11 +322,17 @@ fn group_transitions_by_source(transitions: &[TransitionDef]) -> BTreeMap<String
 /// Realises: [REQ-0607]
 /// Produces `OutlinedStateMachinePlan` blueprints consumed by `PartStatesFacet` and `StandaloneState` Rust emitters.
 #[must_use]
-pub fn outline_state_def(state_def: &StateDef, bounds: &ModularityBounds) -> OutlinedStateMachinePlan {
+pub fn outline_state_def(
+    state_def: &StateDef,
+    bounds: &ModularityBounds,
+) -> OutlinedStateMachinePlan {
     let (states, initial_state) = collect_ordered_states(state_def);
     let grouped = group_transitions_by_source(&state_def.transitions);
     let complexity_cap = bounds.max_cyclomatic_complexity.saturating_sub(1).max(1);
-    let max_tx = bounds.max_transitions_per_handler.max(1).min(complexity_cap);
+    let max_tx = bounds
+        .max_transitions_per_handler
+        .max(1)
+        .min(complexity_cap);
     let mut handlers = Vec::with_capacity(grouped.len());
     for (src_state, txs) in grouped {
         let src_slug = to_snake_slug(&src_state);
@@ -319,5 +355,10 @@ pub fn outline_state_def(state_def: &StateDef, bounds: &ModularityBounds) -> Out
             }
         }
     }
-    OutlinedStateMachinePlan { state_def_name: to_pascal_ident(&state_def.name), states, initial_state, handlers }
+    OutlinedStateMachinePlan {
+        state_def_name: to_pascal_ident(&state_def.name),
+        states,
+        initial_state,
+        handlers,
+    }
 }

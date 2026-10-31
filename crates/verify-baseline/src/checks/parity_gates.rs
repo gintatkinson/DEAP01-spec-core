@@ -611,20 +611,77 @@ fn is_valid_si_unit(unit: &str) -> bool {
     let u = unit.trim().to_ascii_lowercase();
     matches!(
         u.as_str(),
-        "s" | "sec" | "second" | "seconds" | "ms" | "us" | "µs" | "ns" | "min" | "h" | "hr"
-            | "hz" | "khz" | "mhz" | "ghz"
-            | "m" | "km" | "cm" | "mm" | "nm" | "um" | "µm"
-            | "m/s" | "km/h" | "m/s^2" | "m/s2" | "fps" | "rpm"
-            | "kg" | "g" | "mg"
-            | "j" | "kj" | "mj" | "wh" | "kwh"
-            | "w" | "kw" | "mw"
-            | "v" | "mv" | "kv"
-            | "a" | "ma"
-            | "deg" | "rad" | "degree" | "degrees" | "radian" | "radians"
-            | "db" | "dbm" | "dbi"
-            | "%" | "percent" | "ratio" | "dimensionless" | "count"
-            | "bps" | "kbps" | "mbps" | "gbps" | "b/s" | "kb/s" | "mb/s" | "gb/s"
-            | "b" | "kb" | "mb" | "gb" | "bytes" | "ppm"
+        "s" | "sec"
+            | "second"
+            | "seconds"
+            | "ms"
+            | "us"
+            | "µs"
+            | "ns"
+            | "min"
+            | "h"
+            | "hr"
+            | "hz"
+            | "khz"
+            | "mhz"
+            | "ghz"
+            | "m"
+            | "km"
+            | "cm"
+            | "mm"
+            | "nm"
+            | "um"
+            | "µm"
+            | "m/s"
+            | "km/h"
+            | "m/s^2"
+            | "m/s2"
+            | "fps"
+            | "rpm"
+            | "kg"
+            | "g"
+            | "mg"
+            | "j"
+            | "kj"
+            | "mj"
+            | "wh"
+            | "kwh"
+            | "w"
+            | "kw"
+            | "mw"
+            | "v"
+            | "mv"
+            | "kv"
+            | "a"
+            | "ma"
+            | "deg"
+            | "rad"
+            | "degree"
+            | "degrees"
+            | "radian"
+            | "radians"
+            | "db"
+            | "dbm"
+            | "dbi"
+            | "%"
+            | "percent"
+            | "ratio"
+            | "dimensionless"
+            | "count"
+            | "bps"
+            | "kbps"
+            | "mbps"
+            | "gbps"
+            | "b/s"
+            | "kb/s"
+            | "mb/s"
+            | "gb/s"
+            | "b"
+            | "kb"
+            | "mb"
+            | "gb"
+            | "bytes"
+            | "ppm"
     )
 }
 
@@ -685,7 +742,10 @@ fn collect_part_def_names(part: &PartDef, set: &mut BTreeSet<String>) {
 pub fn discover_sysml_model_text(repo_root: &Path) -> Option<String> {
     let schema_dir = repo_root.join("schema");
     if schema_dir.is_dir() {
-        let mut paths = deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[&schema_dir]);
+        let mut paths =
+            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[
+                &schema_dir,
+            ]);
         paths.sort();
         let mut sysml_contents = Vec::new();
         let mut non_sysml_paths = Vec::new();
@@ -708,7 +768,9 @@ pub fn discover_sysml_model_text(repo_root: &Path) -> Option<String> {
         }
 
         if !non_sysml_paths.is_empty() {
-            let parts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts(&non_sysml_paths);
+            let parts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts(
+                &non_sysml_paths,
+            );
             if !parts.is_empty() {
                 let mut synthetic = String::new();
                 synthetic.push_str("package DownstreamSchema {\n");
@@ -733,7 +795,9 @@ pub fn discover_sysml_model_text(repo_root: &Path) -> Option<String> {
     let designs_dir = repo_root.join("docs").join("designs");
     if designs_dir.is_dir() {
         let mut paths =
-            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[&designs_dir]);
+            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[
+                &designs_dir,
+            ]);
         paths.sort();
         let mut design_sysml_contents = Vec::new();
         for p in paths {
@@ -978,7 +1042,11 @@ pub fn check_semantic_diagram_ast_parity(repo_root: &Path) -> Result<ParityOutco
             let entry = match entry_res {
                 Ok(e) => e,
                 Err(err) => {
-                    errors.push(format!("Check 21 failed: I/O error walking directory '{}': {}", dir.display(), err));
+                    errors.push(format!(
+                        "Check 21 failed: I/O error walking directory '{}': {}",
+                        dir.display(),
+                        err
+                    ));
                     continue;
                 }
             };
@@ -992,11 +1060,18 @@ pub fn check_semantic_diagram_ast_parity(repo_root: &Path) -> Result<ParityOutco
         md_files.sort();
 
         for path in md_files {
-            let rel = path.strip_prefix(repo_root).unwrap_or(&path).display().to_string();
+            let rel = path
+                .strip_prefix(repo_root)
+                .unwrap_or(&path)
+                .display()
+                .to_string();
             let content = match fs::read_to_string(&path) {
                 Ok(c) => c,
                 Err(e) => {
-                    errors.push(format!("Check 21 failed: Unable to read file '{}': {}", rel, e));
+                    errors.push(format!(
+                        "Check 21 failed: Unable to read file '{}': {}",
+                        rel, e
+                    ));
                     continue;
                 }
             };
@@ -1023,18 +1098,28 @@ pub fn check_semantic_diagram_ast_parity(repo_root: &Path) -> Result<ParityOutco
                         i += 1;
                     }
 
-                    if let Some(&first) = block_lines.iter().find(|l| !l.trim().is_empty() && !l.trim().starts_with("%%")) {
+                    if let Some(&first) = block_lines
+                        .iter()
+                        .find(|l| !l.trim().is_empty() && !l.trim().starts_with("%%"))
+                    {
                         let trimmed = first.trim();
                         let diag_type = DiagramType::parse_header(trimmed);
                         if diag_type.is_none() {
-                            errors.push(format!("Missing mandatory Mermaid diagram type header in {} (got: '{}')", rel, trimmed));
+                            errors.push(format!(
+                                "Missing mandatory Mermaid diagram type header in {} (got: '{}')",
+                                rel, trimmed
+                            ));
                         }
 
                         let is_class_diag = diag_type == Some(DiagramType::ClassDiagram);
                         for line in &block_lines {
                             let s = line.trim();
                             if is_class_diag {
-                                if (s.contains('{') || s.contains('}')) && !s.starts_with("class ") && s != "{" && s != "}" {
+                                if (s.contains('{') || s.contains('}'))
+                                    && !s.starts_with("class ")
+                                    && s != "{"
+                                    && s != "}"
+                                {
                                     errors.push(format!("Mermaid syntax violation in {}: Curly braces '{{}}' inside class member line: '{}'.", rel, s));
                                 }
                                 if has_colon_method_syntax(s) {
@@ -1131,18 +1216,29 @@ pub fn check_semantic_prose_invariants(repo_root: &Path) -> Result<ParityOutcome
             let entry = match entry_res {
                 Ok(e) => e,
                 Err(err) => {
-                    errors.push(format!("Check 22 failed: I/O error walking directory '{}': {}", dir.display(), err));
+                    errors.push(format!(
+                        "Check 22 failed: I/O error walking directory '{}': {}",
+                        dir.display(),
+                        err
+                    ));
                     continue;
                 }
             };
             if entry.file_type().is_file() {
                 let path = entry.path();
                 if path.extension().is_some_and(|ext| ext == "md") {
-                    let rel = path.strip_prefix(repo_root).unwrap_or(path).display().to_string();
+                    let rel = path
+                        .strip_prefix(repo_root)
+                        .unwrap_or(path)
+                        .display()
+                        .to_string();
                     let content = match fs::read_to_string(path) {
                         Ok(c) => c,
                         Err(e) => {
-                            errors.push(format!("Check 22 failed: Unable to read file '{}': {}", rel, e));
+                            errors.push(format!(
+                                "Check 22 failed: Unable to read file '{}': {}",
+                                rel, e
+                            ));
                             continue;
                         }
                     };
@@ -1153,24 +1249,25 @@ pub fn check_semantic_prose_invariants(repo_root: &Path) -> Result<ParityOutcome
                         if trimmed.starts_with("```") || trimmed.is_empty() {
                             continue;
                         }
-                        if (trimmed.contains("Invariant:") || trimmed.contains("Physical Invariant:"))
+                        if (trimmed.contains("Invariant:")
+                            || trimmed.contains("Physical Invariant:"))
                             && trimmed.contains("[INV-")
                         {
                             if let Some(start) = trimmed.find("[INV-") {
-                                    if let Some(slice) = trimmed.get(start.saturating_add(1)..) {
-                                        if let Some(end) = slice.find(']') {
-                                            if let Some(inv_id) = slice.get(..end) {
-                                                if !declared_constraints.is_empty()
-                                                    && !declared_constraints.contains(inv_id)
-                                                {
-                                                    errors.push(format!(
+                                if let Some(slice) = trimmed.get(start.saturating_add(1)..) {
+                                    if let Some(end) = slice.find(']') {
+                                        if let Some(inv_id) = slice.get(..end) {
+                                            if !declared_constraints.is_empty()
+                                                && !declared_constraints.contains(inv_id)
+                                            {
+                                                errors.push(format!(
                                                         "Check 22 failed: Prose invariant assertion '{}' on line {} in '{}' is ungrounded in SysML model.",
                                                         inv_id, line_no, rel
                                                     ));
-                                                }
                                             }
                                         }
                                     }
+                                }
                             }
                         }
                     }
@@ -1471,7 +1568,22 @@ fn parse_citation_string(raw: &str, line_no: usize) -> Option<CitationRef> {
     let path_end = slice
         .find(|c: char| {
             c.is_whitespace()
-                || matches!(c, '`' | '\'' | '"' | '(' | ')' | '[' | ']' | '<' | '>' | '§' | '#' | ',' | ';' | '|')
+                || matches!(
+                    c,
+                    '`' | '\''
+                        | '"'
+                        | '('
+                        | ')'
+                        | '['
+                        | ']'
+                        | '<'
+                        | '>'
+                        | '§'
+                        | '#'
+                        | ','
+                        | ';'
+                        | '|'
+                )
         })
         .unwrap_or(slice.len());
 
@@ -1660,9 +1772,10 @@ fn is_structural_protocol_token(token: &str) -> bool {
     token.split('-').any(|seg| {
         (!seg.is_empty() && seg.chars().all(|c| c.is_ascii_digit()))
             || (seg.len() >= 2
-                && seg
-                    .get(1..)
-                    .is_some_and(|rest| rest.chars().any(|c| c.is_ascii_uppercase() || c.is_ascii_digit())))
+                && seg.get(1..).is_some_and(|rest| {
+                    rest.chars()
+                        .any(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+                }))
     })
 }
 
@@ -2054,7 +2167,9 @@ fn extract_candidate_protocol_tokens(line: &str) -> Vec<String> {
                         }
                         if is_structural_protocol_token(cand_w) {
                             let combined = if let Some(&next_num) = words.get(j.saturating_add(1)) {
-                                if !next_num.is_empty() && next_num.chars().all(|c| c.is_ascii_digit()) {
+                                if !next_num.is_empty()
+                                    && next_num.chars().all(|c| c.is_ascii_digit())
+                                {
                                     format!("{} {}", cand_w, next_num)
                                 } else {
                                     cand_w.to_string()
@@ -2062,7 +2177,10 @@ fn extract_candidate_protocol_tokens(line: &str) -> Vec<String> {
                             } else {
                                 cand_w.to_string()
                             };
-                            if !out.iter().any(|existing: &String| existing.eq_ignore_ascii_case(&combined)) {
+                            if !out
+                                .iter()
+                                .any(|existing: &String| existing.eq_ignore_ascii_case(&combined))
+                            {
                                 out.push(combined);
                             }
                             break;
@@ -2075,7 +2193,9 @@ fn extract_candidate_protocol_tokens(line: &str) -> Vec<String> {
                 if let Some(&prev_w) = words.get(i.saturating_sub(1)) {
                     if is_structural_protocol_token(prev_w)
                         && !is_valid_si_unit(prev_w)
-                        && !out.iter().any(|existing: &String| existing.eq_ignore_ascii_case(prev_w))
+                        && !out
+                            .iter()
+                            .any(|existing: &String| existing.eq_ignore_ascii_case(prev_w))
                     {
                         out.push(prev_w.to_string());
                     }
@@ -2113,7 +2233,11 @@ fn extract_candidate_protocol_tokens(line: &str) -> Vec<String> {
 fn extract_quantitative_unit_claims(line: &str) -> Vec<String> {
     let words: Vec<&str> = line
         .split_whitespace()
-        .map(|w| w.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '/' && c != '^' && c != '%'))
+        .map(|w| {
+            w.trim_matches(|c: char| {
+                !c.is_ascii_alphanumeric() && c != '.' && c != '/' && c != '^' && c != '%'
+            })
+        })
         .filter(|w| !w.is_empty())
         .collect();
     let mut claims = Vec::new();
@@ -2123,7 +2247,11 @@ fn extract_quantitative_unit_claims(line: &str) -> Vec<String> {
                 && num_w.chars().all(|c| c.is_ascii_digit() || c == '.')
                 && num_w.chars().any(|c| c.is_ascii_digit());
             if is_num && is_valid_si_unit(unit_w) {
-                claims.push(format!("{} {}", num_w.to_ascii_lowercase(), unit_w.to_ascii_lowercase()));
+                claims.push(format!(
+                    "{} {}",
+                    num_w.to_ascii_lowercase(),
+                    unit_w.to_ascii_lowercase()
+                ));
             }
         }
     }
@@ -2215,7 +2343,8 @@ pub fn audit_spec_citations_and_protocols(
                     };
 
                     for q_claim in extract_quantitative_unit_claims(combined_claim) {
-                        let in_ast = ast_claims.contains(&q_claim) || model_lower.contains(&q_claim);
+                        let in_ast =
+                            ast_claims.contains(&q_claim) || model_lower.contains(&q_claim);
                         if !lower_sec.contains(&q_claim) && !in_ast {
                             errors.push(format!(
                                 "Check 23 failed: Citation fraud detected in '{}' on line {}: cited section '§{}' in '{}' does not substantiate '{}' claim.",
@@ -2330,7 +2459,11 @@ pub fn check_factual_grounding(
     let slicer = SectionSlicer::new(repo_root);
     let model_str = model_text.unwrap_or_default();
 
-    for scan_dir in TargetScanDir::ALL.iter().copied().filter(|d| d.requires_factual_grounding()) {
+    for scan_dir in TargetScanDir::ALL
+        .iter()
+        .copied()
+        .filter(|d| d.requires_factual_grounding())
+    {
         let dir = scan_dir.resolve(repo_root);
         if !dir.is_dir() {
             continue;
@@ -2351,7 +2484,11 @@ pub fn check_factual_grounding(
             let entry = match entry_res {
                 Ok(e) => e,
                 Err(err) => {
-                    errors.push(format!("Check 23 failed: I/O error walking directory '{}': {}", dir.display(), err));
+                    errors.push(format!(
+                        "Check 23 failed: I/O error walking directory '{}': {}",
+                        dir.display(),
+                        err
+                    ));
                     continue;
                 }
             };
@@ -2367,7 +2504,10 @@ pub fn check_factual_grounding(
                     let content = match fs::read_to_string(path) {
                         Ok(c) => c,
                         Err(e) => {
-                            errors.push(format!("Check 23 failed: Unable to read file '{}': {}", rel_path, e));
+                            errors.push(format!(
+                                "Check 23 failed: Unable to read file '{}': {}",
+                                rel_path, e
+                            ));
                             continue;
                         }
                     };
@@ -2606,7 +2746,11 @@ pub fn parse_markdown_table_rows(
                 }
                 let raw_cols: Vec<&str> = trimmed.split('|').map(|c| c.trim()).collect();
                 let col_count = raw_cols.len();
-                let start = if trimmed.starts_with('|') && col_count > 1 { 1 } else { 0 };
+                let start = if trimmed.starts_with('|') && col_count > 1 {
+                    1
+                } else {
+                    0
+                };
                 let end = if trimmed.ends_with('|') && col_count > start {
                     col_count.saturating_sub(1)
                 } else {
@@ -2839,31 +2983,70 @@ pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<Str
         errors.push("Check 24 failed: ICD_01 Port Definition Roster Table (Section 4) is missing or contains 0 rows.".to_string());
     }
 
-    let port_id_idx = port_headers.iter().position(|h| h.contains("port id") || h.contains("id")).unwrap_or(0);
-    let subsys_idx = port_headers.iter().position(|h| h.contains("subsystem")).unwrap_or(1);
-    let port_name_idx = port_headers.iter().position(|h| h.contains("port name") || h.contains("name")).unwrap_or(2);
-    let dir_idx = port_headers.iter().position(|h| h.contains("direction")).unwrap_or(3);
+    let port_id_idx = port_headers
+        .iter()
+        .position(|h| h.contains("port id") || h.contains("id"))
+        .unwrap_or(0);
+    let subsys_idx = port_headers
+        .iter()
+        .position(|h| h.contains("subsystem"))
+        .unwrap_or(1);
+    let port_name_idx = port_headers
+        .iter()
+        .position(|h| h.contains("port name") || h.contains("name"))
+        .unwrap_or(2);
+    let dir_idx = port_headers
+        .iter()
+        .position(|h| h.contains("direction"))
+        .unwrap_or(3);
 
     let mut declared_ports: BTreeMap<String, PortMeta> = BTreeMap::new();
     for row in &port_rows {
         let raw_id = row.get(port_id_idx).map(|s| s.as_str()).unwrap_or("");
         let port_id = extract_port_identifier(raw_id).unwrap_or_else(|| {
-            raw_id.trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string()
+            raw_id
+                .trim_matches(|c| c == '`' || c == ' ' || c == '*')
+                .to_string()
         });
-        let subsys = row.get(subsys_idx).map(|s| s.as_str()).unwrap_or("").trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string();
-        let name = row.get(port_name_idx).map(|s| s.as_str()).unwrap_or("").trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string();
-        let dir = row.get(dir_idx).map(|s| s.as_str()).unwrap_or("").trim_matches(|c| c == '`' || c == ' ' || c == '*').to_ascii_uppercase();
+        let subsys = row
+            .get(subsys_idx)
+            .map(|s| s.as_str())
+            .unwrap_or("")
+            .trim_matches(|c| c == '`' || c == ' ' || c == '*')
+            .to_string();
+        let name = row
+            .get(port_name_idx)
+            .map(|s| s.as_str())
+            .unwrap_or("")
+            .trim_matches(|c| c == '`' || c == ' ' || c == '*')
+            .to_string();
+        let dir = row
+            .get(dir_idx)
+            .map(|s| s.as_str())
+            .unwrap_or("")
+            .trim_matches(|c| c == '`' || c == ' ' || c == '*')
+            .to_ascii_uppercase();
 
         if port_id.is_empty() || !port_id.starts_with("PORT-") {
-            errors.push(format!("Check 24 failed: Invalid Port ID '{}' in Section 4 (must start with 'PORT-')", raw_id));
+            errors.push(format!(
+                "Check 24 failed: Invalid Port ID '{}' in Section 4 (must start with 'PORT-')",
+                raw_id
+            ));
         } else {
             use std::collections::btree_map::Entry;
             match declared_ports.entry(port_id) {
                 Entry::Occupied(e) => {
-                    errors.push(format!("Check 24 failed: Duplicate Port ID '{}' declared in Section 4", e.key()));
+                    errors.push(format!(
+                        "Check 24 failed: Duplicate Port ID '{}' declared in Section 4",
+                        e.key()
+                    ));
                 }
                 Entry::Vacant(e) => {
-                    e.insert(PortMeta { subsystem: subsys, name, direction: dir });
+                    e.insert(PortMeta {
+                        subsystem: subsys,
+                        name,
+                        direction: dir,
+                    });
                 }
             }
         }
@@ -2874,10 +3057,22 @@ pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<Str
         errors.push("Check 24 failed: ICD_01 Connection Binding Roster Table (Section 5) is missing or contains 0 rows.".to_string());
     }
 
-    let conn_id_idx = conn_headers.iter().position(|h| h.contains("connection id") || h.contains("id")).unwrap_or(0);
-    let src_idx = conn_headers.iter().position(|h| h.contains("source")).unwrap_or(1);
-    let dst_idx = conn_headers.iter().position(|h| h.contains("dest")).unwrap_or(2);
-    let flows_idx = conn_headers.iter().position(|h| h.contains("item flow") || h.contains("flow")).unwrap_or(6);
+    let conn_id_idx = conn_headers
+        .iter()
+        .position(|h| h.contains("connection id") || h.contains("id"))
+        .unwrap_or(0);
+    let src_idx = conn_headers
+        .iter()
+        .position(|h| h.contains("source"))
+        .unwrap_or(1);
+    let dst_idx = conn_headers
+        .iter()
+        .position(|h| h.contains("dest"))
+        .unwrap_or(2);
+    let flows_idx = conn_headers
+        .iter()
+        .position(|h| h.contains("item flow") || h.contains("flow"))
+        .unwrap_or(6);
 
     let mut bound_ports = BTreeSet::new();
     let mut valid_connections = BTreeSet::new();
@@ -2886,7 +3081,9 @@ pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<Str
     for row in &conn_rows {
         let raw_conn_id = row.get(conn_id_idx).map(|s| s.as_str()).unwrap_or("");
         let conn_id = extract_single_conn_id(raw_conn_id).unwrap_or_else(|| {
-            raw_conn_id.trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string()
+            raw_conn_id
+                .trim_matches(|c| c == '`' || c == ' ' || c == '*')
+                .to_string()
         });
         let src_raw = row.get(src_idx).map(|s| s.as_str()).unwrap_or("");
         let dst_raw = row.get(dst_idx).map(|s| s.as_str()).unwrap_or("");
@@ -2895,7 +3092,10 @@ pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<Str
         if conn_id.is_empty() || !conn_id.starts_with("CONN-") {
             errors.push(format!("Check 24 failed: Invalid Connection ID '{}' in Section 5 (must start with 'CONN-')", raw_conn_id));
         } else if seen_conn_ids.contains(&conn_id) {
-            errors.push(format!("Check 24 failed: Duplicate Connection ID '{}' in Section 5", conn_id));
+            errors.push(format!(
+                "Check 24 failed: Duplicate Connection ID '{}' in Section 5",
+                conn_id
+            ));
         } else {
             seen_conn_ids.insert(conn_id.clone());
         }
@@ -2936,9 +3136,8 @@ pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<Str
             .and_then(|id| declared_ports.get(id))
             .map(|p| p.name.as_str())
             .unwrap_or(dst_raw);
-        let has_multi_subsystems = !src_subsys.is_empty()
-            && !dst_subsys.is_empty()
-            && src_subsys != dst_subsys;
+        let has_multi_subsystems =
+            !src_subsys.is_empty() && !dst_subsys.is_empty() && src_subsys != dst_subsys;
         let is_ast_nested = ast_nested_subsystems.contains(&src_subsys.to_ascii_lowercase())
             || ast_nested_subsystems.contains(&dst_subsys.to_ascii_lowercase())
             || ast_nested_ports.contains(&src_port_name.to_ascii_lowercase())
@@ -2952,8 +3151,10 @@ pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<Str
             || has_multi_subsystems;
 
         if is_nested_connection {
-            let src_qualified = src_raw.contains('(') && src_raw.contains('.') && src_raw.contains(')');
-            let dst_qualified = dst_raw.contains('(') && dst_raw.contains('.') && dst_raw.contains(')');
+            let src_qualified =
+                src_raw.contains('(') && src_raw.contains('.') && src_raw.contains(')');
+            let dst_qualified =
+                dst_raw.contains('(') && dst_raw.contains('.') && dst_raw.contains(')');
             if !src_qualified {
                 errors.push(format!(
                     "Check 24 failed: Connection '{}' source port '{}' lacks hierarchical subsystem qualification for nested port (expected format 'PORT-ID (Subsystem.Path.port)')",
@@ -3016,52 +3217,105 @@ pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<Str
         }
     }
 
-    let (sig_headers, sig_rows) = parse_markdown_table_rows(&icd02_content, "signal flow dictionary");
+    let (sig_headers, sig_rows) =
+        parse_markdown_table_rows(&icd02_content, "signal flow dictionary");
     if sig_rows.is_empty() {
         errors.push("Check 24 failed: ICD_02 Master Signal Flow Dictionary Table (Section 2) is missing or contains 0 rows.".to_string());
     }
 
-    let sig_id_idx = sig_headers.iter().position(|h| h.contains("signal id") || h.contains("id")).unwrap_or(0);
-    let name_idx = sig_headers.iter().position(|h| h.contains("signal name") || h.contains("name")).unwrap_or(1);
-    let src_port_idx = sig_headers.iter().position(|h| h.contains("source")).unwrap_or(2);
-    let dst_port_idx = sig_headers.iter().position(|h| h.contains("dest")).unwrap_or(3);
-    let type_idx = sig_headers.iter().position(|h| h.contains("data type") || h.contains("type")).unwrap_or(4);
-    let units_idx = sig_headers.iter().position(|h| h.contains("unit")).unwrap_or(5);
-    let range_idx = sig_headers.iter().position(|h| h.contains("range")).unwrap_or(6);
-    let rate_idx = sig_headers.iter().position(|h| h.contains("rate")).unwrap_or(7);
-    let default_idx = sig_headers.iter().position(|h| h.contains("default")).unwrap_or(8);
-    let citation_idx = sig_headers.iter().position(|h| h.contains("citation") || h.contains("schema") || h.contains("source")).unwrap_or(9);
+    let sig_id_idx = sig_headers
+        .iter()
+        .position(|h| h.contains("signal id") || h.contains("id"))
+        .unwrap_or(0);
+    let name_idx = sig_headers
+        .iter()
+        .position(|h| h.contains("signal name") || h.contains("name"))
+        .unwrap_or(1);
+    let src_port_idx = sig_headers
+        .iter()
+        .position(|h| h.contains("source"))
+        .unwrap_or(2);
+    let dst_port_idx = sig_headers
+        .iter()
+        .position(|h| h.contains("dest"))
+        .unwrap_or(3);
+    let type_idx = sig_headers
+        .iter()
+        .position(|h| h.contains("data type") || h.contains("type"))
+        .unwrap_or(4);
+    let units_idx = sig_headers
+        .iter()
+        .position(|h| h.contains("unit"))
+        .unwrap_or(5);
+    let range_idx = sig_headers
+        .iter()
+        .position(|h| h.contains("range"))
+        .unwrap_or(6);
+    let rate_idx = sig_headers
+        .iter()
+        .position(|h| h.contains("rate"))
+        .unwrap_or(7);
+    let default_idx = sig_headers
+        .iter()
+        .position(|h| h.contains("default"))
+        .unwrap_or(8);
+    let citation_idx = sig_headers
+        .iter()
+        .position(|h| h.contains("citation") || h.contains("schema") || h.contains("source"))
+        .unwrap_or(9);
 
     let mut seen_sig_ids = BTreeSet::new();
 
     for row in &sig_rows {
         let raw_sig_id = row.get(sig_id_idx).map(|s| s.as_str()).unwrap_or("");
         let sig_id = extract_single_signal_id(raw_sig_id).unwrap_or_else(|| {
-            raw_sig_id.trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string()
+            raw_sig_id
+                .trim_matches(|c| c == '`' || c == ' ' || c == '*')
+                .to_string()
         });
-        let sig_name = row.get(name_idx).map(|s| s.as_str()).unwrap_or("").trim_matches(|c| c == '`' || c == ' ' || c == '*');
+        let sig_name = row
+            .get(name_idx)
+            .map(|s| s.as_str())
+            .unwrap_or("")
+            .trim_matches(|c| c == '`' || c == ' ' || c == '*');
         let src_raw = row.get(src_port_idx).map(|s| s.as_str()).unwrap_or("");
         let dst_raw = row.get(dst_port_idx).map(|s| s.as_str()).unwrap_or("");
         let src_port = extract_port_identifier(src_raw).unwrap_or_else(|| {
-            src_raw.trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string()
+            src_raw
+                .trim_matches(|c| c == '`' || c == ' ' || c == '*')
+                .to_string()
         });
         let dst_port = extract_port_identifier(dst_raw).unwrap_or_else(|| {
-            dst_raw.trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string()
+            dst_raw
+                .trim_matches(|c| c == '`' || c == ' ' || c == '*')
+                .to_string()
         });
 
         if sig_id.is_empty() || !sig_id.starts_with("SIG-") {
-            errors.push(format!("Check 24 failed: Invalid Signal ID '{}' in Section 2 (must start with 'SIG-')", raw_sig_id));
+            errors.push(format!(
+                "Check 24 failed: Invalid Signal ID '{}' in Section 2 (must start with 'SIG-')",
+                raw_sig_id
+            ));
         } else if seen_sig_ids.contains(&sig_id) {
-            errors.push(format!("Check 24 failed: Duplicate Signal ID '{}' in Section 2", sig_id));
+            errors.push(format!(
+                "Check 24 failed: Duplicate Signal ID '{}' in Section 2",
+                sig_id
+            ));
         } else {
             seen_sig_ids.insert(sig_id.clone());
         }
 
         if !declared_ports.contains_key(&src_port) {
-            errors.push(format!("Check 24 failed: Signal '{}' ({}) references undeclared source port '{}'", sig_id, sig_name, src_port));
+            errors.push(format!(
+                "Check 24 failed: Signal '{}' ({}) references undeclared source port '{}'",
+                sig_id, sig_name, src_port
+            ));
         }
         if !declared_ports.contains_key(&dst_port) {
-            errors.push(format!("Check 24 failed: Signal '{}' ({}) references undeclared dest port '{}'", sig_id, sig_name, dst_port));
+            errors.push(format!(
+                "Check 24 failed: Signal '{}' ({}) references undeclared dest port '{}'",
+                sig_id, sig_name, dst_port
+            ));
         }
 
         let is_mapped = valid_connections.contains(&(src_port.clone(), dst_port.clone()));
@@ -3076,8 +3330,16 @@ pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<Str
         let si_units = row.get(units_idx).map(|s| s.as_str()).unwrap_or("").trim();
         let valid_range = row.get(range_idx).map(|s| s.as_str()).unwrap_or("").trim();
         let update_rate = row.get(rate_idx).map(|s| s.as_str()).unwrap_or("").trim();
-        let safe_default = row.get(default_idx).map(|s| s.as_str()).unwrap_or("").trim();
-        let citation = row.get(citation_idx).map(|s| s.as_str()).unwrap_or("").trim();
+        let safe_default = row
+            .get(default_idx)
+            .map(|s| s.as_str())
+            .unwrap_or("")
+            .trim();
+        let citation = row
+            .get(citation_idx)
+            .map(|s| s.as_str())
+            .unwrap_or("")
+            .trim();
 
         let fields = [
             ("data type", data_type),
@@ -3164,7 +3426,11 @@ pub fn check_operational_allocation(repo_root: &Path) -> Result<ParityOutcome, V
                 let entry = match entry_res {
                     Ok(e) => e,
                     Err(err) => {
-                        errors.push(format!("Check 25 failed: I/O error walking directory '{}': {}", dir.display(), err));
+                        errors.push(format!(
+                            "Check 25 failed: I/O error walking directory '{}': {}",
+                            dir.display(),
+                            err
+                        ));
                         continue;
                     }
                 };
@@ -3184,15 +3450,23 @@ pub fn check_operational_allocation(repo_root: &Path) -> Result<ParityOutcome, V
     }
 
     for path in target_files {
-        let rel = path.strip_prefix(repo_root).unwrap_or(&path).display().to_string();
+        let rel = path
+            .strip_prefix(repo_root)
+            .unwrap_or(&path)
+            .display()
+            .to_string();
         let content = match fs::read_to_string(&path) {
             Ok(c) => c,
             Err(e) => {
-                errors.push(format!("Check 25 failed: Unable to read file '{}': {}", rel, e));
+                errors.push(format!(
+                    "Check 25 failed: Unable to read file '{}': {}",
+                    rel, e
+                ));
                 continue;
             }
         };
-        let findings = crate::spec_audit::conops_audit::validate_operational_allocation_tags(&content, &rel);
+        let findings =
+            crate::spec_audit::conops_audit::validate_operational_allocation_tags(&content, &rel);
         for f in findings {
             errors.push(f.to_string());
         }
@@ -3269,7 +3543,11 @@ pub fn check_standards_measurement(
                 let entry = match entry_res {
                     Ok(e) => e,
                     Err(err) => {
-                        errors.push(format!("Check 26 failed: I/O error walking directory '{}': {}", dir.display(), err));
+                        errors.push(format!(
+                            "Check 26 failed: I/O error walking directory '{}': {}",
+                            dir.display(),
+                            err
+                        ));
                         continue;
                     }
                 };
@@ -3292,11 +3570,18 @@ pub fn check_standards_measurement(
     }
 
     for path in target_files {
-        let rel = path.strip_prefix(repo_root).unwrap_or(&path).display().to_string();
+        let rel = path
+            .strip_prefix(repo_root)
+            .unwrap_or(&path)
+            .display()
+            .to_string();
         let content = match fs::read_to_string(&path) {
             Ok(c) => c,
             Err(e) => {
-                errors.push(format!("Check 26 failed: Unable to read file '{}': {}", rel, e));
+                errors.push(format!(
+                    "Check 26 failed: Unable to read file '{}': {}",
+                    rel, e
+                ));
                 continue;
             }
         };
@@ -3307,7 +3592,10 @@ pub fn check_standards_measurement(
                 for row in &rows {
                     if let Some(unit_val) = row.get(unit_col) {
                         let clean = unit_val.trim().trim_matches(|c| c == '`' || c == '*');
-                        if clean.is_empty() || is_metrology_placeholder(clean) || !is_valid_si_unit(clean) {
+                        if clean.is_empty()
+                            || is_metrology_placeholder(clean)
+                            || !is_valid_si_unit(clean)
+                        {
                             errors.push(format!(
                                 "Check 26 failed: Invalid or missing SI dimensional unit '{}' in '{}'",
                                 clean, rel
@@ -3677,11 +3965,15 @@ pub fn check_conops_and_mission_intent_completeness(
     let is_upstream = is_upstream_compiler(repo_root);
     let conops_dir = repo_root.join("docs").join("conops");
 
-    let schema_file = repo_root.join(".pipeline").join("schemas").join("conops_specification_schema.json");
+    let schema_file = repo_root
+        .join(".pipeline")
+        .join("schemas")
+        .join("conops_specification_schema.json");
     if schema_file.is_file() {
         match crate::spec_audit::conops_audit::validate_conops_schema_file(&schema_file) {
             Ok(schema_findings) if !schema_findings.is_empty() => {
-                let errs: Vec<String> = schema_findings.into_iter().map(|f| f.to_string()).collect();
+                let errs: Vec<String> =
+                    schema_findings.into_iter().map(|f| f.to_string()).collect();
                 return Err(errs);
             }
             Err(e) => {
@@ -3701,13 +3993,19 @@ pub fn check_conops_and_mission_intent_completeness(
         }
 
         let mut conops_files = Vec::new();
-        let entries = fs::read_dir(&conops_dir).map_err(|e| vec![format!(
-            "Check 28 failed: Unable to read conops directory '{}': {}",
-            conops_dir.display(), e
-        )])?;
+        let entries = fs::read_dir(&conops_dir).map_err(|e| {
+            vec![format!(
+                "Check 28 failed: Unable to read conops directory '{}': {}",
+                conops_dir.display(),
+                e
+            )]
+        })?;
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.ends_with(".md") && name != "README.md" && !name.to_ascii_uppercase().contains("TEMPLATE") {
+            if name.ends_with(".md")
+                && name != "README.md"
+                && !name.to_ascii_uppercase().contains("TEMPLATE")
+            {
                 conops_files.push(entry.path());
             }
         }
@@ -3727,22 +4025,31 @@ pub fn check_conops_and_mission_intent_completeness(
         }
 
         for path in &conops_files {
-            let content = fs::read_to_string(path).map_err(|e| vec![format!(
-                "Check 28 failed: Unable to read ConOps file '{}': {}",
-                path.display(), e
-            )])?;
-            let doc = crate::spec_audit::markdown_ast::parse_markdown(&content).map_err(|e| vec![format!(
-                "Check 28 failed: Unable to parse markdown in '{}': {}",
-                path.display(), e
-            )])?;
+            let content = fs::read_to_string(path).map_err(|e| {
+                vec![format!(
+                    "Check 28 failed: Unable to read ConOps file '{}': {}",
+                    path.display(),
+                    e
+                )]
+            })?;
+            let doc = crate::spec_audit::markdown_ast::parse_markdown(&content).map_err(|e| {
+                vec![format!(
+                    "Check 28 failed: Unable to parse markdown in '{}': {}",
+                    path.display(),
+                    e
+                )]
+            })?;
             let rel = match path.strip_prefix(repo_root) {
                 Ok(r) => r.to_string_lossy().to_string(),
                 Err(_) => path.to_string_lossy().to_string(),
             };
-            let findings = crate::spec_audit::conops_audit::validate_conops(&doc, &content, &rel).map_err(|e| vec![format!(
-                "Check 28 failed: Validation error in '{}': {}",
-                rel, e
-            )])?;
+            let findings = crate::spec_audit::conops_audit::validate_conops(&doc, &content, &rel)
+                .map_err(|e| {
+                vec![format!(
+                    "Check 28 failed: Validation error in '{}': {}",
+                    rel, e
+                )]
+            })?;
             if !findings.is_empty() && (strict || !effective_allow_missing) {
                 let errs: Vec<String> = findings.into_iter().map(|f| f.to_string()).collect();
                 return Err(errs);
@@ -3810,7 +4117,11 @@ pub fn check_research_inventory(
                 let entry = match entry_res {
                     Ok(e) => e,
                     Err(err) => {
-                        errors.push(format!("Check 29 failed: I/O error walking directory '{}': {}", dir.display(), err));
+                        errors.push(format!(
+                            "Check 29 failed: I/O error walking directory '{}': {}",
+                            dir.display(),
+                            err
+                        ));
                         continue;
                     }
                 };
@@ -3830,11 +4141,18 @@ pub fn check_research_inventory(
     }
 
     for path in spec_files {
-        let rel = path.strip_prefix(repo_root).unwrap_or(&path).display().to_string();
+        let rel = path
+            .strip_prefix(repo_root)
+            .unwrap_or(&path)
+            .display()
+            .to_string();
         let content = match fs::read_to_string(&path) {
             Ok(c) => c,
             Err(e) => {
-                errors.push(format!("Check 29 failed: Unable to read file '{}': {}", rel, e));
+                errors.push(format!(
+                    "Check 29 failed: Unable to read file '{}': {}",
+                    rel, e
+                ));
                 continue;
             }
         };
@@ -3845,7 +4163,8 @@ pub fn check_research_inventory(
             let trimmed = line.trim();
             if trimmed.starts_with('#') {
                 let lower = trimmed.to_ascii_lowercase();
-                in_source_refs = lower.contains("source references") || lower.contains("bibliography");
+                in_source_refs =
+                    lower.contains("source references") || lower.contains("bibliography");
                 continue;
             }
 
@@ -3891,7 +4210,9 @@ pub fn check_research_inventory(
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-PARITY-GATE-30].
-pub fn check_executive_deliverable_traceability(repo_root: &Path) -> Result<ParityOutcome, Vec<String>> {
+pub fn check_executive_deliverable_traceability(
+    repo_root: &Path,
+) -> Result<ParityOutcome, Vec<String>> {
     let reports_dir = TargetScanDir::Reports.resolve(repo_root);
     if !reports_dir.is_dir() {
         return Ok(ParityOutcome::PendingOrClean);
@@ -3903,7 +4224,11 @@ pub fn check_executive_deliverable_traceability(repo_root: &Path) -> Result<Pari
         let entry = match entry_res {
             Ok(e) => e,
             Err(err) => {
-                errors.push(format!("Check 30 failed: I/O error walking directory '{}': {}", reports_dir.display(), err));
+                errors.push(format!(
+                    "Check 30 failed: I/O error walking directory '{}': {}",
+                    reports_dir.display(),
+                    err
+                ));
                 continue;
             }
         };
@@ -3923,7 +4248,11 @@ pub fn check_executive_deliverable_traceability(repo_root: &Path) -> Result<Pari
     let mut ssot_conns = BTreeSet::new();
     let views_dir = repo_root.join("docs").join("architecture").join("views");
     if views_dir.is_dir() {
-        for entry in WalkDir::new(&views_dir).sort_by_file_name().into_iter().flatten() {
+        for entry in WalkDir::new(&views_dir)
+            .sort_by_file_name()
+            .into_iter()
+            .flatten()
+        {
             if entry.file_type().is_file() {
                 if let Ok(vc) = fs::read_to_string(entry.path()) {
                     for cid in extract_connection_ids(&vc) {
@@ -3945,8 +4274,14 @@ pub fn check_executive_deliverable_traceability(repo_root: &Path) -> Result<Pari
     }
     let conops_dir = TargetScanDir::Conops.resolve(repo_root);
     if conops_dir.is_dir() {
-        for entry in WalkDir::new(&conops_dir).sort_by_file_name().into_iter().flatten() {
-            if entry.file_type().is_file() && entry.path().extension().is_some_and(|ext| ext == "md") {
+        for entry in WalkDir::new(&conops_dir)
+            .sort_by_file_name()
+            .into_iter()
+            .flatten()
+        {
+            if entry.file_type().is_file()
+                && entry.path().extension().is_some_and(|ext| ext == "md")
+            {
                 if let Ok(cc) = fs::read_to_string(entry.path()) {
                     for cid in extract_connection_ids(&cc) {
                         ssot_conns.insert(cid);
@@ -3957,11 +4292,18 @@ pub fn check_executive_deliverable_traceability(repo_root: &Path) -> Result<Pari
     }
 
     for path in report_files {
-        let rel = path.strip_prefix(repo_root).unwrap_or(&path).display().to_string();
+        let rel = path
+            .strip_prefix(repo_root)
+            .unwrap_or(&path)
+            .display()
+            .to_string();
         let content = match fs::read_to_string(&path) {
             Ok(c) => c,
             Err(e) => {
-                errors.push(format!("Check 30 failed: Unable to read file '{}': {}", rel, e));
+                errors.push(format!(
+                    "Check 30 failed: Unable to read file '{}': {}",
+                    rel, e
+                ));
                 continue;
             }
         };
@@ -4323,7 +4665,9 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
                     continue;
                 }
             };
-            if entry.file_type().is_file() && entry.path().extension().is_some_and(|ext| ext == "md") {
+            if entry.file_type().is_file()
+                && entry.path().extension().is_some_and(|ext| ext == "md")
+            {
                 let fname = entry.file_name().to_string_lossy();
                 if fname == "README.md" {
                     continue;
@@ -4344,11 +4688,17 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
                 for word in content.split_whitespace() {
                     for part in word.split(['(', ')', '[', ']', '`', '"', '\'']) {
                         let clean = part.trim_matches(|c: char| {
-                            !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != '.' && c != '/'
+                            !c.is_ascii_alphanumeric()
+                                && c != '-'
+                                && c != '_'
+                                && c != '.'
+                                && c != '/'
                         });
                         let basename = clean.rsplit('/').next().unwrap_or(clean);
                         let bl = basename.to_ascii_lowercase();
-                        if (bl.starts_with("feat-") || bl.starts_with("uc-") || bl.starts_with("us-"))
+                        if (bl.starts_with("feat-")
+                            || bl.starts_with("uc-")
+                            || bl.starts_with("us-"))
                             && bl.ends_with(".md")
                             && !declared_specs.contains(&bl)
                         {
@@ -4372,7 +4722,9 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
         let schema_dir = repo_root.join("schema");
         if schema_dir.is_dir() {
             let discovered =
-                deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[&schema_dir]);
+                deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[
+                    &schema_dir,
+                ]);
             for p in discovered {
                 if p.extension().is_some_and(|ext| ext == "sysml") {
                     schema_files.push(p);
@@ -4469,7 +4821,11 @@ fn extract_stpa_prefixed_ids(line: &str, prefix: &str) -> BTreeSet<String> {
         if let Some(rest) = upper.strip_prefix(prefix) {
             if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
                 let normalized_num = rest.trim_start_matches('0');
-                let num_str = if normalized_num.is_empty() { "0" } else { normalized_num };
+                let num_str = if normalized_num.is_empty() {
+                    "0"
+                } else {
+                    normalized_num
+                };
                 ids.insert(format!("{}{}", prefix, num_str));
             }
         }
@@ -4517,7 +4873,11 @@ pub fn check_obligation_witness(repo_root: &Path) -> Result<ParityOutcome, Vec<S
         let entry = match entry_res {
             Ok(e) => e,
             Err(err) => {
-                errors.push(format!("Check 30B failed: I/O error walking directory '{}': {}", safety_dir.display(), err));
+                errors.push(format!(
+                    "Check 30B failed: I/O error walking directory '{}': {}",
+                    safety_dir.display(),
+                    err
+                ));
                 continue;
             }
         };
@@ -4545,7 +4905,11 @@ pub fn check_obligation_witness(repo_root: &Path) -> Result<ParityOutcome, Vec<S
     let mut has_explicit_uca_bindings = false;
 
     for path in &stpa_files {
-        let rel = path.strip_prefix(repo_root).unwrap_or(path).display().to_string();
+        let rel = path
+            .strip_prefix(repo_root)
+            .unwrap_or(path)
+            .display()
+            .to_string();
         let content = match fs::read_to_string(path) {
             Ok(c) => c,
             Err(e) => {
@@ -4675,7 +5039,11 @@ pub fn check_architecture_viewpoint_diagrams(
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-DUAL-SCHEMA-SSOT-PARITY/PACKAGE-SCOPING].
-fn collect_qualified_package_bodies(content: &str, parent_pkg: &str, out: &mut Vec<(String, String)>) {
+fn collect_qualified_package_bodies(
+    content: &str,
+    parent_pkg: &str,
+    out: &mut Vec<(String, String)>,
+) {
     let clean = strip_sysml_comments(content);
     let masked = mask_string_literals(&clean);
     let mut remainder = clean.as_bytes().to_vec();
@@ -4684,22 +5052,45 @@ fn collect_qualified_package_bodies(content: &str, parent_pkg: &str, out: &mut V
     while let Some(pos) = masked.get(idx..).and_then(|s| s.find("package")) {
         let pkg_pos = idx + pos;
         let before_ok = pkg_pos == 0
-            || !masked.as_bytes().get(pkg_pos - 1).copied().is_some_and(|b| b.is_ascii_alphanumeric() || b == b'_');
-        let after_ok = !masked.as_bytes().get(pkg_pos + 7).copied().is_some_and(|b| b.is_ascii_alphanumeric() || b == b'_');
+            || !masked
+                .as_bytes()
+                .get(pkg_pos - 1)
+                .copied()
+                .is_some_and(|b| b.is_ascii_alphanumeric() || b == b'_');
+        let after_ok = !masked
+            .as_bytes()
+            .get(pkg_pos + 7)
+            .copied()
+            .is_some_and(|b| b.is_ascii_alphanumeric() || b == b'_');
         if !before_ok || !after_ok {
             idx = pkg_pos + 7;
             continue;
         }
         let mut curr = pkg_pos + 7;
-        curr += masked.get(curr..).unwrap_or("").bytes().take_while(|b| b.is_ascii_whitespace()).count();
-        let name_len = masked.get(curr..).unwrap_or("").bytes().take_while(|b| b.is_ascii_alphanumeric() || *b == b'_').count();
+        curr += masked
+            .get(curr..)
+            .unwrap_or("")
+            .bytes()
+            .take_while(|b| b.is_ascii_whitespace())
+            .count();
+        let name_len = masked
+            .get(curr..)
+            .unwrap_or("")
+            .bytes()
+            .take_while(|b| b.is_ascii_alphanumeric() || *b == b'_')
+            .count();
         let name = masked.get(curr..curr + name_len).unwrap_or("");
         if name.is_empty() {
             idx = pkg_pos + 7;
             continue;
         }
         curr += name_len;
-        curr += masked.get(curr..).unwrap_or("").bytes().take_while(|b| b.is_ascii_whitespace()).count();
+        curr += masked
+            .get(curr..)
+            .unwrap_or("")
+            .bytes()
+            .take_while(|b| b.is_ascii_whitespace())
+            .count();
         if masked.get(curr..).is_some_and(|s| s.starts_with('{')) {
             if let Some(close_pos) = find_matching_brace(&clean, curr) {
                 let body = clean.get(curr + 1..close_pos).unwrap_or("");
@@ -4838,7 +5229,10 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
 
     let mut schema_sysml_files = Vec::new();
     if schema_dir.is_dir() {
-        let all_files = deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[&schema_dir]);
+        let all_files =
+            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[
+                &schema_dir,
+            ]);
         schema_sysml_files = all_files
             .into_iter()
             .filter(|p| {
@@ -4850,20 +5244,24 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
 
     if designs_dir.is_dir() {
         let mut design_sysml_files: Vec<PathBuf> =
-            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[&designs_dir])
-                .into_iter()
-                .filter(|p| {
-                    p.extension().is_some_and(|ext| ext == "sysml")
-                        && fs::metadata(p).map(|m| m.len() > 0).unwrap_or(false)
-                })
-                .collect();
+            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[
+                &designs_dir,
+            ])
+            .into_iter()
+            .filter(|p| {
+                p.extension().is_some_and(|ext| ext == "sysml")
+                    && fs::metadata(p).map(|m| m.len() > 0).unwrap_or(false)
+            })
+            .collect();
         design_sysml_files.sort();
 
         let mut sidecar_errors = Vec::new();
         for design_sysml in &design_sysml_files {
             let digest_path = design_sysml.with_extension("digest.json");
             let has_valid_digest = digest_path.is_file()
-                && fs::metadata(&digest_path).map(|m| m.len() > 0).unwrap_or(false);
+                && fs::metadata(&digest_path)
+                    .map(|m| m.len() > 0)
+                    .unwrap_or(false);
             if !has_valid_digest {
                 sidecar_errors.push(format!(
                     "Check 31 failed: Missing or empty companion digest sidecar {} for design schema {}",
@@ -4880,7 +5278,9 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
     }
 
     let has_pipeline_schema = pipeline_schema.is_file()
-        && fs::metadata(&pipeline_schema).map(|m| m.len() > 0).unwrap_or(false);
+        && fs::metadata(&pipeline_schema)
+            .map(|m| m.len() > 0)
+            .unwrap_or(false);
     let has_schema_files = !schema_sysml_files.is_empty();
 
     if !(has_schema_files && has_pipeline_schema) {
@@ -4896,7 +5296,11 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
                 schema_dir_content.push_str("\n\n");
             }
             Err(e) => {
-                return Err(vec![format!("Check 31 failed: Unable to read {}: {}", fpath.display(), e)]);
+                return Err(vec![format!(
+                    "Check 31 failed: Unable to read {}: {}",
+                    fpath.display(),
+                    e
+                )]);
             }
         }
     }
@@ -4904,7 +5308,11 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
     let pipeline_schema_content = match fs::read_to_string(&pipeline_schema) {
         Ok(c) => c,
         Err(e) => {
-            return Err(vec![format!("Check 31 failed: Unable to read {}: {}", pipeline_schema.display(), e)]);
+            return Err(vec![format!(
+                "Check 31 failed: Unable to read {}: {}",
+                pipeline_schema.display(),
+                e
+            )]);
         }
     };
 
@@ -4928,48 +5336,95 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
 
     for (pkg_path, body) in &dir_bodies {
         for p in parse_part_defs(body) {
-            let qual = if pkg_path.is_empty() { p.name.clone() } else { format!("{}::{}", pkg_path, p.name) };
+            let qual = if pkg_path.is_empty() {
+                p.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, p.name)
+            };
             parts_dir.entry(qual).or_default().push(p);
         }
         for p in parse_port_defs(body) {
-            let qual = if pkg_path.is_empty() { p.name.clone() } else { format!("{}::{}", pkg_path, p.name) };
+            let qual = if pkg_path.is_empty() {
+                p.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, p.name)
+            };
             ports_dir.entry(qual).or_default().push(p);
         }
         for a in parse_action_defs(body) {
-            let qual = if pkg_path.is_empty() { a.name.clone() } else { format!("{}::{}", pkg_path, a.name) };
+            let qual = if pkg_path.is_empty() {
+                a.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, a.name)
+            };
             actions_dir.entry(qual).or_default().push(a);
         }
         for r in parse_requirement_defs(body) {
-            let qual = if pkg_path.is_empty() { r.name.clone() } else { format!("{}::{}", pkg_path, r.name) };
+            let qual = if pkg_path.is_empty() {
+                r.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, r.name)
+            };
             reqs_dir.entry(qual).or_default().push(r);
         }
         for c in parse_constraint_defs(body) {
-            let qual = if pkg_path.is_empty() { c.name.clone() } else { format!("{}::{}", pkg_path, c.name) };
+            let qual = if pkg_path.is_empty() {
+                c.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, c.name)
+            };
             constraints_dir.entry(qual).or_default().push(c);
         }
         for s in parse_state_defs(body) {
-            let qual = if pkg_path.is_empty() { s.name.clone() } else { format!("{}::{}", pkg_path, s.name) };
+            let qual = if pkg_path.is_empty() {
+                s.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, s.name)
+            };
             states_dir.entry(qual).or_default().push(s);
         }
         for c in parse_calc_defs(body) {
-            let qual = if pkg_path.is_empty() { c.name.clone() } else { format!("{}::{}", pkg_path, c.name) };
+            let qual = if pkg_path.is_empty() {
+                c.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, c.name)
+            };
             calcs_dir.entry(qual).or_default().push(c);
         }
         for c in parse_connection_defs(body) {
-            let qual = if pkg_path.is_empty() { c.name.clone() } else { format!("{}::{}", pkg_path, c.name) };
+            let qual = if pkg_path.is_empty() {
+                c.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, c.name)
+            };
             conns_dir.entry(qual).or_default().push(c);
         }
         for t in parse_test_case_defs(body) {
-            let qual = if pkg_path.is_empty() { t.name.clone() } else { format!("{}::{}", pkg_path, t.name) };
+            let qual = if pkg_path.is_empty() {
+                t.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, t.name)
+            };
             tests_dir.entry(qual).or_default().push(t);
         }
         for a in parse_attribute_defs(body) {
-            let qual = if pkg_path.is_empty() { a.name.clone() } else { format!("{}::{}", pkg_path, a.name) };
+            let qual = if pkg_path.is_empty() {
+                a.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, a.name)
+            };
             attrs_dir.entry(qual).or_default().push(a);
         }
         for (uc_name, uc_body) in parse_use_case_defs(body) {
-            let qual = if pkg_path.is_empty() { uc_name.clone() } else { format!("{}::{}", pkg_path, uc_name) };
-            use_cases_dir.entry(qual).or_default().push((uc_name, uc_body));
+            let qual = if pkg_path.is_empty() {
+                uc_name.clone()
+            } else {
+                format!("{}::{}", pkg_path, uc_name)
+            };
+            use_cases_dir
+                .entry(qual)
+                .or_default()
+                .push((uc_name, uc_body));
         }
     }
 
@@ -4987,48 +5442,95 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
 
     for (pkg_path, body) in &pipe_bodies {
         for p in parse_part_defs(body) {
-            let qual = if pkg_path.is_empty() { p.name.clone() } else { format!("{}::{}", pkg_path, p.name) };
+            let qual = if pkg_path.is_empty() {
+                p.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, p.name)
+            };
             parts_pipe.entry(qual).or_default().push(p);
         }
         for p in parse_port_defs(body) {
-            let qual = if pkg_path.is_empty() { p.name.clone() } else { format!("{}::{}", pkg_path, p.name) };
+            let qual = if pkg_path.is_empty() {
+                p.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, p.name)
+            };
             ports_pipe.entry(qual).or_default().push(p);
         }
         for a in parse_action_defs(body) {
-            let qual = if pkg_path.is_empty() { a.name.clone() } else { format!("{}::{}", pkg_path, a.name) };
+            let qual = if pkg_path.is_empty() {
+                a.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, a.name)
+            };
             actions_pipe.entry(qual).or_default().push(a);
         }
         for r in parse_requirement_defs(body) {
-            let qual = if pkg_path.is_empty() { r.name.clone() } else { format!("{}::{}", pkg_path, r.name) };
+            let qual = if pkg_path.is_empty() {
+                r.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, r.name)
+            };
             reqs_pipe.entry(qual).or_default().push(r);
         }
         for c in parse_constraint_defs(body) {
-            let qual = if pkg_path.is_empty() { c.name.clone() } else { format!("{}::{}", pkg_path, c.name) };
+            let qual = if pkg_path.is_empty() {
+                c.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, c.name)
+            };
             constraints_pipe.entry(qual).or_default().push(c);
         }
         for s in parse_state_defs(body) {
-            let qual = if pkg_path.is_empty() { s.name.clone() } else { format!("{}::{}", pkg_path, s.name) };
+            let qual = if pkg_path.is_empty() {
+                s.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, s.name)
+            };
             states_pipe.entry(qual).or_default().push(s);
         }
         for c in parse_calc_defs(body) {
-            let qual = if pkg_path.is_empty() { c.name.clone() } else { format!("{}::{}", pkg_path, c.name) };
+            let qual = if pkg_path.is_empty() {
+                c.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, c.name)
+            };
             calcs_pipe.entry(qual).or_default().push(c);
         }
         for c in parse_connection_defs(body) {
-            let qual = if pkg_path.is_empty() { c.name.clone() } else { format!("{}::{}", pkg_path, c.name) };
+            let qual = if pkg_path.is_empty() {
+                c.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, c.name)
+            };
             conns_pipe.entry(qual).or_default().push(c);
         }
         for t in parse_test_case_defs(body) {
-            let qual = if pkg_path.is_empty() { t.name.clone() } else { format!("{}::{}", pkg_path, t.name) };
+            let qual = if pkg_path.is_empty() {
+                t.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, t.name)
+            };
             tests_pipe.entry(qual).or_default().push(t);
         }
         for a in parse_attribute_defs(body) {
-            let qual = if pkg_path.is_empty() { a.name.clone() } else { format!("{}::{}", pkg_path, a.name) };
+            let qual = if pkg_path.is_empty() {
+                a.name.clone()
+            } else {
+                format!("{}::{}", pkg_path, a.name)
+            };
             attrs_pipe.entry(qual).or_default().push(a);
         }
         for (uc_name, uc_body) in parse_use_case_defs(body) {
-            let qual = if pkg_path.is_empty() { uc_name.clone() } else { format!("{}::{}", pkg_path, uc_name) };
-            use_cases_pipe.entry(qual).or_default().push((uc_name, uc_body));
+            let qual = if pkg_path.is_empty() {
+                uc_name.clone()
+            } else {
+                format!("{}::{}", pkg_path, uc_name)
+            };
+            use_cases_pipe
+                .entry(qual)
+                .or_default()
+                .push((uc_name, uc_body));
         }
     }
 
@@ -5037,13 +5539,23 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
     compare_scoped_defs("port def", &ports_dir, &ports_pipe, &mut mismatches);
     compare_scoped_defs("action def", &actions_dir, &actions_pipe, &mut mismatches);
     compare_scoped_defs("requirement def", &reqs_dir, &reqs_pipe, &mut mismatches);
-    compare_scoped_defs("constraint def", &constraints_dir, &constraints_pipe, &mut mismatches);
+    compare_scoped_defs(
+        "constraint def",
+        &constraints_dir,
+        &constraints_pipe,
+        &mut mismatches,
+    );
     compare_scoped_defs("state def", &states_dir, &states_pipe, &mut mismatches);
     compare_scoped_defs("calc def", &calcs_dir, &calcs_pipe, &mut mismatches);
     compare_scoped_defs("connection def", &conns_dir, &conns_pipe, &mut mismatches);
     compare_scoped_defs("test case def", &tests_dir, &tests_pipe, &mut mismatches);
     compare_scoped_defs("attribute def", &attrs_dir, &attrs_pipe, &mut mismatches);
-    compare_scoped_defs("use case def", &use_cases_dir, &use_cases_pipe, &mut mismatches);
+    compare_scoped_defs(
+        "use case def",
+        &use_cases_dir,
+        &use_cases_pipe,
+        &mut mismatches,
+    );
 
     if mismatches.is_empty() {
         Ok(ParityOutcome::DualSchemaIdentical)
@@ -5069,7 +5581,8 @@ mod tests {
             let nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
                 .as_nanos();
-            let path = std::env::temp_dir().join(format!("verify_parity_{}_{}_{}", name, nanos, count));
+            let path =
+                std::env::temp_dir().join(format!("verify_parity_{}_{}_{}", name, nanos, count));
             fs::create_dir_all(&path)?;
             Ok(Self { path })
         }
@@ -5084,7 +5597,10 @@ mod tests {
     #[test]
     fn test_dual_schema_single_passes() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("single")?;
-        assert_eq!(check_dual_schema_ssot_parity(&tmp.path), Ok(ParityOutcome::DualSchemaSingleOrClean));
+        assert_eq!(
+            check_dual_schema_ssot_parity(&tmp.path),
+            Ok(ParityOutcome::DualSchemaSingleOrClean)
+        );
         Ok(())
     }
 
@@ -5103,7 +5619,10 @@ mod tests {
         let mut f2 = File::create(pipe_dir.join("schema.sysml"))?;
         write!(f2, "{}", sysml)?;
 
-        assert_eq!(check_dual_schema_ssot_parity(&tmp.path), Ok(ParityOutcome::DualSchemaIdentical));
+        assert_eq!(
+            check_dual_schema_ssot_parity(&tmp.path),
+            Ok(ParityOutcome::DualSchemaIdentical)
+        );
         Ok(())
     }
 
@@ -5138,8 +5657,10 @@ mod tests {
         fs::create_dir_all(&sub2)?;
         fs::create_dir_all(&pipe_dir)?;
 
-        let sysml_a = "package Sub1 {\n  part def SensorA;\n  port def PortA;\n  action def ActionA;\n}\n";
-        let sysml_b = "package Sub2 {\n  part def SensorB;\n  port def PortB;\n  action def ActionB;\n}\n";
+        let sysml_a =
+            "package Sub1 {\n  part def SensorA;\n  port def PortA;\n  action def ActionA;\n}\n";
+        let sysml_b =
+            "package Sub2 {\n  part def SensorB;\n  port def PortB;\n  action def ActionB;\n}\n";
         let combined = format!("{}\n{}", sysml_a, sysml_b);
 
         let mut fa = File::create(sub1.join("a.sysml"))?;
@@ -5149,7 +5670,10 @@ mod tests {
         write!(fb, "{}", sysml_b)?;
 
         let discovered_before_pipeline = discover_sysml_model_text(&tmp.path);
-        assert!(discovered_before_pipeline.is_some(), "discover_sysml_model_text must discover multi-file schema across nested directories");
+        assert!(
+            discovered_before_pipeline.is_some(),
+            "discover_sysml_model_text must discover multi-file schema across nested directories"
+        );
         let disc_text = match discovered_before_pipeline {
             Some(t) => t,
             None => return Err("expected discovered text".into()),
@@ -5168,7 +5692,8 @@ mod tests {
     }
 
     #[test]
-    fn test_issue_256_check28_rejects_missing_conops_schema_architecture_contract() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_256_check28_rejects_missing_conops_schema_architecture_contract(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("check28_missing_arch")?;
         let schemas_dir = tmp.path.join(".pipeline").join("schemas");
         fs::create_dir_all(&schemas_dir)?;
@@ -5182,10 +5707,16 @@ mod tests {
                 "operational_context": { "type": "object" }
             }
         }"#;
-        fs::write(schemas_dir.join("conops_specification_schema.json"), invalid_schema)?;
+        fs::write(
+            schemas_dir.join("conops_specification_schema.json"),
+            invalid_schema,
+        )?;
 
         let res = check_conops_and_mission_intent_completeness(&tmp.path, false, true);
-        assert!(res.is_err(), "Check 28 must fail when conops schema omits architecture properties");
+        assert!(
+            res.is_err(),
+            "Check 28 must fail when conops schema omits architecture properties"
+        );
         let errs = match res {
             Err(e) => e,
             Ok(v) => return Err(format!("expected Err, got {:?}", v).into()),
@@ -5196,26 +5727,41 @@ mod tests {
     }
 
     #[test]
-    fn test_issue_256_check28_passes_valid_conops_schema_architecture_contract() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_256_check28_passes_valid_conops_schema_architecture_contract(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("check28_valid_arch")?;
         let schemas_dir = tmp.path.join(".pipeline").join("schemas");
         fs::create_dir_all(&schemas_dir)?;
 
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let root = manifest_dir.parent().and_then(|p| p.parent()).ok_or("missing root")?;
-        let live_schema = root.join(".pipeline").join("schemas").join("conops_specification_schema.json");
+        let root = manifest_dir
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or("missing root")?;
+        let live_schema = root
+            .join(".pipeline")
+            .join("schemas")
+            .join("conops_specification_schema.json");
         if live_schema.is_file() {
             let content = fs::read_to_string(&live_schema)?;
-            fs::write(schemas_dir.join("conops_specification_schema.json"), content)?;
+            fs::write(
+                schemas_dir.join("conops_specification_schema.json"),
+                content,
+            )?;
 
             let res = check_conops_and_mission_intent_completeness(&tmp.path, false, true);
-            assert!(res.is_ok(), "Check 28 must pass when conops schema contract is complete: {:?}", res);
+            assert!(
+                res.is_ok(),
+                "Check 28 must pass when conops schema contract is complete: {:?}",
+                res
+            );
         }
         Ok(())
     }
 
     #[test]
-    fn test_issue_271_conops_sv1_icd_parity_mismatch_fails() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_271_conops_sv1_icd_parity_mismatch_fails(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("check27_conops_icd_mismatch")?;
         let conops_dir = tmp.path.join("docs").join("conops");
         let interfaces_dir = tmp.path.join("docs").join("interfaces");
@@ -5238,10 +5784,16 @@ flowchart TD
 | `CONN-01` | PORT-SUP-CMD | PORT-CTRL-CMD |
 | `CONN-99` | PORT-ALT-CMD | PORT-CTRL-ALT |
 "#;
-        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd_content)?;
+        fs::write(
+            interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"),
+            icd_content,
+        )?;
 
         let res = check_cross_document_diagram_parity(&tmp.path);
-        assert!(res.is_err(), "Check 27 must fail when ConOps SV-1 and Level 1C ICD connections mismatch");
+        assert!(
+            res.is_err(),
+            "Check 27 must fail when ConOps SV-1 and Level 1C ICD connections mismatch"
+        );
         Ok(())
     }
 
@@ -5269,7 +5821,10 @@ flowchart TD
 | `CONN-01` | PORT-SUP-CMD | PORT-CTRL-CMD |
 | `CONN-02` | PORT-SUP-TLM | PORT-CTRL-TLM |
 "#;
-        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd_content)?;
+        fs::write(
+            interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"),
+            icd_content,
+        )?;
 
         let res = check_cross_document_diagram_parity(&tmp.path);
         assert_eq!(res, Ok(ParityOutcome::Verified));
@@ -5277,7 +5832,8 @@ flowchart TD
     }
 
     #[test]
-    fn test_defect_276_divergent_reports_diagram_without_ssot_views_library_fails() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_276_divergent_reports_diagram_without_ssot_views_library_fails(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("check27_reports_divergence")?;
         let conops_dir = tmp.path.join("docs").join("conops");
         let reports_dir = tmp.path.join("docs").join("reports");
@@ -5300,7 +5856,10 @@ flowchart TD
 | `CONN-01` | PORT-SUP-CMD | PORT-CTRL-CMD |
 | `CONN-02` | PORT-SUP-TLM | PORT-CTRL-TLM |
 "#;
-        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd_content)?;
+        fs::write(
+            interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"),
+            icd_content,
+        )?;
 
         let report_content = r#"# Executive Engineering Deliverables
 ```mermaid
@@ -5308,7 +5867,10 @@ flowchart TD
     SubA -->|"CONN-99: Divergent Unaligned Flow"| SubB
 ```
 "#;
-        fs::write(reports_dir.join("PHASE_1_EXECUTIVE_ENGINEERING_DELIVERABLES.md"), report_content)?;
+        fs::write(
+            reports_dir.join("PHASE_1_EXECUTIVE_ENGINEERING_DELIVERABLES.md"),
+            report_content,
+        )?;
 
         let res = check_cross_document_diagram_parity(&tmp.path);
         assert!(res.is_err(), "Check 27 must fail when executive deliverables report contains divergent diagram connections");
@@ -5316,7 +5878,8 @@ flowchart TD
     }
 
     #[test]
-    fn test_defect_276_upstream_missing_architecture_views_library_fails() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_276_upstream_missing_architecture_views_library_fails(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("check27_upstream_missing_arch_views")?;
         let pipeline_upstream = tmp.path.join(".pipeline").join("upstream");
         fs::create_dir_all(&pipeline_upstream)?;
@@ -5327,7 +5890,8 @@ flowchart TD
     }
 
     #[test]
-    fn test_defect_276_canonical_architecture_views_parity_passes() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_276_canonical_architecture_views_parity_passes(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("check27_canonical_arch_views_matching")?;
         let pipeline_upstream = tmp.path.join(".pipeline").join("upstream");
         let arch_views_dir = tmp.path.join("docs").join("architecture").join("views");
@@ -5361,7 +5925,10 @@ flowchart TD
 | `CONN-01` | PORT-SUP-CMD | PORT-CTRL-CMD |
 | `CONN-02` | PORT-SUP-TLM | PORT-CTRL-TLM |
 "#;
-        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd_content)?;
+        fs::write(
+            interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"),
+            icd_content,
+        )?;
 
         let report_content = r#"# Executive Engineering Deliverables
 ```mermaid
@@ -5370,7 +5937,10 @@ flowchart TD
     SupervisoryStation -->|"CONN-02: System Datalink"| Controller
 ```
 "#;
-        fs::write(reports_dir.join("PHASE_1_EXECUTIVE_ENGINEERING_DELIVERABLES.md"), report_content)?;
+        fs::write(
+            reports_dir.join("PHASE_1_EXECUTIVE_ENGINEERING_DELIVERABLES.md"),
+            report_content,
+        )?;
 
         let res = check_cross_document_diagram_parity(&tmp.path);
         assert_eq!(res, Ok(ParityOutcome::Verified));
@@ -5378,7 +5948,8 @@ flowchart TD
     }
 
     #[test]
-    fn test_reproduce_defect_286_synthetic_mocks_blind_compiler_to_citation_fraud() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_reproduce_defect_286_synthetic_mocks_blind_compiler_to_citation_fraud(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use crate::checks::safety_stpa::check_safety_integrity;
 
         let tmp = TempDir::new("check23_reproduce_defect_286")?;
@@ -5389,38 +5960,65 @@ flowchart TD
         fs::create_dir_all(&features_dir)?;
         fs::create_dir_all(&safety_dir)?;
 
-        let model_fixture = include_str!("../../../../tests/fixtures/safety/ground_truth_model.sysml");
+        let model_fixture =
+            include_str!("../../../../tests/fixtures/safety/ground_truth_model.sysml");
         fs::write(schema_dir.join("model.sysml"), model_fixture)?;
 
-        let oem_manual_fixture = include_str!("../../../../tests/fixtures/safety/oem_user_manual.md");
+        let oem_manual_fixture =
+            include_str!("../../../../tests/fixtures/safety/oem_user_manual.md");
         fs::write(schema_dir.join("oem_user_manual.md"), oem_manual_fixture)?;
 
-        let missing_file_fixture = include_str!("../../../../tests/fixtures/safety/missing_file_citation_feature.md");
-        fs::write(features_dir.join("feat_missing_file.md"), missing_file_fixture)?;
+        let missing_file_fixture =
+            include_str!("../../../../tests/fixtures/safety/missing_file_citation_feature.md");
+        fs::write(
+            features_dir.join("feat_missing_file.md"),
+            missing_file_fixture,
+        )?;
 
-        let fraudulent_cit_fixture = include_str!("../../../../tests/fixtures/safety/fraudulent_citation_feature.md");
-        fs::write(features_dir.join("feat_fraudulent_cit.md"), fraudulent_cit_fixture)?;
+        let fraudulent_cit_fixture =
+            include_str!("../../../../tests/fixtures/safety/fraudulent_citation_feature.md");
+        fs::write(
+            features_dir.join("feat_fraudulent_cit.md"),
+            fraudulent_cit_fixture,
+        )?;
 
-        let section_fraud_fixture = include_str!("../../../../tests/fixtures/safety/section_symbol_fraud_feature.md");
-        fs::write(features_dir.join("feat_section_fraud.md"), section_fraud_fixture)?;
+        let section_fraud_fixture =
+            include_str!("../../../../tests/fixtures/safety/section_symbol_fraud_feature.md");
+        fs::write(
+            features_dir.join("feat_section_fraud.md"),
+            section_fraud_fixture,
+        )?;
 
-        let ungrounded_dshot_fixture = include_str!("../../../../tests/fixtures/safety/ungrounded_dshot_feature.md");
-        fs::write(features_dir.join("feat_ungrounded_dshot.md"), ungrounded_dshot_fixture)?;
+        let ungrounded_dshot_fixture =
+            include_str!("../../../../tests/fixtures/safety/ungrounded_dshot_feature.md");
+        fs::write(
+            features_dir.join("feat_ungrounded_dshot.md"),
+            ungrounded_dshot_fixture,
+        )?;
 
-        let mut stpa_content = String::from(include_str!("../../../../tests/fixtures/safety/complete_stpa_matrix.md"));
+        let mut stpa_content = String::from(include_str!(
+            "../../../../tests/fixtures/safety/complete_stpa_matrix.md"
+        ));
         stpa_content.push_str("\n\n<!-- Source: schema/phantom-safety-spec.md §9.9.9 -->\nActuator servos operate via DShot600 ungrounded bus.\n");
         fs::write(safety_dir.join("STPA_MATRIX.md"), stpa_content)?;
 
         let check23_res = check_factual_grounding(&tmp.path, false, true);
-        assert!(check23_res.is_err(), "Check 23 failed to reject downstream citation fraud and ungrounded protocols!");
+        assert!(
+            check23_res.is_err(),
+            "Check 23 failed to reject downstream citation fraud and ungrounded protocols!"
+        );
 
         let check17_res = check_safety_integrity(&tmp.path, false, true);
-        assert!(check17_res.is_err(), "Check 17 failed to reject fraudulent safety citations to phantom files!");
+        assert!(
+            check17_res.is_err(),
+            "Check 17 failed to reject fraudulent safety citations to phantom files!"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_defect_333_icd_unqualified_nested_gnss_fix_fails() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_333_icd_unqualified_nested_gnss_fix_fails(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("check24_unqualified_gnss_fix")?;
         let interfaces_dir = tmp.path.join("docs").join("interfaces");
         fs::create_dir_all(&interfaces_dir)?;
@@ -5444,7 +6042,10 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `CONN-05` | gnssFixOut | gnssFixIn | Periodic update (100 Hz) | 10.0 | High | GnssFix |
 "#;
-        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd01_content)?;
+        fs::write(
+            interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"),
+            icd01_content,
+        )?;
 
         let icd02_content = r#"| Attribute | Specification Detail |
 | :--- | :--- |
@@ -5459,15 +6060,23 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `SIG-NS-FC-001` | GnssFixData | `PORT-NS-GNSS_FIX_OUT` | `PORT-FC-GNSS_FIX_IN` | GnssFix | dimensionless | [0, 1] | 100 Hz | 0 | schema/model.sysml |
 "#;
-        fs::write(interfaces_dir.join("ICD_02_MASTER_SIGNAL_DICTIONARY.md"), icd02_content)?;
+        fs::write(
+            interfaces_dir.join("ICD_02_MASTER_SIGNAL_DICTIONARY.md"),
+            icd02_content,
+        )?;
 
         let res = check_icd_completeness(&tmp.path);
-        assert!(res.is_err(), "Check 24 must fail when gnssFix connection lacks hierarchical qualification: {:?}", res);
+        assert!(
+            res.is_err(),
+            "Check 24 must fail when gnssFix connection lacks hierarchical qualification: {:?}",
+            res
+        );
         Ok(())
     }
 
     #[test]
-    fn test_defect_333_icd_complete_level1c_suite_passes() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_333_icd_complete_level1c_suite_passes() -> Result<(), Box<dyn std::error::Error>>
+    {
         let tmp = TempDir::new("check24_complete_level1c")?;
         let interfaces_dir = tmp.path.join("docs").join("interfaces");
         fs::create_dir_all(&interfaces_dir)?;
@@ -5491,7 +6100,10 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `CONN-05` | `PORT-NS-GNSS_FIX_OUT` (FlightController.NavigationSensorSuite.gnssFixOut) | `PORT-FC-GNSS_FIX_IN` (FlightController.gnssFixIn) | Periodic update (100 Hz) | 10.0 | High | GnssFix |
 "#;
-        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd01_content)?;
+        fs::write(
+            interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"),
+            icd01_content,
+        )?;
 
         let icd02_content = r#"| Attribute | Specification Detail |
 | :--- | :--- |
@@ -5506,10 +6118,18 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `SIG-NS-FC-001` | GnssFixData | `PORT-NS-GNSS_FIX_OUT` | `PORT-FC-GNSS_FIX_IN` | GnssFix | dimensionless | [0, 1] | 100 Hz | 0 | schema/model.sysml |
 "#;
-        fs::write(interfaces_dir.join("ICD_02_MASTER_SIGNAL_DICTIONARY.md"), icd02_content)?;
+        fs::write(
+            interfaces_dir.join("ICD_02_MASTER_SIGNAL_DICTIONARY.md"),
+            icd02_content,
+        )?;
 
         let res = check_icd_completeness(&tmp.path);
-        assert_eq!(res, Ok(ParityOutcome::Verified), "Expected complete ICD suite to pass, but got: {:?}", res);
+        assert_eq!(
+            res,
+            Ok(ParityOutcome::Verified),
+            "Expected complete ICD suite to pass, but got: {:?}",
+            res
+        );
         Ok(())
     }
 
@@ -5528,14 +6148,23 @@ flowchart TD
     fn test_multiple_citations_same_file_different_sections_on_single_line() {
         let line = "per schema/oem_user_manual.md §1.1 and per schema/oem_user_manual.md §99.9";
         let citations = extract_citations_from_line(line, 1);
-        assert_eq!(citations.len(), 2, "Both citations on the same line must be preserved");
-        let sec1 = citations.iter().any(|c| c.section.as_deref() == Some("1.1"));
-        let sec2 = citations.iter().any(|c| c.section.as_deref() == Some("99.9"));
+        assert_eq!(
+            citations.len(),
+            2,
+            "Both citations on the same line must be preserved"
+        );
+        let sec1 = citations
+            .iter()
+            .any(|c| c.section.as_deref() == Some("1.1"));
+        let sec2 = citations
+            .iter()
+            .any(|c| c.section.as_deref() == Some("99.9"));
         assert!(sec1 && sec2);
     }
 
     #[test]
-    fn test_section_slicer_rejects_non_heading_body_number_match() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_section_slicer_rejects_non_heading_body_number_match(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("slicer_non_heading")?;
         let doc_path = tmp.path.join("spec.md");
         let content = "# 1. Overview\nSome body text mentioning 7.2.3 in passing without heading.\n## 2. Details\nMore text.\n";
@@ -5543,12 +6172,16 @@ flowchart TD
 
         let slicer = SectionSlicer::new(&tmp.path);
         let extracted = slicer.extract_section("spec.md", "§7.2.3");
-        assert!(extracted.is_none(), "SectionSlicer must not return whole-file fallback when section is not a heading");
+        assert!(
+            extracted.is_none(),
+            "SectionSlicer must not return whole-file fallback when section is not a heading"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_check24_non_gnss_nested_port_requires_qualification() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check24_non_gnss_nested_port_requires_qualification(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("check24_nested_non_gnss")?;
         let interfaces_dir = tmp.path.join("docs").join("interfaces");
         fs::create_dir_all(&interfaces_dir)?;
@@ -5563,22 +6196,33 @@ flowchart TD
 | Connection ID | Source Port | Dest Port | Flow Behavior | Latency Max ms | Reliability Req | Item Flows Conveyed |
 | `CONN-01` | PORT-IMU-ACCEL_OUT | PORT-FC-IMU_IN | Periodic update (200 Hz) | 5.0 | High | AccelData |
 "#;
-        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd01_content)?;
+        fs::write(
+            interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"),
+            icd01_content,
+        )?;
 
         let icd02_content = r#"# Level 1C: Master Signal Flow Dictionary
 ## 2. Master Signal Flow Dictionary Table
 | Signal ID | Signal Name | Source Port | Dest Port | Data Type | SI Units | Valid Range | Update Rate | Safe Default Value | Schema Citation |
 | `SIG-IMU-FC-001` | AccelData | `PORT-IMU-ACCEL_OUT` | `PORT-FC-IMU_IN` | Accel | m/s^2 | [-100, 100] | 200 Hz | 0 | schema/model.sysml |
 "#;
-        fs::write(interfaces_dir.join("ICD_02_MASTER_SIGNAL_DICTIONARY.md"), icd02_content)?;
+        fs::write(
+            interfaces_dir.join("ICD_02_MASTER_SIGNAL_DICTIONARY.md"),
+            icd02_content,
+        )?;
 
         let res = check_icd_completeness(&tmp.path);
-        assert!(res.is_err(), "Check 24 must fail when nested IMU connection lacks hierarchical qualification: {:?}", res);
+        assert!(
+            res.is_err(),
+            "Check 24 must fail when nested IMU connection lacks hierarchical qualification: {:?}",
+            res
+        );
         Ok(())
     }
 
     #[test]
-    fn test_check27_empty_conops_connections_with_populated_icd_fails() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check27_empty_conops_connections_with_populated_icd_fails(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("check27_asymmetric_empty")?;
         let conops_dir = tmp.path.join("docs").join("conops");
         let interfaces_dir = tmp.path.join("docs").join("interfaces");
@@ -5598,22 +6242,30 @@ flowchart TD
 | Connection ID | Source Port | Dest Port |
 | `CONN-01` | PORT-SUP-CMD | PORT-CTRL-CMD |
 "#;
-        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd_content)?;
+        fs::write(
+            interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"),
+            icd_content,
+        )?;
 
         let res = check_cross_document_diagram_parity(&tmp.path);
-        assert!(res.is_err(), "Check 27 must fail when ConOps has 0 connections while ICD has CONN-01");
+        assert!(
+            res.is_err(),
+            "Check 27 must fail when ConOps has 0 connections while ICD has CONN-01"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_check31_detects_attribute_or_body_divergence_with_identical_part_names() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check31_detects_attribute_or_body_divergence_with_identical_part_names(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("check31_body_divergence")?;
         let schema_dir = tmp.path.join("schema");
         let pipe_dir = tmp.path.join(".pipeline");
         fs::create_dir_all(&schema_dir)?;
         fs::create_dir_all(&pipe_dir)?;
 
-        let sysml_with_port = "package Core {\n  part def FlightController {\n    port cmdIn;\n  }\n}\n";
+        let sysml_with_port =
+            "package Core {\n  part def FlightController {\n    port cmdIn;\n  }\n}\n";
         let sysml_empty = "package Core {\n  part def FlightController;\n}\n";
 
         fs::write(schema_dir.join("domain.sysml"), sysml_with_port)?;
@@ -5625,7 +6277,8 @@ flowchart TD
     }
 
     #[test]
-    fn test_issue_443_check31_detects_requirement_constraint_state_and_cross_package_divergence() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_443_check31_detects_requirement_constraint_state_and_cross_package_divergence(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("check31_issue443_divergence")?;
         let schema_dir = tmp.path.join("schema");
         let pipe_dir = tmp.path.join(".pipeline");
@@ -5640,42 +6293,68 @@ flowchart TD
         fs::write(pipe_dir.join("schema.sysml"), sysml_pipeline)?;
 
         let res = check_dual_schema_ssot_parity(&tmp.path);
-        assert!(res.is_err(), "Check 31 must detect requirement def divergence: {:?}", res);
+        assert!(
+            res.is_err(),
+            "Check 31 must detect requirement def divergence: {:?}",
+            res
+        );
 
         // Case 2: Constraint drift
-        let sysml_schema_c = "package Core {\n  part def Controller;\n  constraint def ThermalLimit;\n}\n";
+        let sysml_schema_c =
+            "package Core {\n  part def Controller;\n  constraint def ThermalLimit;\n}\n";
         fs::write(schema_dir.join("domain.sysml"), sysml_schema_c)?;
         let res_c = check_dual_schema_ssot_parity(&tmp.path);
-        assert!(res_c.is_err(), "Check 31 must detect constraint def divergence: {:?}", res_c);
+        assert!(
+            res_c.is_err(),
+            "Check 31 must detect constraint def divergence: {:?}",
+            res_c
+        );
 
         // Case 3: Cross-package colliding part name divergence
         let sysml_multi_pkg_a = "package SubA {\n  part def Engine {\n    port in1;\n  }\n}\npackage SubB {\n  part def Engine;\n}\n";
-        let sysml_multi_pkg_b = "package SubA {\n  part def Engine;\n}\npackage SubB {\n  part def Engine;\n}\n";
+        let sysml_multi_pkg_b =
+            "package SubA {\n  part def Engine;\n}\npackage SubB {\n  part def Engine;\n}\n";
         fs::write(schema_dir.join("domain.sysml"), sysml_multi_pkg_a)?;
         fs::write(pipe_dir.join("schema.sysml"), sysml_multi_pkg_b)?;
         let res_coll = check_dual_schema_ssot_parity(&tmp.path);
-        assert!(res_coll.is_err(), "Check 31 must detect divergence in colliding part name across packages: {:?}", res_coll);
+        assert!(
+            res_coll.is_err(),
+            "Check 31 must detect divergence in colliding part name across packages: {:?}",
+            res_coll
+        );
 
         Ok(())
     }
 
     #[test]
-    fn test_check28_propagates_schema_and_io_errors_fail_closed() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check28_propagates_schema_and_io_errors_fail_closed(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("check28_fail_closed")?;
         let schemas_dir = tmp.path.join(".pipeline").join("schemas");
         fs::create_dir_all(&schemas_dir)?;
 
-        fs::write(schemas_dir.join("conops_specification_schema.json"), "{ invalid_json: true }")?;
+        fs::write(
+            schemas_dir.join("conops_specification_schema.json"),
+            "{ invalid_json: true }",
+        )?;
 
         let res = check_conops_and_mission_intent_completeness(&tmp.path, false, true);
-        assert!(res.is_err(), "Check 28 must fail closed on malformed JSON schema: {:?}", res);
+        assert!(
+            res.is_err(),
+            "Check 28 must fail closed on malformed JSON schema: {:?}",
+            res
+        );
         Ok(())
     }
 
     #[test]
     fn test_target_scan_dir_taxonomy_unification_option_b() {
         let set: BTreeSet<TargetScanDir> = TargetScanDir::ALL.iter().copied().collect();
-        assert_eq!(set.len(), 12, "TargetScanDir::ALL must contain 12 unique variants");
+        assert_eq!(
+            set.len(),
+            12,
+            "TargetScanDir::ALL must contain 12 unique variants"
+        );
         assert_eq!(TargetScanDir::ALL.len(), 12);
         assert_eq!(TargetScanDir::Designs.docs_subdir(), "designs");
         assert!(TargetScanDir::Conops.requires_factual_grounding());
@@ -5693,7 +6372,8 @@ flowchart TD
     }
 
     #[test]
-    fn test_workspace_integrity_no_fake_predicates_or_fixture_hardcoding() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_workspace_integrity_no_fake_predicates_or_fixture_hardcoding(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let root = manifest_dir
             .parent()
@@ -5733,7 +6413,11 @@ flowchart TD
             if path.extension().and_then(|e| e.to_str()) != Some("rs") {
                 continue;
             }
-            let rel = path.strip_prefix(root).unwrap_or(path).to_string_lossy().to_string();
+            let rel = path
+                .strip_prefix(root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .to_string();
             if !rel.contains("/src/") {
                 continue;
             }
@@ -5803,7 +6487,8 @@ flowchart TD
     }
 
     #[test]
-    fn test_issue_440_research_inventory_io_error_formats_as_check_29() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_440_research_inventory_io_error_formats_as_check_29(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -5824,7 +6509,10 @@ flowchart TD
             let _ = fs::set_permissions(&unreadable, restore_perms);
 
             let errs = res.err().unwrap_or_default();
-            assert!(!errs.is_empty(), "Expected I/O errors for unreadable directory");
+            assert!(
+                !errs.is_empty(),
+                "Expected I/O errors for unreadable directory"
+            );
             let io_err = errs
                 .iter()
                 .find(|e| e.contains("I/O error walking directory"))
@@ -5843,9 +6531,9 @@ flowchart TD
         Ok(())
     }
 
-
     #[test]
-    fn test_issue_440_coverage_digest_errors_format_as_check_30a() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_440_coverage_digest_errors_format_as_check_30a(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("cov_digest")?;
         let feat_dir = tmp.path.join("docs").join("features");
         fs::create_dir_all(&feat_dir)?;
@@ -5877,7 +6565,8 @@ flowchart TD
     }
 
     #[test]
-    fn test_issue_440_obligation_witness_errors_format_as_check_30b() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_440_obligation_witness_errors_format_as_check_30b(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("ob_witness")?;
         let safety_dir = tmp.path.join("docs").join("safety");
         fs::create_dir_all(&safety_dir)?;
@@ -5905,7 +6594,8 @@ flowchart TD
     }
 
     #[test]
-    fn test_issue_440_architecture_viewpoint_errors_format_as_check_30c() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_440_architecture_viewpoint_errors_format_as_check_30c(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("arch_views")?;
         fs::create_dir_all(tmp.path.join(".pipeline").join("upstream"))?;
 
@@ -5978,7 +6668,8 @@ flowchart TD
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-MODEL-DISCOVERY]
     #[test]
-    fn test_discover_sysml_model_text_falls_back_to_docs_designs_sysml() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_discover_sysml_model_text_falls_back_to_docs_designs_sysml(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("issue_537_docs_designs_sysml")?;
         let schema_dir = tmp.path.join("schema");
         fs::create_dir_all(&schema_dir)?;
@@ -6088,7 +6779,8 @@ flowchart TD
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-ARCH-MODEL-DISCOVERY], [REQ-ISSUE-472-CHECK17-REALIZATION-CLOSURE]
     #[test]
-    fn test_discover_architectural_sysml_model_text_includes_docs_designs_sysml() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_discover_architectural_sysml_model_text_includes_docs_designs_sysml(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("issue_538_arch_docs_designs_sysml")?;
         let schema_dir = tmp.path.join("schema");
         fs::create_dir_all(&schema_dir)?;
@@ -6214,7 +6906,8 @@ flowchart TD
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-DUAL-SCHEMA-SSOT-PARITY]
     #[test]
-    fn test_check_31_dual_schema_ssot_parity_validates_docs_designs_sysml_and_sidecars() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_31_dual_schema_ssot_parity_validates_docs_designs_sysml_and_sidecars(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("issue_539_check_31_docs_designs")?;
         let schema_dir = tmp.path.join("schema");
         fs::create_dir_all(&schema_dir)?;
@@ -6321,7 +7014,8 @@ flowchart TD
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARITY-GATE-21], [REQ-PARITY-GATE-23]
     #[test]
-    fn test_target_scan_dir_includes_designs_for_check_21_and_check_23() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_target_scan_dir_includes_designs_for_check_21_and_check_23(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("issue_540_designs_scan_dir")?;
         let schema_dir = tmp.path.join("schema");
         fs::create_dir_all(&schema_dir)?;
@@ -6447,7 +7141,8 @@ flowchart TD
             sysml_text
         );
 
-        let json_text = slicer.extract_section("docs/designs/blueprint-01-alpha.digest.json", "1.0");
+        let json_text =
+            slicer.extract_section("docs/designs/blueprint-01-alpha.digest.json", "1.0");
         assert!(
             json_text.as_deref().is_some_and(|t| t.contains("Alpha")),
             "Expected SectionSlicer::extract_section on .digest.json with section '1.0' to return content containing 'Alpha', got: {:?}",
@@ -6682,7 +7377,10 @@ flowchart TD
         );
         fs::write(schema_dir.join("compiler.sysml"), model_sysml)?;
 
-        let fraud_file_spec = format!("{}\nSee `docs/nonexistent_fraud.md` for details.\n", clean_spec);
+        let fraud_file_spec = format!(
+            "{}\nSee `docs/nonexistent_fraud.md` for details.\n",
+            clean_spec
+        );
         fs::write(&hazard_log_path, fraud_file_spec)?;
         let res_fraud_file = check_factual_grounding(&dogfood, false, true);
         assert!(
@@ -6716,4 +7414,3 @@ flowchart TD
         Ok(())
     }
 }
-

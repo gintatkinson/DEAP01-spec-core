@@ -45,11 +45,19 @@ pub fn transpile_stpa(
     scoring_config_path: Option<&Path>,
 ) -> Result<(), String> {
     if !schema_path.exists() {
-        return Err(format!("Schema file does not exist: {}", schema_path.display()));
+        return Err(format!(
+            "Schema file does not exist: {}",
+            schema_path.display()
+        ));
     }
 
-    let content = fs::read_to_string(schema_path)
-        .map_err(|e| format!("Failed to read schema file '{}': {}", schema_path.display(), e))?;
+    let content = fs::read_to_string(schema_path).map_err(|e| {
+        format!(
+            "Failed to read schema file '{}': {}",
+            schema_path.display(),
+            e
+        )
+    })?;
 
     if content.trim().is_empty() {
         return Err(format!("Schema file '{}' is empty.", schema_path.display()));

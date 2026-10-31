@@ -822,7 +822,12 @@ fn synthesize_uca_context(
                     format!("constraint {} ({})", sanitize_uca_cell(&c.name), expr)
                 }
             })
-            .unwrap_or_else(|| format!("package {} control envelope", sanitize_uca_cell(&ctx.base_pkg_name)))
+            .unwrap_or_else(|| {
+                format!(
+                    "package {} control envelope",
+                    sanitize_uca_cell(&ctx.base_pkg_name)
+                )
+            })
     } else if !ctx.pkg_requirements.is_empty() {
         ctx.pkg_requirements
             .get(uca_idx % ctx.pkg_requirements.len())
@@ -834,7 +839,12 @@ fn synthesize_uca_context(
                     format!("requirement {} ({})", sanitize_uca_cell(&r.name), rid)
                 }
             })
-            .unwrap_or_else(|| format!("package {} control envelope", sanitize_uca_cell(&ctx.base_pkg_name)))
+            .unwrap_or_else(|| {
+                format!(
+                    "package {} control envelope",
+                    sanitize_uca_cell(&ctx.base_pkg_name)
+                )
+            })
     } else {
         format!(
             "package {} control envelope",
@@ -1100,12 +1110,29 @@ mod tests {
         assert_eq!(first.severity, "Critical (Derived)");
         assert_eq!(first.sail, "SIL-2 (Derived)");
 
-        assert_eq!(ucas.get(1).ok_or("missing element 1 of ucas")?.guide_word, "Providing");
-        assert_eq!(ucas.get(2).ok_or("missing element 2 of ucas")?.guide_word, "Too early / Too late / Out of order");
-        assert_eq!(ucas.get(3).ok_or("missing element 3 of ucas")?.guide_word, "Stopped too soon / Applied too long");
+        assert_eq!(
+            ucas.get(1).ok_or("missing element 1 of ucas")?.guide_word,
+            "Providing"
+        );
+        assert_eq!(
+            ucas.get(2).ok_or("missing element 2 of ucas")?.guide_word,
+            "Too early / Too late / Out of order"
+        );
+        assert_eq!(
+            ucas.get(3).ok_or("missing element 3 of ucas")?.guide_word,
+            "Stopped too soon / Applied too long"
+        );
 
-        assert_eq!(ucas.get(4).ok_or("missing element 4 of ucas")?.control_action, "ReleaseSafetyLock");
-        assert_eq!(ucas.get(4).ok_or("missing element 4 of ucas")?.hazard, "H-2");
+        assert_eq!(
+            ucas.get(4)
+                .ok_or("missing element 4 of ucas")?
+                .control_action,
+            "ReleaseSafetyLock"
+        );
+        assert_eq!(
+            ucas.get(4).ok_or("missing element 4 of ucas")?.hazard,
+            "H-2"
+        );
         Ok(())
     }
 }

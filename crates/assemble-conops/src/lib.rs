@@ -39,9 +39,8 @@ pub use assembler::{
     validate_unit_integrity, CANONICAL_CONOPS_UNITS, CANONICAL_MISSION_INTENT_UNITS,
 };
 pub use params::{
-    bind_parameters, extract_subsystem_parts, extract_subsystem_parts_from_sysml,
-    find_line_number, SubsystemPart, SubsystemPort, SysMLParameterBindingEngine,
-    DEFAULT_CONOPS_PARAMS,
+    bind_parameters, extract_subsystem_parts, extract_subsystem_parts_from_sysml, find_line_number,
+    SubsystemPart, SubsystemPort, SysMLParameterBindingEngine, DEFAULT_CONOPS_PARAMS,
 };
 pub use sanitize::{sanitize_level_1b_operational_text, wrap_mermaid_label};
 pub use toc::{extract_headings, generate_table_of_contents, slugify, verify_markdown_links};
@@ -63,14 +62,19 @@ mod tests {
         assert!(module_doc.contains("## 5. Algorithmic Complexity Bounds"));
         assert!(module_doc.contains("## 6. Failure Modes & Fault Tolerance"));
         assert!(module_doc.contains("## 7. Realization & Traceability"));
-        assert!(module_doc.contains("Realises: [REQ-ASSEMBLE-CONOPS-LIB], [DO-330-TQL-4-CONOPS-LIB]"));
+        assert!(
+            module_doc.contains("Realises: [REQ-ASSEMBLE-CONOPS-LIB], [DO-330-TQL-4-CONOPS-LIB]")
+        );
     }
 
     #[test]
     fn test_no_unconditional_crate_root_safety_lint_allows() {
         for (name, src) in [
             ("crates/assemble-conops/src/lib.rs", include_str!("lib.rs")),
-            ("crates/assemble-conops/src/main.rs", include_str!("main.rs")),
+            (
+                "crates/assemble-conops/src/main.rs",
+                include_str!("main.rs"),
+            ),
             (
                 "crates/compile-sysml/src/lib.rs",
                 include_str!("../../compile-sysml/src/lib.rs"),
@@ -99,4 +103,3 @@ mod tests {
         }
     }
 }
-

@@ -361,7 +361,8 @@ fn test_live_workspace_crates_have_100_percent_per_item_7_section_docstrings(
 }
 
 #[test]
-fn test_check_36_catches_multiline_dart_classes_string_slashes_interpolated_quotes_and_dart3_items() {
+fn test_check_36_catches_multiline_dart_classes_string_slashes_interpolated_quotes_and_dart3_items()
+{
     let valid_dart = r#"
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A PrimaryService classification.
@@ -564,7 +565,10 @@ class SecondaryService {
         "  // Naive comment\n  // not docstring",
     );
     let neg_res = audit_dart_source_docstrings(&missing_getter_doc, "lib/services.dart");
-    assert!(neg_res.is_err(), "Missing docstring on getter must fail closed");
+    assert!(
+        neg_res.is_err(),
+        "Missing docstring on getter must fail closed"
+    );
 }
 
 #[test]
@@ -1119,8 +1123,7 @@ pub unsafe trait RawSafetyTrait {
 }
 pub extern "C" fn ffi_entrypoint() {}
 "#;
-    let qual_res =
-        audit_rust_source_docstrings(rust_extended_qualifiers, "crates/demo/src/lib.rs");
+    let qual_res = audit_rust_source_docstrings(rust_extended_qualifiers, "crates/demo/src/lib.rs");
     assert!(
         qual_res.is_err(),
         "Undocumented pub(self), unsafe, and extern items must fail closed, got: {:?}",
@@ -1227,7 +1230,3 @@ fn test_check_36_inline_comment_and_literal_token_separation_issue_517() {
         dart_errs
     );
 }
-
-
-
-

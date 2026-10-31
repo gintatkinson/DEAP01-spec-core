@@ -31,12 +31,12 @@
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use compile_sysml::parse_sysml;
 use compile_sysml::parser::grammar::parse_sysml_tree;
 use compile_sysml::semantic::serializer::SysmlSerializable;
 use compile_sysml::semantic::symbols::SymbolTable;
 use compile_sysml::semantic::validator::SemanticValidator;
 use compile_sysml::sync::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
-use compile_sysml::parse_sysml;
 
 /// Verifies that multi-file single-package and multi-package SysML schemas do not leak an
 /// extraneous `SysML_Model` wrapper across AST parsing, serialization, symbol indexing,
@@ -73,9 +73,7 @@ use compile_sysml::parse_sysml;
 #[test]
 fn test_multi_file_single_and_multi_package_no_extraneous_sysml_model_wrapper(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)?
-        .as_nanos();
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
     let tmp_dir = std::env::temp_dir().join(format!(
         "deap_multi_file_compilation_test_{}_{}",
         std::process::id(),
@@ -210,9 +208,7 @@ fn test_multi_file_single_and_multi_package_no_extraneous_sysml_model_wrapper(
 #[test]
 fn test_multi_file_with_top_level_doc_and_imports_preserves_package_scopes_and_dual_schema_parity(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)?
-        .as_nanos();
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
     let tmp_dir = std::env::temp_dir().join(format!(
         "deap_multi_file_doc_import_test_{}_{}",
         std::process::id(),
@@ -301,10 +297,18 @@ fn test_multi_file_with_top_level_doc_and_imports_preserves_package_scopes_and_d
 
     let sym_table = SymbolTable::build_from_package(&reparsed);
     assert!(sym_table.lookup("CUAS_COA_System::TrackManager").is_some());
-    assert!(sym_table.lookup("CUAS_COA_System::InterceptPlanner").is_some());
-    assert!(sym_table.lookup("CockpitRealization::TacticalDisplay").is_some());
-    assert!(sym_table.lookup("SolverRealization::EngagementSolver").is_some());
-    assert!(sym_table.lookup("SysML_Model::CUAS_COA_System::TrackManager").is_none());
+    assert!(sym_table
+        .lookup("CUAS_COA_System::InterceptPlanner")
+        .is_some());
+    assert!(sym_table
+        .lookup("CockpitRealization::TacticalDisplay")
+        .is_some());
+    assert!(sym_table
+        .lookup("SolverRealization::EngagementSolver")
+        .is_some());
+    assert!(sym_table
+        .lookup("SysML_Model::CUAS_COA_System::TrackManager")
+        .is_none());
     // Root-level import `import CUAS_COA_System::*;` must be resolvable from any child package scope
     assert!(sym_table
         .lookup_in_scope("SolverRealization", "TrackManager")
@@ -313,7 +317,6 @@ fn test_multi_file_with_top_level_doc_and_imports_preserves_package_scopes_and_d
     let _ = fs::remove_dir_all(&tmp_dir);
     Ok(())
 }
-
 
 /// Verifies that single-file and multi-file SysML v2 schemas containing top-level `import`
 /// declarations before `package` blocks unwrap synthetic `SysML_Model` containers, preserve
@@ -355,7 +358,8 @@ fn test_multi_file_with_top_level_doc_and_imports_preserves_package_scopes_and_d
 fn test_multi_file_top_level_imports_and_unsorted_slices_unwrap_sysml_model(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // (a) Single file starting with top-level import before package DomainPkg
-    let single_with_import = "import ScalarValues::*;\n\npackage DomainPkg {\n    part def SensorNode {}\n}\n";
+    let single_with_import =
+        "import ScalarValues::*;\n\npackage DomainPkg {\n    part def SensorNode {}\n}\n";
     let parsed_single = parse_sysml(single_with_import)?;
     assert_eq!(
         parsed_single.name, "DomainPkg",
@@ -373,9 +377,7 @@ fn test_multi_file_top_level_imports_and_unsorted_slices_unwrap_sysml_model(
     );
 
     // (b) Multi-file schema directory with top-level imports and multiple distinct packages
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)?
-        .as_nanos();
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
     let tmp_dir = std::env::temp_dir().join(format!(
         "deap_multi_file_imports_test_{}_{}",
         std::process::id(),
@@ -410,12 +412,7 @@ fn test_multi_file_top_level_imports_and_unsorted_slices_unwrap_sysml_model(
         f_cockpit.clone(),
         f_solver.clone(),
     ])?;
-    let tree_reverse = parse_sysml_tree(&[
-        f_solver,
-        f_cockpit,
-        f_domain,
-        f_shared_imports,
-    ])?;
+    let tree_reverse = parse_sysml_tree(&[f_solver, f_cockpit, f_domain, f_shared_imports])?;
 
     let serialized_forward = tree_forward.to_sysml(0);
     let serialized_reverse = tree_reverse.to_sysml(0);
@@ -436,4 +433,3 @@ fn test_multi_file_top_level_imports_and_unsorted_slices_unwrap_sysml_model(
     let _ = fs::remove_dir_all(&tmp_dir);
     Ok(())
 }
-

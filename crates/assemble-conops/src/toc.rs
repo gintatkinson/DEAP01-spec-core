@@ -130,7 +130,10 @@ pub fn extract_headings(content: &str) -> Vec<(usize, String, String)> {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-ASSEMBLE-CONOPS-TOC-GENERATE-TABLE-OF-CONTENTS] | SysML v2: ActionDef(generate_table_of_contents)
-pub fn generate_table_of_contents(headings: &[(usize, String, String)], max_depth: usize) -> String {
+pub fn generate_table_of_contents(
+    headings: &[(usize, String, String)],
+    max_depth: usize,
+) -> String {
     let mut toc_lines = vec!["## Table of Contents".to_string(), String::new()];
 
     for &(level, ref title, ref slug) in headings {
@@ -241,10 +244,30 @@ mod tests {
 
         let headings = extract_headings(doc);
         assert_eq!(headings.len(), 4);
-        assert_eq!(headings.first(), Some(&(1, "Main Title".to_string(), "main-title".to_string())));
-        assert_eq!(headings.get(1), Some(&(2, "Section 1: Overview".to_string(), "section-1-overview".to_string())));
-        assert_eq!(headings.get(2), Some(&(3, "1.1 Scope".to_string(), "11-scope".to_string())));
-        assert_eq!(headings.get(3), Some(&(2, "Section 2: Requirements".to_string(), "section-2-requirements".to_string())));
+        assert_eq!(
+            headings.first(),
+            Some(&(1, "Main Title".to_string(), "main-title".to_string()))
+        );
+        assert_eq!(
+            headings.get(1),
+            Some(&(
+                2,
+                "Section 1: Overview".to_string(),
+                "section-1-overview".to_string()
+            ))
+        );
+        assert_eq!(
+            headings.get(2),
+            Some(&(3, "1.1 Scope".to_string(), "11-scope".to_string()))
+        );
+        assert_eq!(
+            headings.get(3),
+            Some(&(
+                2,
+                "Section 2: Requirements".to_string(),
+                "section-2-requirements".to_string()
+            ))
+        );
 
         let toc = generate_table_of_contents(&headings, 3);
         assert!(toc.contains("- [Section 1: Overview](#section-1-overview)"));
@@ -259,6 +282,8 @@ Content with valid [link](#section-one) and broken [bad link](#missing-section).
 "#;
         let errors = verify_markdown_links(doc);
         assert_eq!(errors.len(), 1);
-        assert!(errors.first().is_some_and(|e| e.contains("#missing-section")));
+        assert!(errors
+            .first()
+            .is_some_and(|e| e.contains("#missing-section")));
     }
 }

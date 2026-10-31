@@ -344,7 +344,10 @@ impl GeneratedTreeManifest {
             return Err(ModularityDiagnostic::new(
                 ModularityErrorCode::FixedPointDriftE0705,
                 "tree_sha256",
-                format!("tree SHA-256 drift: {} != {}", self.tree_sha256, other.tree_sha256),
+                format!(
+                    "tree SHA-256 drift: {} != {}",
+                    self.tree_sha256, other.tree_sha256
+                ),
             ));
         }
         Ok(())

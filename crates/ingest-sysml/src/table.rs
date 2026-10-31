@@ -47,12 +47,46 @@ use std::collections::{BTreeMap, BTreeSet};
 /// If any extracted identifier matches a reserved keyword in this table, it is safely
 /// suffixed with `_item` by [`sanitize_identifier`] to maintain KerML grammar validity.
 pub const RESERVED_SYSML_KEYWORDS: &[&str] = &[
-    "package", "part", "def", "port", "attribute", "action", "flow",
-    "item", "connect", "connection", "interface", "doc", "assert",
-    "constraint", "state", "requirement", "use", "case", "test",
-    "in", "out", "inout", "import", "public", "private", "alias",
-    "perform", "subsystem", "first", "then", "step", "entry", "exit",
-    "do", "transition", "assume", "require", "verify", "satisfy", "text",
+    "package",
+    "part",
+    "def",
+    "port",
+    "attribute",
+    "action",
+    "flow",
+    "item",
+    "connect",
+    "connection",
+    "interface",
+    "doc",
+    "assert",
+    "constraint",
+    "state",
+    "requirement",
+    "use",
+    "case",
+    "test",
+    "in",
+    "out",
+    "inout",
+    "import",
+    "public",
+    "private",
+    "alias",
+    "perform",
+    "subsystem",
+    "first",
+    "then",
+    "step",
+    "entry",
+    "exit",
+    "do",
+    "transition",
+    "assume",
+    "require",
+    "verify",
+    "satisfy",
+    "text",
 ];
 
 /// Keywords identifying structural or functional section headers that are not component names.
@@ -60,12 +94,36 @@ pub const RESERVED_SYSML_KEYWORDS: &[&str] = &[
 /// In Markdown specifications, headings such as `## Bill of Materials` or `## System Interfaces`
 /// delineate tabular sections rather than individual physical or logical components.
 pub const NON_COMPONENT_SECTION_KEYWORDS: &[&str] = &[
-    "bill of materials", "bom", "components", "parts", "subsystems",
-    "interfaces", "ports", "signals", "signal interface", "interconnects",
-    "parameters", "parametric limits", "limits", "constraints", "invariants",
-    "assertions", "requirements", "specifications", "overview", "introduction",
-    "scope", "architecture", "notes", "glossary", "definitions", "summary",
-    "system interfaces", "system parameters", "system limits", "system constraints",
+    "bill of materials",
+    "bom",
+    "components",
+    "parts",
+    "subsystems",
+    "interfaces",
+    "ports",
+    "signals",
+    "signal interface",
+    "interconnects",
+    "parameters",
+    "parametric limits",
+    "limits",
+    "constraints",
+    "invariants",
+    "assertions",
+    "requirements",
+    "specifications",
+    "overview",
+    "introduction",
+    "scope",
+    "architecture",
+    "notes",
+    "glossary",
+    "definitions",
+    "summary",
+    "system interfaces",
+    "system parameters",
+    "system limits",
+    "system constraints",
 ];
 
 /// Authoritative provenance column header names recognized during tabular extraction.
@@ -73,9 +131,16 @@ pub const NON_COMPONENT_SECTION_KEYWORDS: &[&str] = &[
 /// These column headers establish formal DO-178C Section 5.5 / ISO 26262 Part 8 traceability
 /// back to OEM source documents, standards, or external requirements.
 pub const PROVENANCE_COLUMNS: &[&str] = &[
-    "provenance_citation", "provenance", "source_reference",
-    "oem_source_reference", "oem_document_citation", "citation",
-    "reference", "source", "clause", "specification_reference",
+    "provenance_citation",
+    "provenance",
+    "source_reference",
+    "oem_source_reference",
+    "oem_document_citation",
+    "citation",
+    "reference",
+    "source",
+    "clause",
+    "specification_reference",
 ];
 
 /// Classification archetype for Markdown tables based on structural schema patterns.
@@ -201,7 +266,13 @@ pub fn sanitize_identifier(text: &str, default_name: &str) -> String {
     // Step 2: Remove Markdown inline formatting tokens (*, `, _, #)
     let formatted: String = clean_cand
         .chars()
-        .map(|c| if c == '*' || c == '`' || c == '_' || c == '#' { ' ' } else { c })
+        .map(|c| {
+            if c == '*' || c == '`' || c == '_' || c == '#' {
+                ' '
+            } else {
+                c
+            }
+        })
         .collect();
     let formatted = formatted.trim();
 
@@ -359,15 +430,16 @@ pub fn extract_unit_from_header_or_val(header_or_val: &str) -> (String, String) 
                 inner.push(next_c);
             }
             if closed && unit.is_empty() {
-                let is_valid_unit = !inner.is_empty() && inner.chars().all(|ch| {
-                    ch.is_ascii_alphanumeric()
-                        || ch == '_'
-                        || ch == '/'
-                        || ch == '°'
-                        || ch == '^'
-                        || ch == '%'
-                        || ch == '-'
-                });
+                let is_valid_unit = !inner.is_empty()
+                    && inner.chars().all(|ch| {
+                        ch.is_ascii_alphanumeric()
+                            || ch == '_'
+                            || ch == '/'
+                            || ch == '°'
+                            || ch == '^'
+                            || ch == '%'
+                            || ch == '-'
+                    });
                 if is_valid_unit {
                     unit = inner.trim().to_string();
                 }
@@ -550,7 +622,11 @@ fn strip_html_tags(val: &str) -> String {
         if let Some(end_tag) = after_start.find('>') {
             let tag_content = after_start[..end_tag].trim();
             let lower = tag_content.to_ascii_lowercase();
-            if lower == "br" || lower.starts_with("br ") || lower.starts_with("br/") || lower == "br/" {
+            if lower == "br"
+                || lower.starts_with("br ")
+                || lower.starts_with("br/")
+                || lower == "br/"
+            {
                 out.push(' ');
             }
             rest = &after_start[end_tag + 1..];
@@ -800,9 +876,7 @@ fn split_range_parts(s: &str) -> Vec<&str> {
                         .get(i.saturating_sub(1))
                         .is_some_and(|b| b.is_ascii_whitespace()))
                 && (i + 2 == s.len()
-                    || s_bytes
-                        .get(i + 2)
-                        .is_some_and(|b| b.is_ascii_whitespace())))
+                    || s_bytes.get(i + 2).is_some_and(|b| b.is_ascii_whitespace())))
         {
             if let Some(seg) = s.get(start..i) {
                 parts.push(seg.trim());
@@ -936,12 +1010,26 @@ pub fn classify_table(headers: &[String]) -> TableType {
 
     // 1. BOM / Component list archetype detection
     let bom_indicators = [
-        "component", "component_name", "part", "part_name", "subsystem",
-        "item", "module", "assembly", "lru",
+        "component",
+        "component_name",
+        "part",
+        "part_name",
+        "subsystem",
+        "item",
+        "module",
+        "assembly",
+        "lru",
     ];
     let bom_attr_indicators = [
-        "part_number", "pn", "sku", "mass", "weight", "power", "qty",
-        "quantity", "cost",
+        "part_number",
+        "pn",
+        "sku",
+        "mass",
+        "weight",
+        "power",
+        "qty",
+        "quantity",
+        "cost",
     ];
 
     let has_bom_name = bom_indicators.iter().any(|k| h_set.contains(k));
@@ -950,14 +1038,25 @@ pub fn classify_table(headers: &[String]) -> TableType {
     if has_bom_name && has_bom_attr {
         return TableType::Bom;
     }
-    if has_bom_name && headers.len() >= 3 && !h_set.iter().any(|h| ["direction", "dir", "port", "signal"].contains(h)) {
+    if has_bom_name
+        && headers.len() >= 3
+        && !h_set
+            .iter()
+            .any(|h| ["direction", "dir", "port", "signal"].contains(h))
+    {
         return TableType::Bom;
     }
 
     // 2. Ports / Interfaces / Signals archetype detection
     let port_indicators = [
-        "port", "port_name", "signal", "signal_name", "signal_id",
-        "interface", "interface_name", "flow",
+        "port",
+        "port_name",
+        "signal",
+        "signal_name",
+        "signal_id",
+        "interface",
+        "interface_name",
+        "flow",
     ];
     let dir_indicators = ["direction", "dir", "flow_direction"];
     let type_indicators = ["type", "data_type", "payload", "rate", "protocol"];
@@ -978,10 +1077,27 @@ pub fn classify_table(headers: &[String]) -> TableType {
 
     // 3. Parametric limits / Constraints archetype detection
     let constraint_indicators = [
-        "min", "max", "lower_bound", "upper_bound", "range", "valid_range",
-        "limit", "bound", "bounds", "tolerance", "constraint", "assertion",
+        "min",
+        "max",
+        "lower_bound",
+        "upper_bound",
+        "range",
+        "valid_range",
+        "limit",
+        "bound",
+        "bounds",
+        "tolerance",
+        "constraint",
+        "assertion",
     ];
-    let param_indicators = ["parameter", "param", "property", "metric", "variable", "name"];
+    let param_indicators = [
+        "parameter",
+        "param",
+        "property",
+        "metric",
+        "variable",
+        "name",
+    ];
 
     let has_constraint = constraint_indicators.iter().any(|k| h_set.contains(k));
     let has_param = param_indicators.iter().any(|k| h_set.contains(k));
@@ -1076,7 +1192,8 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
                 .map(|c| c.trim().to_string())
                 .collect();
 
-            let is_delimiter = !cells.is_empty() && cells.iter().all(|c| is_table_delimiter_cell(c));
+            let is_delimiter =
+                !cells.is_empty() && cells.iter().all(|c| is_table_delimiter_cell(c));
 
             if is_delimiter && !in_table {
                 // Header was on previous line if available
@@ -1125,8 +1242,16 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
                         .split('|')
                         .map(|c| c.trim().to_string())
                         .collect();
-                    if !next_cells.is_empty() && next_cells.iter().all(|c| is_table_delimiter_cell(c)) {
-                        flush_table(&mut in_table, &mut raw_headers, &mut norm_headers, &mut units, &mut rows);
+                    if !next_cells.is_empty()
+                        && next_cells.iter().all(|c| is_table_delimiter_cell(c))
+                    {
+                        flush_table(
+                            &mut in_table,
+                            &mut raw_headers,
+                            &mut norm_headers,
+                            &mut units,
+                            &mut rows,
+                        );
                         raw_headers = cells.clone();
                         norm_headers = cells.iter().map(|c| normalize_col(c)).collect();
                         units = cells
@@ -1140,13 +1265,25 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
                 }
             }
         } else if in_table {
-            flush_table(&mut in_table, &mut raw_headers, &mut norm_headers, &mut units, &mut rows);
+            flush_table(
+                &mut in_table,
+                &mut raw_headers,
+                &mut norm_headers,
+                &mut units,
+                &mut rows,
+            );
         }
 
         i += 1;
     }
 
-    flush_table(&mut in_table, &mut raw_headers, &mut norm_headers, &mut units, &mut rows);
+    flush_table(
+        &mut in_table,
+        &mut raw_headers,
+        &mut norm_headers,
+        &mut units,
+        &mut rows,
+    );
     tables
 }
 
@@ -1192,11 +1329,23 @@ mod tests {
 
     #[test]
     fn test_sanitize_identifier() {
-        assert_eq!(sanitize_identifier("Signal_Alpha (Hz)", "Item"), "Signal_Alpha");
-        assert_eq!(sanitize_identifier("[REQ-0001] Abstract Spec", "Item"), "Abstract_Spec");
-        assert_eq!(sanitize_identifier("1. Normative Statement", "Item"), "_1_Normative_Statement");
+        assert_eq!(
+            sanitize_identifier("Signal_Alpha (Hz)", "Item"),
+            "Signal_Alpha"
+        );
+        assert_eq!(
+            sanitize_identifier("[REQ-0001] Abstract Spec", "Item"),
+            "Abstract_Spec"
+        );
+        assert_eq!(
+            sanitize_identifier("1. Normative Statement", "Item"),
+            "_1_Normative_Statement"
+        );
         assert_eq!(sanitize_identifier("subsystem", "Item"), "subsystem_item");
-        assert_eq!(sanitize_identifier("AC-01: Pure Schema-Driven", "Item"), "AC_01_Pure_Schema_Driven");
+        assert_eq!(
+            sanitize_identifier("AC-01: Pure Schema-Driven", "Item"),
+            "AC_01_Pure_Schema_Driven"
+        );
         assert_eq!(sanitize_identifier("port", "Item"), "port_item");
         assert_eq!(sanitize_identifier("text", "Item"), "text_item");
         assert_eq!(sanitize_identifier("", "Fallback"), "Fallback");
@@ -1213,13 +1362,19 @@ mod tests {
         assert_eq!(unit2, "MHz");
 
         assert_eq!(normalize_col("Requirement ID"), "requirement_id");
-        assert_eq!(normalize_col("**Deterministic UUIDv5**"), "deterministic_uuidv5");
+        assert_eq!(
+            normalize_col("**Deterministic UUIDv5**"),
+            "deterministic_uuidv5"
+        );
         assert_eq!(normalize_col("Param_Alpha (kg)"), "param_alpha");
     }
 
     #[test]
     fn test_clean_cell_value() {
-        assert_eq!(clean_cell_value("[Standard 101](https://example.com)"), "Standard 101");
+        assert_eq!(
+            clean_cell_value("[Standard 101](https://example.com)"),
+            "Standard 101"
+        );
         assert_eq!(clean_cell_value("Line 1<br/>Line 2"), "Line 1 Line 2");
         assert_eq!(clean_cell_value("<b>Bold</b> text"), "Bold text");
     }
@@ -1244,7 +1399,10 @@ mod tests {
     #[test]
     fn test_parse_range_bounds() {
         assert_eq!(parse_range_bounds("[0.0, 100.0]"), (Some(0.0), Some(100.0)));
-        assert_eq!(parse_range_bounds("-20.0 to 60.0"), (Some(-20.0), Some(60.0)));
+        assert_eq!(
+            parse_range_bounds("-20.0 to 60.0"),
+            (Some(-20.0), Some(60.0))
+        );
         assert_eq!(parse_range_bounds("18.0 .. 25.2"), (Some(18.0), Some(25.2)));
     }
 
@@ -1269,7 +1427,9 @@ mod tests {
         assert_eq!(tables.len(), 3);
 
         assert_eq!(
-            tables.first().map(|t| classify_table(&t.normalized_headers)),
+            tables
+                .first()
+                .map(|t| classify_table(&t.normalized_headers)),
             Some(TableType::Properties)
         );
         assert_eq!(

@@ -76,57 +76,177 @@ pub const MANDATORY_THREAT_DOMAINS: &[ThreatDomainSpec] = &[
     },
     ThreatDomainSpec {
         name: "Mechanical",
-        keywords: &["mechanical", "structural", "thr-mec", "actuator jam", "flutter"],
+        keywords: &[
+            "mechanical",
+            "structural",
+            "thr-mec",
+            "actuator jam",
+            "flutter",
+        ],
     },
     ThreatDomainSpec {
         name: "Power/Thermal",
-        keywords: &["power/thermal", "power and thermal", "power", "thermal", "thr-pwr", "thr-thm"],
+        keywords: &[
+            "power/thermal",
+            "power and thermal",
+            "power",
+            "thermal",
+            "thr-pwr",
+            "thr-thm",
+        ],
     },
     ThreatDomainSpec {
         name: "Environmental",
-        keywords: &["environmental", "atmospheric", "weather", "icing", "precipitation", "gust", "thr-env"],
+        keywords: &[
+            "environmental",
+            "atmospheric",
+            "weather",
+            "icing",
+            "precipitation",
+            "gust",
+            "thr-env",
+        ],
     },
     ThreatDomainSpec {
         name: "EW/Cyber",
         keywords: &[
-            "ew", "electronic warfare", "electromagnetic", "rf jamming", "gnss jamming",
-            "cyber", "cybersecurity", "packet injection", "firmware tampering", "thr-ew", "thr-cyb", "thr-ewc",
+            "ew",
+            "electronic warfare",
+            "electromagnetic",
+            "rf jamming",
+            "gnss jamming",
+            "cyber",
+            "cybersecurity",
+            "packet injection",
+            "firmware tampering",
+            "thr-ew",
+            "thr-cyb",
+            "thr-ewc",
         ],
     },
     ThreatDomainSpec {
         name: "Optical",
-        keywords: &["optical", "laser", "dazzling", "camera saturation", "thr-opt"],
+        keywords: &[
+            "optical",
+            "laser",
+            "dazzling",
+            "camera saturation",
+            "thr-opt",
+        ],
     },
     ThreatDomainSpec {
         name: "Signature/Acoustic",
-        keywords: &["signature", "acoustic", "infrared", "rcs", "radar cross-section", "thr-sig", "thr-ac"],
+        keywords: &[
+            "signature",
+            "acoustic",
+            "infrared",
+            "rcs",
+            "radar cross-section",
+            "thr-sig",
+            "thr-ac",
+        ],
     },
     ThreatDomainSpec {
         name: "Human Factors",
-        keywords: &["human factors", "human", "operator fatigue", "pilot", "input disparity", "thr-hum"],
+        keywords: &[
+            "human factors",
+            "human",
+            "operator fatigue",
+            "pilot",
+            "input disparity",
+            "thr-hum",
+        ],
     },
     ThreatDomainSpec {
         name: "CBRN",
-        keywords: &["cbrn", "chemical", "biological", "radiological", "nuclear", "toxic", "contamination", "thr-cbrn"],
+        keywords: &[
+            "cbrn",
+            "chemical",
+            "biological",
+            "radiological",
+            "nuclear",
+            "toxic",
+            "contamination",
+            "thr-cbrn",
+        ],
     },
 ];
 
 /// Recognized SI and engineering units for MoE / MoP formulations.
 pub const MOE_MOP_RECOGNIZED_UNITS: &[&str] = &[
-    "s", "sec", "second", "seconds", "ms", "us", "µs", "ns", "min", "h", "hr",
-    "hz", "khz", "mhz", "ghz",
-    "m", "km", "cm", "mm", "nm", "um", "µm",
-    "m/s", "km/h", "m/s^2", "m/s2", "fps", "rpm",
-    "kg", "g", "mg",
-    "j", "kj", "mj", "wh", "kwh",
-    "w", "kw", "mw",
-    "v", "mv", "kv",
-    "a", "ma",
-    "deg", "rad", "degree", "degrees", "radian", "radians", "k",
-    "db", "dbm", "dbi",
-    "%", "percent", "ratio", "dimensionless", "count",
-    "bps", "kbps", "mbps", "gbps", "b/s", "kb/s", "mb/s", "gb/s",
-    "b", "kb", "mb", "gb", "bytes", "ppm",
+    "s",
+    "sec",
+    "second",
+    "seconds",
+    "ms",
+    "us",
+    "µs",
+    "ns",
+    "min",
+    "h",
+    "hr",
+    "hz",
+    "khz",
+    "mhz",
+    "ghz",
+    "m",
+    "km",
+    "cm",
+    "mm",
+    "nm",
+    "um",
+    "µm",
+    "m/s",
+    "km/h",
+    "m/s^2",
+    "m/s2",
+    "fps",
+    "rpm",
+    "kg",
+    "g",
+    "mg",
+    "j",
+    "kj",
+    "mj",
+    "wh",
+    "kwh",
+    "w",
+    "kw",
+    "mw",
+    "v",
+    "mv",
+    "kv",
+    "a",
+    "ma",
+    "deg",
+    "rad",
+    "degree",
+    "degrees",
+    "radian",
+    "radians",
+    "k",
+    "db",
+    "dbm",
+    "dbi",
+    "%",
+    "percent",
+    "ratio",
+    "dimensionless",
+    "count",
+    "bps",
+    "kbps",
+    "mbps",
+    "gbps",
+    "b/s",
+    "kb/s",
+    "mb/s",
+    "gb/s",
+    "b",
+    "kb",
+    "mb",
+    "gb",
+    "bytes",
+    "ppm",
 ];
 
 /// Represents an individual parsed Markdown table row.
@@ -260,7 +380,9 @@ pub fn extract_markdown_tables(content: &str) -> Vec<MarkdownTable> {
 
             // Check if this is a delimiter row (| :--- | :--- |)
             let is_delimiter = cells.iter().all(|c| {
-                !c.is_empty() && c.chars().all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())
+                !c.is_empty()
+                    && c.chars()
+                        .all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())
             });
 
             if is_delimiter && delimiter_expected {
@@ -479,7 +601,10 @@ pub fn validate_pace_plan(content: &str, rel_path: &str) -> Vec<SpecAuditFinding
     let tables = extract_markdown_tables(content);
     for tbl in &tables {
         let header_str = tbl.headers.join(" ").to_lowercase();
-        if header_str.contains("pace") || header_str.contains("tier") || header_str.contains("link medium") {
+        if header_str.contains("pace")
+            || header_str.contains("tier")
+            || header_str.contains("link medium")
+        {
             for row in &tbl.rows {
                 let row_str = row.cells.join(" ").to_lowercase();
                 for &tier in PACE_TIERS {
@@ -641,7 +766,9 @@ pub fn validate_moe_mop_metrics(content: &str, rel_path: &str) -> Vec<SpecAuditF
 
     for tbl in &tables {
         let header_str = tbl.headers.join(" ").to_lowercase();
-        let has_metric_cols = header_str.contains("metric") || header_str.contains("moe") || header_str.contains("mop");
+        let has_metric_cols = header_str.contains("metric")
+            || header_str.contains("moe")
+            || header_str.contains("mop");
         let has_thresh_obj = header_str.contains("threshold") || header_str.contains("objective");
 
         if has_metric_cols && has_thresh_obj {
@@ -669,8 +796,14 @@ pub fn validate_moe_mop_metrics(content: &str, rel_path: &str) -> Vec<SpecAuditF
                 let metric_id_clean = metric_id.trim_matches(&['`', '*', '_'][..]);
 
                 // Check Threshold and Objective value pairs
-                let thresh_val = thresh_idx.and_then(|idx| row.cells.get(idx)).map(|s| s.trim()).unwrap_or("");
-                let obj_val = obj_idx.and_then(|idx| row.cells.get(idx)).map(|s| s.trim()).unwrap_or("");
+                let thresh_val = thresh_idx
+                    .and_then(|idx| row.cells.get(idx))
+                    .map(|s| s.trim())
+                    .unwrap_or("");
+                let obj_val = obj_idx
+                    .and_then(|idx| row.cells.get(idx))
+                    .map(|s| s.trim())
+                    .unwrap_or("");
 
                 let is_thresh_invalid = thresh_val.is_empty()
                     || thresh_val.contains("{{")
@@ -753,7 +886,10 @@ pub fn validate_moe_mop_metrics(content: &str, rel_path: &str) -> Vec<SpecAuditF
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-CONOPS-AUDIT-VALIDATE-OPERATIONAL-ALLOCATION-TAGS] | SysML v2: ActionDef(validate_operational_allocation_tags)
-pub fn validate_operational_allocation_tags(content: &str, rel_path: &str) -> Vec<SpecAuditFinding> {
+pub fn validate_operational_allocation_tags(
+    content: &str,
+    rel_path: &str,
+) -> Vec<SpecAuditFinding> {
     let mut findings = Vec::new();
     let mut declared_oa_tasks = BTreeSet::new();
     let mut declared_met_tasks = BTreeSet::new();
@@ -841,7 +977,9 @@ pub fn validate_operational_allocation_tags(content: &str, rel_path: &str) -> Ve
 
     for oa_id in declared_oa_tasks {
         let expected_tag = format!("[{}]", oa_id);
-        if !upper_content.contains("OPERATIONALALLOCATION") || !upper_content.contains(&expected_tag) {
+        if !upper_content.contains("OPERATIONALALLOCATION")
+            || !upper_content.contains(&expected_tag)
+        {
             findings.push(SpecAuditFinding::new(
                 "conops-operational-allocation-missing",
                 format!(
@@ -856,7 +994,9 @@ pub fn validate_operational_allocation_tags(content: &str, rel_path: &str) -> Ve
 
     for met_id in declared_met_tasks {
         let expected_tag = format!("[{}]", met_id);
-        if !upper_content.contains("OPERATIONALALLOCATION") || !upper_content.contains(&expected_tag) {
+        if !upper_content.contains("OPERATIONALALLOCATION")
+            || !upper_content.contains(&expected_tag)
+        {
             findings.push(SpecAuditFinding::new(
                 "conops-operational-allocation-missing",
                 format!(
@@ -904,14 +1044,17 @@ pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<
     let lower_doc = content.to_lowercase();
     let lower_path = rel_path.to_lowercase();
 
-    let in_conops_dir = lower_path.contains("docs/conops/") || lower_path.starts_with("docs/conops");
+    let in_conops_dir =
+        lower_path.contains("docs/conops/") || lower_path.starts_with("docs/conops");
     let is_conops_spec = lower_path.ends_with("/conops.md")
         || lower_path == "conops.md"
         || lower_doc.contains("# concept of operations");
 
     let is_full_conops = is_conops_spec || (in_conops_dir && lower_path.ends_with("conops.md"));
     let is_arch_unit = in_conops_dir
-        && (lower_path.contains("04_") || lower_path.contains("08_") || lower_path.contains("architecture"));
+        && (lower_path.contains("04_")
+            || lower_path.contains("08_")
+            || lower_path.contains("architecture"));
 
     if !is_full_conops && !is_arch_unit {
         return findings;
@@ -972,8 +1115,11 @@ pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<
     }
 
     // 4. Must enforce IEEE 1362 and DoDAF SV-1 standards governance (Issue #267)
-    let has_ieee1362 = lower_doc.contains("ieee 1362") || lower_doc.contains("ieee std 1362") || lower_doc.contains("ieee:1362");
-    let has_dodaf_sv1 = (lower_doc.contains("dodaf") && (lower_doc.contains("sv-1") || lower_doc.contains("sv1")))
+    let has_ieee1362 = lower_doc.contains("ieee 1362")
+        || lower_doc.contains("ieee std 1362")
+        || lower_doc.contains("ieee:1362");
+    let has_dodaf_sv1 = (lower_doc.contains("dodaf")
+        && (lower_doc.contains("sv-1") || lower_doc.contains("sv1")))
         || lower_doc.contains("dodaf 2.02 sv-1")
         || lower_doc.contains("dodaf v2.02 sv-1");
     if !has_ieee1362 || !has_dodaf_sv1 {
@@ -1000,9 +1146,14 @@ pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<
         true
     } else if let Some(m_idx) = arch_region.find("```mermaid") {
         let m_slice = &arch_region[m_idx..];
-        let end_idx = m_slice[10..].find("```").map(|i| m_idx + 10 + i).unwrap_or(arch_region.len());
+        let end_idx = m_slice[10..]
+            .find("```")
+            .map(|i| m_idx + 10 + i)
+            .unwrap_or(arch_region.len());
         let diag_text = &arch_region[m_idx..end_idx];
-        diag_text.contains("PORT-") || diag_text.contains("PORT_") || diag_text.to_lowercase().contains("port")
+        diag_text.contains("PORT-")
+            || diag_text.contains("PORT_")
+            || diag_text.to_lowercase().contains("port")
     } else {
         false
     };
@@ -1024,7 +1175,10 @@ pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<
         true
     } else if let Some(m_idx) = arch_region.find("```mermaid") {
         let m_slice = &arch_region[m_idx..];
-        let end_idx = m_slice[10..].find("```").map(|i| m_idx + 10 + i).unwrap_or(arch_region.len());
+        let end_idx = m_slice[10..]
+            .find("```")
+            .map(|i| m_idx + 10 + i)
+            .unwrap_or(arch_region.len());
         let diag_text = &arch_region[m_idx..end_idx];
         diag_text.contains("CONN-") || diag_text.contains("conn-")
     } else {
@@ -1047,7 +1201,10 @@ pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<
     if !is_template_placeholder {
         if let Some(m_idx) = arch_region.find("```mermaid") {
             let m_slice = &arch_region[m_idx..];
-            let end_idx = m_slice[10..].find("```").map(|i| m_idx + 10 + i).unwrap_or(arch_region.len());
+            let end_idx = m_slice[10..]
+                .find("```")
+                .map(|i| m_idx + 10 + i)
+                .unwrap_or(arch_region.len());
             let diag_text = &arch_region[m_idx..end_idx];
 
             if let Some(err_msg) = audit_modular_subgraph_edge_routing(diag_text) {
@@ -1302,14 +1459,17 @@ pub fn validate_subsystem_architecture(content: &str, rel_path: &str) -> Vec<Spe
     let lower_doc = content.to_lowercase();
     let lower_path = rel_path.to_lowercase();
 
-    let in_conops_dir = lower_path.contains("docs/conops/") || lower_path.starts_with("docs/conops");
+    let in_conops_dir =
+        lower_path.contains("docs/conops/") || lower_path.starts_with("docs/conops");
     let is_conops_spec = lower_path.ends_with("/conops.md")
         || lower_path == "conops.md"
         || lower_doc.contains("# concept of operations");
 
     let is_full_conops = is_conops_spec || (in_conops_dir && lower_path.ends_with("conops.md"));
     let is_arch_unit = in_conops_dir
-        && (lower_path.contains("04_") || lower_path.contains("08_") || lower_path.contains("architecture"));
+        && (lower_path.contains("04_")
+            || lower_path.contains("08_")
+            || lower_path.contains("architecture"));
 
     if !is_full_conops && !is_arch_unit {
         return findings;
@@ -1391,14 +1551,17 @@ pub fn validate_system_interface_topology(content: &str, rel_path: &str) -> Vec<
     let lower_doc = content.to_lowercase();
     let lower_path = rel_path.to_lowercase();
 
-    let in_conops_dir = lower_path.contains("docs/conops/") || lower_path.starts_with("docs/conops");
+    let in_conops_dir =
+        lower_path.contains("docs/conops/") || lower_path.starts_with("docs/conops");
     let is_conops_spec = lower_path.ends_with("/conops.md")
         || lower_path == "conops.md"
         || lower_doc.contains("# concept of operations");
 
     let is_full_conops = is_conops_spec || (in_conops_dir && lower_path.ends_with("conops.md"));
     let is_arch_unit = in_conops_dir
-        && (lower_path.contains("04_") || lower_path.contains("08_") || lower_path.contains("architecture"));
+        && (lower_path.contains("04_")
+            || lower_path.contains("08_")
+            || lower_path.contains("architecture"));
 
     if !is_full_conops && !is_arch_unit {
         return findings;
@@ -1460,7 +1623,10 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
         None => {
             findings.push(SpecAuditFinding::new(
                 "conops-schema-required-array-missing",
-                format!("Top-level schema in '{}' has no required array.", schema_path),
+                format!(
+                    "Top-level schema in '{}' has no required array.",
+                    schema_path
+                ),
                 schema_path,
                 None,
             ));
@@ -1468,10 +1634,7 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
         }
     };
 
-    let required_props: BTreeSet<&str> = req_array
-        .iter()
-        .filter_map(|v| v.as_str())
-        .collect();
+    let required_props: BTreeSet<&str> = req_array.iter().filter_map(|v| v.as_str()).collect();
 
     // 1. Verify required array presence
     if !required_props.contains("super_system_architecture") {
@@ -1486,7 +1649,10 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
     if !required_props.contains("subsystem_architecture") {
         findings.push(SpecAuditFinding::new(
             "conops-schema-subsystem-architecture-missing",
-            format!("Top-level schema contract required array in '{}' omits 'subsystem_architecture'.", schema_path),
+            format!(
+                "Top-level schema contract required array in '{}' omits 'subsystem_architecture'.",
+                schema_path
+            ),
             schema_path,
             None,
         ));
@@ -1504,12 +1670,14 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
     if !required_props.contains("user_classes") {
         findings.push(SpecAuditFinding::new(
             "conops-schema-user-classes-missing",
-            format!("Top-level schema contract required array in '{}' omits 'user_classes'.", schema_path),
+            format!(
+                "Top-level schema contract required array in '{}' omits 'user_classes'.",
+                schema_path
+            ),
             schema_path,
             None,
         ));
     }
-
 
     // 2. Verify properties definitions
     let props = match schema.get("properties").and_then(|p| p.as_object()) {
@@ -1517,7 +1685,10 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
         None => {
             findings.push(SpecAuditFinding::new(
                 "conops-schema-properties-missing",
-                format!("Top-level schema in '{}' has no properties object.", schema_path),
+                format!(
+                    "Top-level schema in '{}' has no properties object.",
+                    schema_path
+                ),
                 schema_path,
                 None,
             ));
@@ -1561,7 +1732,10 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
     } else {
         findings.push(SpecAuditFinding::new(
             "conops-schema-super-system-architecture-missing",
-            format!("Top-level schema properties in '{}' omits 'super_system_architecture'.", schema_path),
+            format!(
+                "Top-level schema properties in '{}' omits 'super_system_architecture'.",
+                schema_path
+            ),
             schema_path,
             None,
         ));
@@ -1604,7 +1778,10 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
     } else {
         findings.push(SpecAuditFinding::new(
             "conops-schema-subsystem-architecture-missing",
-            format!("Top-level schema properties in '{}' omits 'subsystem_architecture'.", schema_path),
+            format!(
+                "Top-level schema properties in '{}' omits 'subsystem_architecture'.",
+                schema_path
+            ),
             schema_path,
             None,
         ));
@@ -1646,7 +1823,10 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
     } else {
         findings.push(SpecAuditFinding::new(
             "conops-schema-interface-topology-missing",
-            format!("Top-level schema properties in '{}' omits 'system_interface_topology'.", schema_path),
+            format!(
+                "Top-level schema properties in '{}' omits 'system_interface_topology'.",
+                schema_path
+            ),
             schema_path,
             None,
         ));
@@ -1655,7 +1835,10 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
     // 2d. user_classes property structure (ISO 29148 §5.2.4, refs #291)
     if let Some(user_classes) = props.get("user_classes") {
         let is_arr = user_classes.get("type").and_then(|t| t.as_str()) == Some("array");
-        let min_items = user_classes.get("minItems").and_then(|m| m.as_u64()).unwrap_or(0);
+        let min_items = user_classes
+            .get("minItems")
+            .and_then(|m| m.as_u64())
+            .unwrap_or(0);
 
         let items_req: BTreeSet<&str> = user_classes
             .get("items")
@@ -1701,7 +1884,10 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
     } else {
         findings.push(SpecAuditFinding::new(
             "conops-schema-user-classes-missing",
-            format!("Top-level schema properties in '{}' omits 'user_classes'.", schema_path),
+            format!(
+                "Top-level schema properties in '{}' omits 'user_classes'.",
+                schema_path
+            ),
             schema_path,
             None,
         ));
@@ -1709,7 +1895,6 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
 
     findings
 }
-
 
 /// Audits top-level schema contract file on disk.
 ///
@@ -1737,7 +1922,9 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-CONOPS-AUDIT-VALIDATE-CONOPS-SCHEMA-FILE] | SysML v2: ActionDef(validate_conops_schema_file)
-pub fn validate_conops_schema_file(schema_path: &Path) -> Result<Vec<SpecAuditFinding>, SpecAuditError> {
+pub fn validate_conops_schema_file(
+    schema_path: &Path,
+) -> Result<Vec<SpecAuditFinding>, SpecAuditError> {
     if !schema_path.is_file() {
         return Ok(Vec::new());
     }
@@ -1798,7 +1985,8 @@ pub fn validate_user_classes(content: &str, rel_path: &str) -> Vec<SpecAuditFind
         if let Some(col) = id_col_idx {
             for row in &tbl.rows {
                 if let Some(cell) = row.cells.get(col) {
-                    let raw_id = cell.trim()
+                    let raw_id = cell
+                        .trim()
                         .trim_matches('*')
                         .trim_matches('_')
                         .trim_matches('`')
@@ -1848,9 +2036,9 @@ pub fn validate_user_classes(content: &str, rel_path: &str) -> Vec<SpecAuditFind
 
             if is_uc {
                 let left_ok = i == 0
-                    || bytes.get(i - 1).is_none_or(|&b| {
-                        !(b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
-                    });
+                    || bytes
+                        .get(i - 1)
+                        .is_none_or(|&b| !(b.is_ascii_alphanumeric() || b == b'_' || b == b'-'));
                 if left_ok {
                     let digit_start = i + 3;
                     let mut j = digit_start;
@@ -1952,7 +2140,6 @@ pub fn validate_conops(
     Ok(findings)
 }
 
-
 /// Audits all ConOps and Mission Intent specifications under `docs/conops/` in the workspace.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1979,7 +2166,9 @@ pub fn validate_conops(
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-CONOPS-AUDIT-VALIDATE-CONOPS-WORKSPACE] | SysML v2: ActionDef(validate_conops_workspace)
-pub fn validate_conops_workspace(repo_root: &Path) -> Result<Vec<SpecAuditFinding>, SpecAuditError> {
+pub fn validate_conops_workspace(
+    repo_root: &Path,
+) -> Result<Vec<SpecAuditFinding>, SpecAuditError> {
     let conops_dir = repo_root.join("docs").join("conops");
     if !conops_dir.is_dir() {
         // Downstream workspace without ConOps directory: gracefully exempt
@@ -2016,7 +2205,11 @@ pub fn validate_conops_workspace(repo_root: &Path) -> Result<Vec<SpecAuditFindin
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SPEC-AUDIT-CONOPS-AUDIT-SCAN-DIR] | SysML v2: ActionDef(scan_dir)
-    fn scan_dir(dir: &Path, repo_root: &Path, findings: &mut Vec<SpecAuditFinding>) -> Result<(), SpecAuditError> {
+    fn scan_dir(
+        dir: &Path,
+        repo_root: &Path,
+        findings: &mut Vec<SpecAuditFinding>,
+    ) -> Result<(), SpecAuditError> {
         let entries = match fs::read_dir(dir) {
             Ok(e) => e,
             Err(e) => return Err(SpecAuditError::IoError(e.to_string())),
@@ -2040,7 +2233,11 @@ pub fn validate_conops_workspace(repo_root: &Path) -> Result<Vec<SpecAuditFindin
                     Ok(c) => c,
                     Err(e) => return Err(SpecAuditError::IoError(e.to_string())),
                 };
-                let rel_path = path.strip_prefix(repo_root).unwrap_or(&path).to_string_lossy().to_string();
+                let rel_path = path
+                    .strip_prefix(repo_root)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .to_string();
                 let doc = parse_markdown(&content)?;
                 let mut f = validate_conops(&doc, &content, &rel_path)?;
                 findings.append(&mut f);
@@ -2102,7 +2299,11 @@ mod tests {
 | `EMG-07` | Abort Command | Impact_Safe |
 "#;
         let findings = validate_emergency_decision_matrix(content, "docs/conops/CONOPS.md");
-        assert!(findings.is_empty(), "Expected passing emergency matrix, got: {:?}", findings);
+        assert!(
+            findings.is_empty(),
+            "Expected passing emergency matrix, got: {:?}",
+            findings
+        );
     }
 
     #[test]
@@ -2119,8 +2320,12 @@ mod tests {
             findings.first().map(|f| f.rule_id.as_str()),
             Some("conops-emergency-matrix-incomplete")
         );
-        assert!(findings.first().is_some_and(|f| f.message.contains("EMG-03")));
-        assert!(findings.first().is_some_and(|f| f.message.contains("EMG-07")));
+        assert!(findings
+            .first()
+            .is_some_and(|f| f.message.contains("EMG-03")));
+        assert!(findings
+            .first()
+            .is_some_and(|f| f.message.contains("EMG-07")));
     }
 
     #[test]
@@ -2134,7 +2339,11 @@ mod tests {
 | **Emergency** | 433 MHz Independent Kill Switch |
 "#;
         let findings = validate_pace_plan(content, "docs/conops/MISSION_INTENT.md");
-        assert!(findings.is_empty(), "Expected passing PACE plan, got: {:?}", findings);
+        assert!(
+            findings.is_empty(),
+            "Expected passing PACE plan, got: {:?}",
+            findings
+        );
     }
 
     #[test]
@@ -2173,7 +2382,11 @@ mod tests {
 - CBRN: Toxic particulate filter and hazardous contamination ingress sealing
 "#;
         let findings = validate_threat_matrix(content, "docs/conops/MISSION_INTENT.md");
-        assert!(findings.is_empty(), "Expected all threat domains present, got: {:?}", findings);
+        assert!(
+            findings.is_empty(),
+            "Expected all threat domains present, got: {:?}",
+            findings
+        );
     }
 
     #[test]
@@ -2205,7 +2418,11 @@ mod tests {
 | MoP-01 | Loop frequency | 250.0 | 500.0 | Hz |
 "#;
         let findings = validate_moe_mop_metrics(valid_content, "docs/conops/MISSION_INTENT.md");
-        assert!(findings.is_empty(), "Valid MoE/MoP should pass, got: {:?}", findings);
+        assert!(
+            findings.is_empty(),
+            "Valid MoE/MoP should pass, got: {:?}",
+            findings
+        );
 
         let invalid_content = r#"## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics
 | Metric ID | Formulation | Threshold | Objective | Unit |
@@ -2213,9 +2430,14 @@ mod tests {
 | MoE-01 | Latency equation | {{TODO}} | 50.0 | ms |
 | MoP-01 | Loop frequency | 250.0 | TBD | unknown_unit |
 "#;
-        let invalid_findings = validate_moe_mop_metrics(invalid_content, "docs/conops/MISSION_INTENT.md");
-        assert!(invalid_findings.iter().any(|f| f.rule_id == "conops-moe-mop-missing-threshold-objective"));
-        assert!(invalid_findings.iter().any(|f| f.rule_id == "conops-moe-mop-missing-unit"));
+        let invalid_findings =
+            validate_moe_mop_metrics(invalid_content, "docs/conops/MISSION_INTENT.md");
+        assert!(invalid_findings
+            .iter()
+            .any(|f| f.rule_id == "conops-moe-mop-missing-threshold-objective"));
+        assert!(invalid_findings
+            .iter()
+            .any(|f| f.rule_id == "conops-moe-mop-missing-unit"));
     }
 
     #[test]
@@ -2230,8 +2452,13 @@ mod tests {
 /// OperationalAllocation: [OA-01]
 /// OperationalAllocation: [MET-01]
 "#;
-        let findings = validate_operational_allocation_tags(valid_content, "docs/conops/MISSION_INTENT.md");
-        assert!(findings.is_empty(), "Valid operational allocations should pass: {:?}", findings);
+        let findings =
+            validate_operational_allocation_tags(valid_content, "docs/conops/MISSION_INTENT.md");
+        assert!(
+            findings.is_empty(),
+            "Valid operational allocations should pass: {:?}",
+            findings
+        );
 
         let unallocated_content = r#"# Tactical Mission Intent
 ## Operational Activities
@@ -2242,7 +2469,10 @@ mod tests {
 
 /// OperationalAllocation: [OA-01]
 "#;
-        let unallocated_findings = validate_operational_allocation_tags(unallocated_content, "docs/conops/MISSION_INTENT.md");
+        let unallocated_findings = validate_operational_allocation_tags(
+            unallocated_content,
+            "docs/conops/MISSION_INTENT.md",
+        );
         assert_eq!(unallocated_findings.len(), 1);
         assert_eq!(
             unallocated_findings.first().map(|f| f.rule_id.as_str()),
@@ -2260,8 +2490,13 @@ mod tests {
 
 /// OperationalAllocation: OA-01
 "#;
-        let malformed_findings = validate_operational_allocation_tags(malformed_content, "docs/conops/MISSION_INTENT.md");
-        assert!(malformed_findings.iter().any(|f| f.rule_id == "conops-operational-allocation-malformed"));
+        let malformed_findings = validate_operational_allocation_tags(
+            malformed_content,
+            "docs/conops/MISSION_INTENT.md",
+        );
+        assert!(malformed_findings
+            .iter()
+            .any(|f| f.rule_id == "conops-operational-allocation-malformed"));
     }
 
     #[test]
@@ -2281,11 +2516,20 @@ mod tests {
                 "operational_context": { "type": "object" }
             }
         });
-        let findings = validate_conops_schema_contract(&invalid_schema, ".pipeline/schemas/conops_specification_schema.json");
+        let findings = validate_conops_schema_contract(
+            &invalid_schema,
+            ".pipeline/schemas/conops_specification_schema.json",
+        );
         assert!(!findings.is_empty(), "Schema contract must reject omission of super_system_architecture and subsystem_architecture");
-        assert!(findings.iter().any(|f| f.rule_id == "conops-schema-super-system-architecture-missing"));
-        assert!(findings.iter().any(|f| f.rule_id == "conops-schema-subsystem-architecture-missing"));
-        assert!(findings.iter().any(|f| f.rule_id == "conops-schema-interface-topology-missing"));
+        assert!(findings
+            .iter()
+            .any(|f| f.rule_id == "conops-schema-super-system-architecture-missing"));
+        assert!(findings
+            .iter()
+            .any(|f| f.rule_id == "conops-schema-subsystem-architecture-missing"));
+        assert!(findings
+            .iter()
+            .any(|f| f.rule_id == "conops-schema-interface-topology-missing"));
     }
 
     #[test]
@@ -2298,21 +2542,30 @@ System boundaries and context.
 Current gaps and issues.
 "#;
         let super_findings = validate_super_system_architecture(content, "docs/conops/CONOPS.md");
-        assert!(!super_findings.is_empty(), "Must reject ConOps doc missing super-system architecture");
+        assert!(
+            !super_findings.is_empty(),
+            "Must reject ConOps doc missing super-system architecture"
+        );
         assert_eq!(
             super_findings.first().map(|f| f.rule_id.as_str()),
             Some("conops-super-system-architecture-missing")
         );
 
         let subsys_findings = validate_subsystem_architecture(content, "docs/conops/CONOPS.md");
-        assert!(!subsys_findings.is_empty(), "Must reject ConOps doc missing subsystem architecture");
+        assert!(
+            !subsys_findings.is_empty(),
+            "Must reject ConOps doc missing subsystem architecture"
+        );
         assert_eq!(
             subsys_findings.first().map(|f| f.rule_id.as_str()),
             Some("conops-subsystem-architecture-missing")
         );
 
         let topo_findings = validate_system_interface_topology(content, "docs/conops/CONOPS.md");
-        assert!(!topo_findings.is_empty(), "Must reject ConOps doc missing interface topology");
+        assert!(
+            !topo_findings.is_empty(),
+            "Must reject ConOps doc missing interface topology"
+        );
         assert_eq!(
             topo_findings.first().map(|f| f.rule_id.as_str()),
             Some("conops-system-interface-topology-missing")
@@ -2401,8 +2654,15 @@ Current gaps and issues.
             }
         });
 
-        let findings = validate_conops_schema_contract(&valid_schema, ".pipeline/schemas/conops_specification_schema.json");
-        assert!(findings.is_empty(), "Valid schema contract must pass with zero findings, got: {:?}", findings);
+        let findings = validate_conops_schema_contract(
+            &valid_schema,
+            ".pipeline/schemas/conops_specification_schema.json",
+        );
+        assert!(
+            findings.is_empty(),
+            "Valid schema contract must pass with zero findings, got: {:?}",
+            findings
+        );
     }
 
     #[test]
@@ -2445,13 +2705,25 @@ Taxonomy of interface interconnects:
 - PORT-TLM-OUT (OUT)
 "#;
         let super_f = validate_super_system_architecture(valid_conops, "docs/conops/CONOPS.md");
-        assert!(super_f.is_empty(), "Valid super-system architecture must pass: {:?}", super_f);
+        assert!(
+            super_f.is_empty(),
+            "Valid super-system architecture must pass: {:?}",
+            super_f
+        );
 
         let subsys_f = validate_subsystem_architecture(valid_conops, "docs/conops/CONOPS.md");
-        assert!(subsys_f.is_empty(), "Valid subsystem architecture must pass: {:?}", subsys_f);
+        assert!(
+            subsys_f.is_empty(),
+            "Valid subsystem architecture must pass: {:?}",
+            subsys_f
+        );
 
         let topo_f = validate_system_interface_topology(valid_conops, "docs/conops/CONOPS.md");
-        assert!(topo_f.is_empty(), "Valid interface topology must pass: {:?}", topo_f);
+        assert!(
+            topo_f.is_empty(),
+            "Valid interface topology must pass: {:?}",
+            topo_f
+        );
     }
 
     #[test]
@@ -2461,7 +2733,10 @@ Taxonomy of interface interconnects:
             .parent()
             .and_then(|p| p.parent())
             .ok_or("resolve workspace root")?;
-        let schema_path = root.join(".pipeline").join("schemas").join("conops_specification_schema.json");
+        let schema_path = root
+            .join(".pipeline")
+            .join("schemas")
+            .join("conops_specification_schema.json");
         if schema_path.is_file() {
             let findings = validate_conops_schema_file(&schema_path)?;
             assert!(findings.is_empty(), "Live .pipeline/schemas/conops_specification_schema.json must pass contract validation: {:?}", findings);
@@ -2494,7 +2769,8 @@ Taxonomy of interface interconnects:
 - PORT-C2-IN (IN)
 - PORT-TLM-OUT (OUT)
 "#;
-        let findings = validate_super_system_architecture(unconstrained_conops, "docs/conops/CONOPS.md");
+        let findings =
+            validate_super_system_architecture(unconstrained_conops, "docs/conops/CONOPS.md");
         assert!(
             !findings.is_empty(),
             "Unconstrained architecture diagram lacking IEEE 1362 and DoDAF SV-1 must fail quality gate"
@@ -2555,7 +2831,8 @@ Taxonomy of interface interconnects:
 - PORT-C2-IN (IN)
 - PORT-TLM-OUT (OUT)
 "#;
-        let findings = validate_super_system_architecture(compliant_conops, "docs/conops/CONOPS.md");
+        let findings =
+            validate_super_system_architecture(compliant_conops, "docs/conops/CONOPS.md");
         assert!(
             findings.is_empty(),
             "Compliant architecture diagram with IEEE 1362 and DoDAF SV-1 must pass quality gate, got: {:?}",
@@ -2725,7 +3002,10 @@ flowchart TD
                 }
             }
         });
-        let findings = validate_conops_schema_contract(&invalid_schema, ".pipeline/schemas/conops_specification_schema.json");
+        let findings = validate_conops_schema_contract(
+            &invalid_schema,
+            ".pipeline/schemas/conops_specification_schema.json",
+        );
         assert!(
             findings.iter().any(|f| f.rule_id == "conops-schema-user-classes-taxonomy-collision"),
             "Schema with legacy ^UC-[0-9]{{2}}$ pattern must be rejected with 'conops-schema-user-classes-taxonomy-collision' (refs #291)"
@@ -2773,6 +3053,3 @@ Operational handover is executed between incoming operator and outgoing operator
         );
     }
 }
-
-
-

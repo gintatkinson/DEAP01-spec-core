@@ -305,7 +305,8 @@ fn test_issue_546_resolve_schema_targets_falls_back_to_pipeline_schema(
     fs::write(&pipeline_schema, "package Issue546FallbackPkg {}\n")?;
 
     // Case 1: temp_ws/schema does NOT exist on disk, but temp_ws/.pipeline/schema.sysml exists
-    let res_missing_schema_dir = compile_sysml::resolve_schema_targets(Some(temp_ws.join("schema")));
+    let res_missing_schema_dir =
+        compile_sysml::resolve_schema_targets(Some(temp_ws.join("schema")));
     assert_eq!(
         res_missing_schema_dir,
         Ok(compile_sysml::SchemaTarget::SingleFile(
@@ -920,7 +921,11 @@ package QueryEnginePkg {
         stderr
     );
 
-    let root_polluted_fmeca = temp.path().join("docs").join("safety").join("05_FMECA_MATRIX.md");
+    let root_polluted_fmeca = temp
+        .path()
+        .join("docs")
+        .join("safety")
+        .join("05_FMECA_MATRIX.md");
     assert!(
         !root_polluted_fmeca.exists(),
         "--schema .pipeline/upstream --stpa-transpile must NOT pollute workspace root docs/safety/05_FMECA_MATRIX.md"
@@ -1492,8 +1497,7 @@ fn test_issue_698_stpa_lowers_sysml_operators_to_katex_and_matlab(
             assert!(
                 !has_unescaped_percent,
                 "{} KaTeX math block must not contain unescaped '%' comment character:\n$${}$$",
-                doc_name,
-                math_block
+                doc_name, math_block
             );
             assert!(
                 !negative_brace_depth && brace_depth == 0,
@@ -2521,16 +2525,15 @@ fn test_issue_696_forward_sync_non_forced_evicts_stale_user_story_boilerplate_pr
         .split_once("## User Story\n")
         .ok_or("Pass 1 US-01 missing '## User Story\\n' heading")?;
     let custom_story_body = "As a `StorageReliabilityOperator`, I want to invoke `CommitJournalBatchAction` under maintenance fencing, so that quorum durability holds.";
-    let rebuilt_us01 = if let Some((_, rest_from_next_heading)) =
-        after_story_heading.split_once("\n## ")
-    {
-        format!(
-            "{}## User Story\n\n{}\n\n## {}",
-            before_story, custom_story_body, rest_from_next_heading
-        )
-    } else {
-        format!("{}## User Story\n\n{}\n", before_story, custom_story_body)
-    };
+    let rebuilt_us01 =
+        if let Some((_, rest_from_next_heading)) = after_story_heading.split_once("\n## ") {
+            format!(
+                "{}## User Story\n\n{}\n\n## {}",
+                before_story, custom_story_body, rest_from_next_heading
+            )
+        } else {
+            format!("{}## User Story\n\n{}\n", before_story, custom_story_body)
+        };
     let custom_us01 = rebuilt_us01.replacen("- [ ] AC-US-01-01:", "- [x] AC-US-01-01:", 1);
     fs::write(&us01_disk_path, &custom_us01)?;
 
@@ -3022,9 +3025,8 @@ fn test_issue_694_multiline_bdd_actor_extraction_and_diagnostic_only_use_case_pr
         uc01_mss
     );
     assert!(
-        uc01_mss.contains(
-            "AuditVerifierEngine confirms digest parity across all committed records"
-        ),
+        uc01_mss
+            .contains("AuditVerifierEngine confirms digest parity across all committed records"),
         "UC-01 '## 4. Main Success Scenario' must project Then clause:\n{}",
         uc01_mss
     );
@@ -3038,17 +3040,13 @@ fn test_issue_694_multiline_bdd_actor_extraction_and_diagnostic_only_use_case_pr
 
     let uc01_post = extract_markdown_h2_section(&uc01_md, "## 6. Postconditions")?;
     assert!(
-        uc01_post.contains(
-            "AuditVerifierEngine confirms digest parity across all committed records"
-        ),
+        uc01_post
+            .contains("AuditVerifierEngine confirms digest parity across all committed records"),
         "UC-01 '## 6. Postconditions' must project Then clause:\n{}",
         uc01_post
     );
 
-    assert_mermaid_blocks_free_of_backticks_and_semicolons(
-        "UC-01-VerifyAuditDigest.md",
-        &uc01_md,
-    )?;
+    assert_mermaid_blocks_free_of_backticks_and_semicolons("UC-01-VerifyAuditDigest.md", &uc01_md)?;
 
     // 2. US-01-VerifyAuditDigestAction.md inherits package-local actor "AuditComplianceOfficer" via extract_first_uc_actor.
     let us01_story = extract_markdown_h2_section(&us01_md, "## User Story")?;
@@ -3062,9 +3060,7 @@ fn test_issue_694_multiline_bdd_actor_extraction_and_diagnostic_only_use_case_pr
     //    incorporates objective in its scenario/trigger, and contains zero legacy boilerplate.
     let uc02_alt = extract_markdown_h2_section(&uc02_md, "## 5. Alternate and Exception Flows")?;
     assert!(
-        uc02_alt.contains("E0602")
-            && !uc02_alt.contains("E0602).")
-            && !uc02_alt.contains("E0602)"),
+        uc02_alt.contains("E0602") && !uc02_alt.contains("E0602).") && !uc02_alt.contains("E0602)"),
         "UC-02 '## 5. Alternate and Exception Flows' must clean 'E0602).' to 'E0602':\n{}",
         uc02_alt
     );
@@ -3560,8 +3556,7 @@ fn test_issue_699_forward_sync_ast_grounded_features_epics_acronyms_and_merge_ev
     }
     let has_positive_bdd = ac_lines.iter().any(|line| {
         let lower = line.to_ascii_lowercase();
-        let has_gwt =
-            lower.contains("given") && lower.contains("when") && lower.contains("then");
+        let has_gwt = lower.contains("given") && lower.contains("when") && lower.contains("then");
         let is_positive = (lower.contains("satisf")
             || lower.contains("valid")
             || lower.contains("nominal")
@@ -3573,8 +3568,7 @@ fn test_issue_699_forward_sync_ast_grounded_features_epics_acronyms_and_merge_ev
     });
     let has_negative_bdd = ac_lines.iter().any(|line| {
         let lower = line.to_ascii_lowercase();
-        let has_gwt =
-            lower.contains("given") && lower.contains("when") && lower.contains("then");
+        let has_gwt = lower.contains("given") && lower.contains("when") && lower.contains("then");
         let cites_violation = lower.contains("violat")
             || lower.contains("invalid")
             || lower.contains("malformed")

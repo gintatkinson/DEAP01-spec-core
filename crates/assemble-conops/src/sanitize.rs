@@ -145,7 +145,9 @@ fn strip_poly_hex(text: &str) -> String {
             if start > 0 && bytes.get(start - 1).copied() == Some(b'_') {
                 start -= 1;
             }
-            let right_ok = !bytes.get(end).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+            let right_ok = !bytes
+                .get(end)
+                .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
             if right_ok {
                 result.push_str(&text[last_idx..start]);
                 last_idx = end;
@@ -198,7 +200,10 @@ fn replace_crc16(text: &str) -> String {
         let mut found = None;
         if let Some(pos) = lower[i..].find("crc") {
             let start = i + pos;
-            let left_ok = start == 0 || !bytes.get(start - 1).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+            let left_ok = start == 0
+                || !bytes
+                    .get(start - 1)
+                    .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
             if left_ok {
                 let mut j = start + 3;
                 if bytes.get(j).copied() == Some(b'-') {
@@ -208,7 +213,10 @@ fn replace_crc16(text: &str) -> String {
                     j += 2;
                     if bytes.get(j).copied() == Some(b'-') {
                         let mut k = j + 1;
-                        while bytes.get(k).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_') {
+                        while bytes
+                            .get(k)
+                            .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_')
+                        {
                             k += 1;
                         }
                         if k > j + 1 {
@@ -221,7 +229,9 @@ fn replace_crc16(text: &str) -> String {
                     }
                     if k > j && lower[k..].starts_with("polynomial") {
                         let poly_end = k + 10;
-                        let right_poly_ok = !bytes.get(poly_end).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+                        let right_poly_ok = !bytes
+                            .get(poly_end)
+                            .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
                         if right_poly_ok {
                             j = poly_end;
                             let mut m = j;
@@ -231,13 +241,17 @@ fn replace_crc16(text: &str) -> String {
                             if m > j {
                                 if lower[m..].starts_with("equation") {
                                     let eq_end = m + 8;
-                                    let right_eq = !bytes.get(eq_end).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+                                    let right_eq = !bytes
+                                        .get(eq_end)
+                                        .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
                                     if right_eq {
                                         j = eq_end;
                                     }
                                 } else if lower[m..].starts_with("formula") {
                                     let form_end = m + 7;
-                                    let right_form = !bytes.get(form_end).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+                                    let right_form = !bytes
+                                        .get(form_end)
+                                        .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
                                     if right_form {
                                         j = form_end;
                                     }
@@ -246,7 +260,9 @@ fn replace_crc16(text: &str) -> String {
                         }
                     }
 
-                    let right_ok = !bytes.get(j).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+                    let right_ok = !bytes
+                        .get(j)
+                        .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
                     if right_ok {
                         found = Some((start, j));
                     }
@@ -305,7 +321,10 @@ fn replace_polynomial_equation(text: &str) -> String {
         if let Some(pos) = lower[i..].find("polynomial") {
             let start = i + pos;
             let end_poly = start + 10;
-            let left_ok = start == 0 || !bytes.get(start - 1).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+            let left_ok = start == 0
+                || !bytes
+                    .get(start - 1)
+                    .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
             if left_ok {
                 let mut j = end_poly;
                 while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
@@ -313,7 +332,9 @@ fn replace_polynomial_equation(text: &str) -> String {
                 }
                 if j > end_poly && lower[j..].starts_with("equation") {
                     let end = j + 8;
-                    let right_ok = !bytes.get(end).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+                    let right_ok = !bytes
+                        .get(end)
+                        .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
                     if right_ok {
                         result.push_str(&text[last_idx..start]);
                         result.push_str("integrity validation");
@@ -365,7 +386,9 @@ fn strip_baud_rates(text: &str) -> String {
     let mut last_idx = 0;
     let mut i = 0;
 
-    let standard_bauds = ["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"];
+    let standard_bauds = [
+        "9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600",
+    ];
 
     while i < lower.len() {
         if bytes.get(i).copied() == Some(b'_') {
@@ -373,7 +396,9 @@ fn strip_baud_rates(text: &str) -> String {
             for baud in &standard_bauds {
                 if lower[i + 1..].starts_with(baud) {
                     let end = i + 1 + baud.len();
-                    let right_ok = !bytes.get(end).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+                    let right_ok = !bytes
+                        .get(end)
+                        .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
                     if right_ok {
                         result.push_str(&text[last_idx..i]);
                         last_idx = end;
@@ -394,19 +419,25 @@ fn strip_baud_rates(text: &str) -> String {
         if is_baud || is_bps {
             let suffix_len = if is_baud { 4 } else { 3 };
             let end = i + suffix_len;
-            let right_ok = !bytes.get(end).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+            let right_ok = !bytes
+                .get(end)
+                .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
 
             if right_ok {
                 let mut prev = i;
                 if is_baud
                     && prev > 0
-                    && bytes.get(prev - 1).is_some_and(|&b| {
-                        matches!(b, b'k' | b'm' | b'g' | b'K' | b'M' | b'G')
-                    })
+                    && bytes
+                        .get(prev - 1)
+                        .is_some_and(|&b| matches!(b, b'k' | b'm' | b'g' | b'K' | b'M' | b'G'))
                 {
                     prev -= 1;
                 }
-                while prev > 0 && bytes.get(prev - 1).is_some_and(|&b| b == b' ' || b == b'\t') {
+                while prev > 0
+                    && bytes
+                        .get(prev - 1)
+                        .is_some_and(|&b| b == b' ' || b == b'\t')
+                {
                     prev -= 1;
                 }
                 let num_end = prev;
@@ -427,7 +458,9 @@ fn strip_baud_rates(text: &str) -> String {
                     let mut start = num_start;
                     let mut at_cursor = num_start;
                     while at_cursor > 0
-                        && bytes.get(at_cursor - 1).is_some_and(|&b| b == b' ' || b == b'\t')
+                        && bytes
+                            .get(at_cursor - 1)
+                            .is_some_and(|&b| b == b' ' || b == b'\t')
                     {
                         at_cursor -= 1;
                     }
@@ -499,7 +532,10 @@ fn strip_opcodes(text: &str) -> String {
     while i < lower.len() {
         let is_opcode = lower[i..].starts_with("opcode");
         if is_opcode {
-            let left_ok = i == 0 || !bytes.get(i - 1).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+            let left_ok = i == 0
+                || !bytes
+                    .get(i - 1)
+                    .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
             if left_ok {
                 let mut j = i + 6;
                 if bytes.get(j).is_some_and(|&b| b == b's' || b == b'S') {
@@ -516,7 +552,9 @@ fn strip_opcodes(text: &str) -> String {
                             m += 1;
                         }
                         if m > k + 2 {
-                            let right_ok = !bytes.get(m).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+                            let right_ok = !bytes
+                                .get(m)
+                                .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
                             if right_ok {
                                 result.push_str(&text[last_idx..i]);
                                 last_idx = m;
@@ -529,7 +567,9 @@ fn strip_opcodes(text: &str) -> String {
                         while bytes.get(m).is_some_and(u8::is_ascii_digit) {
                             m += 1;
                         }
-                        let right_ok = !bytes.get(m).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+                        let right_ok = !bytes
+                            .get(m)
+                            .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
                         if right_ok {
                             result.push_str(&text[last_idx..i]);
                             last_idx = m;
@@ -538,7 +578,9 @@ fn strip_opcodes(text: &str) -> String {
                         }
                     }
                 }
-                let right_word_ok = !bytes.get(j).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+                let right_word_ok = !bytes
+                    .get(j)
+                    .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
                 if right_word_ok {
                     result.push_str(&text[last_idx..i]);
                     last_idx = j;
@@ -548,11 +590,17 @@ fn strip_opcodes(text: &str) -> String {
             }
         }
 
-        let is_hex_lead = (bytes.get(i).copied() == Some(b'_') && i + 2 < bytes.len() && lower[i + 1..].starts_with("0x"))
+        let is_hex_lead = (bytes.get(i).copied() == Some(b'_')
+            && i + 2 < bytes.len()
+            && lower[i + 1..].starts_with("0x"))
             || lower[i..].starts_with("0x");
         if is_hex_lead {
             let start = i;
-            let mut j = if bytes.get(i).copied() == Some(b'_') { i + 3 } else { i + 2 };
+            let mut j = if bytes.get(i).copied() == Some(b'_') {
+                i + 3
+            } else {
+                i + 2
+            };
             let mut has_hex = false;
             while bytes.get(j).is_some_and(u8::is_ascii_hexdigit) {
                 has_hex = true;
@@ -661,7 +709,10 @@ fn strip_use_cases(text: &str) -> String {
 
         let is_uc = lower[i..].starts_with("uc-");
         if is_uc {
-            let left_ok = i == 0 || !bytes.get(i - 1).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+            let left_ok = i == 0
+                || !bytes
+                    .get(i - 1)
+                    .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
             if left_ok {
                 let mut j = i + 3;
                 let digit_start = j;
@@ -669,7 +720,9 @@ fn strip_use_cases(text: &str) -> String {
                     j += 1;
                 }
                 if j > digit_start {
-                    let right_ok = !bytes.get(j).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+                    let right_ok = !bytes
+                        .get(j)
+                        .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
                     if right_ok {
                         result.push_str(&text[last_idx..i]);
                         last_idx = j;
@@ -790,7 +843,10 @@ fn clean_lead_comma_paren(text: &str) -> String {
                 j += 1;
             }
             if bytes.get(j).copied() == Some(b',') {
-                while bytes.get(j).is_some_and(|&b| b == b',' || b == b' ' || b == b'\t') {
+                while bytes
+                    .get(j)
+                    .is_some_and(|&b| b == b',' || b == b' ' || b == b'\t')
+                {
                     j += 1;
                 }
                 i = j;
@@ -841,7 +897,10 @@ fn clean_trail_comma_paren(text: &str) -> String {
     while i < bytes.len() {
         if bytes.get(i).copied() == Some(b',') {
             let mut j = i;
-            while bytes.get(j).is_some_and(|&b| b == b',' || b == b' ' || b == b'\t') {
+            while bytes
+                .get(j)
+                .is_some_and(|&b| b == b',' || b == b' ' || b == b'\t')
+            {
                 j += 1;
             }
             if bytes.get(j).copied() == Some(b')') {
@@ -896,7 +955,10 @@ fn clean_multi_commas(text: &str) -> String {
                 j += 1;
             }
             if bytes.get(j).copied() == Some(b',') {
-                while bytes.get(j).is_some_and(|&b| b == b',' || b == b' ' || b == b'\t') {
+                while bytes
+                    .get(j)
+                    .is_some_and(|&b| b == b',' || b == b' ' || b == b'\t')
+                {
                     j += 1;
                 }
                 result.push(',');
@@ -1108,7 +1170,10 @@ fn strip_html_tags(s: &str) -> String {
                 j += 1;
             }
             let tag_name_start = j;
-            while bytes.get(j).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') {
+            while bytes
+                .get(j)
+                .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+            {
                 j += 1;
             }
             if j > tag_name_start {
@@ -1310,11 +1375,7 @@ pub fn wrap_mermaid_label(text: &str, max_width: usize) -> String {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-PROCESS-SEGMENT] | SysML v2: ActionDef(process_segment)
-fn process_segment(
-    seg: &str,
-    max_width: usize,
-    out_parts: &mut Vec<String>,
-) {
+fn process_segment(seg: &str, max_width: usize, out_parts: &mut Vec<String>) {
     let clean_seg = strip_html_tags(seg).trim().to_string();
     if clean_seg.len() <= max_width {
         out_parts.push(seg.to_string());
@@ -1387,7 +1448,8 @@ mod tests {
 
     #[test]
     fn test_wrap_mermaid_label() {
-        let label = "This is a very long subsystem descriptive label that exceeds maximum width limit";
+        let label =
+            "This is a very long subsystem descriptive label that exceeds maximum width limit";
         let wrapped = wrap_mermaid_label(label, 25);
         assert!(wrapped.contains("<br/>"));
     }
@@ -1395,18 +1457,19 @@ mod tests {
     #[test]
     fn test_issue_291_user_class_taxonomy_preserved_and_collision_eliminated() {
         // Legacy UC-xx was stripped as Level 2 System Use Case:
-        let legacy_conops = "Maintenance Technician (UC-04) performing pre-sortie inspection under UC-01.";
+        let legacy_conops =
+            "Maintenance Technician (UC-04) performing pre-sortie inspection under UC-01.";
         let sanitized_legacy = sanitize_level_1b_operational_text(legacy_conops);
         // Stripped UC-04 and UC-01 because of collision with Level 2 use cases!
         assert!(!sanitized_legacy.contains("UC-04"));
         assert!(!sanitized_legacy.contains("UC-01"));
 
         // With ISO 29148 UCL-xx taxonomy disambiguation:
-        let compliant_conops = "Maintenance Technician (UCL-04) performing pre-sortie inspection under UCL-01.";
+        let compliant_conops =
+            "Maintenance Technician (UCL-04) performing pre-sortie inspection under UCL-01.";
         let sanitized_compliant = sanitize_level_1b_operational_text(compliant_conops);
         // UCL-04 and UCL-01 are preserved intact!
         assert!(sanitized_compliant.contains("UCL-04"));
         assert!(sanitized_compliant.contains("UCL-01"));
     }
 }
-

@@ -161,7 +161,10 @@ fn test_check_no_duplicate_dart_solver_math_rejects_bloated_bridge_and_markers(
     fs::write(data_dir.join("custom_solver_bridge.dart"), &bloated_bridge)?;
 
     let res = check_no_duplicate_dart_solver_math(&tmp.path);
-    assert!(res.is_err(), "Bloated bridge and duplicate math markers must fail");
+    assert!(
+        res.is_err(),
+        "Bloated bridge and duplicate math markers must fail"
+    );
     let errs = res.err().ok_or("must return violation list")?;
     assert!(
         errs.iter().any(|e| e.contains("1200")),
@@ -226,7 +229,10 @@ fn test_check_41_rejects_malformed_topology_and_missing_or_empty_seeds_dir(
     let tmp_malformed = ScopedTempDir::new("c41_malformed");
     let assets_malformed = tmp_malformed.path.join("app_flutter/assets");
     fs::create_dir_all(&assets_malformed)?;
-    fs::write(assets_malformed.join("topology_data.json"), "{ invalid json ")?;
+    fs::write(
+        assets_malformed.join("topology_data.json"),
+        "{ invalid json ",
+    )?;
     let res_malformed = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp_malformed.path);
     assert!(
         res_malformed.is_err(),
@@ -451,17 +457,45 @@ void main() {
   });
 }
 "#;
-    fs::write(test_dir.join("defective_persistence_test.dart"), defective_dart)?;
+    fs::write(
+        test_dir.join("defective_persistence_test.dart"),
+        defective_dart,
+    )?;
 
     let res = check_39_zero_mocking_test_ast_gate(&tmp.path);
     assert!(res.is_err(), "Check 39 must reject Dart 3 mocks, commented teardown, tautologies, and gesture-free mutations");
     let errs = res.err().ok_or("expected Check 39 violations")?;
-    assert!(errs.iter().any(|e| e.contains("MockEntityStore")), "Must flag final class MockEntityStore: {:?}", errs);
-    assert!(errs.iter().any(|e| e.contains("AlphaEntityRepository")), "Must flag implements AlphaEntityRepository: {:?}", errs);
-    assert!(errs.iter().any(|e| e.contains("BetaDomainService")), "Must flag implements BetaDomainService: {:?}", errs);
-    assert!(errs.iter().any(|e| e.contains("tearDownAll")), "Must flag commented-out tearDownAll: {:?}", errs);
-    assert!(errs.iter().any(|e| e.contains("expect(true, isTrue)")), "Must flag tautological expect(true, isTrue): {:?}", errs);
-    assert!(errs.iter().any(|e| e.contains("controller.mutateEntityState")), "Must flag gesture-free controller mutation: {:?}", errs);
+    assert!(
+        errs.iter().any(|e| e.contains("MockEntityStore")),
+        "Must flag final class MockEntityStore: {:?}",
+        errs
+    );
+    assert!(
+        errs.iter().any(|e| e.contains("AlphaEntityRepository")),
+        "Must flag implements AlphaEntityRepository: {:?}",
+        errs
+    );
+    assert!(
+        errs.iter().any(|e| e.contains("BetaDomainService")),
+        "Must flag implements BetaDomainService: {:?}",
+        errs
+    );
+    assert!(
+        errs.iter().any(|e| e.contains("tearDownAll")),
+        "Must flag commented-out tearDownAll: {:?}",
+        errs
+    );
+    assert!(
+        errs.iter().any(|e| e.contains("expect(true, isTrue)")),
+        "Must flag tautological expect(true, isTrue): {:?}",
+        errs
+    );
+    assert!(
+        errs.iter()
+            .any(|e| e.contains("controller.mutateEntityState")),
+        "Must flag gesture-free controller mutation: {:?}",
+        errs
+    );
     Ok(())
 }
 
@@ -518,7 +552,11 @@ void main() {
     fs::write(test_dir.join("clean_persistence_test.dart"), clean_dart)?;
 
     let res = check_39_zero_mocking_test_ast_gate(&tmp.path);
-    assert!(res.is_ok(), "Compliant SQLite + gesture test must pass Check 39: {:?}", res.err());
+    assert!(
+        res.is_ok(),
+        "Compliant SQLite + gesture test must pass Check 39: {:?}",
+        res.err()
+    );
     Ok(())
 }
 
@@ -557,10 +595,15 @@ fn test_check_40_negative_probe_fail_closed_on_missing_or_commented_contract_and
 
     // Case 1: Missing schema_ui_contract_test.g.dart must fail closed
     let res_missing = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
-    assert!(res_missing.is_err(), "Missing schema_ui_contract_test.g.dart must fail closed");
+    assert!(
+        res_missing.is_err(),
+        "Missing schema_ui_contract_test.g.dart must fail closed"
+    );
     let errs_missing = res_missing.err().ok_or("expected missing contract error")?;
     assert!(
-        errs_missing.iter().any(|e| e.contains("schema_ui_contract_test.g.dart")),
+        errs_missing
+            .iter()
+            .any(|e| e.contains("schema_ui_contract_test.g.dart")),
         "Must report missing schema_ui_contract_test.g.dart: {:?}",
         errs_missing
     );
@@ -578,7 +621,10 @@ void main() {
   });
 }
 "#;
-    fs::write(gen_dir.join("schema_ui_contract_test.g.dart"), commented_contract)?;
+    fs::write(
+        gen_dir.join("schema_ui_contract_test.g.dart"),
+        commented_contract,
+    )?;
 
     let widget_test = r#"
 void main() {
@@ -591,13 +637,29 @@ void main() {
     fs::write(test_dir.join("generic_bridge_test.dart"), widget_test)?;
 
     let res_commented = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
-    assert!(res_commented.is_err(), "Commented contract and direct bridge mutation must fail Check 40");
-    let errs = res_commented.err().ok_or("expected Check 40 violations")?;
-    assert!(errs.iter().any(|e| e.contains("tester.tap(")), "Must flag missing uncommented tester.tap(: {:?}", errs);
-    assert!(errs.iter().any(|e| e.contains("tester.getRect(")), "Must flag missing uncommented tester.getRect(: {:?}", errs);
-    assert!(errs.iter().any(|e| e.contains("Rect.fromLTWH(")), "Must flag synthetic Rect.fromLTWH(: {:?}", errs);
     assert!(
-        errs.iter().any(|e| e.contains("bridge.applyGenericParameterMutation(")),
+        res_commented.is_err(),
+        "Commented contract and direct bridge mutation must fail Check 40"
+    );
+    let errs = res_commented.err().ok_or("expected Check 40 violations")?;
+    assert!(
+        errs.iter().any(|e| e.contains("tester.tap(")),
+        "Must flag missing uncommented tester.tap(: {:?}",
+        errs
+    );
+    assert!(
+        errs.iter().any(|e| e.contains("tester.getRect(")),
+        "Must flag missing uncommented tester.getRect(: {:?}",
+        errs
+    );
+    assert!(
+        errs.iter().any(|e| e.contains("Rect.fromLTWH(")),
+        "Must flag synthetic Rect.fromLTWH(: {:?}",
+        errs
+    );
+    assert!(
+        errs.iter()
+            .any(|e| e.contains("bridge.applyGenericParameterMutation(")),
         "Must flag generic direct bridge mutation: {:?}",
         errs
     );
@@ -656,10 +718,17 @@ void main() {
   });
 }
 "#;
-    fs::write(gen_dir.join("schema_ui_contract_test.g.dart"), valid_contract)?;
+    fs::write(
+        gen_dir.join("schema_ui_contract_test.g.dart"),
+        valid_contract,
+    )?;
 
     let res = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
-    assert!(res.is_ok(), "Complete 4-resolution, 6-viewport contract must pass Check 40: {:?}", res.err());
+    assert!(
+        res.is_ok(),
+        "Complete 4-resolution, 6-viewport contract must pass Check 40: {:?}",
+        res.err()
+    );
     Ok(())
 }
 

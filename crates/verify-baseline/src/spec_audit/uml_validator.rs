@@ -217,7 +217,9 @@ impl SysmlSymbolIndex {
         // Index model-level test cases
         for tc in &model.test_cases {
             if !tc.name.is_empty() {
-                index.test_cases.insert(tc.name.clone(), tc.verified_requirements.clone());
+                index
+                    .test_cases
+                    .insert(tc.name.clone(), tc.verified_requirements.clone());
             }
         }
 
@@ -330,7 +332,8 @@ impl SysmlSymbolIndex {
         }
         for tc in &pkg.test_case_defs {
             if !tc.name.is_empty() {
-                self.test_cases.insert(tc.name.clone(), tc.verified_requirements.clone());
+                self.test_cases
+                    .insert(tc.name.clone(), tc.verified_requirements.clone());
             }
         }
         for st in &pkg.state_defs {
@@ -438,7 +441,8 @@ impl SysmlSymbolIndex {
         }
         for tc in &part.test_cases {
             if !tc.name.is_empty() {
-                self.test_cases.insert(tc.name.clone(), tc.verified_requirements.clone());
+                self.test_cases
+                    .insert(tc.name.clone(), tc.verified_requirements.clone());
             }
         }
 
@@ -930,7 +934,10 @@ pub fn validate_source_references(doc: &MarkdownDoc) -> Result<(), SpecAuditErro
         let has_reference = tokens.iter().any(|t| t.starts_with("referenc"));
         let has_traceability = tokens.iter().any(|t| t == "traceability");
 
-        if (has_source && has_reference) || (has_reference && has_traceability) || (h.text.to_lowercase().contains("source reference")) {
+        if (has_source && has_reference)
+            || (has_reference && has_traceability)
+            || (h.text.to_lowercase().contains("source reference"))
+        {
             target_heading = Some(h);
             break;
         }
@@ -972,12 +979,16 @@ pub fn validate_source_references(doc: &MarkdownDoc) -> Result<(), SpecAuditErro
     // 3. Verify section contains valid references and is not a placeholder stub
     let mut has_valid_reference = false;
     let valid_indicators = [
-        "schema/", ".sysml", ".md", "ieee", "iso", "do-178c", "ecss", "rfc",
-        "req-", "sysml-", "http://", "https://", "clause", "§",
+        "schema/", ".sysml", ".md", "ieee", "iso", "do-178c", "ecss", "rfc", "req-", "sysml-",
+        "http://", "https://", "clause", "§",
     ];
 
     let placeholder_indicators = [
-        "*to be populated*", "*(to be populated)*", "*tbd*", "*(tbd)*", "*(none)*",
+        "*to be populated*",
+        "*(to be populated)*",
+        "*tbd*",
+        "*(tbd)*",
+        "*(none)*",
     ];
 
     for segment in section_prose {
@@ -987,7 +998,9 @@ pub fn validate_source_references(doc: &MarkdownDoc) -> Result<(), SpecAuditErro
             continue;
         }
 
-        if valid_indicators.iter().any(|&vi| lower.contains(vi)) || segment.contains("[") && segment.contains("](") {
+        if valid_indicators.iter().any(|&vi| lower.contains(vi))
+            || segment.contains("[") && segment.contains("](")
+        {
             has_valid_reference = true;
             break;
         }
@@ -1062,8 +1075,7 @@ pub fn validate_document_uml(
                     }
                 }
                 DiagramAst::Sequence(sequence_diagram) => {
-                    if let Err(mut seq_errors) =
-                        validate_sequence_diagram(&sequence_diagram, index)
+                    if let Err(mut seq_errors) = validate_sequence_diagram(&sequence_diagram, index)
                     {
                         all_errors.append(&mut seq_errors);
                     }
@@ -1181,10 +1193,7 @@ fn collect_state_names(state: &StateDef, names: &mut BTreeSet<String>) {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-UML-VALIDATOR-VALIDATE-USE-CASE-DIAGRAM-COMPLIANCE] | SysML v2: ActionDef(validate_use_case_diagram_compliance)
-pub fn validate_use_case_diagram_compliance(
-    doc: &MarkdownDoc,
-    rel_path: &str,
-) -> Vec<String> {
+pub fn validate_use_case_diagram_compliance(doc: &MarkdownDoc, rel_path: &str) -> Vec<String> {
     let mut errors = Vec::new();
 
     if doc.mermaid_blocks.is_empty() {
@@ -1212,7 +1221,11 @@ pub fn validate_use_case_diagram_compliance(
         }
 
         // 2. Directed arrows to actors check
-        let primary_actor = doc.table_metadata.get("primary_actor").map(|s| s.trim()).unwrap_or("");
+        let primary_actor = doc
+            .table_metadata
+            .get("primary_actor")
+            .map(|s| s.trim())
+            .unwrap_or("");
         let mut actor_ids = BTreeSet::new();
         if !primary_actor.is_empty() {
             actor_ids.insert(primary_actor.to_string());
@@ -1248,9 +1261,9 @@ pub fn validate_use_case_diagram_compliance(
             }
             let is_directed = directed_arrows.iter().any(|&arr| t.contains(arr));
             if is_directed {
-                let contains_actor = actor_ids.iter().any(|act| {
-                    t.contains(act) || t.to_lowercase().contains(act)
-                });
+                let contains_actor = actor_ids
+                    .iter()
+                    .any(|act| t.contains(act) || t.to_lowercase().contains(act));
                 if contains_actor {
                     errors.push(format!(
                         "{}: Use Case Diagram Compliance Gate violation: Directed arrows ('-->') used to connect actor in line: '{}'. Actors must use undirected associations ('---') in UML Use Case diagrams.",
@@ -1265,10 +1278,15 @@ pub fn validate_use_case_diagram_compliance(
         let mut has_non_stadium = false;
         for l in &lines {
             let t = l.trim();
-            if t.starts_with("%%") || t.starts_with("subgraph") || t.starts_with("classDef") || t.starts_with("style") {
+            if t.starts_with("%%")
+                || t.starts_with("subgraph")
+                || t.starts_with("classDef")
+                || t.starts_with("style")
+            {
                 continue;
             }
-            if t.contains("[\"") && t.contains("\"]") && !t.contains("([\"") && !t.contains("\"])") {
+            if t.contains("[\"") && t.contains("\"]") && !t.contains("([\"") && !t.contains("\"])")
+            {
                 has_non_stadium = true;
                 break;
             }
@@ -1285,28 +1303,42 @@ pub fn validate_use_case_diagram_compliance(
         let mut node_ids = BTreeSet::new();
         for l in &lines {
             let t = l.trim();
-            if t.starts_with("%%") || t.starts_with("subgraph") || t.starts_with("end")
-                || t.starts_with("flowchart") || t.starts_with("graph")
-                || t.starts_with("classDef") || t.starts_with("style")
+            if t.starts_with("%%")
+                || t.starts_with("subgraph")
+                || t.starts_with("end")
+                || t.starts_with("flowchart")
+                || t.starts_with("graph")
+                || t.starts_with("classDef")
+                || t.starts_with("style")
             {
                 continue;
             }
-            let first_token = t.split(['[', '(', ' ', '-', '.'])
+            let first_token = t
+                .split(['[', '(', ' ', '-', '.'])
                 .next()
                 .unwrap_or("")
                 .trim();
-            if !first_token.is_empty() && first_token.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            if !first_token.is_empty()
+                && first_token
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_')
+            {
                 node_ids.insert(first_token.to_string());
             }
 
             for arr in &["-->", "---", "->", "-.->"] {
                 if let Some(pos) = t.find(arr) {
                     let after = t[pos + arr.len()..].trim();
-                    let target_token = after.split(['[', '(', ' ', '-', '.'])
+                    let target_token = after
+                        .split(['[', '(', ' ', '-', '.'])
                         .next()
                         .unwrap_or("")
                         .trim();
-                    if !target_token.is_empty() && target_token.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                    if !target_token.is_empty()
+                        && target_token
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+                    {
                         node_ids.insert(target_token.to_string());
                     }
                 }
@@ -1350,9 +1382,7 @@ pub fn validate_use_case_diagram_compliance(
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-UML-VALIDATOR-VALIDATE-EPIC-STATECHART-HETEROGENEITY] | SysML v2: ActionDef(validate_epic_statechart_heterogeneity)
-pub fn validate_epic_statechart_heterogeneity(
-    epics: &[(&str, &MarkdownDoc)],
-) -> Vec<String> {
+pub fn validate_epic_statechart_heterogeneity(epics: &[(&str, &MarkdownDoc)]) -> Vec<String> {
     let mut errors = Vec::new();
     let mut epic_transitions: Vec<(&str, Vec<(String, String)>)> = Vec::new();
 
@@ -1392,9 +1422,15 @@ pub fn validate_epic_statechart_heterogeneity(
     // 1. Check for canned pipeline lifecycle transitions:
     let mut canned_epics = Vec::new();
     for (rel_path, trans) in &epic_transitions {
-        let has_boot_ingest = trans.iter().any(|(f, t)| f == "Bootstrapping" && t == "Ingesting");
-        let has_ingest_comp = trans.iter().any(|(f, t)| f == "Ingesting" && t == "Compiling");
-        let has_comp_verif = trans.iter().any(|(f, t)| f == "Compiling" && t == "Verifying");
+        let has_boot_ingest = trans
+            .iter()
+            .any(|(f, t)| f == "Bootstrapping" && t == "Ingesting");
+        let has_ingest_comp = trans
+            .iter()
+            .any(|(f, t)| f == "Ingesting" && t == "Compiling");
+        let has_comp_verif = trans
+            .iter()
+            .any(|(f, t)| f == "Compiling" && t == "Verifying");
         if has_boot_ingest && has_ingest_comp && has_comp_verif {
             canned_epics.push(*rel_path);
         }
@@ -1549,12 +1585,23 @@ pub fn validate_parent_epic_alignment(
             Some(idx) => &f_path[idx + 1..],
             None => f_path,
         };
-        let f_stem = f_basename.strip_suffix(".md").unwrap_or(f_basename).to_lowercase();
+        let f_stem = f_basename
+            .strip_suffix(".md")
+            .unwrap_or(f_basename)
+            .to_lowercase();
 
-        let parent_epic = f_doc.table_metadata.get("parent_epic").map(|s| s.trim()).unwrap_or("");
+        let parent_epic = f_doc
+            .table_metadata
+            .get("parent_epic")
+            .map(|s| s.trim())
+            .unwrap_or("");
         let parent_epic_clean = extract_epic_stem(parent_epic);
 
-        let title = f_doc.table_metadata.get("title").map(|s| s.trim()).unwrap_or("");
+        let title = f_doc
+            .table_metadata
+            .get("title")
+            .map(|s| s.trim())
+            .unwrap_or("");
         let subsys = extract_subsystem_from_title(title);
 
         feat_info.insert(f_stem, (subsys, parent_epic_clean));
@@ -1572,14 +1619,21 @@ pub fn validate_parent_epic_alignment(
         }
 
         for segment in &ep_doc.prose {
-            for raw_word in segment.text.split(|c: char| c == '(' || c == ')' || c == '[' || c == ']' || c.is_whitespace()) {
-                let word = raw_word.trim_matches(|c: char| c.is_ascii_punctuation() && c != '-' && c != '_');
+            for raw_word in segment
+                .text
+                .split(|c: char| c == '(' || c == ')' || c == '[' || c == ']' || c.is_whitespace())
+            {
+                let word = raw_word
+                    .trim_matches(|c: char| c.is_ascii_punctuation() && c != '-' && c != '_');
                 if word.to_lowercase().contains("us-") {
                     let s_basename = match word.rfind('/') {
                         Some(idx) => &word[idx + 1..],
                         None => word,
                     };
-                    let s_stem = s_basename.strip_suffix(".md").unwrap_or(s_basename).to_lowercase();
+                    let s_stem = s_basename
+                        .strip_suffix(".md")
+                        .unwrap_or(s_basename)
+                        .to_lowercase();
                     epic_associated_stories.insert(s_stem, ep_stem.to_string());
                 }
             }
@@ -1591,28 +1645,47 @@ pub fn validate_parent_epic_alignment(
             Some(idx) => &s_path[idx + 1..],
             None => s_path,
         };
-        let s_stem = s_basename.strip_suffix(".md").unwrap_or(s_basename).to_lowercase();
+        let s_stem = s_basename
+            .strip_suffix(".md")
+            .unwrap_or(s_basename)
+            .to_lowercase();
 
-        let declared_parent = s_doc.table_metadata.get("parent_epic").map(|s| s.trim()).unwrap_or("");
+        let declared_parent = s_doc
+            .table_metadata
+            .get("parent_epic")
+            .map(|s| s.trim())
+            .unwrap_or("");
         let declared_stem = extract_epic_stem(declared_parent);
 
-        let spec_source = s_doc.table_metadata.get("specification_source").map(|s| s.trim()).unwrap_or("");
+        let spec_source = s_doc
+            .table_metadata
+            .get("specification_source")
+            .map(|s| s.trim())
+            .unwrap_or("");
         let is_conops_source = spec_source.to_lowercase().contains("conops");
 
         let mut linked_feature_parent_epics = Vec::new();
         for segment in &s_doc.prose {
-            for raw_word in segment.text.split(|c: char| c == '(' || c == ')' || c == '[' || c == ']' || c.is_whitespace()) {
-                let word = raw_word.trim_matches(|c: char| c.is_ascii_punctuation() && c != '-' && c != '_');
+            for raw_word in segment
+                .text
+                .split(|c: char| c == '(' || c == ')' || c == '[' || c == ']' || c.is_whitespace())
+            {
+                let word = raw_word
+                    .trim_matches(|c: char| c.is_ascii_punctuation() && c != '-' && c != '_');
                 if word.to_lowercase().contains("feat-") {
                     let f_basename = match word.rfind('/') {
                         Some(idx) => &word[idx + 1..],
                         None => word,
                     };
-                    let f_stem = f_basename.strip_suffix(".md").unwrap_or(f_basename).to_lowercase();
+                    let f_stem = f_basename
+                        .strip_suffix(".md")
+                        .unwrap_or(f_basename)
+                        .to_lowercase();
                     let matched_feat = feat_info.iter().find(|(k, _)| {
                         k.as_str() == f_stem
                             || (k.starts_with(&f_stem) && k[f_stem.len()..].starts_with('-'))
-                            || (f_stem.starts_with(k.as_str()) && f_stem[k.len()..].starts_with('-'))
+                            || (f_stem.starts_with(k.as_str())
+                                && f_stem[k.len()..].starts_with('-'))
                     });
                     if let Some((_, (_subsys, p_epic))) = matched_feat {
                         if !p_epic.is_empty() {
@@ -1625,7 +1698,9 @@ pub fn validate_parent_epic_alignment(
 
         let primary_feature_epic = linked_feature_parent_epics
             .iter()
-            .find(|(_f, p)| !p.to_lowercase().contains("epic-01") && !p.to_lowercase().contains("epic-02"))
+            .find(|(_f, p)| {
+                !p.to_lowercase().contains("epic-01") && !p.to_lowercase().contains("epic-02")
+            })
             .map(|(_f, p)| p.as_str());
 
         let expected_from_epic_checklist = epic_associated_stories
@@ -1642,13 +1717,16 @@ pub fn validate_parent_epic_alignment(
             let declared_lower = declared_stem.to_lowercase();
             let expected_lower = expected.to_lowercase();
 
-            let mismatch = if declared_lower.contains("epic-02") && !expected_lower.contains("epic-02") {
-                true
-            } else if !declared_lower.contains(&expected_lower) && !expected_lower.contains(&declared_lower) {
-                !is_conops_source
-            } else {
-                false
-            };
+            let mismatch =
+                if declared_lower.contains("epic-02") && !expected_lower.contains("epic-02") {
+                    true
+                } else if !declared_lower.contains(&expected_lower)
+                    && !expected_lower.contains(&declared_lower)
+                {
+                    !is_conops_source
+                } else {
+                    false
+                };
 
             if mismatch {
                 errors.push(format!(
@@ -1810,7 +1888,11 @@ pub fn validate_feature_operation_coverage(
         // Strip brackets if array-like: "[Container1, Container2]"
         let cleaned = c_val.trim_matches(|c| c == '[' || c == ']' || c == '`');
         for part_entry in cleaned.split(',') {
-            let entry = part_entry.trim().trim_matches('"').trim_matches('\'').trim();
+            let entry = part_entry
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .trim();
             if entry.is_empty() {
                 continue;
             }
@@ -1828,7 +1910,9 @@ pub fn validate_feature_operation_coverage(
 
             for (c_name, c_info) in &index.classifiers {
                 if c_name.to_ascii_lowercase() == leaf_lower
-                    && !matched_classifiers.iter().any(|existing| existing.name == c_info.name)
+                    && !matched_classifiers
+                        .iter()
+                        .any(|existing| existing.name == c_info.name)
                 {
                     matched_classifiers.push(c_info);
                 }
@@ -1859,7 +1943,9 @@ pub fn validate_feature_operation_coverage(
                         if !ident_clean.is_empty() {
                             explicit_declared_parts.insert(ident_clean.to_ascii_lowercase());
                         }
-                    } else if line_str.contains(':') && !line_str.to_ascii_lowercase().starts_with("note") {
+                    } else if line_str.contains(':')
+                        && !line_str.to_ascii_lowercase().starts_with("note")
+                    {
                         if let Some(colon_pos) = line_str.find(':') {
                             let ident = line_str[..colon_pos].trim();
                             let ident_clean = extract_simple_ident(ident);
@@ -1908,7 +1994,9 @@ pub fn validate_feature_operation_coverage(
 
         for (c_name, c_info) in &index.classifiers {
             if explicit_declared_parts.contains(&c_name.to_ascii_lowercase())
-                && !matched_classifiers.iter().any(|existing| existing.name == c_info.name)
+                && !matched_classifiers
+                    .iter()
+                    .any(|existing| existing.name == c_info.name)
             {
                 matched_classifiers.push(c_info);
             }
@@ -1989,7 +2077,12 @@ pub fn validate_user_story_test_cases(
 
     // 1. From frontmatter
     if let Some(ref fm) = doc.frontmatter {
-        for key in &["sysml_test_case", "test_case", "test_case_def", "test_cases"] {
+        for key in &[
+            "sysml_test_case",
+            "test_case",
+            "test_case_def",
+            "test_cases",
+        ] {
             if let Some(val) = fm.get(*key) {
                 let cleaned = val.trim_matches(|c| c == '[' || c == ']' || c == '`');
                 for t in cleaned.split(',') {
@@ -2025,11 +2118,7 @@ pub fn validate_user_story_test_cases(
 
     // Filter out generic keywords
     tc_refs.retain(|t| {
-        t != "TestCase"
-            && t != "test_case"
-            && t != "test_case_def"
-            && t != "Name"
-            && t != "TC_"
+        t != "TestCase" && t != "test_case" && t != "test_case_def" && t != "Name" && t != "TC_"
     });
     tc_refs.sort();
     tc_refs.dedup();
@@ -2096,7 +2185,9 @@ mod tests {
         SequenceParticipantAst, StateDefAst, StateTransitionAst, Visibility,
     };
     use crate::spec_audit::markdown_ast::{HeadingNode, ProseSegment};
-    use deap_core::sysml_ast::{ActionDef, AttributeDef, OperationDef, PartDef, StateDef, SysmlModel};
+    use deap_core::sysml_ast::{
+        ActionDef, AttributeDef, OperationDef, PartDef, StateDef, SysmlModel,
+    };
 
     fn create_test_sysml_model() -> SysmlModel {
         let mut model = SysmlModel::default();
@@ -2239,9 +2330,9 @@ mod tests {
         let res = validate_sequence_diagram(&seq, &index);
         assert!(res.is_err());
         let errors = res.err().unwrap_or_default();
-        assert!(errors
-            .first()
-            .is_some_and(|e| e.to_string().contains("Lifeline 'UnregisteredEngine' in sequence diagram")));
+        assert!(errors.first().is_some_and(|e| e
+            .to_string()
+            .contains("Lifeline 'UnregisteredEngine' in sequence diagram")));
     }
 
     #[test]
@@ -2336,9 +2427,9 @@ mod tests {
         let res = validate_class_diagram(&class_diag, &index);
         assert!(res.is_err());
         let errors = res.err().unwrap_or_default();
-        assert!(errors
-            .first()
-            .is_some_and(|e| e.to_string().contains("Class 'PhantomPart' in class diagram")));
+        assert!(errors.first().is_some_and(|e| e
+            .to_string()
+            .contains("Class 'PhantomPart' in class diagram")));
     }
 
     #[test]
@@ -2505,9 +2596,9 @@ mod tests {
 
         let res = validate_source_references(&missing_doc);
         assert!(res.is_err());
-        assert!(res
-            .err()
-            .is_some_and(|e| e.to_string().contains("missing a mandatory 'Source References' section")));
+        assert!(res.err().is_some_and(|e| e
+            .to_string()
+            .contains("missing a mandatory 'Source References' section")));
     }
 
     #[test]
@@ -2530,10 +2621,16 @@ mod tests {
         };
 
         let errs = validate_use_case_diagram_compliance(&legacy_doc, "docs/use-cases/uc-01.md");
-        assert!(errs.iter().any(|e| e.contains("lacks a system boundary subgraph")));
-        assert!(errs.iter().any(|e| e.contains("Directed arrows ('-->') used to connect actor")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("lacks a system boundary subgraph")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("Directed arrows ('-->') used to connect actor")));
         assert!(errs.iter().any(|e| e.contains("Non-stadium nodes")));
-        assert!(errs.iter().any(|e| e.contains("Trivial 2-node flow detected")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("Trivial 2-node flow detected")));
 
         // Compliant UML diagram with boundary, stadium nodes, undirected association
         let compliant_raw = r#"graph TD
@@ -2549,7 +2646,10 @@ mod tests {
         let compliant_doc = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
-            table_metadata: BTreeMap::from([("primary_actor".to_string(), "HumanEngineer".to_string())]),
+            table_metadata: BTreeMap::from([(
+                "primary_actor".to_string(),
+                "HumanEngineer".to_string(),
+            )]),
             prose: vec![],
             mermaid_blocks: vec![MermaidBlock {
                 raw: compliant_raw.to_string(),
@@ -2560,8 +2660,13 @@ mod tests {
             unresolved_placeholders: vec![],
         };
 
-        let clean_errs = validate_use_case_diagram_compliance(&compliant_doc, "docs/use-cases/uc-01.md");
-        assert!(clean_errs.is_empty(), "Compliant diagram should have 0 errors: {:?}", clean_errs);
+        let clean_errs =
+            validate_use_case_diagram_compliance(&compliant_doc, "docs/use-cases/uc-01.md");
+        assert!(
+            clean_errs.is_empty(),
+            "Compliant diagram should have 0 errors: {:?}",
+            clean_errs
+        );
     }
 
     #[test]
@@ -2597,8 +2702,13 @@ mod tests {
         ];
 
         let errs = validate_epic_statechart_heterogeneity(&epics);
-        assert!(!errs.is_empty(), "Identical canned statecharts must be flagged");
-        assert!(errs.iter().any(|e| e.contains("share identical canned pipeline lifecycle statecharts")));
+        assert!(
+            !errs.is_empty(),
+            "Identical canned statecharts must be flagged"
+        );
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("share identical canned pipeline lifecycle statecharts")));
 
         // Heterogeneous epics
         let custom_raw = r#"stateDiagram-v2
@@ -2626,7 +2736,11 @@ mod tests {
             ("docs/epics/epic-04.md", &epic3),
         ];
         let clean_errs = validate_epic_statechart_heterogeneity(&heterogenous);
-        assert!(clean_errs.is_empty(), "Heterogeneous epics must pass: {:?}", clean_errs);
+        assert!(
+            clean_errs.is_empty(),
+            "Heterogeneous epics must pass: {:?}",
+            clean_errs
+        );
     }
 
     #[test]
@@ -2636,8 +2750,14 @@ mod tests {
             headings: vec![],
             frontmatter: None,
             table_metadata: BTreeMap::from([
-                ("title".to_string(), "Feature 06: [System Vision] SystemVisionEngine".to_string()),
-                ("parent_epic".to_string(), "[EPIC-03-SystemVision](../epics/EPIC-03-SystemVision.md)".to_string()),
+                (
+                    "title".to_string(),
+                    "Feature 06: [System Vision] SystemVisionEngine".to_string(),
+                ),
+                (
+                    "parent_epic".to_string(),
+                    "[EPIC-03-SystemVision](../epics/EPIC-03-SystemVision.md)".to_string(),
+                ),
             ]),
             prose: vec![],
             mermaid_blocks: vec![],
@@ -2674,7 +2794,10 @@ mod tests {
             unresolved_placeholders: vec![],
         };
 
-        let stories = vec![("docs/user-stories/US-01-BootstrapSystemVisionAction.md", &mismatched_story)];
+        let stories = vec![(
+            "docs/user-stories/US-01-BootstrapSystemVisionAction.md",
+            &mismatched_story,
+        )];
         let features = vec![("docs/features/FEAT-06-SystemVisionEngine.md", &feat06)];
         let epics = vec![("docs/epics/EPIC-03-SystemVision.md", &epic03)];
 
@@ -2707,9 +2830,16 @@ mod tests {
             unresolved_placeholders: vec![],
         };
 
-        let clean_stories = vec![("docs/user-stories/US-01-BootstrapSystemVisionAction.md", &aligned_story)];
+        let clean_stories = vec![(
+            "docs/user-stories/US-01-BootstrapSystemVisionAction.md",
+            &aligned_story,
+        )];
         let clean_errs = validate_parent_epic_alignment(&clean_stories, &features, &epics);
-        assert!(clean_errs.is_empty(), "Aligned story should have 0 errors: {:?}", clean_errs);
+        assert!(
+            clean_errs.is_empty(),
+            "Aligned story should have 0 errors: {:?}",
+            clean_errs
+        );
     }
 
     #[test]

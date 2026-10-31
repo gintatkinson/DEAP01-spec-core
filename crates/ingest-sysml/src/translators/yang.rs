@@ -407,10 +407,9 @@ fn scan_quoted_string(chars: &[char], pos: &mut usize, quote_char: char) -> Resu
     while let Some(&ch) = chars.get(*pos) {
         if quote_char == '"' && ch == '\\' {
             *pos += 1;
-            let escaped = chars
-                .get(*pos)
-                .copied()
-                .ok_or_else(|| "Unterminated escape sequence in double-quoted string".to_string())?;
+            let escaped = chars.get(*pos).copied().ok_or_else(|| {
+                "Unterminated escape sequence in double-quoted string".to_string()
+            })?;
             match escaped {
                 'n' => s.push('\n'),
                 't' => s.push('\t'),

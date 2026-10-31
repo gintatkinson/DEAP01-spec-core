@@ -29,7 +29,9 @@ use std::path::{Path, PathBuf};
 use deap_core::sysml_ast::{PackageDef, SysmlModel};
 
 pub use bridge_emitter::generate_solver_bridge_dart;
-pub use contracts::{FlutterCodegenError, FlutterContractOptions, FlutterContractReport, TopologyNode};
+pub use contracts::{
+    FlutterCodegenError, FlutterContractOptions, FlutterContractReport, TopologyNode,
+};
 pub use models_emitter::generate_schema_models_dart;
 pub use naming::{
     compute_schema_hash, escape_dart_single_quoted, extract_bounds_from_doc, format_display_name,
@@ -57,7 +59,11 @@ pub use ui_test_emitter::generate_ui_contract_test_dart;
 /// Realises: [REQ-0607], [REQ-EMIT-FLUTTER-CONTRACTS]
 fn resolve_flutter_base_dir(out_dir: &Path) -> PathBuf {
     let candidate = out_dir.join("app_flutter");
-    if candidate.is_dir() { candidate } else { out_dir.to_path_buf() }
+    if candidate.is_dir() {
+        candidate
+    } else {
+        out_dir.to_path_buf()
+    }
 }
 
 /// Persists a batch of `(relative_path, dart_source)` tuples atomically under `base_dir`.
@@ -76,10 +82,15 @@ fn resolve_flutter_base_dir(out_dir: &Path) -> PathBuf {
 /// - Aborts immediately and propagates `FlutterCodegenError::Io` on directory or atomic write failure.
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0607], [REQ-EMIT-FLUTTER-CONTRACTS]
-fn write_generated_dart_batch(base_dir: &Path, files: &[(String, String)]) -> Result<(), FlutterCodegenError> {
+fn write_generated_dart_batch(
+    base_dir: &Path,
+    files: &[(String, String)],
+) -> Result<(), FlutterCodegenError> {
     for (rel_path, content) in files {
         let full_path = base_dir.join(rel_path);
-        if let Some(parent) = full_path.parent() { fs::create_dir_all(parent)?; }
+        if let Some(parent) = full_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
         crate::semantic::digest::write_atomic(&full_path, content)?;
     }
     Ok(())
@@ -102,7 +113,10 @@ fn write_generated_dart_batch(base_dir: &Path, files: &[(String, String)]) -> Re
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0607], [REQ-EMIT-FLUTTER-CONTRACTS]
 fn synth_package_from_flat_model(model: &SysmlModel) -> PackageDef {
-    let name = match &model.package_name { Some(n) => n.clone(), None => "root".to_string() };
+    let name = match &model.package_name {
+        Some(n) => n.clone(),
+        None => "root".to_string(),
+    };
     PackageDef {
         name,
         part_defs: model.parts.clone(),
@@ -128,10 +142,20 @@ fn synth_package_from_flat_model(model: &SysmlModel) -> PackageDef {
 /// - Propagates `FlutterCodegenError::Io` when parent directory creation or atomic write fails.
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0607], [REQ-EMIT-FLUTTER-CONTRACTS]
-pub fn emit_dart_solver_bridge(out_dir: &Path, model: &SysmlModel, schema_hash: u64) -> Result<PathBuf, FlutterCodegenError> {
+pub fn emit_dart_solver_bridge(
+    out_dir: &Path,
+    model: &SysmlModel,
+    schema_hash: u64,
+) -> Result<PathBuf, FlutterCodegenError> {
     let base_dir = resolve_flutter_base_dir(out_dir);
-    let solver_bridge_path = base_dir.join("lib").join("data").join("generated").join("solver_bridge.g.dart");
-    if let Some(parent) = solver_bridge_path.parent() { fs::create_dir_all(parent)?; }
+    let solver_bridge_path = base_dir
+        .join("lib")
+        .join("data")
+        .join("generated")
+        .join("solver_bridge.g.dart");
+    if let Some(parent) = solver_bridge_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
     let content = generate_solver_bridge_dart(model, schema_hash);
     crate::semantic::digest::write_atomic(&solver_bridge_path, &content)?;
     Ok(solver_bridge_path)
@@ -161,27 +185,71 @@ pub fn emit_modular_flutter_contracts(
     dry_run: bool,
 ) -> Result<FlutterContractReport, FlutterCodegenError> {
     let base_dir = resolve_flutter_base_dir(out_dir);
-    let (resolved_topology_str, nodes) = topology::resolve_topology_nodes(out_dir, &base_dir, &model.parts, topology_json)?;
-    let schema_str = serde_json::to_string(model).map_err(|e| FlutterCodegenError::InvalidModel(format!("Failed to serialize SysmlModel for hash: {e}")))?;
+    let (resolved_topology_str, nodes) =
+        topology::resolve_topology_nodes(out_dir, &base_dir, &model.parts, topology_json)?;
+    let schema_str = serde_json::to_string(model).map_err(|e| {
+        FlutterCodegenError::InvalidModel(format!("Failed to serialize SysmlModel for hash: {e}"))
+    })?;
     let schema_hash = compute_schema_hash(&schema_str, &resolved_topology_str);
-    let seed_path = base_dir.join("lib").join("data").join("seeds").join("generated_domain_seed.g.dart");
-    let models_path = base_dir.join("lib").join("models").join("generated_schema_models.g.dart");
-    let solver_bridge_path = base_dir.join("lib").join("data").join("generated").join("solver_bridge.g.dart");
-    let ui_contract_test_path = base_dir.join("test").join("generated").join("schema_ui_contract_test.g.dart");
+    let seed_path = base_dir
+        .join("lib")
+        .join("data")
+        .join("seeds")
+        .join("generated_domain_seed.g.dart");
+    let models_path = base_dir
+        .join("lib")
+        .join("models")
+        .join("generated_schema_models.g.dart");
+    let solver_bridge_path = base_dir
+        .join("lib")
+        .join("data")
+        .join("generated")
+        .join("solver_bridge.g.dart");
+    let ui_contract_test_path = base_dir
+        .join("test")
+        .join("generated")
+        .join("schema_ui_contract_test.g.dart");
     let mut batch: Vec<(String, String)> = vec![
-        ("lib/data/seeds/generated_domain_seed.g.dart".to_string(), generate_domain_seed_dart(model, &nodes, schema_hash)),
-        ("lib/models/generated_schema_models.g.dart".to_string(), generate_schema_models_dart(model, &nodes, schema_hash)),
-        ("lib/data/generated/solver_bridge.g.dart".to_string(), generate_solver_bridge_dart(model, schema_hash)),
-        ("test/generated/schema_ui_contract_test.g.dart".to_string(), generate_ui_contract_test_dart(model, &nodes)),
+        (
+            "lib/data/seeds/generated_domain_seed.g.dart".to_string(),
+            generate_domain_seed_dart(model, &nodes, schema_hash),
+        ),
+        (
+            "lib/models/generated_schema_models.g.dart".to_string(),
+            generate_schema_models_dart(model, &nodes, schema_hash),
+        ),
+        (
+            "lib/data/generated/solver_bridge.g.dart".to_string(),
+            generate_solver_bridge_dart(model, schema_hash),
+        ),
+        (
+            "test/generated/schema_ui_contract_test.g.dart".to_string(),
+            generate_ui_contract_test_dart(model, &nodes),
+        ),
     ];
-    batch.extend(seed_emitter::emit_modular_seed_files(pkg, &nodes, schema_hash));
-    batch.extend(models_emitter::emit_modular_model_files(pkg, &nodes, schema_hash));
+    batch.extend(seed_emitter::emit_modular_seed_files(
+        pkg,
+        &nodes,
+        schema_hash,
+    ));
+    batch.extend(models_emitter::emit_modular_model_files(
+        pkg,
+        &nodes,
+        schema_hash,
+    ));
     batch.extend(bridge_emitter::emit_modular_bridge_files(pkg, schema_hash));
     batch.extend(ui_test_emitter::emit_modular_ui_test_files(pkg, &nodes));
-    if !dry_run { write_generated_dart_batch(&base_dir, &batch)?; }
+    if !dry_run {
+        write_generated_dart_batch(&base_dir, &batch)?;
+    }
     Ok(FlutterContractReport {
-        seed_path, models_path, solver_bridge_path, ui_contract_test_path,
-        schema_hash, entities_count: nodes.len(), types_count: model.parts.len(),
+        seed_path,
+        models_path,
+        solver_bridge_path,
+        ui_contract_test_path,
+        schema_hash,
+        entities_count: nodes.len(),
+        types_count: model.parts.len(),
     })
 }
 
@@ -201,7 +269,11 @@ pub fn emit_modular_flutter_contracts(
 /// - Propagates any `FlutterCodegenError` raised during topology decoding, hashing, or disk writes.
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0607], [REQ-EMIT-FLUTTER-CONTRACTS]
-pub fn emit_flutter_contracts(out_dir: &Path, model: &SysmlModel, topology_json: Option<&str>) -> Result<FlutterContractReport, FlutterCodegenError> {
+pub fn emit_flutter_contracts(
+    out_dir: &Path,
+    model: &SysmlModel,
+    topology_json: Option<&str>,
+) -> Result<FlutterContractReport, FlutterCodegenError> {
     let pkg = synth_package_from_flat_model(model);
     emit_modular_flutter_contracts(out_dir, &pkg, model, topology_json, false)
 }

@@ -401,11 +401,9 @@ fn test_upstream_blueprint_to_spec_and_github_projection_zero_defects(
                 || file_name.starts_with("US-04-")
                 || file_name.starts_with("US-05-");
             if !is_bp01_story && content.contains("FEAT-01-") {
-                return Err(format!(
-                    "Cross-package FEAT-01 pollution detected in {}",
-                    file_name
-                )
-                .into());
+                return Err(
+                    format!("Cross-package FEAT-01 pollution detected in {}", file_name).into(),
+                );
             }
         }
 

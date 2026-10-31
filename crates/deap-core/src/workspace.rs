@@ -163,7 +163,9 @@ pub fn check_no_ds_store_files(repo_root: &Path) -> Result<(), Vec<String>> {
             }
         })
     {
-        let Ok(e) = e else { continue; };
+        let Ok(e) = e else {
+            continue;
+        };
         if e.file_name() == ".DS_Store" {
             let rel = e
                 .path()
@@ -266,7 +268,8 @@ pub fn check_no_duplicate_master_blueprints(repo_root: &Path) -> Result<(), Vec<
     let pubspec_path = repo_root.join("app_flutter").join("pubspec.yaml");
     if pubspec_path.is_file() {
         if let Ok(pubspec_text) = fs::read_to_string(&pubspec_path) {
-            if !pubspec_text.contains("name: app_flutter") && pubspec_text.contains("app_flutter:") {
+            if !pubspec_text.contains("name: app_flutter") && pubspec_text.contains("app_flutter:")
+            {
                 let tier1_sdk_files = [
                     "app_flutter/lib/features/layout/component_factory.dart",
                     "app_flutter/lib/features/layout/layout.dart",
@@ -282,12 +285,19 @@ pub fn check_no_duplicate_master_blueprints(repo_root: &Path) -> Result<(), Vec<
         }
     }
 
-    let blueprints_dir = repo_root.join("docs").join("architecture").join("blueprints");
+    let blueprints_dir = repo_root
+        .join("docs")
+        .join("architecture")
+        .join("blueprints");
     if blueprints_dir.is_dir() {
         if let Ok(entries) = fs::read_dir(&blueprints_dir) {
             for entry in entries.flatten() {
                 if entry.path().is_file()
-                    && entry.path().extension().map(|ext| ext == "md").unwrap_or(false)
+                    && entry
+                        .path()
+                        .extension()
+                        .map(|ext| ext == "md")
+                        .unwrap_or(false)
                 {
                     let rel = entry
                         .path()
@@ -303,7 +313,9 @@ pub fn check_no_duplicate_master_blueprints(repo_root: &Path) -> Result<(), Vec<
 
     let blueprints: Vec<&str> = MASTER_BLUEPRINTS
         .iter()
-        .chain(std::iter::once("DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml"))
+        .chain(std::iter::once(
+            "DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml",
+        ))
         .collect();
 
     for e in WalkDir::new(repo_root)
@@ -318,7 +330,9 @@ pub fn check_no_duplicate_master_blueprints(repo_root: &Path) -> Result<(), Vec<
             }
         })
     {
-        let Ok(e) = e else { continue; };
+        let Ok(e) = e else {
+            continue;
+        };
         if e.file_type().is_file() {
             let fname = e.file_name().to_string_lossy();
             if blueprints.iter().any(|&bp| bp == fname) {
@@ -400,7 +414,8 @@ pub fn check_downstream_instructions_exist(repo_root: &Path) -> Result<(), Vec<S
                         "Check 14 failed: README.md is empty in repository root '{}'.",
                         repo_root.display()
                     ));
-                } else if !content.contains("# Downstream Cyber-Physical Infrastructure Safety Project")
+                } else if !content
+                    .contains("# Downstream Cyber-Physical Infrastructure Safety Project")
                     && !content.contains("Operator Prompt Catalog")
                 {
                     errors.push(format!(
@@ -410,10 +425,7 @@ pub fn check_downstream_instructions_exist(repo_root: &Path) -> Result<(), Vec<S
                 }
             }
             Err(e) => {
-                errors.push(format!(
-                    "Check 14 failed: Unable to read README.md: {}",
-                    e
-                ));
+                errors.push(format!("Check 14 failed: Unable to read README.md: {}", e));
             }
         }
     }
@@ -424,9 +436,9 @@ pub fn check_downstream_instructions_exist(repo_root: &Path) -> Result<(), Vec<S
         repo_root.join("CLAUDE.md"),
         repo_root.join(".agents").join("AGENTS.md"),
     ];
-    let valid_entrypoint = agent_entrypoints.iter().any(|p| {
-        p.is_file() && fs::metadata(p).map(|m| m.len() > 0).unwrap_or(false)
-    });
+    let valid_entrypoint = agent_entrypoints
+        .iter()
+        .any(|p| p.is_file() && fs::metadata(p).map(|m| m.len() > 0).unwrap_or(false));
     if !valid_entrypoint {
         errors.push(format!(
             "Check 14 failed: No non-empty agent instruction entrypoint found in '{}' (expected AGENTS.md, CLAUDE.md, or .agents/AGENTS.md).",
@@ -498,12 +510,18 @@ pub fn check_reconcile_backlog_tooling_exists(repo_root: &Path) -> Result<(), Ve
     let mut errors = Vec::new();
 
     if is_upstream_compiler(repo_root) {
-        let release_bin = repo_root.join("target").join("release").join("reconcile-backlog");
+        let release_bin = repo_root
+            .join("target")
+            .join("release")
+            .join("reconcile-backlog");
         let crate_dir = repo_root.join("crates").join("reconcile-backlog");
         let crate_cargo = crate_dir.join("Cargo.toml");
         let crate_src = crate_dir.join("src").join("main.rs");
 
-        let has_release_bin = release_bin.is_file() && fs::metadata(&release_bin).map(|m| m.len() > 0).unwrap_or(false);
+        let has_release_bin = release_bin.is_file()
+            && fs::metadata(&release_bin)
+                .map(|m| m.len() > 0)
+                .unwrap_or(false);
         let has_crate = crate_cargo.is_file() && crate_src.is_file();
 
         if !has_release_bin && !has_crate {
@@ -527,7 +545,9 @@ pub fn check_reconcile_backlog_tooling_exists(repo_root: &Path) -> Result<(), Ve
         for bin_name in &required_binaries {
             let bin_path = target_release.join(bin_name);
             let is_valid = bin_path.is_file()
-                && fs::metadata(&bin_path).map(|m| m.len() > 0).unwrap_or(false);
+                && fs::metadata(&bin_path)
+                    .map(|m| m.len() > 0)
+                    .unwrap_or(false);
             if !is_valid {
                 missing_bins.push(format!("target/release/{}", bin_name));
             }
@@ -622,7 +642,9 @@ pub fn check_upstream_template_clean_landing_zones(repo_root: &Path) -> Result<(
                 }
             })
         {
-            let Ok(e) = e else { continue; };
+            let Ok(e) = e else {
+                continue;
+            };
             if e.file_type().is_file() {
                 let fname = e.file_name().to_string_lossy();
                 if !allowed_files.contains(&fname.as_ref()) {
@@ -661,7 +683,8 @@ mod tests {
 
     impl TempDir {
         fn new(name: &str) -> Result<Self, std::io::Error> {
-            let path = std::env::temp_dir().join(format!("deap_test_{}_{}", name, uuid::Uuid::new_v4()));
+            let path =
+                std::env::temp_dir().join(format!("deap_test_{}_{}", name, uuid::Uuid::new_v4()));
             fs::create_dir_all(&path)?;
             Ok(Self { path })
         }
@@ -698,7 +721,10 @@ mod tests {
         File::create(tmp.path.join(".DS_Store"))?;
         let res = check_no_ds_store_files(&tmp.path);
         let errs = res.err().ok_or("expected Err")?;
-        assert!(errs.first().ok_or("expected error message")?.contains(".DS_Store"));
+        assert!(errs
+            .first()
+            .ok_or("expected error message")?
+            .contains(".DS_Store"));
         Ok(())
     }
 
@@ -739,9 +765,15 @@ mod tests {
             tmp.path.join("app_flutter/pubspec.yaml"),
             "name: cuas_coa_app\ndependencies:\n  app_flutter:\n    path: ../../DEAP-profile-flutter-app/app_flutter\n",
         )?;
-        File::create(tmp.path.join("app_flutter/lib/features/layout/component_factory.dart"))?;
+        File::create(
+            tmp.path
+                .join("app_flutter/lib/features/layout/component_factory.dart"),
+        )?;
         assert!(check_no_duplicate_master_blueprints(&tmp.path).is_err());
-        fs::remove_file(tmp.path.join("app_flutter/lib/features/layout/component_factory.dart"))?;
+        fs::remove_file(
+            tmp.path
+                .join("app_flutter/lib/features/layout/component_factory.dart"),
+        )?;
         assert!(check_no_duplicate_master_blueprints(&tmp.path).is_ok());
         fs::remove_dir_all(tmp.path.join("app_flutter"))?;
 
@@ -758,7 +790,10 @@ mod tests {
 
         // Create README with required phrase
         let mut readme = File::create(tmp.path.join("README.md"))?;
-        writeln!(readme, "# Downstream Cyber-Physical Infrastructure Safety Project\n\nDetails.")?;
+        writeln!(
+            readme,
+            "# Downstream Cyber-Physical Infrastructure Safety Project\n\nDetails."
+        )?;
 
         // Create AGENTS.md
         let mut agents = File::create(tmp.path.join("AGENTS.md"))?;
@@ -802,7 +837,8 @@ mod tests {
     }
 
     #[test]
-    fn test_check_reconcile_backlog_tooling_rust_native() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_reconcile_backlog_tooling_rust_native() -> Result<(), Box<dyn std::error::Error>>
+    {
         let tmp = TempDir::new("reconcile_rust")?;
         // Empty workspace must fail
         assert!(check_reconcile_backlog_tooling_exists(&tmp.path).is_err());
@@ -859,7 +895,10 @@ mod tests {
             .and_then(|p| p.parent())
             .ok_or("repo root")?;
 
-        assert_eq!(is_upstream_compiler(repo_root), repo_root.join(".pipeline/upstream").is_dir());
+        assert_eq!(
+            is_upstream_compiler(repo_root),
+            repo_root.join(".pipeline/upstream").is_dir()
+        );
         assert!(check_gitignore_exists(repo_root).is_ok());
         assert!(check_no_ds_store_files(repo_root).is_ok());
         assert!(check_no_duplicate_master_blueprints(repo_root).is_ok());
@@ -949,6 +988,9 @@ mod tests {
                 current_doc.clear();
             }
         }
-        assert_eq!(fn_count, 7, "Expected exactly 7 documented functions in workspace.rs");
+        assert_eq!(
+            fn_count, 7,
+            "Expected exactly 7 documented functions in workspace.rs"
+        );
     }
 }

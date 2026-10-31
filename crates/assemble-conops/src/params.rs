@@ -459,7 +459,6 @@ fn find_first_package(text: &str) -> Option<&str> {
     None
 }
 
-
 /// Executes deterministic fn `find_all_attributes` within `crates/assemble-conops/src/params.rs`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -578,10 +577,7 @@ fn find_all_attributes(text: &str) -> Vec<(&str, &str)> {
 /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-FIND-LINE-NUMBER] | SysML v2: ActionDef(find_line_number)
 pub fn find_line_number(content: &str, byte_offset: usize) -> Option<usize> {
     let prefix = content.as_bytes().get(..byte_offset)?;
-    let line = prefix
-        .iter()
-        .filter(|&&b| b == b'\n')
-        .count() + 1;
+    let line = prefix.iter().filter(|&&b| b == b'\n').count() + 1;
     Some(line)
 }
 
@@ -618,7 +614,10 @@ fn extract_doc_comment_before(content: &str, pos: usize) -> String {
         if let Some(start_pos) = doc_end.rfind("/*") {
             let inner = doc_end.get(start_pos + 2..).unwrap_or("");
             let inner_trimmed = inner.trim();
-            let stripped = inner_trimmed.strip_prefix("doc").unwrap_or(inner_trimmed).trim();
+            let stripped = inner_trimmed
+                .strip_prefix("doc")
+                .unwrap_or(inner_trimmed)
+                .trim();
             return stripped.to_string();
         }
     }
@@ -654,9 +653,14 @@ fn extract_doc_comment_before(content: &str, pos: usize) -> String {
 fn extract_inner_doc(body: &str) -> String {
     if let Some(start_pos) = body.find("/*") {
         if let Some(end_pos) = body.get(start_pos + 2..).and_then(|s| s.find("*/")) {
-            let inner = body.get(start_pos + 2..start_pos + 2 + end_pos).unwrap_or("");
+            let inner = body
+                .get(start_pos + 2..start_pos + 2 + end_pos)
+                .unwrap_or("");
             let inner_trimmed = inner.trim();
-            let stripped = inner_trimmed.strip_prefix("doc").unwrap_or(inner_trimmed).trim();
+            let stripped = inner_trimmed
+                .strip_prefix("doc")
+                .unwrap_or(inner_trimmed)
+                .trim();
             return stripped.to_string();
         }
     }
@@ -790,19 +794,37 @@ fn check_direction_word(before: &str) -> Option<(&'static str, usize)> {
     let trimmed = before.trim_end();
     if trimmed.ends_with("inout") {
         let start = trimmed.len() - 5;
-        if start == 0 || !trimmed.as_bytes().get(start - 1).copied().is_some_and(is_ident_char) {
+        if start == 0
+            || !trimmed
+                .as_bytes()
+                .get(start - 1)
+                .copied()
+                .is_some_and(is_ident_char)
+        {
             return Some(("INOUT", start));
         }
     }
     if trimmed.ends_with("out") {
         let start = trimmed.len() - 3;
-        if start == 0 || !trimmed.as_bytes().get(start - 1).copied().is_some_and(is_ident_char) {
+        if start == 0
+            || !trimmed
+                .as_bytes()
+                .get(start - 1)
+                .copied()
+                .is_some_and(is_ident_char)
+        {
             return Some(("OUT", start));
         }
     }
     if trimmed.ends_with("in") {
         let start = trimmed.len() - 2;
-        if start == 0 || !trimmed.as_bytes().get(start - 1).copied().is_some_and(is_ident_char) {
+        if start == 0
+            || !trimmed
+                .as_bytes()
+                .get(start - 1)
+                .copied()
+                .is_some_and(is_ident_char)
+        {
             return Some(("IN", start));
         }
     }
@@ -851,7 +873,8 @@ pub fn parse_subsystem_ports_from_body(
     while i < bytes.len() {
         if let Some(rel_pos) = body.get(i..).and_then(|s| s.find("port")) {
             let port_idx = i + rel_pos;
-            let left_ok = port_idx == 0 || !bytes.get(port_idx - 1).copied().is_some_and(is_ident_char);
+            let left_ok =
+                port_idx == 0 || !bytes.get(port_idx - 1).copied().is_some_and(is_ident_char);
             let right_ok = !bytes.get(port_idx + 4).copied().is_some_and(is_ident_char);
             if !left_ok || !right_ok {
                 i = port_idx + 4;
@@ -995,7 +1018,8 @@ pub fn extract_subsystem_parts_from_sysml(content: &str, filepath: &str) -> Vec<
     while i < bytes.len() {
         if let Some(rel_pos) = content.get(i..).and_then(|s| s.find("part")) {
             let part_pos = i + rel_pos;
-            let left_ok = part_pos == 0 || !bytes.get(part_pos - 1).copied().is_some_and(is_ident_char);
+            let left_ok =
+                part_pos == 0 || !bytes.get(part_pos - 1).copied().is_some_and(is_ident_char);
             let right_ok = !bytes.get(part_pos + 4).copied().is_some_and(is_ident_char);
             if !left_ok || !right_ok {
                 i = part_pos + 4;
@@ -1020,7 +1044,11 @@ pub fn extract_subsystem_parts_from_sysml(content: &str, filepath: &str) -> Vec<
             while bytes.get(curr).copied().is_some_and(is_ident_char) {
                 curr += 1;
             }
-            let name = content.get(name_start..curr).unwrap_or("").trim().to_string();
+            let name = content
+                .get(name_start..curr)
+                .unwrap_or("")
+                .trim()
+                .to_string();
             if name.is_empty() || name == "def" {
                 i = part_pos + 4;
                 continue;
@@ -1048,7 +1076,10 @@ pub fn extract_subsystem_parts_from_sysml(content: &str, filepath: &str) -> Vec<
             let (body, next_idx) = if bytes.get(curr) == Some(&b'{') {
                 let open_pos = curr;
                 if let Some(close_pos) = find_matching_brace(content, open_pos) {
-                    (content.get(open_pos + 1..close_pos).unwrap_or(""), close_pos + 1)
+                    (
+                        content.get(open_pos + 1..close_pos).unwrap_or(""),
+                        close_pos + 1,
+                    )
                 } else {
                     (content.get(open_pos + 1..).unwrap_or(""), bytes.len())
                 }
@@ -1157,9 +1188,16 @@ pub fn extract_subsystem_parts_from_sysml(content: &str, filepath: &str) -> Vec<
 /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-EXTRACT-SUBSYSTEM-PARTS-FROM-YAML] | SysML v2: ActionDef(extract_subsystem_parts_from_yaml)
 pub fn extract_subsystem_parts_from_yaml(content: &str, filepath: &str) -> Vec<SubsystemPart> {
     let mut parts = Vec::new();
-    let part_names = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".yaml", content);
+    let part_names =
+        deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(
+            ".yaml", content,
+        );
     for name in part_names {
-        let line_num = content.lines().enumerate().find(|(_, l)| l.contains(&name)).map(|(idx, _)| idx + 1);
+        let line_num = content
+            .lines()
+            .enumerate()
+            .find(|(_, l)| l.contains(&name))
+            .map(|(idx, _)| idx + 1);
         parts.push(SubsystemPart {
             name,
             doc: String::new(),
@@ -1206,9 +1244,16 @@ pub fn extract_subsystem_parts_from_yaml(content: &str, filepath: &str) -> Vec<S
 /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-EXTRACT-SUBSYSTEM-PARTS-FROM-JSON] | SysML v2: ActionDef(extract_subsystem_parts_from_json)
 pub fn extract_subsystem_parts_from_json(content: &str, filepath: &str) -> Vec<SubsystemPart> {
     let mut parts = Vec::new();
-    let part_names = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".json", content);
+    let part_names =
+        deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(
+            ".json", content,
+        );
     for name in part_names {
-        let line_num = content.lines().enumerate().find(|(_, l)| l.contains(&name)).map(|(idx, _)| idx + 1);
+        let line_num = content
+            .lines()
+            .enumerate()
+            .find(|(_, l)| l.contains(&name))
+            .map(|(idx, _)| idx + 1);
         parts.push(SubsystemPart {
             name,
             doc: String::new(),
@@ -1255,9 +1300,16 @@ pub fn extract_subsystem_parts_from_json(content: &str, filepath: &str) -> Vec<S
 /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-EXTRACT-SUBSYSTEM-PARTS-FROM-MARKDOWN] | SysML v2: ActionDef(extract_subsystem_parts_from_markdown)
 pub fn extract_subsystem_parts_from_markdown(content: &str, filepath: &str) -> Vec<SubsystemPart> {
     let mut parts = Vec::new();
-    let part_names = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".md", content);
+    let part_names =
+        deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(
+            ".md", content,
+        );
     for name in part_names {
-        let line_num = content.lines().enumerate().find(|(_, l)| l.contains(&name)).map(|(idx, _)| idx + 1);
+        let line_num = content
+            .lines()
+            .enumerate()
+            .find(|(_, l)| l.contains(&name))
+            .map(|(idx, _)| idx + 1);
         parts.push(SubsystemPart {
             name,
             doc: String::new(),
@@ -1302,7 +1354,10 @@ pub fn extract_subsystem_parts_from_markdown(content: &str, filepath: &str) -> V
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-EXTRACT-SUBSYSTEM-PARTS-FROM-INTERFACE-SCHEMA] | SysML v2: ActionDef(extract_subsystem_parts_from_interface_schema)
-pub fn extract_subsystem_parts_from_interface_schema(content: &str, filepath: &str) -> Vec<SubsystemPart> {
+pub fn extract_subsystem_parts_from_interface_schema(
+    content: &str,
+    filepath: &str,
+) -> Vec<SubsystemPart> {
     let mut parts = Vec::new();
     let ext = Path::new(filepath)
         .extension()
@@ -1310,9 +1365,16 @@ pub fn extract_subsystem_parts_from_interface_schema(content: &str, filepath: &s
         .unwrap_or("")
         .to_lowercase();
     let dot_ext = format!(".{}", ext);
-    let part_names = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(&dot_ext, content);
+    let part_names =
+        deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(
+            &dot_ext, content,
+        );
     for name in part_names {
-        let line_num = content.lines().enumerate().find(|(_, l)| l.contains(&name)).map(|(idx, _)| idx + 1);
+        let line_num = content
+            .lines()
+            .enumerate()
+            .find(|(_, l)| l.contains(&name))
+            .map(|(idx, _)| idx + 1);
         parts.push(SubsystemPart {
             name,
             doc: String::new(),
@@ -1370,12 +1432,17 @@ pub fn extract_subsystem_parts(target: &Path) -> Vec<SubsystemPart> {
                 "sysml" => parts.extend(extract_subsystem_parts_from_sysml(&content, &fpath)),
                 "yaml" | "yml" => parts.extend(extract_subsystem_parts_from_yaml(&content, &fpath)),
                 "json" => parts.extend(extract_subsystem_parts_from_json(&content, &fpath)),
-                "md" | "markdown" => parts.extend(extract_subsystem_parts_from_markdown(&content, &fpath)),
-                _ => parts.extend(extract_subsystem_parts_from_interface_schema(&content, &fpath)),
+                "md" | "markdown" => {
+                    parts.extend(extract_subsystem_parts_from_markdown(&content, &fpath))
+                }
+                _ => parts.extend(extract_subsystem_parts_from_interface_schema(
+                    &content, &fpath,
+                )),
             }
         }
     } else if target.is_dir() {
-        let schema_files = deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[target]);
+        let schema_files =
+            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[target]);
         for sf in schema_files {
             parts.extend(extract_subsystem_parts(&sf));
         }
@@ -1569,7 +1636,10 @@ fn replace_word_case_insensitive(text: &str, target_word: &str, replacement: &st
     let mut search_idx = 0;
 
     while search_idx < lower_text.len() {
-        if let Some(pos) = lower_text.get(search_idx..).and_then(|s| s.find(&lower_target)) {
+        if let Some(pos) = lower_text
+            .get(search_idx..)
+            .and_then(|s| s.find(&lower_target))
+        {
             let start = search_idx + pos;
             let end = start + target_len;
 
@@ -1645,7 +1715,12 @@ fn replace_altitude_agl(text: &str, replacement: &str) -> String {
                     .get(agl_end)
                     .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
 
-            if right_ok && agl_start > 0 && bytes.get(agl_start - 1).is_some_and(u8::is_ascii_whitespace) {
+            if right_ok
+                && agl_start > 0
+                && bytes
+                    .get(agl_start - 1)
+                    .is_some_and(u8::is_ascii_whitespace)
+            {
                 let mut prev = agl_start - 1;
                 while prev > 0 && bytes.get(prev).is_some_and(u8::is_ascii_whitespace) {
                     prev -= 1;
@@ -1873,12 +1948,18 @@ impl SysMLParameterBindingEngine {
 
         // Populate default parameters
         for &(k, v) in DEFAULT_CONOPS_PARAMS {
-            engine.parameter_bindings.insert(k.to_string(), v.to_string());
+            engine
+                .parameter_bindings
+                .insert(k.to_string(), v.to_string());
         }
 
         if let Some(dom) = domain {
-            engine.parameter_bindings.insert("DOMAIN_TYPE".to_string(), dom.to_string());
-            engine.parameter_bindings.insert("TARGET_DOMAIN".to_string(), dom.to_string());
+            engine
+                .parameter_bindings
+                .insert("DOMAIN_TYPE".to_string(), dom.to_string());
+            engine
+                .parameter_bindings
+                .insert("TARGET_DOMAIN".to_string(), dom.to_string());
             engine.explicit_keys.insert("DOMAIN_TYPE".to_string());
             engine.explicit_keys.insert("TARGET_DOMAIN".to_string());
         }
@@ -1895,15 +1976,21 @@ impl SysMLParameterBindingEngine {
             for (k, v) in params {
                 engine.explicit_keys.insert(k.to_uppercase());
                 engine.parameter_bindings.insert(k.clone(), v.clone());
-                engine.parameter_bindings.insert(k.to_uppercase(), v.clone());
+                engine
+                    .parameter_bindings
+                    .insert(k.to_uppercase(), v.clone());
                 engine._map_semantic_aliases(&k, &v);
             }
         }
 
         engine.detected_domain = engine._detect_domain_type();
         let dom_clone = engine.detected_domain.clone();
-        engine.parameter_bindings.insert("DETECTED_DOMAIN".to_string(), dom_clone.clone());
-        engine.parameter_bindings.insert("DOMAIN_TYPE".to_string(), dom_clone);
+        engine
+            .parameter_bindings
+            .insert("DETECTED_DOMAIN".to_string(), dom_clone.clone());
+        engine
+            .parameter_bindings
+            .insert("DOMAIN_TYPE".to_string(), dom_clone);
 
         engine._derive_operational_intent();
         engine._derive_mass_budgets();
@@ -2023,7 +2110,8 @@ impl SysMLParameterBindingEngine {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-SYSMLPARAMETERBINDINGENGINE-AUTO-DETECT-WORKSPACE-PARAMETERS] | SysML v2: ActionDef(SysMLParameterBindingEngine::auto_detect_workspace_parameters)
     pub fn auto_detect_workspace_parameters(&mut self, search_dirs: &[PathBuf]) {
-        let supported_exts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::SUPPORTED_EXTENSIONS;
+        let supported_exts =
+            deap_core::sysml_ast::UnifiedSchemaModelExtractor::SUPPORTED_EXTENSIONS;
 
         for sdir in search_dirs {
             // Check upstream guard
@@ -2163,7 +2251,11 @@ impl SysMLParameterBindingEngine {
                 self.ast_part_names.insert(p.name.clone());
                 self.explicit_keys.insert(p.name.clone());
                 self.explicit_keys.insert(p.name.to_uppercase());
-                if !self.ast_parts.iter().any(|existing| existing.name == p.name) {
+                if !self
+                    .ast_parts
+                    .iter()
+                    .any(|existing| existing.name == p.name)
+                {
                     self.ast_parts.push(p);
                 }
             }
@@ -2175,14 +2267,20 @@ impl SysMLParameterBindingEngine {
                 }
                 if let Some((k, v)) = trimmed.split_once(':') {
                     let k_clean = k.trim().replace(['"', '\'', '`'], "").to_string();
-                    let v_clean = v.trim().trim_matches(['"', '\'', '`', ';']).trim().to_string();
+                    let v_clean = v
+                        .trim()
+                        .trim_matches(['"', '\'', '`', ';'])
+                        .trim()
+                        .to_string();
                     if !k_clean.is_empty()
                         && !v_clean.is_empty()
                         && !v_clean.starts_with('[')
                         && !v_clean.starts_with('{')
                     {
-                        self.parameter_bindings.insert(k_clean.clone(), v_clean.clone());
-                        self.parameter_bindings.insert(k_clean.to_uppercase(), v_clean.clone());
+                        self.parameter_bindings
+                            .insert(k_clean.clone(), v_clean.clone());
+                        self.parameter_bindings
+                            .insert(k_clean.to_uppercase(), v_clean.clone());
                         self._map_semantic_aliases(&k_clean, &v_clean);
                     }
                 }
@@ -2226,7 +2324,11 @@ impl SysMLParameterBindingEngine {
                 self.ast_part_names.insert(p.name.clone());
                 self.explicit_keys.insert(p.name.clone());
                 self.explicit_keys.insert(p.name.to_uppercase());
-                if !self.ast_parts.iter().any(|existing| existing.name == p.name) {
+                if !self
+                    .ast_parts
+                    .iter()
+                    .any(|existing| existing.name == p.name)
+                {
                     self.ast_parts.push(p);
                 }
             }
@@ -2269,7 +2371,11 @@ impl SysMLParameterBindingEngine {
                 self.ast_part_names.insert(p.name.clone());
                 self.explicit_keys.insert(p.name.clone());
                 self.explicit_keys.insert(p.name.to_uppercase());
-                if !self.ast_parts.iter().any(|existing| existing.name == p.name) {
+                if !self
+                    .ast_parts
+                    .iter()
+                    .any(|existing| existing.name == p.name)
+                {
                     self.ast_parts.push(p);
                 }
             }
@@ -2364,13 +2470,15 @@ impl SysMLParameterBindingEngine {
                     Value::Number(n) => {
                         let str_val = n.to_string();
                         self.parameter_bindings.insert(k.clone(), str_val.clone());
-                        self.parameter_bindings.insert(k.to_uppercase(), str_val.clone());
+                        self.parameter_bindings
+                            .insert(k.to_uppercase(), str_val.clone());
                         self._map_semantic_aliases(k, &str_val);
                     }
                     Value::Bool(b) => {
                         let str_val = b.to_string();
                         self.parameter_bindings.insert(k.clone(), str_val.clone());
-                        self.parameter_bindings.insert(k.to_uppercase(), str_val.clone());
+                        self.parameter_bindings
+                            .insert(k.to_uppercase(), str_val.clone());
                         self._map_semantic_aliases(k, &str_val);
                     }
                     Value::Array(arr) => {
@@ -2399,7 +2507,8 @@ impl SysMLParameterBindingEngine {
                             }
                             let formatted = lines.join("\n");
                             self.parameter_bindings.insert(k.clone(), formatted.clone());
-                            self.parameter_bindings.insert(k.to_uppercase(), formatted.clone());
+                            self.parameter_bindings
+                                .insert(k.to_uppercase(), formatted.clone());
                             self.parameter_bindings
                                 .insert("CORE_MISSION_CAPABILITIES".to_string(), formatted);
                         }
@@ -2461,7 +2570,11 @@ impl SysMLParameterBindingEngine {
                 self.ast_part_names.insert(p.name.clone());
                 self.explicit_keys.insert(p.name.clone());
                 self.explicit_keys.insert(p.name.to_uppercase());
-                if !self.ast_parts.iter().any(|existing| existing.name == p.name) {
+                if !self
+                    .ast_parts
+                    .iter()
+                    .any(|existing| existing.name == p.name)
+                {
                     self.ast_parts.push(p.clone());
                 }
             }
@@ -2510,7 +2623,10 @@ impl SysMLParameterBindingEngine {
             }
         }
 
-        let parts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".sysml", text);
+        let parts =
+            deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(
+                ".sysml", text,
+            );
         for p_name in parts {
             let p_name = p_name.trim().to_string();
             self.ast_part_names.insert(p_name.clone());
@@ -2519,9 +2635,14 @@ impl SysMLParameterBindingEngine {
         }
 
         if self.ast_parts.is_empty() {
-            let fallback_parts = extract_subsystem_parts_from_sysml(text, "schema/DEAP_MODEL.sysml");
+            let fallback_parts =
+                extract_subsystem_parts_from_sysml(text, "schema/DEAP_MODEL.sysml");
             for p in fallback_parts {
-                if !self.ast_parts.iter().any(|existing| existing.name == p.name) {
+                if !self
+                    .ast_parts
+                    .iter()
+                    .any(|existing| existing.name == p.name)
+                {
                     self.ast_parts.push(p);
                 }
             }
@@ -2574,7 +2695,11 @@ impl SysMLParameterBindingEngine {
                 self.ast_part_names.insert(p.name.clone());
                 self.explicit_keys.insert(p.name.clone());
                 self.explicit_keys.insert(p.name.to_uppercase());
-                if !self.ast_parts.iter().any(|existing| existing.name == p.name) {
+                if !self
+                    .ast_parts
+                    .iter()
+                    .any(|existing| existing.name == p.name)
+                {
                     self.ast_parts.push(p);
                 }
             }
@@ -2669,9 +2794,7 @@ impl SysMLParameterBindingEngine {
     /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-SYSMLPARAMETERBINDINGENGINE-MAP-SEMANTIC-ALIASES] | SysML v2: ActionDef(SysMLParameterBindingEngine::_map_semantic_aliases)
     pub fn _map_semantic_aliases(&mut self, key: &str, val: &str) {
         let lower = key.to_lowercase().replace(['-', ' '], "_");
-        let num_val = extract_numeric_substring(val)
-            .unwrap_or(val)
-            .to_string();
+        let num_val = extract_numeric_substring(val).unwrap_or(val).to_string();
 
         let mut aliases = BTreeMap::new();
 
@@ -2709,7 +2832,11 @@ impl SysMLParameterBindingEngine {
             if let Ok(v) = num_val.parse::<f64>() {
                 aliases.insert("V_MAX_NOMINAL_MPS", format!("{:.1}", v * 0.85));
             }
-        } else if lower.contains("stall") || lower.contains("min_speed") || lower.contains("v_min") || lower == "vmin" {
+        } else if lower.contains("stall")
+            || lower.contains("min_speed")
+            || lower.contains("v_min")
+            || lower == "vmin"
+        {
             aliases.insert("V_MIN_MAX_MPS", num_val.clone());
             aliases.insert("V_STALL_MAX_MPS", num_val.clone());
             aliases.insert("STALL_SPEED_MPS", num_val.clone());
@@ -2750,24 +2877,30 @@ impl SysMLParameterBindingEngine {
             } else if let Ok(p) = num_val.parse::<f64>() {
                 aliases.insert("PAYLOAD_NOMINAL_KG", format!("{:.1}", p * 0.8));
             }
-        } else if lower.contains("endurance") || lower.contains("flight_time") || lower.contains("mission_duration") {
+        } else if lower.contains("endurance")
+            || lower.contains("flight_time")
+            || lower.contains("mission_duration")
+        {
             aliases.insert("ENDURANCE_NOMINAL_MIN", num_val.clone());
             if let Ok(e) = num_val.parse::<f64>() {
                 aliases.insert("ENDURANCE_MIN_MIN", format!("{:.1}", e * 0.67));
             } else {
                 aliases.insert("ENDURANCE_MIN_MIN", num_val.clone());
             }
-        } else if lower.contains("length") || lower.contains("dim_l") || lower.contains("dim_max_l") {
+        } else if lower.contains("length") || lower.contains("dim_l") || lower.contains("dim_max_l")
+        {
             aliases.insert("DIM_MAX_L_M", num_val.clone());
             if let Ok(d) = num_val.parse::<f64>() {
                 aliases.insert("DIM_NOM_L_M", format!("{:.1}", d * 0.9));
             }
-        } else if lower.contains("width") || lower.contains("dim_w") || lower.contains("dim_max_w") {
+        } else if lower.contains("width") || lower.contains("dim_w") || lower.contains("dim_max_w")
+        {
             aliases.insert("DIM_MAX_W_M", num_val.clone());
             if let Ok(d) = num_val.parse::<f64>() {
                 aliases.insert("DIM_NOM_W_M", format!("{:.1}", d * 0.9));
             }
-        } else if lower.contains("height") || lower.contains("dim_h") || lower.contains("dim_max_h") {
+        } else if lower.contains("height") || lower.contains("dim_h") || lower.contains("dim_max_h")
+        {
             aliases.insert("DIM_MAX_H_M", num_val.clone());
             if let Ok(d) = num_val.parse::<f64>() {
                 aliases.insert("DIM_NOM_H_M", format!("{:.1}", d * 0.9));
@@ -2810,20 +2943,32 @@ impl SysMLParameterBindingEngine {
         {
             aliases.insert("EFFECTOR_ENGAGEMENT_RANGE_M", num_val.clone());
             aliases.insert("ENGAGEMENT_RANGE_M", num_val.clone());
-        } else if lower.contains("c2_range") || lower.contains("datalink_range") || lower.contains("comm_range") {
+        } else if lower.contains("c2_range")
+            || lower.contains("datalink_range")
+            || lower.contains("comm_range")
+        {
             aliases.insert("C2_RANGE_NOMINAL_KM", num_val.clone());
             if let Ok(km) = num_val.parse::<f64>() {
                 aliases.insert("C2_RANGE_MIN_KM", format!("{:.1}", km * 0.6));
             }
-        } else if lower.contains("latency") || lower.contains("response_time") || lower.contains("loop_time") {
+        } else if lower.contains("latency")
+            || lower.contains("response_time")
+            || lower.contains("loop_time")
+        {
             aliases.insert("MAX_INFERENCE_LATENCY_MS", num_val.clone());
             aliases.insert("MAX_LATENCY_MS", num_val.clone());
             aliases.insert("PROCESSING_LATENCY_MS", num_val.clone());
             aliases.insert("TAU_RTT_MAX_MS", num_val.clone());
-        } else if lower.contains("temperature_min") || lower.contains("temp_min") || lower.contains("operating_temp_min") {
+        } else if lower.contains("temperature_min")
+            || lower.contains("temp_min")
+            || lower.contains("operating_temp_min")
+        {
             aliases.insert("TEMP_MIN_DEGC", num_val.clone());
             aliases.insert("OPERATING_TEMPERATURE_MIN_C", num_val.clone());
-        } else if lower.contains("temperature_max") || lower.contains("temp_max") || lower.contains("operating_temp_max") {
+        } else if lower.contains("temperature_max")
+            || lower.contains("temp_max")
+            || lower.contains("operating_temp_max")
+        {
             aliases.insert("TEMP_MAX_DEGC", num_val.clone());
             aliases.insert("OPERATING_TEMPERATURE_MAX_C", num_val.clone());
         } else if lower.contains("temp_nominal") || lower.contains("temperature_nominal") {
@@ -2871,10 +3016,17 @@ impl SysMLParameterBindingEngine {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-SYSMLPARAMETERBINDINGENGINE-DETECT-DOMAIN-TYPE] | SysML v2: ActionDef(SysMLParameterBindingEngine::_detect_domain_type)
     pub fn _detect_domain_type(&self) -> String {
-        for key in &["DOMAIN_TYPE", "TARGET_DOMAIN", "OPERATIONAL_DOMAIN", "DOMAIN"] {
+        for key in &[
+            "DOMAIN_TYPE",
+            "TARGET_DOMAIN",
+            "OPERATIONAL_DOMAIN",
+            "DOMAIN",
+        ] {
             if let Some(val) = self.parameter_bindings.get(*key) {
                 let clean = val.trim().to_lowercase();
-                if !clean.is_empty() && !["unknown", "none", "null", "undefined"].contains(&clean.as_str()) {
+                if !clean.is_empty()
+                    && !["unknown", "none", "null", "undefined"].contains(&clean.as_str())
+                {
                     let last = clean.split("::").last().unwrap_or(&clean).trim();
                     return last.to_string();
                 }
@@ -2887,10 +3039,17 @@ impl SysMLParameterBindingEngine {
             if digest_path.is_file() {
                 if let Ok(content) = fs::read_to_string(&digest_path) {
                     if let Ok(Value::Object(map)) = serde_json::from_str::<Value>(&content) {
-                        for k in &["domain", "domain_type", "target_domain", "operational_domain"] {
+                        for k in &[
+                            "domain",
+                            "domain_type",
+                            "target_domain",
+                            "operational_domain",
+                        ] {
                             if let Some(Value::String(s)) = map.get(*k) {
                                 let clean = s.trim().to_lowercase();
-                                if !clean.is_empty() && !["unknown", "none", "null"].contains(&clean.as_str()) {
+                                if !clean.is_empty()
+                                    && !["unknown", "none", "null"].contains(&clean.as_str())
+                                {
                                     return clean;
                                 }
                             }
@@ -3051,10 +3210,9 @@ impl SysMLParameterBindingEngine {
             let propulsion = (propulsion_pct * mtow * 100.0).round() / 100.0;
             let energy = (energy_pct * mtow * 100.0).round() / 100.0;
             let payload = (payload_pct * mtow * 100.0).round() / 100.0;
-            let containment = ((mtow - (airframe + avionics + propulsion + energy + payload))
-                * 100.0)
-                .round()
-                / 100.0;
+            let containment =
+                ((mtow - (airframe + avionics + propulsion + energy + payload)) * 100.0).round()
+                    / 100.0;
 
             self.parameter_bindings
                 .entry("MASS_BUDGET_AIRFRAME_KG".to_string())
@@ -3123,9 +3281,12 @@ impl SysMLParameterBindingEngine {
             .or_else(|| self.parameter_bindings.get("V_RESIDUAL"))
             .and_then(|s| s.parse::<f64>().ok());
 
-        let has_parachute_component = self.has_ast_component("parachute") || self.has_ast_component("chute");
+        let has_parachute_component =
+            self.has_ast_component("parachute") || self.has_ast_component("chute");
         let has_parachute_params = self.parameter_bindings.contains_key("S_CANOPY")
-            || self.parameter_bindings.contains_key("PARACHUTE_DRAG_COEFFICIENT");
+            || self
+                .parameter_bindings
+                .contains_key("PARACHUTE_DRAG_COEFFICIENT");
 
         let v_residual = if let Some(vr) = explicit_v_res {
             vr
@@ -3156,8 +3317,16 @@ impl SysMLParameterBindingEngine {
             } else {
                 1.5
             }
-        } else if self.parameter_bindings.get("LIFECYCLE_TYPE").map(|s| s == "EXPENDABLE_DISPOSAL").unwrap_or(false)
-            || self.parameter_bindings.get("IS_EXPENDABLE").map(|s| s == "true").unwrap_or(false)
+        } else if self
+            .parameter_bindings
+            .get("LIFECYCLE_TYPE")
+            .map(|s| s == "EXPENDABLE_DISPOSAL")
+            .unwrap_or(false)
+            || self
+                .parameter_bindings
+                .get("IS_EXPENDABLE")
+                .map(|s| s == "true")
+                .unwrap_or(false)
         {
             // For expendable platforms without deceleration containment, residual perimeter impact velocity equals v_max
             v_max
@@ -3228,9 +3397,15 @@ impl SysMLParameterBindingEngine {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-SYSMLPARAMETERBINDINGENGINE-DERIVE-DOMAIN-RISK-ASSESSMENT] | SysML v2: ActionDef(SysMLParameterBindingEngine::_derive_domain_risk_assessment)
     pub fn _derive_domain_risk_assessment(&mut self) {
-        if !self.parameter_bindings.contains_key("DOMAIN_RISK_ASSESSMENT_CLAUSES") {
+        if !self
+            .parameter_bindings
+            .contains_key("DOMAIN_RISK_ASSESSMENT_CLAUSES")
+        {
             let clauses = "<!-- Domain-specific risk containment and safety integrity clauses derived from active domain schema -->";
-            self.parameter_bindings.insert("DOMAIN_RISK_ASSESSMENT_CLAUSES".to_string(), clauses.to_string());
+            self.parameter_bindings.insert(
+                "DOMAIN_RISK_ASSESSMENT_CLAUSES".to_string(),
+                clauses.to_string(),
+            );
         }
     }
 
@@ -3264,7 +3439,10 @@ impl SysMLParameterBindingEngine {
         let existing = self
             .parameter_bindings
             .get("DOMAIN_REGULATORY_STANDARDS_TABLE_ROWS")
-            .or_else(|| self.parameter_bindings.get("REGULATORY_STANDARDS_TABLE_ROWS"));
+            .or_else(|| {
+                self.parameter_bindings
+                    .get("REGULATORY_STANDARDS_TABLE_ROWS")
+            });
 
         let table_rows = if let Some(rows) = existing {
             rows.clone()
@@ -3278,8 +3456,10 @@ impl SysMLParameterBindingEngine {
             rows.join("\n")
         };
 
-        self.parameter_bindings
-            .insert("DOMAIN_REGULATORY_STANDARDS_TABLE_ROWS".to_string(), table_rows.clone());
+        self.parameter_bindings.insert(
+            "DOMAIN_REGULATORY_STANDARDS_TABLE_ROWS".to_string(),
+            table_rows.clone(),
+        );
         self.parameter_bindings
             .insert("REGULATORY_STANDARDS_TABLE_ROWS".to_string(), table_rows);
     }
@@ -3412,7 +3592,8 @@ impl SysMLParameterBindingEngine {
     /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-SYSMLPARAMETERBINDINGENGINE-DERIVE-DOMAIN-ONTOLOGY] | SysML v2: ActionDef(SysMLParameterBindingEngine::_derive_domain_ontology)
     pub fn _derive_domain_ontology(&mut self) {
         let dom = self.detected_domain.to_lowercase();
-        self.is_non_aircraft = ["medical", "rail", "marine", "space", "industrial"].contains(&dom.as_str());
+        self.is_non_aircraft =
+            ["medical", "rail", "marine", "space", "industrial"].contains(&dom.as_str());
         self.is_civilian = true;
 
         // Abstract MBSE operational safety interlocks and positive condition verification parameters.
@@ -3437,11 +3618,24 @@ impl SysMLParameterBindingEngine {
                 .entry(format!("INTERLOCK_0{idx}_TAG"))
                 .or_insert_with(|| format!("{pfx}-0{idx}"));
         }
-        self.parameter_bindings.insert("TARGET_VERIFICATION_LABEL".to_string(), "Positive Condition Verification (PCV)".to_string());
-        self.parameter_bindings.insert("TARGET_VERIFICATION_ACRONYM".to_string(), "PCV".to_string());
-        self.parameter_bindings.insert("TARGET_VERIFICATION_PHRASE".to_string(), "positive condition verification".to_string());
-        self.parameter_bindings.insert("HIGH_CONSEQUENCE_ACTION".to_string(), "high-consequence actuation".to_string());
-        self.parameter_bindings.insert("COLLATERAL_RISK_PHRASE".to_string(), "adjacent operational risk".to_string());
+        self.parameter_bindings.insert(
+            "TARGET_VERIFICATION_LABEL".to_string(),
+            "Positive Condition Verification (PCV)".to_string(),
+        );
+        self.parameter_bindings
+            .insert("TARGET_VERIFICATION_ACRONYM".to_string(), "PCV".to_string());
+        self.parameter_bindings.insert(
+            "TARGET_VERIFICATION_PHRASE".to_string(),
+            "positive condition verification".to_string(),
+        );
+        self.parameter_bindings.insert(
+            "HIGH_CONSEQUENCE_ACTION".to_string(),
+            "high-consequence actuation".to_string(),
+        );
+        self.parameter_bindings.insert(
+            "COLLATERAL_RISK_PHRASE".to_string(),
+            "adjacent operational risk".to_string(),
+        );
     }
 
     /// Executes deterministic fn `SysMLParameterBindingEngine::_derive_operational_intent` within `crates/assemble-conops/src/params.rs`.
@@ -3484,24 +3678,36 @@ impl SysMLParameterBindingEngine {
         self.parameter_bindings.entry("OPERATIONAL_PURPOSE".to_string()).or_insert_with(|| {
             format!("The primary operational purpose of {sys_name} is to execute deterministic autonomous operations in {dom} environments.")
         });
-        self.parameter_bindings.entry("PRIMARY_OPERATIONAL_MISSION".to_string()).or_insert_with(|| {
-            format!("The {sys_name} is engineered to execute high-assurance {dom} missions.")
-        });
+        self.parameter_bindings
+            .entry("PRIMARY_OPERATIONAL_MISSION".to_string())
+            .or_insert_with(|| {
+                format!("The {sys_name} is engineered to execute high-assurance {dom} missions.")
+            });
 
-        self.parameter_bindings.entry("CORE_CAPABILITY_1".to_string()).or_insert_with(|| {
-            format!("Autonomous trajectory tracking and corridor execution in {dom}.")
-        });
-        self.parameter_bindings.entry("CORE_CAPABILITY_2".to_string()).or_insert_with(|| {
-            "Multi-modal sensor data fusion combining redundant state estimation sensors.".to_string()
-        });
+        self.parameter_bindings
+            .entry("CORE_CAPABILITY_1".to_string())
+            .or_insert_with(|| {
+                format!("Autonomous trajectory tracking and corridor execution in {dom}.")
+            });
+        self.parameter_bindings
+            .entry("CORE_CAPABILITY_2".to_string())
+            .or_insert_with(|| {
+                "Multi-modal sensor data fusion combining redundant state estimation sensors."
+                    .to_string()
+            });
         self.parameter_bindings.entry("CORE_CAPABILITY_3".to_string()).or_insert_with(|| {
             "Real-time high-throughput telemetry streaming and deterministic command processing.".to_string()
         });
-        self.parameter_bindings.entry("CORE_CAPABILITY_4".to_string()).or_insert_with(|| {
-            "Deterministic failsafe state machine ensuring autonomous containment.".to_string()
-        });
+        self.parameter_bindings
+            .entry("CORE_CAPABILITY_4".to_string())
+            .or_insert_with(|| {
+                "Deterministic failsafe state machine ensuring autonomous containment.".to_string()
+            });
 
-        if !self.parameter_bindings.contains_key("CORE_MISSION_CAPABILITIES") {
+        if !self
+            .parameter_bindings
+            .contains_key("CORE_MISSION_CAPABILITIES")
+        {
             let c1 = self
                 .parameter_bindings
                 .get("CORE_CAPABILITY_1")
@@ -3588,110 +3794,293 @@ impl SysMLParameterBindingEngine {
             LifecycleType::ReusableRecovery
         };
 
-        self.parameter_bindings
-            .insert("LIFECYCLE_TYPE".to_string(), selected_type.as_str().to_string());
+        self.parameter_bindings.insert(
+            "LIFECYCLE_TYPE".to_string(),
+            selected_type.as_str().to_string(),
+        );
 
         match selected_type {
             LifecycleType::ExpendableDisposal => {
-                self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Designated Safe Terminal Containment Zone".to_string());
-                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Safe Containment Area RS-DIVERT-ALPHA".to_string());
-                self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Designated Containment Area (Single-Use Disposal)".to_string());
-                self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Containment Area (Single-Use Disposal)".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_Terminal_Containment_Transit".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "autonomous terminal containment and safe de-energization sequence".to_string());
+                self.parameter_bindings
+                    .entry("PRIMARY_TERMINAL_TARGET".to_string())
+                    .or_insert_with(|| "Designated Safe Terminal Containment Zone".to_string());
+                self.parameter_bindings
+                    .entry("SECONDARY_TERMINAL_TARGET".to_string())
+                    .or_insert_with(|| {
+                        "Secondary Safe Containment Area RS-DIVERT-ALPHA".to_string()
+                    });
+                self.parameter_bindings
+                    .entry("PRIMARY_RECOVERY_FACILITY".to_string())
+                    .or_insert_with(|| {
+                        "Designated Containment Area (Single-Use Disposal)".to_string()
+                    });
+                self.parameter_bindings
+                    .entry("SECONDARY_RECOVERY_FACILITY".to_string())
+                    .or_insert_with(|| {
+                        "Secondary Containment Area (Single-Use Disposal)".to_string()
+                    });
+                self.parameter_bindings
+                    .entry("LIFECYCLE_TRANSIT_MODE".to_string())
+                    .or_insert_with(|| "Autonomous_Terminal_Containment_Transit".to_string());
+                self.parameter_bindings
+                    .entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string())
+                    .or_insert_with(|| {
+                        "autonomous terminal containment and safe de-energization sequence"
+                            .to_string()
+                    });
                 self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned operational corridor waypoints fully traversed and verified; zero unauthorized state boundary excursions; zero unmitigated collision or interference hazards; and successful arrival in the designated terminal containment zone with complete power de-energization and safe disposal.".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute safe terminal containment and power de-energization upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Terminal safe containment and de-energization with complete power bus isolation, memory state purge, and structural containment verification".to_string());
-                self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "SAFE_TERMINAL_CONTAINMENT".to_string());
-                self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "containment".to_string());
-                self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "autonomous containment watchdog and kinetic energy absorption".to_string());
-                self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "autonomous terminal containment and safe power isolation".to_string());
+                self.parameter_bindings
+                    .entry("CONTAINMENT_MITIGATION_TYPE".to_string())
+                    .or_insert_with(|| "SAFE_TERMINAL_CONTAINMENT".to_string());
+                self.parameter_bindings
+                    .entry("RECOVERY_DEVICE_TERM".to_string())
+                    .or_insert_with(|| "containment".to_string());
+                self.parameter_bindings
+                    .entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string())
+                    .or_insert_with(|| {
+                        "autonomous containment watchdog and kinetic energy absorption".to_string()
+                    });
+                self.parameter_bindings
+                    .entry("TIER4_CONTAINMENT_DESC".to_string())
+                    .or_insert_with(|| {
+                        "autonomous terminal containment and safe power isolation".to_string()
+                    });
             }
             LifecycleType::ContinuousStationary => {
-                self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Primary Sterile Field Docking Station".to_string());
-                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Clinical Safe Staging Console".to_string());
-                self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Clinical Operating Suite".to_string());
-                self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Maintenance Staging Bay".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_Clinical_Safing".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "electromechanical joint brake lock and sterile field safing sequence".to_string());
+                self.parameter_bindings
+                    .entry("PRIMARY_TERMINAL_TARGET".to_string())
+                    .or_insert_with(|| "Primary Sterile Field Docking Station".to_string());
+                self.parameter_bindings
+                    .entry("SECONDARY_TERMINAL_TARGET".to_string())
+                    .or_insert_with(|| "Secondary Clinical Safe Staging Console".to_string());
+                self.parameter_bindings
+                    .entry("PRIMARY_RECOVERY_FACILITY".to_string())
+                    .or_insert_with(|| "Clinical Operating Suite".to_string());
+                self.parameter_bindings
+                    .entry("SECONDARY_RECOVERY_FACILITY".to_string())
+                    .or_insert_with(|| "Secondary Maintenance Staging Bay".to_string());
+                self.parameter_bindings
+                    .entry("LIFECYCLE_TRANSIT_MODE".to_string())
+                    .or_insert_with(|| "Autonomous_Clinical_Safing".to_string());
+                self.parameter_bindings
+                    .entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string())
+                    .or_insert_with(|| {
+                        "electromechanical joint brake lock and sterile field safing sequence"
+                            .to_string()
+                    });
                 self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned operational trajectory segments fully traversed and verified; zero unauthorized workspace boundary excursions; and successful safe parking at the primary sterile console with residual power reserves strictly satisfying $R_{\\mathrm{reserve}} \\ge \\text{Ratio}_{\\text{reserve\\_min}} \\cdot R_{\\mathrm{capacity}}$.".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute automated electromechanical joint brake locking and sterile field preservation upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-operation stationary safe rest at sterile field console with engaged electromechanical joint brake locks, secure memory state purge, and diagnostic log offloading".to_string());
-                self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "ELECTROMECHANICAL_BRAKE_LOCK".to_string());
-                self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "failsafe joint brake".to_string());
-                self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "electromechanical joint brake lock and sterile field interlocks".to_string());
+                self.parameter_bindings
+                    .entry("CONTAINMENT_MITIGATION_TYPE".to_string())
+                    .or_insert_with(|| "ELECTROMECHANICAL_BRAKE_LOCK".to_string());
+                self.parameter_bindings
+                    .entry("RECOVERY_DEVICE_TERM".to_string())
+                    .or_insert_with(|| "failsafe joint brake".to_string());
+                self.parameter_bindings
+                    .entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string())
+                    .or_insert_with(|| {
+                        "electromechanical joint brake lock and sterile field interlocks"
+                            .to_string()
+                    });
                 self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "instant electromechanical joint brake locking and actuator power bus disconnect".to_string());
             }
             LifecycleType::TrackBoundGuided => {
-                self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Primary Rail Maintenance Siding".to_string());
-                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Controlled Deceleration Spur RS-DIVERT-ALPHA".to_string());
-                self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Classification Yard Maintenance Depot".to_string());
-                self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Service Siding".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_Track_Deceleration".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "controlled track deceleration and siding brake sequence".to_string());
+                self.parameter_bindings
+                    .entry("PRIMARY_TERMINAL_TARGET".to_string())
+                    .or_insert_with(|| "Primary Rail Maintenance Siding".to_string());
+                self.parameter_bindings
+                    .entry("SECONDARY_TERMINAL_TARGET".to_string())
+                    .or_insert_with(|| {
+                        "Secondary Controlled Deceleration Spur RS-DIVERT-ALPHA".to_string()
+                    });
+                self.parameter_bindings
+                    .entry("PRIMARY_RECOVERY_FACILITY".to_string())
+                    .or_insert_with(|| "Classification Yard Maintenance Depot".to_string());
+                self.parameter_bindings
+                    .entry("SECONDARY_RECOVERY_FACILITY".to_string())
+                    .or_insert_with(|| "Secondary Service Siding".to_string());
+                self.parameter_bindings
+                    .entry("LIFECYCLE_TRANSIT_MODE".to_string())
+                    .or_insert_with(|| "Autonomous_Track_Deceleration".to_string());
+                self.parameter_bindings
+                    .entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string())
+                    .or_insert_with(|| {
+                        "controlled track deceleration and siding brake sequence".to_string()
+                    });
                 self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned track blocks and route sections fully traversed and verified; zero unauthorized siding excursions; and successful controlled arrival at the primary maintenance siding or designated secondary spur with residual resources strictly satisfying $R_{\\mathrm{reserve}} \\ge \\text{Ratio}_{\\text{reserve\\_min}} \\cdot R_{\\mathrm{capacity}}$.".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute controlled track deceleration or secondary maintenance siding divert upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-operation stationary rest at rail siding with mechanical parking brakes engaged, pneumatic systems vented, secure memory state purge, and diagnostic log offloading".to_string());
-                self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "TRACK_SIDING_BRAKE".to_string());
-                self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "pneumatic emergency brake".to_string());
-                self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "pneumatic emergency brake and track siding deceleration system".to_string());
-                self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "emergency brake pipe venting and mechanical friction caliper clamping".to_string());
+                self.parameter_bindings
+                    .entry("CONTAINMENT_MITIGATION_TYPE".to_string())
+                    .or_insert_with(|| "TRACK_SIDING_BRAKE".to_string());
+                self.parameter_bindings
+                    .entry("RECOVERY_DEVICE_TERM".to_string())
+                    .or_insert_with(|| "pneumatic emergency brake".to_string());
+                self.parameter_bindings
+                    .entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string())
+                    .or_insert_with(|| {
+                        "pneumatic emergency brake and track siding deceleration system".to_string()
+                    });
+                self.parameter_bindings
+                    .entry("TIER4_CONTAINMENT_DESC".to_string())
+                    .or_insert_with(|| {
+                        "emergency brake pipe venting and mechanical friction caliper clamping"
+                            .to_string()
+                    });
             }
             LifecycleType::PersistentOrbital => {
-                self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Designated De-Orbit Reentry Corridor / Graveyard Orbit".to_string());
-                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Disposal Orbit Node RS-DIVERT-ALPHA".to_string());
-                self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Designated Atmospheric Demise Footprint".to_string());
-                self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Stable Graveyard Disposal Orbit".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_Disposal_Burn_Transit".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "autonomous de-orbit disposal and passivation sequence".to_string());
+                self.parameter_bindings
+                    .entry("PRIMARY_TERMINAL_TARGET".to_string())
+                    .or_insert_with(|| {
+                        "Designated De-Orbit Reentry Corridor / Graveyard Orbit".to_string()
+                    });
+                self.parameter_bindings
+                    .entry("SECONDARY_TERMINAL_TARGET".to_string())
+                    .or_insert_with(|| "Secondary Disposal Orbit Node RS-DIVERT-ALPHA".to_string());
+                self.parameter_bindings
+                    .entry("PRIMARY_RECOVERY_FACILITY".to_string())
+                    .or_insert_with(|| "Designated Atmospheric Demise Footprint".to_string());
+                self.parameter_bindings
+                    .entry("SECONDARY_RECOVERY_FACILITY".to_string())
+                    .or_insert_with(|| "Stable Graveyard Disposal Orbit".to_string());
+                self.parameter_bindings
+                    .entry("LIFECYCLE_TRANSIT_MODE".to_string())
+                    .or_insert_with(|| "Autonomous_Disposal_Burn_Transit".to_string());
+                self.parameter_bindings
+                    .entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string())
+                    .or_insert_with(|| {
+                        "autonomous de-orbit disposal and passivation sequence".to_string()
+                    });
                 self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned orbital mission phases fully executed and verified; zero unauthorized constellation slot excursions; zero unmitigated orbital debris collision hazards; and successful de-orbit disposal or transfer to graveyard orbit with residual propellant satisfying disposal containment standards.".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute autonomous de-orbit disposal burn or graveyard orbit maneuver upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-mission passivation and safe disposal state with reaction wheels desaturated, batteries passivated, secure memory state purge, and final ephemeris offload".to_string());
-                self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "DEORBIT_DISPOSAL_BURN".to_string());
-                self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "autonomous de-orbit propulsion".to_string());
-                self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "autonomous de-orbit propulsion and orbital passivation unit".to_string());
+                self.parameter_bindings
+                    .entry("CONTAINMENT_MITIGATION_TYPE".to_string())
+                    .or_insert_with(|| "DEORBIT_DISPOSAL_BURN".to_string());
+                self.parameter_bindings
+                    .entry("RECOVERY_DEVICE_TERM".to_string())
+                    .or_insert_with(|| "autonomous de-orbit propulsion".to_string());
+                self.parameter_bindings
+                    .entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string())
+                    .or_insert_with(|| {
+                        "autonomous de-orbit propulsion and orbital passivation unit".to_string()
+                    });
                 self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "autonomous retro-burn execution, reaction wheel desaturation, and battery passivation".to_string());
             }
             LifecycleType::ReusableRecovery => {
                 let has_chute = self.has_ast_component("parachute")
                     || self.has_ast_component("chute")
-                    || self.parameter_bindings.get("CONTAINMENT_MITIGATION_TYPE").map(|s| s.contains("PARACHUTE")).unwrap_or(false);
+                    || self
+                        .parameter_bindings
+                        .get("CONTAINMENT_MITIGATION_TYPE")
+                        .map(|s| s.contains("PARACHUTE"))
+                        .unwrap_or(false);
                 let has_buoyant = self.has_ast_component("buoyancy")
                     || self.has_ast_component("drop_weight")
                     || self.has_ast_component("ballast");
                 let has_brake = self.has_ast_component("brake");
 
                 if has_chute {
-                    self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "PARACHUTE_DESCENT".to_string());
-                    self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "parachute recovery system".to_string());
-                    self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "certified parachute recovery system".to_string());
-                    self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "autonomous parachute deployment and motor drive power isolation".to_string());
-                    self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "autonomous return-to-base or parachute recovery sequence".to_string());
+                    self.parameter_bindings
+                        .entry("CONTAINMENT_MITIGATION_TYPE".to_string())
+                        .or_insert_with(|| "PARACHUTE_DESCENT".to_string());
+                    self.parameter_bindings
+                        .entry("RECOVERY_DEVICE_TERM".to_string())
+                        .or_insert_with(|| "parachute recovery system".to_string());
+                    self.parameter_bindings
+                        .entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string())
+                        .or_insert_with(|| "certified parachute recovery system".to_string());
+                    self.parameter_bindings
+                        .entry("TIER4_CONTAINMENT_DESC".to_string())
+                        .or_insert_with(|| {
+                            "autonomous parachute deployment and motor drive power isolation"
+                                .to_string()
+                        });
+                    self.parameter_bindings
+                        .entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string())
+                        .or_insert_with(|| {
+                            "autonomous return-to-base or parachute recovery sequence".to_string()
+                        });
                 } else if has_buoyant {
-                    self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "BUOYANT_SURFACE_ASCENT".to_string());
-                    self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "positive buoyancy drop-weight".to_string());
+                    self.parameter_bindings
+                        .entry("CONTAINMENT_MITIGATION_TYPE".to_string())
+                        .or_insert_with(|| "BUOYANT_SURFACE_ASCENT".to_string());
+                    self.parameter_bindings
+                        .entry("RECOVERY_DEVICE_TERM".to_string())
+                        .or_insert_with(|| "positive buoyancy drop-weight".to_string());
                     self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "galvanic drop-weight ballast release and passive buoyancy ascent system".to_string());
-                    self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "galvanic drop-weight release and passive buoyancy ascent".to_string());
-                    self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "ballast expulsion and passive buoyant surface recovery sequence".to_string());
+                    self.parameter_bindings
+                        .entry("TIER4_CONTAINMENT_DESC".to_string())
+                        .or_insert_with(|| {
+                            "galvanic drop-weight release and passive buoyancy ascent".to_string()
+                        });
+                    self.parameter_bindings
+                        .entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string())
+                        .or_insert_with(|| {
+                            "ballast expulsion and passive buoyant surface recovery sequence"
+                                .to_string()
+                        });
                 } else if has_brake {
-                    self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "MECHANICAL_BRAKE_DECELERATION".to_string());
-                    self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "emergency brake".to_string());
-                    self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "autonomous friction brake deceleration system".to_string());
-                    self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "friction caliper clamping and actuator power cutoff".to_string());
-                    self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "autonomous deceleration and safe parking sequence".to_string());
+                    self.parameter_bindings
+                        .entry("CONTAINMENT_MITIGATION_TYPE".to_string())
+                        .or_insert_with(|| "MECHANICAL_BRAKE_DECELERATION".to_string());
+                    self.parameter_bindings
+                        .entry("RECOVERY_DEVICE_TERM".to_string())
+                        .or_insert_with(|| "emergency brake".to_string());
+                    self.parameter_bindings
+                        .entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string())
+                        .or_insert_with(|| {
+                            "autonomous friction brake deceleration system".to_string()
+                        });
+                    self.parameter_bindings
+                        .entry("TIER4_CONTAINMENT_DESC".to_string())
+                        .or_insert_with(|| {
+                            "friction caliper clamping and actuator power cutoff".to_string()
+                        });
+                    self.parameter_bindings
+                        .entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string())
+                        .or_insert_with(|| {
+                            "autonomous deceleration and safe parking sequence".to_string()
+                        });
                 } else {
-                    self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "FAILSAFE_CONTAINMENT".to_string());
-                    self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "failsafe containment".to_string());
-                    self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "autonomous failsafe containment system".to_string());
-                    self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "autonomous emergency containment actuation or actuator power cutoff".to_string());
-                    self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "autonomous return-to-base sequence".to_string());
+                    self.parameter_bindings
+                        .entry("CONTAINMENT_MITIGATION_TYPE".to_string())
+                        .or_insert_with(|| "FAILSAFE_CONTAINMENT".to_string());
+                    self.parameter_bindings
+                        .entry("RECOVERY_DEVICE_TERM".to_string())
+                        .or_insert_with(|| "failsafe containment".to_string());
+                    self.parameter_bindings
+                        .entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string())
+                        .or_insert_with(|| "autonomous failsafe containment system".to_string());
+                    self.parameter_bindings
+                        .entry("TIER4_CONTAINMENT_DESC".to_string())
+                        .or_insert_with(|| {
+                            "autonomous emergency containment actuation or actuator power cutoff"
+                                .to_string()
+                        });
+                    self.parameter_bindings
+                        .entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string())
+                        .or_insert_with(|| "autonomous return-to-base sequence".to_string());
                 }
 
-                self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Primary Recovery Base".to_string());
-                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Divert Site RS-DIVERT-ALPHA".to_string());
-                self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Primary Recovery Base".to_string());
-                self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Divert Base".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_RTB_Transit".to_string());
+                self.parameter_bindings
+                    .entry("PRIMARY_TERMINAL_TARGET".to_string())
+                    .or_insert_with(|| "Primary Recovery Base".to_string());
+                self.parameter_bindings
+                    .entry("SECONDARY_TERMINAL_TARGET".to_string())
+                    .or_insert_with(|| "Secondary Divert Site RS-DIVERT-ALPHA".to_string());
+                self.parameter_bindings
+                    .entry("PRIMARY_RECOVERY_FACILITY".to_string())
+                    .or_insert_with(|| "Primary Recovery Base".to_string());
+                self.parameter_bindings
+                    .entry("SECONDARY_RECOVERY_FACILITY".to_string())
+                    .or_insert_with(|| "Secondary Divert Base".to_string());
+                self.parameter_bindings
+                    .entry("LIFECYCLE_TRANSIT_MODE".to_string())
+                    .or_insert_with(|| "Autonomous_RTB_Transit".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned operational corridor waypoints fully traversed and verified; zero unauthorized state boundary excursions; zero unmitigated collision or interference hazards; all state conditions positively identified and verified ($C_{\\mathrm{condition}} \\ge C_{\\mathrm{threshold}}$); and successful recovery at the primary base or designated secondary divert recovery site with residual resources strictly satisfying $R_{\\mathrm{reserve}} \\ge \\text{Ratio}_{\\text{reserve\\_min}} \\cdot R_{\\mathrm{capacity}}$.".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute autonomous return-to-base (RTB) or secondary divert routing upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-operation stationary rest at recovery site with actuator safe locking, secure memory state purge, and diagnostic log offloading".to_string());
@@ -3801,7 +4190,10 @@ impl SysMLParameterBindingEngine {
 
         super_lines.push("    end".to_string());
         super_lines.push(String::new());
-        super_lines.push("    subgraph Support_Segment[\"Auxiliary & Support Segment (IEEE 1362 §5.3)\"]".to_string());
+        super_lines.push(
+            "    subgraph Support_Segment[\"Auxiliary & Support Segment (IEEE 1362 §5.3)\"]"
+                .to_string(),
+        );
         super_lines.push("        direction TB".to_string());
         super_lines.push("        SupportEquipment[\"Support and Maintenance<br/>Infrastructure<br/>• PORT_SUPP_PWR (OUT)\"]".to_string());
         super_lines.push("    end".to_string());
@@ -3815,12 +4207,20 @@ impl SysMLParameterBindingEngine {
 
         // Connection links (CONN-01..CONN-N)
         super_lines.push("    %% External Interface Connections".to_string());
-        super_lines.push("    Operator -->|\"CONN-01: Supervisory Command & Control\"| SupervisoryStation".to_string());
+        super_lines.push(
+            "    Operator -->|\"CONN-01: Supervisory Command & Control\"| SupervisoryStation"
+                .to_string(),
+        );
         super_lines.push("    ExternalAuthority -->|\"CONN-02: Authorization & Safety Consent\"| SupervisoryStation".to_string());
 
-        let target_node = node_ids.first().cloned().unwrap_or_else(|| "Platform".to_string());
+        let target_node = node_ids
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "Platform".to_string());
         super_lines.push(format!("    SupervisoryStation -->|\"CONN-03: System C2 Datalink [PORT_SUP_C2 -> PORT_CTRL_C2]\"| {target_node}"));
-        super_lines.push(format!("    Environment -.->|\"CONN-04: Environmental & Boundary Telemetry\"| {target_node}"));
+        super_lines.push(format!(
+            "    Environment -.->|\"CONN-04: Environmental & Boundary Telemetry\"| {target_node}"
+        ));
 
         let mut conn_idx = 5;
         if node_ids.len() > 1 {
@@ -3881,7 +4281,11 @@ impl SysMLParameterBindingEngine {
             let idx = idx_0 + 1;
             let raw_p_name = &p.name;
             let clean_p = sanitize_level_1b_operational_text(raw_p_name);
-            let clean_p = if clean_p.is_empty() { raw_p_name.clone() } else { clean_p };
+            let clean_p = if clean_p.is_empty() {
+                raw_p_name.clone()
+            } else {
+                clean_p
+            };
             let p_upper = clean_p.to_uppercase().replace([' ', '_', '.'], "-");
 
             let p_doc = if !p.doc.trim().is_empty() && p.doc.trim().len() >= 10 {
@@ -3891,11 +4295,15 @@ impl SysMLParameterBindingEngine {
             };
 
             let p_mass_kg = p.mass_kg.unwrap_or_else(|| {
-                ((total_mtow / (parts_to_render.len().max(1) as f64).max(0.2)) * 100.0).round() / 100.0
+                ((total_mtow / (parts_to_render.len().max(1) as f64).max(0.2)) * 100.0).round()
+                    / 100.0
             });
             let p_power_w = p.power_w.unwrap_or_else(|| {
                 let lower = clean_p.to_lowercase();
-                if lower.contains("computer") || lower.contains("obc") || lower.contains("controller") {
+                if lower.contains("computer")
+                    || lower.contains("obc")
+                    || lower.contains("controller")
+                {
                     ((base_power_w * 1.2) * 10.0).round() / 10.0
                 } else {
                     ((base_power_w * 0.5) * 10.0).round() / 10.0
@@ -3939,15 +4347,27 @@ impl SysMLParameterBindingEngine {
                 for port in &p.ports {
                     let raw_port_name = &port.name;
                     let port_name = sanitize_level_1b_operational_text(raw_port_name);
-                    let port_name = if port_name.is_empty() { raw_port_name.clone() } else { port_name };
-                    let port_dir = if port.direction.is_empty() { "INOUT".to_string() } else { port.direction.to_uppercase() };
+                    let port_name = if port_name.is_empty() {
+                        raw_port_name.clone()
+                    } else {
+                        port_name
+                    };
+                    let port_dir = if port.direction.is_empty() {
+                        "INOUT".to_string()
+                    } else {
+                        port.direction.to_uppercase()
+                    };
                     let raw_port_type = if port.type_name.is_empty() || port.type_name == "Port" {
                         "DeterministicSystemBus".to_string()
                     } else {
                         port.type_name.clone()
                     };
                     let port_type = sanitize_level_1b_operational_text(&raw_port_type);
-                    let port_type = if port_type.is_empty() { raw_port_type } else { port_type };
+                    let port_type = if port_type.is_empty() {
+                        raw_port_type
+                    } else {
+                        port_type
+                    };
 
                     let port_doc = if !port.doc.trim().is_empty() && port.doc.trim().len() >= 5 {
                         sanitize_level_1b_operational_text(&port.doc)
@@ -3987,12 +4407,16 @@ impl SysMLParameterBindingEngine {
             sub_lines.push(String::new());
 
             // 4.8.{idx}.2 Functional Allocation (SV-4)
-            sub_lines.push(format!("##### 4.8.{idx}.2 Functional Allocation (SV-4) - Scope & Mission Role"));
+            sub_lines.push(format!(
+                "##### 4.8.{idx}.2 Functional Allocation (SV-4) - Scope & Mission Role"
+            ));
             sub_lines.push(format!("- **Primary Mission Role & Scope:** {p_doc}"));
             sub_lines.push(String::new());
 
             // 4.8.{idx}.3 Resource Budgets
-            sub_lines.push(format!("##### 4.8.{idx}.3 Resource Budgets - Resource & Operating Envelope Allocations"));
+            sub_lines.push(format!(
+                "##### 4.8.{idx}.3 Resource Budgets - Resource & Operating Envelope Allocations"
+            ));
             sub_lines.push("| Resource Parameter | Nominal Allocation | Min (-15% Tolerance) | Max (+15% Tolerance) | Engineering Units | Allocation Description | OEM / SSOT Source |".to_string());
             sub_lines.push("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |".to_string());
             sub_lines.push(format!("| Allocated Operating Power | {p_power_w} | {p_power_min} | {p_power_max} | W | Continuous operating electrical power draw | {part_prov_str} |"));
@@ -4019,8 +4443,10 @@ impl SysMLParameterBindingEngine {
         }
 
         let sub_arch = sub_lines.join("\n");
-        self.parameter_bindings
-            .insert("SUBSYSTEM_ARCHITECTURE_SECTION".to_string(), sub_arch.clone());
+        self.parameter_bindings.insert(
+            "SUBSYSTEM_ARCHITECTURE_SECTION".to_string(),
+            sub_arch.clone(),
+        );
         self.parameter_bindings
             .insert("CONOPS_SECTION_4_SUBSYSTEMS".to_string(), sub_arch);
 
@@ -4032,7 +4458,11 @@ impl SysMLParameterBindingEngine {
         for p in &parts_to_render {
             let raw_p_name = &p.name;
             let clean_p = sanitize_level_1b_operational_text(raw_p_name);
-            let clean_p = if clean_p.is_empty() { raw_p_name.clone() } else { clean_p };
+            let clean_p = if clean_p.is_empty() {
+                raw_p_name.clone()
+            } else {
+                clean_p
+            };
             let part_tier = if !p.epistemic_tier.is_empty() {
                 &p.epistemic_tier
             } else {
@@ -4049,8 +4479,10 @@ impl SysMLParameterBindingEngine {
             };
             seg_lines.push(format!("| `{clean_p}` | Primary Operational Segment | {part_prov_str} | SysML v2: `part def {raw_p_name}` | Realizes core operational mission functions |"));
         }
-        self.parameter_bindings
-            .insert("SEGMENT_ALLOCATION_MATRIX".to_string(), seg_lines.join("\n"));
+        self.parameter_bindings.insert(
+            "SEGMENT_ALLOCATION_MATRIX".to_string(),
+            seg_lines.join("\n"),
+        );
 
         // 4. Port Taxonomy
         let port_tax = "- **PORT-C2-INOUT (INOUT):** Bidirectional supervisory command and telemetry interface.\n- **PORT-NAV-IN (IN):** Navigation, positioning, and reference frame telemetry input interface.\n- **PORT-ACT-OUT (OUT):** Deterministic actuator demand vector and containment control interface.\n- **PORT-PWR-IN (IN):** Regulated primary/auxiliary power bus distribution interface.";
@@ -4443,9 +4875,18 @@ impl SysMLParameterBindingEngine {
             .map(|s| s.as_str())
             .unwrap_or("Autonomous Cyber-Physical System");
 
-        current = current.replace("the Abstract Cyber-Physical System Archetype", &format!("the {sys_target}"));
-        current = current.replace("The Abstract Cyber-Physical System Archetype", &format!("The {sys_target}"));
-        current = current.replace("an Abstract Cyber-Physical System Archetype", &format!("the {sys_target}"));
+        current = current.replace(
+            "the Abstract Cyber-Physical System Archetype",
+            &format!("the {sys_target}"),
+        );
+        current = current.replace(
+            "The Abstract Cyber-Physical System Archetype",
+            &format!("The {sys_target}"),
+        );
+        current = current.replace(
+            "an Abstract Cyber-Physical System Archetype",
+            &format!("the {sys_target}"),
+        );
         current = current.replace("Abstract Cyber-Physical System Archetype", sys_target);
         current = current.replace("Autonomous Cyber-Physical System Archetype", sys_target);
         current = current.replace("AutonomousSystemArchetype", sys_target);
@@ -4491,24 +4932,45 @@ impl SysMLParameterBindingEngine {
             *current = replace_altitude_agl(current, "mm");
             *current = replace_astm_f3411(current, "IEC 62304 / ISO 14971");
         } else if dom == "rail" {
-            *current = replace_word_case_insensitive(current, "parachute", "pneumatic emergency brake");
+            *current =
+                replace_word_case_insensitive(current, "parachute", "pneumatic emergency brake");
             *current = current.replace("PARACHUTE", "EMERGENCY_BRAKE");
             *current = replace_altitude_agl(current, "m");
             *current = replace_astm_f3411(current, "EN 50128 SIL 4");
         } else if dom == "marine" {
-            *current = replace_word_case_insensitive(current, "parachute", "positive buoyancy drop-weight");
+            *current = replace_word_case_insensitive(
+                current,
+                "parachute",
+                "positive buoyancy drop-weight",
+            );
             *current = current.replace("PARACHUTE", "DROP_WEIGHT");
             *current = replace_altitude_agl(current, "m Depth");
             *current = replace_astm_f3411(current, "DNV-GL-ST-E403");
         } else if dom == "space" {
-            *current = replace_word_case_insensitive(current, "parachute", "autonomous de-orbit propulsion");
+            *current = replace_word_case_insensitive(
+                current,
+                "parachute",
+                "autonomous de-orbit propulsion",
+            );
             *current = current.replace("PARACHUTE", "DEORBIT_THRUSTER");
             *current = replace_altitude_agl(current, "km");
             *current = replace_astm_f3411(current, "ECSS-E-ST-40C");
-        } else if self.parameter_bindings.get("LIFECYCLE_TYPE").map(|s| s == "EXPENDABLE_DISPOSAL").unwrap_or(false)
-            || self.parameter_bindings.get("IS_EXPENDABLE").map(|s| s == "true").unwrap_or(false)
+        } else if self
+            .parameter_bindings
+            .get("LIFECYCLE_TYPE")
+            .map(|s| s == "EXPENDABLE_DISPOSAL")
+            .unwrap_or(false)
+            || self
+                .parameter_bindings
+                .get("IS_EXPENDABLE")
+                .map(|s| s == "true")
+                .unwrap_or(false)
         {
-            *current = replace_word_case_insensitive(current, "parachute", "controlled impact containment");
+            *current = replace_word_case_insensitive(
+                current,
+                "parachute",
+                "controlled impact containment",
+            );
             *current = current.replace("PARACHUTE", "CONTAINMENT");
         } else if !has_chute_in_ast {
             let rec_term = self
@@ -4544,8 +5006,13 @@ impl SysMLParameterBindingEngine {
             }
         }
         *current = replace_roe_phrase(current);
-        *current = replace_word_case_insensitive(current, "weapons release", "high-consequence actuation");
-        *current = replace_word_case_insensitive(current, "collateral damage", "adjacent operational risk");
+        *current =
+            replace_word_case_insensitive(current, "weapons release", "high-consequence actuation");
+        *current = replace_word_case_insensitive(
+            current,
+            "collateral damage",
+            "adjacent operational risk",
+        );
     }
 }
 
@@ -4592,7 +5059,10 @@ mod tests {
     #[test]
     fn test_parameter_substitution_and_inline_default() {
         let mut bindings = BTreeMap::new();
-        bindings.insert("SYSTEM_IDENTIFIER".to_string(), "AutonomousPlatform".to_string());
+        bindings.insert(
+            "SYSTEM_IDENTIFIER".to_string(),
+            "AutonomousPlatform".to_string(),
+        );
         let engine = SysMLParameterBindingEngine::new(Some(bindings), None, None, false, None);
 
         let input = "System: {{SYSTEM_IDENTIFIER}} with baud {{BAUD_RATE:57600}} and default {{UNKNOWN_KEY:FallbackValue}}";
@@ -4614,12 +5084,27 @@ mod tests {
     #[test]
     fn test_default_domain_ontology_pure_schema_driven_no_kinetic_bias() {
         let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
-        assert_eq!(engine.resolve_token("HIGH_CONSEQUENCE_ACTION", None), "high-consequence actuation");
-        assert_eq!(engine.resolve_token("COLLATERAL_RISK_PHRASE", None), "adjacent operational risk");
+        assert_eq!(
+            engine.resolve_token("HIGH_CONSEQUENCE_ACTION", None),
+            "high-consequence actuation"
+        );
+        assert_eq!(
+            engine.resolve_token("COLLATERAL_RISK_PHRASE", None),
+            "adjacent operational risk"
+        );
         assert_eq!(engine.resolve_token("INTERLOCK_PREFIX", None), "INT");
-        assert_eq!(engine.resolve_token("TARGET_VERIFICATION_ACRONYM", None), "PCV");
-        assert_eq!(engine.resolve_token("INTERLOCK_POLICY_NAME", None), "Operational Safety Interlocks");
-        assert_eq!(engine.resolve_token("INTERLOCK_SECTION_TITLE", None), "Safety Constraints & Subsystem Interlocks");
+        assert_eq!(
+            engine.resolve_token("TARGET_VERIFICATION_ACRONYM", None),
+            "PCV"
+        );
+        assert_eq!(
+            engine.resolve_token("INTERLOCK_POLICY_NAME", None),
+            "Operational Safety Interlocks"
+        );
+        assert_eq!(
+            engine.resolve_token("INTERLOCK_SECTION_TITLE", None),
+            "Safety Constraints & Subsystem Interlocks"
+        );
     }
 
     #[test]
@@ -4642,8 +5127,14 @@ mod tests {
         let engine = SysMLParameterBindingEngine::new(Some(bindings), None, None, false, None);
         assert_eq!(engine.resolve_token("TOTAL_MTOW_KG", None), "100.0");
         assert_eq!(engine.resolve_token("V_BOUNDARY_MAX_MPS", None), "20.0");
-        assert_eq!(engine.resolve_token("E_BOUNDARY_IMPACT_JOULES", None), "20000.0");
-        assert_eq!(engine.resolve_token("E_K_UNMITIGATED_JOULES", None), "20000.0");
+        assert_eq!(
+            engine.resolve_token("E_BOUNDARY_IMPACT_JOULES", None),
+            "20000.0"
+        );
+        assert_eq!(
+            engine.resolve_token("E_K_UNMITIGATED_JOULES", None),
+            "20000.0"
+        );
         assert_eq!(engine.resolve_token("V_RESIDUAL_MPS", None), "1.5");
         assert_eq!(engine.resolve_token("E_K_MITIGATED_JOULES", None), "112.5");
         let v_term = engine.resolve_token("V_TERMINAL_UNMITIGATED_MPS", None);
@@ -4668,41 +5159,88 @@ mod tests {
             .parameter_bindings
             .get("SUPER_SYSTEM_ARCHITECTURE")
             .ok_or_else(|| "missing SUPER_SYSTEM_ARCHITECTURE".to_string())?;
-        assert!(super_arch.contains("External_Actors"), "Super-system architecture must include External_Actors");
-        assert!(super_arch.contains("Supervisory_Segment"), "Super-system architecture must include Supervisory_Segment");
-        assert!(super_arch.contains("Support_Segment"), "Super-system architecture must include Support_Segment");
-        assert!(super_arch.contains("~~~"), "Super-system architecture must include vertical rank spacers");
-        assert!(super_arch.contains("CONN-"), "Super-system architecture must include CONN- connection labels");
-        assert!(super_arch.contains("• PORT-"), "Super-system architecture must include embedded port attributes");
+        assert!(
+            super_arch.contains("External_Actors"),
+            "Super-system architecture must include External_Actors"
+        );
+        assert!(
+            super_arch.contains("Supervisory_Segment"),
+            "Super-system architecture must include Supervisory_Segment"
+        );
+        assert!(
+            super_arch.contains("Support_Segment"),
+            "Super-system architecture must include Support_Segment"
+        );
+        assert!(
+            super_arch.contains("~~~"),
+            "Super-system architecture must include vertical rank spacers"
+        );
+        assert!(
+            super_arch.contains("CONN-"),
+            "Super-system architecture must include CONN- connection labels"
+        );
+        assert!(
+            super_arch.contains("• PORT-"),
+            "Super-system architecture must include embedded port attributes"
+        );
         assert!(!super_arch.contains("Core_Tier"), "Super-system architecture must eliminate nested tier subgraphs per Rule E5 (refs #277)");
 
         let sub_arch = engine
             .parameter_bindings
             .get("SUBSYSTEM_ARCHITECTURE_SECTION")
             .ok_or_else(|| "missing SUBSYSTEM_ARCHITECTURE_SECTION".to_string())?;
-        assert!(sub_arch.contains("- **Functional Purpose & Scope:**"), "Subsystem architecture must contain Functional Purpose & Scope");
-        assert!(sub_arch.contains("- **Physical & Logical Interface / Port Allocations:**"), "Subsystem architecture must contain Physical & Logical Interface");
-        assert!(sub_arch.contains("- **Power, Mass & Resource Envelopes:**"), "Subsystem architecture must contain Power, Mass & Resource Envelopes");
-        assert!(sub_arch.contains("- **Operational Role & Statechart Integration:**"), "Subsystem architecture must contain Operational Role");
-        assert!(sub_arch.contains("- **Safety Invariants, Containment Interlocks & FMECA Linkage:**"), "Subsystem architecture must contain Safety Invariants");
-        assert!(sub_arch.contains("- **SSOT Ground Truth Mapping:**"), "Subsystem architecture must contain SSOT Ground Truth Mapping bullet");
-        assert!(sub_arch.contains("SysML v2: `part def Avionics`"), "Subsystem architecture must bind AST part def node");
+        assert!(
+            sub_arch.contains("- **Functional Purpose & Scope:**"),
+            "Subsystem architecture must contain Functional Purpose & Scope"
+        );
+        assert!(
+            sub_arch.contains("- **Physical & Logical Interface / Port Allocations:**"),
+            "Subsystem architecture must contain Physical & Logical Interface"
+        );
+        assert!(
+            sub_arch.contains("- **Power, Mass & Resource Envelopes:**"),
+            "Subsystem architecture must contain Power, Mass & Resource Envelopes"
+        );
+        assert!(
+            sub_arch.contains("- **Operational Role & Statechart Integration:**"),
+            "Subsystem architecture must contain Operational Role"
+        );
+        assert!(
+            sub_arch.contains("- **Safety Invariants, Containment Interlocks & FMECA Linkage:**"),
+            "Subsystem architecture must contain Safety Invariants"
+        );
+        assert!(
+            sub_arch.contains("- **SSOT Ground Truth Mapping:**"),
+            "Subsystem architecture must contain SSOT Ground Truth Mapping bullet"
+        );
+        assert!(
+            sub_arch.contains("SysML v2: `part def Avionics`"),
+            "Subsystem architecture must bind AST part def node"
+        );
 
         let seg_matrix = engine
             .parameter_bindings
             .get("SEGMENT_ALLOCATION_MATRIX")
             .ok_or_else(|| "missing SEGMENT_ALLOCATION_MATRIX".to_string())?;
-        assert!(seg_matrix.contains("SSOT Ground Truth Source & Citation"), "Segment allocation matrix must contain SSOT Ground Truth column");
-        assert!(seg_matrix.contains("SysML v2: `part def Avionics`"), "Segment allocation matrix must bind AST part def node");
+        assert!(
+            seg_matrix.contains("SSOT Ground Truth Source & Citation"),
+            "Segment allocation matrix must contain SSOT Ground Truth column"
+        );
+        assert!(
+            seg_matrix.contains("SysML v2: `part def Avionics`"),
+            "Segment allocation matrix must bind AST part def node"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_issue_248_pure_schema_driven_containment_and_zero_fallback_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_248_pure_schema_driven_containment_and_zero_fallback_recovery(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // 1. Expendable / Zero-Recovery platform must NOT have hardcoded recovery base or RTB transit
         let mut exp_bindings = BTreeMap::new();
         exp_bindings.insert("IS_EXPENDABLE".to_string(), "true".to_string());
-        let exp_engine = SysMLParameterBindingEngine::new(Some(exp_bindings), None, None, false, None);
+        let exp_engine =
+            SysMLParameterBindingEngine::new(Some(exp_bindings), None, None, false, None);
 
         assert_ne!(
             exp_engine.resolve_token("PRIMARY_TERMINAL_TARGET", None),
@@ -4745,8 +5283,11 @@ mod tests {
         chute_bindings.insert("AIR_DENSITY_KGM3".to_string(), "1.2".to_string());
         chute_bindings.insert("S_CANOPY".to_string(), "50.0".to_string());
         chute_bindings.insert("PARACHUTE_DRAG_COEFFICIENT".to_string(), "1.5".to_string());
-        let mut chute_engine = SysMLParameterBindingEngine::new(Some(chute_bindings), None, None, false, None);
-        chute_engine.ast_part_names.insert("ParachuteRecoveryUnit".to_string());
+        let mut chute_engine =
+            SysMLParameterBindingEngine::new(Some(chute_bindings), None, None, false, None);
+        chute_engine
+            .ast_part_names
+            .insert("ParachuteRecoveryUnit".to_string());
         chute_engine._derive_quadratic_physics();
 
         let v_mit: f64 = chute_engine
@@ -4761,11 +5302,13 @@ mod tests {
     }
 
     #[test]
-    fn test_defect_302_unified_schema_support_in_assemble_conops() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_302_unified_schema_support_in_assemble_conops(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
 
         // 1. YAML schema ingestion
-        let yaml_content = "subsystems:\n  - FlightComputer\n  - NavigationUnit\nOPERATIONAL_RANGE_KM: 500\n";
+        let yaml_content =
+            "subsystems:\n  - FlightComputer\n  - NavigationUnit\nOPERATIONAL_RANGE_KM: 500\n";
         let temp_yaml = std::env::temp_dir().join("test_schema_302.yaml");
         std::fs::write(&temp_yaml, yaml_content)?;
         let ingested_yaml = engine.ingest_file(&temp_yaml);
@@ -4773,7 +5316,13 @@ mod tests {
         assert!(ingested_yaml, "YAML schema ingestion must succeed");
         assert!(engine.ast_part_names.contains("FlightComputer"));
         assert!(engine.ast_part_names.contains("NavigationUnit"));
-        assert_eq!(engine.parameter_bindings.get("OPERATIONAL_RANGE_KM").map(|s| s.as_str()), Some("500"));
+        assert_eq!(
+            engine
+                .parameter_bindings
+                .get("OPERATIONAL_RANGE_KM")
+                .map(|s| s.as_str()),
+            Some("500")
+        );
 
         // 2. Markdown architecture table ingestion
         let md_content = "# Specifications\n\n### 4.3 Subsystem Architecture\n| Subsystem | Function |\n|---|---|\n| GuidanceComputer | Navigation and guidance |\n| SensorPayload | High-res electro-optical |\n";
@@ -4781,12 +5330,16 @@ mod tests {
         std::fs::write(&temp_md, md_content)?;
         let ingested_md = engine.ingest_file(&temp_md);
         std::fs::remove_file(&temp_md).ok();
-        assert!(ingested_md, "Markdown architecture table ingestion must succeed");
+        assert!(
+            ingested_md,
+            "Markdown architecture table ingestion must succeed"
+        );
         assert!(engine.ast_part_names.contains("GuidanceComputer"));
         assert!(engine.ast_part_names.contains("SensorPayload"));
 
         // 3. Protobuf ingestion
-        let proto_content = "syntax = \"proto3\";\nservice TelemetryGateway {\n  rpc Stream();\n}\n";
+        let proto_content =
+            "syntax = \"proto3\";\nservice TelemetryGateway {\n  rpc Stream();\n}\n";
         let temp_proto = std::env::temp_dir().join("test_schema_302.proto");
         std::fs::write(&temp_proto, proto_content)?;
         let ingested_proto = engine.ingest_file(&temp_proto);
@@ -4800,37 +5353,78 @@ mod tests {
     fn test_defect_313_zero_weapon_crypto_zeroization_and_abstract_authority_handoff() {
         let mut exp_bindings = BTreeMap::new();
         exp_bindings.insert("IS_EXPENDABLE".to_string(), "true".to_string());
-        let exp_engine = SysMLParameterBindingEngine::new(Some(exp_bindings), None, None, false, None);
+        let exp_engine =
+            SysMLParameterBindingEngine::new(Some(exp_bindings), None, None, false, None);
 
         // 1. Must NOT contain weapon-system drone zeroization or ditching terms
         let failsafe = exp_engine.resolve_token("LIFECYCLE_FAILSAFE_SEQUENCE", None);
-        assert!(!failsafe.contains("zeroization"), "LIFECYCLE_FAILSAFE_SEQUENCE must not contain zeroization: got '{failsafe}'");
-        assert!(!failsafe.contains("ditching"), "LIFECYCLE_FAILSAFE_SEQUENCE must not contain ditching: got '{failsafe}'");
+        assert!(
+            !failsafe.contains("zeroization"),
+            "LIFECYCLE_FAILSAFE_SEQUENCE must not contain zeroization: got '{failsafe}'"
+        );
+        assert!(
+            !failsafe.contains("ditching"),
+            "LIFECYCLE_FAILSAFE_SEQUENCE must not contain ditching: got '{failsafe}'"
+        );
 
         let end_state = exp_engine.resolve_token("LIFECYCLE_END_STATE", None);
-        assert!(!end_state.contains("terminal impact"), "LIFECYCLE_END_STATE must not contain terminal impact: got '{end_state}'");
-        assert!(!end_state.contains("ditching"), "LIFECYCLE_END_STATE must not contain ditching: got '{end_state}'");
-        assert!(!end_state.contains("cryptographic zeroization"), "LIFECYCLE_END_STATE must not contain cryptographic zeroization: got '{end_state}'");
+        assert!(
+            !end_state.contains("terminal impact"),
+            "LIFECYCLE_END_STATE must not contain terminal impact: got '{end_state}'"
+        );
+        assert!(
+            !end_state.contains("ditching"),
+            "LIFECYCLE_END_STATE must not contain ditching: got '{end_state}'"
+        );
+        assert!(
+            !end_state.contains("cryptographic zeroization"),
+            "LIFECYCLE_END_STATE must not contain cryptographic zeroization: got '{end_state}'"
+        );
 
         let post_op = exp_engine.resolve_token("LIFECYCLE_POST_OP_STATE", None);
-        assert!(!post_op.contains("kinetic impact"), "LIFECYCLE_POST_OP_STATE must not contain kinetic impact: got '{post_op}'");
-        assert!(!post_op.contains("zeroization"), "LIFECYCLE_POST_OP_STATE must not contain zeroization: got '{post_op}'");
+        assert!(
+            !post_op.contains("kinetic impact"),
+            "LIFECYCLE_POST_OP_STATE must not contain kinetic impact: got '{post_op}'"
+        );
+        assert!(
+            !post_op.contains("zeroization"),
+            "LIFECYCLE_POST_OP_STATE must not contain zeroization: got '{post_op}'"
+        );
 
         let mit_type = exp_engine.resolve_token("CONTAINMENT_MITIGATION_TYPE", None);
-        assert!(!mit_type.contains("ZEROIZATION"), "CONTAINMENT_MITIGATION_TYPE must not contain ZEROIZATION: got '{mit_type}'");
+        assert!(
+            !mit_type.contains("ZEROIZATION"),
+            "CONTAINMENT_MITIGATION_TYPE must not contain ZEROIZATION: got '{mit_type}'"
+        );
 
         // 2. Abstract supervisory authority delegation and generic interface security contract in Section 4.5
         let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
         let handoff_section = engine.resolve_token("SUPERVISORY_AUTHORITY_HANDOFF_SECTION", None);
-        assert_ne!(handoff_section, "N/A", "SUPERVISORY_AUTHORITY_HANDOFF_SECTION must be dynamically derived");
-        assert!(handoff_section.contains("sequenceDiagram"), "SUPERVISORY_AUTHORITY_HANDOFF_SECTION must contain Mermaid sequenceDiagram");
-        assert!(handoff_section.contains("ISO/IEC 27001"), "SUPERVISORY_AUTHORITY_HANDOFF_SECTION must cite ISO/IEC 27001 interface contract");
-        assert!(!handoff_section.contains("VehicleController"), "Must not contain hardcoded UAS VehicleController");
-        assert!(!handoff_section.contains("PrimaryConsole"), "Must not contain hardcoded PrimaryConsole");
+        assert_ne!(
+            handoff_section, "N/A",
+            "SUPERVISORY_AUTHORITY_HANDOFF_SECTION must be dynamically derived"
+        );
+        assert!(
+            handoff_section.contains("sequenceDiagram"),
+            "SUPERVISORY_AUTHORITY_HANDOFF_SECTION must contain Mermaid sequenceDiagram"
+        );
+        assert!(
+            handoff_section.contains("ISO/IEC 27001"),
+            "SUPERVISORY_AUTHORITY_HANDOFF_SECTION must cite ISO/IEC 27001 interface contract"
+        );
+        assert!(
+            !handoff_section.contains("VehicleController"),
+            "Must not contain hardcoded UAS VehicleController"
+        );
+        assert!(
+            !handoff_section.contains("PrimaryConsole"),
+            "Must not contain hardcoded PrimaryConsole"
+        );
     }
 
     #[test]
-    fn test_defect_316_synthesize_subsystem_architecture_provenance_columns() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_316_synthesize_subsystem_architecture_provenance_columns(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let sysml_code = r#"package AutonomousPlatform {
     part def PrimaryOBC {
         doc /* Core onboard computer */
@@ -4856,7 +5450,8 @@ mod tests {
             subsys_sec.contains(&expected_c2_link),
             "Interface table must contain '{expected_c2_link}': got:\n{subsys_sec}"
         );
-        let expected_actuator = format!("[actuator_bus]({}#L5) [TIER-1: OEM]", temp_sysml.display());
+        let expected_actuator =
+            format!("[actuator_bus]({}#L5) [TIER-1: OEM]", temp_sysml.display());
         assert!(
             subsys_sec.contains(&expected_actuator),
             "Interface table must contain '{expected_actuator}': got:\n{subsys_sec}"
@@ -4893,12 +5488,18 @@ mod tests {
         assert_eq!(obc.source_line, Some(2));
         assert_eq!(obc.epistemic_tier, "[TIER-1: OEM]");
         assert_eq!(obc.ports.len(), 2);
-        let port0 = obc.ports.first().ok_or_else(|| "missing port0".to_string())?;
+        let port0 = obc
+            .ports
+            .first()
+            .ok_or_else(|| "missing port0".to_string())?;
         assert_eq!(port0.name, "c2_link");
         assert_eq!(port0.direction, "INOUT");
         assert_eq!(port0.source_line, Some(4));
         assert_eq!(port0.epistemic_tier, "[TIER-1: OEM]");
-        let port1 = obc.ports.get(1).ok_or_else(|| "missing port1".to_string())?;
+        let port1 = obc
+            .ports
+            .get(1)
+            .ok_or_else(|| "missing port1".to_string())?;
         assert_eq!(port1.name, "actuator_bus");
         assert_eq!(port1.direction, "OUT");
         assert_eq!(port1.source_line, Some(5));
@@ -4907,7 +5508,8 @@ mod tests {
     }
 
     #[test]
-    fn test_conops_scenarios_synthesize_from_ast_statechart() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_conops_scenarios_synthesize_from_ast_statechart(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let sysml_model = r#"package MedicalInfusionPlatform {
     part def InfusionPumpUnit {
         doc /* Core infusion pump subsystem */
@@ -4937,10 +5539,16 @@ mod tests {
         }
 
         // Verify zero synthetic drone combat mission phases or military terms are injected
-        assert!(!engine.ast_part_names.contains("Phase_Ingress_StationKeeping"));
+        assert!(!engine
+            .ast_part_names
+            .contains("Phase_Ingress_StationKeeping"));
         assert!(!engine.ast_part_names.contains("Phase_PID_InterlockCheck"));
-        assert!(!engine.ast_part_names.contains("Phase_DualConsent_ArmingExecution"));
-        assert!(!engine.ast_part_names.contains("Phase_PostAction_AssessmentDump"));
+        assert!(!engine
+            .ast_part_names
+            .contains("Phase_DualConsent_ArmingExecution"));
+        assert!(!engine
+            .ast_part_names
+            .contains("Phase_PostAction_AssessmentDump"));
 
         // Verify medical domain sanitization replaces ungrounded kinetic/combat terms
         let sample_text = "Operational execution under ROE-01 commands weapons release.";
@@ -4953,7 +5561,8 @@ mod tests {
     }
 
     #[test]
-    fn test_cuas_coa_physical_limits_sysml_provenance_and_zero_placeholder_output() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_cuas_coa_physical_limits_sysml_provenance_and_zero_placeholder_output(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let temp_root = std::env::temp_dir().join(format!(
             "deap_test_params_provenance_{}",
             std::process::id()
@@ -5002,11 +5611,17 @@ mod tests {
         engine.ingest_file(&schema_path);
 
         assert_eq!(
-            engine.parameter_bindings.get("TOTAL_MTOW_KG").map(String::as_str),
+            engine
+                .parameter_bindings
+                .get("TOTAL_MTOW_KG")
+                .map(String::as_str),
             Some("25.0")
         );
         assert_eq!(
-            engine.parameter_bindings.get("V_MAX_MPS").map(String::as_str),
+            engine
+                .parameter_bindings
+                .get("V_MAX_MPS")
+                .map(String::as_str),
             Some("35.0")
         );
         assert_eq!(
@@ -5034,11 +5649,10 @@ mod tests {
     }
 
     #[test]
-    fn test_issue_446_cuas_schema_physical_limits_override_uav_defaults() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_root = std::env::temp_dir().join(format!(
-            "deap_test_issue_446_{}",
-            std::process::id()
-        ));
+    fn test_issue_446_cuas_schema_physical_limits_override_uav_defaults(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let temp_root =
+            std::env::temp_dir().join(format!("deap_test_issue_446_{}", std::process::id()));
         let schema_dir = temp_root.join("schema");
         let unit_dir = temp_root.join("docs/conops/units/conops");
         std::fs::create_dir_all(&schema_dir)?;
@@ -5115,12 +5729,22 @@ mod tests {
         let rendered = engine.substitute(&raw_unit);
         std::fs::remove_dir_all(&temp_root).ok();
 
-        assert!(!rendered.contains("<= 25.0"), "ConOps PL-01 must not contain hardcoded 25.0 kg UAV default");
-        assert!(!rendered.contains("<= 120.0"), "ConOps PL-07 must not contain hardcoded 120.0 m UAV default");
-        assert!(!rendered.contains("10.0 x 10.0 x 10.0"), "ConOps PL-03 must not contain degenerate 10.0 x 10.0 x 10.0 m heuristic");
-        assert!(!rendered.contains(">= N/A"), "ConOps PL-08 must not contain '>= N/A' range");
+        assert!(
+            !rendered.contains("<= 25.0"),
+            "ConOps PL-01 must not contain hardcoded 25.0 kg UAV default"
+        );
+        assert!(
+            !rendered.contains("<= 120.0"),
+            "ConOps PL-07 must not contain hardcoded 120.0 m UAV default"
+        );
+        assert!(
+            !rendered.contains("10.0 x 10.0 x 10.0"),
+            "ConOps PL-03 must not contain degenerate 10.0 x 10.0 x 10.0 m heuristic"
+        );
+        assert!(
+            !rendered.contains(">= N/A"),
+            "ConOps PL-08 must not contain '>= N/A' range"
+        );
         Ok(())
     }
 }
-
-

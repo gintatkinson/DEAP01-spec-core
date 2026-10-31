@@ -1198,11 +1198,9 @@ fn strip_mermaid_comment(line: &str) -> &str {
 
 /// Known Mermaid arrow tokens sorted by length descending to prevent partial match collisions.
 const ARROWS: &[&str] = &[
-    "==>>", "-->>", "<<==", "<<--", "<-->", "<==>",
-    "<|--", "--|>", "<|..", "..|>", "<|==", "==|>",
-    "*--", "--*", "o--", "--o",
-    "<-.-", "-.->", "==>", "-->", "->>", "<==", "<--",
-    "<<-", "<->", "->", "<-", "..>", "<..", "..", "--",
+    "==>>", "-->>", "<<==", "<<--", "<-->", "<==>", "<|--", "--|>", "<|..", "..|>", "<|==", "==|>",
+    "*--", "--*", "o--", "--o", "<-.-", "-.->", "==>", "-->", "->>", "<==", "<--", "<<-", "<->",
+    "->", "<-", "..>", "<..", "..", "--",
 ];
 
 /// Checks whether a string segment contains any UML or flowchart relation arrow.
@@ -1428,8 +1426,15 @@ fn check_node_label_quoting(line: &str, line_num: usize) -> Result<(), SpecAudit
                 let inner_trimmed = inner_slice.trim();
 
                 // Strip nested shape markers if any (e.g. `([ ... ])`, `[[ ... ]]`)
-                let cleaned_label = inner_trimmed
-                    .trim_matches(|ch: char| ch == '[' || ch == ']' || ch == '(' || ch == ')' || ch == '{' || ch == '}' || ch == '/');
+                let cleaned_label = inner_trimmed.trim_matches(|ch: char| {
+                    ch == '['
+                        || ch == ']'
+                        || ch == '('
+                        || ch == ')'
+                        || ch == '{'
+                        || ch == '}'
+                        || ch == '/'
+                });
 
                 let is_quoted = cleaned_label.starts_with('"') && cleaned_label.ends_with('"');
                 if !is_quoted && !cleaned_label.is_empty() {
@@ -1686,7 +1691,10 @@ fn parse_class_diagram(block: &MermaidBlock) -> Result<ClassDiagramAst, SpecAudi
             let right_trimmed = right.trim();
 
             if !contains_relation_arrow(left_trimmed) {
-                let class_name = left_trimmed.strip_prefix("class ").unwrap_or(left_trimmed).trim();
+                let class_name = left_trimmed
+                    .strip_prefix("class ")
+                    .unwrap_or(left_trimmed)
+                    .trim();
                 let mut temp_class = ClassDefAst {
                     name: class_name.to_string(),
                     annotations: Vec::new(),
@@ -2016,16 +2024,17 @@ fn parse_state_diagram(block: &MermaidBlock) -> Result<StateDiagramAst, SpecAudi
         // Note parsing: `note left of State : ...`
         if let Some(after_note_raw) = clean.strip_prefix("note ") {
             let after_note = after_note_raw.trim();
-            let (target_state, text) = if let Some((dir_and_target, note_body)) = after_note.split_once(':') {
-                let target = dir_and_target
-                    .split_whitespace()
-                    .last()
-                    .unwrap_or("")
-                    .to_string();
-                (Some(target), note_body.trim().to_string())
-            } else {
-                (None, after_note.to_string())
-            };
+            let (target_state, text) =
+                if let Some((dir_and_target, note_body)) = after_note.split_once(':') {
+                    let target = dir_and_target
+                        .split_whitespace()
+                        .last()
+                        .unwrap_or("")
+                        .to_string();
+                    (Some(target), note_body.trim().to_string())
+                } else {
+                    (None, after_note.to_string())
+                };
 
             notes.push(StateNoteAst {
                 target_state,
@@ -2106,11 +2115,8 @@ fn parse_state_diagram(block: &MermaidBlock) -> Result<StateDiagramAst, SpecAudi
                     if let Some(close_b) = unquoted[open_b..].find(']') {
                         let actual_close = open_b + close_b;
                         guard = Some(unquoted[open_b + 1..actual_close].trim().to_string());
-                        label_without_guard = format!(
-                            "{}{}",
-                            &unquoted[..open_b],
-                            &unquoted[actual_close + 1..]
-                        );
+                        label_without_guard =
+                            format!("{}{}", &unquoted[..open_b], &unquoted[actual_close + 1..]);
                     }
                 }
 
@@ -2187,10 +2193,7 @@ fn parse_sequence_diagram(block: &MermaidBlock) -> Result<SequenceDiagramAst, Sp
     let mut activations: Vec<SequenceActivationAst> = Vec::new();
 
     const SEQ_ARROWS: &[&str] = &[
-        "-->>+", "-->>-", "-->>",
-        "->>+", "->>-", "->>",
-        "-->+", "-->-", "-->",
-        "->+", "->-", "->",
+        "-->>+", "-->>-", "-->>", "->>+", "->>-", "->>", "-->+", "-->-", "-->", "->+", "->-", "->",
         "--x", "-x", "--)", "-)",
     ];
 
@@ -2688,7 +2691,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_class_diagram_parsing_with_visibility_and_types() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_class_diagram_parsing_with_visibility_and_types(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let raw = r#"classDiagram
     class FlightController {
         +float altitude
@@ -2709,7 +2713,10 @@ mod tests {
         };
 
         let ast = parse_mermaid_diagram(&block)?;
-        assert!(matches!(ast, DiagramAst::Class(_)), "Expected Class diagram AST");
+        assert!(
+            matches!(ast, DiagramAst::Class(_)),
+            "Expected Class diagram AST"
+        );
         if let DiagramAst::Class(c_ast) = ast {
             assert_eq!(
                 c_ast.classes.len(),
@@ -2723,15 +2730,16 @@ mod tests {
                 .find(|c| c.name == "FlightController")
                 .ok_or("missing FlightController")?;
             assert_eq!(fc.attributes.len(), 2);
-            assert_eq!(fc.attributes.first().map(|a| a.name.as_str()), Some("altitude"));
+            assert_eq!(
+                fc.attributes.first().map(|a| a.name.as_str()),
+                Some("altitude")
+            );
             assert_eq!(
                 fc.attributes.first().and_then(|a| a.visibility),
                 Some(Visibility::Public)
             );
             assert_eq!(
-                fc.attributes
-                    .first()
-                    .and_then(|a| a.type_name.as_deref()),
+                fc.attributes.first().and_then(|a| a.type_name.as_deref()),
                 Some("float")
             );
 
@@ -2745,9 +2753,7 @@ mod tests {
                 Some(Visibility::Public)
             );
             assert_eq!(
-                fc.operations
-                    .first()
-                    .and_then(|o| o.return_type.as_deref()),
+                fc.operations.first().and_then(|o| o.return_type.as_deref()),
                 Some("void")
             );
             assert_eq!(
@@ -2772,10 +2778,7 @@ mod tests {
                 Some(ClassRelationType::Composition)
             );
             assert_eq!(
-                c_ast
-                    .relations
-                    .first()
-                    .and_then(|r| r.label.as_deref()),
+                c_ast.relations.first().and_then(|r| r.label.as_deref()),
                 Some("owns")
             );
         }
@@ -2858,7 +2861,11 @@ mod tests {
         };
 
         let res = parse_mermaid_diagram(&block);
-        assert!(res.is_ok(), "Expected valid quoted comparison operator to pass: {:?}", res);
+        assert!(
+            res.is_ok(),
+            "Expected valid quoted comparison operator to pass: {:?}",
+            res
+        );
     }
 
     #[test]
@@ -2893,7 +2900,11 @@ mod tests {
         };
 
         let res = parse_mermaid_diagram(&block);
-        assert!(res.is_ok(), "Expected quoted node label with special chars to pass: {:?}", res);
+        assert!(
+            res.is_ok(),
+            "Expected quoted node label with special chars to pass: {:?}",
+            res
+        );
     }
 
     #[test]
@@ -2929,7 +2940,10 @@ mod tests {
             assert!(pilot.is_actor);
 
             assert_eq!(s_ast.messages.len(), 4);
-            assert_eq!(s_ast.messages.first().map(|m| m.from.as_str()), Some("Pilot"));
+            assert_eq!(
+                s_ast.messages.first().map(|m| m.from.as_str()),
+                Some("Pilot")
+            );
             assert_eq!(
                 s_ast.messages.first().map(|m| m.to.as_str()),
                 Some("FlightController")
@@ -2957,7 +2971,8 @@ mod tests {
     }
 
     #[test]
-    fn test_state_diagram_extraction_with_guard_and_action() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_state_diagram_extraction_with_guard_and_action(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let raw = r#"stateDiagram-v2
     [*] --> Idle
     Idle --> Active : "start [armed] / initMotors()"
@@ -3022,7 +3037,9 @@ mod tests {
             end_line: 6,
         };
         if parse_mermaid_diagram(&bad_block).is_ok() {
-            return Err("Expected Mermaid diagram with inline backticks to be rejected".to_string());
+            return Err(
+                "Expected Mermaid diagram with inline backticks to be rejected".to_string(),
+            );
         }
 
         let good_raw = "graph TD\n    subgraph \"CompilerLintEnforcementGate System Boundary\"\n        UC_Main([\"Rustc E0453 Hard Rejection\"])\n        UC_Step01([\"Actor Operator submits input payload\"])\n        UC_Step02([\"CompilerLintEnforcementGate validates input schema\"])\n    end\n";
@@ -3033,7 +3050,10 @@ mod tests {
             end_line: 6,
         };
         if let Err(e) = parse_mermaid_diagram(&good_block) {
-            return Err(format!("Expected sanitized Mermaid diagram to pass, got {:?}", e));
+            return Err(format!(
+                "Expected sanitized Mermaid diagram to pass, got {:?}",
+                e
+            ));
         }
         Ok(())
     }

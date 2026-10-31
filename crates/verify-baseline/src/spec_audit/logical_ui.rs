@@ -97,16 +97,27 @@ pub fn is_lumi_spec(doc: &MarkdownDoc, content: &str) -> bool {
         .or_else(|| doc.table_metadata.get("interface_types"))
     {
         let lower = iface.to_lowercase();
-        if lower.contains("ui") || lower.contains("gui") || lower.contains("lumi") || lower.contains("user") {
+        if lower.contains("ui")
+            || lower.contains("gui")
+            || lower.contains("lumi")
+            || lower.contains("user")
+        {
             return true;
         }
     }
 
     // 2. Check frontmatter interface_type or interface_types
     if let Some(ref fm) = doc.frontmatter {
-        if let Some(iface) = fm.get("interface_type").or_else(|| fm.get("interface_types")) {
+        if let Some(iface) = fm
+            .get("interface_type")
+            .or_else(|| fm.get("interface_types"))
+        {
             let lower = iface.to_lowercase();
-            if lower.contains("ui") || lower.contains("gui") || lower.contains("lumi") || lower.contains("user") {
+            if lower.contains("ui")
+                || lower.contains("gui")
+                || lower.contains("lumi")
+                || lower.contains("user")
+            {
                 return true;
             }
         }
@@ -161,7 +172,11 @@ pub fn is_lumi_spec(doc: &MarkdownDoc, content: &str) -> bool {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-LOGICAL-UI-VALIDATE-3LAYER-CHAIN] | SysML v2: ActionDef(validate_3layer_chain)
-pub fn validate_3layer_chain(doc: &MarkdownDoc, content: &str, rel_path: &str) -> Vec<SpecAuditFinding> {
+pub fn validate_3layer_chain(
+    doc: &MarkdownDoc,
+    content: &str,
+    rel_path: &str,
+) -> Vec<SpecAuditFinding> {
     let mut findings = Vec::new();
 
     if !is_lumi_spec(doc, content) {
@@ -356,7 +371,9 @@ pub fn validate_layout_guidelines(content: &str, rel_path: &str) -> Vec<SpecAudi
         if trimmed.starts_with('|') && trimmed.ends_with('|') {
             let cells = trimmed.split('|');
             for cell in cells {
-                let cell_clean = cell.trim().trim_matches(|c| c == '*' || c == '`' || c == '_');
+                let cell_clean = cell
+                    .trim()
+                    .trim_matches(|c| c == '*' || c == '`' || c == '_');
                 if cell_clean.eq_ignore_ascii_case("n/a") {
                     findings.push(SpecAuditFinding::new(
                         "lumi-prohibit-raw-na-fallback",
@@ -730,7 +747,11 @@ pub fn detect_pixel_dimensions(content: &str, rel_path: &str) -> Vec<SpecAuditFi
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-LOGICAL-UI-DETECT-FRAMEWORK-LEAKS] | SysML v2: ActionDef(detect_framework_leaks)
-pub fn detect_framework_leaks(doc: &MarkdownDoc, content: &str, rel_path: &str) -> Vec<SpecAuditFinding> {
+pub fn detect_framework_leaks(
+    doc: &MarkdownDoc,
+    content: &str,
+    rel_path: &str,
+) -> Vec<SpecAuditFinding> {
     let mut findings = Vec::new();
 
     // 1. Check metadata table or YAML frontmatter for forbidden platform field
@@ -791,7 +812,13 @@ pub fn detect_framework_leaks(doc: &MarkdownDoc, content: &str, rel_path: &str) 
             let lower = trimmed.to_lowercase();
             let mut is_english_verb = false;
 
-            let verb_phrases = ["react to", "react with", "react on", "reacts to", "reaction to"];
+            let verb_phrases = [
+                "react to",
+                "react with",
+                "react on",
+                "reacts to",
+                "reaction to",
+            ];
             for phrase in verb_phrases {
                 if lower.contains(phrase) {
                     is_english_verb = true;
@@ -1000,14 +1027,15 @@ The UI uses responsive split panes with @container isolation rules.
             findings.first().map(|f| f.rule_id.as_str()),
             Some("lumi-3-layer-chain-incomplete")
         );
-        assert!(findings
-            .first()
-            .is_some_and(|f| f.message.contains("Layer 2: Logic & Safety State Management")));
+        assert!(findings.first().is_some_and(|f| f
+            .message
+            .contains("Layer 2: Logic & Safety State Management")));
         Ok(())
     }
 
     #[test]
-    fn test_lumi_split_panes_missing_container_query_fails() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_lumi_split_panes_missing_container_query_fails(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"---
 title: "Telemetry Viewport Feature"
 interface_type: "ui"
@@ -1037,7 +1065,8 @@ The UI features a resizable split pane between telemetry and controls.
     }
 
     #[test]
-    fn test_platform_independence_dom_attribute_leak_fails() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_platform_independence_dom_attribute_leak_fails(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# US-01 User Authentication
 
 The user inputs credentials in the form.
@@ -1053,7 +1082,8 @@ The input field carries aria-label="Username" and role="textbox" with tabindex="
     }
 
     #[test]
-    fn test_platform_independence_hardcoded_pixels_fails() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_platform_independence_hardcoded_pixels_fails() -> Result<(), Box<dyn std::error::Error>>
+    {
         let content = r#"# Feat-02 Status Card
 
 The card width is fixed at 450px and height at 120px.
@@ -1065,9 +1095,13 @@ Maximum bound is 1000px.
             findings.first().map(|f| f.rule_id.as_str()),
             Some("platform-independence-hardcoded-pixel-dimension")
         );
-        assert!(findings.first().is_some_and(|f| f.message.contains("450px")));
+        assert!(findings
+            .first()
+            .is_some_and(|f| f.message.contains("450px")));
         assert!(findings.get(1).is_some_and(|f| f.message.contains("120px")));
-        assert!(findings.get(2).is_some_and(|f| f.message.contains("1000px")));
+        assert!(findings
+            .get(2)
+            .is_some_and(|f| f.message.contains("1000px")));
         Ok(())
     }
 
@@ -1106,8 +1140,14 @@ The system will react with an automatic parachute deployment.
 
     #[test]
     fn test_pixel_detection_boundary_cases() {
-        assert_eq!(find_pixel_dimensions_in_line("width: 120px;"), vec!["120px"]);
-        assert_eq!(find_pixel_dimensions_in_line("margin: 2.5px;"), vec!["2.5px"]);
+        assert_eq!(
+            find_pixel_dimensions_in_line("width: 120px;"),
+            vec!["120px"]
+        );
+        assert_eq!(
+            find_pixel_dimensions_in_line("margin: 2.5px;"),
+            vec!["2.5px"]
+        );
         assert!(find_pixel_dimensions_in_line("complex rendering").is_empty());
         assert!(find_pixel_dimensions_in_line("px-to-rem").is_empty());
         assert!(find_pixel_dimensions_in_line("approx 10").is_empty());

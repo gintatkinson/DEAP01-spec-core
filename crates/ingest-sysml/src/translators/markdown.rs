@@ -1324,8 +1324,8 @@ fn find_req_ids(text: &str) -> Vec<&str> {
         if candidate.len() >= 8 {
             let digits_slice = &candidate[4..8];
             if digits_slice.chars().all(|c| c.is_ascii_digit()) {
-                let end_boundary =
-                    candidate.len() == 8 || !candidate.as_bytes().get(8).is_some_and(u8::is_ascii_digit);
+                let end_boundary = candidate.len() == 8
+                    || !candidate.as_bytes().get(8).is_some_and(u8::is_ascii_digit);
                 if end_boundary {
                     ids.push(&candidate[..8]);
                 }
@@ -1928,10 +1928,7 @@ fn synthesize_sequence_action_name(msg_clean: &str) -> String {
         .map_or(msg_clean, |(prefix, _)| prefix);
     let before_colon =
         split_once_single_colon(before_paren).map_or(before_paren, |(prefix, _)| prefix);
-    let trimmed_head = before_colon
-        .trim()
-        .trim_matches(SURROUNDING_DELIMS)
-        .trim();
+    let trimmed_head = before_colon.trim().trim_matches(SURROUNDING_DELIMS).trim();
     let head = strip_ingested_action_prefix(trimmed_head);
 
     if head.is_empty() {
@@ -4004,7 +4001,9 @@ impl MarkdownTranslator {
                 } else if in_table {
                     let mut row_dict = BTreeMap::new();
                     for (idx, norm_col) in table_norm_headers.iter().enumerate() {
-                        let val = cells.get(idx).map_or_else(String::new, |c| clean_cell_value(c));
+                        let val = cells
+                            .get(idx)
+                            .map_or_else(String::new, |c| clean_cell_value(c));
                         row_dict.insert(norm_col.clone(), val);
                     }
                     table_rows.push(row_dict);
@@ -5752,10 +5751,7 @@ Complexity Class P.
             .ok_or("missing inv0 doc")?
             .contains(r"\forall d_1 \ne d_2"));
 
-        assert_eq!(
-            inv1.name,
-            "Invariant_REQ_0032_Zero_Diff_Churn_Determinism"
-        );
+        assert_eq!(inv1.name, "Invariant_REQ_0032_Zero_Diff_Churn_Determinism");
         assert_eq!(
             inv2.name,
             "Invariant_REQ_0032_Diagnostic_Code_Binding_Invariants"
@@ -5820,7 +5816,10 @@ Complexity Class P.
             format!("{}/../../schema/REQ-0031.md", manifest_dir),
             format!("{}/../../schema/REQ-0032.md", manifest_dir),
         ];
-        if !files.first().is_some_and(|f| std::path::Path::new(f).exists()) {
+        if !files
+            .first()
+            .is_some_and(|f| std::path::Path::new(f).exists())
+        {
             return Ok(());
         }
         let translator = MarkdownTranslator::new();

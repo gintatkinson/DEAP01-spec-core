@@ -104,7 +104,14 @@ impl fmt::Display for Span {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-LEXER-TOKEN-SPAN-FMT] | SysML v2: ActionDef(Span::fmt)
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}-{}:{}", self.line, self.col, self.line, self.col + (self.end - self.start))
+        write!(
+            f,
+            "{}:{}-{}:{}",
+            self.line,
+            self.col,
+            self.line,
+            self.col + (self.end - self.start)
+        )
     }
 }
 
@@ -217,42 +224,42 @@ pub enum TokenKind {
     LineComment(String),
 
     // Multi-character Operators
-    ColonEq,       // :=
-    ColonGt,       // :>
-    DoubleColon,   // ::
-    Arrow,         // ->
-    TildeGt,       // ~>
-    EqEq,          // ==
-    NotEq,         // !=
-    LtEq,          // <=
-    GtEq,          // >=
-    AmpAmp,        // &&
-    PipePipe,      // ||
+    ColonEq,     // :=
+    ColonGt,     // :>
+    DoubleColon, // ::
+    Arrow,       // ->
+    TildeGt,     // ~>
+    EqEq,        // ==
+    NotEq,       // !=
+    LtEq,        // <=
+    GtEq,        // >=
+    AmpAmp,      // &&
+    PipePipe,    // ||
 
     // Single-character Operators
-    Eq,            // =
-    Lt,            // <
-    Gt,            // >
-    Plus,          // +
-    Minus,         // -
-    Star,          // *
-    Slash,         // /
-    Percent,       // %
-    Caret,         // ^
-    Tilde,         // ~
-    Exclamation,   // !
+    Eq,          // =
+    Lt,          // <
+    Gt,          // >
+    Plus,        // +
+    Minus,       // -
+    Star,        // *
+    Slash,       // /
+    Percent,     // %
+    Caret,       // ^
+    Tilde,       // ~
+    Exclamation, // !
 
     // Punctuation
-    Colon,         // :
-    Semi,          // ;
-    Comma,         // ,
-    Dot,           // .
-    OpenBrace,     // {
-    CloseBrace,    // }
-    OpenParen,     // (
-    CloseParen,    // )
-    OpenBracket,   // [
-    CloseBracket,  // ]
+    Colon,        // :
+    Semi,         // ;
+    Comma,        // ,
+    Dot,          // .
+    OpenBrace,    // {
+    CloseBrace,   // }
+    OpenParen,    // (
+    CloseParen,   // )
+    OpenBracket,  // [
+    CloseBracket, // ]
 
     // End of file
     Eof,

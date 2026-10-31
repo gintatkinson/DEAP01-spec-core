@@ -19,8 +19,8 @@
 //! - **Deterministic Identifier Sanitization**: All symbols pass through `sanitize_identifier` to prevent
 //!   SysML v2 reserved keyword collisions or illegal punctuation.
 
-use deap_core::sysml_ast::{ActionDef, AttributeDef, PackageDef, PartDef};
 use crate::table::sanitize_identifier;
+use deap_core::sysml_ast::{ActionDef, AttributeDef, PackageDef, PartDef};
 
 /// Deterministic translator for OMG IDL specifications.
 ///
@@ -158,7 +158,11 @@ impl IDLTranslator {
                 let mut out_params = Vec::new();
 
                 if !params_raw.is_empty() {
-                    let param_items: Vec<&str> = params_raw.split(',').map(|p| p.trim()).filter(|p| !p.is_empty()).collect();
+                    let param_items: Vec<&str> = params_raw
+                        .split(',')
+                        .map(|p| p.trim())
+                        .filter(|p| !p.is_empty())
+                        .collect();
                     for p in param_items {
                         let p_parts: Vec<&str> = p.split_whitespace().collect();
                         if let (Some(&direction), Some(&raw_type), Some(&raw_name)) =
@@ -181,7 +185,9 @@ impl IDLTranslator {
                                 continue;
                             }
                         }
-                        if let (Some(&raw_type), Some(&raw_name)) = (p_parts.first(), p_parts.get(1)) {
+                        if let (Some(&raw_type), Some(&raw_name)) =
+                            (p_parts.first(), p_parts.get(1))
+                        {
                             let p_type = raw_type.to_string();
                             let p_n = sanitize_identifier(raw_name, "param");
                             in_params.push(AttributeDef {
@@ -327,7 +333,10 @@ fn scan_idl_blocks<'a>(content: &'a str, keyword: &str) -> Vec<(&'a str, &'a str
                 let body_and_rest = after.get(brace_open + 1..).unwrap_or("");
                 if let Some(brace_close) = body_and_rest.find('}') {
                     let body = body_and_rest.get(..brace_close).unwrap_or("");
-                    let after_close = body_and_rest.get(brace_close + 1..).unwrap_or("").trim_start();
+                    let after_close = body_and_rest
+                        .get(brace_close + 1..)
+                        .unwrap_or("")
+                        .trim_start();
                     if after_close.starts_with(';') {
                         if !block_name.is_empty() {
                             results.push((block_name, body));
@@ -379,8 +388,17 @@ fn scan_struct_fields(body: &str) -> Vec<(String, String)> {
         let parts: Vec<&str> = trimmed.split_whitespace().collect();
         if let Some((&f_name, type_parts)) = parts.split_last().filter(|(_, tp)| !tp.is_empty()) {
             let f_type = type_parts.join(" ");
-            if f_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-                && f_type.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '<' || c == '>' || c == ':')
+            if f_name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+                && f_type.chars().all(|c| {
+                    c.is_ascii_alphanumeric()
+                        || c == '_'
+                        || c == '-'
+                        || c == '<'
+                        || c == '>'
+                        || c == ':'
+                })
             {
                 fields.push((f_type, f_name.to_string()));
             }
@@ -428,7 +446,10 @@ fn scan_interface_ops(if_body: &str) -> Vec<(String, String)> {
                 if let Some((&op_name, _prefix_tokens)) =
                     tokens.split_last().filter(|(_, p)| !p.is_empty())
                 {
-                    if op_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+                    if op_name
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+                    {
                         ops.push((op_name.to_string(), params_raw.to_string()));
                     }
                 }
@@ -483,8 +504,17 @@ fn scan_typedefs(content: &str) -> Vec<(String, String)> {
                     parts.split_last().filter(|(_, tp)| !tp.is_empty())
                 {
                     let t_type = type_parts.join(" ");
-                    if t_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-                        && t_type.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '<' || c == '>' || c == ':')
+                    if t_name
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+                        && t_type.chars().all(|c| {
+                            c.is_ascii_alphanumeric()
+                                || c == '_'
+                                || c == '-'
+                                || c == '<'
+                                || c == '>'
+                                || c == ':'
+                        })
                     {
                         typedefs.push((t_type, t_name.to_string()));
                     }

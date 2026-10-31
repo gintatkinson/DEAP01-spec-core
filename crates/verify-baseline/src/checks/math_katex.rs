@@ -35,17 +35,14 @@ use walkdir::WalkDir;
 pub fn check_latex_katex_syntax(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut all_errors = Vec::new();
 
-    for entry_res in WalkDir::new(repo_root)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.file_type().is_dir() {
-                let name = e.file_name().to_string_lossy();
-                !EXCLUDED_DIRS.iter().any(|ex| name == ex)
-            } else {
-                true
-            }
-        })
-    {
+    for entry_res in WalkDir::new(repo_root).into_iter().filter_entry(|e| {
+        if e.file_type().is_dir() {
+            let name = e.file_name().to_string_lossy();
+            !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+        } else {
+            true
+        }
+    }) {
         let entry = match entry_res {
             Ok(val) => val,
             Err(err) => {
@@ -100,7 +97,8 @@ mod tests {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_nanos())
                 .unwrap_or(0);
-            let path = std::env::temp_dir().join(format!("verify_katex_{}_{}_{}", name, nanos, count));
+            let path =
+                std::env::temp_dir().join(format!("verify_katex_{}_{}_{}", name, nanos, count));
             let _ = fs::create_dir_all(&path);
             Self { path }
         }

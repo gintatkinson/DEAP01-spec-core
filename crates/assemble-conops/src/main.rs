@@ -267,9 +267,7 @@ fn main() -> ExitCode {
         None
     };
 
-    let ws_ref = workspace
-        .clone()
-        .unwrap_or_else(|| PathBuf::from("."));
+    let ws_ref = workspace.clone().unwrap_or_else(|| PathBuf::from("."));
 
     let input_dir = if let Some(in_dir) = args.input_dir {
         in_dir

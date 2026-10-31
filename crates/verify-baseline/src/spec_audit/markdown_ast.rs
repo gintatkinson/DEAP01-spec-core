@@ -194,8 +194,6 @@ pub struct MarkdownDoc {
     pub unresolved_placeholders: Vec<PlaceholderFinding>,
 }
 
-
-
 /// Computes byte offsets of line starts to enable O(log N) line number lookups.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -502,14 +500,25 @@ fn detect_placeholder_on_line(
             let full_token = rest.get(open..=open + 1 + close).unwrap_or("");
 
             const PREFIXES: &[&str] = &[
-                "feature", "feat", "epic", "user story", "user-story", "user_story",
-                "use case", "use-case", "use_case", "story", "issue", "us", "uc",
+                "feature",
+                "feat",
+                "epic",
+                "user story",
+                "user-story",
+                "user_story",
+                "use case",
+                "use-case",
+                "use_case",
+                "story",
+                "issue",
+                "us",
+                "uc",
             ];
             let mut matched_id = false;
             for p in PREFIXES {
                 if let Some(after_p) = lower_content.strip_prefix(p) {
-                    let rem = after_p
-                        .trim_matches(|c: char| c == '-' || c == '_' || c.is_whitespace());
+                    let rem =
+                        after_p.trim_matches(|c: char| c == '-' || c == '_' || c.is_whitespace());
                     if rem == "id" || rem == "issueid" {
                         matched_id = true;
                         break;
@@ -1096,8 +1105,14 @@ classDiagram
             Some("1. Context")
         );
 
-        assert_eq!(doc.table_metadata.get("issue_id").map(|s| s.as_str()), Some("100"));
-        assert_eq!(doc.table_metadata.get("package").map(|s| s.as_str()), Some("SystemPackage"));
+        assert_eq!(
+            doc.table_metadata.get("issue_id").map(|s| s.as_str()),
+            Some("100")
+        );
+        assert_eq!(
+            doc.table_metadata.get("package").map(|s| s.as_str()),
+            Some("SystemPackage")
+        );
 
         assert_eq!(doc.mermaid_blocks.len(), 1);
         assert_eq!(
@@ -1120,6 +1135,9 @@ classDiagram
     fn test_metadata_row_allowed_placeholders() {
         let content = "| **Issue ID** | #[IssueID] |\n";
         let findings = find_unresolved_placeholders(content, false);
-        assert!(findings.is_empty(), "Allowed metadata placeholder should not trigger error");
+        assert!(
+            findings.is_empty(),
+            "Allowed metadata placeholder should not trigger error"
+        );
     }
 }

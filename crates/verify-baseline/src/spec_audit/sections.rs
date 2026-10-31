@@ -157,7 +157,11 @@ impl SectionRule {
     pub fn from_pattern(pattern: &str, display_name: &str) -> Self {
         let clean_pat = pattern.trim_start_matches("(?i)").trim();
         let pat_hashes = clean_pat.chars().take_while(|&c| c == '#').count();
-        let disp_hashes = display_name.trim().chars().take_while(|&c| c == '#').count();
+        let disp_hashes = display_name
+            .trim()
+            .chars()
+            .take_while(|&c| c == '#')
+            .count();
 
         let level = if pat_hashes > 0 {
             pat_hashes as u8
@@ -286,16 +290,34 @@ impl SectionRules {
         // Epics
         let epic_sections = [
             ("## 1. Context", "## 1. Context"),
-            ("## 2. Requirements & Checklist", "## 2. Requirements & Checklist"),
-            ("### Associated Use Cases & User Stories", "### Associated Use Cases & User Stories"),
+            (
+                "## 2. Requirements & Checklist",
+                "## 2. Requirements & Checklist",
+            ),
+            (
+                "### Associated Use Cases & User Stories",
+                "### Associated Use Cases & User Stories",
+            ),
             ("#### Associated Use Cases", "#### Associated Use Cases"),
-            ("#### Associated User Stories", "#### Associated User Stories"),
+            (
+                "#### Associated User Stories",
+                "#### Associated User Stories",
+            ),
             ("## 3. Architecture", "## 3. Architecture"),
-            ("## 4. Operational Considerations", "## 4. Operational Considerations"),
+            (
+                "## 4. Operational Considerations",
+                "## 4. Operational Considerations",
+            ),
             ("## 5. Security & Governance", "## 5. Security & Governance"),
             ("## 6. Source References", "## 6. Source References"),
-            ("## System-Level UML Class Diagram", "## System-Level UML Class Diagram"),
-            ("## System State Machine Diagram", "## System State Machine Diagram"),
+            (
+                "## System-Level UML Class Diagram",
+                "## System-Level UML Class Diagram",
+            ),
+            (
+                "## System State Machine Diagram",
+                "## System State Machine Diagram",
+            ),
         ];
         for (pat, disp) in epic_sections {
             rules
@@ -309,7 +331,10 @@ impl SectionRules {
             ("## UML Class Diagram", "## UML Class Diagram"),
             ("## Interface Requirements", "## Interface Requirements"),
             ("### 1. Test Data Shape", "### 1. Test Data Shape"),
-            ("### 4. Interactive Flow & States", "### 4. Interactive Flow & States"),
+            (
+                "### 4. Interactive Flow & States",
+                "### 4. Interactive Flow & States",
+            ),
         ];
         for (pat, disp) in feature_sections {
             rules
@@ -323,8 +348,14 @@ impl SectionRules {
             ("## UML Class Diagram", "## UML Class Diagram"),
             ("## Interface Requirements", "## Interface Requirements"),
             ("### 1. Test Data Shape", "### 1. Test Data Shape"),
-            ("### 3. Visual Layout & Arrangement", "### 3. Visual Layout & Arrangement"),
-            ("### 4. Interactive Flow & States", "### 4. Interactive Flow & States"),
+            (
+                "### 3. Visual Layout & Arrangement",
+                "### 3. Visual Layout & Arrangement",
+            ),
+            (
+                "### 4. Interactive Flow & States",
+                "### 4. Interactive Flow & States",
+            ),
         ];
         for (pat, disp) in feature_ui_sections {
             rules
@@ -338,8 +369,14 @@ impl SectionRules {
             ("## UML Class Diagram", "## UML Class Diagram"),
             ("## Interface Requirements", "## Interface Requirements"),
             ("### 1. Payload Schema", "### 1. Payload Schema"),
-            ("### 3. Logical Operations & Interface Messages", "### 3. Logical Operations & Interface Messages"),
-            ("### 4. Logical Exception States & Validation Failures", "### 4. Logical Exception States & Validation Failures"),
+            (
+                "### 3. Logical Operations & Interface Messages",
+                "### 3. Logical Operations & Interface Messages",
+            ),
+            (
+                "### 4. Logical Exception States & Validation Failures",
+                "### 4. Logical Exception States & Validation Failures",
+            ),
         ];
         for (pat, disp) in feature_api_sections {
             rules
@@ -353,8 +390,14 @@ impl SectionRules {
             ("## UML Class Diagram", "## UML Class Diagram"),
             ("## Interface Requirements", "## Interface Requirements"),
             ("### 1. Payload Schema", "### 1. Payload Schema"),
-            ("### 3. Logical Operations & Interface Messages", "### 3. Logical Operations & Interface Messages"),
-            ("### 4. Logical Exception States & Validation Failures", "### 4. Logical Exception States & Validation Failures"),
+            (
+                "### 3. Logical Operations & Interface Messages",
+                "### 3. Logical Operations & Interface Messages",
+            ),
+            (
+                "### 4. Logical Exception States & Validation Failures",
+                "### 4. Logical Exception States & Validation Failures",
+            ),
         ];
         for (pat, disp) in feature_m2m_sections {
             rules
@@ -382,7 +425,10 @@ impl SectionRules {
             ("## 2. Preconditions", "## 2. Preconditions"),
             ("## 3. Trigger", "## 3. Trigger"),
             ("## 4. Main Success Scenario", "## 4. Main Success Scenario"),
-            ("## 5. Alternate and Exception Flows", "## 5. Alternate and Exception Flows"),
+            (
+                "## 5. Alternate and Exception Flows",
+                "## 5. Alternate and Exception Flows",
+            ),
             ("## 6. Postconditions", "## 6. Postconditions"),
             ("## 8. Realization Matrix", "## 8. Realization Matrix"),
         ];
@@ -451,7 +497,10 @@ impl SectionRules {
 
         // 2. Ingest from spec_rules.required_sections if present in extra
         if let Some(spec_rules) = codebase_rules.extra.get("spec_rules") {
-            if let Some(req_sections) = spec_rules.get("required_sections").and_then(|v| v.as_object()) {
+            if let Some(req_sections) = spec_rules
+                .get("required_sections")
+                .and_then(|v| v.as_object())
+            {
                 for (spec_type, arr_val) in req_sections {
                     if let Some(arr) = arr_val.as_array() {
                         let mut parsed_rules = Vec::new();
@@ -512,10 +561,11 @@ impl SectionRules {
             }
             "use_case" | "use-case" | "use_cases" | "use-cases" => "use_case".to_string(),
             "feature" | "features" => {
-                let iface_opt = doc
-                    .table_metadata
-                    .get("interface_type")
-                    .or_else(|| doc.frontmatter.as_ref().and_then(|fm| fm.get("interface_type")));
+                let iface_opt = doc.table_metadata.get("interface_type").or_else(|| {
+                    doc.frontmatter
+                        .as_ref()
+                        .and_then(|fm| fm.get("interface_type"))
+                });
 
                 if let Some(iface) = iface_opt {
                     let iface_lower = iface.to_lowercase();
@@ -601,7 +651,10 @@ impl SectionRules {
                 .any(|(level, tokens)| *level == rule.level && tokens == &rule.normalized_tokens);
 
             if !matched {
-                errors.push(format!("{}: missing section '{}'", rel_path, rule.display_name));
+                errors.push(format!(
+                    "{}: missing section '{}'",
+                    rel_path, rule.display_name
+                ));
             }
         }
 
@@ -747,8 +800,11 @@ pub fn validate_use_case_anti_boilerplate(
     for h in &doc.headings {
         let h_tokens = normalize_tokens(&h.text);
         if (h_tokens.contains(&"alternate".to_string()) && h_tokens.contains(&"flows".to_string()))
-            || (h_tokens.contains(&"exception".to_string()) && h_tokens.contains(&"flows".to_string()))
-            || h.text.to_lowercase().contains("alternate and exception flows")
+            || (h_tokens.contains(&"exception".to_string())
+                && h_tokens.contains(&"flows".to_string()))
+            || h.text
+                .to_lowercase()
+                .contains("alternate and exception flows")
         {
             alt_flows_heading = Some(h);
             break;
@@ -776,10 +832,16 @@ pub fn validate_use_case_anti_boilerplate(
                 let digit_count = trimmed.chars().take_while(|c| c.is_ascii_digit()).count();
                 if digit_count > 0 {
                     let after_digits = &trimmed[digit_count..];
-                    let letter_count = after_digits.chars().take_while(|c| c.is_ascii_alphabetic()).count();
+                    let letter_count = after_digits
+                        .chars()
+                        .take_while(|c| c.is_ascii_alphabetic())
+                        .count();
                     if letter_count > 0 {
                         let after_letters = &after_digits[letter_count..];
-                        if after_letters.starts_with('.') || after_letters.starts_with(':') || after_letters.starts_with(' ') {
+                        if after_letters.starts_with('.')
+                            || after_letters.starts_with(':')
+                            || after_letters.starts_with(' ')
+                        {
                             exception_count += 1;
                         }
                     }
@@ -835,7 +897,8 @@ mod tests {
         assert_eq!(rule.normalized_tokens, vec!["1", "context"]);
         assert_eq!(rule.display_name, "## 1. Context");
 
-        let rule3 = SectionRule::from_pattern(r"###\s+1\.\s+Payload\s+Schema", "### 1. Payload Schema");
+        let rule3 =
+            SectionRule::from_pattern(r"###\s+1\.\s+Payload\s+Schema", "### 1. Payload Schema");
         assert_eq!(rule3.level, 3);
         assert_eq!(rule3.normalized_tokens, vec!["1", "payload", "schema"]);
     }
@@ -849,7 +912,9 @@ Prose here.
         let doc = parse_markdown(content)?;
         let errors = validate_sections("epic", &doc, "docs/epics/epic-01-test.md");
         assert!(!errors.is_empty(), "Should report missing epic sections");
-        assert!(errors.iter().any(|e| e.contains("2. Requirements & Checklist")));
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("2. Requirements & Checklist")));
         Ok(())
     }
 
@@ -870,7 +935,11 @@ Prose here.
 "#;
         let doc = parse_markdown(content)?;
         let errors = validate_sections("epic", &doc, "docs/epics/epic-01-complete.md");
-        assert!(errors.is_empty(), "Complete epic should have 0 section errors, got: {:?}", errors);
+        assert!(
+            errors.is_empty(),
+            "Complete epic should have 0 section errors, got: {:?}",
+            errors
+        );
         Ok(())
     }
 
@@ -888,7 +957,11 @@ Prose here.
 "#;
         let doc = parse_markdown(content)?;
         let errors = validate_sections("feature", &doc, "docs/features/feat-01-ui.md");
-        assert!(errors.is_empty(), "Complete UI feature should have 0 section errors, got: {:?}", errors);
+        assert!(
+            errors.is_empty(),
+            "Complete UI feature should have 0 section errors, got: {:?}",
+            errors
+        );
         Ok(())
     }
 
@@ -928,11 +1001,23 @@ Prose here.
 - 5a. Syntax error detected: System logs error.
 "#;
         let doc_canned = parse_markdown(canned_content)?;
-        let errors = validate_use_case_anti_boilerplate(&doc_canned, canned_content, "docs/use-cases/uc-01.md");
-        assert!(errors.iter().any(|e| e.contains("initiates workflow execution")));
-        assert!(errors.iter().any(|e| e.contains("processes structural elements and validates semantic constraints")));
-        assert!(errors.iter().any(|e| e.contains("Main Success Scenario has fewer than 5 steps")));
-        assert!(errors.iter().any(|e| e.contains("Alternate and Exception Flows has fewer than 3 exception cases")));
+        let errors = validate_use_case_anti_boilerplate(
+            &doc_canned,
+            canned_content,
+            "docs/use-cases/uc-01.md",
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("initiates workflow execution")));
+        assert!(errors.iter().any(
+            |e| e.contains("processes structural elements and validates semantic constraints")
+        ));
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("Main Success Scenario has fewer than 5 steps")));
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("Alternate and Exception Flows has fewer than 3 exception cases")));
 
         // Valid use case with 6 steps and 4 exception flows
         let valid_content = r#"# Use Case 01: System Vision
@@ -951,8 +1036,16 @@ Prose here.
 - 5d. File permission error on workspace: Execution halts safely.
 "#;
         let doc_valid = parse_markdown(valid_content)?;
-        let errors_valid = validate_use_case_anti_boilerplate(&doc_valid, valid_content, "docs/use-cases/uc-01.md");
-        assert!(errors_valid.is_empty(), "Valid use case should have 0 boilerplate errors: {:?}", errors_valid);
+        let errors_valid = validate_use_case_anti_boilerplate(
+            &doc_valid,
+            valid_content,
+            "docs/use-cases/uc-01.md",
+        );
+        assert!(
+            errors_valid.is_empty(),
+            "Valid use case should have 0 boilerplate errors: {:?}",
+            errors_valid
+        );
         Ok(())
     }
 
@@ -989,4 +1082,3 @@ Prose here.
         Ok(())
     }
 }
-

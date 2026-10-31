@@ -30,8 +30,8 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-SYSML-INGEST-MD/reproducer_tests] | SysML v2: VerificationCaseDef(reproducer_tests)
 
-use std::time::{SystemTime, UNIX_EPOCH};
 use ingest_sysml::translators::markdown::MarkdownTranslator;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Verifies that `MarkdownTranslator::translate_files` preserves distinct top-level packages for
 /// distinct blueprints (`BP-01`, `BP-02`) that share the same multi-crate `Target Crates` list.
@@ -78,8 +78,7 @@ fn test_issue_548_blueprint_target_crates_do_not_collapse_packages() -> Result<(
         std::process::id(),
         nanos
     ));
-    std::fs::create_dir_all(&temp_dir)
-        .map_err(|e| format!("failed to create temp dir: {e}"))?;
+    std::fs::create_dir_all(&temp_dir).map_err(|e| format!("failed to create temp dir: {e}"))?;
 
     let bp1_path = temp_dir.join("blueprint-01-alpha.md");
     let bp2_path = temp_dir.join("blueprint-02-beta.md");
@@ -112,10 +111,8 @@ The system shall enforce alpha architectural boundaries across workspace crates.
 The system shall enforce beta architectural boundaries across workspace crates.
 ";
 
-    std::fs::write(&bp1_path, bp1_content)
-        .map_err(|e| format!("failed to write bp1: {e}"))?;
-    std::fs::write(&bp2_path, bp2_content)
-        .map_err(|e| format!("failed to write bp2: {e}"))?;
+    std::fs::write(&bp1_path, bp1_content).map_err(|e| format!("failed to write bp1: {e}"))?;
+    std::fs::write(&bp2_path, bp2_content).map_err(|e| format!("failed to write bp2: {e}"))?;
 
     let translator = MarkdownTranslator::new();
     let files = vec![
@@ -308,11 +305,9 @@ stateDiagram-v2
         std::process::id(),
         nanos
     ));
-    std::fs::create_dir_all(&temp_dir)
-        .map_err(|e| format!("failed to create temp dir: {e}"))?;
+    std::fs::create_dir_all(&temp_dir).map_err(|e| format!("failed to create temp dir: {e}"))?;
     let bp_path = temp_dir.join("blueprint-01-subsystem.md");
-    std::fs::write(&bp_path, md)
-        .map_err(|e| format!("failed to write bp_path: {e}"))?;
+    std::fs::write(&bp_path, md).map_err(|e| format!("failed to write bp_path: {e}"))?;
 
     let files = vec![bp_path.to_string_lossy().to_string()];
     let consolidated_res = translator.translate_files(&files, "ConsolidatedPkg");
@@ -323,10 +318,7 @@ stateDiagram-v2
     }
 
     let consolidated = consolidated_res.map_err(|e| format!("translate_files failed: {e}"))?;
-    let child_pkg = consolidated
-        .packages
-        .first()
-        .unwrap_or(&consolidated);
+    let child_pkg = consolidated.packages.first().unwrap_or(&consolidated);
 
     assert!(
         !child_pkg.action_defs.is_empty(),
@@ -517,9 +509,9 @@ sequenceDiagram
         .ok_or_else(|| "missing interaction_def".to_string())?;
 
     for msg in &interaction.messages {
-        let (msg_token, route_tail) = msg.split_once(" from ").ok_or_else(|| {
-            format!("interaction message missing ' from ' delimiter: '{msg}'")
-        })?;
+        let (msg_token, route_tail) = msg
+            .split_once(" from ")
+            .ok_or_else(|| format!("interaction message missing ' from ' delimiter: '{msg}'"))?;
         let is_valid_sysml_ident = !msg_token.is_empty()
             && msg_token
                 .chars()
@@ -532,9 +524,9 @@ sequenceDiagram
             is_valid_sysml_ident,
             "Interaction message token before ' from ' must be a single valid SysML identifier, got '{msg_token}' in message '{msg}'"
         );
-        let (sender, receiver) = route_tail.split_once(" to ").ok_or_else(|| {
-            format!("interaction message missing ' to ' delimiter: '{msg}'")
-        })?;
+        let (sender, receiver) = route_tail
+            .split_once(" to ")
+            .ok_or_else(|| format!("interaction message missing ' to ' delimiter: '{msg}'"))?;
         assert!(
             !sender.is_empty() && !receiver.is_empty(),
             "Interaction message must have non-empty sender and receiver in '{msg}'"

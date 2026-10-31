@@ -150,7 +150,11 @@ pub fn verify_file_output(path: &Path) -> Result<(), Vec<String>> {
     let metadata = match std::fs::metadata(path) {
         Ok(m) => m,
         Err(e) => {
-            errors.push(format!("Cannot read metadata for {}: {}", path.display(), e));
+            errors.push(format!(
+                "Cannot read metadata for {}: {}",
+                path.display(),
+                e
+            ));
             return Err(errors);
         }
     };
@@ -252,7 +256,10 @@ pub fn run_check_output(args: &OutputIntegrityArgs) -> Result<(), i32> {
         );
         Err(42)
     } else {
-        println!("Subagent output verification PASSED ({} files verified).", checked);
+        println!(
+            "Subagent output verification PASSED ({} files verified).",
+            checked
+        );
         Ok(())
     }
 }

@@ -29,12 +29,12 @@
 pub mod dag_verifier;
 pub mod expr_anf;
 pub mod outliner;
+mod partition_facets;
 pub mod partitioner;
 
 pub use dag_verifier::{run_kahn_topological_sort, verify_dag_and_layers, verify_layer_edges};
 pub use expr_anf::{estimate_rust_fn_cyclomatic_complexity, hoist_constraint_anf};
 pub use outliner::{
-    map_sysml_type_to_rust, outline_action_def, outline_state_def, to_pascal_ident,
-    to_snake_slug,
+    map_sysml_type_to_rust, outline_action_def, outline_state_def, to_pascal_ident, to_snake_slug,
 };
 pub use partitioner::lower_package_to_module_graph;

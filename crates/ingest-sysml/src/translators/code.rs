@@ -349,9 +349,8 @@ impl CodeTranslator {
         }
         let mut all_items: Vec<SourceAstItem> = Vec::new();
         for path in file_paths {
-            let content = fs::read_to_string(path).map_err(|e| {
-                format!("Failed to read source file '{}': {}", path.display(), e)
-            })?;
+            let content = fs::read_to_string(path)
+                .map_err(|e| format!("Failed to read source file '{}': {}", path.display(), e))?;
             let label = path.display().to_string();
             let file_lang = match self.language {
                 SourceLanguage::Auto => SourceLanguage::detect_from_extension(path)

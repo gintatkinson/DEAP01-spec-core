@@ -27,25 +27,19 @@ use deap_core::sysml_ast::{AttributeDef, ConstraintDef};
 /// Recognized physical and engineering units across frequencies, timing, electrical, rates, dimensions, and quantities.
 pub const RECOGNIZED_UNITS: &[&str] = &[
     // Frequency
-    "hz", "khz", "mhz", "ghz",
-    // Time & Latency
-    "s", "sec", "second", "seconds", "ms", "us", "µs", "ns", "min", "minute", "minutes", "hr", "hour", "hours", "h",
-    // Voltage, Current, Power, Energy
+    "hz", "khz", "mhz", "ghz", // Time & Latency
+    "s", "sec", "second", "seconds", "ms", "us", "µs", "ns", "min", "minute", "minutes", "hr",
+    "hour", "hours", "h", // Voltage, Current, Power, Energy
     "v", "mv", "kv", "a", "ma", "ua", "µa", "w", "kw", "mw", "j", "kj", "mj", "kwh", "mah", "ah",
     // Resistance, Capacitance
-    "ohm", "kohm", "mohm", "f", "uf", "µf", "nf", "pf",
-    // Rates & Velocity
-    "bps", "kbps", "mbps", "gbps", "b/s", "kb/s", "mb/s", "gb/s", "bytes/s", "baud",
-    "m/s", "km/h", "deg/s", "rad/s", "m/s^2", "m/s2", "fps", "rpm",
-    // Dimensions & Geometry
-    "m", "cm", "mm", "km", "nm", "um", "µm", "deg", "rad", "degree", "degrees", "radian", "radians",
-    // Mass & Temperature
-    "kg", "g", "mg", "c", "°c", "k",
-    // Ratios, Levels, Percentages
-    "%", "percent", "db", "dbm", "dbi", "ppm", "ratio",
-    // Pressure & Force
-    "bar", "mbar", "pa", "kpa", "mpa", "psi", "n", "kn",
-    // Data storage
+    "ohm", "kohm", "mohm", "f", "uf", "µf", "nf", "pf", // Rates & Velocity
+    "bps", "kbps", "mbps", "gbps", "b/s", "kb/s", "mb/s", "gb/s", "bytes/s", "baud", "m/s", "km/h",
+    "deg/s", "rad/s", "m/s^2", "m/s2", "fps", "rpm", // Dimensions & Geometry
+    "m", "cm", "mm", "km", "nm", "um", "µm", "deg", "rad", "degree", "degrees", "radian",
+    "radians", // Mass & Temperature
+    "kg", "g", "mg", "c", "°c", "k", // Ratios, Levels, Percentages
+    "%", "percent", "db", "dbm", "dbi", "ppm", "ratio", // Pressure & Force
+    "bar", "mbar", "pa", "kpa", "mpa", "psi", "n", "kn", // Data storage
     "b", "kb", "mb", "gb", "tb", "byte", "bytes",
 ];
 
@@ -82,24 +76,8 @@ pub const ENGINEERING_PARAMETER_TERMS: &[&str] = &[
 
 /// Normative standards prefixes and keywords for factual grounding citations.
 pub const NORMATIVE_STANDARDS: &[&str] = &[
-    "iso",
-    "iec",
-    "ieee",
-    "rtca",
-    "do-178",
-    "do-178c",
-    "do-254",
-    "do-331",
-    "mil-std",
-    "stanag",
-    "rfc",
-    "arinc",
-    "nist",
-    "ecss",
-    "astm",
-    "sae",
-    "jarus",
-    "sora",
+    "iso", "iec", "ieee", "rtca", "do-178", "do-178c", "do-254", "do-331", "mil-std", "stanag",
+    "rfc", "arinc", "nist", "ecss", "astm", "sae", "jarus", "sora",
 ];
 
 /// Placeholder tokens prohibited in authoritative source reference citations.
@@ -120,16 +98,38 @@ pub const PROHIBITED_PLACEHOLDERS: &[&str] = &[
 
 /// Physical actuation / high-consequence target entity tokens in sequence diagrams.
 pub const PHYSICAL_ARMING_TARGET_TOKENS: &[&str] = &[
-    "actuator", "motor", "safetyswitch", "drive",
-    "powerstage", "highvoltage", "emitter",
-    "propulsionenable", "effector", "valve", "pump",
+    "actuator",
+    "motor",
+    "safetyswitch",
+    "drive",
+    "powerstage",
+    "highvoltage",
+    "emitter",
+    "propulsionenable",
+    "effector",
+    "valve",
+    "pump",
 ];
 
 /// Human C2 / HITL participant tokens in sequence diagrams.
 pub const HITL_SENDER_TOKENS: &[&str] = &[
-    "operator", "operators", "pilot", "pilots", "human", "commander",
-    "supervisor", "controller", "technician", "safetyofficer", "user",
-    "c2", "gcsoperator", "gcs", "groundcontrolstation", "groundstation", "console",
+    "operator",
+    "operators",
+    "pilot",
+    "pilots",
+    "human",
+    "commander",
+    "supervisor",
+    "controller",
+    "technician",
+    "safetyofficer",
+    "user",
+    "c2",
+    "gcsoperator",
+    "gcs",
+    "groundcontrolstation",
+    "groundstation",
+    "console",
 ];
 
 /// Checks if a token represents a recognized physical or engineering unit.
@@ -288,7 +288,14 @@ pub fn extract_scalar_numeric_claim(val: &str) -> Option<(f64, Option<String>)> 
     let clean = trimmed.trim_matches(|c| c == '*' || c == '`' || c == '_' || c == '"' || c == '\'');
     let mut num_end = 0;
     for (i, c) in clean.char_indices() {
-        if c.is_ascii_digit() || c == '.' || c == '+' || c == '-' || c == '−' || c == 'e' || c == 'E' {
+        if c.is_ascii_digit()
+            || c == '.'
+            || c == '+'
+            || c == '-'
+            || c == '−'
+            || c == 'e'
+            || c == 'E'
+        {
             num_end = i + c.len_utf8();
         } else if !c.is_whitespace() {
             break;
@@ -338,17 +345,15 @@ pub fn find_engineering_parameter(line: &str) -> Option<&'static str> {
     for &param in ENGINEERING_PARAMETER_TERMS {
         if let Some(pos) = lower.find(param) {
             let before_ok = pos == 0
-                || lower
-                    .as_bytes()
-                    .get(pos - 1)
-                    .is_none_or(|&prev_b| !prev_b.is_ascii_alphanumeric() && prev_b != b'_' && prev_b != b'-');
+                || lower.as_bytes().get(pos - 1).is_none_or(|&prev_b| {
+                    !prev_b.is_ascii_alphanumeric() && prev_b != b'_' && prev_b != b'-'
+                });
 
             let end = pos + param.len();
             let after_ok = end >= lower.len()
-                || lower
-                    .as_bytes()
-                    .get(end)
-                    .is_none_or(|&next_b| !next_b.is_ascii_alphanumeric() && next_b != b'_' && next_b != b'-');
+                || lower.as_bytes().get(end).is_none_or(|&next_b| {
+                    !next_b.is_ascii_alphanumeric() && next_b != b'_' && next_b != b'-'
+                });
 
             if before_ok && after_ok {
                 return Some(param);
@@ -401,19 +406,30 @@ pub fn find_naked_numeric_quantities(line: &str) -> Vec<(String, usize)> {
                 let Some(&b) = bytes.get(word_start - 1) else {
                     break;
                 };
-                if b.is_ascii_whitespace() || b == b'[' || b == b'(' || b == b'{' || b == b'<' || b == b'|' {
+                if b.is_ascii_whitespace()
+                    || b == b'['
+                    || b == b'('
+                    || b == b'{'
+                    || b == b'<'
+                    || b == b'|'
+                {
                     break;
                 }
                 word_start -= 1;
             }
             let prefix = bytes.get(word_start..start).unwrap_or_default();
-            let is_id_token_prefix = prefix.iter().any(|b| b.is_ascii_alphabetic() || *b == b'_' || *b == b'#');
+            let is_id_token_prefix = prefix
+                .iter()
+                .any(|b| b.is_ascii_alphabetic() || *b == b'_' || *b == b'#');
 
             let mut dot_seen = false;
             while let Some(&b) = bytes.get(idx) {
                 if b.is_ascii_digit() {
                     idx += 1;
-                } else if b == b'.' && !dot_seen && bytes.get(idx + 1).is_some_and(|nb| nb.is_ascii_digit()) {
+                } else if b == b'.'
+                    && !dot_seen
+                    && bytes.get(idx + 1).is_some_and(|nb| nb.is_ascii_digit())
+                {
                     dot_seen = true;
                     idx += 1;
                 } else {
@@ -445,14 +461,41 @@ pub fn find_naked_numeric_quantities(line: &str) -> Vec<(String, usize)> {
             // Check if preceding token is an index/label word (e.g. "feature 24", "epic 01", "req 02", "step 3")
             let is_preceded_by_label_word = if word_start > 0 {
                 let before_text = line.get(..word_start).unwrap_or("").trim_end();
-                let last_word = before_text.rsplit(|c: char| c.is_whitespace() || c == '|' || c == '*' || c == '`' || c == '#').next().unwrap_or("");
+                let last_word = before_text
+                    .rsplit(|c: char| {
+                        c.is_whitespace() || c == '|' || c == '*' || c == '`' || c == '#'
+                    })
+                    .next()
+                    .unwrap_or("");
                 let lw_clean = last_word.trim().to_lowercase();
-                matches!(lw_clean.as_str(), "feature" | "feat" | "epic" | "req" | "ac" | "step" | "item" | "section" | "table" | "figure" | "level" | "mode" | "id" | "issue" | "case" | "story" | "check" | "bp" | "blueprint")
+                matches!(
+                    lw_clean.as_str(),
+                    "feature"
+                        | "feat"
+                        | "epic"
+                        | "req"
+                        | "ac"
+                        | "step"
+                        | "item"
+                        | "section"
+                        | "table"
+                        | "figure"
+                        | "level"
+                        | "mode"
+                        | "id"
+                        | "issue"
+                        | "case"
+                        | "story"
+                        | "check"
+                        | "bp"
+                        | "blueprint"
+                )
             } else {
                 false
             };
 
-            let is_identifier = is_id_token_prefix || is_id_token_suffix || is_preceded_by_label_word;
+            let is_identifier =
+                is_id_token_prefix || is_id_token_suffix || is_preceded_by_label_word;
 
             // Character after digits: if it's alphanumeric, check if it forms a recognized unit
             if !is_identifier && start < end {
@@ -462,11 +505,16 @@ pub fn find_naked_numeric_quantities(line: &str) -> Vec<(String, usize)> {
                 // or outline sub-step labels like 5a., 5e., 5i., 5d., 5a)
                 let is_outline_label = if bytes.get(end).is_some_and(|b| b.is_ascii_alphabetic()) {
                     let mut letter_end = end;
-                    while bytes.get(letter_end).is_some_and(|b| b.is_ascii_alphabetic()) {
+                    while bytes
+                        .get(letter_end)
+                        .is_some_and(|b| b.is_ascii_alphabetic())
+                    {
                         letter_end += 1;
                     }
                     (letter_end - end <= 2)
-                        && bytes.get(letter_end).is_some_and(|&lb| lb == b'.' || lb == b')' || lb == b':')
+                        && bytes
+                            .get(letter_end)
+                            .is_some_and(|&lb| lb == b'.' || lb == b')' || lb == b':')
                 } else {
                     false
                 };
@@ -632,7 +680,9 @@ pub fn is_assertion_grounded(
     if (lower_doc.contains("## source references") || lower_doc.contains("## 6. source references"))
         && (lower_doc.contains("schema/")
             || lower_doc.contains(".sysml")
-            || NORMATIVE_STANDARDS.iter().any(|&std| lower_doc.contains(std)))
+            || NORMATIVE_STANDARDS
+                .iter()
+                .any(|&std| lower_doc.contains(std)))
     {
         return true;
     }
@@ -699,7 +749,10 @@ pub fn validate_factual_grounding(
             if crate::spec_audit::markdown_ast::is_metadata_header_table_row(trimmed) {
                 continue;
             }
-            if trimmed.chars().all(|c| c == '|' || c == '-' || c == ':' || c.is_ascii_whitespace()) {
+            if trimmed
+                .chars()
+                .all(|c| c == '|' || c == '-' || c == ':' || c.is_ascii_whitespace())
+            {
                 continue;
             }
             let lower = trimmed.to_lowercase();
@@ -726,7 +779,10 @@ pub fn validate_factual_grounding(
                     .filter(|c| !c.is_empty())
                     .collect();
                 if let Some(&first_part) = parts.first().filter(|_| parts.len() == 2) {
-                    let k_norm = first_part.replace(['*', '_', '`'], "").trim().to_lowercase();
+                    let k_norm = first_part
+                        .replace(['*', '_', '`'], "")
+                        .trim()
+                        .to_lowercase();
                     if k_norm == "title"
                         || k_norm == "package"
                         || k_norm == "subsystem"
@@ -973,10 +1029,7 @@ fn parse_message_arrow(line: &str) -> Option<(&str, &str, &str)> {
     let left = left.trim();
     let action = action.trim();
 
-    const ARROWS: &[&str] = &[
-        "-->>", "-->", "--)", "--x",
-        "->>", "->", "-x", "-)",
-    ];
+    const ARROWS: &[&str] = &["-->>", "-->", "--)", "--x", "->>", "->", "-x", "-)"];
 
     for arrow in ARROWS {
         if let Some(idx) = left.find(arrow) {
@@ -1018,25 +1071,35 @@ fn parse_message_arrow(line: &str) -> Option<(&str, &str, &str)> {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-PROVENANCE-IS-HITL-SENDER] | SysML v2: ActionDef(is_hitl_sender)
-fn is_hitl_sender(
-    sender: &str,
-    participants: &std::collections::BTreeMap<String, String>,
-) -> bool {
+fn is_hitl_sender(sender: &str, participants: &std::collections::BTreeMap<String, String>) -> bool {
     let s_norm = normalize_token(sender);
     let alias = participants.get(sender).cloned().unwrap_or_default();
     let a_norm = normalize_token(&alias);
 
     const HITL_SUBSTRINGS: &[&str] = &[
-        "operator", "pilot", "gcs", "commander", "human",
-        "supervisor", "safetyofficer", "controller", "console",
-        "technician", "user", "c2",
+        "operator",
+        "pilot",
+        "gcs",
+        "commander",
+        "human",
+        "supervisor",
+        "safetyofficer",
+        "controller",
+        "console",
+        "technician",
+        "user",
+        "c2",
     ];
 
-    if HITL_SENDER_TOKENS.contains(&s_norm.as_str()) || HITL_SENDER_TOKENS.contains(&a_norm.as_str()) {
+    if HITL_SENDER_TOKENS.contains(&s_norm.as_str())
+        || HITL_SENDER_TOKENS.contains(&a_norm.as_str())
+    {
         return true;
     }
 
-    HITL_SUBSTRINGS.iter().any(|tok| s_norm.contains(tok) || a_norm.contains(tok))
+    HITL_SUBSTRINGS
+        .iter()
+        .any(|tok| s_norm.contains(tok) || a_norm.contains(tok))
 }
 
 /// Determines whether a message action signifies an explicit HITL arming authorization or operator consent.
@@ -1085,7 +1148,9 @@ fn is_hitl_consent_action(action: &str) -> bool {
         return true;
     }
 
-    let has_auth = words.iter().any(|w| w == "auth" || w.starts_with("auth") || w == "arm" || w.starts_with("arm"));
+    let has_auth = words
+        .iter()
+        .any(|w| w == "auth" || w.starts_with("auth") || w == "arm" || w.starts_with("arm"));
     let has_cmd_or_token = words.iter().any(|w| {
         w == "command"
             || w == "cmd"
@@ -1135,8 +1200,17 @@ fn is_hitl_consent_action(action: &str) -> bool {
 fn is_disarm_action(action: &str) -> bool {
     let words = tokenize_words(action);
     const DISARM_WORDS: &[&str] = &[
-        "disarm", "disarming", "safe", "safing", "inhibit", "inhibiting",
-        "abort", "aborting", "disable", "deactivate", "isolate",
+        "disarm",
+        "disarming",
+        "safe",
+        "safing",
+        "inhibit",
+        "inhibiting",
+        "abort",
+        "aborting",
+        "disable",
+        "deactivate",
+        "isolate",
     ];
     words.iter().any(|w| DISARM_WORDS.contains(&w.as_str()))
 }
@@ -1177,7 +1251,9 @@ fn is_physical_arming_target(
     let a_norm = normalize_token(&alias);
 
     PHYSICAL_ARMING_TARGET_TOKENS.iter().any(|tok| {
-        t_norm == *tok || t_norm.contains(tok) || (!a_norm.is_empty() && (a_norm == *tok || a_norm.contains(tok)))
+        t_norm == *tok
+            || t_norm.contains(tok)
+            || (!a_norm.is_empty() && (a_norm == *tok || a_norm.contains(tok)))
     })
 }
 
@@ -1214,19 +1290,31 @@ fn is_physical_arming_action(action: &str) -> bool {
     }
 
     const ACTUATION_KEYWORDS: &[&str] = &[
-        "actuate", "actuation", "drive", "engage", "trigger",
-        "arm", "arming",
+        "actuate",
+        "actuation",
+        "drive",
+        "engage",
+        "trigger",
+        "arm",
+        "arming",
     ];
 
-    if words.iter().any(|w| ACTUATION_KEYWORDS.contains(&w.as_str())) {
+    if words
+        .iter()
+        .any(|w| ACTUATION_KEYWORDS.contains(&w.as_str()))
+    {
         return true;
     }
 
     let act_norm = normalize_token(action);
     const COMBOS: &[&str] = &[
-        "motorenable", "enablemotor", "propulsionenable",
-        "actuatedrive", "engagedrive",
-        "activatepowerstage", "highvoltage",
+        "motorenable",
+        "enablemotor",
+        "propulsionenable",
+        "actuatedrive",
+        "engagedrive",
+        "activatepowerstage",
+        "highvoltage",
     ];
 
     COMBOS.iter().any(|c| act_norm.contains(c))
@@ -1269,7 +1357,10 @@ pub fn validate_sequence_diagram_temporal_safety(
 
     for block in &doc.mermaid_blocks {
         let is_sequence = block.header.eq_ignore_ascii_case("sequenceDiagram")
-            || block.raw.lines().any(|l| l.trim().starts_with("sequenceDiagram"));
+            || block
+                .raw
+                .lines()
+                .any(|l| l.trim().starts_with("sequenceDiagram"));
         if !is_sequence {
             continue;
         }
@@ -1532,9 +1623,8 @@ pub fn validate_source_reference_clause_integrity(
     // 4. Verifies verbatim clause numbers and schema paths
     let lower_sec = sec_text.to_lowercase();
     let has_schema_path = lower_sec.contains("schema/") || lower_sec.contains(".sysml");
-    let has_verbatim_clause = lower_sec.contains('§')
-        || lower_sec.contains("clause ")
-        || lower_sec.contains("section ");
+    let has_verbatim_clause =
+        lower_sec.contains('§') || lower_sec.contains("clause ") || lower_sec.contains("section ");
 
     if !has_schema_path && !has_verbatim_clause {
         findings.push(SpecAuditFinding::new(
@@ -1581,11 +1671,17 @@ pub fn is_valid_epic_feature_checklist_item(line: &str) -> bool {
     let trimmed = line.trim();
     let after_box = if let Some(rest) = trimmed.strip_prefix("- [ ] ") {
         rest
-    } else if let Some(rest) = trimmed.strip_prefix("- [x] ").or_else(|| trimmed.strip_prefix("- [X] ")) {
+    } else if let Some(rest) = trimmed
+        .strip_prefix("- [x] ")
+        .or_else(|| trimmed.strip_prefix("- [X] "))
+    {
         rest
     } else if let Some(rest) = trimmed.strip_prefix("* [ ] ") {
         rest
-    } else if let Some(rest) = trimmed.strip_prefix("* [x] ").or_else(|| trimmed.strip_prefix("* [X] ")) {
+    } else if let Some(rest) = trimmed
+        .strip_prefix("* [x] ")
+        .or_else(|| trimmed.strip_prefix("* [X] "))
+    {
         rest
     } else {
         return false;
@@ -1594,7 +1690,8 @@ pub fn is_valid_epic_feature_checklist_item(line: &str) -> bool {
     let after_ws = after_box.trim_start();
 
     // 2. Must contain #<IssueID> or #[IssueID]
-    let after_issue = if let Some(rest) = after_ws.strip_prefix("#[issueid]")
+    let after_issue = if let Some(rest) = after_ws
+        .strip_prefix("#[issueid]")
         .or_else(|| after_ws.strip_prefix("#[IssueID]"))
         .or_else(|| after_ws.strip_prefix("#[issue_id]"))
     {
@@ -1609,7 +1706,11 @@ pub fn is_valid_epic_feature_checklist_item(line: &str) -> bool {
         return false;
     };
 
-    let after_sep = after_issue.trim_start().trim_start_matches('-').trim_start_matches(':').trim_start();
+    let after_sep = after_issue
+        .trim_start()
+        .trim_start_matches('-')
+        .trim_start_matches(':')
+        .trim_start();
 
     // 3. Must contain markdown link [<Title>](<target>)
     if !after_sep.starts_with('[') {
@@ -1638,7 +1739,10 @@ pub fn is_valid_epic_feature_checklist_item(line: &str) -> bool {
     }
 
     // 4. Optional trailing parenthetical (<clauses>)
-    let after_link = after_target_open.get(close_paren_rel + 1..).unwrap_or("").trim();
+    let after_link = after_target_open
+        .get(close_paren_rel + 1..)
+        .unwrap_or("")
+        .trim();
     if !after_link.is_empty()
         && (!after_link.starts_with('(') || !after_link.ends_with(')') || after_link.len() < 3)
     {
@@ -1769,7 +1873,11 @@ pub fn count_feature_acceptance_criteria(content: &str) -> usize {
 
         let lower = trimmed.to_lowercase();
         // Checkbox criteria e.g. "- [ ] AC-01", "- [ ] REQ-01"
-        if trimmed.starts_with("- [ ]") || trimmed.starts_with("- [x]") || trimmed.starts_with("* [ ]") || trimmed.starts_with("* [x]") {
+        if trimmed.starts_with("- [ ]")
+            || trimmed.starts_with("- [x]")
+            || trimmed.starts_with("* [ ]")
+            || trimmed.starts_with("* [x]")
+        {
             let after_box = trimmed.get(5..).unwrap_or("").trim_start();
             if !after_box.starts_with('#') {
                 count += 1;
@@ -1777,7 +1885,10 @@ pub fn count_feature_acceptance_criteria(content: &str) -> usize {
         } else if in_ac_section
             && (trimmed.starts_with('-')
                 || trimmed.starts_with('*')
-                || (trimmed.as_bytes().first().is_some_and(|b| b.is_ascii_digit())
+                || (trimmed
+                    .as_bytes()
+                    .first()
+                    .is_some_and(|b| b.is_ascii_digit())
                     && trimmed.as_bytes().get(1) == Some(&b'.')))
             && (lower.contains("ac-")
                 || lower.contains("req-")
@@ -2000,9 +2111,20 @@ Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
 "#;
         let doc = parse_markdown(content)?;
         let index = build_test_symbol_index();
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-01.md", Some(&index), &[], &[])?;
+        let findings = validate_factual_grounding(
+            &doc,
+            content,
+            "docs/features/feat-01.md",
+            Some(&index),
+            &[],
+            &[],
+        )?;
 
-        assert!(findings.is_empty(), "Expected no findings, got: {:?}", findings);
+        assert!(
+            findings.is_empty(),
+            "Expected no findings, got: {:?}",
+            findings
+        );
         Ok(())
     }
 
@@ -2024,9 +2146,19 @@ Derived from schema/model.sysml §4.1.
 "#;
         let doc = parse_markdown(content)?;
         let index = build_test_symbol_index();
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-01.md", Some(&index), &[], &[])?;
+        let findings = validate_factual_grounding(
+            &doc,
+            content,
+            "docs/features/feat-01.md",
+            Some(&index),
+            &[],
+            &[],
+        )?;
 
-        let missing_units: Vec<_> = findings.iter().filter(|f| f.rule_id == "factual-grounding-missing-unit").collect();
+        let missing_units: Vec<_> = findings
+            .iter()
+            .filter(|f| f.rule_id == "factual-grounding-missing-unit")
+            .collect();
         assert!(!missing_units.is_empty(), "Expected missing unit findings");
         assert!(missing_units.iter().any(|f| f.message.contains("250")));
         assert!(missing_units.iter().any(|f| f.message.contains("50")));
@@ -2042,9 +2174,14 @@ Derived from schema/model.sysml §4.1.
 Normative standards baseline: ISO/IEC/IEEE 29148:2018 §6.4.2 and schema/model.sysml.
 "#;
         let doc = parse_markdown(content)?;
-        let findings = validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")?;
+        let findings =
+            validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")?;
 
-        assert!(findings.is_empty(), "Expected clean source references, got: {:?}", findings);
+        assert!(
+            findings.is_empty(),
+            "Expected clean source references, got: {:?}",
+            findings
+        );
         Ok(())
     }
 
@@ -2056,7 +2193,8 @@ Normative standards baseline: ISO/IEC/IEEE 29148:2018 §6.4.2 and schema/model.s
 This spec lacks a source references section.
 "#;
         let doc = parse_markdown(content)?;
-        let findings = validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")?;
+        let findings =
+            validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")?;
 
         assert_eq!(findings.len(), 1);
         assert_eq!(
@@ -2075,7 +2213,8 @@ This spec lacks a source references section.
 ## Next Section
 "#;
         let doc = parse_markdown(content)?;
-        let findings = validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")?;
+        let findings =
+            validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")?;
 
         assert_eq!(findings.len(), 1);
         assert_eq!(
@@ -2095,10 +2234,15 @@ This spec lacks a source references section.
 - {{TODO: Populate external citation}}
 "#;
         let doc = parse_markdown(content)?;
-        let findings = validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")?;
+        let findings =
+            validate_source_reference_clause_integrity(&doc, content, "docs/features/feat-01.md")?;
 
-        assert!(findings.iter().any(|f| f.rule_id == "source-reference-placeholder-detected"));
-        assert!(findings.iter().any(|f| f.rule_id == "source-reference-self-referential"));
+        assert!(findings
+            .iter()
+            .any(|f| f.rule_id == "source-reference-placeholder-detected"));
+        assert!(findings
+            .iter()
+            .any(|f| f.rule_id == "source-reference-self-referential"));
         Ok(())
     }
 
@@ -2114,8 +2258,11 @@ type: epic
 - [ ] #10 - [Feature 01: Single feature](../features/FEAT-01.md) (traceable requirement)
 "#;
         let doc1 = parse_markdown(underflow_content)?;
-        let findings1 = validate_cardinality_bounds(&doc1, underflow_content, "docs/epics/epic-01.md")?;
-        assert!(findings1.iter().any(|f| f.rule_id == "cardinality-bounds-epic-underflow"));
+        let findings1 =
+            validate_cardinality_bounds(&doc1, underflow_content, "docs/epics/epic-01.md")?;
+        assert!(findings1
+            .iter()
+            .any(|f| f.rule_id == "cardinality-bounds-epic-underflow"));
 
         // Nominal: 4 features
         let nominal_content = r#"---
@@ -2130,8 +2277,13 @@ type: epic
 - [ ] #13 - [Feature 04: Feature 4](../features/FEAT-04.md) (traceable requirement)
 "#;
         let doc2 = parse_markdown(nominal_content)?;
-        let findings2 = validate_cardinality_bounds(&doc2, nominal_content, "docs/epics/epic-01.md")?;
-        assert!(findings2.is_empty(), "Nominal epic features should pass: {:?}", findings2);
+        let findings2 =
+            validate_cardinality_bounds(&doc2, nominal_content, "docs/epics/epic-01.md")?;
+        assert!(
+            findings2.is_empty(),
+            "Nominal epic features should pass: {:?}",
+            findings2
+        );
 
         // Overflow: 16 features
         let mut overflow_lines = vec![
@@ -2147,8 +2299,11 @@ type: epic
         }
         let overflow_content = overflow_lines.join("\n");
         let doc3 = parse_markdown(&overflow_content)?;
-        let findings3 = validate_cardinality_bounds(&doc3, &overflow_content, "docs/epics/epic-01.md")?;
-        assert!(findings3.iter().any(|f| f.rule_id == "cardinality-bounds-epic-overflow"));
+        let findings3 =
+            validate_cardinality_bounds(&doc3, &overflow_content, "docs/epics/epic-01.md")?;
+        assert!(findings3
+            .iter()
+            .any(|f| f.rule_id == "cardinality-bounds-epic-overflow"));
         Ok(())
     }
 
@@ -2164,8 +2319,11 @@ type: feature
 - [ ] AC-01: Single criterion
 "#;
         let doc1 = parse_markdown(underflow_content)?;
-        let findings1 = validate_cardinality_bounds(&doc1, underflow_content, "docs/features/feat-01.md")?;
-        assert!(findings1.iter().any(|f| f.rule_id == "cardinality-bounds-feature-underflow"));
+        let findings1 =
+            validate_cardinality_bounds(&doc1, underflow_content, "docs/features/feat-01.md")?;
+        assert!(findings1
+            .iter()
+            .any(|f| f.rule_id == "cardinality-bounds-feature-underflow"));
 
         // Nominal: 5 criteria
         let nominal_content = r#"---
@@ -2181,8 +2339,13 @@ type: feature
 - [ ] AC-05: Criterion 5
 "#;
         let doc2 = parse_markdown(nominal_content)?;
-        let findings2 = validate_cardinality_bounds(&doc2, nominal_content, "docs/features/feat-01.md")?;
-        assert!(findings2.is_empty(), "Nominal criteria should pass: {:?}", findings2);
+        let findings2 =
+            validate_cardinality_bounds(&doc2, nominal_content, "docs/features/feat-01.md")?;
+        assert!(
+            findings2.is_empty(),
+            "Nominal criteria should pass: {:?}",
+            findings2
+        );
 
         // Overflow: 11 criteria
         let mut overflow_lines = vec![
@@ -2198,8 +2361,11 @@ type: feature
         }
         let overflow_content = overflow_lines.join("\n");
         let doc3 = parse_markdown(&overflow_content)?;
-        let findings3 = validate_cardinality_bounds(&doc3, &overflow_content, "docs/features/feat-01.md")?;
-        assert!(findings3.iter().any(|f| f.rule_id == "cardinality-bounds-feature-overflow"));
+        let findings3 =
+            validate_cardinality_bounds(&doc3, &overflow_content, "docs/features/feat-01.md")?;
+        assert!(findings3
+            .iter()
+            .any(|f| f.rule_id == "cardinality-bounds-feature-overflow"));
         Ok(())
     }
 
@@ -2237,7 +2403,8 @@ Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
         let index = build_test_symbol_index();
 
         // 1. Cardinality bounds must read 'type' from CommonMark metadata table (not just YAML frontmatter)
-        let cb_findings = validate_cardinality_bounds(&doc, content, "specifications/feat-custom-path.md")?;
+        let cb_findings =
+            validate_cardinality_bounds(&doc, content, "specifications/feat-custom-path.md")?;
         assert!(
             cb_findings.is_empty(),
             "Expected 0 cardinality findings for nominal 3 criteria, but got: {:?}",
@@ -2245,7 +2412,14 @@ Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
         );
 
         // 2. Factual grounding must NOT treat metadata table rows or package-name digits as claimed parameters / naked numbers
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-24.md", Some(&index), &[], &[])?;
+        let findings = validate_factual_grounding(
+            &doc,
+            content,
+            "docs/features/feat-24.md",
+            Some(&index),
+            &[],
+            &[],
+        )?;
 
         assert!(
             findings.is_empty(),
@@ -2276,7 +2450,9 @@ Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
         assert!(!is_pure_scalar_numeric("PL-40_Actuator"));
         assert!(!is_pure_scalar_numeric("RS-485_Bus"));
         assert!(!is_pure_scalar_numeric("ALPHA5"));
-        assert!(!is_pure_scalar_numeric("Feature 24 Power Management System"));
+        assert!(!is_pure_scalar_numeric(
+            "Feature 24 Power Management System"
+        ));
         assert!(!is_pure_scalar_numeric("ALPHA5_ControlActions"));
         assert!(!is_pure_scalar_numeric("DSC_IN1 Arm Enable"));
         assert!(!is_pure_scalar_numeric(""));
@@ -2285,15 +2461,27 @@ Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
 
     #[test]
     fn test_extract_scalar_numeric_claim() {
-        assert_eq!(extract_scalar_numeric_claim("50 W"), Some((50.0, Some("W".to_string()))));
+        assert_eq!(
+            extract_scalar_numeric_claim("50 W"),
+            Some((50.0, Some("W".to_string())))
+        );
         assert_eq!(extract_scalar_numeric_claim("-40.0"), Some((-40.0, None)));
-        assert_eq!(extract_scalar_numeric_claim("115200 bps"), Some((115200.0, Some("bps".to_string()))));
-        assert_eq!(extract_scalar_numeric_claim("35 m/s"), Some((35.0, Some("m/s".to_string()))));
+        assert_eq!(
+            extract_scalar_numeric_claim("115200 bps"),
+            Some((115200.0, Some("bps".to_string())))
+        );
+        assert_eq!(
+            extract_scalar_numeric_claim("35 m/s"),
+            Some((35.0, Some("m/s".to_string())))
+        );
 
         // Subsystem packages and titles must return None
         assert_eq!(extract_scalar_numeric_claim("5_ControlActions"), None);
         assert_eq!(extract_scalar_numeric_claim("ALPHA5"), None);
-        assert_eq!(extract_scalar_numeric_claim("Feature 24 Power Management System"), None);
+        assert_eq!(
+            extract_scalar_numeric_claim("Feature 24 Power Management System"),
+            None
+        );
         assert_eq!(extract_scalar_numeric_claim("PL-40_Actuator"), None);
     }
 
@@ -2328,7 +2516,14 @@ Derived from schema/model.sysml §2.1 and ISO/IEC/IEEE 15288:2023.
 "#;
         let doc = parse_markdown(content)?;
         let index = build_test_symbol_index();
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-30.md", Some(&index), &[], &[])?;
+        let findings = validate_factual_grounding(
+            &doc,
+            content,
+            "docs/features/feat-30.md",
+            Some(&index),
+            &[],
+            &[],
+        )?;
 
         assert!(
             findings.is_empty(),
@@ -2362,7 +2557,14 @@ Derived from schema/model.sysml and ISO/IEC/IEEE 15026-3.
 "#;
         let doc = parse_markdown(content)?;
         let index = build_test_symbol_index();
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-31.md", Some(&index), &[], &[])?;
+        let findings = validate_factual_grounding(
+            &doc,
+            content,
+            "docs/features/feat-31.md",
+            Some(&index),
+            &[],
+            &[],
+        )?;
 
         assert!(
             findings.is_empty(),
@@ -2396,7 +2598,14 @@ Derived from schema/model.sysml and ISO/IEC/IEEE 12207:2017.
 "#;
         let doc = parse_markdown(content)?;
         let index = build_test_symbol_index();
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-32.md", Some(&index), &[], &[])?;
+        let findings = validate_factual_grounding(
+            &doc,
+            content,
+            "docs/features/feat-32.md",
+            Some(&index),
+            &[],
+            &[],
+        )?;
 
         assert!(
             findings.is_empty(),
@@ -2423,10 +2632,19 @@ This spec lacks normative citations and schema grounding for its operational vel
 "#;
         let doc = parse_markdown(content)?;
         let index = build_test_symbol_index();
-        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-33.md", Some(&index), &[], &[])?;
+        let findings = validate_factual_grounding(
+            &doc,
+            content,
+            "docs/features/feat-33.md",
+            Some(&index),
+            &[],
+            &[],
+        )?;
 
         assert!(
-            findings.iter().any(|f| f.rule_id == "factual-grounding-ungrounded-assertion"),
+            findings
+                .iter()
+                .any(|f| f.rule_id == "factual-grounding-ungrounded-assertion"),
             "Expected ungrounded assertion finding for unverified claim, got: {:?}",
             findings
         );
@@ -2436,9 +2654,14 @@ This spec lacks normative citations and schema grounding for its operational vel
     #[test]
     fn test_autonomous_arming_sequence_diagram_detected_and_rejected(
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let content = include_str!("../../../../tests/fixtures/safety/autonomous_arming_usecase.md");
+        let content =
+            include_str!("../../../../tests/fixtures/safety/autonomous_arming_usecase.md");
         let doc = parse_markdown(content)?;
-        let findings = validate_sequence_diagram_temporal_safety(&doc, content, "tests/fixtures/safety/autonomous_arming_usecase.md");
+        let findings = validate_sequence_diagram_temporal_safety(
+            &doc,
+            content,
+            "tests/fixtures/safety/autonomous_arming_usecase.md",
+        );
 
         assert!(
             !findings.is_empty(),
@@ -2454,7 +2677,9 @@ This spec lacks normative citations and schema grounding for its operational vel
             findings
         );
         assert!(
-            violations.iter().any(|f| f.message.contains("Autonomous physical actuation sequence detected")),
+            violations.iter().any(|f| f
+                .message
+                .contains("Autonomous physical actuation sequence detected")),
             "Violation message must explain autonomous physical actuation sequence"
         );
         Ok(())
@@ -2465,7 +2690,11 @@ This spec lacks normative citations and schema grounding for its operational vel
     ) -> Result<(), Box<dyn std::error::Error>> {
         let content = include_str!("../../../../tests/fixtures/safety/hitl_arming_usecase.md");
         let doc = parse_markdown(content)?;
-        let findings = validate_sequence_diagram_temporal_safety(&doc, content, "tests/fixtures/safety/hitl_arming_usecase.md");
+        let findings = validate_sequence_diagram_temporal_safety(
+            &doc,
+            content,
+            "tests/fixtures/safety/hitl_arming_usecase.md",
+        );
 
         let violations: Vec<_> = findings
             .iter()
@@ -2503,7 +2732,8 @@ sequenceDiagram
 ```
 "#;
         let doc = parse_markdown(content)?;
-        let findings = validate_sequence_diagram_temporal_safety(&doc, content, "docs/conops/SCN-05.md");
+        let findings =
+            validate_sequence_diagram_temporal_safety(&doc, content, "docs/conops/SCN-05.md");
         assert!(
             findings.is_empty(),
             "SCN-05 sequence diagram should pass temporal safety without violations: {:?}",
@@ -2548,5 +2778,3 @@ type: epic
         );
     }
 }
-
-

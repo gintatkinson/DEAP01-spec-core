@@ -747,9 +747,7 @@ impl Cli {
             emit_flutter_contracts: matches
                 .get_one::<PathBuf>("emit_flutter_contracts")
                 .cloned(),
-            emit_modular_rust: matches
-                .get_one::<PathBuf>("emit_modular_rust")
-                .cloned(),
+            emit_modular_rust: matches.get_one::<PathBuf>("emit_modular_rust").cloned(),
             docs: matches
                 .get_one::<PathBuf>("docs")
                 .cloned()
@@ -952,7 +950,8 @@ mod tests {
         let usage_cli = Cli::parse_from(vec!["compile-sysml"]);
         assert_eq!(usage_cli.into_mode(), Ok(CommandMode::ShowUsage));
 
-        let implicit_compile = Cli::parse_from(vec!["compile-sysml", "schema/model.sysml", "--dry-run"]);
+        let implicit_compile =
+            Cli::parse_from(vec!["compile-sysml", "schema/model.sysml", "--dry-run"]);
         assert_eq!(
             implicit_compile.into_mode(),
             Ok(CommandMode::Compile {

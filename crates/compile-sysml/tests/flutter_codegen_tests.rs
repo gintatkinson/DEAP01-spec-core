@@ -133,7 +133,8 @@ impl Drop for ScopedTempDir {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-FLUTTER-GENERATE-SOLVER-BRIDGE]
 #[test]
-fn test_emit_dart_solver_bridge_typed_dtos_and_solve_json_transport() -> Result<(), Box<dyn std::error::Error>> {
+fn test_emit_dart_solver_bridge_typed_dtos_and_solve_json_transport(
+) -> Result<(), Box<dyn std::error::Error>> {
     let tmp = ScopedTempDir::new("solver_bridge");
     let mut model = SysmlModel::default();
     model.package_name = Some("OptimizationKernelPackage".to_string());
@@ -186,7 +187,10 @@ fn test_emit_dart_solver_bridge_typed_dtos_and_solve_json_transport() -> Result<
     model.parts.push(part_def);
 
     let bridge_path = emit_dart_solver_bridge(&tmp.path, &model, 0xCAFE_BABE_1234_5678)?;
-    assert!(bridge_path.exists(), "solver_bridge.g.dart must be written to disk");
+    assert!(
+        bridge_path.exists(),
+        "solver_bridge.g.dart must be written to disk"
+    );
 
     let dart_src = fs::read_to_string(&bridge_path)?;
     let direct_src = generate_solver_bridge_dart(&model, 0xCAFE_BABE_1234_5678);
@@ -438,23 +442,48 @@ fn test_generate_ui_contract_test_dart_emits_live_pump_getrect_tap_and_pairwise_
     let raw_dart = generate_ui_contract_test_dart(&model, &nodes);
     let stripped = strip_line_comments_for_test(&raw_dart);
 
-    assert!(stripped.contains("DomainSeedStrategy"), "Must reference DomainSeedStrategy in active code");
-    assert!(stripped.contains("a.overlaps(b)"), "Must use a.overlaps(b) in assertPairwiseHudNonOverlap");
-    assert!(stripped.contains("tester.pumpWidget("), "Must mount live widget tree via tester.pumpWidget");
-    assert!(stripped.contains("tester.getRect("), "Must query live RenderBox bounds via tester.getRect");
     assert!(
-        stripped.contains("await tester.tap(find.byKey(SchemaWidgetKeys.entityRow('NODE_ALPHA_01')));"),
+        stripped.contains("DomainSeedStrategy"),
+        "Must reference DomainSeedStrategy in active code"
+    );
+    assert!(
+        stripped.contains("a.overlaps(b)"),
+        "Must use a.overlaps(b) in assertPairwiseHudNonOverlap"
+    );
+    assert!(
+        stripped.contains("tester.pumpWidget("),
+        "Must mount live widget tree via tester.pumpWidget"
+    );
+    assert!(
+        stripped.contains("tester.getRect("),
+        "Must query live RenderBox bounds via tester.getRect"
+    );
+    assert!(
+        stripped
+            .contains("await tester.tap(find.byKey(SchemaWidgetKeys.entityRow('NODE_ALPHA_01')));"),
         "Must emit uncommented tester.tap for NODE_ALPHA_01"
     );
     assert!(
-        stripped.contains("await tester.tap(find.byKey(SchemaWidgetKeys.entityRow('NODE_BETA_02')));"),
+        stripped
+            .contains("await tester.tap(find.byKey(SchemaWidgetKeys.entityRow('NODE_BETA_02')));"),
         "Must emit uncommented tester.tap for NODE_BETA_02"
     );
-    for dim in ["1920", "1080", "2560", "1440", "3840", "2160", "6016", "3384"] {
-        assert!(stripped.contains(dim), "Must contain canonical physical dimension {dim}");
+    for dim in [
+        "1920", "1080", "2560", "1440", "3840", "2160", "6016", "3384",
+    ] {
+        assert!(
+            stripped.contains(dim),
+            "Must contain canonical physical dimension {dim}"
+        );
     }
-    assert!(!stripped.contains("Rect.fromLTWH("), "Must not use synthetic Rect.fromLTWH literals");
-    assert!(!stripped.contains("'{}'"), "Must not contain uninterpolated '{{}}' placeholders");
+    assert!(
+        !stripped.contains("Rect.fromLTWH("),
+        "Must not use synthetic Rect.fromLTWH literals"
+    );
+    assert!(
+        !stripped.contains("'{}'"),
+        "Must not contain uninterpolated '{{}}' placeholders"
+    );
 }
 
 /// Verifies that `generate_schema_models_dart`, `generate_domain_seed_dart`, and `generate_solver_bridge_dart`
@@ -576,7 +605,9 @@ fn test_generate_schema_models_and_seed_union_topology_types_dedup_ids_and_sanit
         models_src
     );
     assert!(
-        models_src.contains("double get dynamicExtraMetric => _record.getPropertyDouble('dynamic_extra_metric')"),
+        models_src.contains(
+            "double get dynamicExtraMetric => _record.getPropertyDouble('dynamic_extra_metric')"
+        ),
         "Must emit dynamicExtraMetric getter on AlphaComponentView: {}",
         models_src
     );
@@ -586,17 +617,22 @@ fn test_generate_schema_models_and_seed_union_topology_types_dedup_ids_and_sanit
         models_src
     );
     assert!(
-        models_src.contains("String get dynamicLabel => _record.getPropertyString('dynamic_label')"),
+        models_src
+            .contains("String get dynamicLabel => _record.getPropertyString('dynamic_label')"),
         "Must emit dynamicLabel getter on AlphaComponentView: {}",
         models_src
     );
     assert!(
-        models_src.contains("String get topologyOnlyProp => _record.getPropertyString('topology_only_prop')"),
+        models_src.contains(
+            "String get topologyOnlyProp => _record.getPropertyString('topology_only_prop')"
+        ),
         "Must emit topologyOnlyProp getter on BetaTopologyOnlyTypeView: {}",
         models_src
     );
     assert!(
-        models_src.contains("double get topologyOnlyNum => _record.getPropertyDouble('topology_only_num')"),
+        models_src.contains(
+            "double get topologyOnlyNum => _record.getPropertyDouble('topology_only_num')"
+        ),
         "Must emit topologyOnlyNum getter on BetaTopologyOnlyTypeView: {}",
         models_src
     );
@@ -607,7 +643,9 @@ fn test_generate_schema_models_and_seed_union_topology_types_dedup_ids_and_sanit
         "Must include parent_id ZONE-NORTH-01 in SchemaEntityIds: {}",
         models_src
     );
-    let camel_occurrences = models_src.matches("static const String nodeAlpha01 =").count();
+    let camel_occurrences = models_src
+        .matches("static const String nodeAlpha01 =")
+        .count();
     assert_eq!(
         camel_occurrences, 1,
         "Must deduplicate colliding camel_id constants in SchemaEntityIds: {}",
@@ -626,17 +664,22 @@ fn test_generate_schema_models_and_seed_union_topology_types_dedup_ids_and_sanit
         models_src
     );
     assert!(
-        models_src.contains("double get badRealDefault => _record.getPropertyDouble('bad_real_default') ?? 0.0;"),
+        models_src.contains(
+            "double get badRealDefault => _record.getPropertyDouble('bad_real_default') ?? 0.0;"
+        ),
         "Must sanitize non-numeric Real default_value to 0.0: {}",
         models_src
     );
     assert!(
-        models_src.contains("int get badIntDefault => _record.getPropertyInt('bad_int_default') ?? 0;"),
+        models_src
+            .contains("int get badIntDefault => _record.getPropertyInt('bad_int_default') ?? 0;"),
         "Must sanitize non-numeric Integer default_value to 0: {}",
         models_src
     );
     assert!(
-        models_src.contains("bool get badBoolDefault => _record.getPropertyBool('bad_bool_default') ?? false;"),
+        models_src.contains(
+            "bool get badBoolDefault => _record.getPropertyBool('bad_bool_default') ?? false;"
+        ),
         "Must sanitize invalid Boolean default_value to false: {}",
         models_src
     );

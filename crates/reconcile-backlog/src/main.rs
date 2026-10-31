@@ -189,7 +189,11 @@ impl Cli {
                 Command::new("create-issue")
                     .visible_alias("create_issue")
                     .about("Create or reopen an issue idempotently with precondition checks")
-                    .arg(Arg::new("body_file").long("body-file").action(ArgAction::Set))
+                    .arg(
+                        Arg::new("body_file")
+                            .long("body-file")
+                            .action(ArgAction::Set),
+                    )
                     .arg(Arg::new("label").long("label").action(ArgAction::Set))
                     .arg(Arg::new("title").long("title").action(ArgAction::Set))
                     .arg(Arg::new("repo").long("repo").action(ArgAction::Set))
@@ -304,7 +308,10 @@ fn main() {
         let canonical_workspace = match workspace_path.canonicalize() {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("Error: Cannot resolve workspace path '{}': {}", cli.workspace, e);
+                eprintln!(
+                    "Error: Cannot resolve workspace path '{}': {}",
+                    cli.workspace, e
+                );
                 process::exit(1);
             }
         };
@@ -319,8 +326,18 @@ fn main() {
             default_branch: cli.default_branch.clone(),
         };
 
-        println!("Starting backlog reconciliation for workspace: {}", options.workspace_root.display());
-        println!("Mode: {}", if options.offline { "OFFLINE" } else { "ONLINE (Provider: GitHub)" });
+        println!(
+            "Starting backlog reconciliation for workspace: {}",
+            options.workspace_root.display()
+        );
+        println!(
+            "Mode: {}",
+            if options.offline {
+                "OFFLINE"
+            } else {
+                "ONLINE (Provider: GitHub)"
+            }
+        );
         if options.dry_run {
             println!("Dry-run enabled: No changes will be written to disk or tracker.");
         }
@@ -336,12 +353,27 @@ fn main() {
         match result {
             Ok(summary) => {
                 println!("Reconciliation completed successfully:");
-                println!("  - Total specifications scanned: {}", summary.total_specs_scanned);
-                println!("  - Frontmatter issue IDs updated: {}", summary.frontmatters_updated);
-                println!("  - Checklist items reconciled:   {}", summary.checklists_updated);
-                println!("  - Placeholder blocks purged:     {}", summary.placeholders_purged);
+                println!(
+                    "  - Total specifications scanned: {}",
+                    summary.total_specs_scanned
+                );
+                println!(
+                    "  - Frontmatter issue IDs updated: {}",
+                    summary.frontmatters_updated
+                );
+                println!(
+                    "  - Checklist items reconciled:   {}",
+                    summary.checklists_updated
+                );
+                println!(
+                    "  - Placeholder blocks purged:     {}",
+                    summary.placeholders_purged
+                );
                 if !options.offline {
-                    println!("  - Remote issues synced:          {}", summary.remote_issues_synced);
+                    println!(
+                        "  - Remote issues synced:          {}",
+                        summary.remote_issues_synced
+                    );
                 }
                 process::exit(0);
             }
@@ -371,5 +403,3 @@ mod tests {
         assert!(src.contains("/// Realises: [REQ-RECONCILE-BACKLOG-MAIN]"));
     }
 }
-
-

@@ -1449,11 +1449,20 @@ pub fn parse_rust_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
                             invariants: Vec::new(),
                             states: Vec::new(),
                         });
-                        if kind == SourceItemKind::Struct && code.contains('{') && !code.contains('}') {
+                        if kind == SourceItemKind::Struct
+                            && code.contains('{')
+                            && !code.contains('}')
+                        {
                             active_struct_idx = Some(item_idx);
-                        } else if kind == SourceItemKind::Enum && code.contains('{') && !code.contains('}') {
+                        } else if kind == SourceItemKind::Enum
+                            && code.contains('{')
+                            && !code.contains('}')
+                        {
                             active_enum_idx = Some(item_idx);
-                        } else if kind == SourceItemKind::Trait && code.contains('{') && !code.contains('}') {
+                        } else if kind == SourceItemKind::Trait
+                            && code.contains('{')
+                            && !code.contains('}')
+                        {
                             active_impl_owner = Some(name);
                         } else if kind.is_callable() {
                             active_fn_idx = Some(item_idx);
@@ -1488,11 +1497,12 @@ pub fn parse_rust_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
                         cfg_test_pending = false;
                         current_doc.clear();
                     } else {
-                        let actual_kind = if kind == SourceItemKind::Function && active_impl_owner.is_some() {
-                            SourceItemKind::Method
-                        } else {
-                            kind
-                        };
+                        let actual_kind =
+                            if kind == SourceItemKind::Function && active_impl_owner.is_some() {
+                                SourceItemKind::Method
+                            } else {
+                                kind
+                            };
                         let reqs = extract_realises_ids_from_doc_lines(&current_doc);
                         let (params, return_type) = if actual_kind.is_callable() {
                             parse_rust_callable_signature(code)
@@ -1916,10 +1926,8 @@ pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) 
                             ..Default::default()
                         });
                     }
-                    if let Some(owner_part) = pkg
-                        .part_defs
-                        .iter_mut()
-                        .find(|p| p.name == widget_clean)
+                    if let Some(owner_part) =
+                        pkg.part_defs.iter_mut().find(|p| p.name == widget_clean)
                     {
                         owner_part.attributes.extend(attributes.clone());
                         owner_part.ports.extend(ports.clone());
@@ -2062,7 +2070,11 @@ pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) 
                 }
                 if let Some(widget_part) = pkg.part_defs.iter_mut().find(|p| p.name == widget_clean)
                 {
-                    if !widget_part.actions.iter().any(|a| a.name == action_def.name) {
+                    if !widget_part
+                        .actions
+                        .iter()
+                        .any(|a| a.name == action_def.name)
+                    {
                         widget_part.actions.push(action_def);
                     }
                     for req in &item.satisfied_requirements {
@@ -2495,7 +2507,10 @@ pub fn summary_from_doc_lines(doc_lines: &[String]) -> Option<String> {
 /// Realises: [REQ-0605], [REQ-FEAT-42-PARSE-RUST-IMPL-HEADER]
 pub fn extract_rust_impl_header_prefix(code: &str) -> Option<&str> {
     let trimmed = code.trim();
-    let after_unsafe = trimmed.strip_prefix("unsafe ").unwrap_or(trimmed).trim_start();
+    let after_unsafe = trimmed
+        .strip_prefix("unsafe ")
+        .unwrap_or(trimmed)
+        .trim_start();
     let after_impl = after_unsafe.strip_prefix("impl")?;
     if !after_impl.is_empty()
         && !after_impl.starts_with('<')
@@ -2586,11 +2601,7 @@ pub fn parse_rust_impl_header(code: &str) -> Option<String> {
     let without_where = rest
         .split_once(" where ")
         .map(|(before, _)| before.trim())
-        .unwrap_or_else(|| {
-            rest.strip_suffix(" where")
-                .map(str::trim)
-                .unwrap_or(rest)
-        });
+        .unwrap_or_else(|| rest.strip_suffix(" where").map(str::trim).unwrap_or(rest));
 
     let mut angle_depth: usize = 0;
     let mut paren_depth: usize = 0;
@@ -2621,7 +2632,10 @@ pub fn parse_rust_impl_header(code: &str) -> Option<String> {
         Some(idx) => without_where.get(idx..).unwrap_or("").trim(),
         None => without_where,
     };
-    let target_clean = target_part.trim_start_matches('&').trim_start_matches("mut ").trim();
+    let target_clean = target_part
+        .trim_start_matches('&')
+        .trim_start_matches("mut ")
+        .trim();
     extract_leading_ast_ident(target_clean)
 }
 
@@ -2856,8 +2870,8 @@ pub fn parse_rust_callable_signature(sig: &str) -> (Vec<SourceParam>, Option<Str
                 .unwrap_or(pname_raw.trim())
                 .trim_start_matches('&')
                 .trim();
-            let pname = extract_leading_ast_ident(clean_pname)
-                .unwrap_or_else(|| "param".to_string());
+            let pname =
+                extract_leading_ast_ident(clean_pname).unwrap_or_else(|| "param".to_string());
             let ptype = ptype_raw.trim().to_string();
             if !ptype.is_empty() {
                 params.push(SourceParam {
@@ -2920,9 +2934,7 @@ pub fn parse_rust_callable_signature(sig: &str) -> (Vec<SourceParam>, Option<Str
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-CLASSIFY-DART-TOP-AST]
-pub fn classify_dart_top_level_ast(
-    code: &str,
-) -> Option<(SourceItemKind, String, Option<String>)> {
+pub fn classify_dart_top_level_ast(code: &str) -> Option<(SourceItemKind, String, Option<String>)> {
     if code.starts_with("import ")
         || code.starts_with("export ")
         || code.starts_with("part ")
@@ -3040,10 +3052,7 @@ pub fn classify_dart_member_ast(code: &str, class_name: &str) -> Option<(SourceI
         let trimmed_after = after_factory.trim_start();
         if let Some((cls, rest)) = trimmed_after.split_once('.') {
             if let Some(named) = extract_leading_ast_ident(rest) {
-                return Some((
-                    SourceItemKind::Constructor,
-                    format!("{}.{}", cls, named),
-                ));
+                return Some((SourceItemKind::Constructor, format!("{}.{}", cls, named)));
             }
         }
         let cname = extract_leading_ast_ident(trimmed_after)?;
@@ -4034,12 +4043,15 @@ pub fn normalize_type_for_sysml(raw_type: &str) -> String {
         }
     }
 
-    let base = s.split_once('<').map(|(outer, _)| outer.trim()).unwrap_or(s.trim());
+    let base = s
+        .split_once('<')
+        .map(|(outer, _)| outer.trim())
+        .unwrap_or(s.trim());
     let last_segment = base.rsplit_once("::").map(|(_, last)| last).unwrap_or(base);
     let ident = sanitize_sysml_identifier(last_segment, "String");
     match ident.as_str() {
-        "u8" | "u16" | "u32" | "u64" | "u128" | "usize" | "i8" | "i16" | "i32" | "i64"
-        | "i128" | "isize" | "int" => "Integer".to_string(),
+        "u8" | "u16" | "u32" | "u64" | "u128" | "usize" | "i8" | "i16" | "i32" | "i64" | "i128"
+        | "isize" | "int" => "Integer".to_string(),
         "f32" | "f64" | "double" | "num" => "Real".to_string(),
         "bool" => "Boolean".to_string(),
         "str" | "String" | "char" | "Path" | "PathBuf" => "String".to_string(),
@@ -4402,7 +4414,10 @@ pub fn extract_dart_callable_ident(code: &str) -> Option<String> {
             }
         }
         if let Some(idx) = cut_byte_idx {
-            trimmed_before.get(..idx).unwrap_or(trimmed_before).trim_end()
+            trimmed_before
+                .get(..idx)
+                .unwrap_or(trimmed_before)
+                .trim_end()
         } else {
             trimmed_before
         }
@@ -4434,7 +4449,6 @@ pub fn extract_dart_callable_ident(code: &str) -> Option<String> {
     }
     Some(ident)
 }
-
 
 /// Determines the byte length of a single-character literal at the start of `slice`.
 ///
@@ -4503,18 +4517,25 @@ pub fn single_char_literal_byte_len(slice: &str) -> Option<usize> {
             }
         } else if first == 'u' {
             if let Some(close_brace) = after_backslash.find('}') {
-                if after_backslash.get(close_brace.saturating_add(1)..close_brace.saturating_add(2)) == Some("'") {
+                if after_backslash.get(close_brace.saturating_add(1)..close_brace.saturating_add(2))
+                    == Some("'")
+                {
                     return Some(close_brace.saturating_add(4));
                 }
             }
-        } else if after_backslash.get(first.len_utf8()..first.len_utf8().saturating_add(1)) == Some("'") {
+        } else if after_backslash.get(first.len_utf8()..first.len_utf8().saturating_add(1))
+            == Some("'")
+        {
             return Some(first.len_utf8().saturating_add(3));
         }
         None
     } else {
         let mut chars = rest.chars();
         let ch = chars.next()?;
-        if ch != '\'' && ch != '\\' && rest.get(ch.len_utf8()..ch.len_utf8().saturating_add(1)) == Some("'") {
+        if ch != '\''
+            && ch != '\\'
+            && rest.get(ch.len_utf8()..ch.len_utf8().saturating_add(1)) == Some("'")
+        {
             Some(ch.len_utf8().saturating_add(2))
         } else {
             None
@@ -5383,7 +5404,12 @@ fn is_rust_lifetime_at(bytes: &[u8], idx: usize) -> bool {
     }
 
     let mut prev = idx;
-    while prev > 0 && bytes.get(prev.saturating_sub(1)).map(|b| b.is_ascii_whitespace()).unwrap_or(false) {
+    while prev > 0
+        && bytes
+            .get(prev.saturating_sub(1))
+            .map(|b| b.is_ascii_whitespace())
+            .unwrap_or(false)
+    {
         prev = prev.saturating_sub(1);
     }
     let prev_byte = if prev > 0 {
@@ -6117,9 +6143,11 @@ impl ComponentBuffer {
                 buf.attributes.len()
             ));
         }
-        if !buf.actions.iter().any(|a| {
-            a.name == "push_item" && a.in_params.len() == 1 && a.out_params.len() == 1
-        }) {
+        if !buf
+            .actions
+            .iter()
+            .any(|a| a.name == "push_item" && a.in_params.len() == 1 && a.out_params.len() == 1)
+        {
             return Err("Missing expected 'push_item' action on ComponentBuffer".to_string());
         }
         if buf.constraints.is_empty() {
@@ -6129,7 +6157,9 @@ impl ComponentBuffer {
             .satisfied_requirements
             .contains(&"REQ-BUF-01".to_string())
         {
-            return Err("Missing 'REQ-BUF-01' satisfied requirement on ComponentBuffer".to_string());
+            return Err(
+                "Missing 'REQ-BUF-01' satisfied requirement on ComponentBuffer".to_string(),
+            );
         }
         Ok(())
     }
@@ -6475,7 +6505,8 @@ pub fn after_dollar_brace() -> bool {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SOURCE-AST-SCAN-RUST-LINE-LEX-STATE], [REQ-SOURCE-AST-RUST-SCANNER-STATE]
     #[test]
-    fn test_scan_rust_line_preserving_lex_state_char_literals_and_lifetimes() -> Result<(), String> {
+    fn test_scan_rust_line_preserving_lex_state_char_literals_and_lifetimes() -> Result<(), String>
+    {
         let mut state = RustStringScannerState::Normal;
         let line = "pub fn pick<'lifetime_alpha, 'lifetime_beta>(x: &'lifetime_alpha str, c: char) -> bool where 'lifetime_alpha: 'lifetime_beta { c == '{' || c == '\\'' || c == '\\u{1F600}' }";
         let sanitized = scan_rust_line_preserving_lex_state(line, &mut state);
@@ -6483,10 +6514,14 @@ pub fn after_dollar_brace() -> bool {
             return Err(format!("Expected Normal scanner state, got {state:?}"));
         }
         if !sanitized.contains("pub fn pick<'lifetime_alpha, 'lifetime_beta>") {
-            return Err(format!("Missing lifetime signature in sanitized line: {sanitized}"));
+            return Err(format!(
+                "Missing lifetime signature in sanitized line: {sanitized}"
+            ));
         }
         if sanitized.contains("'{'") || sanitized.contains("1F600") {
-            return Err(format!("Character literals were not blanked in sanitized line: {sanitized}"));
+            return Err(format!(
+                "Character literals were not blanked in sanitized line: {sanitized}"
+            ));
         }
 
         let rust_src = r###"/* multiline comment start
@@ -6563,7 +6598,9 @@ impl ComponentAlpha {
             .ok_or_else(|| "Missing process_signal method AST item".to_string())?
             .clone();
         let extracted: ExtractedMethodSignature = extract_method_signature(&method_item)
-            .ok_or_else(|| "Expected Some(ExtractedMethodSignature) for process_signal".to_string())?;
+            .ok_or_else(|| {
+                "Expected Some(ExtractedMethodSignature) for process_signal".to_string()
+            })?;
         if extracted.0 != vec![("input_val".to_string(), "Integer".to_string())] {
             return Err(format!("Unexpected in_params: {:?}", extracted.0));
         }
@@ -6579,8 +6616,9 @@ impl ComponentAlpha {
         top_fn_item.name = "reset_global".to_string();
         top_fn_item.owner_name = None;
         top_fn_item.return_type = Some("()".to_string());
-        let top_extracted = extract_method_signature(&top_fn_item)
-            .ok_or_else(|| "Expected Some(ExtractedMethodSignature) for top-level Function".to_string())?;
+        let top_extracted = extract_method_signature(&top_fn_item).ok_or_else(|| {
+            "Expected Some(ExtractedMethodSignature) for top-level Function".to_string()
+        })?;
         if !top_extracted.1.is_empty() || top_extracted.2.is_some() {
             return Err(format!(
                 "Expected empty out_params and None ret_type for unit Function, got {top_extracted:?}"
@@ -6609,7 +6647,9 @@ impl ComponentAlpha {
             .get("TopLevel")
             .ok_or_else(|| "Missing TopLevel entry in ComponentMethodTable".to_string())?;
         if top_methods.len() != 1 || top_methods.first() != Some(&top_extracted) {
-            return Err(format!("Unexpected TopLevel methods entry: {top_methods:?}"));
+            return Err(format!(
+                "Unexpected TopLevel methods entry: {top_methods:?}"
+            ));
         }
 
         let methods = table
@@ -6619,7 +6659,9 @@ impl ComponentAlpha {
             || methods.first() != Some(&extracted)
             || methods.get(1) != Some(&ctor_extracted)
         {
-            return Err(format!("Unexpected ComponentAlpha methods entry: {methods:?}"));
+            return Err(format!(
+                "Unexpected ComponentAlpha methods entry: {methods:?}"
+            ));
         }
 
         let pkg = lower_source_ast_to_package(&items, "PkgAlpha");
@@ -6664,7 +6706,8 @@ impl ComponentAlpha {
     /// Realises: [REQ-FEAT-42-DISCOVER-SOURCE-FILES]
     #[test]
     fn test_discover_source_files_excludes_hidden_caches_and_target() -> Result<(), String> {
-        let temp_dir = std::env::temp_dir().join(format!(".deap_test_src_discover_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!(".deap_test_src_discover_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp_dir);
         let src_dir = temp_dir.join("src");
         let cargo_cache_dir = temp_dir.join(".cargo").join("registry").join("src");
@@ -6677,9 +6720,15 @@ impl ComponentAlpha {
 
         let valid_rs = src_dir.join("lib.rs");
         std::fs::write(&valid_rs, "pub struct ValidComponent;\n").map_err(|e| e.to_string())?;
-        std::fs::write(cargo_cache_dir.join("cached.rs"), "pub struct CachedDep;\n").map_err(|e| e.to_string())?;
-        std::fs::write(target_dir.join("build_gen.rs"), "pub struct BuildGen;\n").map_err(|e| e.to_string())?;
-        std::fs::write(tests_dir.join("integration.rs"), "pub struct IntegrationFixture;\n").map_err(|e| e.to_string())?;
+        std::fs::write(cargo_cache_dir.join("cached.rs"), "pub struct CachedDep;\n")
+            .map_err(|e| e.to_string())?;
+        std::fs::write(target_dir.join("build_gen.rs"), "pub struct BuildGen;\n")
+            .map_err(|e| e.to_string())?;
+        std::fs::write(
+            tests_dir.join("integration.rs"),
+            "pub struct IntegrationFixture;\n",
+        )
+        .map_err(|e| e.to_string())?;
 
         let discovered = discover_source_files(&temp_dir, SourceLanguage::Rust);
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -6779,15 +6828,44 @@ impl ComponentAlpha {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-FEAT-42-CLASSIFY-RUST-ITEM-AST]
     #[test]
-    fn test_issue_556_classify_rust_item_line_ast_extracts_unsafe_and_extern_items() -> Result<(), String> {
+    fn test_issue_556_classify_rust_item_line_ast_extracts_unsafe_and_extern_items(
+    ) -> Result<(), String> {
         let cases = [
-            ("pub unsafe trait Sendable {", SourceItemKind::Trait, "Sendable"),
-            ("unsafe trait RawMarker {", SourceItemKind::Trait, "RawMarker"),
-            ("pub unsafe fn raw_ptr_read() {", SourceItemKind::Function, "raw_ptr_read"),
-            ("unsafe fn internal_unchecked() {", SourceItemKind::Function, "internal_unchecked"),
-            ("pub const unsafe fn const_unchecked() {", SourceItemKind::Function, "const_unchecked"),
-            ("pub async unsafe fn async_unchecked() {", SourceItemKind::Function, "async_unchecked"),
-            ("pub extern \"C\" fn c_abi_entry() {", SourceItemKind::Function, "c_abi_entry"),
+            (
+                "pub unsafe trait Sendable {",
+                SourceItemKind::Trait,
+                "Sendable",
+            ),
+            (
+                "unsafe trait RawMarker {",
+                SourceItemKind::Trait,
+                "RawMarker",
+            ),
+            (
+                "pub unsafe fn raw_ptr_read() {",
+                SourceItemKind::Function,
+                "raw_ptr_read",
+            ),
+            (
+                "unsafe fn internal_unchecked() {",
+                SourceItemKind::Function,
+                "internal_unchecked",
+            ),
+            (
+                "pub const unsafe fn const_unchecked() {",
+                SourceItemKind::Function,
+                "const_unchecked",
+            ),
+            (
+                "pub async unsafe fn async_unchecked() {",
+                SourceItemKind::Function,
+                "async_unchecked",
+            ),
+            (
+                "pub extern \"C\" fn c_abi_entry() {",
+                SourceItemKind::Function,
+                "c_abi_entry",
+            ),
             (
                 "pub unsafe extern \"C\" fn unsafe_c_abi_entry() {",
                 SourceItemKind::Function,
@@ -6798,7 +6876,11 @@ impl ComponentAlpha {
                 SourceItemKind::Function,
                 "const_unsafe_c_fn",
             ),
-            ("extern fn default_abi_fn() {", SourceItemKind::Function, "default_abi_fn"),
+            (
+                "extern fn default_abi_fn() {",
+                SourceItemKind::Function,
+                "default_abi_fn",
+            ),
         ];
 
         for (line, expected_kind, expected_name) in cases {
@@ -6834,9 +6916,7 @@ impl ComponentAlpha {
             (SourceItemKind::Function, "ffi_dispatch_irq"),
         ];
         if summary != expected_summary {
-            return Err(format!(
-                "Expected {expected_summary:?}, got {summary:?}"
-            ));
+            return Err(format!("Expected {expected_summary:?}, got {summary:?}"));
         }
         Ok(())
     }
@@ -6869,7 +6949,8 @@ impl ComponentAlpha {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-FEAT-42-LOWER-AST-TO-PACKAGE]
     #[test]
-    fn test_issue_557_dart_state_methods_and_asserts_lowered_onto_owning_widget_part_def() -> Result<(), String> {
+    fn test_issue_557_dart_state_methods_and_asserts_lowered_onto_owning_widget_part_def(
+    ) -> Result<(), String> {
         let src = concat!(
             "class _TelemetryPanelState extends State<TelemetryPanel> {\n",
             "  int refreshHz = 60;\n",
@@ -7170,11 +7251,7 @@ impl ComponentAlpha {
                 top_params
             ));
         }
-        if !top_fn
-            .invariants
-            .iter()
-            .any(|inv| inv == "speedMps >= 0.0")
-        {
+        if !top_fn.invariants.iter().any(|inv| inv == "speedMps >= 0.0") {
             return Err(format!(
                 "Expected validateEnvelope.invariants to contain 'speedMps >= 0.0', got {:?}",
                 top_fn.invariants
@@ -7242,7 +7319,8 @@ impl ComponentAlpha {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-FEAT-42-NORMALIZE-TYPE-SYSML], [REQ-FEAT-42-PARSE-DART-CALLABLE-SIG], [REQ-FEAT-42-LOWER-AST-TO-PACKAGE]
     #[test]
-    fn test_issue_518_generic_unwrapping_dart_field_params_and_module_fallback() -> Result<(), String> {
+    fn test_issue_518_generic_unwrapping_dart_field_params_and_module_fallback(
+    ) -> Result<(), String> {
         for (raw, expected) in [
             ("Option<u32>", "Integer"),
             ("Result<f64, String>", "Real"),
@@ -7256,23 +7334,44 @@ impl ComponentAlpha {
         ] {
             let actual = normalize_type_for_sysml(raw);
             if actual != expected {
-                return Err(format!("normalize_type_for_sysml({raw:?}) = {actual:?}, expected {expected:?}"));
+                return Err(format!(
+                    "normalize_type_for_sysml({raw:?}) = {actual:?}, expected {expected:?}"
+                ));
             }
         }
-        let fn_only = parse_rust_source_ast("pub fn compute_metric(x: Option<i64>) -> Result<f64, String> { Ok(1.0) }\n", "mod.rs")?;
+        let fn_only = parse_rust_source_ast(
+            "pub fn compute_metric(x: Option<i64>) -> Result<f64, String> { Ok(1.0) }\n",
+            "mod.rs",
+        )?;
         let fn_pkg = lower_source_ast_to_package(&fn_only, "SignalPkg");
         if fn_pkg.part_defs.first().map(|p| p.name.as_str()) != Some("SignalPkgModule") {
-            return Err(format!("Expected fallback PartDef 'SignalPkgModule', got {:?}", fn_pkg.part_defs));
+            return Err(format!(
+                "Expected fallback PartDef 'SignalPkgModule', got {:?}",
+                fn_pkg.part_defs
+            ));
         }
         let dart_src = concat!(
             "class BaseNode {\n  final int nodeId;\n  const BaseNode({required this.nodeId});\n}\n",
             "class ChildNode extends BaseNode {\n  final double scaleFactor;\n  final maxRetries = 3;\n  var isReady = true;\n",
             "  const ChildNode({required super.nodeId, super.untypedToken, required this.scaleFactor, this.maxRetries = 3, this.isReady = true, int this.extraCode = 0});\n}\n",
         );
-        let dart_pkg = lower_source_ast_to_package(&parse_dart_source_ast(dart_src, "nodes.dart")?, "NodePkg");
-        let child = dart_pkg.part_defs.iter().find(|p| p.name == "ChildNode").ok_or("Missing ChildNode")?;
-        let ctor = child.actions.iter().find(|a| a.name == "ChildNode").ok_or("Missing ChildNode ctor")?;
-        let got: Vec<(&str, &str)> = ctor.in_params.iter().map(|p| (p.name.as_str(), p.type_name.as_str())).collect();
+        let dart_pkg =
+            lower_source_ast_to_package(&parse_dart_source_ast(dart_src, "nodes.dart")?, "NodePkg");
+        let child = dart_pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "ChildNode")
+            .ok_or("Missing ChildNode")?;
+        let ctor = child
+            .actions
+            .iter()
+            .find(|a| a.name == "ChildNode")
+            .ok_or("Missing ChildNode ctor")?;
+        let got: Vec<(&str, &str)> = ctor
+            .in_params
+            .iter()
+            .map(|p| (p.name.as_str(), p.type_name.as_str()))
+            .collect();
         let expected_params = vec![
             ("nodeId", "Integer"),
             ("untypedToken", "String"),
@@ -7282,7 +7381,9 @@ impl ComponentAlpha {
             ("extraCode", "Integer"),
         ];
         if got != expected_params {
-            return Err(format!("Expected ChildNode ctor params {expected_params:?}, got {got:?}"));
+            return Err(format!(
+                "Expected ChildNode ctor params {expected_params:?}, got {got:?}"
+            ));
         }
         Ok(())
     }
@@ -7334,7 +7435,9 @@ impl ComponentAlpha {
             || scoped.cfg_test_pending
             || scoped.dart_annotation_paren_depth != 0
         {
-            return Err(format!("Unexpected default ScopedItemScannerState: {scoped:?}"));
+            return Err(format!(
+                "Unexpected default ScopedItemScannerState: {scoped:?}"
+            ));
         }
 
         let mut rust_state = RustDartLexState {
@@ -7349,7 +7452,9 @@ impl ComponentAlpha {
             || rust_state.raw_hash_count.is_some()
             || rust_state.active_string.is_some()
         {
-            return Err(format!("Expected clean RustDartLexState, got {rust_state:?}"));
+            return Err(format!(
+                "Expected clean RustDartLexState, got {rust_state:?}"
+            ));
         }
         if !scanned_rust.contains("pub fn check<'lifetime_a>") || scanned_rust.contains("comment") {
             return Err(format!("Unexpected scanned_rust output: {scanned_rust:?}"));
@@ -7372,16 +7477,20 @@ impl ComponentAlpha {
             return Err(format!("Unexpected scanned_dart output: {scanned_dart:?}"));
         }
 
-        let impl_code = "impl<T: Clone> TraitBound for TargetComponent<T> where T: Send { fn run(&self) {} }";
-        let prefix = extract_rust_impl_header_prefix(impl_code)
-            .ok_or_else(|| "Expected Some(prefix) from extract_rust_impl_header_prefix".to_string())?;
+        let impl_code =
+            "impl<T: Clone> TraitBound for TargetComponent<T> where T: Send { fn run(&self) {} }";
+        let prefix = extract_rust_impl_header_prefix(impl_code).ok_or_else(|| {
+            "Expected Some(prefix) from extract_rust_impl_header_prefix".to_string()
+        })?;
         if !prefix.starts_with("impl<T: Clone>") || !prefix.ends_with("where T: Send") {
             return Err(format!("Unexpected impl header prefix: {prefix:?}"));
         }
         let target = parse_rust_impl_header(impl_code)
             .ok_or_else(|| "Expected Some(target) from parse_rust_impl_header".to_string())?;
         if target != "TargetComponent" {
-            return Err(format!("Expected TargetComponent from parse_rust_impl_header, got {target:?}"));
+            return Err(format!(
+                "Expected TargetComponent from parse_rust_impl_header, got {target:?}"
+            ));
         }
 
         let interp_line = "final u = \"url: ${map[\"http://\"]}\"; // comment";

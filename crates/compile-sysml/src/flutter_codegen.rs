@@ -31,6 +31,6 @@ pub use crate::modular_codegen::emitters::flutter::{
     emit_modular_flutter_contracts, escape_dart_single_quoted, extract_bounds_from_doc,
     format_display_name, generate_domain_seed_dart, generate_schema_models_dart,
     generate_solver_bridge_dart, generate_ui_contract_test_dart, parse_topology_json,
-    split_ident_into_words, to_camel_case, to_pascal_case, to_snake_case_dart,
-    FlutterCodegenError, FlutterContractOptions, FlutterContractReport, TopologyNode,
+    split_ident_into_words, to_camel_case, to_pascal_case, to_snake_case_dart, FlutterCodegenError,
+    FlutterContractOptions, FlutterContractReport, TopologyNode,
 };

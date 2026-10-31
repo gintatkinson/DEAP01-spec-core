@@ -13,16 +13,34 @@
 //! Propagates typed `Result` errors or assertion failures without `.unwrap()` or `.expect()`.
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-0607] -- Self-hosting modular codegen contract verification suite.
-use compile_sysml::{cli::Cli, driver, flutter_codegen::{
-    compute_schema_hash, emit_dart_solver_bridge, emit_flutter_contracts, escape_dart_single_quoted, extract_bounds_from_doc,
-    format_display_name, generate_domain_seed_dart, generate_schema_models_dart, generate_solver_bridge_dart, generate_ui_contract_test_dart,
-    parse_topology_json, split_ident_into_words, to_camel_case, to_pascal_case, FlutterCodegenError, FlutterContractOptions, FlutterContractReport, TopologyNode,
-}, modular_codegen::{
-    domain::{GeneratedTreeManifest, LayerRole, ModularityBounds, ModularityErrorCode},
-    emitters::rust_emitter::compute_directory_tree_manifest, lowering::estimate_rust_fn_cyclomatic_complexity,
-    generated::{domain::modularity_bounds_spec::model::ModularityBoundsSpec, lowering::modular_codegen_lifecycle::ModularCodegenLifecycleState},
-}};
-use std::{any::{type_name as tn, type_name_of_val as tv}, error::Error, fs, path::{Path, PathBuf}, sync::atomic::{AtomicU64, Ordering}};
+use compile_sysml::{
+    cli::Cli,
+    driver,
+    flutter_codegen::{
+        compute_schema_hash, emit_dart_solver_bridge, emit_flutter_contracts,
+        escape_dart_single_quoted, extract_bounds_from_doc, format_display_name,
+        generate_domain_seed_dart, generate_schema_models_dart, generate_solver_bridge_dart,
+        generate_ui_contract_test_dart, parse_topology_json, split_ident_into_words, to_camel_case,
+        to_pascal_case, FlutterCodegenError, FlutterContractOptions, FlutterContractReport,
+        TopologyNode,
+    },
+    modular_codegen::{
+        domain::{GeneratedTreeManifest, LayerRole, ModularityBounds, ModularityErrorCode},
+        emitters::rust_emitter::compute_directory_tree_manifest,
+        generated::{
+            domain::modularity_bounds_spec::model::ModularityBoundsSpec,
+            lowering::modular_codegen_lifecycle::ModularCodegenLifecycleState,
+        },
+        lowering::estimate_rust_fn_cyclomatic_complexity,
+    },
+};
+use std::{
+    any::{type_name as tn, type_name_of_val as tv},
+    error::Error,
+    fs,
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
+};
 type TestResult = Result<(), Box<dyn Error>>;
 static COUNTER: AtomicU64 = AtomicU64::new(1);
 /// RAII temporary directory guard ensuring deterministic fixture cleanup on scope exit.
@@ -40,7 +58,9 @@ static COUNTER: AtomicU64 = AtomicU64::new(1);
 /// Unwinds cleanly on early `?` returns or assertion failures without leaking temporary trees.
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0607] -- RAII temporary directory fixture isolation.
-struct ScopedTempDir { path: PathBuf }
+struct ScopedTempDir {
+    path: PathBuf,
+}
 impl ScopedTempDir {
     /// Allocates and creates a unique temporary directory under the host OS temp root.
     /// ## 1. Safety Intent & Regulatory Scope
@@ -59,7 +79,8 @@ impl ScopedTempDir {
     /// Realises: [REQ-0607] -- Collision-free temporary test workspace allocation.
     fn new(prefix: &str) -> Result<Self, Box<dyn Error>> {
         let id = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let path = std::env::temp_dir().join(format!("deap_sh_{prefix}_{}_{id}", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("deap_sh_{prefix}_{}_{id}", std::process::id()));
         fs::create_dir_all(&path)?;
         Ok(Self { path })
     }
@@ -133,10 +154,21 @@ fn test_e0702_directed_cycle_fails_closed_with_zero_files_written() -> TestResul
     let tmp = ScopedTempDir::new("e0702")?;
     let (schema, out_dir) = (tmp.path.join("cycle.sysml"), tmp.path.join("out"));
     fs::write(&schema, "package CyclePkg { part def NodeA { @Layer(\"Domain\"); part b_ref : NodeB; } part def NodeB { @Layer(\"Domain\"); part a_ref : NodeA; } }")?;
-    let cli = Cli::try_parse_from(["compile-sysml", "--emit-modular-rust", out_dir.to_str().ok_or("u8")?, "--schema", schema.to_str().ok_or("u8")?])?;
-    let (code, msg) = driver::execute(cli).err().ok_or("expected E0702 cycle failure")?;
+    let cli = Cli::try_parse_from([
+        "compile-sysml",
+        "--emit-modular-rust",
+        out_dir.to_str().ok_or("u8")?,
+        "--schema",
+        schema.to_str().ok_or("u8")?,
+    ])?;
+    let (code, msg) = driver::execute(cli)
+        .err()
+        .ok_or("expected E0702 cycle failure")?;
     assert_eq!(code, 1);
-    assert!(msg.contains("E0702") && !out_dir.exists(), "unexpected E0702 result: {msg}");
+    assert!(
+        msg.contains("E0702") && !out_dir.exists(),
+        "unexpected E0702 result: {msg}"
+    );
     Ok(())
 }
 /// Verifies upward `@Layer` imports (`Domain -> Presentation`) fail closed with `E0703`.
@@ -156,14 +188,27 @@ fn test_e0702_directed_cycle_fails_closed_with_zero_files_written() -> TestResul
 /// Realises: [REQ-0607] -- Negative mutation probe for `E0703` upward layer dependency gate.
 #[test]
 fn test_e0703_upward_layer_import_domain_to_presentation_fails_closed() -> TestResult {
-    assert!(LayerRole::Domain != LayerRole::Application && LayerRole::Domain != LayerRole::Presentation);
+    assert!(
+        LayerRole::Domain != LayerRole::Application && LayerRole::Domain != LayerRole::Presentation
+    );
     let tmp = ScopedTempDir::new("e0703")?;
     let (schema, out_dir) = (tmp.path.join("layer.sysml"), tmp.path.join("out"));
     fs::write(&schema, "package LayerViolationPkg { part def CoreEntity { @Layer(\"Domain\"); part ui_ref : PresentationView; } part def PresentationView { @Layer(\"Presentation\"); attribute label : String = \"view\"; } }")?;
-    let cli = Cli::try_parse_from(["compile-sysml", "--emit-modular-rust", out_dir.to_str().ok_or("u8")?, "--schema", schema.to_str().ok_or("u8")?])?;
-    let (code, msg) = driver::execute(cli).err().ok_or("expected E0703 upward layer failure")?;
+    let cli = Cli::try_parse_from([
+        "compile-sysml",
+        "--emit-modular-rust",
+        out_dir.to_str().ok_or("u8")?,
+        "--schema",
+        schema.to_str().ok_or("u8")?,
+    ])?;
+    let (code, msg) = driver::execute(cli)
+        .err()
+        .ok_or("expected E0703 upward layer failure")?;
     assert_eq!(code, 1);
-    assert!(msg.contains("E0703") && !out_dir.exists(), "unexpected E0703 result: {msg}");
+    assert!(
+        msg.contains("E0703") && !out_dir.exists(),
+        "unexpected E0703 result: {msg}"
+    );
     Ok(())
 }
 /// Verifies `GeneratedTreeManifest::verify_fixed_point` rejects tampered SHA-256 digests with `E0705`.
@@ -184,16 +229,32 @@ fn test_e0703_upward_layer_import_domain_to_presentation_fails_closed() -> TestR
 #[test]
 fn test_e0705_fixed_point_drift_detection_fails_closed() -> TestResult {
     let tmp = ScopedTempDir::new("e0705")?;
-    let (schema, dir_a, dir_b) = (tmp.path.join("v.sysml"), tmp.path.join("a"), tmp.path.join("b"));
-    fs::write(&schema, "package DriftPkg { part def UnitNode { @Layer(\"Domain\"); attribute v : Integer = 1; } }")?;
+    let (schema, dir_a, dir_b) = (
+        tmp.path.join("v.sysml"),
+        tmp.path.join("a"),
+        tmp.path.join("b"),
+    );
+    fs::write(
+        &schema,
+        "package DriftPkg { part def UnitNode { @Layer(\"Domain\"); attribute v : Integer = 1; } }",
+    )?;
     for target in [&dir_a, &dir_b] {
-        let cli = Cli::try_parse_from(["compile-sysml", "--emit-modular-rust", target.to_str().ok_or("u8")?, "--schema", schema.to_str().ok_or("u8")?])?;
+        let cli = Cli::try_parse_from([
+            "compile-sysml",
+            "--emit-modular-rust",
+            target.to_str().ok_or("u8")?,
+            "--schema",
+            schema.to_str().ok_or("u8")?,
+        ])?;
         assert_eq!(driver::execute(cli).map_err(|(_, e)| e)?, 0);
     }
     let manifest_a: GeneratedTreeManifest = compute_directory_tree_manifest(&dir_a)?;
     let mut manifest_b = compute_directory_tree_manifest(&dir_b)?;
     manifest_b.tree_sha256 = "0000".to_string();
-    let diag = manifest_a.verify_fixed_point(&manifest_b).err().ok_or("expected E0705 drift")?;
+    let diag = manifest_a
+        .verify_fixed_point(&manifest_b)
+        .err()
+        .ok_or("expected E0705 drift")?;
     assert!(diag.code == ModularityErrorCode::FixedPointDriftE0705 && diag.code.code() == "E0705");
     Ok(())
 }
@@ -217,7 +278,14 @@ fn test_emit_modular_rust_dry_run_writes_zero_files() -> TestResult {
     let tmp = ScopedTempDir::new("dry_run")?;
     let (schema, out_dir) = (tmp.path.join("dry.sysml"), tmp.path.join("out"));
     fs::write(&schema, "package DryPkg { part def DryNode { @Layer(\"Domain\"); attribute ok : Boolean = true; } }")?;
-    let cli = Cli::try_parse_from(["compile-sysml", "--emit-modular-rust", out_dir.to_str().ok_or("u8")?, "--schema", schema.to_str().ok_or("u8")?, "--dry-run"])?;
+    let cli = Cli::try_parse_from([
+        "compile-sysml",
+        "--emit-modular-rust",
+        out_dir.to_str().ok_or("u8")?,
+        "--schema",
+        schema.to_str().ok_or("u8")?,
+        "--dry-run",
+    ])?;
     assert_eq!(driver::execute(cli).map_err(|(_, e)| e)?, 0);
     assert!(!out_dir.exists(), "--dry-run must write zero files");
     Ok(())
@@ -241,13 +309,24 @@ fn test_emit_modular_rust_dry_run_writes_zero_files() -> TestResult {
 fn test_four_level_lowering_arbitrary_scale_schema_obeys_all_bounds() -> TestResult {
     let tmp = ScopedTempDir::new("scale")?;
     let (schema, out_dir) = (tmp.path.join("scale.sysml"), tmp.path.join("out"));
-    let attrs: String = (1..=25).map(|k| format!("attribute x_{k:02} : Integer = 1; ")).collect();
-    let params = (1..=25).map(|k| format!("in x_{k:02} : Integer")).collect::<Vec<_>>().join(", ");
-    let prefix: String = (1..=12).map(|k| format!("x_{:02} >= 0 and x_{:02} >= 0 or ", 2 * k - 1, 2 * k)).collect();
+    let attrs: String = (1..=25)
+        .map(|k| format!("attribute x_{k:02} : Integer = 1; "))
+        .collect();
+    let params = (1..=25)
+        .map(|k| format!("in x_{k:02} : Integer"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let prefix: String = (1..=12)
+        .map(|k| format!("x_{:02} >= 0 and x_{:02} >= 0 or ", 2 * k - 1, 2 * k))
+        .collect();
     let steps: String = (1..=40).map(|k| format!("step s_{k:02}; ")).collect();
     let states: String = (1..=14).map(|k| format!("state S{k:02}; ")).collect();
-    let act_tx: String = (1..=12).map(|k| format!("transition T_a_{k:02} first Active accept ev_a_{k:02} then S{k:02}; ")).collect();
-    let ret_tx: String = (1..=10).map(|k| format!("transition T_r_{k:02} first S{k:02} accept ev_r_{k:02} then Active; ")).collect();
+    let act_tx: String = (1..=12)
+        .map(|k| format!("transition T_a_{k:02} first Active accept ev_a_{k:02} then S{k:02}; "))
+        .collect();
+    let ret_tx: String = (1..=10)
+        .map(|k| format!("transition T_r_{k:02} first S{k:02} accept ev_r_{k:02} then Active; "))
+        .collect();
     let sysml = format!(
         "package ScaleRoot {{ package core_domain {{ package sub_domain {{ part def SubLeafSpec {{ @Layer(\"Domain\"); attribute leaf_id : Integer = 1; }} }} part def BaseMetricSpec {{ @Layer(\"Domain\"); attribute limit_val : Integer = 10; part leaf_ref : SubLeafSpec; }} calc def ScaleMetricCalc(in raw_val : Integer) : Integer {{ raw_val + 1; }} }} \
          package app_lowering {{ port def ScaleInPort {{ attribute protocol_family : String = \"ScaleIn\"; flow in req_stream : String; }} port def ScaleOutPort {{ attribute protocol_family : String = \"ScaleOut\"; flow out resp_stream : String; }} \
@@ -258,20 +337,54 @@ fn test_four_level_lowering_arbitrary_scale_schema_obeys_all_bounds() -> TestRes
          package ui_emitters {{ port def ScaleViewPort {{ attribute protocol_family : String = \"ScaleView\"; flow out frame_stream : String; }} part def ScalePresenter {{ @Layer(\"Presentation\"); attribute ready : Boolean = true; part ctrl_ref : MultiFacetController; port out view_out : ScaleViewPort; }} }} }}"
     );
     fs::write(&schema, sysml)?;
-    let cli = Cli::try_parse_from(["compile-sysml", "--emit-modular-rust", out_dir.to_str().ok_or("u8")?, "--schema", schema.to_str().ok_or("u8")?])?;
+    let cli = Cli::try_parse_from([
+        "compile-sysml",
+        "--emit-modular-rust",
+        out_dir.to_str().ok_or("u8")?,
+        "--schema",
+        schema.to_str().ok_or("u8")?,
+    ])?;
     assert_eq!(driver::execute(cli).map_err(|(_, e)| e)?, 0);
-    for rel in ["core_domain/mod.rs", "core_domain/sub_domain/mod.rs", "app_lowering/mod.rs", "ui_emitters/mod.rs"] {
-        assert!(out_dir.join(rel).is_file(), "missing nested subpackage barrel: {rel}");
+    for rel in [
+        "core_domain/mod.rs",
+        "core_domain/sub_domain/mod.rs",
+        "app_lowering/mod.rs",
+        "ui_emitters/mod.rs",
+    ] {
+        assert!(
+            out_dir.join(rel).is_file(),
+            "missing nested subpackage barrel: {rel}"
+        );
     }
     let bounds = ModularityBounds::canonical();
-    assert!((2..=bounds.max_cyclomatic_complexity).contains(&estimate_rust_fn_cyclomatic_complexity("fn p(x: i64) -> i64 { if x > 0 { x } else { 0 } }")));
+    assert!((2..=bounds.max_cyclomatic_complexity).contains(
+        &estimate_rust_fn_cyclomatic_complexity(
+            "fn p(x: i64) -> i64 { if x > 0 { x } else { 0 } }"
+        )
+    ));
     let manifest = compute_directory_tree_manifest(&out_dir)?;
-    assert!(manifest.files.len() >= 10, "expected >= 10 files, got {}", manifest.files.len());
+    assert!(
+        manifest.files.len() >= 10,
+        "expected >= 10 files, got {}",
+        manifest.files.len()
+    );
     for file in &manifest.files {
-        assert!(file.line_count <= bounds.max_file_lines && file.item_count <= bounds.max_items_per_file, "size bound: {}", file.relative_path);
-        assert!(file.max_cyclomatic_complexity <= bounds.max_cyclomatic_complexity, "v(G) bound: {}", file.relative_path);
+        assert!(
+            file.line_count <= bounds.max_file_lines
+                && file.item_count <= bounds.max_items_per_file,
+            "size bound: {}",
+            file.relative_path
+        );
+        assert!(
+            file.max_cyclomatic_complexity <= bounds.max_cyclomatic_complexity,
+            "v(G) bound: {}",
+            file.relative_path
+        );
         let content = fs::read_to_string(out_dir.join(&file.relative_path))?;
-        assert!(content.contains("## 1. Safety Intent & Regulatory Scope") && content.contains("## 7. Realization & Traceability"));
+        assert!(
+            content.contains("## 1. Safety Intent & Regulatory Scope")
+                && content.contains("## 7. Realization & Traceability")
+        );
     }
     Ok(())
 }
@@ -295,13 +408,36 @@ fn test_modular_flutter_emission_decomposes_packages_and_barrels() -> TestResult
     let tmp = ScopedTempDir::new("flutter_mod")?;
     let (schema, app_dir) = (tmp.path.join("app.sysml"), tmp.path.join("app_flutter"));
     fs::write(&schema, "package ModularApp { package domain { part def AlphaNode { attribute count : Integer = 1; } } package presentation { port def AlphaSignalPort { flow out payload : String; } part def BetaPanel { attribute title : String = \"ok\"; port out sig : AlphaSignalPort; } } }")?;
-    let cli = Cli::try_parse_from(["compile-sysml", "--emit-flutter-contracts", app_dir.to_str().ok_or("u8")?, "--schema", schema.to_str().ok_or("u8")?])?;
+    let cli = Cli::try_parse_from([
+        "compile-sysml",
+        "--emit-flutter-contracts",
+        app_dir.to_str().ok_or("u8")?,
+        "--schema",
+        schema.to_str().ok_or("u8")?,
+    ])?;
     assert_eq!(driver::execute(cli).map_err(|(_, e)| e)?, 0);
-    for b in ["lib/src/models/generated_schema_models.g.dart", "lib/src/data/solver_bridge.g.dart", "lib/src/data/seeds/generated_domain_seed.g.dart", "test/schema_ui_contract_test.g.dart"] {
-        assert!(app_dir.join(b).is_file(), "missing top-level Dart barrel: {b}");
+    for b in [
+        "lib/src/models/generated_schema_models.g.dart",
+        "lib/src/data/solver_bridge.g.dart",
+        "lib/src/data/seeds/generated_domain_seed.g.dart",
+        "test/schema_ui_contract_test.g.dart",
+    ] {
+        assert!(
+            app_dir.join(b).is_file(),
+            "missing top-level Dart barrel: {b}"
+        );
     }
-    for d in ["lib/src/models/generated", "lib/src/data/generated/ffi", "lib/src/data/generated/dto", "lib/src/data/seeds/generated", "test/generated/support"] {
-        assert!(!collect_files_with_suffix(&app_dir.join(d), ".g.dart")?.is_empty(), "empty modular Dart dir: {d}");
+    for d in [
+        "lib/src/models/generated",
+        "lib/src/data/generated/ffi",
+        "lib/src/data/generated/dto",
+        "lib/src/data/seeds/generated",
+        "test/generated/support",
+    ] {
+        assert!(
+            !collect_files_with_suffix(&app_dir.join(d), ".g.dart")?.is_empty(),
+            "empty modular Dart dir: {d}"
+        );
     }
     Ok(())
 }
@@ -322,23 +458,54 @@ fn test_modular_flutter_emission_decomposes_packages_and_barrels() -> TestResult
 /// Realises: [REQ-0607] -- Monolith elimination and 18-symbol `flutter_codegen` facade contract.
 #[test]
 fn test_flutter_codegen_facade_under_100_lines_and_all_18_symbols_preserved() -> TestResult {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(|p| p.parent()).ok_or("missing root")?;
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .ok_or("missing root")?;
     let facade = fs::read_to_string(root.join("crates/compile-sysml/src/flutter_codegen.rs"))?;
-    assert!(facade.lines().count() < 100, "flutter_codegen.rs facade must be < 100 lines");
-    assert!(to_pascal_case("alpha_node") == "AlphaNode" && to_camel_case("AlphaNode") == "alphaNode");
+    assert!(
+        facade.lines().count() < 100,
+        "flutter_codegen.rs facade must be < 100 lines"
+    );
+    assert!(
+        to_pascal_case("alpha_node") == "AlphaNode" && to_camel_case("AlphaNode") == "alphaNode"
+    );
     assert!(escape_dart_single_quoted("a'b").contains("\\'"));
-    assert!(!split_ident_into_words("AlphaNode").is_empty() && !format_display_name("alpha_node").is_empty());
+    assert!(
+        !split_ident_into_words("AlphaNode").is_empty()
+            && !format_display_name("alpha_node").is_empty()
+    );
     let syms = [
-        tn::<FlutterCodegenError>(), tn::<FlutterContractOptions>(), tn::<FlutterContractReport>(), tn::<TopologyNode>(),
-        tv(&compute_schema_hash), tv(&extract_bounds_from_doc), tv(&parse_topology_json), tv(&generate_domain_seed_dart),
-        tv(&generate_schema_models_dart), tv(&generate_solver_bridge_dart), tv(&emit_dart_solver_bridge), tv(&generate_ui_contract_test_dart), tv(&emit_flutter_contracts),
+        tn::<FlutterCodegenError>(),
+        tn::<FlutterContractOptions>(),
+        tn::<FlutterContractReport>(),
+        tn::<TopologyNode>(),
+        tv(&compute_schema_hash),
+        tv(&extract_bounds_from_doc),
+        tv(&parse_topology_json),
+        tv(&generate_domain_seed_dart),
+        tv(&generate_schema_models_dart),
+        tv(&generate_solver_bridge_dart),
+        tv(&emit_dart_solver_bridge),
+        tv(&generate_ui_contract_test_dart),
+        tv(&emit_flutter_contracts),
     ];
     assert!(syms.iter().all(|name| !name.is_empty()));
-    let rs_files = collect_files_with_suffix(&root.join("crates/compile-sysml/src/modular_codegen"), ".rs")?;
-    assert!(!rs_files.is_empty(), "modular_codegen must contain decomposed .rs modules");
+    let rs_files = collect_files_with_suffix(
+        &root.join("crates/compile-sysml/src/modular_codegen"),
+        ".rs",
+    )?;
+    assert!(
+        !rs_files.is_empty(),
+        "modular_codegen must contain decomposed .rs modules"
+    );
     let max_lines = ModularityBounds::canonical().max_file_lines;
     for path in &rs_files {
-        assert!(fs::read_to_string(path)?.lines().count() <= max_lines, "{} exceeded {max_lines}", path.display());
+        assert!(
+            fs::read_to_string(path)?.lines().count() <= max_lines,
+            "{} exceeded {max_lines}",
+            path.display()
+        );
     }
     Ok(())
 }
@@ -359,17 +526,38 @@ fn test_flutter_codegen_facade_under_100_lines_and_all_18_symbols_preserved() ->
 /// Realises: [REQ-0607] -- Metacircular Stage-1 == Stage-2 SHA-256 fixed-point verification.
 #[test]
 fn test_metacircular_self_hosting_stage1_equals_stage2_sha256() -> TestResult {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(|p| p.parent()).ok_or("missing root")?;
-    let (schema, stage1_dir) = (root.join(".pipeline/upstream/schema/modular_codegen.sysml"), root.join("crates/compile-sysml/src/modular_codegen/generated"));
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .ok_or("missing root")?;
+    let (schema, stage1_dir) = (
+        root.join(".pipeline/upstream/schema/modular_codegen.sysml"),
+        root.join("crates/compile-sysml/src/modular_codegen/generated"),
+    );
     let tmp = ScopedTempDir::new("stage2")?;
     let stage2_dir = tmp.path.join("generated_stage2");
-    let cli = Cli::try_parse_from(["compile-sysml", "--emit-modular-rust", stage2_dir.to_str().ok_or("u8")?, "--schema", schema.to_str().ok_or("u8")?])?;
+    let cli = Cli::try_parse_from([
+        "compile-sysml",
+        "--emit-modular-rust",
+        stage2_dir.to_str().ok_or("u8")?,
+        "--schema",
+        schema.to_str().ok_or("u8")?,
+    ])?;
     assert_eq!(driver::execute(cli).map_err(|(_, e)| e)?, 0);
-    let (stage1, stage2) = (compute_directory_tree_manifest(&stage1_dir)?, compute_directory_tree_manifest(&stage2_dir)?);
+    let (stage1, stage2) = (
+        compute_directory_tree_manifest(&stage1_dir)?,
+        compute_directory_tree_manifest(&stage2_dir)?,
+    );
     assert!(!stage1.files.is_empty() && stage1.verify_fixed_point(&stage2).is_ok());
     assert_eq!(stage1.tree_sha256, stage2.tree_sha256);
     let idle = ModularCodegenLifecycleState::Idle;
-    assert_eq!(compile_sysml::modular_codegen::self_hosted_modularity_bounds(), ModularityBounds::canonical());
-    assert!(ModularityBoundsSpec::default().max_file_lines == 400 && idle == ModularCodegenLifecycleState::Idle);
+    assert_eq!(
+        compile_sysml::modular_codegen::self_hosted_modularity_bounds(),
+        ModularityBounds::canonical()
+    );
+    assert!(
+        ModularityBoundsSpec::default().max_file_lines == 400
+            && idle == ModularCodegenLifecycleState::Idle
+    );
     Ok(())
 }

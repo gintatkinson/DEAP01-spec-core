@@ -504,8 +504,12 @@ mod tests {
 
     #[test]
     fn test_diagnostic_creation_and_serialization() -> Result<(), Box<dyn std::error::Error>> {
-        let diag = Diagnostic::new(DiagnosticSeverity::Error, "E0301", "Power invariant violation")
-            .with_location("schema/REQ-0099.md", 44, 1);
+        let diag = Diagnostic::new(
+            DiagnosticSeverity::Error,
+            "E0301",
+            "Power invariant violation",
+        )
+        .with_location("schema/REQ-0099.md", 44, 1);
         assert_eq!(diag.severity, DiagnosticSeverity::Error);
         assert_eq!(diag.code, "E0301");
         assert_eq!(diag.line, Some(44));
@@ -633,6 +637,9 @@ mod tests {
                 current_doc.clear();
             }
         }
-        assert_eq!(fn_count, 7, "Expected exactly 7 documented functions in diagnostics.rs");
+        assert_eq!(
+            fn_count, 7,
+            "Expected exactly 7 documented functions in diagnostics.rs"
+        );
     }
 }

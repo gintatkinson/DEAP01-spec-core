@@ -44,7 +44,9 @@ use super::naming::{format_display_name, to_pascal_case, to_snake_case_dart};
 pub(crate) fn strip_surrounding_quotes(raw: &str) -> &str {
     let trimmed = raw.trim();
     let double_stripped = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"'));
-    let single_stripped = trimmed.strip_prefix('\'').and_then(|s| s.strip_suffix('\''));
+    let single_stripped = trimmed
+        .strip_prefix('\'')
+        .and_then(|s| s.strip_suffix('\''));
     double_stripped.or(single_stripped).unwrap_or(trimmed)
 }
 
@@ -67,29 +69,50 @@ pub(crate) fn strip_surrounding_quotes(raw: &str) -> &str {
 fn parse_topology_node_object(
     obj: &serde_json::Map<String, serde_json::Value>,
 ) -> Option<TopologyNode> {
-    let id = obj.get("id").and_then(serde_json::Value::as_str).unwrap_or("").to_string();
+    let id = obj
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("")
+        .to_string();
     if id.is_empty() {
         return None;
     }
     let type_name = ["typeName", "type_name", "type"]
-        .into_iter().find_map(|k| obj.get(k).and_then(serde_json::Value::as_str))
-        .unwrap_or("Entity").to_string();
-    let label =
-        obj.get("label").and_then(serde_json::Value::as_str).unwrap_or(id.as_str()).to_string();
+        .into_iter()
+        .find_map(|k| obj.get(k).and_then(serde_json::Value::as_str))
+        .unwrap_or("Entity")
+        .to_string();
+    let label = obj
+        .get("label")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or(id.as_str())
+        .to_string();
     let parent_id = ["parentId", "parent_id"]
-        .into_iter().find_map(|k| obj.get(k).and_then(serde_json::Value::as_str))
+        .into_iter()
+        .find_map(|k| obj.get(k).and_then(serde_json::Value::as_str))
         .map(str::to_string);
     let created_at = ["createdAt", "created_at"]
-        .into_iter().find_map(|k| obj.get(k).and_then(serde_json::Value::as_i64))
+        .into_iter()
+        .find_map(|k| obj.get(k).and_then(serde_json::Value::as_i64))
         .unwrap_or(1_729_684_800_000);
     let updated_at = ["updatedAt", "updated_at"]
-        .into_iter().find_map(|k| obj.get(k).and_then(serde_json::Value::as_i64))
+        .into_iter()
+        .find_map(|k| obj.get(k).and_then(serde_json::Value::as_i64))
         .unwrap_or(1_729_684_800_000);
-    let properties: BTreeMap<String, serde_json::Value> = obj.get("properties")
+    let properties: BTreeMap<String, serde_json::Value> = obj
+        .get("properties")
         .and_then(serde_json::Value::as_object)
         .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
         .unwrap_or_default();
-    Some(TopologyNode { id, type_name, label, parent_id, properties, created_at, updated_at })
+    Some(TopologyNode {
+        id,
+        type_name,
+        label,
+        parent_id,
+        properties,
+        created_at,
+        updated_at,
+    })
 }
 
 /// Parses a JSON array or `{"nodes": [...]}` envelope into normalized `TopologyNode` values.
@@ -113,12 +136,17 @@ pub fn parse_topology_json(json_str: &str) -> Result<Vec<TopologyNode>, FlutterC
     let node_array = if let Some(arr) = value.as_array() {
         Some(arr)
     } else {
-        value.as_object().and_then(|o| o.get("nodes")).and_then(serde_json::Value::as_array)
+        value
+            .as_object()
+            .and_then(|o| o.get("nodes"))
+            .and_then(serde_json::Value::as_array)
     };
     let nodes = node_array
         .map(|arr| {
-            arr.iter().filter_map(serde_json::Value::as_object)
-                .filter_map(parse_topology_node_object).collect()
+            arr.iter()
+                .filter_map(serde_json::Value::as_object)
+                .filter_map(parse_topology_node_object)
+                .collect()
         })
         .unwrap_or_default();
     Ok(nodes)
@@ -141,7 +169,10 @@ pub fn parse_topology_json(json_str: &str) -> Result<Vec<TopologyNode>, FlutterC
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0607], [REQ-FLUTTER-PARSE-TOPOLOGY-JSON]
 pub fn resolve_topology_nodes(
-    out_dir: &Path, base_dir: &Path, parts: &[PartDef], topology_json: Option<&str>,
+    out_dir: &Path,
+    base_dir: &Path,
+    parts: &[PartDef],
+    topology_json: Option<&str>,
 ) -> Result<(String, Vec<TopologyNode>), FlutterCodegenError> {
     if let Some(json_str) = topology_json {
         return parse_topology_json(json_str).map(|nodes| (json_str.to_string(), nodes));
@@ -149,7 +180,10 @@ pub fn resolve_topology_nodes(
     for candidate in [
         base_dir.join("assets").join("topology_data.json"),
         out_dir.join("assets").join("topology_data.json"),
-        out_dir.join("app_flutter").join("assets").join("topology_data.json"),
+        out_dir
+            .join("app_flutter")
+            .join("assets")
+            .join("topology_data.json"),
     ] {
         match fs::read_to_string(&candidate) {
             Ok(content) => {
@@ -160,15 +194,19 @@ pub fn resolve_topology_nodes(
             Err(err) => return Err(FlutterCodegenError::Io(err)),
         }
     }
-    let synth = parts.iter().enumerate().map(|(idx, part)| TopologyNode {
-        id: format!("{}_{}", to_pascal_case(&part.name), idx.saturating_add(1)),
-        type_name: part.name.clone(),
-        label: format_display_name(&part.name),
-        parent_id: None,
-        properties: BTreeMap::new(),
-        created_at: 1_729_684_800_000,
-        updated_at: 1_729_684_800_000,
-    }).collect();
+    let synth = parts
+        .iter()
+        .enumerate()
+        .map(|(idx, part)| TopologyNode {
+            id: format!("{}_{}", to_pascal_case(&part.name), idx.saturating_add(1)),
+            type_name: part.name.clone(),
+            label: format_display_name(&part.name),
+            parent_id: None,
+            properties: BTreeMap::new(),
+            created_at: 1_729_684_800_000,
+            updated_at: 1_729_684_800_000,
+        })
+        .collect();
     Ok((String::new(), synth))
 }
 
@@ -193,8 +231,10 @@ pub fn collect_package_slices(root: &PackageDef) -> Vec<(String, &PackageDef)> {
     let mut out = Vec::new();
     while let Some(pkg) = stack.pop() {
         let flags = [
-            !pkg.part_defs.is_empty(), !pkg.port_defs.is_empty(),
-            !pkg.item_defs.is_empty(), out.is_empty(),
+            !pkg.part_defs.is_empty(),
+            !pkg.port_defs.is_empty(),
+            !pkg.item_defs.is_empty(),
+            out.is_empty(),
         ];
         if flags.into_iter().any(std::convert::identity) {
             out.push((to_snake_case_dart(&pkg.name), pkg));

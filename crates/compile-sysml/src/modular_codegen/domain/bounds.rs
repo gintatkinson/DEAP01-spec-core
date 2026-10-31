@@ -255,7 +255,13 @@ impl std::fmt::Display for ModularityDiagnostic {
     /// Realises: [REQ-0607]
     /// Implements canonical human- and tool-readable rendering for `ModularityDiagnostic` compiler diagnostics.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{}] {}: {}", self.code.code(), self.element, self.message)
+        write!(
+            f,
+            "[{}] {}: {}",
+            self.code.code(),
+            self.element,
+            self.message
+        )
     }
 }
 

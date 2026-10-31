@@ -84,7 +84,10 @@ pub fn check_wbs_suite_integrity(
     allow_missing_specs: bool,
     strict: bool,
 ) -> Result<WbsCheckOutcome, Vec<String>> {
-    let wbs_md = repo_root.join("docs").join("management").join("WBS_DELIVERABLES_SUITE.md");
+    let wbs_md = repo_root
+        .join("docs")
+        .join("management")
+        .join("WBS_DELIVERABLES_SUITE.md");
     let wbs_dir = repo_root.join("docs").join("wbs");
 
     if !wbs_md.is_file() && !wbs_dir.is_dir() {
@@ -107,19 +110,31 @@ pub fn check_wbs_suite_integrity(
         wbs_dir.join("WBS_DELIVERABLES_SUITE.md")
     };
 
-    let wbs_csv = repo_root.join("docs").join("management").join("wbs_export_jira_monday_ms_project.csv");
-    let wbs_json = repo_root.join("docs").join("management").join("wbs_export.json");
+    let wbs_csv = repo_root
+        .join("docs")
+        .join("management")
+        .join("wbs_export_jira_monday_ms_project.csv");
+    let wbs_json = repo_root
+        .join("docs")
+        .join("management")
+        .join("wbs_export.json");
 
     if !wbs_csv.is_file() {
         errors.push(format!(
             "Missing enterprise export deliverable: {}",
-            wbs_csv.strip_prefix(repo_root).unwrap_or(&wbs_csv).display()
+            wbs_csv
+                .strip_prefix(repo_root)
+                .unwrap_or(&wbs_csv)
+                .display()
         ));
     }
     if !wbs_json.is_file() {
         errors.push(format!(
             "Missing enterprise export deliverable: {}",
-            wbs_json.strip_prefix(repo_root).unwrap_or(&wbs_json).display()
+            wbs_json
+                .strip_prefix(repo_root)
+                .unwrap_or(&wbs_json)
+                .display()
         ));
     }
 
@@ -143,7 +158,10 @@ pub fn check_wbs_suite_integrity(
                     && content.contains("Target Issue Key")
                     && content.contains("Owner / Role");
                 if !has_traceability {
-                    errors.push("WBS_DELIVERABLES_SUITE.md missing 7-Column Traceability Matrix header.".to_string());
+                    errors.push(
+                        "WBS_DELIVERABLES_SUITE.md missing 7-Column Traceability Matrix header."
+                            .to_string(),
+                    );
                 }
 
                 // Check internal markdown hyperlinks resolve
@@ -178,10 +196,16 @@ pub fn check_wbs_suite_integrity(
     if wbs_csv.is_file() {
         if let Ok(content) = fs::read_to_string(&wbs_csv) {
             if let Some(first_line) = content.lines().next() {
-                let headers: Vec<&str> = first_line.split(',').map(|s| s.trim().trim_matches('"')).collect();
+                let headers: Vec<&str> = first_line
+                    .split(',')
+                    .map(|s| s.trim().trim_matches('"'))
+                    .collect();
                 for req in REQUIRED_CSV_HEADERS {
                     if !headers.contains(req) {
-                        errors.push(format!("wbs_export_jira_monday_ms_project.csv missing required header: '{}'", req));
+                        errors.push(format!(
+                            "wbs_export_jira_monday_ms_project.csv missing required header: '{}'",
+                            req
+                        ));
                     }
                 }
             } else {
@@ -197,16 +221,24 @@ pub fn check_wbs_suite_integrity(
                 Ok(json_data) => {
                     for req_key in &["metadata", "wbs_tree", "traceability_matrix"] {
                         if json_data.get(req_key).is_none() {
-                            errors.push(format!("wbs_export.json missing required top-level key: '{}'", req_key));
+                            errors.push(format!(
+                                "wbs_export.json missing required top-level key: '{}'",
+                                req_key
+                            ));
                         }
                     }
                     if let Some(wbs_tree) = json_data.get("wbs_tree") {
                         if !wbs_tree.is_object() {
-                            errors.push("wbs_export.json 'wbs_tree' must be a JSON object.".to_string());
+                            errors.push(
+                                "wbs_export.json 'wbs_tree' must be a JSON object.".to_string(),
+                            );
                         } else {
                             for tree_key in &["wbs_code", "name", "level", "children"] {
                                 if wbs_tree.get(tree_key).is_none() {
-                                    errors.push(format!("wbs_export.json 'wbs_tree' missing required key: '{}'", tree_key));
+                                    errors.push(format!(
+                                        "wbs_export.json 'wbs_tree' missing required key: '{}'",
+                                        tree_key
+                                    ));
                                 }
                             }
                         }
@@ -320,7 +352,8 @@ mod tests {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_nanos())
                 .unwrap_or(0);
-            let path = std::env::temp_dir().join(format!("verify_wbs_{}_{}_{}", name, nanos, count));
+            let path =
+                std::env::temp_dir().join(format!("verify_wbs_{}_{}_{}", name, nanos, count));
             let _ = fs::create_dir_all(&path);
             Self { path }
         }
@@ -362,7 +395,10 @@ mod tests {
 
         let json_file = mgmt.join("wbs_export.json");
         let mut f_json = File::create(json_file)?;
-        writeln!(f_json, r#"{{"metadata": {{}}, "wbs_tree": {{"wbs_code": "1", "name": "Root", "level": 1, "children": []}}, "traceability_matrix": []}}"#)?;
+        writeln!(
+            f_json,
+            r#"{{"metadata": {{}}, "wbs_tree": {{"wbs_code": "1", "name": "Root", "level": 1, "children": []}}, "traceability_matrix": []}}"#
+        )?;
 
         let res = check_wbs_suite_integrity(&tmp.path, false, false);
         assert_eq!(res, Ok(WbsCheckOutcome::Verified));

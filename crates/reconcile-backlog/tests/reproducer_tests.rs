@@ -571,17 +571,23 @@ fn test_issue_554_bottom_up_registration_and_checklist_backpatching(
         created
     );
     assert_eq!(
-        created.first().map(|(id, title, label)| (*id, title.as_str(), label.as_str())),
+        created
+            .first()
+            .map(|(id, title, label)| (*id, title.as_str(), label.as_str())),
         Some((560, "US-01: Action", "user-story")),
         "First created issue must be bottom-tier User Story US-01 (#560)"
     );
     assert_eq!(
-        created.get(1).map(|(id, title, label)| (*id, title.as_str(), label.as_str())),
+        created
+            .get(1)
+            .map(|(id, title, label)| (*id, title.as_str(), label.as_str())),
         Some((561, "Feature 01: Subcomp", "feature")),
         "Second created issue must be middle-tier Feature FEAT-01 (#561)"
     );
     assert_eq!(
-        created.get(2).map(|(id, title, label)| (*id, title.as_str(), label.as_str())),
+        created
+            .get(2)
+            .map(|(id, title, label)| (*id, title.as_str(), label.as_str())),
         Some((562, "Epic 01: Test Subsystem", "epic")),
         "Third created issue must be top-tier Epic EPIC-01 (#562)"
     );

@@ -278,7 +278,8 @@ impl AllowedAlignmentEnvsCatalog {
         std::slice::Iter<'static, AllowedAlignmentEnv>,
         fn(&'static AllowedAlignmentEnv) -> &'static str,
     > {
-        let project: fn(&'static AllowedAlignmentEnv) -> &'static str = AllowedAlignmentEnv::as_str_ref;
+        let project: fn(&'static AllowedAlignmentEnv) -> &'static str =
+            AllowedAlignmentEnv::as_str_ref;
         AllowedAlignmentEnv::ALL.iter().map(project)
     }
 }
@@ -517,7 +518,8 @@ impl ValidMermaidHeadersCatalog {
         std::slice::Iter<'static, ValidMermaidHeader>,
         fn(&'static ValidMermaidHeader) -> &'static str,
     > {
-        let project: fn(&'static ValidMermaidHeader) -> &'static str = ValidMermaidHeader::as_str_ref;
+        let project: fn(&'static ValidMermaidHeader) -> &'static str =
+            ValidMermaidHeader::as_str_ref;
         ValidMermaidHeader::ALL.iter().map(project)
     }
 
@@ -930,7 +932,11 @@ pub fn check_latex_katex_syntax(content: &str, file_rel_path: &str) -> Vec<Strin
                     let after = block.get(idx + 7..).unwrap_or("");
                     if let Some(close_pos) = after.find('}') {
                         let env_name = after.get(..close_pos).unwrap_or("");
-                        if !env_name.is_empty() && env_name.chars().all(|c| c.is_ascii_alphabetic() || c == '*') {
+                        if !env_name.is_empty()
+                            && env_name
+                                .chars()
+                                .all(|c| c.is_ascii_alphabetic() || c == '*')
+                        {
                             env_stack.push(env_name.to_string());
                             idx += 7 + close_pos + 1;
                             continue;
@@ -940,7 +946,11 @@ pub fn check_latex_katex_syntax(content: &str, file_rel_path: &str) -> Vec<Strin
                     let after = block.get(idx + 5..).unwrap_or("");
                     if let Some(close_pos) = after.find('}') {
                         let env_name = after.get(..close_pos).unwrap_or("");
-                        if !env_name.is_empty() && env_name.chars().all(|c| c.is_ascii_alphabetic() || c == '*') {
+                        if !env_name.is_empty()
+                            && env_name
+                                .chars()
+                                .all(|c| c.is_ascii_alphabetic() || c == '*')
+                        {
                             if let Some(pos) = env_stack.iter().rposition(|x| x == env_name) {
                                 env_stack.truncate(pos);
                             }
@@ -966,7 +976,11 @@ pub fn check_latex_katex_syntax(content: &str, file_rel_path: &str) -> Vec<Strin
                     while end < block.len() && !block.is_char_boundary(end) {
                         end += 1;
                     }
-                    let snippet = block.get(start..end).unwrap_or("").trim().replace('\n', " ");
+                    let snippet = block
+                        .get(start..end)
+                        .unwrap_or("")
+                        .trim()
+                        .replace('\n', " ");
                     errors.push(format!(
                         "Bare alignment operator '&' outside alignment environment in {}: \"...{}...\"",
                         file_rel_path, snippet
@@ -1021,7 +1035,11 @@ fn validate_mermaid_angle_bracket_escaping(line: &str) -> Option<char> {
         if clean_line.get(idx..).is_some_and(|s| s.starts_with("<<")) {
             if let Some(close_pos) = clean_line.get(idx + 2..).and_then(|s| s.find(">>")) {
                 let inner = clean_line.get(idx + 2..idx + 2 + close_pos).unwrap_or("");
-                if !inner.is_empty() && inner.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+                if !inner.is_empty()
+                    && inner
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+                {
                     idx += 2 + close_pos + 2;
                     continue;
                 }
@@ -1037,9 +1055,8 @@ fn validate_mermaid_angle_bracket_escaping(line: &str) -> Option<char> {
 
     // Strip longest arrows first to prevent partial replacements (e.g. "-->" matching inside "<-->")
     let arrows = [
-        "==>>", "-->>", "<<==", "<<--", "<-->", "<==>", "<-.-", "-.->",
-        "==>", "-->", "->>", "<==", "<--", "<<-", "<->",
-        "->", "<-",
+        "==>>", "-->>", "<<==", "<<--", "<-->", "<==>", "<-.-", "-.->", "==>", "-->", "->>", "<==",
+        "<--", "<<-", "<->", "->", "<-",
     ];
     for arrow in arrows {
         clean_line = clean_line.replace(arrow, "");
@@ -1152,9 +1169,8 @@ pub fn check_mermaid_syntax(content: &str, file_rel_path: &str) -> Vec<String> {
                 let mut kind = String::new();
                 if let Some((header_line, header_text)) = header_opt {
                     let lower = header_text.to_lowercase();
-                    if let Some(matched_kind) = VALID_MERMAID_HEADERS
-                        .iter()
-                        .find(|&h| lower.starts_with(h))
+                    if let Some(matched_kind) =
+                        VALID_MERMAID_HEADERS.iter().find(|&h| lower.starts_with(h))
                     {
                         kind = matched_kind.to_string();
                     } else {
@@ -1193,8 +1209,14 @@ pub fn check_mermaid_syntax(content: &str, file_rel_path: &str) -> Vec<String> {
                 }
 
                 // Check angle bracket escaping in diagram kinds
-                if ["graph", "flowchart", "sequencediagram", "statediagram", "statediagram-v2"]
-                    .contains(&kind.as_str())
+                if [
+                    "graph",
+                    "flowchart",
+                    "sequencediagram",
+                    "statediagram",
+                    "statediagram-v2",
+                ]
+                .contains(&kind.as_str())
                 {
                     for &(lineno, body_line) in &body {
                         let trimmed = body_line.trim();
@@ -1398,7 +1420,9 @@ q_i \le 0 &\vee (\mathbf{d}(Q_1) \ne \mathbf{d}(Q_2) \wedge Q_1 \pm Q_2) \implie
         let sample = "```mermaid\ngraph TD\nA --> B\n";
         let errors = check_mermaid_syntax(sample, "test.md");
         assert!(!errors.is_empty(), "Should detect unclosed mermaid fence");
-        assert!(errors.first().is_some_and(|e| e.contains("unclosed ```mermaid fence")));
+        assert!(errors
+            .first()
+            .is_some_and(|e| e.contains("unclosed ```mermaid fence")));
     }
 
     #[test]
@@ -1406,7 +1430,9 @@ q_i \le 0 &\vee (\mathbf{d}(Q_1) \ne \mathbf{d}(Q_2) \wedge Q_1 \pm Q_2) \implie
         let sample = "```mermaid\ninvalidHeader TD\nA --> B\n```";
         let errors = check_mermaid_syntax(sample, "test.md");
         assert!(!errors.is_empty(), "Should detect invalid diagram header");
-        assert!(errors.first().is_some_and(|e| e.contains("missing or invalid Mermaid diagram header")));
+        assert!(errors
+            .first()
+            .is_some_and(|e| e.contains("missing or invalid Mermaid diagram header")));
     }
 
     #[test]
@@ -1414,7 +1440,9 @@ q_i \le 0 &\vee (\mathbf{d}(Q_1) \ne \mathbf{d}(Q_2) \wedge Q_1 \pm Q_2) \implie
         let sample = "```mermaid\ngraph TD\nA -->|x < 5| B\n```";
         let errors = check_mermaid_syntax(sample, "test.md");
         assert!(!errors.is_empty(), "Should detect unquoted '<' character");
-        assert!(errors.first().is_some_and(|e| e.contains("unquoted '<' character")));
+        assert!(errors
+            .first()
+            .is_some_and(|e| e.contains("unquoted '<' character")));
 
         let quoted_sample = "```mermaid\ngraph TD\nA -->|\"x < 5\"| B\n```";
         let clean_errors = check_mermaid_syntax(quoted_sample, "test.md");
@@ -1462,7 +1490,10 @@ q_i \le 0 &\vee (\mathbf{d}(Q_1) \ne \mathbf{d}(Q_2) \wedge Q_1 \pm Q_2) \implie
             "smallmatrix",
         ];
         assert_eq!(AllowedAlignmentEnv::ALL.len(), 17);
-        let via_enum: Vec<&'static str> = AllowedAlignmentEnv::ALL.iter().map(|e| e.as_str()).collect();
+        let via_enum: Vec<&'static str> = AllowedAlignmentEnv::ALL
+            .iter()
+            .map(|e| e.as_str())
+            .collect();
         assert_eq!(via_enum, expected);
         let via_catalog: Vec<&'static str> = ALLOWED_ALIGNMENT_ENVS.iter().collect();
         assert_eq!(via_catalog, expected);
@@ -1497,7 +1528,8 @@ q_i \le 0 &\vee (\mathbf{d}(Q_1) \ne \mathbf{d}(Q_2) \wedge Q_1 \pm Q_2) \implie
             "requirementdiagram",
         ];
         assert_eq!(ValidMermaidHeader::ALL.len(), 18);
-        let via_enum: Vec<&'static str> = ValidMermaidHeader::ALL.iter().map(|h| h.as_str()).collect();
+        let via_enum: Vec<&'static str> =
+            ValidMermaidHeader::ALL.iter().map(|h| h.as_str()).collect();
         assert_eq!(via_enum, expected);
         let via_catalog: Vec<&'static str> = VALID_MERMAID_HEADERS.iter().collect();
         assert_eq!(via_catalog, expected);

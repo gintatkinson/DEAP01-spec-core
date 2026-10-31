@@ -48,4 +48,3 @@ pub use parity_gates::*;
 pub use safety_stpa::{check_safety_integrity, SafetyCheckOutcome};
 pub use structural::*;
 pub use wbs_integrity::{check_wbs_suite_integrity, WbsCheckOutcome};
-

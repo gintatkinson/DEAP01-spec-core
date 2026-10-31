@@ -767,4 +767,3 @@ pub struct ComponentBuffer {
 
     Ok(())
 }
-

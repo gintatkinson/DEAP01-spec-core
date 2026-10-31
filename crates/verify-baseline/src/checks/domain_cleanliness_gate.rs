@@ -295,7 +295,9 @@ fn is_m1_domain_dict_name(ident: &str) -> bool {
     }
 
     // 2. Sample, mock, or concrete domain hardware/vehicle dicts
-    let domain_nouns = ["uav", "aircraft", "vehicle", "device", "patient", "car", "robot"];
+    let domain_nouns = [
+        "uav", "aircraft", "vehicle", "device", "patient", "car", "robot",
+    ];
     let prefixes = ["sample_", "mock_", "concrete_"];
     for p in &prefixes {
         if let Some(after) = lower.strip_prefix(p) {
@@ -428,7 +430,9 @@ fn check_line_for_metamodel_typing_violation(line: &str) -> Option<String> {
                             && (candidate_val.starts_with(|c: char| c.is_ascii_uppercase())
                                 || candidate_val.starts_with("meta_")
                                 || candidate_val.starts_with("Meta"))
-                            && candidate_val.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                            && candidate_val
+                                .chars()
+                                .all(|c| c.is_ascii_alphanumeric() || c == '_')
                             && !is_allowed_m2_type(candidate_val)
                         {
                             return Some(candidate_val.to_string());
@@ -476,7 +480,10 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
 
     // 1. Enforce zero legacy Python parity_auditor directories on disk
     let legacy_paths = [
-        repo_root.join("skills").join("spec-orchestrator").join("parity_auditor"),
+        repo_root
+            .join("skills")
+            .join("spec-orchestrator")
+            .join("parity_auditor"),
         repo_root.join("parity_auditor"),
     ];
     for p in &legacy_paths {
@@ -495,17 +502,14 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
         violations.push("Check 19 violation: Native Rust workspace crates/ directory missing in upstream compiler repository.".to_string());
     } else {
         // 3. Scan all native Rust source files in crates/ for hardcoded parameter dictionaries and metamodel violations
-        for entry_res in WalkDir::new(&crates_dir)
-            .into_iter()
-            .filter_entry(|e| {
-                if e.file_type().is_dir() {
-                    let name = e.file_name().to_string_lossy();
-                    name != "target" && name != ".git" && !EXCLUDED_DIRS.iter().any(|ex| name == ex)
-                } else {
-                    true
-                }
-            })
-        {
+        for entry_res in WalkDir::new(&crates_dir).into_iter().filter_entry(|e| {
+            if e.file_type().is_dir() {
+                let name = e.file_name().to_string_lossy();
+                name != "target" && name != ".git" && !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+            } else {
+                true
+            }
+        }) {
             let entry = match entry_res {
                 Ok(val) => val,
                 Err(err) => {
@@ -542,7 +546,9 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
                                     }
                                 }
 
-                                if let Some(bad_type) = check_line_for_metamodel_typing_violation(line) {
+                                if let Some(bad_type) =
+                                    check_line_for_metamodel_typing_violation(line)
+                                {
                                     violations.push(format!(
                                         "Check 19 violation (domain-metamodel-typing-violation): Unvalidated M1 domain instance entity/type '{}' declared in {}:{}. Upstream compiler ASTs and dictionaries must adhere strictly to the closed M2 metamodel allowlist.",
                                         bad_type,
@@ -566,7 +572,11 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
 
     // 4. Scan upstream compiler templates and platform rules for unmapped domain instance concepts
     let template_dirs = [
-        repo_root.join("skills").join("spec-conops-engineering").join("resources").join("units"),
+        repo_root
+            .join("skills")
+            .join("spec-conops-engineering")
+            .join("resources")
+            .join("units"),
         repo_root.join(".pipeline").join("templates"),
         repo_root.join("rules"),
     ];
@@ -576,21 +586,21 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
             continue;
         }
 
-        for entry_res in WalkDir::new(t_dir)
-            .into_iter()
-            .filter_entry(|e| {
-                if e.file_type().is_dir() {
-                    let name = e.file_name().to_string_lossy();
-                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
-                } else {
-                    true
-                }
-            })
-        {
+        for entry_res in WalkDir::new(t_dir).into_iter().filter_entry(|e| {
+            if e.file_type().is_dir() {
+                let name = e.file_name().to_string_lossy();
+                !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+            } else {
+                true
+            }
+        }) {
             let entry = match entry_res {
                 Ok(val) => val,
                 Err(err) => {
-                    violations.push(format!("Check 19 template directory walk I/O error: {}", err));
+                    violations.push(format!(
+                        "Check 19 template directory walk I/O error: {}",
+                        err
+                    ));
                     continue;
                 }
             };
@@ -631,7 +641,8 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
                                 }
                             }
 
-                            if let Some(bad_type) = check_line_for_metamodel_typing_violation(line) {
+                            if let Some(bad_type) = check_line_for_metamodel_typing_violation(line)
+                            {
                                 violations.push(format!(
                                     "Check 19 violation (domain-metamodel-typing-violation): Upstream template '{}:{}' declares unvalidated M1 domain instance entity/type '{}'. Upstream templates must adhere strictly to the closed M2 metamodel allowlist.",
                                     rel,
@@ -678,7 +689,8 @@ mod tests {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_nanos())
                 .unwrap_or(0);
-            let path = std::env::temp_dir().join(format!("verify_domain_{}_{}_{}", name, nanos, count));
+            let path =
+                std::env::temp_dir().join(format!("verify_domain_{}_{}_{}", name, nanos, count));
             fs::create_dir_all(&path)?;
             Ok(Self { path })
         }
@@ -736,16 +748,23 @@ mod tests {
         let src_dir = tmp.path.join("crates/test-crate/src");
         fs::create_dir_all(&src_dir)?;
         let mut f = File::create(src_dir.join("lib.rs"))?;
-        writeln!(f, "pub const FLIGHT_ENVELOPE_MAP: &[(&str, f64)] = &[(\"max_altitude\", 10000.0)];")?;
+        writeln!(
+            f,
+            "pub const FLIGHT_ENVELOPE_MAP: &[(&str, f64)] = &[(\"max_altitude\", 10000.0)];"
+        )?;
         let res = check_domain_agnostic_ast_cleanliness(&tmp.path);
         assert!(res.is_err());
         let errs = res.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("domain-metamodel-typing-violation") && e.contains("FLIGHT_ENVELOPE_MAP")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("domain-metamodel-typing-violation")
+                && e.contains("FLIGHT_ENVELOPE_MAP")));
         Ok(())
     }
 
     #[test]
-    fn test_check_19_rejects_unvalidated_m1_entity_type() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_19_rejects_unvalidated_m1_entity_type() -> Result<(), Box<dyn std::error::Error>>
+    {
         let tmp = TempDir::new("c19_m1_type")?;
         fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let src_dir = tmp.path.join("crates/test-crate/src");
@@ -755,7 +774,9 @@ mod tests {
         let res = check_domain_agnostic_ast_cleanliness(&tmp.path);
         assert!(res.is_err());
         let errs = res.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("domain-metamodel-typing-violation") && e.contains("TacticalUAV")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("domain-metamodel-typing-violation") && e.contains("TacticalUAV")));
         Ok(())
     }
 
@@ -772,18 +793,24 @@ mod tests {
     }
 
     #[test]
-    fn test_check_19_template_rejection_of_unmapped_domain_dict() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_19_template_rejection_of_unmapped_domain_dict(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c19_tmpl_reject")?;
         fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         fs::create_dir_all(tmp.path.join("crates"))?;
-        let tmpl_dir = tmp.path.join("skills/spec-conops-engineering/resources/units");
+        let tmpl_dir = tmp
+            .path
+            .join("skills/spec-conops-engineering/resources/units");
         fs::create_dir_all(&tmpl_dir)?;
         let mut f = File::create(tmpl_dir.join("01_TEST_UNIT.md"))?;
         writeln!(f, "# Test Unit\n\nHardcoded payload: FLIGHT_ENVELOPE_MAP")?;
         let res = check_domain_agnostic_ast_cleanliness(&tmp.path);
         assert!(res.is_err());
         let errs = res.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("domain-metamodel-typing-violation") && e.contains("FLIGHT_ENVELOPE_MAP")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("domain-metamodel-typing-violation")
+                && e.contains("FLIGHT_ENVELOPE_MAP")));
         Ok(())
     }
 
@@ -820,13 +847,17 @@ mod tests {
     }
 
     #[test]
-    fn test_check_19_conops_governance_rule_aerospace_decontamination() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_19_conops_governance_rule_aerospace_decontamination(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
             .ok_or("repo root")?;
         let rule_path = repo_root.join("rules/conops-mission-intent-integrity.md");
-        assert!(rule_path.is_file(), "rules/conops-mission-intent-integrity.md must exist");
+        assert!(
+            rule_path.is_file(),
+            "rules/conops-mission-intent-integrity.md must exist"
+        );
         let content = fs::read_to_string(&rule_path)?;
 
         let forbidden_terms = [
@@ -895,7 +926,8 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-CHECK-19-FAIL-CLOSED-IO-TEST]
     #[test]
-    fn test_check_19_fails_closed_on_unreadable_non_utf8_files() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_19_fails_closed_on_unreadable_non_utf8_files(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c19_fail_closed_io")?;
         fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let src_dir = tmp.path.join("crates/test-crate/src");

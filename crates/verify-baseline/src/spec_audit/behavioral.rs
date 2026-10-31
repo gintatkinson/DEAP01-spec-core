@@ -167,7 +167,10 @@ impl BehavioralTrigger {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SPEC-AUDIT-BEHAVIORAL-BEHAVIORALTRIGGER-ACTIVE-NODES-FROM-NORMALIZED-SET] | SysML v2: ActionDef(BehavioralTrigger::active_nodes_from_normalized_set)
-    pub fn active_nodes_from_normalized_set(&self, normalized_symbols: &BTreeSet<String>) -> Vec<String> {
+    pub fn active_nodes_from_normalized_set(
+        &self,
+        normalized_symbols: &BTreeSet<String>,
+    ) -> Vec<String> {
         self.trigger_nodes
             .iter()
             .filter(|node| normalized_symbols.contains(&normalize_symbol_name(node)))
@@ -483,7 +486,9 @@ pub fn contains_token_with_word_boundary(content: &str, target: &str) -> bool {
             !lower_content
                 .as_bytes()
                 .get(abs_pos - 1)
-                .is_some_and(|&prev_byte| prev_byte.is_ascii_alphanumeric() || prev_byte == b'_' || prev_byte == b'-')
+                .is_some_and(|&prev_byte| {
+                    prev_byte.is_ascii_alphanumeric() || prev_byte == b'_' || prev_byte == b'-'
+                })
         };
 
         let after_ok = if end_pos >= lower_content.len() {
@@ -492,7 +497,9 @@ pub fn contains_token_with_word_boundary(content: &str, target: &str) -> bool {
             !lower_content
                 .as_bytes()
                 .get(end_pos)
-                .is_some_and(|&next_byte| next_byte.is_ascii_alphanumeric() || next_byte == b'_' || next_byte == b'-')
+                .is_some_and(|&next_byte| {
+                    next_byte.is_ascii_alphanumeric() || next_byte == b'_' || next_byte == b'-'
+                })
         };
 
         if before_ok && after_ok {
@@ -568,7 +575,10 @@ pub fn spec_references_node(content: &str, node: &str) -> bool {
 
     // 4. Collapsed alphanumeric match (e.g. "streamdata" matching "StreamData")
     let collapsed: String = node.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
-    if !collapsed.is_empty() && collapsed != node && contains_token_with_word_boundary(content, &collapsed) {
+    if !collapsed.is_empty()
+        && collapsed != node
+        && contains_token_with_word_boundary(content, &collapsed)
+    {
         return true;
     }
 
@@ -713,9 +723,12 @@ fn body_contains_any_term(body: &str, terms: &[String]) -> bool {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SPEC-AUDIT-BEHAVIORAL-PARSE-BEHAVIORAL-TRIGGERS] | SysML v2: ActionDef(parse_behavioral_triggers)
-pub fn parse_behavioral_triggers(json_content: &str) -> Result<Vec<BehavioralTrigger>, SpecAuditError> {
-    serde_json::from_str(json_content)
-        .map_err(|e| SpecAuditError::RuleError(format!("Failed to parse behavioral triggers JSON: {}", e)))
+pub fn parse_behavioral_triggers(
+    json_content: &str,
+) -> Result<Vec<BehavioralTrigger>, SpecAuditError> {
+    serde_json::from_str(json_content).map_err(|e| {
+        SpecAuditError::RuleError(format!("Failed to parse behavioral triggers JSON: {}", e))
+    })
 }
 
 /// Loads and parses behavioral triggers JSON configuration from a file path.
@@ -838,7 +851,9 @@ pub fn validate_behavioral_triggers(
                             .iter()
                             .filter(|b| {
                                 b.header.eq_ignore_ascii_case(req_mermaid)
-                                    || b.raw.lines().any(|l| l.trim().starts_with(req_mermaid.as_str()))
+                                    || b.raw
+                                        .lines()
+                                        .any(|l| l.trim().starts_with(req_mermaid.as_str()))
                             })
                             .collect();
 
@@ -868,7 +883,8 @@ pub fn validate_behavioral_triggers(
                     // 3. Secondary Markdown prose body check (if configured)
                     if file_valid && !rule.match_terms_in_body_secondary.is_empty() {
                         let body_text = extract_body_outside_code_blocks(&spec.content);
-                        if !body_contains_any_term(&body_text, &rule.match_terms_in_body_secondary) {
+                        if !body_contains_any_term(&body_text, &rule.match_terms_in_body_secondary)
+                        {
                             file_valid = false;
                         }
                     }
@@ -925,7 +941,9 @@ pub fn validate_behavioral_triggers_workspace(
     workspace_root: &Path,
     symbol_index: &SysmlSymbolIndex,
 ) -> Result<Vec<SpecAuditFinding>, SpecAuditError> {
-    let triggers_path = workspace_root.join("rules").join("behavioral_triggers.json");
+    let triggers_path = workspace_root
+        .join("rules")
+        .join("behavioral_triggers.json");
     if !triggers_path.exists() {
         return Ok(Vec::new());
     }
@@ -934,7 +952,10 @@ pub fn validate_behavioral_triggers_workspace(
     let mut specs = Vec::new();
 
     let target_dirs = [
-        ("user-story", workspace_root.join("docs").join("user-stories")),
+        (
+            "user-story",
+            workspace_root.join("docs").join("user-stories"),
+        ),
         ("use-case", workspace_root.join("docs").join("use-cases")),
     ];
 
@@ -1016,7 +1037,10 @@ mod tests {
         let specs = Vec::new();
 
         let findings = validate_behavioral_triggers(&[trigger], &index, &specs)?;
-        assert!(findings.is_empty(), "Inactive trigger should impose nothing");
+        assert!(
+            findings.is_empty(),
+            "Inactive trigger should impose nothing"
+        );
         Ok(())
     }
 
@@ -1029,7 +1053,11 @@ mod tests {
         let specs = Vec::new(); // no specifications present
 
         let findings = validate_behavioral_triggers(&[trigger], &index, &specs)?;
-        assert_eq!(findings.len(), 2, "Expected 2 findings (one per rule for stream-data)");
+        assert_eq!(
+            findings.len(),
+            2,
+            "Expected 2 findings (one per rule for stream-data)"
+        );
         assert_eq!(
             findings.first().map(|f| f.rule_id.as_str()),
             Some("behavioral-trigger-node-must-be-covered-by-a-specification")
@@ -1069,7 +1097,11 @@ The operator reviews recorded stream-data.
 "#;
 
         let specs = vec![
-            AuditedSpec::from_content("docs/user-stories/us-01.md", "user-story", user_story_content)?,
+            AuditedSpec::from_content(
+                "docs/user-stories/us-01.md",
+                "user-story",
+                user_story_content,
+            )?,
             AuditedSpec::from_content("docs/use-cases/uc-01.md", "use-case", use_case_content)?,
         ];
 
@@ -1110,7 +1142,11 @@ The operator reviews recorded stream-data.
 "#;
 
         let specs = vec![
-            AuditedSpec::from_content("docs/user-stories/us-01.md", "user-story", invalid_user_story)?,
+            AuditedSpec::from_content(
+                "docs/user-stories/us-01.md",
+                "user-story",
+                invalid_user_story,
+            )?,
             AuditedSpec::from_content("docs/use-cases/uc-01.md", "use-case", valid_use_case)?,
         ];
 
@@ -1154,7 +1190,11 @@ The operator reviews recorded stream-data.
 "#;
 
         let specs = vec![
-            AuditedSpec::from_content("docs/user-stories/us-01.md", "user-story", valid_user_story)?,
+            AuditedSpec::from_content(
+                "docs/user-stories/us-01.md",
+                "user-story",
+                valid_user_story,
+            )?,
             AuditedSpec::from_content("docs/use-cases/uc-01.md", "use-case", invalid_use_case)?,
         ];
 
@@ -1172,10 +1212,22 @@ The operator reviews recorded stream-data.
 
     #[test]
     fn test_contains_token_with_word_boundary() {
-        assert!(contains_token_with_word_boundary("stream-data payload", "stream-data"));
-        assert!(contains_token_with_word_boundary("The `stream-data` node", "stream-data"));
-        assert!(!contains_token_with_word_boundary("mainstream-database", "stream-data"));
-        assert!(!contains_token_with_word_boundary("stream-dataset", "stream-data"));
+        assert!(contains_token_with_word_boundary(
+            "stream-data payload",
+            "stream-data"
+        ));
+        assert!(contains_token_with_word_boundary(
+            "The `stream-data` node",
+            "stream-data"
+        ));
+        assert!(!contains_token_with_word_boundary(
+            "mainstream-database",
+            "stream-data"
+        ));
+        assert!(!contains_token_with_word_boundary(
+            "stream-dataset",
+            "stream-data"
+        ));
     }
 
     #[test]

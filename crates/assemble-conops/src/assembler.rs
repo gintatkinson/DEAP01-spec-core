@@ -228,7 +228,8 @@ pub fn relativize_markdown_links(text: &str, output_file: &Path, workspace_dir: 
                                 continue;
                             }
 
-                            let (url_part, title_part, has_angle_brackets) = if target_trimmed.starts_with('<')
+                            let (url_part, title_part, has_angle_brackets) = if target_trimmed
+                                .starts_with('<')
                                 && target_trimmed.contains('>')
                             {
                                 let end = target_trimmed.find('>').unwrap_or(1);
@@ -236,7 +237,10 @@ pub fn relativize_markdown_links(text: &str, output_file: &Path, workspace_dir: 
                                 let title = &target_trimmed[end + 1..];
                                 (url, title.to_string(), true)
                             } else if let Some((p0, p1)) = target_trimmed.split_once(' ') {
-                                if p1.starts_with('"') || p1.starts_with('\'') || p1.starts_with('(') {
+                                if p1.starts_with('"')
+                                    || p1.starts_with('\'')
+                                    || p1.starts_with('(')
+                                {
                                     (p0, format!(" {p1}"), false)
                                 } else {
                                     (target_trimmed, String::new(), false)
@@ -259,11 +263,12 @@ pub fn relativize_markdown_links(text: &str, output_file: &Path, workspace_dir: 
                                 continue;
                             }
 
-                            let (path_part, anchor_suffix) = if let Some((p, a)) = url_part.split_once('#') {
-                                (p, format!("#{a}"))
-                            } else {
-                                (url_part, String::new())
-                            };
+                            let (path_part, anchor_suffix) =
+                                if let Some((p, a)) = url_part.split_once('#') {
+                                    (p, format!("#{a}"))
+                                } else {
+                                    (url_part, String::new())
+                                };
 
                             if path_part.is_empty() {
                                 result.push_str(&text[idx..tend + 1]);
@@ -276,7 +281,8 @@ pub fn relativize_markdown_links(text: &str, output_file: &Path, workspace_dir: 
                                 || path_part == "."
                                 || path_part == "..";
                             let is_abs = path_part.starts_with('/')
-                                || (path_part.len() > 2 && path_part.as_bytes().get(1).copied() == Some(b':'));
+                                || (path_part.len() > 2
+                                    && path_part.as_bytes().get(1).copied() == Some(b':'));
 
                             let target_abs = if is_abs {
                                 let p = Path::new(path_part);
@@ -290,8 +296,8 @@ pub fn relativize_markdown_links(text: &str, output_file: &Path, workspace_dir: 
                                 if candidate.exists() {
                                     candidate
                                 } else {
-                                    let cand_ws =
-                                        abs_ws_dir.join(path_part.trim_start_matches(['.', '/', '\\']));
+                                    let cand_ws = abs_ws_dir
+                                        .join(path_part.trim_start_matches(['.', '/', '\\']));
                                     let cand_docs = abs_ws_dir
                                         .join("docs")
                                         .join(path_part.trim_start_matches(['.', '/', '\\']));
@@ -309,7 +315,10 @@ pub fn relativize_markdown_links(text: &str, output_file: &Path, workspace_dir: 
 
                             let rel = path_relative_from(&target_abs, &abs_output_dir);
                             let mut rel_str = rel.to_string_lossy().replace('\\', "/");
-                            if path_part.starts_with("./") && !rel_str.starts_with('.') && !rel_str.is_empty() {
+                            if path_part.starts_with("./")
+                                && !rel_str.starts_with('.')
+                                && !rel_str.is_empty()
+                            {
                                 rel_str = format!("./{rel_str}");
                             }
 
@@ -444,7 +453,10 @@ pub fn validate_unit_integrity(
         let text = match fs::read_to_string(path) {
             Ok(t) => t,
             Err(e) => {
-                errors.push(format!("Failed to read unit file '{}': {e}", path.display()));
+                errors.push(format!(
+                    "Failed to read unit file '{}': {e}",
+                    path.display()
+                ));
                 continue;
             }
         };
@@ -520,7 +532,10 @@ pub fn assemble_document(
     if !units_dir.is_dir() {
         return (
             String::new(),
-            vec![format!("Units directory '{}' does not exist.", units_dir.display())],
+            vec![format!(
+                "Units directory '{}' does not exist.",
+                units_dir.display()
+            )],
         );
     }
 
@@ -548,7 +563,10 @@ pub fn assemble_document(
         Err(e) => {
             return (
                 String::new(),
-                vec![format!("Failed to read directory '{}': {e}", units_dir.display())],
+                vec![format!(
+                    "Failed to read directory '{}': {e}",
+                    units_dir.display()
+                )],
             );
         }
     };
@@ -556,7 +574,10 @@ pub fn assemble_document(
     if all_entries.is_empty() {
         return (
             String::new(),
-            vec![format!("No markdown unit files (*.md) found in '{}'.", units_dir.display())],
+            vec![format!(
+                "No markdown unit files (*.md) found in '{}'.",
+                units_dir.display()
+            )],
         );
     }
 
@@ -578,9 +599,13 @@ pub fn assemble_document(
                         filenames.push("04_SYSTEM_ARCHITECTURE.md".to_string());
                     } else if all_entries.contains(&"08_SYSTEM_ARCHITECTURE.md".to_string()) {
                         filenames.push("08_SYSTEM_ARCHITECTURE.md".to_string());
-                    } else if all_entries.contains(&"04_USER_CLASSES_AND_STAKEHOLDERS.md".to_string()) {
+                    } else if all_entries
+                        .contains(&"04_USER_CLASSES_AND_STAKEHOLDERS.md".to_string())
+                    {
                         filenames.push("04_USER_CLASSES_AND_STAKEHOLDERS.md".to_string());
-                    } else if all_entries.contains(&"04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md".to_string()) {
+                    } else if all_entries
+                        .contains(&"04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md".to_string())
+                    {
                         filenames.push("04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md".to_string());
                     }
                 }
@@ -626,18 +651,24 @@ pub fn assemble_document(
                 if !unit8_handled {
                     if all_entries.contains(&"08_ENVIRONMENTAL_OPERATING_LIMITS.md".to_string()) {
                         filenames.push("08_ENVIRONMENTAL_OPERATING_LIMITS.md".to_string());
-                    } else if all_entries.contains(&"08_ENVIRONMENTAL_MIL_STD_810H.md".to_string()) {
+                    } else if all_entries.contains(&"08_ENVIRONMENTAL_MIL_STD_810H.md".to_string())
+                    {
                         filenames.push("08_ENVIRONMENTAL_MIL_STD_810H.md".to_string());
                     }
                 }
-            } else if all_entries.contains(&item.to_string()) && !filenames.contains(&item.to_string()) {
+            } else if all_entries.contains(&item.to_string())
+                && !filenames.contains(&item.to_string())
+            {
                 filenames.push(item.to_string());
             }
         }
         if filenames.is_empty() {
             return (
                 String::new(),
-                vec![format!("No canonical unit files from whitelist found in '{}'.", units_dir.display())],
+                vec![format!(
+                    "No canonical unit files from whitelist found in '{}'.",
+                    units_dir.display()
+                )],
             );
         }
     } else {
@@ -667,7 +698,9 @@ pub fn assemble_document(
                     || u4_raw.contains("### 8.3")
                     || u4_raw.contains("### 4.8")
                     || u4_raw.contains("Subsystem Architecture"))
-                    && (u4_raw.contains("LRU") || u4_raw.contains("Subsystem") || u4_raw.contains("Part"));
+                    && (u4_raw.contains("LRU")
+                        || u4_raw.contains("Subsystem")
+                        || u4_raw.contains("Part"));
                 let has_concrete = has_concrete_super && has_concrete_sub;
 
                 if !has_concrete
@@ -691,17 +724,31 @@ pub fn assemble_document(
     let mut units: Vec<(String, String)> = Vec::new();
     for path in &unit_paths {
         let raw_text = fs::read_to_string(path).unwrap_or_default();
-        let fname = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+        let fname = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string();
         let bound_text = param_engine.substitute(&raw_text);
         units.push((fname, bound_text));
     }
 
     let default_title = doc_title.unwrap_or("Concept of Operations");
     let default_ver = doc_version
-        .or_else(|| param_engine.parameter_bindings.get("DOCUMENT_VERSION").map(|s| s.as_str()))
+        .or_else(|| {
+            param_engine
+                .parameter_bindings
+                .get("DOCUMENT_VERSION")
+                .map(|s| s.as_str())
+        })
         .unwrap_or("1.0.0");
     let default_date = doc_date
-        .or_else(|| param_engine.parameter_bindings.get("DOCUMENT_DATE").map(|s| s.as_str()))
+        .or_else(|| {
+            param_engine
+                .parameter_bindings
+                .get("DOCUMENT_DATE")
+                .map(|s| s.as_str())
+        })
         .unwrap_or("2026-10-10");
 
     let mut meta_title = default_title.to_string();
@@ -712,7 +759,11 @@ pub fn assemble_document(
         for line in content.lines() {
             let trimmed = line.trim();
             if trimmed.starts_with('|') {
-                let parts: Vec<&str> = trimmed.trim_matches('|').split('|').map(str::trim).collect();
+                let parts: Vec<&str> = trimmed
+                    .trim_matches('|')
+                    .split('|')
+                    .map(str::trim)
+                    .collect();
                 if let (Some(&p0), Some(&p1)) = (parts.first(), parts.get(1)) {
                     if p0.eq_ignore_ascii_case("**title**") {
                         meta_title = p1.to_string();
@@ -788,7 +839,10 @@ pub fn assemble_document(
             format!("{header_table}\n{full_body}\n\n{toc}\n")
         }
     } else {
-        format!("{header_table}\n# {meta_title}\n\n{toc}\n{}\n", full_body.trim())
+        format!(
+            "{header_table}\n# {meta_title}\n\n{toc}\n{}\n",
+            full_body.trim()
+        )
     };
 
     let link_errs = verify_markdown_links(&assembled);
@@ -883,13 +937,7 @@ pub fn assemble_conops(
     }
     let ws_path = ws.unwrap_or_else(|| input_dir.to_path_buf());
 
-    let mut engine = SysMLParameterBindingEngine::new(
-        None,
-        params,
-        Some(&ws_path),
-        true,
-        domain,
-    );
+    let mut engine = SysMLParameterBindingEngine::new(None, params, Some(&ws_path), true, domain);
 
     let detected_dom = domain
         .map(|s| s.to_string())
@@ -911,7 +959,10 @@ pub fn assemble_conops(
     let mut mission_units_dir = None;
     for cand in &[
         input_dir.join(&detected_dom).join("mission_intent"),
-        input_dir.join("units").join(&detected_dom).join("mission_intent"),
+        input_dir
+            .join("units")
+            .join(&detected_dom)
+            .join("mission_intent"),
         input_dir.join("mission_intent"),
         input_dir.join("units").join("mission_intent"),
     ] {
@@ -944,7 +995,10 @@ pub fn assemble_conops(
             let out_file = output_dir.join("CONOPS.md");
             doc = relativize_markdown_links(&doc, &out_file, &ws_path);
             fs::write(&out_file, doc)?;
-            println!("[+] Successfully wrote compiled ConOps to '{}'.", out_file.display());
+            println!(
+                "[+] Successfully wrote compiled ConOps to '{}'.",
+                out_file.display()
+            );
         }
     } else {
         println!(
@@ -974,7 +1028,10 @@ pub fn assemble_conops(
             let out_file = output_dir.join("MISSION_INTENT.md");
             doc = relativize_markdown_links(&doc, &out_file, &ws_path);
             fs::write(&out_file, doc)?;
-            println!("[+] Successfully wrote compiled Mission Intent to '{}'.", out_file.display());
+            println!(
+                "[+] Successfully wrote compiled Mission Intent to '{}'.",
+                out_file.display()
+            );
         }
     } else {
         println!(
@@ -1024,24 +1081,36 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_unit_integrity_with_unresolved_placeholder() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_validate_unit_integrity_with_unresolved_placeholder(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = std::env::temp_dir().join("test_conops_units_bad");
         fs::create_dir_all(&temp_dir)?;
         let unit_file = temp_dir.join("01_BAD.md");
-        fs::write(&unit_file, "# Unit 1\nUnresolved {{NONEXISTENT_TOKEN_12345}}.")?;
+        fs::write(
+            &unit_file,
+            "# Unit 1\nUnresolved {{NONEXISTENT_TOKEN_12345}}.",
+        )?;
 
         let (is_valid, errors) = validate_unit_integrity(&[unit_file], None);
         assert!(!is_valid);
         assert!(!errors.is_empty());
-        assert!(errors.first().ok_or("missing err")?.contains("NONEXISTENT_TOKEN_12345"));
+        assert!(errors
+            .first()
+            .ok_or("missing err")?
+            .contains("NONEXISTENT_TOKEN_12345"));
         fs::remove_dir_all(&temp_dir)?;
         Ok(())
     }
 
     #[test]
-    fn test_canonical_unit_05_integrity_and_decontamination() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_canonical_unit_05_integrity_and_decontamination(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let repo_root = manifest_dir.parent().ok_or("no p1")?.parent().ok_or("no p2")?;
+        let repo_root = manifest_dir
+            .parent()
+            .ok_or("no p1")?
+            .parent()
+            .ok_or("no p2")?;
         let unit_05_path = repo_root
             .join("skills/spec-conops-engineering/resources/units/conops/05_OPERATIONAL_STATE_SPACE_AND_RISK.md");
 
@@ -1050,22 +1119,60 @@ mod tests {
         }
 
         let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
-        let (is_valid, errors) = validate_unit_integrity(std::slice::from_ref(&unit_05_path), Some(&engine));
-        assert!(is_valid, "Unit 05 integrity validation failed: {:?}", errors);
+        let (is_valid, errors) =
+            validate_unit_integrity(std::slice::from_ref(&unit_05_path), Some(&engine));
+        assert!(
+            is_valid,
+            "Unit 05 integrity validation failed: {:?}",
+            errors
+        );
         assert!(errors.is_empty());
 
         let raw_content = fs::read_to_string(&unit_05_path)?;
-        assert!(!raw_content.contains("AIR_DENSITY"), "Unit 05 must not contain AIR_DENSITY");
-        assert!(!raw_content.contains("t_{\\mathrm{fall}}"), "Unit 05 must not contain ballistic t_fall");
-        assert!(!raw_content.contains("d_{\\mathrm{wind}}"), "Unit 05 must not contain wind drift d_wind");
-        assert!(!raw_content.contains("FRONTAL_AREA"), "Unit 05 must not contain FRONTAL_AREA");
-        assert!(!raw_content.contains("DRAG_COEFFICIENT"), "Unit 05 must not contain DRAG_COEFFICIENT");
-        assert!(!raw_content.contains("Ground Risk Buffer"), "Unit 05 must not contain Ground Risk Buffer");
-        assert!(!raw_content.contains("Ground Risk Class"), "Unit 05 must not contain Ground Risk Class");
-        assert!(!raw_content.contains('\u{2014}'), "Unit 05 must not contain em dash");
-        assert!(!raw_content.contains('\u{2013}'), "Unit 05 must not contain en dash");
-        assert!(raw_content.contains("ISO/IEC/IEEE 15026-3"), "Unit 05 must cite ISO/IEC/IEEE 15026-3");
-        assert!(raw_content.contains("E_{\\mathrm{boundary\\_impact}}"), "Unit 05 must contain boundary impact energy math");
+        assert!(
+            !raw_content.contains("AIR_DENSITY"),
+            "Unit 05 must not contain AIR_DENSITY"
+        );
+        assert!(
+            !raw_content.contains("t_{\\mathrm{fall}}"),
+            "Unit 05 must not contain ballistic t_fall"
+        );
+        assert!(
+            !raw_content.contains("d_{\\mathrm{wind}}"),
+            "Unit 05 must not contain wind drift d_wind"
+        );
+        assert!(
+            !raw_content.contains("FRONTAL_AREA"),
+            "Unit 05 must not contain FRONTAL_AREA"
+        );
+        assert!(
+            !raw_content.contains("DRAG_COEFFICIENT"),
+            "Unit 05 must not contain DRAG_COEFFICIENT"
+        );
+        assert!(
+            !raw_content.contains("Ground Risk Buffer"),
+            "Unit 05 must not contain Ground Risk Buffer"
+        );
+        assert!(
+            !raw_content.contains("Ground Risk Class"),
+            "Unit 05 must not contain Ground Risk Class"
+        );
+        assert!(
+            !raw_content.contains('\u{2014}'),
+            "Unit 05 must not contain em dash"
+        );
+        assert!(
+            !raw_content.contains('\u{2013}'),
+            "Unit 05 must not contain en dash"
+        );
+        assert!(
+            raw_content.contains("ISO/IEC/IEEE 15026-3"),
+            "Unit 05 must cite ISO/IEC/IEEE 15026-3"
+        );
+        assert!(
+            raw_content.contains("E_{\\mathrm{boundary\\_impact}}"),
+            "Unit 05 must contain boundary impact energy math"
+        );
 
         // Verify state space containment geometry is accurately attributed to kinematic trajectory dynamics
         assert!(
@@ -1090,9 +1197,14 @@ mod tests {
     }
 
     #[test]
-    fn test_canonical_unit_05_non_si_aviation_units_and_alias_probe() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_canonical_unit_05_non_si_aviation_units_and_alias_probe(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let repo_root = manifest_dir.parent().ok_or("no p1")?.parent().ok_or("no p2")?;
+        let repo_root = manifest_dir
+            .parent()
+            .ok_or("no p1")?
+            .parent()
+            .ok_or("no p2")?;
         let unit_05_path = repo_root
             .join("skills/spec-conops-engineering/resources/units/conops/05_OPERATIONAL_STATE_SPACE_AND_RISK.md");
 
@@ -1105,7 +1217,13 @@ mod tests {
 
         // 1. Assert canonical ConOps Unit 05 is strictly free of non-SI aviation units
         let forbidden_non_si_units = [
-            "knots", "knot", "kts", "feet", "foot", "mph", "nautical mile",
+            "knots",
+            "knot",
+            "kts",
+            "feet",
+            "foot",
+            "mph",
+            "nautical mile",
         ];
         for unit in &forbidden_non_si_units {
             assert!(
@@ -1129,7 +1247,9 @@ mod tests {
                     line
                 );
                 assert!(
-                    !word.starts_with("FL") || word.len() < 4 || !word[2..].chars().all(|c| c.is_ascii_digit()),
+                    !word.starts_with("FL")
+                        || word.len() < 4
+                        || !word[2..].chars().all(|c| c.is_ascii_digit()),
                     "Unit 05 must not contain flight level designations '{}' in line: {}",
                     word,
                     line
@@ -1139,8 +1259,15 @@ mod tests {
 
         // 2. Assert canonical ConOps Unit 05 is free of hardcoded tactical aviation assumptions
         let forbidden_aviation_concepts = [
-            "sora", "jarus", "bvlos", "vlos", "airspace",
-            "flight termination", "aerodynamic drag", "ballistic fall", "wind drift",
+            "sora",
+            "jarus",
+            "bvlos",
+            "vlos",
+            "airspace",
+            "flight termination",
+            "aerodynamic drag",
+            "ballistic fall",
+            "wind drift",
         ];
         for concept in &forbidden_aviation_concepts {
             assert!(
@@ -1200,7 +1327,10 @@ mod tests {
 
         // Write historical alias file 05_AIRSPACE_AND_SORA_RISK.md
         let alias_file = conops_temp.join("05_AIRSPACE_AND_SORA_RISK.md");
-        fs::write(&alias_file, "## 5. Operational State Space\n\nContent via historical alias.")?;
+        fs::write(
+            &alias_file,
+            "## 5. Operational State Space\n\nContent via historical alias.",
+        )?;
 
         let mut engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
         let (assembled_text, errors) = assemble_document(
@@ -1211,7 +1341,11 @@ mod tests {
             &mut engine,
             None,
         );
-        assert!(errors.is_empty(), "Assembly with alias failed: {:?}", errors);
+        assert!(
+            errors.is_empty(),
+            "Assembly with alias failed: {:?}",
+            errors
+        );
         assert!(
             assembled_text.contains("Content via historical alias"),
             "assemble_document must include 05_AIRSPACE_AND_SORA_RISK.md as fallback alias for Unit 05"
@@ -1222,158 +1356,329 @@ mod tests {
     }
 
     #[test]
-    fn test_canonical_unit_system_architecture_and_optx_decontamination() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_canonical_unit_system_architecture_and_optx_decontamination(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let repo_root = manifest_dir.parent().ok_or("no p1")?.parent().ok_or("no p2")?;
-        let conops_units_dir = repo_root.join("skills/spec-conops-engineering/resources/units/conops");
+        let repo_root = manifest_dir
+            .parent()
+            .ok_or("no p1")?
+            .parent()
+            .ok_or("no p2")?;
+        let conops_units_dir =
+            repo_root.join("skills/spec-conops-engineering/resources/units/conops");
 
         let optx_path = conops_units_dir.join("07_OPTX_EXCHANGES.md");
         if optx_path.is_file() {
             let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
-            let (is_valid, errors) = validate_unit_integrity(std::slice::from_ref(&optx_path), Some(&engine));
-            assert!(is_valid, "Unit 07 integrity validation failed: {:?}", errors);
+            let (is_valid, errors) =
+                validate_unit_integrity(std::slice::from_ref(&optx_path), Some(&engine));
+            assert!(
+                is_valid,
+                "Unit 07 integrity validation failed: {:?}",
+                errors
+            );
             assert!(errors.is_empty());
 
             let raw = fs::read_to_string(&optx_path)?;
-            assert!(!raw.contains("ARINC"), "Unit 07 must not contain ARINC bus protocols");
-            assert!(!raw.contains("avionic"), "Unit 07 must not contain avionic network tiers");
+            assert!(
+                !raw.contains("ARINC"),
+                "Unit 07 must not contain ARINC bus protocols"
+            );
+            assert!(
+                !raw.contains("avionic"),
+                "Unit 07 must not contain avionic network tiers"
+            );
             assert!(!raw.contains("DO-178"), "Unit 07 must not contain DO-178");
             assert!(!raw.contains("DO-254"), "Unit 07 must not contain DO-254");
             assert!(!raw.contains("DAL-A"), "Unit 07 must not contain DAL-A");
             assert!(!raw.contains("DAL-B"), "Unit 07 must not contain DAL-B");
-            assert!(!raw.contains("Control Surface Deflections"), "Unit 07 must not contain Control Surface Deflections");
-            assert!(!raw.contains("Barometric Static Pressure"), "Unit 07 must not contain Barometric Static Pressure");
-            assert!(!raw.contains("Dynamic Bingo"), "Unit 07 must not contain Dynamic Bingo");
-            assert!(!raw.contains("ROE Arming Keys"), "Unit 07 must not contain ROE Arming Keys");
-            assert!(!raw.contains("ASTM F3411"), "Unit 07 must not contain ASTM F3411");
-            assert!(!raw.contains("ASD-STAN"), "Unit 07 must not contain ASD-STAN");
-            assert!(!raw.contains("ballistic recovery"), "Unit 07 must not contain ballistic recovery");
+            assert!(
+                !raw.contains("Control Surface Deflections"),
+                "Unit 07 must not contain Control Surface Deflections"
+            );
+            assert!(
+                !raw.contains("Barometric Static Pressure"),
+                "Unit 07 must not contain Barometric Static Pressure"
+            );
+            assert!(
+                !raw.contains("Dynamic Bingo"),
+                "Unit 07 must not contain Dynamic Bingo"
+            );
+            assert!(
+                !raw.contains("ROE Arming Keys"),
+                "Unit 07 must not contain ROE Arming Keys"
+            );
+            assert!(
+                !raw.contains("ASTM F3411"),
+                "Unit 07 must not contain ASTM F3411"
+            );
+            assert!(
+                !raw.contains("ASD-STAN"),
+                "Unit 07 must not contain ASD-STAN"
+            );
+            assert!(
+                !raw.contains("ballistic recovery"),
+                "Unit 07 must not contain ballistic recovery"
+            );
             assert!(!raw.contains("Squib"), "Unit 07 must not contain Squib");
-            assert!(!raw.contains('\u{2014}'), "Unit 07 must not contain em dash");
-            assert!(!raw.contains('\u{2013}'), "Unit 07 must not contain en dash");
+            assert!(
+                !raw.contains('\u{2014}'),
+                "Unit 07 must not contain em dash"
+            );
+            assert!(
+                !raw.contains('\u{2013}'),
+                "Unit 07 must not contain en dash"
+            );
         }
 
         let arch_04_path = conops_units_dir.join("04_SYSTEM_ARCHITECTURE.md");
         if arch_04_path.is_file() {
             let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
-            let (is_valid, errors) = validate_unit_integrity(std::slice::from_ref(&arch_04_path), Some(&engine));
-            assert!(is_valid, "Unit 04 integrity validation failed: {:?}", errors);
+            let (is_valid, errors) =
+                validate_unit_integrity(std::slice::from_ref(&arch_04_path), Some(&engine));
+            assert!(
+                is_valid,
+                "Unit 04 integrity validation failed: {:?}",
+                errors
+            );
             assert!(errors.is_empty());
 
             let raw = fs::read_to_string(&arch_04_path)?;
-            assert!(!raw.contains("Encrypted PACE Communications"), "Unit 04 must not contain PACE Communications");
+            assert!(
+                !raw.contains("Encrypted PACE Communications"),
+                "Unit 04 must not contain PACE Communications"
+            );
             assert!(!raw.contains("MATLAB"), "Unit 04 must not contain MATLAB");
-            assert!(!raw.contains('\u{2014}'), "Unit 04 must not contain em dash");
-            assert!(!raw.contains('\u{2013}'), "Unit 04 must not contain en dash");
+            assert!(
+                !raw.contains('\u{2014}'),
+                "Unit 04 must not contain em dash"
+            );
+            assert!(
+                !raw.contains('\u{2013}'),
+                "Unit 04 must not contain en dash"
+            );
         }
 
         let arch_08_path = conops_units_dir.join("08_SYSTEM_ARCHITECTURE.md");
         if arch_08_path.is_file() {
             let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
-            let (is_valid, errors) = validate_unit_integrity(std::slice::from_ref(&arch_08_path), Some(&engine));
-            assert!(is_valid, "Unit 08 integrity validation failed: {:?}", errors);
+            let (is_valid, errors) =
+                validate_unit_integrity(std::slice::from_ref(&arch_08_path), Some(&engine));
+            assert!(
+                is_valid,
+                "Unit 08 integrity validation failed: {:?}",
+                errors
+            );
             assert!(errors.is_empty());
 
             let raw = fs::read_to_string(&arch_08_path)?;
             assert!(!raw.contains("ARINC"), "Unit 08 must not contain ARINC");
             assert!(!raw.contains("STANAG"), "Unit 08 must not contain STANAG");
-            assert!(!raw.contains("MIL-STD-1553"), "Unit 08 must not contain MIL-STD-1553");
-            assert!(!raw.contains('\u{2014}'), "Unit 08 must not contain em dash");
-            assert!(!raw.contains('\u{2013}'), "Unit 08 must not contain en dash");
+            assert!(
+                !raw.contains("MIL-STD-1553"),
+                "Unit 08 must not contain MIL-STD-1553"
+            );
+            assert!(
+                !raw.contains('\u{2014}'),
+                "Unit 08 must not contain em dash"
+            );
+            assert!(
+                !raw.contains('\u{2013}'),
+                "Unit 08 must not contain en dash"
+            );
         }
         Ok(())
     }
 
     #[test]
-    fn test_canonical_unit_12_and_lifecycle_containment_decontamination() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_canonical_unit_12_and_lifecycle_containment_decontamination(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let repo_root = manifest_dir.parent().ok_or("no p1")?.parent().ok_or("no p2")?;
-        let conops_units_dir = repo_root.join("skills/spec-conops-engineering/resources/units/conops");
+        let repo_root = manifest_dir
+            .parent()
+            .ok_or("no p1")?
+            .parent()
+            .ok_or("no p2")?;
+        let conops_units_dir =
+            repo_root.join("skills/spec-conops-engineering/resources/units/conops");
 
         let unit_12_path = conops_units_dir.join("12_EMERGENCY_DECISION_MATRIX.md");
         if unit_12_path.is_file() {
             let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
-            let (is_valid, errors) = validate_unit_integrity(std::slice::from_ref(&unit_12_path), Some(&engine));
-            assert!(is_valid, "Unit 12 integrity validation failed: {:?}", errors);
+            let (is_valid, errors) =
+                validate_unit_integrity(std::slice::from_ref(&unit_12_path), Some(&engine));
+            assert!(
+                is_valid,
+                "Unit 12 integrity validation failed: {:?}",
+                errors
+            );
             assert!(errors.is_empty());
 
             let text = fs::read_to_string(&unit_12_path)?;
             let substituted = engine.substitute(&text);
-            assert!(!substituted.contains("{{"), "Unit 12 must have zero unresolved tokens");
-            assert!(!substituted.contains('\u{2014}'), "Unit 12 must not contain em dash");
-            assert!(!substituted.to_lowercase().contains("parachute"), "Unit 12 must not contain parachute");
+            assert!(
+                !substituted.contains("{{"),
+                "Unit 12 must have zero unresolved tokens"
+            );
+            assert!(
+                !substituted.contains('\u{2014}'),
+                "Unit 12 must not contain em dash"
+            );
+            assert!(
+                !substituted.to_lowercase().contains("parachute"),
+                "Unit 12 must not contain parachute"
+            );
         }
 
         // Verify expendable platform assembly produces zero recovery facility or parachute references
         let mut exp_bindings = std::collections::BTreeMap::new();
         exp_bindings.insert("IS_EXPENDABLE".to_string(), "true".to_string());
-        let exp_engine = SysMLParameterBindingEngine::new(Some(exp_bindings), None, None, false, None);
+        let exp_engine =
+            SysMLParameterBindingEngine::new(Some(exp_bindings), None, None, false, None);
 
         let unit_05_path = conops_units_dir.join("05_OPERATIONAL_STATE_SPACE_AND_RISK.md");
         if unit_05_path.is_file() {
-            let (is_valid, errors) = validate_unit_integrity(std::slice::from_ref(&unit_05_path), Some(&exp_engine));
-            assert!(is_valid, "Unit 05 expendable integrity failed: {:?}", errors);
+            let (is_valid, errors) =
+                validate_unit_integrity(std::slice::from_ref(&unit_05_path), Some(&exp_engine));
+            assert!(
+                is_valid,
+                "Unit 05 expendable integrity failed: {:?}",
+                errors
+            );
             let text = fs::read_to_string(&unit_05_path)?;
             let substituted = exp_engine.substitute(&text);
-            assert!(!substituted.to_lowercase().contains("parachute"), "Expendable Unit 05 must not contain parachute");
+            assert!(
+                !substituted.to_lowercase().contains("parachute"),
+                "Expendable Unit 05 must not contain parachute"
+            );
         }
         Ok(())
     }
 
     #[test]
-    fn test_canonical_unit_05_pace_c2_plan_decontamination() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_canonical_unit_05_pace_c2_plan_decontamination(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let repo_root = manifest_dir.parent().ok_or("no p1")?.parent().ok_or("no p2")?;
-        let pace_path = repo_root
-            .join("skills/spec-conops-engineering/resources/units/mission_intent/05_PACE_C2_PLAN.md");
+        let repo_root = manifest_dir
+            .parent()
+            .ok_or("no p1")?
+            .parent()
+            .ok_or("no p2")?;
+        let pace_path = repo_root.join(
+            "skills/spec-conops-engineering/resources/units/mission_intent/05_PACE_C2_PLAN.md",
+        );
 
         if !pace_path.is_file() {
             return Ok(());
         }
 
         let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
-        let (is_valid, errors) = validate_unit_integrity(std::slice::from_ref(&pace_path), Some(&engine));
-        assert!(is_valid, "Unit 05 PACE C2 Plan integrity validation failed: {:?}", errors);
+        let (is_valid, errors) =
+            validate_unit_integrity(std::slice::from_ref(&pace_path), Some(&engine));
+        assert!(
+            is_valid,
+            "Unit 05 PACE C2 Plan integrity validation failed: {:?}",
+            errors
+        );
         assert!(errors.is_empty());
 
         let raw = fs::read_to_string(&pace_path)?;
-        assert!(!raw.contains("MIL-STD-188-220"), "Unit 05 PACE C2 Plan must not contain MIL-STD-188-220");
-        assert!(!raw.contains("MIL-STD-882E"), "Unit 05 PACE C2 Plan must not contain MIL-STD-882E");
-        assert!(!raw.contains("STANAG"), "Unit 05 PACE C2 Plan must not contain STANAG");
-        assert!(!raw.contains("CJCSI"), "Unit 05 PACE C2 Plan must not contain CJCSI");
-        assert!(!raw.contains('\u{2014}'), "Unit 05 PACE C2 Plan must not contain em dash");
-        assert!(!raw.contains('\u{2013}'), "Unit 05 PACE C2 Plan must not contain en dash");
-        assert!(raw.contains("IEEE Std 1558-2020"), "Unit 05 PACE C2 Plan must cite IEEE Std 1558-2020");
-        assert!(raw.contains("ISO/IEC/IEEE 15288:2023"), "Unit 05 PACE C2 Plan must cite ISO/IEC/IEEE 15288:2023");
+        assert!(
+            !raw.contains("MIL-STD-188-220"),
+            "Unit 05 PACE C2 Plan must not contain MIL-STD-188-220"
+        );
+        assert!(
+            !raw.contains("MIL-STD-882E"),
+            "Unit 05 PACE C2 Plan must not contain MIL-STD-882E"
+        );
+        assert!(
+            !raw.contains("STANAG"),
+            "Unit 05 PACE C2 Plan must not contain STANAG"
+        );
+        assert!(
+            !raw.contains("CJCSI"),
+            "Unit 05 PACE C2 Plan must not contain CJCSI"
+        );
+        assert!(
+            !raw.contains('\u{2014}'),
+            "Unit 05 PACE C2 Plan must not contain em dash"
+        );
+        assert!(
+            !raw.contains('\u{2013}'),
+            "Unit 05 PACE C2 Plan must not contain en dash"
+        );
+        assert!(
+            raw.contains("IEEE Std 1558-2020"),
+            "Unit 05 PACE C2 Plan must cite IEEE Std 1558-2020"
+        );
+        assert!(
+            raw.contains("ISO/IEC/IEEE 15288:2023"),
+            "Unit 05 PACE C2 Plan must cite ISO/IEC/IEEE 15288:2023"
+        );
 
         // Verify absence of hardcoded synthetic timeouts
-        assert!(!raw.contains("5.0s"), "Unit 05 PACE C2 Plan must not contain hardcoded 5.0s timeout");
-        assert!(!raw.contains("2.0s"), "Unit 05 PACE C2 Plan must not contain hardcoded 2.0s timeout");
-        assert!(!raw.contains("15.0s"), "Unit 05 PACE C2 Plan must not contain hardcoded 15.0s timeout");
-        assert!(!raw.contains("30.0s"), "Unit 05 PACE C2 Plan must not contain hardcoded 30.0s timeout");
-        assert!(!raw.contains("tau_loss = 5.0"), "Unit 05 PACE C2 Plan must not contain tau_loss = 5.0");
+        assert!(
+            !raw.contains("5.0s"),
+            "Unit 05 PACE C2 Plan must not contain hardcoded 5.0s timeout"
+        );
+        assert!(
+            !raw.contains("2.0s"),
+            "Unit 05 PACE C2 Plan must not contain hardcoded 2.0s timeout"
+        );
+        assert!(
+            !raw.contains("15.0s"),
+            "Unit 05 PACE C2 Plan must not contain hardcoded 15.0s timeout"
+        );
+        assert!(
+            !raw.contains("30.0s"),
+            "Unit 05 PACE C2 Plan must not contain hardcoded 30.0s timeout"
+        );
+        assert!(
+            !raw.contains("tau_loss = 5.0"),
+            "Unit 05 PACE C2 Plan must not contain tau_loss = 5.0"
+        );
 
         // Verify AST-driven timing parameters and operator-configured fallbacks
-        assert!(raw.contains("tau_timeout_Primary"), "Unit 05 PACE C2 Plan must define tau_timeout_Primary");
-        assert!(raw.contains("tau_hysteresis_Primary"), "Unit 05 PACE C2 Plan must define tau_hysteresis_Primary");
-        assert!(raw.contains("OPERATOR_CONFIGURED"), "Unit 05 PACE C2 Plan must support OPERATOR_CONFIGURED parameters");
+        assert!(
+            raw.contains("tau_timeout_Primary"),
+            "Unit 05 PACE C2 Plan must define tau_timeout_Primary"
+        );
+        assert!(
+            raw.contains("tau_hysteresis_Primary"),
+            "Unit 05 PACE C2 Plan must define tau_hysteresis_Primary"
+        );
+        assert!(
+            raw.contains("OPERATOR_CONFIGURED"),
+            "Unit 05 PACE C2 Plan must support OPERATOR_CONFIGURED parameters"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_canonical_unit_01_metadata_and_overview_integrity() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_canonical_unit_01_metadata_and_overview_integrity(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let repo_root = manifest_dir.parent().ok_or("no p1")?.parent().ok_or("no p2")?;
-        let unit_01_path = repo_root
-            .join("skills/spec-conops-engineering/resources/units/conops/01_METADATA_AND_OVERVIEW.md");
+        let repo_root = manifest_dir
+            .parent()
+            .ok_or("no p1")?
+            .parent()
+            .ok_or("no p2")?;
+        let unit_01_path = repo_root.join(
+            "skills/spec-conops-engineering/resources/units/conops/01_METADATA_AND_OVERVIEW.md",
+        );
 
         if !unit_01_path.is_file() {
             return Ok(());
         }
 
         let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
-        let (is_valid, errors) = validate_unit_integrity(std::slice::from_ref(&unit_01_path), Some(&engine));
-        assert!(is_valid, "Unit 01 integrity validation failed: {:?}", errors);
+        let (is_valid, errors) =
+            validate_unit_integrity(std::slice::from_ref(&unit_01_path), Some(&engine));
+        assert!(
+            is_valid,
+            "Unit 01 integrity validation failed: {:?}",
+            errors
+        );
         assert!(errors.is_empty());
 
         let raw = fs::read_to_string(&unit_01_path)?;
@@ -1428,7 +1733,9 @@ mod tests {
 
         // Canonical segments: SupportSegment MUST be present, legacy divergent AuxSupport MUST NOT
         assert!(
-            raw.contains("subgraph SupportSegment[\"Support & Ground Support Equipment (GSE) Segment\"]"),
+            raw.contains(
+                "subgraph SupportSegment[\"Support & Ground Support Equipment (GSE) Segment\"]"
+            ),
             "Unit 01 must declare canonical subgraph SupportSegment (fixes #305)"
         );
         assert!(
@@ -1463,15 +1770,26 @@ mod tests {
         );
 
         // Strict punctuation invariants
-        assert!(!raw.contains('\u{2014}'), "Unit 01 must not contain Unicode em dash");
-        assert!(!raw.contains('\u{2013}'), "Unit 01 must not contain Unicode en dash");
+        assert!(
+            !raw.contains('\u{2014}'),
+            "Unit 01 must not contain Unicode em dash"
+        );
+        assert!(
+            !raw.contains('\u{2013}'),
+            "Unit 01 must not contain Unicode en dash"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_canonical_unit_10_maintenance_and_gse_support_integrity() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_canonical_unit_10_maintenance_and_gse_support_integrity(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let repo_root = manifest_dir.parent().ok_or("no p1")?.parent().ok_or("no p2")?;
+        let repo_root = manifest_dir
+            .parent()
+            .ok_or("no p1")?
+            .parent()
+            .ok_or("no p2")?;
         let unit_10_path = repo_root
             .join("skills/spec-conops-engineering/resources/units/conops/10_MAINTENANCE_AND_GSE_SUPPORT.md");
 
@@ -1480,8 +1798,13 @@ mod tests {
         }
 
         let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
-        let (is_valid, errors) = validate_unit_integrity(std::slice::from_ref(&unit_10_path), Some(&engine));
-        assert!(is_valid, "Unit 10 integrity validation failed: {:?}", errors);
+        let (is_valid, errors) =
+            validate_unit_integrity(std::slice::from_ref(&unit_10_path), Some(&engine));
+        assert!(
+            is_valid,
+            "Unit 10 integrity validation failed: {:?}",
+            errors
+        );
         assert!(errors.is_empty());
 
         let raw = fs::read_to_string(&unit_10_path)?;
@@ -1578,25 +1901,42 @@ mod tests {
         }
 
         // Strict punctuation invariants
-        assert!(!raw.contains('\u{2014}'), "Unit 10 must not contain Unicode em dash");
-        assert!(!raw.contains('\u{2013}'), "Unit 10 must not contain Unicode en dash");
+        assert!(
+            !raw.contains('\u{2014}'),
+            "Unit 10 must not contain Unicode em dash"
+        );
+        assert!(
+            !raw.contains('\u{2013}'),
+            "Unit 10 must not contain Unicode en dash"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_canonical_unit_09_scenarios_and_timelines_integrity() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_canonical_unit_09_scenarios_and_timelines_integrity(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let repo_root = manifest_dir.parent().ok_or("no p1")?.parent().ok_or("no p2")?;
-        let unit_09_path = repo_root
-            .join("skills/spec-conops-engineering/resources/units/conops/09_SCENARIOS_AND_TIMELINES.md");
+        let repo_root = manifest_dir
+            .parent()
+            .ok_or("no p1")?
+            .parent()
+            .ok_or("no p2")?;
+        let unit_09_path = repo_root.join(
+            "skills/spec-conops-engineering/resources/units/conops/09_SCENARIOS_AND_TIMELINES.md",
+        );
 
         if !unit_09_path.is_file() {
             return Ok(());
         }
 
         let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
-        let (is_valid, errors) = validate_unit_integrity(std::slice::from_ref(&unit_09_path), Some(&engine));
-        assert!(is_valid, "Unit 09 integrity validation failed: {:?}", errors);
+        let (is_valid, errors) =
+            validate_unit_integrity(std::slice::from_ref(&unit_09_path), Some(&engine));
+        assert!(
+            is_valid,
+            "Unit 09 integrity validation failed: {:?}",
+            errors
+        );
         assert!(errors.is_empty());
 
         let raw = fs::read_to_string(&unit_09_path)?;
@@ -1604,19 +1944,35 @@ mod tests {
         // Verify all 5 schema-driven scenario structures exist
         assert!(raw.contains("### 9.1 Scenario SCN-01: Normal Operational Cycle"));
         assert!(raw.contains("### 9.2 Scenario SCN-02: Boundary Excursion & Auto-Recovery"));
-        assert!(raw.contains("### 9.3 Scenario SCN-03: Degraded C2 Lost-Link & Autonomous Fallback Return"));
+        assert!(raw.contains(
+            "### 9.3 Scenario SCN-03: Degraded C2 Lost-Link & Autonomous Fallback Return"
+        ));
         assert!(raw.contains("### 9.4 Scenario SCN-04: Emergency State Safing"));
-        assert!(raw.contains("### 9.5 Scenario SCN-05: Sensor Stream Correlation & State Synchronization"));
+        assert!(raw.contains(
+            "### 9.5 Scenario SCN-05: Sensor Stream Correlation & State Synchronization"
+        ));
 
         // Verify valid Mermaid sequence and state diagrams
         assert!(raw.contains("sequenceDiagram"));
         assert!(raw.contains("stateDiagram-v2"));
 
         // Verify elimination of faulty prose-locking synthetic combat drone phases (fixes #317)
-        assert!(!raw.contains("Phase_Ingress_StationKeeping"), "Unit 09 must not contain Phase_Ingress_StationKeeping");
-        assert!(!raw.contains("Phase_PID_InterlockCheck"), "Unit 09 must not contain Phase_PID_InterlockCheck");
-        assert!(!raw.contains("Phase_DualConsent_ArmingExecution"), "Unit 09 must not contain Phase_DualConsent_ArmingExecution");
-        assert!(!raw.contains("Phase_PostAction_AssessmentDump"), "Unit 09 must not contain Phase_PostAction_AssessmentDump");
+        assert!(
+            !raw.contains("Phase_Ingress_StationKeeping"),
+            "Unit 09 must not contain Phase_Ingress_StationKeeping"
+        );
+        assert!(
+            !raw.contains("Phase_PID_InterlockCheck"),
+            "Unit 09 must not contain Phase_PID_InterlockCheck"
+        );
+        assert!(
+            !raw.contains("Phase_DualConsent_ArmingExecution"),
+            "Unit 09 must not contain Phase_DualConsent_ArmingExecution"
+        );
+        assert!(
+            !raw.contains("Phase_PostAction_AssessmentDump"),
+            "Unit 09 must not contain Phase_PostAction_AssessmentDump"
+        );
 
         // Verify verified domain-agnostic state machine phases are present
         assert!(raw.contains("Phase_Stream_Ingress"));
@@ -1624,16 +1980,28 @@ mod tests {
         assert!(raw.contains("Phase_State_Synchronization"));
 
         // Strict punctuation invariants
-        assert!(!raw.contains('\u{2014}'), "Unit 09 must not contain Unicode em dash");
-        assert!(!raw.contains('\u{2013}'), "Unit 09 must not contain Unicode en dash");
+        assert!(
+            !raw.contains('\u{2014}'),
+            "Unit 09 must not contain Unicode em dash"
+        );
+        assert!(
+            !raw.contains('\u{2013}'),
+            "Unit 09 must not contain Unicode en dash"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_canonical_unit_08_environmental_integrity_and_decontamination() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_canonical_unit_08_environmental_integrity_and_decontamination(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let repo_root = manifest_dir.parent().ok_or("no p1")?.parent().ok_or("no p2")?;
-        let conops_units_dir = repo_root.join("skills/spec-conops-engineering/resources/units/conops");
+        let repo_root = manifest_dir
+            .parent()
+            .ok_or("no p1")?
+            .parent()
+            .ok_or("no p2")?;
+        let conops_units_dir =
+            repo_root.join("skills/spec-conops-engineering/resources/units/conops");
         let unit_08_path = conops_units_dir.join("08_ENVIRONMENTAL_MIL_STD_810H.md");
 
         if !unit_08_path.is_file() {
@@ -1641,36 +2009,88 @@ mod tests {
         }
 
         let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
-        let (is_valid, errors) = validate_unit_integrity(std::slice::from_ref(&unit_08_path), Some(&engine));
-        assert!(is_valid, "Unit 08 integrity validation failed: {:?}", errors);
+        let (is_valid, errors) =
+            validate_unit_integrity(std::slice::from_ref(&unit_08_path), Some(&engine));
+        assert!(
+            is_valid,
+            "Unit 08 integrity validation failed: {:?}",
+            errors
+        );
         assert!(errors.is_empty());
 
         let raw = fs::read_to_string(&unit_08_path)?;
 
         // Enforce pure schema-driven compiler invariant: zero hardcoded military standards (refs #323)
-        assert!(!raw.contains("MIL-STD-810H"), "Unit 08 must not hardcode MIL-STD-810H (refs #323)");
-        assert!(!raw.contains("MIL-STD-461G"), "Unit 08 must not hardcode MIL-STD-461G (refs #323)");
-        assert!(!raw.contains("MIL-STD-1472H"), "Unit 08 must not hardcode MIL-STD-1472H (refs #323)");
+        assert!(
+            !raw.contains("MIL-STD-810H"),
+            "Unit 08 must not hardcode MIL-STD-810H (refs #323)"
+        );
+        assert!(
+            !raw.contains("MIL-STD-461G"),
+            "Unit 08 must not hardcode MIL-STD-461G (refs #323)"
+        );
+        assert!(
+            !raw.contains("MIL-STD-1472H"),
+            "Unit 08 must not hardcode MIL-STD-1472H (refs #323)"
+        );
 
         // Enforce decontamination of tactical aviation / military hardware concepts (refs #323)
-        assert!(!raw.contains("Air Transport"), "Unit 08 must not contain aviation concept Air Transport");
-        assert!(!raw.contains("Air Carriage"), "Unit 08 must not contain aviation concept Air Carriage");
-        assert!(!raw.contains("Rapid Decompression"), "Unit 08 must not contain aviation concept Rapid Decompression");
-        assert!(!raw.contains("altitude ceiling"), "Unit 08 must not contain aviation concept altitude ceiling");
-        assert!(!raw.contains("cargo hold"), "Unit 08 must not contain aviation concept cargo hold");
-        assert!(!raw.contains("radome"), "Unit 08 must not contain aviation concept radome");
-        assert!(!raw.contains("telemetry mast"), "Unit 08 must not contain aviation concept telemetry mast");
-        assert!(!raw.contains("Ground Support Equipment"), "Unit 08 must not hardcode Ground Support Equipment");
-        assert!(!raw.contains("Red China Clay"), "Unit 08 must not contain military test dust Red China Clay");
-        assert!(!raw.contains("gunfire vibration"), "Unit 08 must not contain military gunfire vibration");
+        assert!(
+            !raw.contains("Air Transport"),
+            "Unit 08 must not contain aviation concept Air Transport"
+        );
+        assert!(
+            !raw.contains("Air Carriage"),
+            "Unit 08 must not contain aviation concept Air Carriage"
+        );
+        assert!(
+            !raw.contains("Rapid Decompression"),
+            "Unit 08 must not contain aviation concept Rapid Decompression"
+        );
+        assert!(
+            !raw.contains("altitude ceiling"),
+            "Unit 08 must not contain aviation concept altitude ceiling"
+        );
+        assert!(
+            !raw.contains("cargo hold"),
+            "Unit 08 must not contain aviation concept cargo hold"
+        );
+        assert!(
+            !raw.contains("radome"),
+            "Unit 08 must not contain aviation concept radome"
+        );
+        assert!(
+            !raw.contains("telemetry mast"),
+            "Unit 08 must not contain aviation concept telemetry mast"
+        );
+        assert!(
+            !raw.contains("Ground Support Equipment"),
+            "Unit 08 must not hardcode Ground Support Equipment"
+        );
+        assert!(
+            !raw.contains("Red China Clay"),
+            "Unit 08 must not contain military test dust Red China Clay"
+        );
+        assert!(
+            !raw.contains("gunfire vibration"),
+            "Unit 08 must not contain military gunfire vibration"
+        );
 
         // Verify abstract standards citations
-        assert!(raw.contains("ISO/IEC/IEEE 15288:2023"), "Unit 08 must cite ISO/IEC/IEEE 15288:2023");
-        assert!(raw.contains("ISO/IEC/IEEE 29148:2018"), "Unit 08 must cite ISO/IEC/IEEE 29148:2018");
+        assert!(
+            raw.contains("ISO/IEC/IEEE 15288:2023"),
+            "Unit 08 must cite ISO/IEC/IEEE 15288:2023"
+        );
+        assert!(
+            raw.contains("ISO/IEC/IEEE 29148:2018"),
+            "Unit 08 must cite ISO/IEC/IEEE 29148:2018"
+        );
         assert!(raw.contains("IEC 60529"), "Unit 08 must cite IEC 60529");
 
         // Verify abstract qualification matrix rows exist
-        for env_id in &["ENV-01", "ENV-02", "ENV-03", "ENV-04", "ENV-05", "ENV-06", "ENV-07"] {
+        for env_id in &[
+            "ENV-01", "ENV-02", "ENV-03", "ENV-04", "ENV-05", "ENV-06", "ENV-07",
+        ] {
             assert!(
                 raw.contains(&format!("**{}**", env_id)),
                 "Unit 08 must contain abstract environmental matrix row {}",
@@ -1680,21 +2100,38 @@ mod tests {
 
         // Verify parameterization & substitution cleanliness
         let substituted = engine.substitute(&raw);
-        assert!(!substituted.contains("{{"), "Unit 08 substituted output must contain zero unresolved placeholders");
+        assert!(
+            !substituted.contains("{{"),
+            "Unit 08 substituted output must contain zero unresolved placeholders"
+        );
 
         // Strict punctuation invariants
-        assert!(!raw.contains('\u{2014}'), "Unit 08 must not contain Unicode em dash");
-        assert!(!raw.contains('\u{2013}'), "Unit 08 must not contain Unicode en dash");
+        assert!(
+            !raw.contains('\u{2014}'),
+            "Unit 08 must not contain Unicode em dash"
+        );
+        assert!(
+            !raw.contains('\u{2013}'),
+            "Unit 08 must not contain Unicode en dash"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_governance_rule_conops_mission_intent_integrity_decontamination() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_governance_rule_conops_mission_intent_integrity_decontamination(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let repo_root = manifest_dir.parent().ok_or("no p1")?.parent().ok_or("no p2")?;
+        let repo_root = manifest_dir
+            .parent()
+            .ok_or("no p1")?
+            .parent()
+            .ok_or("no p2")?;
         let rule_path = repo_root.join("rules/conops-mission-intent-integrity.md");
 
-        assert!(rule_path.is_file(), "rules/conops-mission-intent-integrity.md must exist");
+        assert!(
+            rule_path.is_file(),
+            "rules/conops-mission-intent-integrity.md must exist"
+        );
         let content = fs::read_to_string(&rule_path)?;
 
         // Forbidden domain-specific aerospace concepts violating Pure Schema-Driven Compiler Invariant
@@ -1728,23 +2165,40 @@ mod tests {
     }
 
     #[test]
-    fn test_canonical_mission_intent_unit_09_resource_math_decontamination() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_canonical_mission_intent_unit_09_resource_math_decontamination(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let repo_root = manifest_dir.parent().ok_or("no p1")?.parent().ok_or("no p2")?;
-        let unit_09_path = repo_root.join("skills/spec-conops-engineering/resources/units/mission_intent/09_BINGO_ENERGY_MATH.md");
+        let repo_root = manifest_dir
+            .parent()
+            .ok_or("no p1")?
+            .parent()
+            .ok_or("no p2")?;
+        let unit_09_path = repo_root.join(
+            "skills/spec-conops-engineering/resources/units/mission_intent/09_BINGO_ENERGY_MATH.md",
+        );
 
-        assert!(unit_09_path.is_file(), "09_BINGO_ENERGY_MATH.md must exist on disk");
+        assert!(
+            unit_09_path.is_file(),
+            "09_BINGO_ENERGY_MATH.md must exist on disk"
+        );
 
         let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
-        let (is_valid, errors) = validate_unit_integrity(std::slice::from_ref(&unit_09_path), Some(&engine));
-        assert!(is_valid, "Unit 09 integrity validation failed: {:?}", errors);
+        let (is_valid, errors) =
+            validate_unit_integrity(std::slice::from_ref(&unit_09_path), Some(&engine));
+        assert!(
+            is_valid,
+            "Unit 09 integrity validation failed: {:?}",
+            errors
+        );
         assert!(errors.is_empty());
 
         let raw = fs::read_to_string(&unit_09_path)?;
 
         // Required headings and abstract MBSE mathematical standards (INCOSE SEH v5.0 §3.2)
         assert!(
-            raw.contains("## 9. Critical Energy Threshold Mathematics & Secondary Divert Protocols"),
+            raw.contains(
+                "## 9. Critical Energy Threshold Mathematics & Secondary Divert Protocols"
+            ),
             "Unit 09 must contain canonical Section 9 heading"
         );
         assert!(
@@ -1756,7 +2210,8 @@ mod tests {
             "Unit 09 must contain Section 9.2 heading"
         );
         assert!(
-            raw.contains("INCOSE Systems Engineering Handbook v5.0 (§3.2)") || raw.contains("INCOSE SEH v5.0 §3.2"),
+            raw.contains("INCOSE Systems Engineering Handbook v5.0 (§3.2)")
+                || raw.contains("INCOSE SEH v5.0 §3.2"),
             "Unit 09 must cite INCOSE SEH v5.0 §3.2"
         );
         assert!(
@@ -1764,7 +2219,8 @@ mod tests {
             "Unit 09 must formulate dynamic resource threshold R_threshold(t)"
         );
         assert!(
-            raw.contains(r"\text{Ratio}_{\text{reserve\_min}}") || raw.contains(r"Ratio_{\text{reserve\_min}}"),
+            raw.contains(r"\text{Ratio}_{\text{reserve\_min}}")
+                || raw.contains(r"Ratio_{\text{reserve\_min}}"),
             "Unit 09 must formulate statutory resource reserve ratio"
         );
 
@@ -1798,14 +2254,7 @@ mod tests {
         );
 
         // Verification of zero non-SI aviation units
-        let forbidden_units = [
-            "knots",
-            "knot",
-            "kts",
-            "feet",
-            "nautical mile",
-            "fpm",
-        ];
+        let forbidden_units = ["knots", "knot", "kts", "feet", "nautical mile", "fpm"];
 
         let mut found_units = Vec::new();
         for unit in &forbidden_units {
@@ -1826,13 +2275,21 @@ mod tests {
         );
 
         // Verification of zero Unicode em dash or en dash
-        assert!(!raw.contains('\u{2014}'), "Unit 09 must not contain Unicode em dash");
-        assert!(!raw.contains('\u{2013}'), "Unit 09 must not contain Unicode en dash");
+        assert!(
+            !raw.contains('\u{2014}'),
+            "Unit 09 must not contain Unicode em dash"
+        );
+        assert!(
+            !raw.contains('\u{2013}'),
+            "Unit 09 must not contain Unicode en dash"
+        );
 
         // Verification of clean parameter substitution with zero unresolved tokens
         let substituted = engine.substitute(&raw);
-        assert!(!substituted.contains("{{"), "Unit 09 substituted output must contain zero unresolved placeholders");
+        assert!(
+            !substituted.contains("{{"),
+            "Unit 09 substituted output must contain zero unresolved placeholders"
+        );
         Ok(())
     }
 }
-

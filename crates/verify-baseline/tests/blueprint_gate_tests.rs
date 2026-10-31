@@ -379,7 +379,8 @@ fn test_check_1_rejects_ephemeral_and_invalid_paths() {
     let private_var_folders = Path::new("/private/var/folders/ab/cd/T/blueprint-01-ephemeral.md");
     assert!(check_1_zero_ephemeral_path(ws, private_var_folders).is_err());
 
-    let env_temp = std::env::temp_dir().join(format!("blueprint-01-temp-{}.md", std::process::id()));
+    let env_temp =
+        std::env::temp_dir().join(format!("blueprint-01-temp-{}.md", std::process::id()));
     assert!(check_1_zero_ephemeral_path(ws, &env_temp).is_err());
 
     let wrong_dir = Path::new("docs/epics/blueprint-01-wrong-dir.md");
@@ -470,11 +471,17 @@ fn test_check_2_metadata_table_pass_and_mutations() {
     );
 
     // Mutation 1: Wrong Generation Mode ("manual" instead of "subagent")
-    let bad_mode = valid.replace("| **Generation Mode** | `subagent` |", "| **Generation Mode** | `manual` |");
+    let bad_mode = valid.replace(
+        "| **Generation Mode** | `subagent` |",
+        "| **Generation Mode** | `manual` |",
+    );
     assert!(check_2_metadata_table(&bad_mode).is_err());
 
     // Mutation 2: Requirement ID missing "REQ-"
-    let bad_req = valid.replace("| **Requirement ID** | `REQ-BP-001` |", "| **Requirement ID** | `BP-001` |");
+    let bad_req = valid.replace(
+        "| **Requirement ID** | `REQ-BP-001` |",
+        "| **Requirement ID** | `BP-001` |",
+    );
     assert!(check_2_metadata_table(&bad_req).is_err());
 
     // Mutation 3: Missing Specification Source row
@@ -571,10 +578,7 @@ fn test_check_3_sections_order_and_completeness() {
 
     // Mutation 2: Out-of-order sections (Section 3 before Section 2)
     let out_of_order = valid
-        .replace(
-            "## 2. Structural Component Metamodel",
-            "__TEMP_SEC_2__",
-        )
+        .replace("## 2. Structural Component Metamodel", "__TEMP_SEC_2__")
         .replace(
             "## 3. UML & Behavioral Topology",
             "## 2. Structural Component Metamodel",
@@ -659,9 +663,7 @@ fn test_check_4_derivation_table_pass_and_mutations() {
         rows.get(2).map(|r| r.grade.as_str()),
         Some("Declared Assumption")
     );
-    assert!(rows
-        .first()
-        .is_some_and(|r| r.claim.contains("\\|x\\|")));
+    assert!(rows.first().is_some_and(|r| r.claim.contains("\\|x\\|")));
 
     // Mutation 1: Invalid Derivation Grade
     let bad_grade = [
@@ -753,10 +755,16 @@ fn test_check_5_components_pass_and_mutations() {
     assert!(res.is_ok(), "Expected Check 5 pass, got: {res:?}");
     let comps = res.unwrap_or_default();
     assert_eq!(comps.len(), 2);
-    assert_eq!(comps.first().map(|c| c.name.as_str()), Some("TelemetryRouter"));
+    assert_eq!(
+        comps.first().map(|c| c.name.as_str()),
+        Some("TelemetryRouter")
+    );
     assert_eq!(comps.first().map(|c| c.properties.len()), Some(5));
     assert_eq!(comps.first().map(|c| c.ports.len()), Some(3));
-    assert_eq!(comps.get(1).map(|c| c.name.as_str()), Some("WatchdogMonitor"));
+    assert_eq!(
+        comps.get(1).map(|c| c.name.as_str()),
+        Some("WatchdogMonitor")
+    );
 
     // Verify public types BlueprintReport and BlueprintCliOptions are constructible
     let report = BlueprintReport {
@@ -1469,14 +1477,8 @@ fn test_check_10_compiles_and_persists_sysml_and_digest_in_docs_designs() {
         nanos
     ));
     let designs_dir = temp_ws.join("docs").join("designs");
-    let src_dir = temp_ws
-        .join("crates")
-        .join("verify-baseline")
-        .join("src");
-    let tests_dir = temp_ws
-        .join("crates")
-        .join("verify-baseline")
-        .join("tests");
+    let src_dir = temp_ws.join("crates").join("verify-baseline").join("src");
+    let tests_dir = temp_ws.join("crates").join("verify-baseline").join("tests");
 
     std::fs::create_dir_all(&designs_dir).unwrap_or(());
     std::fs::create_dir_all(&src_dir).unwrap_or(());
@@ -1554,8 +1556,10 @@ fn test_check_10_compiles_and_persists_sysml_and_digest_in_docs_designs() {
 
     // Negative mutation: Markdown lacking component/constraint constructs fails Check 10
     let incomplete_bp = designs_dir.join("blueprint-98-incomplete.md");
-    let incomplete_res =
-        check_10_compile_and_persist_sysml(&incomplete_bp, "# EmptyDoc\n\nNo requirements or parts.\n");
+    let incomplete_res = check_10_compile_and_persist_sysml(
+        &incomplete_bp,
+        "# EmptyDoc\n\nNo requirements or parts.\n",
+    );
     assert!(
         incomplete_res.is_err(),
         "Check 10 must reject markdown lacking required SysML constructs"
@@ -1640,11 +1644,8 @@ fn test_check_12_closed_loop_payload_verification_passes_and_rejects_mismatch() 
     );
 
     // Negative 1: Mismatched title
-    let bad_title = verify_closed_loop_github_payload(
-        valid_json,
-        "Wrong Blueprint Title",
-        "REQ-BP-001",
-    );
+    let bad_title =
+        verify_closed_loop_github_payload(valid_json, "Wrong Blueprint Title", "REQ-BP-001");
     assert!(bad_title.is_err());
 
     // Negative 2: Missing requirement ID in body
@@ -1739,20 +1740,11 @@ fn test_full_verify_blueprint_end_to_end_pass_and_fail_closed() {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let temp_ws = std::env::temp_dir().join(format!(
-        "deap_bp_e2e_test_{}_{}",
-        std::process::id(),
-        nanos
-    ));
+    let temp_ws =
+        std::env::temp_dir().join(format!("deap_bp_e2e_test_{}_{}", std::process::id(), nanos));
     let designs_dir = temp_ws.join("docs").join("designs");
-    let src_dir = temp_ws
-        .join("crates")
-        .join("verify-baseline")
-        .join("src");
-    let tests_dir = temp_ws
-        .join("crates")
-        .join("verify-baseline")
-        .join("tests");
+    let src_dir = temp_ws.join("crates").join("verify-baseline").join("src");
+    let tests_dir = temp_ws.join("crates").join("verify-baseline").join("tests");
 
     std::fs::create_dir_all(&designs_dir).unwrap_or(());
     std::fs::create_dir_all(&src_dir).unwrap_or(());
@@ -1795,7 +1787,10 @@ fn test_full_verify_blueprint_end_to_end_pass_and_fail_closed() {
         dry_run: true,
     };
     let verify_fail = verify_blueprint(&temp_ws, &fail_opts);
-    assert!(verify_fail.is_err(), "Expected verify_blueprint to fail closed");
+    assert!(
+        verify_fail.is_err(),
+        "Expected verify_blueprint to fail closed"
+    );
     let exit_fail = run_blueprint_cli(&temp_ws, &fail_opts);
     assert_eq!(exit_fail, 1, "Expected exit code 1 on violated blueprint");
     assert!(
@@ -1874,14 +1869,8 @@ fn test_multi_component_pascal_case_types_and_dry_run_sysml_persistence() {
         nanos
     ));
     let designs_dir = temp_ws.join("docs").join("designs");
-    let src_dir = temp_ws
-        .join("crates")
-        .join("verify-baseline")
-        .join("src");
-    let tests_dir = temp_ws
-        .join("crates")
-        .join("verify-baseline")
-        .join("tests");
+    let src_dir = temp_ws.join("crates").join("verify-baseline").join("src");
+    let tests_dir = temp_ws.join("crates").join("verify-baseline").join("tests");
 
     std::fs::create_dir_all(&designs_dir).unwrap_or(());
     std::fs::create_dir_all(&src_dir).unwrap_or(());
@@ -1956,8 +1945,14 @@ fn test_multi_component_pascal_case_types_and_dry_run_sysml_persistence() {
 
     if let Ok(report) = report_res {
         assert_eq!(report.components.len(), 2);
-        assert!(report.sysml_path.exists(), "Expected .sysml file to be persisted under --dry-run");
-        assert!(report.digest_path.exists(), "Expected .digest.json file to be persisted under --dry-run");
+        assert!(
+            report.sysml_path.exists(),
+            "Expected .sysml file to be persisted under --dry-run"
+        );
+        assert!(
+            report.digest_path.exists(),
+            "Expected .digest.json file to be persisted under --dry-run"
+        );
         let sysml_res = std::fs::read_to_string(&report.sysml_path);
         assert!(sysml_res.is_ok(), "Persisted .sysml must be readable");
         let Ok(sysml_text) = sysml_res else {
@@ -2058,7 +2053,10 @@ fn test_req_0604_ac01_and_ac05_operation_signatures_and_parent_epic_helpers() {
     assert_eq!(parsed, Some(action.clone()));
 
     // Negative / fail-closed probes for malformed bullets (AC-05)
-    assert_eq!(parse_markdown_operation_bullet("- `ComputeTrajectory()`"), None);
+    assert_eq!(
+        parse_markdown_operation_bullet("- `ComputeTrajectory()`"),
+        None
+    );
     assert_eq!(parse_markdown_operation_bullet("- `+()`"), None);
     assert_eq!(parse_markdown_operation_bullet("plain text line"), None);
 
@@ -2164,7 +2162,8 @@ fn test_req_0604_ac01_and_ac05_operation_signatures_and_parent_epic_helpers() {
 #[test]
 fn test_req_0604_ac02_logical_icd_matrix_and_signal_dictionary() {
     use compile_sysml::sync::forward::{
-        compile_logical_icd_artifacts, emit_logical_icd_artifacts, try_compile_logical_icd_artifacts,
+        compile_logical_icd_artifacts, emit_logical_icd_artifacts,
+        try_compile_logical_icd_artifacts,
     };
     use deap_core::sysml_ast::{ConnectionDef, PackageDef, PartDef, PortDef};
 
@@ -2210,12 +2209,13 @@ fn test_req_0604_ac02_logical_icd_matrix_and_signal_dictionary() {
     assert!(icd02.contains("# ICD_02: Master Signal Dictionary"));
     assert!(icd02.contains("GuidanceCmd"));
 
-    let tmp_dir = std::env::temp_dir().join(format!(
-        "deap_req_0604_icd_test_{}",
-        std::process::id()
-    ));
+    let tmp_dir =
+        std::env::temp_dir().join(format!("deap_req_0604_icd_test_{}", std::process::id()));
     let emitted = emit_logical_icd_artifacts(&pkg, &tmp_dir);
-    assert!(emitted.is_ok(), "Expected ICD emission to succeed: {emitted:?}");
+    assert!(
+        emitted.is_ok(),
+        "Expected ICD emission to succeed: {emitted:?}"
+    );
     if let Ok((p1, p2)) = emitted {
         assert!(p1.is_file());
         assert!(p2.is_file());
@@ -2323,16 +2323,21 @@ fn test_req_0604_ac03_wbs_level4_and_enterprise_exports() {
     assert!(bundle.msproject_xml.contains("<Project"));
     assert!(bundle.ast_json.contains("\"wbs_code\": \"01.01.01\""));
 
-    let tmp_dir = std::env::temp_dir().join(format!(
-        "deap_req_0604_wbs_test_{}",
-        std::process::id()
-    ));
+    let tmp_dir =
+        std::env::temp_dir().join(format!("deap_req_0604_wbs_test_{}", std::process::id()));
     let written = emit_wbs_artifacts(&root, &tmp_dir);
-    assert!(written.is_ok(), "Expected WBS emission to succeed: {written:?}");
+    assert!(
+        written.is_ok(),
+        "Expected WBS emission to succeed: {written:?}"
+    );
     if let Ok(paths) = written {
         assert_eq!(paths.len(), 7);
         for p in &paths {
-            assert!(p.is_file(), "Expected emitted WBS artifact to exist: {}", p.display());
+            assert!(
+                p.is_file(),
+                "Expected emitted WBS artifact to exist: {}",
+                p.display()
+            );
         }
     }
     std::fs::remove_dir_all(&tmp_dir).unwrap_or(());
@@ -2386,7 +2391,10 @@ fn test_req_0604_ac04_html_comment_reopen_and_inclusive_epic_count() {
     };
 
     let mut in_comment = false;
-    assert!(advance_html_comment_state("<!-- start comment", &mut in_comment));
+    assert!(advance_html_comment_state(
+        "<!-- start comment",
+        &mut in_comment
+    ));
     assert!(in_comment);
 
     // Same-line close followed by unclosed re-open must keep in_comment == true
@@ -2407,10 +2415,19 @@ fn test_req_0604_ac04_html_comment_reopen_and_inclusive_epic_count() {
     assert!(!in_comment);
 
     let child_specs = vec![
-        ("epics/EPIC-02-ConOps.md".to_string(), "# Epic 2".to_string()),
+        (
+            "epics/EPIC-02-ConOps.md".to_string(),
+            "# Epic 2".to_string(),
+        ),
         ("epics/EPIC-03-Nav.md".to_string(), "# Epic 3".to_string()),
-        ("epics/EPIC-02-ConOps.md".to_string(), "# Epic 2 dup".to_string()),
-        ("features/FEAT-01-Core.md".to_string(), "# Feat 1".to_string()),
+        (
+            "epics/EPIC-02-ConOps.md".to_string(),
+            "# Epic 2 dup".to_string(),
+        ),
+        (
+            "features/FEAT-01-Core.md".to_string(),
+            "# Feat 1".to_string(),
+        ),
     ];
     assert_eq!(
         count_total_epics_inclusive("epics/EPIC-01-Root.md", true, &child_specs),
@@ -2422,7 +2439,10 @@ fn test_req_0604_ac04_html_comment_reopen_and_inclusive_epic_count() {
     );
 
     // Verify CLI pre-dispatch returns Ok(None) when neither --emit-icd nor --emit-wbs is passed
-    let normal_args = vec!["compile-sysml".to_string(), "schema/model.sysml".to_string()];
+    let normal_args = vec![
+        "compile-sysml".to_string(),
+        "schema/model.sysml".to_string(),
+    ];
     assert_eq!(execute_emit_cli_args(&normal_args), Ok(None));
 }
 
@@ -2466,9 +2486,9 @@ fn test_req_0605_ac01_ac05_unified_lexer_multiline_annotations_and_schema_isolat
         resolve_schema_context_strict,
     };
     use deap_core::source_ast::{
-        RustDartLexState, ScopedItemScannerState, SourceLanguage,
-        extract_rust_impl_header_prefix, parse_rust_impl_header,
-        scan_line_with_unified_lex_state, strip_dart_annotations_tracking_state,
+        extract_rust_impl_header_prefix, parse_rust_impl_header, scan_line_with_unified_lex_state,
+        strip_dart_annotations_tracking_state, RustDartLexState, ScopedItemScannerState,
+        SourceLanguage,
     };
     use deap_core::sysml_ast::{ConstraintDef, PackageDef, PartDef, RequirementDef};
     use verify_baseline::checks::docstring_gate::{
@@ -2506,12 +2526,8 @@ fn test_req_0605_ac01_ac05_unified_lexer_multiline_annotations_and_schema_isolat
         "Synthesized docstring must be placed BEFORE @pragma(, got:\n{pass1_out}"
     );
 
-    let pass2_res = inject_dart_file_docstrings(
-        &pass1_out,
-        "app_flutter/lib/signal_step.dart",
-        None,
-        false,
-    );
+    let pass2_res =
+        inject_dart_file_docstrings(&pass1_out, "app_flutter/lib/signal_step.dart", None, false);
     assert!(
         pass2_res.is_ok(),
         "Expected Pass 2 of inject_dart_file_docstrings to succeed: {pass2_res:?}"
@@ -2588,7 +2604,10 @@ fn test_req_0605_ac01_ac05_unified_lexer_multiline_annotations_and_schema_isolat
         Some(&schema_pkg),
         false,
     );
-    assert!(rust_res.is_ok(), "Expected Rust docstring injection to succeed: {rust_res:?}");
+    assert!(
+        rust_res.is_ok(),
+        "Expected Rust docstring injection to succeed: {rust_res:?}"
+    );
     let (rust_enriched, rust_count) = rust_res.unwrap_or_default();
     assert_eq!(rust_count, 2);
     assert!(
@@ -2738,12 +2757,8 @@ impl TempWorkspace {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let root = std::env::temp_dir().join(format!(
-            "deap_{}_{}_{}",
-            prefix,
-            std::process::id(),
-            nanos
-        ));
+        let root =
+            std::env::temp_dir().join(format!("deap_{}_{}_{}", prefix, std::process::id(), nanos));
         let create_res = std::fs::create_dir_all(&root);
         assert!(
             create_res.is_ok(),
@@ -2921,8 +2936,7 @@ fn req_0606_ac01_to_ac04_cli_audit_code_five_pillars_dossiers_idempotency_and_fa
     use std::process::Command;
     use verify_baseline::audit_code::{
         ClosedLoopDefectPublisherGate, DeterministicDossierSynthesizer,
-        DeterministicStaticDefectAuditor, FivePillarStaticAstAnalyzer,
-        MermaidUmlDiagramGenerator,
+        DeterministicStaticDefectAuditor, FivePillarStaticAstAnalyzer, MermaidUmlDiagramGenerator,
     };
 
     let auditor_meta = DeterministicStaticDefectAuditor::default();
@@ -3022,7 +3036,10 @@ fn req_0606_ac01_to_ac04_cli_audit_code_five_pillars_dossiers_idempotency_and_fa
 
     let bin = env!("CARGO_BIN_EXE_verify-baseline");
     let ws_root_str = ws.root.to_str().unwrap_or("");
-    assert!(!ws_root_str.is_empty(), "Workspace path must be valid UTF-8");
+    assert!(
+        !ws_root_str.is_empty(),
+        "Workspace path must be valid UTF-8"
+    );
 
     // Run 1: full 5-pillar audit in --dry-run mode
     let run1_res = Command::new(bin)
@@ -3117,7 +3134,10 @@ fn req_0606_ac01_to_ac04_cli_audit_code_five_pillars_dossiers_idempotency_and_fa
     // Verify `--pillar concurrency` filters strictly to Pillar 3 (AC-01)
     for file_name in run1_dossiers.keys() {
         let rm_res = std::fs::remove_file(defects_dir.join(file_name));
-        assert!(rm_res.is_ok(), "Failed to clear dossier {file_name}: {rm_res:?}");
+        assert!(
+            rm_res.is_ok(),
+            "Failed to clear dossier {file_name}: {rm_res:?}"
+        );
     }
     let filter_res = Command::new(bin)
         .args([
@@ -3265,7 +3285,10 @@ fn req_0606_ac01_to_ac04_cli_audit_code_five_pillars_dossiers_idempotency_and_fa
     let neg_missing_res = Command::new(bin)
         .args(["audit-code", "--path", missing_str, "--dry-run"])
         .output();
-    assert!(neg_missing_res.is_ok(), "Failed to spawn negative missing-path probe");
+    assert!(
+        neg_missing_res.is_ok(),
+        "Failed to spawn negative missing-path probe"
+    );
     if let Ok(neg_missing_out) = neg_missing_res {
         assert_eq!(
             neg_missing_out.status.code(),
@@ -3285,7 +3308,10 @@ fn req_0606_ac01_to_ac04_cli_audit_code_five_pillars_dossiers_idempotency_and_fa
     let neg_brace_res = Command::new(bin)
         .args(["audit-code", "--path", broken_ws_str, "--dry-run"])
         .output();
-    assert!(neg_brace_res.is_ok(), "Failed to spawn negative unbalanced-brace probe");
+    assert!(
+        neg_brace_res.is_ok(),
+        "Failed to spawn negative unbalanced-brace probe"
+    );
     if let Ok(neg_brace_out) = neg_brace_res {
         assert_eq!(
             neg_brace_out.status.code(),
@@ -3306,7 +3332,10 @@ fn req_0606_ac01_to_ac04_cli_audit_code_five_pillars_dossiers_idempotency_and_fa
             "--dry-run",
         ])
         .output();
-    assert!(neg_pillar_res.is_ok(), "Failed to spawn negative invalid-pillar probe");
+    assert!(
+        neg_pillar_res.is_ok(),
+        "Failed to spawn negative invalid-pillar probe"
+    );
     if let Ok(neg_pillar_out) = neg_pillar_res {
         assert_eq!(
             neg_pillar_out.status.code(),
@@ -3511,7 +3540,10 @@ fn check_37_rejects_approved_design_blueprint_with_nonexistent_crates_path() {
     use verify_baseline::checks::structural::check_blueprint_grounding;
 
     let ws = TempWorkspace::new("check_37_approved_bp");
-    ws.write_file("crates/verify-baseline/src/lib.rs", "// existing crate root\n");
+    ws.write_file(
+        "crates/verify-baseline/src/lib.rs",
+        "// existing crate root\n",
+    );
 
     let approved_bp = concat!(
         "| Attribute | Specification Detail |\n",
@@ -3568,6 +3600,3 @@ fn check_37_rejects_approved_design_blueprint_with_nonexistent_crates_path() {
         "Expected Approved design blueprint with existing crates/ module to return Ok(()), got: {approved_present_res:?}"
     );
 }
-
-
-

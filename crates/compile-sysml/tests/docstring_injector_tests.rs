@@ -118,8 +118,13 @@ fn unique_test_dir(prefix: &str) -> Result<PathBuf, String> {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     let path = std::env::temp_dir().join(format!("{}_{}_{}", prefix, std::process::id(), nanos));
-    fs::create_dir_all(&path)
-        .map_err(|e| format!("Failed to create unique temp dir '{}': {}", path.display(), e))?;
+    fs::create_dir_all(&path).map_err(|e| {
+        format!(
+            "Failed to create unique temp dir '{}': {}",
+            path.display(),
+            e
+        )
+    })?;
     Ok(path)
 }
 
@@ -626,8 +631,8 @@ impl AttitudeController {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-DART-MULTILINE-AND-STRING-SLICE-SAFETY]
 #[test]
-fn test_injector_handles_multiline_dart_classes_string_slashes_interpolated_utf8_quotes_and_dart3_items()
--> Result<(), String> {
+fn test_injector_handles_multiline_dart_classes_string_slashes_interpolated_utf8_quotes_and_dart3_items(
+) -> Result<(), String> {
     let dart_source = r#"// Leading top comment
 import 'dart:async';
 
@@ -745,8 +750,8 @@ class SecondaryService {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-09-DOCSTRING-CLI-EXIT-CODES], [REQ-FEAT-42-DOCSTRING-EXIT-CODE]
 #[test]
-fn test_cli_exit_code_1_on_broken_schema_and_exit_code_2_on_conflicting_unforced_docstring()
--> Result<(), String> {
+fn test_cli_exit_code_1_on_broken_schema_and_exit_code_2_on_conflicting_unforced_docstring(
+) -> Result<(), String> {
     let dir = unique_test_dir("feat42_cli_exit_codes")?;
     let src_dir = dir.join("src");
     fs::create_dir_all(&src_dir).map_err(|e| format!("Failed to create src dir: {}", e))?;
@@ -844,7 +849,12 @@ pub struct AutopilotController {
         .arg("--schema")
         .arg(&valid_schema)
         .output()
-        .map_err(|e| format!("Failed to run compile-sysml on conflicting docstring: {}", e))?;
+        .map_err(|e| {
+            format!(
+                "Failed to run compile-sysml on conflicting docstring: {}",
+                e
+            )
+        })?;
     assert_eq!(
         out_conflict.status.code(),
         Some(2),
@@ -868,8 +878,8 @@ pub struct AutopilotController {
         String::from_utf8_lossy(&out_forced.stderr)
     );
 
-    let updated_rust =
-        fs::read_to_string(&rust_file).map_err(|e| format!("Failed to read autopilot.rs: {}", e))?;
+    let updated_rust = fs::read_to_string(&rust_file)
+        .map_err(|e| format!("Failed to read autopilot.rs: {}", e))?;
     assert!(
         updated_rust.contains("[REQ-SCHEMA-001]"),
         "Expected forced docstring to contain [REQ-SCHEMA-001], got:\n{}",
@@ -915,8 +925,8 @@ pub struct AutopilotController {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-ISSUE-520-MULTI-REQ-DART-DETAILS-RUST-UNBOUNDED-TEST]
 #[test]
-fn test_issue_520_multi_req_constraint_aggregation_dart_details_and_rust_unbounded_items()
--> Result<(), String> {
+fn test_issue_520_multi_req_constraint_aggregation_dart_details_and_rust_unbounded_items(
+) -> Result<(), String> {
     // Sub-Defect A: Multi-requirement and multi-constraint aggregation + partial Realises conflict detection
     let schema_sysml = r#"
 package CoreVerificationPkg {
@@ -1040,13 +1050,9 @@ enum GammaState {
   terminated,
 }
 "#;
-    let (dart_enriched, dart_count) = inject_dart_file_docstrings(
-        dart_src,
-        "lib/beta_controller.dart",
-        None,
-        false,
-    )
-    .map_err(|e| e.into_message())?;
+    let (dart_enriched, dart_count) =
+        inject_dart_file_docstrings(dart_src, "lib/beta_controller.dart", None, false)
+            .map_err(|e| e.into_message())?;
     assert!(dart_count >= 4);
     assert!(
         dart_enriched.contains("gainAlpha: double, stepCount: int"),
@@ -1060,13 +1066,9 @@ enum GammaState {
         dart_enriched.contains("idle, active, completed, faulted, suspended, archived, terminated"),
         "Expected GammaState docstring to interpolate all 7 Dart enum variants, got:\n{dart_enriched}"
     );
-    let (dart_second, dart_second_count) = inject_dart_file_docstrings(
-        &dart_enriched,
-        "lib/beta_controller.dart",
-        None,
-        false,
-    )
-    .map_err(|e| e.into_message())?;
+    let (dart_second, dart_second_count) =
+        inject_dart_file_docstrings(&dart_enriched, "lib/beta_controller.dart", None, false)
+            .map_err(|e| e.into_message())?;
     assert_eq!(dart_second_count, 0);
     assert_eq!(dart_enriched, dart_second);
 
@@ -1112,13 +1114,9 @@ pub fn check_five_invariants(val: i32) -> i32 {
     val
 }
 "#;
-    let (wide_enriched, wide_count) = inject_rust_file_docstrings(
-        wide_rust_src,
-        "crates/core_module/src/wide.rs",
-        None,
-        false,
-    )
-    .map_err(|e| e.into_message())?;
+    let (wide_enriched, wide_count) =
+        inject_rust_file_docstrings(wide_rust_src, "crates/core_module/src/wide.rs", None, false)
+            .map_err(|e| e.into_message())?;
     assert!(wide_count >= 4);
     assert!(
         wide_enriched.contains("field_6: u32, field_7: u32"),
@@ -1139,4 +1137,3 @@ pub fn check_five_invariants(val: i32) -> i32 {
 
     Ok(())
 }
-

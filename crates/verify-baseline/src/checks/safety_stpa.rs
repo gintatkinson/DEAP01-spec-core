@@ -203,27 +203,55 @@ pub fn parse_fmeca_table(content: &str) -> FmecaData {
 
             // Locate columns
             let id_idx = headers.iter().position(|h| {
-                h.contains("id") || h.contains("code") || h.starts_with("fm#") || h.starts_with("item#")
+                h.contains("id")
+                    || h.contains("code")
+                    || h.starts_with("fm#")
+                    || h.starts_with("item#")
             });
-            let comp_idx = headers.iter().position(|h| {
-                (h.contains("component") || h.contains("subsystem") || h.contains("part") || h.contains("unit"))
-                    && !h.contains("effect")
-                    && !h.contains("mode")
-            }).or_else(|| {
-                headers.iter().position(|h| h.contains("item") && !h.contains("id"))
+            let comp_idx = headers
+                .iter()
+                .position(|h| {
+                    (h.contains("component")
+                        || h.contains("subsystem")
+                        || h.contains("part")
+                        || h.contains("unit"))
+                        && !h.contains("effect")
+                        && !h.contains("mode")
+                })
+                .or_else(|| {
+                    headers
+                        .iter()
+                        .position(|h| h.contains("item") && !h.contains("id"))
+                });
+            let mode_idx = headers
+                .iter()
+                .position(|h| {
+                    (h.contains("failure mode")
+                        || h.contains("failure mechanism")
+                        || h.contains("mode"))
+                        && !h.contains("dimension")
+                        && !h.contains("effect")
+                })
+                .or_else(|| {
+                    headers.iter().position(|h| {
+                        h.contains("failure") && !h.contains("id") && !h.contains("effect")
+                    })
+                });
+            let s_idx = headers
+                .iter()
+                .position(|h| h == "s" || h.starts_with("sev") || h.contains("severity"));
+            let o_idx = headers
+                .iter()
+                .position(|h| h == "o" || h.starts_with("occ") || h.contains("occurrence"));
+            let d_idx = headers
+                .iter()
+                .position(|h| h == "d" || h.starts_with("det") || h.contains("detection"));
+            let rpn_idx = headers
+                .iter()
+                .position(|h| h == "rpn" || h.contains("priority"));
+            let basis_idx = headers.iter().position(|h| {
+                h.contains("basis") || h.contains("derivation") || h.contains("provenance")
             });
-            let mode_idx = headers.iter().position(|h| {
-                (h.contains("failure mode") || h.contains("failure mechanism") || h.contains("mode"))
-                    && !h.contains("dimension")
-                    && !h.contains("effect")
-            }).or_else(|| {
-                headers.iter().position(|h| h.contains("failure") && !h.contains("id") && !h.contains("effect"))
-            });
-            let s_idx = headers.iter().position(|h| h == "s" || h.starts_with("sev") || h.contains("severity"));
-            let o_idx = headers.iter().position(|h| h == "o" || h.starts_with("occ") || h.contains("occurrence"));
-            let d_idx = headers.iter().position(|h| h == "d" || h.starts_with("det") || h.contains("detection"));
-            let rpn_idx = headers.iter().position(|h| h == "rpn" || h.contains("priority"));
-            let basis_idx = headers.iter().position(|h| h.contains("basis") || h.contains("derivation") || h.contains("provenance"));
 
             if rpn_idx.is_some() || headers.iter().any(|h| h.contains("rpn")) {
                 data.has_rpn = true;
@@ -244,10 +272,8 @@ pub fn parse_fmeca_table(content: &str) -> FmecaData {
                 if !row_line.starts_with('|') {
                     break;
                 }
-                let cells: Vec<String> = row_line
-                    .split('|')
-                    .map(|s| s.trim().to_string())
-                    .collect();
+                let cells: Vec<String> =
+                    row_line.split('|').map(|s| s.trim().to_string()).collect();
 
                 // Strip leading/trailing empty elements from split on |
                 let cells: Vec<String> = if cells.len() >= 2
@@ -349,35 +375,139 @@ pub fn parse_fmeca_table(content: &str) -> FmecaData {
 }
 
 const INTERFACE_KEYWORDS: &[&str] = &[
-    "interface", "port", "bus", "signal", "protocol", "packet", "message", "frame",
-    "channel", "link", "crc", "timeout", "io", "input", "output", "data",
-    "transceiver", "receiver", "uplink", "downlink", "telemetry", "transient", "transients",
-    "γ", "\\gamma", "gamma",
+    "interface",
+    "port",
+    "bus",
+    "signal",
+    "protocol",
+    "packet",
+    "message",
+    "frame",
+    "channel",
+    "link",
+    "crc",
+    "timeout",
+    "io",
+    "input",
+    "output",
+    "data",
+    "transceiver",
+    "receiver",
+    "uplink",
+    "downlink",
+    "telemetry",
+    "transient",
+    "transients",
+    "γ",
+    "\\gamma",
+    "gamma",
 ];
 
 const STATE_KEYWORDS: &[&str] = &[
-    "state", "mode", "transition", "deadlock", "latch", "phase", "statechart",
-    "fsm", "sync", "synchronization", "desync", "drift", "stuck", "uninitialized",
-    "freeze", "lockup", "trip", "abort", "corruption", "disagreement",
-    "φ", "\\phi", "phi",
+    "state",
+    "mode",
+    "transition",
+    "deadlock",
+    "latch",
+    "phase",
+    "statechart",
+    "fsm",
+    "sync",
+    "synchronization",
+    "desync",
+    "drift",
+    "stuck",
+    "uninitialized",
+    "freeze",
+    "lockup",
+    "trip",
+    "abort",
+    "corruption",
+    "disagreement",
+    "φ",
+    "\\phi",
+    "phi",
 ];
 
 const ACTION_KEYWORDS: &[&str] = &[
-    "action", "command", "execution", "operation", "control", "timing", "deadline",
-    "compute", "calculation", "process", "logic", "omission", "commission", "latency",
-    "jitter", "delay", "rate", "clamping", "limiter", "saturation", "step",
-    "overshoot", "schedule", "task", "authority", "miss",
-    "ω", "\\omega", "omega",
+    "action",
+    "command",
+    "execution",
+    "operation",
+    "control",
+    "timing",
+    "deadline",
+    "compute",
+    "calculation",
+    "process",
+    "logic",
+    "omission",
+    "commission",
+    "latency",
+    "jitter",
+    "delay",
+    "rate",
+    "clamping",
+    "limiter",
+    "saturation",
+    "step",
+    "overshoot",
+    "schedule",
+    "task",
+    "authority",
+    "miss",
+    "ω",
+    "\\omega",
+    "omega",
 ];
 
 const RESOURCE_KEYWORDS: &[&str] = &[
-    "resource", "memory", "cpu", "buffer", "power", "energy", "battery", "thermal",
-    "heat", "overheat", "overload", "bandwidth", "storage", "capacity", "stack",
-    "heap", "overflow", "underflow", "brownout", "voltage", "current", "load",
-    "fault", "short", "sag", "circuit", "crowbar", "degradation", "flash", "ram",
-    "supply", "undervoltage", "overvoltage", "seizure", "winding", "windings",
-    "wiper", "hardware", "bearing", "dielectric", "squib", "fuse", "fusing",
-    "ψ", "\\psi", "psi",
+    "resource",
+    "memory",
+    "cpu",
+    "buffer",
+    "power",
+    "energy",
+    "battery",
+    "thermal",
+    "heat",
+    "overheat",
+    "overload",
+    "bandwidth",
+    "storage",
+    "capacity",
+    "stack",
+    "heap",
+    "overflow",
+    "underflow",
+    "brownout",
+    "voltage",
+    "current",
+    "load",
+    "fault",
+    "short",
+    "sag",
+    "circuit",
+    "crowbar",
+    "degradation",
+    "flash",
+    "ram",
+    "supply",
+    "undervoltage",
+    "overvoltage",
+    "seizure",
+    "winding",
+    "windings",
+    "wiper",
+    "hardware",
+    "bearing",
+    "dielectric",
+    "squib",
+    "fuse",
+    "fusing",
+    "ψ",
+    "\\psi",
+    "psi",
 ];
 
 /// Executes deterministic fn `matches_dimension_lower` within `crates/verify-baseline/src/checks/safety_stpa.rs`.
@@ -474,7 +604,12 @@ pub fn check_failure_dimension_coverage(content: &str, fmeca: &FmecaData) -> Vec
 
     // Check rows first
     for row in &fmeca.rows {
-        let combined = format!("{} {} {}", row.failure_mode, row.component, row.basis.as_deref().unwrap_or(""));
+        let combined = format!(
+            "{} {} {}",
+            row.failure_mode,
+            row.component,
+            row.basis.as_deref().unwrap_or("")
+        );
         let combined_lower = combined.to_lowercase();
         if !found_interface && matches_dimension_lower(&combined_lower, INTERFACE_KEYWORDS) {
             found_interface = true;
@@ -753,17 +888,14 @@ pub fn check_safety_integrity(
             let allowed_files = [".gitkeep", "README.md"];
             let mut violations = Vec::new();
             let mut walk_errors = Vec::new();
-            for entry_res in WalkDir::new(&safety_dir)
-                .into_iter()
-                .filter_entry(|e| {
-                    if e.file_type().is_dir() {
-                        let name = e.file_name().to_string_lossy();
-                        !EXCLUDED_DIRS.iter().any(|ex| name == ex)
-                    } else {
-                        true
-                    }
-                })
-            {
+            for entry_res in WalkDir::new(&safety_dir).into_iter().filter_entry(|e| {
+                if e.file_type().is_dir() {
+                    let name = e.file_name().to_string_lossy();
+                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+                } else {
+                    true
+                }
+            }) {
                 let entry = match entry_res {
                     Ok(val) => val,
                     Err(err) => {
@@ -813,26 +945,26 @@ pub fn check_safety_integrity(
         if effective_allow_missing {
             return Ok(SafetyCheckOutcome::DownstreamPendingOrClean);
         } else {
-            return Err(vec!["Check 17 failed: Safety specification directory 'docs/safety/' is missing.".to_string()]);
+            return Err(vec![
+                "Check 17 failed: Safety specification directory 'docs/safety/' is missing."
+                    .to_string(),
+            ]);
         }
     }
 
     let mut safety_files = Vec::new();
     let mut walk_errors = Vec::new();
-    for entry_res in WalkDir::new(&safety_dir)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.file_type().is_dir() {
-                let name = e.file_name().to_string_lossy();
-                !EXCLUDED_DIRS.iter().any(|ex| name == ex)
-                    && name != "defects"
-                    && name != "audits"
-                    && name != "decisions"
-            } else {
-                true
-            }
-        })
-    {
+    for entry_res in WalkDir::new(&safety_dir).into_iter().filter_entry(|e| {
+        if e.file_type().is_dir() {
+            let name = e.file_name().to_string_lossy();
+            !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+                && name != "defects"
+                && name != "audits"
+                && name != "decisions"
+        } else {
+            true
+        }
+    }) {
         let entry = match entry_res {
             Ok(val) => val,
             Err(err) => {
@@ -858,18 +990,29 @@ pub fn check_safety_integrity(
         if effective_allow_missing {
             return Ok(SafetyCheckOutcome::DownstreamPendingOrClean);
         } else {
-            return Err(vec!["Check 17 failed: No safety specifications found in 'docs/safety/'.".to_string()]);
+            return Err(vec![
+                "Check 17 failed: No safety specifications found in 'docs/safety/'.".to_string(),
+            ]);
         }
     }
 
     let stpa_matrix_file = safety_dir.join("STPA_MATRIX.md");
     if !stpa_matrix_file.is_file() {
-        return Err(vec!["Check 17 failed: Unified STPA matrix 'docs/safety/STPA_MATRIX.md' is missing.".to_string()]);
+        return Err(vec![
+            "Check 17 failed: Unified STPA matrix 'docs/safety/STPA_MATRIX.md' is missing."
+                .to_string(),
+        ]);
     }
 
     let stpa_content = match fs::read_to_string(&stpa_matrix_file) {
         Ok(c) => c,
-        Err(e) => return Err(vec![format!("Check 17 failed: Failed to read {}: {}", stpa_matrix_file.display(), e)]),
+        Err(e) => {
+            return Err(vec![format!(
+                "Check 17 failed: Failed to read {}: {}",
+                stpa_matrix_file.display(),
+                e
+            )])
+        }
     };
 
     let mut combined_content = String::new();
@@ -880,7 +1023,11 @@ pub fn check_safety_integrity(
                 combined_content.push_str("\n\n---\n\n");
             }
             Err(e) => {
-                return Err(vec![format!("Check 17 failed: Failed to read {}: {}", sf.display(), e)]);
+                return Err(vec![format!(
+                    "Check 17 failed: Failed to read {}: {}",
+                    sf.display(),
+                    e
+                )]);
             }
         }
     }
@@ -946,7 +1093,10 @@ pub fn check_safety_integrity(
         || stpa_lower.contains("unsafe control actions");
     let has_uca_id = has_stpa_id(&stpa_lower, "uca-");
     if !(has_uca_kw || has_uca_id) {
-        errors.push("Pillar 4 violation: Missing Unsafe Control Actions ($UCA-1..N$) in STPA_MATRIX.md.".to_string());
+        errors.push(
+            "Pillar 4 violation: Missing Unsafe Control Actions ($UCA-1..N$) in STPA_MATRIX.md."
+                .to_string(),
+        );
     }
     let missing_uca_cats = check_uca_categories(&stpa_content);
     if !missing_uca_cats.is_empty() {
@@ -967,21 +1117,29 @@ pub fn check_safety_integrity(
     }
 
     // Pillar 6: Formal Safety Constraints (SC-1..N)
-    let has_sc_kw = stpa_lower.contains("safety constraint")
-        || stpa_lower.contains("safety constraints");
+    let has_sc_kw =
+        stpa_lower.contains("safety constraint") || stpa_lower.contains("safety constraints");
     let has_sc_id = has_stpa_id(&stpa_lower, "sc-");
     if !(has_sc_kw && has_sc_id) {
-        errors.push("Pillar 6 violation: Missing Formal Safety Constraints ($SC-1..N$) in STPA_MATRIX.md.".to_string());
+        errors.push(
+            "Pillar 6 violation: Missing Formal Safety Constraints ($SC-1..N$) in STPA_MATRIX.md."
+                .to_string(),
+        );
     }
 
     // Pillar 7: FMECA Criticality Matrix
     let has_fmeca = stpa_lower.contains("fmeca") || stpa_lower.contains("failure mode");
     if !has_fmeca {
-        errors.push("Pillar 7 violation: Missing FMECA Criticality Matrix in STPA_MATRIX.md.".to_string());
+        errors.push(
+            "Pillar 7 violation: Missing FMECA Criticality Matrix in STPA_MATRIX.md.".to_string(),
+        );
     } else {
         let fmeca = parse_fmeca_table(&stpa_content);
         if fmeca.total_rows == 0 {
-            errors.push("Pillar 7 violation: FMECA Criticality Matrix in STPA_MATRIX.md contains 0 rows.".to_string());
+            errors.push(
+                "Pillar 7 violation: FMECA Criticality Matrix in STPA_MATRIX.md contains 0 rows."
+                    .to_string(),
+            );
         } else if fmeca.total_rows < 15 {
             // Log notice or check row count >= 15 as declared in Pillar 7 baseline
             errors.push(format!(
@@ -994,7 +1152,10 @@ pub fn check_safety_integrity(
             || stpa_lower.contains("risk priority number")
             || matches_dimension_lower(&stpa_lower, &["rpn"]);
         if !has_rpn {
-            errors.push("Pillar 7 violation: FMECA table missing RPN (Risk Priority Number) calculation.".to_string());
+            errors.push(
+                "Pillar 7 violation: FMECA table missing RPN (Risk Priority Number) calculation."
+                    .to_string(),
+            );
         }
 
         let total_basis = fmeca.ssot_basis_count + fmeca.derived_basis_count;
@@ -1017,7 +1178,8 @@ pub fn check_safety_integrity(
             }
 
             // Check multi-failure-mode per component coverage (Issue #212)
-            let mut component_modes: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
+            let mut component_modes: std::collections::BTreeMap<String, Vec<String>> =
+                std::collections::BTreeMap::new();
             for row in &fmeca.rows {
                 let comp_raw = row.component.trim();
                 let clean_comp = if let Some(idx) = comp_raw.find(']') {
@@ -1092,7 +1254,11 @@ pub fn check_safety_integrity(
                             comp_raw
                         };
                         let comp = clean_comp.trim_matches(|c| c == '`' || c == '*').trim();
-                        if !comp.is_empty() && !table_components.iter().any(|c| c.eq_ignore_ascii_case(comp)) {
+                        if !comp.is_empty()
+                            && !table_components
+                                .iter()
+                                .any(|c| c.eq_ignore_ascii_case(comp))
+                        {
                             table_components.push(comp.to_string());
                         }
                     }
@@ -1100,7 +1266,10 @@ pub fn check_safety_integrity(
                     // 1. Missing declared AST part def components
                     let mut missing_parts = Vec::new();
                     for p in &expected_parts {
-                        if !table_components.iter().any(|c| deap_core::sysml_ast::component_matches(c, p)) {
+                        if !table_components
+                            .iter()
+                            .any(|c| deap_core::sysml_ast::component_matches(c, p))
+                        {
                             missing_parts.push(p.clone());
                         }
                     }
@@ -1115,7 +1284,10 @@ pub fn check_safety_integrity(
                     // 2. Undeclared phantom components not in AST
                     let mut undeclared_parts = Vec::new();
                     for c in &table_components {
-                        if !expected_parts.iter().any(|p| deap_core::sysml_ast::component_matches(c, p)) {
+                        if !expected_parts
+                            .iter()
+                            .any(|p| deap_core::sysml_ast::component_matches(c, p))
+                        {
                             undeclared_parts.push(c.clone());
                         }
                     }
@@ -1212,7 +1384,8 @@ mod tests {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_nanos())
                 .unwrap_or(0);
-            let path = std::env::temp_dir().join(format!("verify_safety_{}_{}_{}", name, nanos, count));
+            let path =
+                std::env::temp_dir().join(format!("verify_safety_{}_{}_{}", name, nanos, count));
             fs::create_dir_all(&path)?;
             Ok(Self { path })
         }
@@ -1251,7 +1424,8 @@ mod tests {
     }
 
     #[test]
-    fn test_fmeca_single_failure_mode_per_component_rejected() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_fmeca_single_failure_mode_per_component_rejected(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("single_mode")?;
         let safety_dir = tmp.path.join("docs").join("safety");
         fs::create_dir_all(&safety_dir)?;
@@ -1290,7 +1464,9 @@ mod tests {
         for (i, (comp, mode)) in components.iter().enumerate() {
             fmeca_content.push_str(&format!(
                 "| FM-{:03} | {} | {} | 2 | 2 | 2 | 8 | Derived |\n",
-                i + 1, comp, mode
+                i + 1,
+                comp,
+                mode
             ));
         }
 
@@ -1299,18 +1475,23 @@ mod tests {
              | Objective ID | Requirement | Allocation |\n\
              |---|---|---|\n\
              | OBJ-1 | Req 1 | Comp1 |\n\n\
-             MATLAB Simulink Stateflow Embedded Coder hooks.\n"
+             MATLAB Simulink Stateflow Embedded Coder hooks.\n",
         );
 
         fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content)?;
 
         let res = check_safety_integrity(&tmp.path, false, true);
-        assert!(res.is_err(), "Single-failure-mode-per-component matrix must be rejected, but got: {:?}", res);
+        assert!(
+            res.is_err(),
+            "Single-failure-mode-per-component matrix must be rejected, but got: {:?}",
+            res
+        );
         Ok(())
     }
 
     #[test]
-    fn test_fmeca_multi_failure_mode_per_component_passes() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_fmeca_multi_failure_mode_per_component_passes() -> Result<(), Box<dyn std::error::Error>>
+    {
         let tmp = TempDir::new("multi_mode")?;
         let safety_dir = tmp.path.join("docs").join("safety");
         fs::create_dir_all(&safety_dir)?;
@@ -1331,12 +1512,24 @@ mod tests {
         let component_pairs = [
             ("Comp1", "Interface bus dropout", "State desync lockup"),
             ("Comp2", "Action timing latency", "Resource power fault"),
-            ("Comp3", "Interface frame corruption", "State transition freeze"),
-            ("Comp4", "Action command overshoot", "Resource thermal overheat"),
+            (
+                "Comp3",
+                "Interface frame corruption",
+                "State transition freeze",
+            ),
+            (
+                "Comp4",
+                "Action command overshoot",
+                "Resource thermal overheat",
+            ),
             ("Comp5", "Interface packet loss", "State corruption error"),
             ("Comp6", "Action rate limiting", "Resource battery sag"),
             ("Comp7", "Interface bus jitter", "State abort trip"),
-            ("Comp8", "Action torque clamping", "Resource memory exhaustion"),
+            (
+                "Comp8",
+                "Action torque clamping",
+                "Resource memory exhaustion",
+            ),
         ];
         let mut row_idx = 1;
         for (comp, mode1, mode2) in &component_pairs {
@@ -1357,7 +1550,7 @@ mod tests {
              | Objective ID | Requirement | Allocation |\n\
              |---|---|---|\n\
              | OBJ-1 | Req 1 | Comp1 |\n\n\
-             MATLAB Simulink Stateflow Embedded Coder hooks.\n"
+             MATLAB Simulink Stateflow Embedded Coder hooks.\n",
         );
 
         fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content)?;
@@ -1390,8 +1583,12 @@ mod tests {
             fmeca_content.push_str(&format!(
                 "| FM-{:03} | Comp{} | Interface bus loss {} | 2 | 2 | 2 | 8 | Derived |\n\
                  | FM-{:03} | Comp{} | State desync lockup {} | 2 | 2 | 2 | 8 | Derived |\n",
-                (i - 1) * 2 + 1, i, i,
-                (i - 1) * 2 + 2, i, i
+                (i - 1) * 2 + 1,
+                i,
+                i,
+                (i - 1) * 2 + 2,
+                i,
+                i
             ));
         }
         fmeca_content.push_str(
@@ -1403,7 +1600,7 @@ mod tests {
              | Objective ID | Requirement | Allocation |\n\
              |---|---|---|\n\
              | OBJ-1 | Req 1 | Comp1 |\n\n\
-             MATLAB Simulink Stateflow Embedded Coder hooks.\n"
+             MATLAB Simulink Stateflow Embedded Coder hooks.\n",
         );
 
         fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content)?;
@@ -1411,12 +1608,15 @@ mod tests {
         let res = check_safety_integrity(&tmp.path, false, true);
         assert!(res.is_err());
         let errs = res.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("Comp8") && e.contains("degenerate single-failure-mode coverage")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("Comp8") && e.contains("degenerate single-failure-mode coverage")));
         Ok(())
     }
 
     #[test]
-    fn test_fmeca_duplicate_mode_does_not_satisfy_multi_mode() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_fmeca_duplicate_mode_does_not_satisfy_multi_mode(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("duplicate_mode")?;
         let safety_dir = tmp.path.join("docs").join("safety");
         fs::create_dir_all(&safety_dir)?;
@@ -1436,16 +1636,28 @@ mod tests {
         );
         fmeca_content.push_str(
             "| FM-001 | Comp1 | Interface bus dropout | 2 | 2 | 2 | 8 | Derived |\n\
-             | FM-002 | Comp1 | Interface bus dropout | 2 | 2 | 2 | 8 | Derived |\n"
+             | FM-002 | Comp1 | Interface bus dropout | 2 | 2 | 2 | 8 | Derived |\n",
         );
         let pairs = [
             ("Comp2", "Action timing latency", "Resource power fault"),
-            ("Comp3", "Interface frame corruption", "State transition freeze"),
-            ("Comp4", "Action command overshoot", "Resource thermal overheat"),
+            (
+                "Comp3",
+                "Interface frame corruption",
+                "State transition freeze",
+            ),
+            (
+                "Comp4",
+                "Action command overshoot",
+                "Resource thermal overheat",
+            ),
             ("Comp5", "Interface packet loss", "State corruption error"),
             ("Comp6", "Action rate limiting", "Resource battery sag"),
             ("Comp7", "Interface bus jitter", "State abort trip"),
-            ("Comp8", "Action torque clamping", "Resource memory exhaustion"),
+            (
+                "Comp8",
+                "Action torque clamping",
+                "Resource memory exhaustion",
+            ),
         ];
         let mut row_idx = 3;
         for (comp, mode1, mode2) in &pairs {
@@ -1466,7 +1678,7 @@ mod tests {
              | Objective ID | Requirement | Allocation |\n\
              |---|---|---|\n\
              | OBJ-1 | Req 1 | Comp1 |\n\n\
-             MATLAB Simulink Stateflow Embedded Coder hooks.\n"
+             MATLAB Simulink Stateflow Embedded Coder hooks.\n",
         );
 
         fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content)?;
@@ -1500,12 +1712,24 @@ mod tests {
         let pairs = [
             ("Comp1", "Interface bus dropout", "State desync lockup"),
             ("Comp2", "Action timing latency", "Resource power fault"),
-            ("Comp3", "Interface frame corruption", "State transition freeze"),
-            ("Comp4", "Action command overshoot", "Resource thermal overheat"),
+            (
+                "Comp3",
+                "Interface frame corruption",
+                "State transition freeze",
+            ),
+            (
+                "Comp4",
+                "Action command overshoot",
+                "Resource thermal overheat",
+            ),
             ("Comp5", "Interface packet loss", "State corruption error"),
             ("Comp6", "Action rate limiting", "Resource battery sag"),
             ("Comp7", "Interface bus jitter", "State abort trip"),
-            ("Comp8", "Action torque clamping", "Resource memory exhaustion"),
+            (
+                "Comp8",
+                "Action torque clamping",
+                "Resource memory exhaustion",
+            ),
         ];
         let mut row_idx = 1;
         for (comp, mode1, mode2) in &pairs {
@@ -1527,7 +1751,7 @@ mod tests {
              | Objective ID | Requirement | Allocation |\n\
              |---|---|---|\n\
              | OBJ-1 | Req 1 | Comp1 |\n\n\
-             MATLAB Simulink Stateflow Embedded Coder hooks.\n"
+             MATLAB Simulink Stateflow Embedded Coder hooks.\n",
         );
 
         fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content)?;
@@ -1535,12 +1759,15 @@ mod tests {
         let res = check_safety_integrity(&tmp.path, false, true);
         assert!(res.is_err());
         let errs = res.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("missing explicit Derivation Basis classification")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("missing explicit Derivation Basis classification")));
         Ok(())
     }
 
     #[test]
-    fn test_issue_249_check17_rejects_fmeca_with_undeclared_or_negated_component() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_249_check17_rejects_fmeca_with_undeclared_or_negated_component(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let temp = TempDir::new("check17_issue249")?;
         let safety_dir = temp.path.join("docs").join("safety");
         let schema_dir = temp.path.join("schema");
@@ -1561,13 +1788,17 @@ mod tests {
         let mut content = String::from("# System Safety & STPA Matrix\n\n");
         content.push_str("## 1. System Losses ($L-1..N$)\n- Loss L-1: Loss of System Function\n\n");
         content.push_str("## 2. System Hazards ($H-1..N$)\n- Hazard H-1: Loss of Control\n\n");
-        content.push_str("## 3. Control Structure Topology\n```mermaid\ngraph TD\n  A --> B\n```\n\n");
+        content
+            .push_str("## 3. Control Structure Topology\n```mermaid\ngraph TD\n  A --> B\n```\n\n");
         content.push_str("## 4. Unsafe Control Actions ($UCA-1..N$)\n- UCA-1: Providing Halt command too late\n- UCA-2: Not providing Halt command\n- UCA-3: Stopped too soon\n- UCA-4: Applied too long\n\n");
-        content.push_str("## 5. Loss Scenarios ($LS-1..N$)\n- Scenario LS-1: Sensor failure causes loss\n\n");
+        content.push_str(
+            "## 5. Loss Scenarios ($LS-1..N$)\n- Scenario LS-1: Sensor failure causes loss\n\n",
+        );
         content.push_str("## 6. Formal Safety Constraints ($SC-1..N$)\n- SC-01: System shall remain within safe operating envelope\n\n");
         content.push_str("## 7. FMECA Criticality Matrix\n\n");
         content.push_str("| FMECA ID | Component | Failure Mode | Potential Effect | Severity (S) | Occurrence (O) | Detection (D) | RPN (S x O x D) | Mitigation | Derivation Basis |\n");
-        content.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
+        content
+            .push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
         // 14 rows of PrimaryProcessor / SensorUnit
         for i in 1..=8 {
             content.push_str(&format!("| FMECA-{:03} | PrimaryProcessor | Mode {} (Interface Γ, State Φ) | Effect | 5 | 2 | 2 | 20 | Mit | SSOT |\n", i, i));
@@ -1586,15 +1817,28 @@ mod tests {
         let result = check_safety_integrity(&temp.path, false, true);
         assert!(result.is_err(), "Expected Check 17 to fail when FMECA references undeclared/negated AuxiliaryBackupUnit");
         let errs = result.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("Pillar 7 violation") && e.contains("'AuxiliaryBackupUnit' contradicted by negative AST model constraint")),
-            "Expected Pillar 7 negation error referencing AuxiliaryBackupUnit, got: {:?}", errs);
-        assert!(!errs.iter().any(|e| e.contains("contradicted by negative AST model constraint") && (e.contains("'PrimaryProcessor'") || e.contains("'SensorUnit'"))),
-            "Declared, non-negated components must not be flagged as negated, got: {:?}", errs);
+        assert!(
+            errs.iter().any(|e| e.contains("Pillar 7 violation")
+                && e.contains(
+                    "'AuxiliaryBackupUnit' contradicted by negative AST model constraint"
+                )),
+            "Expected Pillar 7 negation error referencing AuxiliaryBackupUnit, got: {:?}",
+            errs
+        );
+        assert!(
+            !errs.iter().any(
+                |e| e.contains("contradicted by negative AST model constraint")
+                    && (e.contains("'PrimaryProcessor'") || e.contains("'SensorUnit'"))
+            ),
+            "Declared, non-negated components must not be flagged as negated, got: {:?}",
+            errs
+        );
         Ok(())
     }
 
     #[test]
-    fn test_issue_249_check17_rejects_missing_declared_part() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_249_check17_rejects_missing_declared_part(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let temp = TempDir::new("check17_missing_part")?;
         let safety_dir = temp.path.join("docs").join("safety");
         let schema_dir = temp.path.join("schema");
@@ -1613,13 +1857,17 @@ mod tests {
         let mut content = String::from("# System Safety & STPA Matrix\n\n");
         content.push_str("## 1. System Losses ($L-1..N$)\n- Loss L-1: Loss of Vehicle\n\n");
         content.push_str("## 2. System Hazards ($H-1..N$)\n- Hazard H-1: Loss of Control\n\n");
-        content.push_str("## 3. Control Structure Topology\n```mermaid\ngraph TD\n  A --> B\n```\n\n");
+        content
+            .push_str("## 3. Control Structure Topology\n```mermaid\ngraph TD\n  A --> B\n```\n\n");
         content.push_str("## 4. Unsafe Control Actions ($UCA-1..N$)\n- UCA-1: Providing Land command too late\n- UCA-2: Not providing Land command\n- UCA-3: Stopped too soon\n- UCA-4: Applied too long\n\n");
-        content.push_str("## 5. Loss Scenarios ($LS-1..N$)\n- Scenario LS-1: Sensor failure causes loss\n\n");
+        content.push_str(
+            "## 5. Loss Scenarios ($LS-1..N$)\n- Scenario LS-1: Sensor failure causes loss\n\n",
+        );
         content.push_str("## 6. Formal Safety Constraints ($SC-1..N$)\n- SC-01: Vehicle shall remain in safe corridor\n\n");
         content.push_str("## 7. FMECA Criticality Matrix\n\n");
         content.push_str("| FMECA ID | Component | Failure Mode | Potential Effect | Severity (S) | Occurrence (O) | Detection (D) | RPN (S x O x D) | Mitigation | Derivation Basis |\n");
-        content.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
+        content
+            .push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
         for i in 1..=15 {
             let dim = match i % 4 {
                 0 => "Interface Γ",
@@ -1635,15 +1883,23 @@ mod tests {
         fs::write(safety_dir.join("STPA_MATRIX.md"), content)?;
 
         let result = check_safety_integrity(&temp.path, false, true);
-        assert!(result.is_err(), "Expected Check 17 to fail when declared ActuatorUnit is missing from FMECA");
+        assert!(
+            result.is_err(),
+            "Expected Check 17 to fail when declared ActuatorUnit is missing from FMECA"
+        );
         let errs = result.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("missing declared AST part def component(s): ActuatorUnit")),
-            "Expected missing declared part error for ActuatorUnit, got: {:?}", errs);
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("missing declared AST part def component(s): ActuatorUnit")),
+            "Expected missing declared part error for ActuatorUnit, got: {:?}",
+            errs
+        );
         Ok(())
     }
 
     #[test]
-    fn test_issue_249_check17_valid_bidirectional_ast_closure_passes() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_249_check17_valid_bidirectional_ast_closure_passes(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let temp = TempDir::new("check17_valid_ast")?;
         let safety_dir = temp.path.join("docs").join("safety");
         let schema_dir = temp.path.join("schema");
@@ -1661,13 +1917,17 @@ mod tests {
         let mut content = String::from("# System Safety & STPA Matrix\n\n");
         content.push_str("## 1. System Losses ($L-1..N$)\n- Loss L-1: Loss of Vehicle\n\n");
         content.push_str("## 2. System Hazards ($H-1..N$)\n- Hazard H-1: Loss of Control\n\n");
-        content.push_str("## 3. Control Structure Topology\n```mermaid\ngraph TD\n  A --> B\n```\n\n");
+        content
+            .push_str("## 3. Control Structure Topology\n```mermaid\ngraph TD\n  A --> B\n```\n\n");
         content.push_str("## 4. Unsafe Control Actions ($UCA-1..N$)\n- UCA-1: Providing Land command too late\n- UCA-2: Not providing Land command\n- UCA-3: Stopped too soon\n- UCA-4: Applied too long\n\n");
-        content.push_str("## 5. Loss Scenarios ($LS-1..N$)\n- Scenario LS-1: Sensor failure causes loss\n\n");
+        content.push_str(
+            "## 5. Loss Scenarios ($LS-1..N$)\n- Scenario LS-1: Sensor failure causes loss\n\n",
+        );
         content.push_str("## 6. Formal Safety Constraints ($SC-1..N$)\n- SC-01: Vehicle shall remain in safe corridor\n\n");
         content.push_str("## 7. FMECA Criticality Matrix\n\n");
         content.push_str("| FMECA ID | Component | Failure Mode | Potential Effect | Severity (S) | Occurrence (O) | Detection (D) | RPN (S x O x D) | Mitigation | Derivation Basis |\n");
-        content.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
+        content
+            .push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
         // 8 rows for FlightComputer spanning dimensions
         for i in 1..=8 {
             let dim = match i % 4 {
@@ -1694,7 +1954,11 @@ mod tests {
         fs::write(safety_dir.join("STPA_MATRIX.md"), content)?;
 
         let result = check_safety_integrity(&temp.path, false, true);
-        assert!(result.is_ok(), "Expected Check 17 to pass with valid bidirectional AST closure, got: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Expected Check 17 to pass with valid bidirectional AST closure, got: {:?}",
+            result
+        );
         Ok(())
     }
 
@@ -1706,12 +1970,17 @@ mod tests {
 
         // Fragmented safety files present, but unified STPA_MATRIX.md missing
         fs::write(safety_dir.join("01_LOSSES.md"), "# Losses\nL-1: Loss\n")?;
-        fs::write(safety_dir.join("05_FMECA.md"), "# FMECA\n| FM | Comp | Mode |\n")?;
+        fs::write(
+            safety_dir.join("05_FMECA.md"),
+            "# FMECA\n| FM | Comp | Mode |\n",
+        )?;
 
         let result = check_safety_integrity(&temp.path, false, true);
         assert!(result.is_err());
         let errs = result.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("Unified STPA matrix 'docs/safety/STPA_MATRIX.md' is missing")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("Unified STPA matrix 'docs/safety/STPA_MATRIX.md' is missing")));
         Ok(())
     }
 
@@ -1763,7 +2032,8 @@ mod tests {
     /// Realises: [REQ-CHECK-17-FAIL-CLOSED-WALKDIR-TEST]
     #[cfg(unix)]
     #[test]
-    fn test_check17_unreadable_safety_subdir_fails_closed() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check17_unreadable_safety_subdir_fails_closed() -> Result<(), Box<dyn std::error::Error>>
+    {
         use std::os::unix::fs::PermissionsExt;
 
         let temp = TempDir::new("check17_unreadable_sub")?;

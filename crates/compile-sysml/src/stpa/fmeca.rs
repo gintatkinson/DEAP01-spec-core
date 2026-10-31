@@ -361,7 +361,8 @@ const STATE_DIMENSION_TEMPLATE: DimensionTemplate = DimensionTemplate {
     dimension: FailureDimension::State,
     mode_suffix: "State Invariant Divergence / Transition Deadlock",
     effect_template: "Component fails to satisfy target lifecycle state invariant",
-    mitigation_template: "Enforce guarded state transition preconditions and deterministic recovery transition",
+    mitigation_template:
+        "Enforce guarded state transition preconditions and deterministic recovery transition",
     default_s: 7,
     default_o: 3,
     default_d: 2,
@@ -371,7 +372,8 @@ const ACTION_DIMENSION_TEMPLATE: DimensionTemplate = DimensionTemplate {
     dimension: FailureDimension::Action,
     mode_suffix: "Behavioral Execution Fault / Postcondition Violation",
     effect_template: "Incomplete or non-terminating behavioral transformation",
-    mitigation_template: "Enforce precondition guards, bounded execution steps, and postcondition assertions",
+    mitigation_template:
+        "Enforce precondition guards, bounded execution steps, and postcondition assertions",
     default_s: 8,
     default_o: 2,
     default_d: 3,
@@ -381,7 +383,8 @@ const RESOURCE_DIMENSION_TEMPLATE: DimensionTemplate = DimensionTemplate {
     dimension: FailureDimension::Resource,
     mode_suffix: "Resource Capacity Exhaustion / Attribute Bound Breach",
     effect_template: "Degraded structural capacity or rejected allocation under peak load",
-    mitigation_template: "Enforce explicit capacity bounds, quota checks, and admission backpressure",
+    mitigation_template:
+        "Enforce explicit capacity bounds, quota checks, and admission backpressure",
     default_s: 6,
     default_o: 3,
     default_d: 2,
@@ -399,7 +402,8 @@ const ABSTRACT_STRUCTURAL_SUB_MODES: [DimensionTemplate; 4] = [
         dimension: FailureDimension::Interface,
         mode_suffix: "Boundary Protocol Desynchronization / Contract Mismatch",
         effect_template: "Boundary interaction sequence diverges from declared port contract",
-        mitigation_template: "Enforce strict interface contract validation and ordering preconditions",
+        mitigation_template:
+            "Enforce strict interface contract validation and ordering preconditions",
         default_s: 8,
         default_o: 3,
         default_d: 2,
@@ -417,7 +421,8 @@ const ABSTRACT_STRUCTURAL_SUB_MODES: [DimensionTemplate; 4] = [
         dimension: FailureDimension::State,
         mode_suffix: "Lifecycle State Invariant Drift",
         effect_template: "Internal state representation violates declared structural constraint",
-        mitigation_template: "Enforce invariant assertions prior to state commit and atomic rollback",
+        mitigation_template:
+            "Enforce invariant assertions prior to state commit and atomic rollback",
         default_s: 7,
         default_o: 3,
         default_d: 2,
@@ -426,7 +431,8 @@ const ABSTRACT_STRUCTURAL_SUB_MODES: [DimensionTemplate; 4] = [
         dimension: FailureDimension::Resource,
         mode_suffix: "Capacity Quota Saturation / Allocation Contention",
         effect_template: "Concurrent resource demand exceeds declared structural attribute limit",
-        mitigation_template: "Enforce bounded allocation quotas and deterministic admission backpressure",
+        mitigation_template:
+            "Enforce bounded allocation quotas and deterministic admission backpressure",
         default_s: 6,
         default_o: 3,
         default_d: 2,
@@ -500,8 +506,7 @@ pub fn parse_failure_mode_registry(markdown: &str) -> Vec<RegistryFailureEntry> 
         }
 
         if let Some(cols) = active_cols.as_ref() {
-            if let Some(entry) =
-                parse_registry_data_row(&cells, cols, heading_component.as_deref())
+            if let Some(entry) = parse_registry_data_row(&cells, cols, heading_component.as_deref())
             {
                 entries.push(entry);
             }
@@ -593,9 +598,7 @@ pub fn load_failure_mode_registry_for_out_dir(out_dir: &Path) -> Vec<RegistryFai
 /// Realises: [REQ-STPA-FMECA-SPLIT-MD-CELLS] | SysML v2: ActionDef(split_markdown_table_cells)
 fn split_markdown_table_cells(trimmed: &str) -> Option<Vec<String>> {
     let without_leading = trimmed.strip_prefix('|')?;
-    let body = without_leading
-        .strip_suffix('|')
-        .unwrap_or(without_leading);
+    let body = without_leading.strip_suffix('|').unwrap_or(without_leading);
     let cells: Vec<String> = body
         .split('|')
         .map(|cell| {
@@ -1388,7 +1391,8 @@ fn hazard_references_part(haz: &HazardDef, part_name: &str) -> bool {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-STPA-FMECA-CLASSIFY-HAZARD-DIM] | SysML v2: ActionDef(classify_hazard_dimension)
 fn classify_hazard_dimension(haz: &HazardDef) -> FailureDimension {
-    let combined = format!("{} {}", haz.name, haz.doc.as_deref().unwrap_or("")).to_ascii_lowercase();
+    let combined =
+        format!("{} {}", haz.name, haz.doc.as_deref().unwrap_or("")).to_ascii_lowercase();
     if combined.contains("interface")
         || combined.contains("port")
         || combined.contains("protocol")
@@ -1680,19 +1684,20 @@ fn resolve_scores(
     tmpl: &DimensionTemplate,
 ) -> (u32, u32, u32, String, String, String) {
     if let Some(cfg) = scoring_config {
-        let pick = |scale: &[ScoringScaleEntry], offset: usize, default_score: u32| -> (u32, String) {
-            match index
-                .saturating_add(offset)
-                .checked_rem(scale.len())
-                .and_then(|i| scale.get(i))
-            {
-                Some(entry) => {
-                    let clamped = entry.score.clamp(1, 10);
-                    (clamped, format!("{} ({})", entry.label, clamped))
+        let pick =
+            |scale: &[ScoringScaleEntry], offset: usize, default_score: u32| -> (u32, String) {
+                match index
+                    .saturating_add(offset)
+                    .checked_rem(scale.len())
+                    .and_then(|i| scale.get(i))
+                {
+                    Some(entry) => {
+                        let clamped = entry.score.clamp(1, 10);
+                        (clamped, format!("{} ({})", entry.label, clamped))
+                    }
+                    None => (default_score, format!("{}", default_score)),
                 }
-                None => (default_score, format!("{}", default_score)),
-            }
-        };
+            };
 
         let (s, s_cell) = pick(&cfg.severity_scale, 0, tmpl.default_s);
         let (o, o_cell) = pick(&cfg.occurrence_scale, 1, tmpl.default_o);
@@ -1782,12 +1787,16 @@ mod tests {
         let rows = generate_fmeca_matrix(&pkg, None);
         let components: Vec<_> = rows.iter().map(|r| r.component.as_str()).collect();
         assert!(components.contains(&"PrimaryComputeSubsystem"));
-        assert!(!components.contains(&"AuxiliaryBackupUnit"), "Negated AuxiliaryBackupUnit must NOT be present in FMECA rows");
+        assert!(
+            !components.contains(&"AuxiliaryBackupUnit"),
+            "Negated AuxiliaryBackupUnit must NOT be present in FMECA rows"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_arch_07_fmeca_matrix_precomputes_bang_negated_components_in_btreeset() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_arch_07_fmeca_matrix_precomputes_bang_negated_components_in_btreeset(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut pkg = PackageDef::default();
         pkg.part_defs.push(PartDef {
             name: "PrimaryComputeSubsystem".to_string(),
@@ -1797,12 +1806,13 @@ mod tests {
             name: "AuxiliaryBackupUnit".to_string(),
             ..Default::default()
         });
-        pkg.constraint_defs.push(deap_core::sysml_ast::ConstraintDef {
-            name: "ExcludeBackupUnit".to_string(),
-            expression: "!AuxiliaryBackupUnit".to_string(),
-            is_assertion: true,
-            ..Default::default()
-        });
+        pkg.constraint_defs
+            .push(deap_core::sysml_ast::ConstraintDef {
+                name: "ExcludeBackupUnit".to_string(),
+                expression: "!AuxiliaryBackupUnit".to_string(),
+                is_assertion: true,
+                ..Default::default()
+            });
 
         let rows = generate_fmeca_matrix(&pkg, None);
         let components: Vec<_> = rows.iter().map(|r| r.component.as_str()).collect();

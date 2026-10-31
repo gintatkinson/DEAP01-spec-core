@@ -28,9 +28,9 @@
 //!   Translation rules operate strictly on the abstract OpenAPI 3.x meta-model schema
 //!   (`info`, `components.schemas`, `paths`). Zero domain concepts or specific endpoints are hardcoded.
 
-use serde_json::Value;
-use deap_core::sysml_ast::{ActionDef, AttributeDef, PackageDef, PartDef};
 use crate::table::sanitize_identifier;
+use deap_core::sysml_ast::{ActionDef, AttributeDef, PackageDef, PartDef};
+use serde_json::Value;
 
 /// Deterministic translator for OpenAPI 3.0 and 3.1 specifications.
 ///
@@ -197,7 +197,11 @@ impl OpenAPITranslator {
         };
 
         // Step 2: Parse components.schemas into PartDef structural data types
-        if let Some(schemas) = spec.get("components").and_then(|c| c.get("schemas")).and_then(|s| s.as_object()) {
+        if let Some(schemas) = spec
+            .get("components")
+            .and_then(|c| c.get("schemas"))
+            .and_then(|s| s.as_object())
+        {
             for (schema_name, schema_val) in schemas {
                 if let Some(schema_obj) = schema_val.as_object() {
                     let clean_s_name = sanitize_identifier(schema_name, "Schema");
@@ -214,8 +218,14 @@ impl OpenAPITranslator {
                                         "boolean" => "Boolean".to_string(),
                                         _ => "String".to_string(),
                                     }
-                                } else if let Some(ref_val) = p_obj.get("$ref").and_then(|r| r.as_str()) {
-                                    ref_val.split('/').next_back().map(|s| sanitize_identifier(s, "Type")).unwrap_or_else(|| "String".to_string())
+                                } else if let Some(ref_val) =
+                                    p_obj.get("$ref").and_then(|r| r.as_str())
+                                {
+                                    ref_val
+                                        .split('/')
+                                        .next_back()
+                                        .map(|s| sanitize_identifier(s, "Type"))
+                                        .unwrap_or_else(|| "String".to_string())
                                 } else {
                                     "String".to_string()
                                 }
@@ -250,7 +260,9 @@ impl OpenAPITranslator {
                 if let Some(path_obj) = path_val.as_object() {
                     for method in &["get", "post", "put", "delete", "patch", "options", "head"] {
                         if let Some(op_val) = path_obj.get(*method).and_then(|m| m.as_object()) {
-                            let op_id = if let Some(id) = op_val.get("operationId").and_then(|id| id.as_str()) {
+                            let op_id = if let Some(id) =
+                                op_val.get("operationId").and_then(|id| id.as_str())
+                            {
                                 sanitize_identifier(id, "action")
                             } else {
                                 let clean_path = sanitize_identifier(path_str, "path");
@@ -261,7 +273,9 @@ impl OpenAPITranslator {
                                 .get("summary")
                                 .and_then(|s| s.as_str())
                                 .map(|s| s.to_string())
-                                .unwrap_or_else(|| format!("{} {}", method.to_ascii_uppercase(), path_str));
+                                .unwrap_or_else(|| {
+                                    format!("{} {}", method.to_ascii_uppercase(), path_str)
+                                });
 
                             actions.push(ActionDef {
                                 name: op_id,

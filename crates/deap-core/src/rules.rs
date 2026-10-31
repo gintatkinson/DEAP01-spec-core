@@ -226,8 +226,10 @@ impl ExcludedDirsCatalog {
     /// Realises: [REQ-RULES-EXCLUDED-DIRS-ITER]
     pub fn iter(
         &self,
-    ) -> std::iter::Map<std::slice::Iter<'static, ExcludedDir>, fn(&'static ExcludedDir) -> &'static str>
-    {
+    ) -> std::iter::Map<
+        std::slice::Iter<'static, ExcludedDir>,
+        fn(&'static ExcludedDir) -> &'static str,
+    > {
         let project: fn(&'static ExcludedDir) -> &'static str = ExcludedDir::as_str_ref;
         ExcludedDir::ALL.iter().map(project)
     }
@@ -1206,10 +1208,7 @@ mod tests {
             Some("gintatkinson/DEAP01-spec-core")
         );
         assert_eq!(
-            rules
-                .validation_rules
-                .as_ref()
-                .and_then(|v| v.no_domain),
+            rules.validation_rules.as_ref().and_then(|v| v.no_domain),
             Some(true)
         );
         Ok(())
@@ -1222,10 +1221,16 @@ mod tests {
             .and_then(|p| p.parent())
             .ok_or("repo root")?;
         let rules_opt = CodebaseRules::load_from_dir(repo_root)?;
-        assert!(rules_opt.is_some(), "Should find .pipeline/logical-ui/codebase_rules.json");
+        assert!(
+            rules_opt.is_some(),
+            "Should find .pipeline/logical-ui/codebase_rules.json"
+        );
         let rules = rules_opt.ok_or("Expected Some(rules)")?;
         assert_eq!(
-            rules.meta.as_ref().and_then(|m| m.upstream_repository.as_deref()),
+            rules
+                .meta
+                .as_ref()
+                .and_then(|m| m.upstream_repository.as_deref()),
             Some("gintatkinson/DEAP01-spec-core")
         );
         Ok(())
@@ -1261,17 +1266,18 @@ mod tests {
             assert!(CANONICAL_ARCHITECTURE_BLUEPRINTS.contains(b.as_str()));
         }
         assert!(!CANONICAL_ARCHITECTURE_BLUEPRINTS.contains("NON_EXISTENT_BLUEPRINT.md"));
-        assert!(
-            !CANONICAL_ARCHITECTURE_BLUEPRINTS
-                .contains("deap_sysml_v2_ingestion_engine_blueprint.md")
-        );
+        assert!(!CANONICAL_ARCHITECTURE_BLUEPRINTS
+            .contains("deap_sysml_v2_ingestion_engine_blueprint.md"));
     }
 
     fn verify_canonical_architecture_blueprints_on_disk(repo_root: &Path) -> Result<(), String> {
         if !crate::workspace::is_upstream_compiler(repo_root) {
             return Ok(());
         }
-        let blueprints_dir = repo_root.join("docs").join("architecture").join("blueprints");
+        let blueprints_dir = repo_root
+            .join("docs")
+            .join("architecture")
+            .join("blueprints");
         for blueprint_name in CANONICAL_ARCHITECTURE_BLUEPRINTS.iter() {
             let path = blueprints_dir.join(blueprint_name);
             if !path.is_file() {
@@ -1285,8 +1291,8 @@ mod tests {
     }
 
     #[test]
-    fn test_canonical_architecture_blueprints_exist_on_disk() -> Result<(), Box<dyn std::error::Error>>
-    {
+    fn test_canonical_architecture_blueprints_exist_on_disk(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
@@ -1341,4 +1347,3 @@ mod tests {
         Ok(())
     }
 }
-

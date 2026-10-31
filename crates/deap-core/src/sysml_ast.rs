@@ -2484,7 +2484,11 @@ fn is_word_boundary_before(text: &str, pos: usize) -> bool {
     if pos == 0 {
         true
     } else {
-        !text.as_bytes().get(pos - 1).copied().is_some_and(is_ident_char)
+        !text
+            .as_bytes()
+            .get(pos - 1)
+            .copied()
+            .is_some_and(is_ident_char)
     }
 }
 
@@ -2600,7 +2604,13 @@ fn extract_doc_comment_before(text: &str, keyword_pos: usize) -> Option<String> 
             let doc_prefix = before.get(..open)?.trim_end();
             if doc_prefix.ends_with("doc") {
                 let doc_start = doc_prefix.len() - 3;
-                if doc_start == 0 || !doc_prefix.as_bytes().get(doc_start - 1).copied().is_some_and(is_ident_char) {
+                if doc_start == 0
+                    || !doc_prefix
+                        .as_bytes()
+                        .get(doc_start - 1)
+                        .copied()
+                        .is_some_and(is_ident_char)
+                {
                     let inner = before.get(open + 2..before.len().saturating_sub(2))?;
                     return Some(inner.trim().to_string());
                 }
@@ -2670,7 +2680,8 @@ pub fn parse_attribute_defs(content: &str) -> Vec<AttributeDef> {
     let mut idx = 0;
     while let Some(pos) = masked.get(idx..).and_then(|s| s.find("attribute")) {
         let kw_pos = idx + pos;
-        if !is_word_boundary_before(&masked, kw_pos) || !is_word_boundary_after(&masked, kw_pos + 9) {
+        if !is_word_boundary_before(&masked, kw_pos) || !is_word_boundary_after(&masked, kw_pos + 9)
+        {
             idx = kw_pos + 9;
             continue;
         }
@@ -2716,7 +2727,11 @@ pub fn parse_attribute_defs(content: &str) -> Vec<AttributeDef> {
             }
             curr += skip_ws(masked.get(curr..).unwrap_or(""));
             if let Some(semi) = masked.get(curr..).and_then(|s| s.find(';')) {
-                let val = clean.get(curr..curr + semi).unwrap_or("").trim().to_string();
+                let val = clean
+                    .get(curr..curr + semi)
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
                 attrs.push(AttributeDef {
                     name: name.to_string(),
                     type_name,
@@ -2770,7 +2785,9 @@ pub fn parse_attribute_defs(content: &str) -> Vec<AttributeDef> {
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-PORT-FLOW-LINE]
 fn parse_port_flow_line(line: &str) -> Option<FlowDef> {
     let trimmed = line.trim().trim_end_matches(';').trim();
-    if trimmed.is_empty() || (trimmed.starts_with("attribute") && is_word_boundary_after(trimmed, 9)) {
+    if trimmed.is_empty()
+        || (trimmed.starts_with("attribute") && is_word_boundary_after(trimmed, 9))
+    {
         return None;
     }
     let mut rest = trimmed;
@@ -2855,16 +2872,24 @@ pub fn parse_port_defs(content: &str) -> Vec<PortDef> {
     let mut idx = 0;
     while let Some(pos) = masked.get(idx..).and_then(|s| s.find("port")) {
         let port_pos = idx + pos;
-        if !is_word_boundary_before(&masked, port_pos) || !is_word_boundary_after(&masked, port_pos + 4) {
+        if !is_word_boundary_before(&masked, port_pos)
+            || !is_word_boundary_after(&masked, port_pos + 4)
+        {
             idx = port_pos + 4;
             continue;
         }
         let before_port = masked.get(..port_pos).unwrap_or("").trim_end();
-        let (dir1, doc_end) = if before_port.ends_with("inout") && is_word_boundary_before(before_port, before_port.len() - 5) {
+        let (dir1, doc_end) = if before_port.ends_with("inout")
+            && is_word_boundary_before(before_port, before_port.len() - 5)
+        {
             (Some("inout"), before_port.len() - 5)
-        } else if before_port.ends_with("out") && is_word_boundary_before(before_port, before_port.len() - 3) {
+        } else if before_port.ends_with("out")
+            && is_word_boundary_before(before_port, before_port.len() - 3)
+        {
             (Some("out"), before_port.len() - 3)
-        } else if before_port.ends_with("in") && is_word_boundary_before(before_port, before_port.len() - 2) {
+        } else if before_port.ends_with("in")
+            && is_word_boundary_before(before_port, before_port.len() - 2)
+        {
             (Some("in"), before_port.len() - 2)
         } else {
             (None, port_pos)
@@ -3094,7 +3119,9 @@ pub fn parse_action_defs(content: &str) -> Vec<ActionDef> {
     let mut idx = 0;
     while let Some(pos) = masked.get(idx..).and_then(|s| s.find("action")) {
         let act_pos = idx + pos;
-        if !is_word_boundary_before(&masked, act_pos) || !is_word_boundary_after(&masked, act_pos + 6) {
+        if !is_word_boundary_before(&masked, act_pos)
+            || !is_word_boundary_after(&masked, act_pos + 6)
+        {
             idx = act_pos + 6;
             continue;
         }
@@ -3174,12 +3201,22 @@ pub fn parse_action_defs(content: &str) -> Vec<ActionDef> {
                         out_params.push(attr);
                     }
                 } else if trimmed.starts_with("perform") && is_word_boundary_after(trimmed, 7) {
-                    let perf = trimmed.get(7..).unwrap_or("").trim().trim_end_matches(';').trim();
+                    let perf = trimmed
+                        .get(7..)
+                        .unwrap_or("")
+                        .trim()
+                        .trim_end_matches(';')
+                        .trim();
                     if !perf.is_empty() {
                         performer = Some(perf.to_string());
                     }
                 } else if trimmed.starts_with("step") && is_word_boundary_after(trimmed, 4) {
-                    let step_name = trimmed.get(4..).unwrap_or("").trim().trim_end_matches(';').trim();
+                    let step_name = trimmed
+                        .get(4..)
+                        .unwrap_or("")
+                        .trim()
+                        .trim_end_matches(';')
+                        .trim();
                     if !step_name.is_empty() {
                         steps.push(step_name.to_string());
                     }
@@ -3230,12 +3267,15 @@ pub fn parse_constraint_defs(content: &str) -> Vec<ConstraintDef> {
     let mut idx = 0;
     while let Some(pos) = masked.get(idx..).and_then(|s| s.find("constraint")) {
         let c_pos = idx + pos;
-        if !is_word_boundary_before(&masked, c_pos) || !is_word_boundary_after(&masked, c_pos + 10) {
+        if !is_word_boundary_before(&masked, c_pos) || !is_word_boundary_after(&masked, c_pos + 10)
+        {
             idx = c_pos + 10;
             continue;
         }
         let before_c = masked.get(..c_pos).unwrap_or("").trim_end();
-        let (is_assertion, doc_end) = if before_c.ends_with("assert") && is_word_boundary_before(before_c, before_c.len() - 6) {
+        let (is_assertion, doc_end) = if before_c.ends_with("assert")
+            && is_word_boundary_before(before_c, before_c.len() - 6)
+        {
             (true, before_c.len() - 6)
         } else {
             (false, c_pos)
@@ -3395,13 +3435,23 @@ fn parse_calc_param(s: &str) -> Option<AttributeDef> {
         }
         let after_type = after_colon.get(t_len..).unwrap_or("").trim_start();
         if after_type.starts_with('=') {
-            let val = after_type.get(1..).unwrap_or("").trim().trim_end_matches(';').trim();
+            let val = after_type
+                .get(1..)
+                .unwrap_or("")
+                .trim()
+                .trim_end_matches(';')
+                .trim();
             if !val.is_empty() {
                 default_val = Some(val.to_string());
             }
         }
     } else if after_name.starts_with('=') {
-        let val = after_name.get(1..).unwrap_or("").trim().trim_end_matches(';').trim();
+        let val = after_name
+            .get(1..)
+            .unwrap_or("")
+            .trim()
+            .trim_end_matches(';')
+            .trim();
         if !val.is_empty() {
             default_val = Some(val.to_string());
         }
@@ -3447,14 +3497,19 @@ pub fn parse_calc_defs(content: &str) -> Vec<CalcDef> {
     let mut idx = 0;
     while let Some(pos) = masked.get(idx..).and_then(|s| s.find("calc")) {
         let calc_pos = idx + pos;
-        if !is_word_boundary_before(&masked, calc_pos) || !is_word_boundary_after(&masked, calc_pos + 4) {
+        if !is_word_boundary_before(&masked, calc_pos)
+            || !is_word_boundary_after(&masked, calc_pos + 4)
+        {
             idx = calc_pos + 4;
             continue;
         }
         let doc = extract_doc_comment_before(&clean, calc_pos);
         let mut curr = calc_pos + 4;
         curr += skip_ws(masked.get(curr..).unwrap_or(""));
-        if masked.get(curr..).is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3)) {
+        if masked
+            .get(curr..)
+            .is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3))
+        {
             curr += 3;
             curr += skip_ws(masked.get(curr..).unwrap_or(""));
         }
@@ -3522,16 +3577,34 @@ pub fn parse_calc_defs(content: &str) -> Vec<CalcDef> {
                 if trimmed.is_empty() {
                     continue;
                 }
-                if (trimmed.starts_with("in ") || trimmed.starts_with("in\t") || trimmed.starts_with("attribute "))
-                    && !trimmed.contains('=') && !trimmed.contains('+') && !trimmed.contains('-') && !trimmed.contains('*') && !trimmed.contains('/')
+                if (trimmed.starts_with("in ")
+                    || trimmed.starts_with("in\t")
+                    || trimmed.starts_with("attribute "))
+                    && !trimmed.contains('=')
+                    && !trimmed.contains('+')
+                    && !trimmed.contains('-')
+                    && !trimmed.contains('*')
+                    && !trimmed.contains('/')
                 {
                     if let Some(param) = parse_calc_param(trimmed) {
                         in_params.push(param);
                     }
-                } else if trimmed.starts_with("return ") || trimmed.starts_with("return\t") || trimmed.starts_with("return:") {
+                } else if trimmed.starts_with("return ")
+                    || trimmed.starts_with("return\t")
+                    || trimmed.starts_with("return:")
+                {
                     let rest = trimmed.trim_start_matches("return").trim();
-                    let is_math_expr = rest.contains('+') || rest.contains('-') || rest.contains('*') || rest.contains('/') || rest.contains('(');
-                    if return_type.is_none() && !is_math_expr && (rest.contains(':') || rest.starts_with("type ") || rest.split_whitespace().count() <= 2) {
+                    let is_math_expr = rest.contains('+')
+                        || rest.contains('-')
+                        || rest.contains('*')
+                        || rest.contains('/')
+                        || rest.contains('(');
+                    if return_type.is_none()
+                        && !is_math_expr
+                        && (rest.contains(':')
+                            || rest.starts_with("type ")
+                            || rest.split_whitespace().count() <= 2)
+                    {
                         let type_part = if let Some(colon_pos) = rest.find(':') {
                             rest.get(colon_pos + 1..).unwrap_or("").trim()
                         } else {
@@ -3543,7 +3616,11 @@ pub fn parse_calc_defs(content: &str) -> Vec<CalcDef> {
                             continue;
                         }
                     }
-                    let expr_candidate = rest.trim_start_matches(':').trim().trim_end_matches(';').trim();
+                    let expr_candidate = rest
+                        .trim_start_matches(':')
+                        .trim()
+                        .trim_end_matches(';')
+                        .trim();
                     if !expr_candidate.is_empty() {
                         expr_lines.push(expr_candidate);
                     }
@@ -3729,7 +3806,9 @@ pub fn parse_requirement_defs(content: &str) -> Vec<RequirementDef> {
     let mut idx = 0;
     while let Some(pos) = masked.get(idx..).and_then(|s| s.find("requirement")) {
         let req_pos = idx + pos;
-        if !is_word_boundary_before(&masked, req_pos) || !is_word_boundary_after(&masked, req_pos + 11) {
+        if !is_word_boundary_before(&masked, req_pos)
+            || !is_word_boundary_after(&masked, req_pos + 11)
+        {
             idx = req_pos + 11;
             continue;
         }
@@ -3962,7 +4041,9 @@ pub fn parse_satisfied_requirements(content: &str) -> Vec<String> {
 
     while let Some(pos) = masked.get(idx..).and_then(|s| s.find("satisfy")) {
         let satisfy_pos = idx + pos;
-        if !is_word_boundary_before(&masked, satisfy_pos) || !is_word_boundary_after(&masked, satisfy_pos + 7) {
+        if !is_word_boundary_before(&masked, satisfy_pos)
+            || !is_word_boundary_after(&masked, satisfy_pos + 7)
+        {
             idx = satisfy_pos + 7;
             continue;
         }
@@ -3971,13 +4052,19 @@ pub fn parse_satisfied_requirements(content: &str) -> Vec<String> {
         curr += skip_ws(masked.get(curr..).unwrap_or(""));
 
         // If directly followed by 'by', this is an inverse 'satisfy by <Part>;' clause; skip.
-        if masked.get(curr..).is_some_and(|s| s.starts_with("by") && is_word_boundary_after(s, 2)) {
+        if masked
+            .get(curr..)
+            .is_some_and(|s| s.starts_with("by") && is_word_boundary_after(s, 2))
+        {
             idx = satisfy_pos + 7;
             continue;
         }
 
         // Skip optional 'requirement' keyword
-        if masked.get(curr..).is_some_and(|s| s.starts_with("requirement") && is_word_boundary_after(s, 11)) {
+        if masked
+            .get(curr..)
+            .is_some_and(|s| s.starts_with("requirement") && is_word_boundary_after(s, 11))
+        {
             curr += 11;
             curr += skip_ws(masked.get(curr..).unwrap_or(""));
         }
@@ -3994,7 +4081,9 @@ pub fn parse_satisfied_requirements(content: &str) -> Vec<String> {
                     let mut search_idx = 0;
                     while let Some(pos) = stmt_clean.get(search_idx..).and_then(|s| s.find("by")) {
                         let actual_pos = search_idx + pos;
-                        if is_word_boundary_before(stmt_clean, actual_pos) && is_word_boundary_after(stmt_clean, actual_pos + 2) {
+                        if is_word_boundary_before(stmt_clean, actual_pos)
+                            && is_word_boundary_after(stmt_clean, actual_pos + 2)
+                        {
                             found = Some(actual_pos);
                             break;
                         }
@@ -4063,7 +4152,9 @@ pub fn parse_test_case_defs(content: &str) -> Vec<TestCaseDef> {
     let mut idx = 0;
     while let Some(pos) = masked.get(idx..).and_then(|s| s.find("test")) {
         let test_pos = idx + pos;
-        if !is_word_boundary_before(&masked, test_pos) || !is_word_boundary_after(&masked, test_pos + 4) {
+        if !is_word_boundary_before(&masked, test_pos)
+            || !is_word_boundary_after(&masked, test_pos + 4)
+        {
             idx = test_pos + 4;
             continue;
         }
@@ -4106,7 +4197,12 @@ pub fn parse_test_case_defs(content: &str) -> Vec<TestCaseDef> {
                 for line in body.lines() {
                     let trimmed = line.trim();
                     if trimmed.starts_with("subject") && is_word_boundary_after(trimmed, 7) {
-                        let val = trimmed.get(7..).unwrap_or("").trim().trim_end_matches(';').trim();
+                        let val = trimmed
+                            .get(7..)
+                            .unwrap_or("")
+                            .trim()
+                            .trim_end_matches(';')
+                            .trim();
                         if !val.is_empty() {
                             subject_part = Some(val.to_string());
                         }
@@ -4117,7 +4213,8 @@ pub fn parse_test_case_defs(content: &str) -> Vec<TestCaseDef> {
                         }
                         if rest.starts_with("requirement") && is_word_boundary_after(rest, 11) {
                             rest = rest.get(11..).unwrap_or("").trim();
-                        } else if rest.starts_with("constraint") && is_word_boundary_after(rest, 10) {
+                        } else if rest.starts_with("constraint") && is_word_boundary_after(rest, 10)
+                        {
                             rest = rest.get(10..).unwrap_or("").trim();
                         }
                         let targets = rest.trim_end_matches(';').trim();
@@ -4127,7 +4224,8 @@ pub fn parse_test_case_defs(content: &str) -> Vec<TestCaseDef> {
                                 verified_requirements.push(t.to_string());
                             }
                         }
-                    } else if trimmed.starts_with("objective") && is_word_boundary_after(trimmed, 9) {
+                    } else if trimmed.starts_with("objective") && is_word_boundary_after(trimmed, 9)
+                    {
                         let val = trimmed
                             .get(9..)
                             .unwrap_or("")
@@ -4139,7 +4237,12 @@ pub fn parse_test_case_defs(content: &str) -> Vec<TestCaseDef> {
                             objective = Some(val.to_string());
                         }
                     } else if trimmed.starts_with("step") && is_word_boundary_after(trimmed, 4) {
-                        let val = trimmed.get(4..).unwrap_or("").trim().trim_end_matches(';').trim();
+                        let val = trimmed
+                            .get(4..)
+                            .unwrap_or("")
+                            .trim()
+                            .trim_end_matches(';')
+                            .trim();
                         if !val.is_empty() {
                             test_steps.push(val.to_string());
                         }
@@ -4271,7 +4374,8 @@ pub fn parse_connection_defs(content: &str) -> Vec<ConnectionDef> {
 
         for line in body.lines() {
             let trimmed = line.trim();
-            let after_conn = if trimmed.starts_with("connect") && is_word_boundary_after(trimmed, 7) {
+            let after_conn = if trimmed.starts_with("connect") && is_word_boundary_after(trimmed, 7)
+            {
                 Some(trimmed.get(7..).unwrap_or("").trim_start())
             } else if trimmed.starts_with("flow") && is_word_boundary_after(trimmed, 4) {
                 let after_flow = trimmed.get(4..).unwrap_or("").trim_start();
@@ -4358,7 +4462,8 @@ pub fn parse_state_defs(content: &str) -> Vec<StateDef> {
     let mut idx = 0;
     while let Some(pos) = masked.get(idx..).and_then(|s| s.find("state")) {
         let st_pos = idx + pos;
-        if !is_word_boundary_before(&masked, st_pos) || !is_word_boundary_after(&masked, st_pos + 5) {
+        if !is_word_boundary_before(&masked, st_pos) || !is_word_boundary_after(&masked, st_pos + 5)
+        {
             idx = st_pos + 5;
             continue;
         }
@@ -4405,17 +4510,36 @@ pub fn parse_state_defs(content: &str) -> Vec<StateDef> {
             for line in body.lines() {
                 let trimmed = line.trim();
                 if trimmed.starts_with("entry") && is_word_boundary_after(trimmed, 5) {
-                    let act = trimmed.get(5..).unwrap_or("").trim().trim_end_matches(';').trim();
+                    let act = trimmed
+                        .get(5..)
+                        .unwrap_or("")
+                        .trim()
+                        .trim_end_matches(';')
+                        .trim();
                     entry_action = Some(act.to_string());
                 } else if trimmed.starts_with("do") && is_word_boundary_after(trimmed, 2) {
-                    let act = trimmed.get(2..).unwrap_or("").trim().trim_end_matches(';').trim();
+                    let act = trimmed
+                        .get(2..)
+                        .unwrap_or("")
+                        .trim()
+                        .trim_end_matches(';')
+                        .trim();
                     do_action = Some(act.to_string());
                 } else if trimmed.starts_with("exit") && is_word_boundary_after(trimmed, 4) {
-                    let act = trimmed.get(4..).unwrap_or("").trim().trim_end_matches(';').trim();
+                    let act = trimmed
+                        .get(4..)
+                        .unwrap_or("")
+                        .trim()
+                        .trim_end_matches(';')
+                        .trim();
                     exit_action = Some(act.to_string());
                 } else if trimmed.starts_with("transition") && is_word_boundary_after(trimmed, 10) {
-                    let raw_trans =
-                        trimmed.get(10..).unwrap_or("").trim().trim_end_matches(';').trim();
+                    let raw_trans = trimmed
+                        .get(10..)
+                        .unwrap_or("")
+                        .trim()
+                        .trim_end_matches(';')
+                        .trim();
                     if !raw_trans.is_empty() {
                         if raw_trans.starts_with("first ") || raw_trans.contains(" first ") {
                             let (t_name, after_first) = if raw_trans.starts_with("first ") {
@@ -4473,49 +4597,49 @@ pub fn parse_state_defs(content: &str) -> Vec<StateDef> {
                             });
                         } else {
                             let t_name = raw_trans.to_string();
-                            let (source, target, trigger) =
-                                if let Some(to_idx) = raw_trans.find("_to_") {
-                                    let src_part = raw_trans.get(..to_idx).unwrap_or("").trim();
-                                    let after_to = raw_trans.get(to_idx + 4..).unwrap_or("").trim();
-                                    if let Some(on_idx) = after_to.find("_on_") {
-                                        let tgt_part = after_to.get(..on_idx).unwrap_or("").trim();
-                                        let trig_part =
-                                            after_to.get(on_idx + 4..).unwrap_or("").trim();
-                                        (
-                                            if src_part.is_empty() {
-                                                None
-                                            } else {
-                                                Some(src_part.to_string())
-                                            },
-                                            if tgt_part.is_empty() {
-                                                None
-                                            } else {
-                                                Some(tgt_part.to_string())
-                                            },
-                                            if trig_part.is_empty() {
-                                                None
-                                            } else {
-                                                Some(trig_part.to_string())
-                                            },
-                                        )
-                                    } else {
-                                        (
-                                            if src_part.is_empty() {
-                                                None
-                                            } else {
-                                                Some(src_part.to_string())
-                                            },
-                                            if after_to.is_empty() {
-                                                None
-                                            } else {
-                                                Some(after_to.to_string())
-                                            },
-                                            None,
-                                        )
-                                    }
+                            let (source, target, trigger) = if let Some(to_idx) =
+                                raw_trans.find("_to_")
+                            {
+                                let src_part = raw_trans.get(..to_idx).unwrap_or("").trim();
+                                let after_to = raw_trans.get(to_idx + 4..).unwrap_or("").trim();
+                                if let Some(on_idx) = after_to.find("_on_") {
+                                    let tgt_part = after_to.get(..on_idx).unwrap_or("").trim();
+                                    let trig_part = after_to.get(on_idx + 4..).unwrap_or("").trim();
+                                    (
+                                        if src_part.is_empty() {
+                                            None
+                                        } else {
+                                            Some(src_part.to_string())
+                                        },
+                                        if tgt_part.is_empty() {
+                                            None
+                                        } else {
+                                            Some(tgt_part.to_string())
+                                        },
+                                        if trig_part.is_empty() {
+                                            None
+                                        } else {
+                                            Some(trig_part.to_string())
+                                        },
+                                    )
                                 } else {
-                                    (None, None, None)
-                                };
+                                    (
+                                        if src_part.is_empty() {
+                                            None
+                                        } else {
+                                            Some(src_part.to_string())
+                                        },
+                                        if after_to.is_empty() {
+                                            None
+                                        } else {
+                                            Some(after_to.to_string())
+                                        },
+                                        None,
+                                    )
+                                }
+                            } else {
+                                (None, None, None)
+                            };
                             transitions.push(TransitionDef {
                                 name: Some(t_name),
                                 source,
@@ -4901,7 +5025,9 @@ pub fn parse_part_defs(content: &str) -> Vec<PartDef> {
     let mut idx = 0;
     while let Some(pos) = masked.get(idx..).and_then(|s| s.find("part")) {
         let part_pos = idx + pos;
-        if !is_word_boundary_before(&masked, part_pos) || !is_word_boundary_after(&masked, part_pos + 4) {
+        if !is_word_boundary_before(&masked, part_pos)
+            || !is_word_boundary_after(&masked, part_pos + 4)
+        {
             idx = part_pos + 4;
             continue;
         }
@@ -5045,7 +5171,8 @@ pub fn parse_hazard_defs(content: &str) -> Vec<HazardDef> {
     let mut idx = 0;
     while let Some(pos) = masked.get(idx..).and_then(|s| s.find("hazard")) {
         let haz_pos = idx + pos;
-        if !is_word_boundary_before(&masked, haz_pos) || !is_word_boundary_after(&masked, haz_pos + 6)
+        if !is_word_boundary_before(&masked, haz_pos)
+            || !is_word_boundary_after(&masked, haz_pos + 6)
         {
             idx = haz_pos + 6;
             continue;
@@ -5164,7 +5291,9 @@ pub fn parse_sysml(content: &str) -> SysmlModel {
     let mut idx = 0;
     while let Some(pos) = masked.get(idx..).and_then(|s| s.find("package")) {
         let pkg_pos = idx + pos;
-        if !is_word_boundary_before(&masked, pkg_pos) || !is_word_boundary_after(&masked, pkg_pos + 7) {
+        if !is_word_boundary_before(&masked, pkg_pos)
+            || !is_word_boundary_after(&masked, pkg_pos + 7)
+        {
             idx = pkg_pos + 7;
             continue;
         }
@@ -5206,7 +5335,11 @@ pub fn parse_sysml(content: &str) -> SysmlModel {
 
         if let Some(first_part) = parts.first_mut() {
             for conn in pkg_connections {
-                if !first_part.connections.iter().any(|c| c.name == conn.name && c.source_port == conn.source_port && c.target_port == conn.target_port) {
+                if !first_part.connections.iter().any(|c| {
+                    c.name == conn.name
+                        && c.source_port == conn.source_port
+                        && c.target_port == conn.target_port
+                }) {
                     first_part.connections.push(conn);
                 }
             }
@@ -5241,7 +5374,11 @@ pub fn parse_sysml(content: &str) -> SysmlModel {
 
         if let Some(first_part) = parts.first_mut() {
             for conn in root_connections {
-                if !first_part.connections.iter().any(|c| c.name == conn.name && c.source_port == conn.source_port && c.target_port == conn.target_port) {
+                if !first_part.connections.iter().any(|c| {
+                    c.name == conn.name
+                        && c.source_port == conn.source_port
+                        && c.target_port == conn.target_port
+                }) {
                     first_part.connections.push(conn);
                 }
             }
@@ -5446,14 +5583,23 @@ pub fn extract_negated_components(content: &str) -> Vec<String> {
     }
 
     for line in content.lines() {
-        let line_clean = line.find("//").and_then(|idx| line.get(..idx)).unwrap_or(line);
+        let line_clean = line
+            .find("//")
+            .and_then(|idx| line.get(..idx))
+            .unwrap_or(line);
         let lower = line_clean.trim().to_lowercase();
 
         // (a) Existence negation: `!exists(<Part>)`
         let exists_kw = "!exists(";
-        if let Some(after) = lower.find(exists_kw).and_then(|pos| lower.get(pos + exists_kw.len()..)) {
+        if let Some(after) = lower
+            .find(exists_kw)
+            .and_then(|pos| lower.get(pos + exists_kw.len()..))
+        {
             if let Some(inner) = after.find(')').and_then(|close| after.get(..close)) {
-                let comp = inner.chars().filter(|c| c.is_alphanumeric()).collect::<String>();
+                let comp = inner
+                    .chars()
+                    .filter(|c| c.is_alphanumeric())
+                    .collect::<String>();
                 if !comp.is_empty() {
                     negated.insert(comp);
                 }
@@ -5465,7 +5611,9 @@ pub fn extract_negated_components(content: &str) -> Vec<String> {
         let is_negative_value = |rhs: &str| {
             let val = rhs
                 .trim()
-                .trim_matches(|c: char| c == ';' || c == '}' || c == '{' || c == ',' || c == ')' || c == '(' || c == '.')
+                .trim_matches(|c: char| {
+                    c == ';' || c == '}' || c == '{' || c == ',' || c == ')' || c == '(' || c == '.'
+                })
                 .trim();
             negative_vals.contains(&val)
         };
@@ -5476,7 +5624,8 @@ pub fn extract_negated_components(content: &str) -> Vec<String> {
             let assign = [":=", "==", "="]
                 .into_iter()
                 .find_map(|op| clause_ascii.find(op).map(|pos| (op, pos)));
-            let labelled = assign.filter(|&(_, op_pos)| clause_ascii.find(':').is_some_and(|colon| colon < op_pos));
+            let labelled = assign
+                .filter(|&(_, op_pos)| clause_ascii.find(':').is_some_and(|colon| colon < op_pos));
             if let Some((op, op_pos)) = labelled {
                 // `Prose label: keyName = value` -- the key is the last whitespace/dot/colon-delimited token
                 // before the operator, original casing.
@@ -5553,17 +5702,34 @@ pub fn extract_negated_components(content: &str) -> Vec<String> {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/NEGATED-LABEL-NORMALIZATION]
 fn normalize_negated_label(lhs: &str) -> String {
-    let keywords = ["attribute", "ref", "readonly", "derived", "constant", "in", "out", "inout", "def"];
+    let keywords = [
+        "attribute",
+        "ref",
+        "readonly",
+        "derived",
+        "constant",
+        "in",
+        "out",
+        "inout",
+        "def",
+    ];
     let head = lhs.split(':').next().unwrap_or(lhs);
     let head = head.rsplit(['{', '(', ';', ',']).next().unwrap_or(head);
     let head = head.rsplit('.').next().unwrap_or(head);
     let words: Vec<String> = head
         .split_whitespace()
-        .map(|w| w.chars().filter(|c| c.is_alphanumeric() || *c == '_').collect::<String>())
+        .map(|w| {
+            w.chars()
+                .filter(|c| c.is_alphanumeric() || *c == '_')
+                .collect::<String>()
+        })
         .filter(|w| !w.is_empty() && !w.chars().all(|c| c.is_ascii_digit()))
         .collect();
     let mut start = 0;
-    while words.get(start).is_some_and(|w| keywords.contains(&w.as_str())) {
+    while words
+        .get(start)
+        .is_some_and(|w| keywords.contains(&w.as_str()))
+    {
         start += 1;
     }
     let label_words = words.get(start..).unwrap_or(&[]);
@@ -5599,7 +5765,15 @@ fn normalize_negated_label(lhs: &str) -> String {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/NEGATED-PROSE-PHRASES]
 fn extract_no_phrase_stems(lower: &str) -> Vec<String> {
-    let qualifiers = ["system", "subsystem", "unit", "module", "device", "installed", "present"];
+    let qualifiers = [
+        "system",
+        "subsystem",
+        "unit",
+        "module",
+        "device",
+        "installed",
+        "present",
+    ];
     let words: Vec<&str> = lower
         .split(|c: char| !c.is_alphanumeric() && c != '_')
         .filter(|w| !w.is_empty())
@@ -5667,8 +5841,18 @@ fn extract_negated_key_stem(key: &str) -> String {
     }
     // Longer suffixes precede their own suffixes (`subsystem` before `system`) for correct iterative stripping.
     let suffixes = [
-        "subsystem", "deployment", "controller", "installed", "actuator", "enabled", "present", "system", "module",
-        "device", "sensor", "unit",
+        "subsystem",
+        "deployment",
+        "controller",
+        "installed",
+        "actuator",
+        "enabled",
+        "present",
+        "system",
+        "module",
+        "device",
+        "sensor",
+        "unit",
     ];
     let mut stem: &str = clean.as_str();
     let mut qualified = false;
@@ -5694,8 +5878,8 @@ fn extract_negated_key_stem(key: &str) -> String {
     }
     // Scalar/metrology stems (e.g. `timeUnit`, `rateSensor`) name quantities, not components.
     let non_component_stems = [
-        "time", "base", "scale", "measure", "count", "rate", "limit", "value", "mode", "state", "status", "index",
-        "size",
+        "time", "base", "scale", "measure", "count", "rate", "limit", "value", "mode", "state",
+        "status", "index", "size",
     ];
     // Unqualified keys (e.g. `faultCount`, `retryLimit`) are numeric/state attributes, not presence flags.
     if qualified && stem.len() >= 3 && !non_component_stems.contains(&stem) {
@@ -5986,11 +6170,50 @@ pub fn is_valid_subsystem_identifier(s: &str) -> bool {
         return false;
     }
     let generic_blacklist = [
-        "true", "false", "null", "none", "na", "string", "int", "integer", "boolean", "float",
-        "description", "version", "name", "id", "type", "subsystem", "component", "part", "module",
-        "parameters", "attributes", "properties", "specs", "metadata", "title", "status", "real",
-        "primary", "secondary", "optional", "required", "level", "segment", "layer", "architecture",
-        "purpose", "function", "item", "flow", "port", "interface", "doc", "package", "def",
+        "true",
+        "false",
+        "null",
+        "none",
+        "na",
+        "string",
+        "int",
+        "integer",
+        "boolean",
+        "float",
+        "description",
+        "version",
+        "name",
+        "id",
+        "type",
+        "subsystem",
+        "component",
+        "part",
+        "module",
+        "parameters",
+        "attributes",
+        "properties",
+        "specs",
+        "metadata",
+        "title",
+        "status",
+        "real",
+        "primary",
+        "secondary",
+        "optional",
+        "required",
+        "level",
+        "segment",
+        "layer",
+        "architecture",
+        "purpose",
+        "function",
+        "item",
+        "flow",
+        "port",
+        "interface",
+        "doc",
+        "package",
+        "def",
     ];
     if generic_blacklist.contains(&s.to_ascii_lowercase().as_str()) {
         return false;
@@ -6457,7 +6680,10 @@ impl UnifiedSchemaModelExtractor {
                             .chars()
                             .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
                             .collect();
-                        if !ident.is_empty() && ident != "def" && is_valid_subsystem_identifier(&ident) {
+                        if !ident.is_empty()
+                            && ident != "def"
+                            && is_valid_subsystem_identifier(&ident)
+                        {
                             part_names.insert(ident);
                         }
                     } else {
@@ -6512,7 +6738,10 @@ impl UnifiedSchemaModelExtractor {
                     if cells.is_empty() {
                         continue;
                     }
-                    if cells.iter().all(|c| c.chars().all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())) {
+                    if cells.iter().all(|c| {
+                        c.chars()
+                            .all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())
+                    }) {
                         in_table = true;
                         continue;
                     }
@@ -6606,7 +6835,9 @@ impl UnifiedSchemaModelExtractor {
                         let ident: String = rest
                             .trim_start()
                             .chars()
-                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-' || *c == '.')
+                            .take_while(|c| {
+                                c.is_ascii_alphanumeric() || *c == '_' || *c == '-' || *c == '.'
+                            })
                             .collect();
                         if !ident.is_empty() && is_valid_subsystem_identifier(&ident) {
                             part_names.insert(ident);
@@ -6673,7 +6904,9 @@ impl UnifiedSchemaModelExtractor {
                                         }
                                         serde_json::Value::Object(submap) => {
                                             for name_key in &["name", "id", "identifier", "title"] {
-                                                if let Some(serde_json::Value::String(n)) = submap.get(*name_key) {
+                                                if let Some(serde_json::Value::String(n)) =
+                                                    submap.get(*name_key)
+                                                {
                                                     let n_clean = n.trim();
                                                     if is_valid_subsystem_identifier(n_clean) {
                                                         parts.insert(n_clean.to_string());
@@ -6753,7 +6986,14 @@ impl UnifiedSchemaModelExtractor {
             let current_indent = line.len() - line.trim_start().len();
 
             let is_key = [
-                "subsystems:", "components:", "parts:", "modules:", "subsystem:", "component:", "part:", "module:",
+                "subsystems:",
+                "components:",
+                "parts:",
+                "modules:",
+                "subsystem:",
+                "component:",
+                "part:",
+                "module:",
             ]
             .iter()
             .any(|kw| trimmed.to_ascii_lowercase().starts_with(kw));
@@ -7899,7 +8139,8 @@ constraint def RateLimitConstraint(v : Real) {
     }
 
     #[test]
-    fn test_issue_428_parse_action_defs_nested_blocks_and_docblocks() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_428_parse_action_defs_nested_blocks_and_docblocks(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let sysml_source = r#"
 /* Top-level license comment */
 package SystemControl {
@@ -7928,9 +8169,14 @@ package SystemControl {
 "#;
         let actions = parse_action_defs(sysml_source);
         // FakeActionInStringLiteral must NOT be parsed!
-        assert!(!actions.iter().any(|a| a.name == "FakeActionInStringLiteral"));
+        assert!(!actions
+            .iter()
+            .any(|a| a.name == "FakeActionInStringLiteral"));
 
-        let plan = actions.iter().find(|a| a.name == "PlanExecutionSequence").ok_or("PlanExecutionSequence should exist")?;
+        let plan = actions
+            .iter()
+            .find(|a| a.name == "PlanExecutionSequence")
+            .ok_or("PlanExecutionSequence should exist")?;
         assert_eq!(plan.doc.as_deref(), Some("Primary path planning action"));
         assert!(plan.is_def);
         assert_eq!(plan.in_params.len(), 1);
@@ -7940,13 +8186,19 @@ package SystemControl {
         assert_eq!(plan.performer.as_deref(), Some("ControlProcessor"));
         assert_eq!(plan.steps, vec!["computeSequence", "validateTransition"]);
 
-        let estop = actions.iter().find(|a| a.name == "EmergencyStop").ok_or("EmergencyStop should exist")?;
+        let estop = actions
+            .iter()
+            .find(|a| a.name == "EmergencyStop")
+            .ok_or("EmergencyStop should exist")?;
         assert_eq!(estop.doc.as_deref(), Some("Semicolon terminated action"));
         assert!(estop.is_def);
         assert_eq!(estop.in_params.len(), 1);
         assert_eq!(estop.in_params.first().ok_or("in0")?.name, "code");
 
-        let maneuver = actions.iter().find(|a| a.name == "executeTransition").ok_or("executeTransition should exist")?;
+        let maneuver = actions
+            .iter()
+            .find(|a| a.name == "executeTransition")
+            .ok_or("executeTransition should exist")?;
         assert_eq!(maneuver.doc, None);
         assert!(!maneuver.is_def);
 
@@ -8006,7 +8258,10 @@ package SystemModel_SSOT {
         let model = parse_sysml(fixture);
         assert_eq!(model.package_name.as_deref(), Some("SystemModel_SSOT"));
         assert_eq!(model.parts.len(), 2);
-        assert_eq!(model.parts.first().ok_or("part0")?.name, "PrimaryControlUnit");
+        assert_eq!(
+            model.parts.first().ok_or("part0")?.name,
+            "PrimaryControlUnit"
+        );
         assert_eq!(model.parts.get(1).ok_or("part1")?.name, "StateEstimator");
         Ok(())
     }
@@ -8075,15 +8330,13 @@ package SystemModel_SSOT {
         );
         let a1 = r0.attributes.get(1).ok_or("a1")?;
         assert_eq!(a1.name, "complexity_class");
-        assert_eq!(
-            a1.default_value.as_deref(),
-            Some("\"Class P\"")
-        );
+        assert_eq!(a1.default_value.as_deref(), Some("\"Class P\""));
         Ok(())
     }
 
     #[test]
-    fn test_parse_requirement_defs_constraints_assumptions_derivations() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_parse_requirement_defs_constraints_assumptions_derivations(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let text = r#"
             requirement def REQ_0032_Test {
                 id = "REQ-0032";
@@ -8108,16 +8361,14 @@ package SystemModel_SSOT {
         );
         assert_eq!(
             r0.derived_from,
-            vec![
-                "REQ_0031_BaseEmission",
-                "REQ_0019_IdentifierSanitization"
-            ]
+            vec!["REQ_0031_BaseEmission", "REQ_0019_IdentifierSanitization"]
         );
         Ok(())
     }
 
     #[test]
-    fn test_parse_requirement_defs_with_encapsulated_constraints() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_parse_requirement_defs_with_encapsulated_constraints(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let text = r#"
             requirement def REQ_0001_Universal_Grounding {
                 id = "REQ-0001";
@@ -8213,7 +8464,8 @@ package SystemModel_SSOT {
     }
 
     #[test]
-    fn test_parse_test_case_defs_with_assert_constraints() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_parse_test_case_defs_with_assert_constraints() -> Result<(), Box<dyn std::error::Error>>
+    {
         let content = r#"
             test case def TC_UCA_33_Verification {
                 subject SafetyController;
@@ -8227,21 +8479,39 @@ package SystemModel_SSOT {
         let tc0 = test_cases.first().ok_or("tc0")?;
         assert_eq!(tc0.name, "TC_UCA_33_Verification");
         assert_eq!(tc0.subject_part.as_deref(), Some("SafetyController"));
-        assert_eq!(tc0.verified_requirements, vec!["Assert_UCA_33", "Assert_UCA_34"]);
-        assert_eq!(tc0.objective.as_deref(), Some("Verify safety interlock per UCA-33"));
+        assert_eq!(
+            tc0.verified_requirements,
+            vec!["Assert_UCA_33", "Assert_UCA_34"]
+        );
+        assert_eq!(
+            tc0.objective.as_deref(),
+            Some("Verify safety interlock per UCA-33")
+        );
         assert_eq!(tc0.test_steps, vec!["trigger_interlock"]);
         Ok(())
     }
 
     #[test]
     fn test_component_matches_and_clean_names() {
-        assert!(component_matches("Primary Transducer", "Primary_Transducer"));
+        assert!(component_matches(
+            "Primary Transducer",
+            "Primary_Transducer"
+        ));
         assert!(component_matches("PrimaryController", "PrimaryController"));
         assert!(component_matches("primary_controller", "PrimaryController"));
         assert!(component_matches("StateEstimator", "state_estimator"));
-        assert!(component_matches("[PrimaryController]", "PrimaryController"));
-        assert!(component_matches("**PrimaryController**", "PrimaryController"));
-        assert!(component_matches("`PrimaryController`", "PrimaryController"));
+        assert!(component_matches(
+            "[PrimaryController]",
+            "PrimaryController"
+        ));
+        assert!(component_matches(
+            "**PrimaryController**",
+            "PrimaryController"
+        ));
+        assert!(component_matches(
+            "`PrimaryController`",
+            "PrimaryController"
+        ));
         assert!(!component_matches("PhantomSubsystem", "PrimaryTransducer"));
         assert!(!component_matches("GhostUnit", "PrimaryController"));
     }
@@ -8249,11 +8519,23 @@ package SystemModel_SSOT {
     #[test]
     fn test_extract_negated_components_detection() {
         let backup = vec!["backup".to_string()];
-        assert_eq!(extract_negated_components(r#"attribute backupEnabled = 0;"#), backup);
-        assert_eq!(extract_negated_components(r#"attribute backup_system = "none";"#), backup);
-        assert_eq!(extract_negated_components(r#"TestPlatform.backupSystem = "No""#), backup);
+        assert_eq!(
+            extract_negated_components(r#"attribute backupEnabled = 0;"#),
+            backup
+        );
+        assert_eq!(
+            extract_negated_components(r#"attribute backup_system = "none";"#),
+            backup
+        );
+        assert_eq!(
+            extract_negated_components(r#"TestPlatform.backupSystem = "No""#),
+            backup
+        );
         assert_eq!(extract_negated_components("Backup subsystem: No"), backup);
-        assert_eq!(extract_negated_components("No backup unit installed"), backup);
+        assert_eq!(
+            extract_negated_components("No backup unit installed"),
+            backup
+        );
         assert_eq!(extract_negated_components("!exists(Backup)"), backup);
         assert!(extract_negated_components(r#"attribute backupEnabled = 1;"#).is_empty());
         assert!(extract_negated_components(r#"attribute backupSystem = "Yes";"#).is_empty());
@@ -8325,7 +8607,10 @@ package SystemModel_SSOT {
 
         // Control: an explicit `has<Component>` presence flag still negates the component.
         let control = "attribute hasFaultMonitor = false;";
-        assert_eq!(extract_negated_components(control), vec!["faultmonitor".to_string()]);
+        assert_eq!(
+            extract_negated_components(control),
+            vec!["faultmonitor".to_string()]
+        );
         assert!(is_component_negated("FaultMonitor", control));
         assert!(!is_component_negated("RetryHandler", control));
 
@@ -8352,7 +8637,10 @@ package SystemModel_SSOT {
 
         // Control: a `has_<component>` snake-case presence flag still negates the component.
         let snake_control = "attribute has_backup_module = false;";
-        assert_eq!(extract_negated_components(snake_control), vec!["backup".to_string()]);
+        assert_eq!(
+            extract_negated_components(snake_control),
+            vec!["backup".to_string()]
+        );
     }
 
     #[test]
@@ -8365,9 +8653,13 @@ package SystemModel_SSOT {
         assert!(!is_component_negated("PrimaryProcessor", prose));
 
         // Dotted owner paths in a labelled clause yield the leaf key token only.
-        let dotted = extract_negated_components("Invariant: Owner.auxSystem = 0, redundantSystem = \"No\"");
+        let dotted =
+            extract_negated_components("Invariant: Owner.auxSystem = 0, redundantSystem = \"No\"");
         assert!(dotted.contains(&"aux".to_string()), "stems: {dotted:?}");
-        assert!(!dotted.contains(&"owneraux".to_string()), "stems: {dotted:?}");
+        assert!(
+            !dotted.contains(&"owneraux".to_string()),
+            "stems: {dotted:?}"
+        );
     }
 
     #[test]
@@ -8381,7 +8673,8 @@ package SystemModel_SSOT {
                 part StateEstimator :> SensorBase;
             }
         "#;
-        let sysml_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".sysml", sysml);
+        let sysml_parts =
+            UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".sysml", sysml);
         assert!(sysml_parts.contains("ControlProcessor"));
         assert!(sysml_parts.contains("StateEstimator"));
 
@@ -8394,7 +8687,8 @@ package SystemModel_SSOT {
               - name: PowerDistributionUnit
                 id: PDU-01
         "#;
-        let yaml_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".yaml", yaml);
+        let yaml_parts =
+            UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".yaml", yaml);
         assert!(yaml_parts.contains("ControlProcessor"));
         assert!(yaml_parts.contains("SequencingSystem"));
         assert!(yaml_parts.contains("PowerDistributionUnit"));
@@ -8408,7 +8702,8 @@ package SystemModel_SSOT {
                 ]
             }
         "#;
-        let json_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".json", json);
+        let json_parts =
+            UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".json", json);
         assert!(json_parts.contains("TelemetryTransceiver"));
         assert!(json_parts.contains("ThermalController"));
 
@@ -8437,7 +8732,8 @@ package SystemModel_SSOT {
                 int64 timestamp = 1;
             }
         "#;
-        let proto_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".proto", proto);
+        let proto_parts =
+            UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".proto", proto);
         assert!(proto_parts.contains("DiagnosticsService"));
         assert!(proto_parts.contains("SensorData"));
 
@@ -8461,7 +8757,8 @@ package SystemModel_SSOT {
                 </SW-COMPONENT-PROTOTYPE>
             </AUTOSAR>
         "#;
-        let arxml_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".arxml", arxml);
+        let arxml_parts =
+            UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".arxml", arxml);
         assert!(arxml_parts.contains("ProcessController"));
     }
 
@@ -8484,12 +8781,22 @@ package SystemModel_SSOT {
                 container access-table { leaf size { type uint32; } }
             }
         "#;
-        let yang_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".yang", yang);
-        assert!(yang_parts.contains("EndpointSettings"), "parts: {yang_parts:?}");
+        let yang_parts =
+            UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".yang", yang);
+        assert!(
+            yang_parts.contains("EndpointSettings"),
+            "parts: {yang_parts:?}"
+        );
         assert!(yang_parts.contains("NodeRegistry"), "parts: {yang_parts:?}");
         assert!(yang_parts.contains("NodeEntry"), "parts: {yang_parts:?}");
-        assert!(!yang_parts.contains("sample_module"), "parts: {yang_parts:?}");
-        assert!(!yang_parts.contains("counter_kind"), "parts: {yang_parts:?}");
+        assert!(
+            !yang_parts.contains("sample_module"),
+            "parts: {yang_parts:?}"
+        );
+        assert!(
+            !yang_parts.contains("counter_kind"),
+            "parts: {yang_parts:?}"
+        );
         assert!(!yang_parts.contains("label"), "parts: {yang_parts:?}");
         let upper = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".YANG", yang);
         assert_eq!(upper, yang_parts);
@@ -8529,7 +8836,10 @@ package SystemModel_SSOT {
         assert_eq!(ke_p1.name, "speedMps");
         assert_eq!(ke_p1.type_name, "Real");
         assert_eq!(ke.return_type.as_deref(), Some("Real"));
-        assert_eq!(ke.expression.as_deref(), Some("0.5 * massKg * speedMps * speedMps"));
+        assert_eq!(
+            ke.expression.as_deref(),
+            Some("0.5 * massKg * speedMps * speedMps")
+        );
 
         let vc = calcs.get(1).ok_or("vc")?;
         assert_eq!(vc.name, "VelocityCalc");
@@ -8552,75 +8862,57 @@ package SystemModel_SSOT {
     fn test_package_def_queries_and_nested_ports() -> Result<(), Box<dyn std::error::Error>> {
         let mut root = PackageDef {
             name: "RootSystem".to_string(),
-            calc_defs: vec![
-                CalcDef {
-                    name: "RootCalc".to_string(),
-                    ..Default::default()
-                },
-            ],
-            port_defs: vec![
-                PortDef {
-                    name: "root_port".to_string(),
-                    ..Default::default()
-                },
-            ],
-            hazard_defs: vec![
-                HazardDef {
-                    name: "H-01".to_string(),
-                    severity: 3,
-                    ..Default::default()
-                },
-            ],
-            risk_defs: vec![
-                RiskDef {
-                    name: "R-01".to_string(),
-                    severity: 3,
-                    ..Default::default()
-                },
-            ],
-            state_defs: vec![
-                StateDef {
-                    name: "Nominal".to_string(),
-                    ..Default::default()
-                },
-            ],
-            connection_defs: vec![
-                ConnectionDef {
-                    name: "C-01".to_string(),
-                    source_port: "p1".to_string(),
-                    target_port: "p2".to_string(),
-                    ..Default::default()
-                },
-            ],
+            calc_defs: vec![CalcDef {
+                name: "RootCalc".to_string(),
+                ..Default::default()
+            }],
+            port_defs: vec![PortDef {
+                name: "root_port".to_string(),
+                ..Default::default()
+            }],
+            hazard_defs: vec![HazardDef {
+                name: "H-01".to_string(),
+                severity: 3,
+                ..Default::default()
+            }],
+            risk_defs: vec![RiskDef {
+                name: "R-01".to_string(),
+                severity: 3,
+                ..Default::default()
+            }],
+            state_defs: vec![StateDef {
+                name: "Nominal".to_string(),
+                ..Default::default()
+            }],
+            connection_defs: vec![ConnectionDef {
+                name: "C-01".to_string(),
+                source_port: "p1".to_string(),
+                target_port: "p2".to_string(),
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
         let sub_part = PartDef {
             name: "NestedSensor".to_string(),
-            ports: vec![
-                PortDef {
-                    name: "sync_pulse_out".to_string(),
-                    ..Default::default()
-                },
-            ],
+            ports: vec![PortDef {
+                name: "sync_pulse_out".to_string(),
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
         let top_part = PartDef {
             name: "ControlProcessor".to_string(),
-            ports: vec![
-                PortDef {
-                    name: "ctrl_bus".to_string(),
-                    ..Default::default()
-                },
-            ],
+            ports: vec![PortDef {
+                name: "ctrl_bus".to_string(),
+                ..Default::default()
+            }],
             parts: vec![sub_part],
-            calcs: vec![
-                CalcDef {
-                    name: "InnerCalc".to_string(),
-                    ..Default::default()
-                },
-            ],
+            calcs: vec![CalcDef {
+                name: "InnerCalc".to_string(),
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -8732,14 +9024,19 @@ package SystemModel_SSOT {
             {
                 violations.push(format!("line {}: static string-slice array", line_no));
             }
-            if code.contains(&needle_fm_e) || (code.contains(".filter_map(") && code.contains(".ok()")) {
+            if code.contains(&needle_fm_e)
+                || (code.contains(".filter_map(") && code.contains(".ok()"))
+            {
                 violations.push(format!("line {}: fail-open error swallowing", line_no));
             }
             if code.contains(&needle_lower_slice1)
                 || code.contains(&needle_lower_slice2)
                 || ((code.contains("lower[") || code.contains("_lower[")) && code.contains(".."))
             {
-                violations.push(format!("line {}: cross-string UTF-8 byte-slice hazard", line_no));
+                violations.push(format!(
+                    "line {}: cross-string UTF-8 byte-slice hazard",
+                    line_no
+                ));
             }
             if code.contains(&sha_k0) || code.contains(&sha_h0) {
                 violations.push(format!("line {}: duplicate SHA-256 constant", line_no));
@@ -8752,7 +9049,10 @@ package SystemModel_SSOT {
                 let doc_block = current_doc.join("\n");
                 for req_hdr in [s1, s2, s3, s4, s5, s6, s7] {
                     if !doc_block.contains(req_hdr) {
-                        violations.push(format!("line {}: missing {} on `{}`", line_no, req_hdr, code));
+                        violations.push(format!(
+                            "line {}: missing {} on `{}`",
+                            line_no, req_hdr, code
+                        ));
                     }
                 }
                 current_doc.clear();
@@ -8760,18 +9060,32 @@ package SystemModel_SSOT {
                 current_doc.clear();
             }
         }
-        assert!(violations.is_empty(), "Purity violations:\n{}", violations.join("\n"));
+        assert!(
+            violations.is_empty(),
+            "Purity violations:\n{}",
+            violations.join("\n")
+        );
     }
 
     #[test]
     fn test_supported_schema_extension_enum_cardinality_order_and_catalog_parity() {
         let expected = vec![
-            ".sysml", ".yaml", ".yml", ".json", ".proto", ".idl", ".arxml", ".md", ".markdown",
+            ".sysml",
+            ".yaml",
+            ".yml",
+            ".json",
+            ".proto",
+            ".idl",
+            ".arxml",
+            ".md",
+            ".markdown",
             ".yang",
         ];
         assert_eq!(SupportedSchemaExtension::ALL.len(), 10);
-        let via_enum: Vec<&'static str> =
-            SupportedSchemaExtension::ALL.iter().map(|x| x.as_str()).collect();
+        let via_enum: Vec<&'static str> = SupportedSchemaExtension::ALL
+            .iter()
+            .map(|x| x.as_str())
+            .collect();
         assert_eq!(via_enum, expected);
         let catalog = UnifiedSchemaModelExtractor::SUPPORTED_EXTENSIONS;
         let via_catalog: Vec<&'static str> = catalog.iter().collect();
@@ -8872,7 +9186,9 @@ package SystemModel_SSOT {
         assert!(module_doc.contains("//! ## 5. Algorithmic Complexity Bounds"));
         assert!(module_doc.contains("//! ## 6. Failure Modes & Fault Tolerance"));
         assert!(module_doc.contains("//! ## 7. Realization & Traceability"));
-        assert!(module_doc.contains("//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]"));
+        assert!(
+            module_doc.contains("//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]")
+        );
     }
 
     #[test]
@@ -8968,10 +9284,7 @@ package SystemModel_SSOT {
         );
 
         let zero_budget = model.slice_package_subsystem("FlightGuidance", 0);
-        assert!(
-            zero_budget.is_err(),
-            "Expected error when max_tokens == 0"
-        );
+        assert!(zero_budget.is_err(), "Expected error when max_tokens == 0");
 
         let missing = model.slice_package_subsystem("NonExistentSubsystem", 4096);
         assert!(
@@ -8983,10 +9296,8 @@ package SystemModel_SSOT {
 
     #[test]
     fn test_incremental_ast_cache_miss_and_hit() -> Result<(), String> {
-        let tmp_root = std::env::temp_dir().join(format!(
-            "deap_core_ast_cache_test_{}",
-            uuid::Uuid::new_v4()
-        ));
+        let tmp_root =
+            std::env::temp_dir().join(format!("deap_core_ast_cache_test_{}", uuid::Uuid::new_v4()));
         let cache = IncrementalAstCache::new(&tmp_root);
         assert_eq!(
             cache.cache_dir,
@@ -9034,7 +9345,10 @@ package SystemModel_SSOT {
             }
         "#;
         let model = parse_sysml_model(sysml);
-        let pkg_name = model.package_name.as_deref().ok_or("Expected AvionicsPkg")?;
+        let pkg_name = model
+            .package_name
+            .as_deref()
+            .ok_or("Expected AvionicsPkg")?;
         let part = model.parts.first().ok_or("Expected AirDataSensor")?;
         let td = TypeDescriptor::from_part_def(pkg_name, part);
         assert_eq!(td.type_name, "AirDataSensor");
@@ -9114,10 +9428,8 @@ package SystemModel_SSOT {
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/DISCOVER-SCHEMA-FILES]
     #[test]
     fn test_issue_549_discover_schema_files_excludes_digest_json_sidecars() -> Result<(), String> {
-        let tmp_dir = std::env::temp_dir().join(format!(
-            "deap_core_issue_549_test_{}",
-            uuid::Uuid::new_v4()
-        ));
+        let tmp_dir =
+            std::env::temp_dir().join(format!("deap_core_issue_549_test_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
         let files = [
             "blueprint-01-alpha.sysml",
@@ -9502,8 +9814,11 @@ state def BP_01_LifecycleState {
             .map_err(|e| e.to_string())?;
         std::fs::write(&hidden_file, "package HiddenPkg { part def NodeB; }")
             .map_err(|e| e.to_string())?;
-        std::fs::write(&hidden_nested, "package HiddenNestedPkg { part def NodeC; }")
-            .map_err(|e| e.to_string())?;
+        std::fs::write(
+            &hidden_nested,
+            "package HiddenNestedPkg { part def NodeC; }",
+        )
+        .map_err(|e| e.to_string())?;
 
         let discovered =
             UnifiedSchemaModelExtractor::discover_schema_files(std::slice::from_ref(&tmp_dir));
@@ -9532,5 +9847,3 @@ state def BP_01_LifecycleState {
         Ok(())
     }
 }
-
-

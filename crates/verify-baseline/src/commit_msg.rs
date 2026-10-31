@@ -85,9 +85,18 @@ pub struct CommitViolation {
 }
 
 const FORBIDDEN_VERBS: &[&str] = &[
-    "resolving", "resolves", "resolved", "resolve",
-    "closing", "closes", "closed", "close",
-    "fixing", "fixes", "fixed", "fix",
+    "resolving",
+    "resolves",
+    "resolved",
+    "resolve",
+    "closing",
+    "closes",
+    "closed",
+    "close",
+    "fixing",
+    "fixes",
+    "fixed",
+    "fix",
 ];
 
 /// Helper to parse an issue reference starting at `chars[pos..]`.
@@ -242,9 +251,9 @@ fn parse_issue_reference(chars: &[char], mut pos: usize) -> Option<(String, usiz
         // Check for cross-repo syntax: e.g. "gintatkinson/DEAP01-spec-core#123" or "repo#123"
         let repo_start = pos;
         while pos < len
-            && chars
-                .get(pos)
-                .is_some_and(|&c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/')
+            && chars.get(pos).is_some_and(|&c| {
+                c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/'
+            })
         {
             pos += 1;
         }
@@ -332,9 +341,11 @@ pub fn scan_commit_message(text: &str) -> Vec<CommitViolation> {
             let v_chars: Vec<char> = verb.chars().collect();
             let v_len = v_chars.len();
             if i + v_len <= len {
-                let matches = chars
-                    .get(i..i + v_len)
-                    .is_some_and(|sl| sl.iter().zip(v_chars.iter()).all(|(c1, c2)| c1.to_ascii_lowercase() == *c2));
+                let matches = chars.get(i..i + v_len).is_some_and(|sl| {
+                    sl.iter()
+                        .zip(v_chars.iter())
+                        .all(|(c1, c2)| c1.to_ascii_lowercase() == *c2)
+                });
                 if matches {
                     // Check word boundary after verb: next character must not be alphanumeric or '_'
                     if i + v_len < len
@@ -427,7 +438,8 @@ pub fn scan_commit_message(text: &str) -> Vec<CommitViolation> {
                         }
 
                         if has_separator {
-                            if let Some((chain_id, after_chain)) = parse_issue_reference(&chars, p) {
+                            if let Some((chain_id, after_chain)) = parse_issue_reference(&chars, p)
+                            {
                                 let chain_snippet: String = chars
                                     .get(chain_pos..after_chain)
                                     .map(|sl| sl.iter().collect())
@@ -504,7 +516,9 @@ pub fn format_violation_error(context: &str, text: &str, violations: &[CommitVio
     }
     eprintln!();
     eprintln!("Agents and automated scripts are strictly prohibited from using issue auto-closing keywords");
-    eprintln!("(fix, fixes, fixed, close, closes, closed, resolve, resolves, resolved preceding #<id>).");
+    eprintln!(
+        "(fix, fixes, fixed, close, closes, closed, resolve, resolves, resolved preceding #<id>)."
+    );
     eprintln!("All commit messages referencing issues MUST use neutral citations:");
     eprintln!("  - '(refs #<id>)'");
     eprintln!("  - '(#<id>)'");
@@ -582,13 +596,20 @@ pub fn check_text(text: &str, context: &str) -> Result<(), ()> {
 #[allow(clippy::result_unit_err)]
 pub fn check_file(path: &Path) -> Result<(), ()> {
     if !path.is_file() {
-        eprintln!("Error: Commit message file does not exist: {}", path.display());
+        eprintln!(
+            "Error: Commit message file does not exist: {}",
+            path.display()
+        );
         return Err(());
     }
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Error reading commit message file {}: {}", path.display(), e);
+            eprintln!(
+                "Error reading commit message file {}: {}",
+                path.display(),
+                e
+            );
             return Err(());
         }
     };
@@ -808,7 +829,11 @@ mod tests {
             ("closes #45", "closes", "45"),
             ("resolved #789", "resolved", "789"),
             ("Fix #1", "fix", "1"),
-            ("feat(conops): operational authority (fixes #313)", "fixes", "313"),
+            (
+                "feat(conops): operational authority (fixes #313)",
+                "fixes",
+                "313",
+            ),
             ("docs: update handoff (resolved #12)", "resolved", "12"),
             ("feat: add feature closes #99", "closes", "99"),
             ("fix: #100", "fix", "100"),
@@ -901,7 +926,11 @@ mod tests {
                 "closes",
                 "789",
             ),
-            ("feat: something resolves org.name/my-repo#999", "resolves", "999"),
+            (
+                "feat: something resolves org.name/my-repo#999",
+                "resolves",
+                "999",
+            ),
         ];
 
         for (text, expected_verb, expected_id) in &cases {
@@ -973,7 +1002,12 @@ mod tests {
 
         let msg_oxford = "feat: closes #1, #2, and #3";
         let v_oxford = scan_commit_message(msg_oxford);
-        assert_eq!(v_oxford.len(), 3, "Expected 3 violations in: {}", msg_oxford);
+        assert_eq!(
+            v_oxford.len(),
+            3,
+            "Expected 3 violations in: {}",
+            msg_oxford
+        );
         assert_eq!(v_oxford.first().map(|v| v.issue_id.as_str()), Some("1"));
         assert_eq!(v_oxford.get(1).map(|v| v.issue_id.as_str()), Some("2"));
         assert_eq!(v_oxford.get(2).map(|v| v.issue_id.as_str()), Some("3"));

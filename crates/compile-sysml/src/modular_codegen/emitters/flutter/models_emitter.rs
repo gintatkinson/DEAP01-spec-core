@@ -20,7 +20,10 @@ use std::collections::BTreeSet;
 use deap_core::sysml_ast::{AttributeDef, PackageDef, PartDef, SysmlModel};
 
 use super::contracts::TopologyNode;
-use super::naming::{escape_dart_single_quoted, extract_bounds_from_doc, to_camel_case, to_pascal_case, to_snake_case_dart};
+use super::naming::{
+    escape_dart_single_quoted, extract_bounds_from_doc, to_camel_case, to_pascal_case,
+    to_snake_case_dart,
+};
 use super::topology::{collect_package_slices, strip_surrounding_quotes};
 
 /// Appends a strongly-typed Dart property getter and numeric range validator for a SysML attribute.
@@ -44,8 +47,11 @@ fn append_part_attr_getter(out: &mut String, attr: &AttributeDef, camel_attr: &s
     let attr_esc = escape_dart_single_quoted(&attr.name);
     match attr.type_name.as_str() {
         "Real" | "Float" | "Double" => {
-            let parsed = attr.default_value.as_deref()
-                .and_then(|v| strip_surrounding_quotes(v).parse::<f64>().ok()).unwrap_or(0.0);
+            let parsed = attr
+                .default_value
+                .as_deref()
+                .and_then(|v| strip_surrounding_quotes(v).parse::<f64>().ok())
+                .unwrap_or(0.0);
             let default_val = if parsed.fract() == 0.0 {
                 format!("{parsed:.1}")
             } else {
@@ -57,19 +63,33 @@ fn append_part_attr_getter(out: &mut String, attr: &AttributeDef, camel_attr: &s
             out.push_str(&format!("\n  /// Validates SysML inv constraint for {camel_attr}\n  bool validate{pascal_attr}() {{\n    final v = {camel_attr};\n    return v >= {min_val:.1} && v <= {max_val:.1};\n  }}\n"));
         }
         "Integer" | "Int" => {
-            let parsed = attr.default_value.as_deref()
-                .and_then(|v| strip_surrounding_quotes(v).parse::<i64>().ok()).unwrap_or(0);
-            out.push_str(&format!("  int get {camel_attr} => _record.getPropertyInt('{attr_esc}') ?? {parsed};\n"));
+            let parsed = attr
+                .default_value
+                .as_deref()
+                .and_then(|v| strip_surrounding_quotes(v).parse::<i64>().ok())
+                .unwrap_or(0);
+            out.push_str(&format!(
+                "  int get {camel_attr} => _record.getPropertyInt('{attr_esc}') ?? {parsed};\n"
+            ));
         }
         "Boolean" | "Bool" => {
-            let is_true = attr.default_value.as_deref()
+            let is_true = attr
+                .default_value
+                .as_deref()
                 .is_some_and(|v| strip_surrounding_quotes(v).eq_ignore_ascii_case("true"));
             let default_val = if is_true { "true" } else { "false" };
             out.push_str(&format!("  bool get {camel_attr} => _record.getPropertyBool('{attr_esc}') ?? {default_val};\n"));
         }
         _ => {
-            let raw_def = attr.default_value.as_deref().map(strip_surrounding_quotes).unwrap_or("");
-            out.push_str(&format!("  String get {camel_attr} => _record.getPropertyString('{attr_esc}') ?? '{}';\n", escape_dart_single_quoted(raw_def)));
+            let raw_def = attr
+                .default_value
+                .as_deref()
+                .map(strip_surrounding_quotes)
+                .unwrap_or("");
+            out.push_str(&format!(
+                "  String get {camel_attr} => _record.getPropertyString('{attr_esc}') ?? '{}';\n",
+                escape_dart_single_quoted(raw_def)
+            ));
         }
     }
 }
@@ -91,9 +111,14 @@ fn append_part_attr_getter(out: &mut String, attr: &AttributeDef, camel_attr: &s
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0607], [REQ-FLUTTER-GENERATE-SCHEMA-MODELS]
 fn append_dynamic_node_getters(
-    out: &mut String, nodes: &[TopologyNode], type_name: &str, seen_getters: &mut BTreeSet<String>,
+    out: &mut String,
+    nodes: &[TopologyNode],
+    type_name: &str,
+    seen_getters: &mut BTreeSet<String>,
 ) {
-    let props = nodes.iter().filter(|n| n.type_name.trim() == type_name)
+    let props = nodes
+        .iter()
+        .filter(|n| n.type_name.trim() == type_name)
         .flat_map(|n| n.properties.iter())
         .map(|(k, v)| (k.trim(), to_camel_case(k.trim()), v))
         .filter(|(_, camel_attr, _)| !camel_attr.is_empty());
@@ -127,7 +152,9 @@ fn append_dynamic_node_getters(
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0607], [REQ-FLUTTER-GENERATE-SCHEMA-MODELS]
 fn render_single_extension_view(
-    type_name: &str, part_opt: Option<&PartDef>, nodes: &[TopologyNode],
+    type_name: &str,
+    part_opt: Option<&PartDef>,
+    nodes: &[TopologyNode],
 ) -> Option<(String, String)> {
     let pascal_type = to_pascal_case(type_name);
     if pascal_type.is_empty() {
@@ -136,7 +163,9 @@ fn render_single_extension_view(
     let view_name = format!("{pascal_type}View");
     let mut block = format!("/// Strongly-typed zero-allocation view projection over an InstanceRecord.\nextension type const {view_name}(InstanceRecord _record) implements InstanceRecord {{\n");
     let mut seen_getters = BTreeSet::new();
-    let attrs = part_opt.into_iter().flat_map(|part| part.attributes.iter())
+    let attrs = part_opt
+        .into_iter()
+        .flat_map(|part| part.attributes.iter())
         .map(|attr| (attr, to_camel_case(&attr.name)))
         .filter(|(_, camel_attr)| !camel_attr.is_empty());
     for (attr, camel_attr) in attrs {
@@ -168,14 +197,19 @@ fn render_single_extension_view(
 fn append_entity_ids_and_widget_keys(out: &mut String, nodes: &[TopologyNode]) {
     out.push_str("/// Authoritative compile-time schema entity IDs guaranteeing zero string drift.\nabstract final class SchemaEntityIds {\n");
     let mut seen_ids = BTreeSet::new();
-    let raw_ids = nodes.iter()
+    let raw_ids = nodes
+        .iter()
         .flat_map(|node| [Some(node.id.as_str()), node.parent_id.as_deref()])
-        .flatten().map(str::trim)
+        .flatten()
+        .map(str::trim)
         .map(|trimmed| (trimmed, to_camel_case(trimmed)))
         .filter(|(_, camel_id)| !camel_id.is_empty());
     for (trimmed, camel_id) in raw_ids {
         if seen_ids.insert(camel_id.clone()) {
-            out.push_str(&format!("  static const String {camel_id} = '{}';\n", escape_dart_single_quoted(trimmed)));
+            out.push_str(&format!(
+                "  static const String {camel_id} = '{}';\n",
+                escape_dart_single_quoted(trimmed)
+            ));
         }
     }
     out.push_str("}\n\n/// Standardized widget keys generated for infallible UI interaction testing.\nabstract final class SchemaWidgetKeys {\n  static Key entityRow(String id) => Key('entity_row_$id');\n  static Key entityInspector(String id) => Key('entity_inspector_$id');\n  static Key entityPropertyField(String id, String key) => Key('prop_${id}_$key');\n  static Key hudOverlay(String overlayId) => Key('hud_overlay_$overlayId');\n  static Key splitPaneSash(String sashId) => Key('split_sash_$sashId');\n}\n");
@@ -198,11 +232,16 @@ fn append_entity_ids_and_widget_keys(out: &mut String, nodes: &[TopologyNode]) {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0607], [REQ-FLUTTER-GENERATE-SCHEMA-MODELS]
 pub fn generate_schema_models_dart(
-    model: &SysmlModel, nodes: &[TopologyNode], _schema_hash: u64,
+    model: &SysmlModel,
+    nodes: &[TopologyNode],
+    _schema_hash: u64,
 ) -> String {
     let mut out = String::from("// GENERATED CODE - DO NOT MODIFY BY HAND\n// Generated by compile-sysml from SysML schema\n// Strongly-Typed Zero-Cost View Projections over InstanceRecord\n\nimport 'package:flutter/widgets.dart';\nimport 'package:app_flutter/models/instance_record.dart';\n\n");
     let mut seen_views = BTreeSet::new();
-    let type_names = model.parts.iter().map(|p| p.name.trim())
+    let type_names = model
+        .parts
+        .iter()
+        .map(|p| p.name.trim())
         .chain(nodes.iter().map(|n| n.type_name.trim()))
         .filter(|t| !t.is_empty());
     for type_name in type_names {
@@ -234,14 +273,27 @@ pub fn generate_schema_models_dart(
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0607], [REQ-FLUTTER-GENERATE-SCHEMA-MODELS]
 pub fn emit_modular_model_files(
-    pkg: &PackageDef, nodes: &[TopologyNode], _schema_hash: u64,
+    pkg: &PackageDef,
+    nodes: &[TopologyNode],
+    _schema_hash: u64,
 ) -> Vec<(String, String)> {
     let (mut files, mut exports, mut seen_paths) = (Vec::new(), Vec::new(), BTreeSet::new());
-    let slice_parts = collect_package_slices(pkg).into_iter()
-        .flat_map(|(slug, sub_pkg)| sub_pkg.part_defs.iter().map(move |part| (slug.clone(), part)));
+    let slice_parts = collect_package_slices(pkg)
+        .into_iter()
+        .flat_map(|(slug, sub_pkg)| {
+            sub_pkg
+                .part_defs
+                .iter()
+                .map(move |part| (slug.clone(), part))
+        });
     for (pkg_slug, part) in slice_parts {
-        if let Some((_, view_block)) = render_single_extension_view(part.name.trim(), Some(part), nodes) {
-            let rel_under_models = format!("generated/{pkg_slug}/{}_view.g.dart", to_snake_case_dart(&part.name));
+        if let Some((_, view_block)) =
+            render_single_extension_view(part.name.trim(), Some(part), nodes)
+        {
+            let rel_under_models = format!(
+                "generated/{pkg_slug}/{}_view.g.dart",
+                to_snake_case_dart(&part.name)
+            );
             let full_rel = format!("lib/src/models/{rel_under_models}");
             if seen_paths.insert(full_rel.clone()) {
                 let unit_src = format!("// GENERATED CODE - DO NOT MODIFY BY HAND\nimport 'package:app_flutter/models/instance_record.dart';\n\n{view_block}");
@@ -250,10 +302,21 @@ pub fn emit_modular_model_files(
             }
         }
     }
-    let mut keys_src = String::from("// GENERATED CODE - DO NOT MODIFY BY HAND\nimport 'package:flutter/widgets.dart';\n\n");
+    let mut keys_src = String::from(
+        "// GENERATED CODE - DO NOT MODIFY BY HAND\nimport 'package:flutter/widgets.dart';\n\n",
+    );
     append_entity_ids_and_widget_keys(&mut keys_src, nodes);
-    files.push(("lib/src/models/generated/schema_keys.g.dart".to_string(), keys_src));
+    files.push((
+        "lib/src/models/generated/schema_keys.g.dart".to_string(),
+        keys_src,
+    ));
     exports.push("export 'generated/schema_keys.g.dart';\n".to_string());
-    files.push(("lib/src/models/generated_schema_models.g.dart".to_string(), format!("// GENERATED CODE - DO NOT MODIFY BY HAND\n{}", exports.concat())));
+    files.push((
+        "lib/src/models/generated_schema_models.g.dart".to_string(),
+        format!(
+            "// GENERATED CODE - DO NOT MODIFY BY HAND\n{}",
+            exports.concat()
+        ),
+    ));
     files
 }

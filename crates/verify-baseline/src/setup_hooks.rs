@@ -218,10 +218,7 @@ pub fn run_setup_hooks(args: &SetupHooksArgs) -> Result<(), i32> {
     let git_dir = repo_root.join(".git");
 
     if !git_dir.is_dir() {
-        eprintln!(
-            "Error: .git directory not found at {}",
-            git_dir.display()
-        );
+        eprintln!("Error: .git directory not found at {}", git_dir.display());
         return Err(1);
     }
 
@@ -279,7 +276,11 @@ pub fn run_setup_hooks(args: &SetupHooksArgs) -> Result<(), i32> {
     for zone in &landing_zones {
         let zone_dir = repo_root.join(zone);
         if let Err(e) = fs::create_dir_all(&zone_dir) {
-            eprintln!("Warning: Failed to create landing zone {}: {}", zone_dir.display(), e);
+            eprintln!(
+                "Warning: Failed to create landing zone {}: {}",
+                zone_dir.display(),
+                e
+            );
         }
         let gitkeep = zone_dir.join(".gitkeep");
         if !gitkeep.exists() {
@@ -296,7 +297,14 @@ pub fn run_setup_hooks(args: &SetupHooksArgs) -> Result<(), i32> {
 
     let _ = Command::new("git")
         .current_dir(&repo_root)
-        .args(["add", ".pipeline/", "skills/", "rules/", ".agents/", "docs/"])
+        .args([
+            "add",
+            ".pipeline/",
+            "skills/",
+            "rules/",
+            ".agents/",
+            "docs/",
+        ])
         .output();
 
     println!("Successfully configured git hooks and staged pipeline infrastructure.");

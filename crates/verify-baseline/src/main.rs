@@ -492,10 +492,7 @@ impl Cli {
                 target: sub.get_one::<PathBuf>("target").cloned(),
             })),
             Some(("check-blueprint", sub)) => Some(Subcommands::Blueprint(BlueprintCliOptions {
-                path: sub
-                    .get_one::<PathBuf>("path")
-                    .cloned()
-                    .unwrap_or_default(),
+                path: sub.get_one::<PathBuf>("path").cloned().unwrap_or_default(),
                 repo: sub.get_one::<String>("repo").cloned(),
                 issue: sub.get_one::<u64>("issue").copied(),
                 title: sub.get_one::<String>("title").cloned(),
@@ -509,10 +506,7 @@ impl Cli {
                     .unwrap_or("all");
                 let pillar = AuditPillar::from_cli_token(pillar_raw).unwrap_or(None);
                 Some(Subcommands::AuditCode(AuditCodeArgs {
-                    path: sub
-                        .get_one::<PathBuf>("path")
-                        .cloned()
-                        .unwrap_or_default(),
+                    path: sub.get_one::<PathBuf>("path").cloned().unwrap_or_default(),
                     pillar,
                     issue: sub.get_one::<u64>("issue").copied(),
                     repo: sub.get_one::<String>("repo").cloned(),
@@ -786,7 +780,8 @@ mod tests {
         assert!(module_header.contains("//! ## 5. Algorithmic Complexity Bounds"));
         assert!(module_header.contains("//! ## 6. Failure Modes & Fault Tolerance"));
         assert!(module_header.contains("//! ## 7. Realization & Traceability"));
-        assert!(module_header.contains("//! Realises: [REQ-VERIFY-BASELINE-CLI], [DO-330-TQL-4-VERIFY-CLI]"));
+        assert!(module_header
+            .contains("//! Realises: [REQ-VERIFY-BASELINE-CLI], [DO-330-TQL-4-VERIFY-CLI]"));
         assert!(src.contains("/// ## 1. Safety Intent & Regulatory Scope"));
         assert!(src.contains("/// ## 7. Realization & Traceability"));
         assert!(src.contains("/// Realises: [REQ-VERIFY-BASELINE-MAIN]"));
