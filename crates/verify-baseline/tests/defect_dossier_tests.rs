@@ -6,7 +6,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
-use verify_baseline::checks::audit_source_purity;
+use verify_baseline::checks::{
+    audit_rust_source_docstrings, audit_source_purity, is_compliant_rust_docblock,
+};
 use verify_baseline::defect_dossier::{
     build_gh_command, derive_defect_title, domain_cleanliness_gate, extract_file_basename,
     parse_github_repo_slug, resolve_target_repo, run_check_defect, validate_defect_dossier,
@@ -112,7 +114,10 @@ fn test_valid_critical_dossier_passes_all_12_checks() -> Result<(), Box<dyn std:
     );
     let val = res.map_err(|e| e.join("; "))?;
     assert_eq!(val.severity, "Critical");
-    assert_eq!(val.file_location, "cesium_native_bridge/src/bridge.cpp:56-61");
+    assert_eq!(
+        val.file_location,
+        "cesium_native_bridge/src/bridge.cpp:56-61"
+    );
     assert_eq!(val.suggested_label, "bug");
     assert_eq!(
         val.test_target,
@@ -125,7 +130,8 @@ fn test_valid_critical_dossier_passes_all_12_checks() -> Result<(), Box<dyn std:
 }
 
 #[test]
-fn test_valid_suggestion_dossier_with_na_section_4_passes() -> Result<(), Box<dyn std::error::Error>> {
+fn test_valid_suggestion_dossier_with_na_section_4_passes() -> Result<(), Box<dyn std::error::Error>>
+{
     let body = sample_valid_critical_dossier()
         .replace(
             "```mermaid\nsequenceDiagram\n    participant T1 as Thread 1 (Get Error)\n    participant T2 as Thread 2 (Shutdown)\n    T1->>T2: Concurrent execution\n    Note over T1: Acquires mutex, extracts c_str pointer p, releases mutex\n    Note over T2: Acquires mutex, erases BridgeState, deallocates string backing p\n    T1-->>T2: Dereferences p (Use-After-Free)\n```",
@@ -316,9 +322,7 @@ fn test_validate_and_derive_defect_title() {
         derived,
         "[AUDIT] [bridge.cpp]: Use-after-free when calling bridge_get_last_error concurrently."
     );
-    assert!(
-        validate_defect_title(&derived, "cesium_native_bridge/src/bridge.cpp:56-61").is_ok()
-    );
+    assert!(validate_defect_title(&derived, "cesium_native_bridge/src/bridge.cpp:56-61").is_ok());
 }
 
 #[test]
@@ -443,73 +447,28 @@ fn test_defect_dossier_rs_check_34_purity_and_7_section_rustdoc(
         .ok_or("repo root")?;
     let path = repo_root.join("crates/verify-baseline/src/defect_dossier.rs");
     let src = fs::read_to_string(&path)?;
-    let res = audit_source_purity(
-        &src,
-        "crates/verify-baseline/src/defect_dossier.rs",
-        true,
-    );
+    let res = audit_source_purity(&src, "crates/verify-baseline/src/defect_dossier.rs", true);
     assert!(
         res.is_ok(),
         "defect_dossier.rs failed Check 34 source purity: {:?}",
         res.err()
     );
 
-    // Also verify every struct, enum, trait, and fn in defect_dossier.rs has all 7 sections and Realises: [...]
-    let s1 = "## 1. Safety Intent & Regulatory Scope";
-    let s2 = "## 2. Invariants & Mathematical Properties";
-    let s3 = "## 3. Preconditions";
-    let s4 = "## 4. Postconditions";
-    let s5 = "## 5. Algorithmic Complexity Bounds";
-    let s6 = "## 6. Failure Modes & Fault Tolerance";
-    let s7 = "## 7. Realization & Traceability";
+    // Also verify the module header satisfies Tier A and every item satisfies Tier A / Tier B/C with Realises: [...]
+    let module_doc: Vec<String> = src
+        .lines()
+        .map(str::trim)
+        .take_while(|line| line.starts_with("//!"))
+        .map(String::from)
+        .collect();
+    assert!(
+        is_compliant_rust_docblock(&module_doc, true),
+        "defect_dossier.rs module header must satisfy Tier A Rustdoc contract"
+    );
 
-    let mut current_doc = Vec::new();
-    let mut item_count = 0usize;
-    for (idx, raw_line) in src.lines().enumerate() {
-        let line_no = idx + 1;
-        let trimmed = raw_line.trim();
-        if trimmed.starts_with("//!") || trimmed.starts_with("///") {
-            current_doc.push(trimmed.to_string());
-            continue;
-        }
-        let code = trimmed.split("//").next().unwrap_or(trimmed).trim();
-        if code.is_empty() || code.starts_with("#[") {
-            continue;
-        }
-        let is_item = code.starts_with("pub struct ")
-            || code.starts_with("struct ")
-            || code.starts_with("pub enum ")
-            || code.starts_with("enum ")
-            || code.starts_with("pub trait ")
-            || code.starts_with("trait ")
-            || code.starts_with("pub fn ")
-            || code.starts_with("fn ")
-            || code.starts_with("pub const fn ")
-            || code.starts_with("const fn ")
-            || code.starts_with("pub(crate) fn ");
-        if is_item {
-            item_count += 1;
-            let doc_block = current_doc.join("\n");
-            for sec in [s1, s2, s3, s4, s5, s6, s7] {
-                assert!(
-                    doc_block.contains(sec),
-                    "defect_dossier.rs:{}: item '{}' missing section '{}'",
-                    line_no,
-                    code,
-                    sec
-                );
-            }
-            assert!(
-                doc_block.contains("Realises: ["),
-                "defect_dossier.rs:{}: item '{}' missing non-empty Realises: [...] tag",
-                line_no,
-                code
-            );
-            current_doc.clear();
-        } else {
-            current_doc.clear();
-        }
-    }
+    let item_count =
+        audit_rust_source_docstrings(&src, "crates/verify-baseline/src/defect_dossier.rs")
+            .map_err(|errs| errs.join("\n"))?;
     assert!(
         item_count >= 18,
         "Expected at least 18 documented structs/enums/functions in defect_dossier.rs, found {}",
@@ -569,7 +528,8 @@ fn test_adversarial_code_auditor_skill_minimized_and_identical(
         "SKILL.md frontmatter must describe five correctness risk pillars (refs #468)"
     );
     assert!(
-        !content_a.contains("reproducer_test.py") && !content_a.contains("test_bridge_reproducer.py"),
+        !content_a.contains("reproducer_test.py")
+            && !content_a.contains("test_bridge_reproducer.py"),
         "SKILL.md must not prescribe legacy Python .py test-target paths (refs #466)"
     );
     assert!(
@@ -746,7 +706,10 @@ fn test_rejects_regex_in_section_6_rust_blocks() -> Result<(), Box<dyn std::erro
         &snippet_1,
     );
     let res1 = validate_defect_dossier(&regex_path);
-    assert!(res1.is_err(), "Must reject regex colons in Section 6 rust block");
+    assert!(
+        res1.is_err(),
+        "Must reject regex colons in Section 6 rust block"
+    );
     let errs1 = res1.err().ok_or("expected Err")?.join("\n");
     assert!(
         errs1.contains("Check 34") || errs1.contains("regex"),
@@ -764,7 +727,10 @@ fn test_rejects_regex_in_section_6_rust_blocks() -> Result<(), Box<dyn std::erro
         &snippet_2,
     );
     let res2 = validate_defect_dossier(&regex_new);
-    assert!(res2.is_err(), "Must reject constructor in Section 6 rust block");
+    assert!(
+        res2.is_err(),
+        "Must reject constructor in Section 6 rust block"
+    );
 
     // 3. Rejection of RegexSet
     let snippet_3 = format!(
@@ -776,7 +742,10 @@ fn test_rejects_regex_in_section_6_rust_blocks() -> Result<(), Box<dyn std::erro
         &snippet_3,
     );
     let res3 = validate_defect_dossier(&regex_set);
-    assert!(res3.is_err(), "Must reject RegexSet in Section 6 rust block");
+    assert!(
+        res3.is_err(),
+        "Must reject RegexSet in Section 6 rust block"
+    );
 
     // 4. Rejection of use regex
     let snippet_4 = format!(
@@ -788,7 +757,10 @@ fn test_rejects_regex_in_section_6_rust_blocks() -> Result<(), Box<dyn std::erro
         &snippet_4,
     );
     let res4 = validate_defect_dossier(&use_regex);
-    assert!(res4.is_err(), "Must reject use regex in Section 6 rust block");
+    assert!(
+        res4.is_err(),
+        "Must reject use regex in Section 6 rust block"
+    );
 
     // 5. Valid Rust code without regex passes
     let valid_rust = base.replace(
@@ -836,11 +808,10 @@ fn test_rejects_downstream_crate_paths_in_upstream_workspace(
         "assemble-conops",
         "reconcile-backlog",
     ] {
-        let valid_upstream = base
-            .replace(
-                "crates/verify-baseline/tests/defect_dossier_tests.rs",
-                &format!("crates/{}/tests/test_foo.rs", crate_name),
-            );
+        let valid_upstream = base.replace(
+            "crates/verify-baseline/tests/defect_dossier_tests.rs",
+            &format!("crates/{}/tests/test_foo.rs", crate_name),
+        );
         let res = validate_defect_dossier(&valid_upstream);
         assert!(
             res.is_ok(),
@@ -1086,5 +1057,3 @@ fn test_domain_cleanliness_gate() {
         "validate_defect_dossier must reject downstream crate reference in Section 6"
     );
 }
-
-

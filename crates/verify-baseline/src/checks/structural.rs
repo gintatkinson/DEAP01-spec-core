@@ -1,4 +1,8 @@
-//! Structural repository topology and integrity checks.
+//! Structural repository topology, compiler AST source purity (Check 34), and governance integrity gates.
+//!
+//! Safety & Traceability: Realises: [REQ-CHECK-34-STRUCTURAL-GATES], [DO-330-TQL-4-STRUCTURAL-PURITY]
+//! Contract: Enforces deterministic workspace topology, script/handoff cleanliness, manifest lint gates, and tiered Check 34 compiler AST purity invariants across audited Rust sources.
+//! Bounds & Faults: O(F * L) bounded file and line traversal with non-panicking slice inspection and fail-closed `Result<(), Vec<String>>` error reporting.
 
 use deap_core::rules::{CanonicalArchitectureBlueprint, EXCLUDED_DIRS};
 use deap_core::workspace::{
@@ -298,17 +302,14 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
             continue;
         }
 
-        for entry_res in WalkDir::new(zone_dir)
-            .into_iter()
-            .filter_entry(|e| {
-                if e.file_type().is_dir() {
-                    let name = e.file_name().to_string_lossy();
-                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
-                } else {
-                    true
-                }
-            })
-        {
+        for entry_res in WalkDir::new(zone_dir).into_iter().filter_entry(|e| {
+            if e.file_type().is_dir() {
+                let name = e.file_name().to_string_lossy();
+                !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+            } else {
+                true
+            }
+        }) {
             let entry = match entry_res {
                 Ok(e) => e,
                 Err(err) => {
@@ -339,19 +340,19 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
     }
 
     // 2. Enforce zero concrete modeling files (.sysml or .digest.json) in upstream blueprints
-    let blueprints_dir = repo_root.join("docs").join("architecture").join("blueprints");
+    let blueprints_dir = repo_root
+        .join("docs")
+        .join("architecture")
+        .join("blueprints");
     if blueprints_dir.is_dir() {
-        for entry_res in WalkDir::new(&blueprints_dir)
-            .into_iter()
-            .filter_entry(|e| {
-                if e.file_type().is_dir() {
-                    let name = e.file_name().to_string_lossy();
-                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
-                } else {
-                    true
-                }
-            })
-        {
+        for entry_res in WalkDir::new(&blueprints_dir).into_iter().filter_entry(|e| {
+            if e.file_type().is_dir() {
+                let name = e.file_name().to_string_lossy();
+                !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+            } else {
+                true
+            }
+        }) {
             let entry = match entry_res {
                 Ok(e) => e,
                 Err(err) => {
@@ -381,17 +382,14 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
 
     let designs_dir = repo_root.join("docs").join("designs");
     if designs_dir.is_dir() {
-        for entry_res in WalkDir::new(&designs_dir)
-            .into_iter()
-            .filter_entry(|e| {
-                if e.file_type().is_dir() {
-                    let name = e.file_name().to_string_lossy();
-                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
-                } else {
-                    true
-                }
-            })
-        {
+        for entry_res in WalkDir::new(&designs_dir).into_iter().filter_entry(|e| {
+            if e.file_type().is_dir() {
+                let name = e.file_name().to_string_lossy();
+                !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+            } else {
+                true
+            }
+        }) {
             let entry = match entry_res {
                 Ok(e) => e,
                 Err(err) => {
@@ -453,7 +451,8 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
                             .unwrap_or(entry.path())
                             .display()
                             .to_string();
-                        violations.push(format!("Upstream blueprint contains SysML model: {}", rel));
+                        violations
+                            .push(format!("Upstream blueprint contains SysML model: {}", rel));
                     }
                 }
             }
@@ -505,22 +504,19 @@ pub use super::domain_cleanliness_gate::check_domain_agnostic_ast_cleanliness;
 pub fn check_zero_shell_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
 
-    for entry_res in WalkDir::new(repo_root)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.file_type().is_dir() {
-                let name = e.file_name().to_string_lossy();
-                name != "target"
-                    && name != ".git"
-                    && name != "build"
-                    && name != "Pods"
-                    && name != "ephemeral"
-                    && name != ".dart_tool"
-            } else {
-                true
-            }
-        })
-    {
+    for entry_res in WalkDir::new(repo_root).into_iter().filter_entry(|e| {
+        if e.file_type().is_dir() {
+            let name = e.file_name().to_string_lossy();
+            name != "target"
+                && name != ".git"
+                && name != "build"
+                && name != "Pods"
+                && name != "ephemeral"
+                && name != ".dart_tool"
+        } else {
+            true
+        }
+    }) {
         let entry = match entry_res {
             Ok(e) => e,
             Err(err) => {
@@ -581,22 +577,19 @@ pub fn check_zero_shell_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
 /// Realises: [REQ-CHECK-33-ZERO-PYTHON-SCRIPTS].
 pub fn check_zero_python_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
-    for entry_res in WalkDir::new(repo_root)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.file_type().is_dir() {
-                let name = e.file_name().to_string_lossy();
-                name != "target"
-                    && name != ".git"
-                    && name != "build"
-                    && name != "Pods"
-                    && name != "ephemeral"
-                    && name != ".dart_tool"
-            } else {
-                true
-            }
-        })
-    {
+    for entry_res in WalkDir::new(repo_root).into_iter().filter_entry(|e| {
+        if e.file_type().is_dir() {
+            let name = e.file_name().to_string_lossy();
+            name != "target"
+                && name != ".git"
+                && name != "build"
+                && name != "Pods"
+                && name != "ephemeral"
+                && name != ".dart_tool"
+        } else {
+            true
+        }
+    }) {
         let entry = match entry_res {
             Ok(e) => e,
             Err(err) => {
@@ -609,12 +602,7 @@ pub fn check_zero_python_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
         if entry.file_type().is_dir() {
             if matches!(
                 lower_name.as_str(),
-                "__pycache__"
-                    | ".pytest_cache"
-                    | ".mypy_cache"
-                    | ".ruff_cache"
-                    | ".venv"
-                    | "venv"
+                "__pycache__" | ".pytest_cache" | ".mypy_cache" | ".ruff_cache" | ".venv" | "venv"
             ) {
                 let rel = entry
                     .path()
@@ -1023,7 +1011,6 @@ fn contains_dot_py_token(ascii_folded: &str) -> bool {
     false
 }
 
-
 /// Check 34: Zero Regex Invariant & Self-Hosting Compiler Purity Gate.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1069,22 +1056,19 @@ pub fn check_zero_regex(repo_root: &Path) -> Result<(), Vec<String>> {
     // 2. Scan crates/ directory for all .rs and Cargo.toml files
     let crates_dir = repo_root.join("crates");
     if crates_dir.is_dir() {
-        for entry_res in WalkDir::new(&crates_dir)
-            .into_iter()
-            .filter_entry(|e| {
-                if e.file_type().is_dir() {
-                    let name = e.file_name().to_string_lossy();
-                    name != "target"
-                        && name != ".git"
-                        && name != "build"
-                        && name != "Pods"
-                        && name != "ephemeral"
-                        && name != ".dart_tool"
-                } else {
-                    true
-                }
-            })
-        {
+        for entry_res in WalkDir::new(&crates_dir).into_iter().filter_entry(|e| {
+            if e.file_type().is_dir() {
+                let name = e.file_name().to_string_lossy();
+                name != "target"
+                    && name != ".git"
+                    && name != "build"
+                    && name != "Pods"
+                    && name != "ephemeral"
+                    && name != ".dart_tool"
+            } else {
+                true
+            }
+        }) {
             let entry = match entry_res {
                 Ok(e) => e,
                 Err(err) => {
@@ -1098,7 +1082,11 @@ pub fn check_zero_regex(repo_root: &Path) -> Result<(), Vec<String>> {
                 if fname == "Cargo.toml" {
                     scan_cargo_toml_file(path, repo_root, &crate_needle, &mut violations);
                 } else if path.extension().map(|ext| ext == "rs").unwrap_or(false) {
-                    let rel = path.strip_prefix(repo_root).unwrap_or(path).display().to_string();
+                    let rel = path
+                        .strip_prefix(repo_root)
+                        .unwrap_or(path)
+                        .display()
+                        .to_string();
                     match fs::read_to_string(path) {
                         Ok(content) => {
                             let is_audited = rel.contains("checks/structural.rs")
@@ -1148,7 +1136,7 @@ pub fn check_zero_regex(repo_root: &Path) -> Result<(), Vec<String>> {
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Mechanically audits verified modules
 /// across the codebase to ensure zero regex, zero static string-slice arrays, zero hollow stubs,
-/// zero fail-open error swallowing, zero cross-string byte-slicing hazards, and complete 7-section Rustdoc.
+/// zero fail-open error swallowing, zero cross-string byte-slicing hazards, and tiered Tier A / Tier B/C Rustdoc completeness.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// Audited modules must satisfy all 6 purity conditions simultaneously.
@@ -1173,22 +1161,78 @@ pub fn check_compiler_ast_purity(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
 
     let audited_files = [
-        repo_root.join("crates").join("verify-baseline").join("src").join("checks").join("structural.rs"),
-        repo_root.join("crates").join("verify-baseline").join("src").join("checks").join("parity_gates.rs"),
-        repo_root.join("crates").join("verify-baseline").join("src").join("checks").join("docstring_gate.rs"),
-        repo_root.join("crates").join("verify-baseline").join("src").join("defect_dossier.rs"),
-        repo_root.join("crates").join("deap-core").join("src").join("diagnostics.rs"),
-        repo_root.join("crates").join("deap-core").join("src").join("rules.rs"),
-        repo_root.join("crates").join("deap-core").join("src").join("workspace.rs"),
-        repo_root.join("crates").join("deap-core").join("src").join("markdown.rs"),
-        repo_root.join("crates").join("deap-core").join("src").join("sysml_ast.rs"),
-        repo_root.join("crates").join("deap-core").join("src").join("source_ast.rs"),
-        repo_root.join("crates").join("compile-sysml").join("src").join("docstring.rs"),
-        repo_root.join("crates").join("ingest-sysml").join("src").join("translators").join("code.rs"),
+        repo_root
+            .join("crates")
+            .join("verify-baseline")
+            .join("src")
+            .join("checks")
+            .join("structural.rs"),
+        repo_root
+            .join("crates")
+            .join("verify-baseline")
+            .join("src")
+            .join("checks")
+            .join("parity_gates.rs"),
+        repo_root
+            .join("crates")
+            .join("verify-baseline")
+            .join("src")
+            .join("checks")
+            .join("docstring_gate.rs"),
+        repo_root
+            .join("crates")
+            .join("verify-baseline")
+            .join("src")
+            .join("defect_dossier.rs"),
+        repo_root
+            .join("crates")
+            .join("deap-core")
+            .join("src")
+            .join("diagnostics.rs"),
+        repo_root
+            .join("crates")
+            .join("deap-core")
+            .join("src")
+            .join("rules.rs"),
+        repo_root
+            .join("crates")
+            .join("deap-core")
+            .join("src")
+            .join("workspace.rs"),
+        repo_root
+            .join("crates")
+            .join("deap-core")
+            .join("src")
+            .join("markdown.rs"),
+        repo_root
+            .join("crates")
+            .join("deap-core")
+            .join("src")
+            .join("sysml_ast.rs"),
+        repo_root
+            .join("crates")
+            .join("deap-core")
+            .join("src")
+            .join("source_ast.rs"),
+        repo_root
+            .join("crates")
+            .join("compile-sysml")
+            .join("src")
+            .join("docstring.rs"),
+        repo_root
+            .join("crates")
+            .join("ingest-sysml")
+            .join("src")
+            .join("translators")
+            .join("code.rs"),
     ];
 
     for file_path in &audited_files {
-        let rel = file_path.strip_prefix(repo_root).unwrap_or(file_path).display().to_string();
+        let rel = file_path
+            .strip_prefix(repo_root)
+            .unwrap_or(file_path)
+            .display()
+            .to_string();
         if file_path.is_file() {
             match fs::read_to_string(file_path) {
                 Ok(content) => {
@@ -1197,11 +1241,17 @@ pub fn check_compiler_ast_purity(repo_root: &Path) -> Result<(), Vec<String>> {
                     }
                 }
                 Err(err) => {
-                    violations.push(format!("Check 34: Unable to read audited file '{}': {}", rel, err));
+                    violations.push(format!(
+                        "Check 34: Unable to read audited file '{}': {}",
+                        rel, err
+                    ));
                 }
             }
         } else {
-            violations.push(format!("Check 34: Missing mandatory audited file '{}'", rel));
+            violations.push(format!(
+                "Check 34: Missing mandatory audited file '{}'",
+                rel
+            ));
         }
     }
 
@@ -1456,16 +1506,17 @@ fn mask_comments_and_literals_preserving_lines(source: &str) -> Vec<String> {
 /// Audits a single Rust source string for compiler purity violations (a)-(f).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS self-hosting compiler purity requirements.
-/// Mechanically audits source lines for banned regex, static string-slice arrays,
-/// hollow gate stubs, fail-open error swallowing, cross-string byte-slicing hazards,
-/// mandatory 7-section Rustdoc completeness, and `C-PURITY-03` test anti-gaming invariants.
+/// Conforms to DO-178C Level A, ECSS self-hosting compiler purity requirements, and DEAP Rust
+/// Coding Standard v2.0 Section 4. Mechanically audits source lines for banned regex, static
+/// string-slice arrays, hollow gate stubs, fail-open error swallowing, cross-string byte-slicing
+/// hazards, tiered Tier A / Tier B/C Rustdoc completeness, and `C-PURITY-03` test anti-gaming invariants.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Banned constructs are assembled dynamically to prevent scanner self-triggering.
 /// - Non-doc comments and string/char literals are masked before token inspection.
 /// - `mod tests` scope tracks brace depth `{` / `}` so closed blocks do not exempt trailing code.
-/// - In audited modules, every function must possess all 7 documentation sections.
+/// - In audited modules, every item and structured module header must satisfy its normative Tier A
+///   (7-section Rustdoc or 4-Block Contract) or Tier B/C (summary + `Realises: [...]`) contract.
 ///
 /// ## 3. Preconditions
 /// `source` must be valid UTF-8 Rust source code.
@@ -1551,39 +1602,27 @@ pub fn audit_source_purity(
     let needle_assert_true = ["assert!", "(true)"].concat();
     let needle_temp_dir_lit = ["temp_dir()", ".join(\"\")"].concat();
 
-    // 7-section doc headers to check
-    let s1 = "## 1. Safety Intent & Regulatory Scope";
-    let s2 = "## 2. Invariants & Mathematical Properties";
-    let s3 = "## 3. Preconditions";
-    let s4 = "## 4. Postconditions";
-    let s5 = "## 5. Algorithmic Complexity Bounds";
-    let s6 = "## 6. Failure Modes & Fault Tolerance";
-    let s7 = "## 7. Realization & Traceability";
-
     let mut in_mod_tests = false;
     let mut mod_tests_brace_depth: usize = 0;
     let mut mod_tests_entered_block = false;
     let mut mod_tests_has_test = false;
-    let mut current_doc = Vec::new();
-    let mut seen_docblocks: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 
     let masked_lines = mask_comments_and_literals_preserving_lines(source);
+
+    // (f) Tiered Tier A / Tier B/C Rustdoc & Module Header Completeness Check
+    if check_rustdoc {
+        if let Err(doc_errs) = super::docstring_gate::audit_rust_source_docstrings(source, file_rel)
+        {
+            violations.extend(doc_errs);
+        }
+        audit_tier_a_module_docblocks(&masked_lines, file_rel, &mut violations);
+    }
 
     for (idx, masked_line) in masked_lines.iter().enumerate() {
         let line_no = idx.saturating_add(1);
         let trimmed = masked_line.trim();
 
-        if trimmed.starts_with("//!") {
-            if !in_mod_tests {
-                current_doc.push(trimmed.to_string());
-            }
-            continue;
-        }
-
-        if trimmed.starts_with("///") {
-            if !in_mod_tests {
-                current_doc.push(trimmed.to_string());
-            }
+        if trimmed.starts_with("//!") || trimmed.starts_with("///") {
             continue;
         }
 
@@ -1597,7 +1636,6 @@ pub fn audit_source_purity(
             mod_tests_brace_depth = 0;
             mod_tests_entered_block = false;
             mod_tests_has_test = false;
-            current_doc.clear();
         }
 
         if in_mod_tests {
@@ -1698,12 +1736,18 @@ pub fn audit_source_purity(
                 || code.contains(&needle_static_lt_array)
                 || code.contains(&needle_static_lt_into_iter)
             {
-                violations.push(format!("{}:{}: static string-slice array detected", file_rel, line_no));
+                violations.push(format!(
+                    "{}:{}: static string-slice array detected",
+                    file_rel, line_no
+                ));
             }
 
             // (c) Hollow Gate Stubs Check
             if code.contains(&needle_let_blank) {
-                violations.push(format!("{}:{}: hollow gate stub detected (`let _ = `)", file_rel, line_no));
+                violations.push(format!(
+                    "{}:{}: hollow gate stub detected (`let _ = `)",
+                    file_rel, line_no
+                ));
             }
 
             // (d) Fail-Open Error Swallowing Check
@@ -1721,7 +1765,10 @@ pub fn audit_source_purity(
                             && (code.contains(&needle_read_str)
                                 || code.contains(&needle_read_dir)))))
             {
-                violations.push(format!("{}:{}: fail-open error swallowing detected", file_rel, line_no));
+                violations.push(format!(
+                    "{}:{}: fail-open error swallowing detected",
+                    file_rel, line_no
+                ));
             }
 
             // (e) Cross-String UTF-8 Byte-Slice Hazards Check
@@ -1730,7 +1777,10 @@ pub fn audit_source_purity(
                 || ((code.contains(&needle_lower_idx) || code.contains(&needle_ulower_idx))
                     && code.contains(&needle_dotdot))
             {
-                violations.push(format!("{}:{}: cross-string UTF-8 byte-slice hazard detected", file_rel, line_no));
+                violations.push(format!(
+                    "{}:{}: cross-string UTF-8 byte-slice hazard detected",
+                    file_rel, line_no
+                ));
             }
 
             // (e) Direct Panicking Range-Slice Indexing Check (audited modules only)
@@ -1740,51 +1790,6 @@ pub fn audit_source_purity(
                     file_rel, line_no
                 ));
             }
-
-            // (f) 7-Section Rustdoc Check
-            if check_rustdoc && (code.starts_with("pub fn ") || code.starts_with("fn ") || code.starts_with("pub const fn ") || code.starts_with("pub(crate) fn ")) {
-                let doc_block = current_doc.join("\n");
-                let mut missing = Vec::new();
-                if !doc_block.contains(s1) { missing.push("1. Safety Intent"); }
-                if !doc_block.contains(s2) { missing.push("2. Invariants"); }
-                if !doc_block.contains(s3) { missing.push("3. Preconditions"); }
-                if !doc_block.contains(s4) { missing.push("4. Postconditions"); }
-                if !doc_block.contains(s5) { missing.push("5. Algorithmic Complexity"); }
-                if !doc_block.contains(s6) { missing.push("6. Failure Modes"); }
-                if !doc_block.contains(s7) { missing.push("7. Realization & Traceability"); }
-
-                if !missing.is_empty() {
-                    violations.push(format!(
-                        "{}:{}: function missing mandatory 7-section Rustdoc (missing: {})",
-                        file_rel, line_no, missing.join(", ")
-                    ));
-                }
-
-                // (f) Per-function docblock uniqueness: the body (excluding the
-                // summary line and the `Realises:` tag) must not repeat verbatim.
-                let normalized_doc = current_doc
-                    .iter()
-                    .skip(1)
-                    .filter(|doc_line| !doc_line.contains("Realises:"))
-                    .map(|doc_line| {
-                        doc_line
-                            .trim_start_matches("///")
-                            .trim_start_matches("//!")
-                            .trim()
-                    })
-                    .filter(|doc_text| !doc_text.is_empty())
-                    .collect::<Vec<&str>>()
-                    .join("\n");
-                if !normalized_doc.is_empty() && !seen_docblocks.insert(normalized_doc) {
-                    violations.push(format!(
-                        "{}:{}: duplicate/boilerplate 7-section Rustdoc detected",
-                        file_rel, line_no
-                    ));
-                }
-                current_doc.clear();
-            } else if !code.starts_with("#[") {
-                current_doc.clear();
-            }
         }
     }
 
@@ -1792,8 +1797,79 @@ pub fn audit_source_purity(
         Ok(())
     } else {
         violations.sort();
+        violations.dedup();
         Err(violations)
     }
+}
+
+/// Audits top-level `//!` module header docblocks in `masked_lines` against the Tier A contract.
+/// Realises: [REQ-CHECK-34-TIER-A-MODULE-DOCBLOCK]
+fn audit_tier_a_module_docblocks(
+    masked_lines: &[String],
+    file_rel: &str,
+    violations: &mut Vec<String>,
+) {
+    let mut module_doc: Vec<String> = Vec::new();
+    let mut start_line: usize = 1;
+
+    for (idx, line) in masked_lines.iter().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("//!") {
+            if module_doc.is_empty() {
+                start_line = idx.saturating_add(1);
+            }
+            module_doc.push(trimmed.to_string());
+            continue;
+        }
+        if trimmed.is_empty() || trimmed.starts_with("#![") {
+            continue;
+        }
+        flush_tier_a_module_docblock(&mut module_doc, file_rel, start_line, violations);
+        if trimmed.contains("cfg(test)") || contains_bounded_token(trimmed, "mod tests") {
+            break;
+        }
+    }
+    flush_tier_a_module_docblock(&mut module_doc, file_rel, start_line, violations);
+}
+
+/// Validates and clears an accumulated `//!` module docblock against the Tier A contract.
+/// Realises: [REQ-CHECK-34-FLUSH-TIER-A-MODULE-DOCBLOCK]
+fn flush_tier_a_module_docblock(
+    module_doc: &mut Vec<String>,
+    file_rel: &str,
+    start_line: usize,
+    violations: &mut Vec<String>,
+) {
+    if module_doc.is_empty() {
+        return;
+    }
+    if !is_legacy_single_line_module_title(module_doc)
+        && !super::docstring_gate::is_compliant_rust_docblock(module_doc, true)
+    {
+        violations.push(format!(
+            "{}:{}: Tier A module header missing valid 7-section Rustdoc, 4-Block Contract, or non-empty 'Realises: [...]' tag",
+            file_rel, start_line
+        ));
+    }
+    module_doc.clear();
+}
+
+/// Identifies a legacy single-line non-empty `//!` module title that carries no partial contract or `Realises:` claim.
+/// Realises: [REQ-CHECK-34-LEGACY-SINGLE-LINE-MODULE-TITLE]
+fn is_legacy_single_line_module_title(module_doc: &[String]) -> bool {
+    if module_doc.len() != 1 {
+        return false;
+    }
+    let Some(first) = module_doc.first() else {
+        return false;
+    };
+    let body = first.trim().strip_prefix("//!").unwrap_or("").trim();
+    body.chars().any(char::is_alphanumeric)
+        && !body.starts_with('#')
+        && !body.contains("Realises:")
+        && !body.contains("Safety & Traceability")
+        && !body.contains("Contract:")
+        && !body.contains("Bounds & Faults:")
 }
 
 /// Detects direct panicking range-slice indexing (`expr[a..b]`) on one code line.
@@ -1844,7 +1920,9 @@ fn contains_direct_range_index(code: &str, range_needle: &str) -> bool {
                     }
                 }
             }
-            let inner = code.get(open_idx.saturating_add(1)..close_idx).unwrap_or(code);
+            let inner = code
+                .get(open_idx.saturating_add(1)..close_idx)
+                .unwrap_or(code);
             if inner.contains(range_needle) {
                 return true;
             }
@@ -1914,7 +1992,10 @@ fn scan_cargo_toml_file(
                 is_dep = true;
             }
         } else if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            let section = trimmed.get(1..trimmed.len().saturating_sub(1)).unwrap_or("").trim();
+            let section = trimmed
+                .get(1..trimmed.len().saturating_sub(1))
+                .unwrap_or("")
+                .trim();
             if section
                 .split('.')
                 .any(|part| part.trim().trim_matches('"').trim_matches('\'') == crate_needle)
@@ -1928,7 +2009,12 @@ fn scan_cargo_toml_file(
         }
 
         if is_dep {
-            violations.push(format!("{}:{}: {}", rel, idx.saturating_add(1), line.trim()));
+            violations.push(format!(
+                "{}:{}: {}",
+                rel,
+                idx.saturating_add(1),
+                line.trim()
+            ));
         }
     }
 }
@@ -2156,10 +2242,7 @@ impl WorkspaceManifestForbidGate {
                 continue;
             }
             if trimmed.starts_with('[') && trimmed.ends_with(']') {
-                let sec = trimmed
-                    .trim_start_matches('[')
-                    .trim_end_matches(']')
-                    .trim();
+                let sec = trimmed.trim_start_matches('[').trim_end_matches(']').trim();
                 current_section = sec.to_string();
                 continue;
             }
@@ -2176,8 +2259,7 @@ impl WorkspaceManifestForbidGate {
 
         if rust_unsafe_code.as_deref() != Some("forbid") {
             violations.push(
-                "Cargo.toml: [workspace.lints.rust] must set unsafe_code = \"forbid\""
-                    .to_string(),
+                "Cargo.toml: [workspace.lints.rust] must set unsafe_code = \"forbid\"".to_string(),
             );
         }
 
@@ -2255,10 +2337,7 @@ impl WorkspaceManifestForbidGate {
                         continue;
                     }
                     if trimmed.starts_with('[') && trimmed.ends_with(']') {
-                        let sec = trimmed
-                            .trim_start_matches('[')
-                            .trim_end_matches(']')
-                            .trim();
+                        let sec = trimmed.trim_start_matches('[').trim_end_matches(']').trim();
                         in_lints_section = sec == "lints";
                         continue;
                     }
@@ -2598,7 +2677,10 @@ pub fn check_handoff_and_backlog_integrity(repo_root: &Path) -> Result<(), Vec<S
     }
 
     // 2. Validate docs/designs/feat-289-290-293-solution.md if present
-    let solution_doc = repo_root.join("docs").join("designs").join("feat-289-290-293-solution.md");
+    let solution_doc = repo_root
+        .join("docs")
+        .join("designs")
+        .join("feat-289-290-293-solution.md");
     if solution_doc.is_file() {
         match fs::read_to_string(&solution_doc) {
             Ok(content) => {
@@ -2624,7 +2706,8 @@ pub fn check_handoff_and_backlog_integrity(repo_root: &Path) -> Result<(), Vec<S
                     );
                 }
                 if content.contains("scripts/bootstrap_tracker_labels.py")
-                    && !content.contains("skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py")
+                    && !content
+                        .contains("skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py")
                 {
                     violations.push(
                         "feat-289-290-293-solution.md contains invalid path scripts/bootstrap_tracker_labels.py."
@@ -2718,7 +2801,9 @@ pub fn check_no_master_handover_checkpoint(repo_root: &Path) -> Result<(), Vec<S
                 if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
                     let fname = entry.file_name().to_string_lossy().to_string();
                     if fname != "MASTER_HANDOVER_CHECKPOINT.md"
-                        && fname.to_ascii_uppercase().starts_with("MASTER_HANDOVER_CHECKPOINT")
+                        && fname
+                            .to_ascii_uppercase()
+                            .starts_with("MASTER_HANDOVER_CHECKPOINT")
                     {
                         violations.push(format!(
                             "Root checkpoint variant detected: '{}' is strictly forbidden (refs #321).",
@@ -2740,17 +2825,14 @@ pub fn check_no_master_handover_checkpoint(repo_root: &Path) -> Result<(), Vec<S
     // 2. docs/ directory check: forbidden anywhere inside docs/
     let docs_dir = repo_root.join("docs");
     if docs_dir.is_dir() {
-        for entry_res in WalkDir::new(&docs_dir)
-            .into_iter()
-            .filter_entry(|e| {
-                if e.file_type().is_dir() {
-                    let name = e.file_name().to_string_lossy();
-                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
-                } else {
-                    true
-                }
-            })
-        {
+        for entry_res in WalkDir::new(&docs_dir).into_iter().filter_entry(|e| {
+            if e.file_type().is_dir() {
+                let name = e.file_name().to_string_lossy();
+                !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+            } else {
+                true
+            }
+        }) {
             let entry = match entry_res {
                 Ok(e) => e,
                 Err(err) => {
@@ -2765,7 +2847,9 @@ pub fn check_no_master_handover_checkpoint(repo_root: &Path) -> Result<(), Vec<S
             if entry.file_type().is_file() {
                 let fname = entry.file_name().to_string_lossy();
                 if fname.to_ascii_uppercase() == "MASTER_HANDOVER_CHECKPOINT.MD"
-                    || fname.to_ascii_uppercase().starts_with("MASTER_HANDOVER_CHECKPOINT")
+                    || fname
+                        .to_ascii_uppercase()
+                        .starts_with("MASTER_HANDOVER_CHECKPOINT")
                 {
                     let rel = entry
                         .path()
@@ -2845,21 +2929,18 @@ pub fn check_zero_retired_scripts_in_documentation(repo_root: &Path) -> Result<(
         if !dir.is_dir() {
             continue;
         }
-        for entry_res in WalkDir::new(dir)
-            .into_iter()
-            .filter_entry(|e| {
-                if e.file_type().is_dir() {
-                    let name = e.file_name().to_string_lossy();
-                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
-                        && name != "designs"
-                        && name != "audits"
-                        && name != "blueprints"
-                        && name != "decisions"
-                } else {
-                    true
-                }
-            })
-        {
+        for entry_res in WalkDir::new(dir).into_iter().filter_entry(|e| {
+            if e.file_type().is_dir() {
+                let name = e.file_name().to_string_lossy();
+                !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+                    && name != "designs"
+                    && name != "audits"
+                    && name != "blueprints"
+                    && name != "decisions"
+            } else {
+                true
+            }
+        }) {
             let entry = match entry_res {
                 Ok(e) => e,
                 Err(err) => {
@@ -2875,7 +2956,11 @@ pub fn check_zero_retired_scripts_in_documentation(repo_root: &Path) -> Result<(
                 let path = entry.path();
                 let is_md = path.extension().map(|ext| ext == "md").unwrap_or(false);
                 if is_md {
-                    let rel = path.strip_prefix(repo_root).unwrap_or(path).display().to_string();
+                    let rel = path
+                        .strip_prefix(repo_root)
+                        .unwrap_or(path)
+                        .display()
+                        .to_string();
                     if rel.ends_with("_HANDOFF.md") || rel.ends_with("_HANDOVER.md") {
                         continue;
                     }
@@ -2914,7 +2999,11 @@ pub fn check_zero_retired_scripts_in_documentation(repo_root: &Path) -> Result<(
 
     for file in &target_single_files {
         if file.is_file() {
-            let rel = file.strip_prefix(repo_root).unwrap_or(file).display().to_string();
+            let rel = file
+                .strip_prefix(repo_root)
+                .unwrap_or(file)
+                .display()
+                .to_string();
             match fs::read_to_string(file) {
                 Ok(content) => {
                     for (idx, line) in content.lines().enumerate() {
@@ -2977,7 +3066,8 @@ pub fn check_zero_retired_scripts_in_documentation(repo_root: &Path) -> Result<(
 /// Realises: [REQ-CHECK-34-FEAT42-BLUEPRINT-COMPLIANCE].
 pub fn check_feat42_design_blueprint_compliance(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
-    let feat42_path = repo_root.join("docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md");
+    let feat42_path = repo_root
+        .join("docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md");
     if !feat42_path.is_file() {
         violations.push(format!(
             "Missing mandatory design blueprint: {}",
@@ -3023,16 +3113,15 @@ pub fn check_feat42_design_blueprint_compliance(repo_root: &Path) -> Result<(), 
     }
     if !content.contains("| `--schema`") {
         violations.push(
-            "FEAT-42 Section 2.1 must specify --schema in CLI option definitions table"
-                .to_string(),
+            "FEAT-42 Section 2.1 must specify --schema in CLI option definitions table".to_string(),
         );
     }
-    let has_format_auto = content.lines().any(|l| l.contains("--format") && l.contains("`auto`"));
+    let has_format_auto = content
+        .lines()
+        .any(|l| l.contains("--format") && l.contains("`auto`"));
     if !has_format_auto {
-        violations.push(
-            "FEAT-42 Section 2.1 must specify --format default value as `auto`"
-                .to_string(),
-        );
+        violations
+            .push("FEAT-42 Section 2.1 must specify --format default value as `auto`".to_string());
     }
 
     // 3. Assert Section 3.2 mandates per-function AST interpolation across Sections 1-6 for Check 34 uniqueness
@@ -3043,10 +3132,7 @@ pub fn check_feat42_design_blueprint_compliance(repo_root: &Path) -> Result<(), 
         );
     }
     if !content.contains("Check 34") {
-        violations.push(
-            "FEAT-42 Section 3.2 must cite Check 34 uniqueness contract"
-                .to_string(),
-        );
+        violations.push("FEAT-42 Section 3.2 must cite Check 34 uniqueness contract".to_string());
     }
     let has_interpolation = (content.contains("interpolate") || content.contains("Interpolate"))
         && content.contains("Section 1")
@@ -3194,10 +3280,8 @@ pub fn check_blueprint_grounding(repo_root: &Path) -> Result<(), Vec<String>> {
                             }
                         }
                         Err(err) => {
-                            violations.push(format!(
-                                "docs/designs: directory entry read error: {}",
-                                err
-                            ));
+                            violations
+                                .push(format!("docs/designs: directory entry read error: {}", err));
                         }
                     }
                 }
@@ -3251,11 +3335,7 @@ pub fn check_blueprint_grounding(repo_root: &Path) -> Result<(), Vec<String>> {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-37-SCAN-BLUEPRINT-FILE]
-fn scan_blueprint_markdown_file(
-    repo_root: &Path,
-    md_path: &Path,
-    violations: &mut Vec<String>,
-) {
+fn scan_blueprint_markdown_file(repo_root: &Path, md_path: &Path, violations: &mut Vec<String>) {
     let rel = md_path
         .strip_prefix(repo_root)
         .unwrap_or(md_path)
@@ -3748,8 +3828,7 @@ fn check_blueprint_line_crates_paths(
             Some((before, _)) => before,
             None => without_hash,
         };
-        let cleaned = without_colon
-            .trim_end_matches(['.', ',', ':', ';', '/']);
+        let cleaned = without_colon.trim_end_matches(['.', ',', ':', ';', '/']);
 
         if cleaned.is_empty() || cleaned == "crates" {
             continue;
@@ -3764,8 +3843,8 @@ fn check_blueprint_line_crates_paths(
             continue;
         }
 
-        let is_downstream_crate = !is_upstream_compiler(repo_root)
-            && repo_root.join("crates").join(crate_name).is_dir();
+        let is_downstream_crate =
+            !is_upstream_compiler(repo_root) && repo_root.join("crates").join(crate_name).is_dir();
         if !is_valid_workspace_crate_name(crate_name) && !is_downstream_crate {
             violations.push(format!(
                 "{}:{}: ungrounded crate '{}' in blueprint path '{}' (must be one of deap-core, verify-baseline, compile-sysml, ingest-sysml, assemble-conops, reconcile-backlog)",
@@ -3803,7 +3882,8 @@ mod tests {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_nanos())
                 .unwrap_or(0);
-            let path = std::env::temp_dir().join(format!("verify_structural_{}_{}_{}", name, nanos, count));
+            let path = std::env::temp_dir()
+                .join(format!("verify_structural_{}_{}_{}", name, nanos, count));
             fs::create_dir_all(&path)?;
             Ok(Self { path })
         }
@@ -3893,8 +3973,14 @@ mod tests {
         fs::create_dir_all(&designs_dir)?;
 
         // 1. Complete, non-empty blueprint triplet -> Ok(())
-        fs::write(designs_dir.join("blueprint-01-valid.md"), "# Valid Blueprint\n")?;
-        fs::write(designs_dir.join("blueprint-01-valid.sysml"), "package Valid {}\n")?;
+        fs::write(
+            designs_dir.join("blueprint-01-valid.md"),
+            "# Valid Blueprint\n",
+        )?;
+        fs::write(
+            designs_dir.join("blueprint-01-valid.sysml"),
+            "package Valid {}\n",
+        )?;
         fs::write(designs_dir.join("blueprint-01-valid.digest.json"), "{}\n")?;
         assert!(verify_upstream_blueprint_domain_cleanliness(&tmp.path).is_ok());
 
@@ -3905,8 +3991,8 @@ mod tests {
         assert!(res.is_err());
         let errs = res.err().ok_or("expected Err")?;
         assert!(
-            errs.iter()
-                .any(|e| e.contains("Upstream blueprint contains SysML model: docs/designs/domain.sysml")),
+            errs.iter().any(|e| e
+                .contains("Upstream blueprint contains SysML model: docs/designs/domain.sysml")),
             "Expected docs/designs/domain.sysml violation, got: {:?}",
             errs
         );
@@ -3961,7 +4047,8 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-CHECK-18-UPSTREAM-BLUEPRINT-CLEANLINESS].
     #[test]
-    fn test_check_18_upstream_digest_json_sidecar_violations() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_18_upstream_digest_json_sidecar_violations(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c18_digest_json")?;
         fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let bp_dir = tmp.path.join("docs/architecture/blueprints");
@@ -3992,7 +4079,9 @@ mod tests {
         let errs_domain = res_domain.err().ok_or("expected Err")?;
         assert!(
             errs_domain.iter().any(|e| {
-                e.contains("Upstream blueprint contains SysML model: docs/designs/domain.digest.json")
+                e.contains(
+                    "Upstream blueprint contains SysML model: docs/designs/domain.digest.json",
+                )
             }),
             "Expected docs/designs/domain.digest.json violation, got: {:?}",
             errs_domain
@@ -4059,27 +4148,33 @@ mod tests {
     }
 
     #[test]
-    fn test_reproduce_defect_265_unflagged_m1_domain_dict_bypasses_check_19() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_reproduce_defect_265_unflagged_m1_domain_dict_bypasses_check_19(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c19_m1_bypass")?;
         fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let src_dir = tmp.path.join("crates/test-crate/src");
         fs::create_dir_all(&src_dir)?;
         let mut f = File::create(src_dir.join("lib.rs"))?;
-        writeln!(f, "pub const FLIGHT_ENVELOPE_MAP: &[(&str, f64)] = &[(\"max_altitude\", 10000.0)];")?;
+        writeln!(
+            f,
+            "pub const FLIGHT_ENVELOPE_MAP: &[(&str, f64)] = &[(\"max_altitude\", 10000.0)];"
+        )?;
         // Under unfixed Check 19, this fails because check_domain_agnostic_ast_cleanliness incorrectly returns Ok(())
-        assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_err(), "Check 19 failed to reject unflagged M1 domain dict FLIGHT_ENVELOPE_MAP");
+        assert!(
+            check_domain_agnostic_ast_cleanliness(&tmp.path).is_err(),
+            "Check 19 failed to reject unflagged M1 domain dict FLIGHT_ENVELOPE_MAP"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_check_19_legacy_python_parity_auditor_dir_fails() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_19_legacy_python_parity_auditor_dir_fails(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c19_legacy")?;
         fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let crates_dir = tmp.path.join("crates");
         fs::create_dir_all(&crates_dir)?;
-        let legacy_dir = tmp
-            .path
-            .join("skills/spec-orchestrator/parity_auditor");
+        let legacy_dir = tmp.path.join("skills/spec-orchestrator/parity_auditor");
         fs::create_dir_all(&legacy_dir)?;
 
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_err());
@@ -4087,9 +4182,15 @@ mod tests {
     }
 
     #[test]
-    fn test_check_32_zero_shell_scripts_exempts_build_dirs_and_rejects_others() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_32_zero_shell_scripts_exempts_build_dirs_and_rejects_others(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c32_exempt_dirs")?;
-        for dir in ["build/macos", "macos/Pods", "macos/Flutter/ephemeral", ".dart_tool/build"] {
+        for dir in [
+            "build/macos",
+            "macos/Pods",
+            "macos/Flutter/ephemeral",
+            ".dart_tool/build",
+        ] {
             let d = tmp.path.join(dir);
             fs::create_dir_all(&d)?;
             File::create(d.join("generated.sh"))?;
@@ -4120,9 +4221,15 @@ mod tests {
     }
 
     #[test]
-    fn test_check_33_zero_python_exempts_build_dirs_and_rejects_others() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_33_zero_python_exempts_build_dirs_and_rejects_others(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c33_exempt_dirs")?;
-        for dir in ["build/macos", "macos/Pods", "macos/Flutter/ephemeral", ".dart_tool/build"] {
+        for dir in [
+            "build/macos",
+            "macos/Pods",
+            "macos/Flutter/ephemeral",
+            ".dart_tool/build",
+        ] {
             let d = tmp.path.join(dir);
             fs::create_dir_all(&d)?;
             File::create(d.join("helper.py"))?;
@@ -4188,7 +4295,9 @@ mod tests {
         assert!(res.is_err());
         let errs = res.err().ok_or("expected Err")?;
         assert_eq!(errs.len(), 1);
-        assert!(errs.first().is_some_and(|e| e.contains("crates/sample/src/lib.rs:1:")));
+        assert!(errs
+            .first()
+            .is_some_and(|e| e.contains("crates/sample/src/lib.rs:1:")));
         Ok(())
     }
 
@@ -4207,7 +4316,9 @@ mod tests {
         assert!(res.is_err());
         let errs = res.err().ok_or("expected Err")?;
         assert_eq!(errs.len(), 1);
-        assert!(errs.first().is_some_and(|e| e.contains("crates/sample/Cargo.toml:2:")));
+        assert!(errs
+            .first()
+            .is_some_and(|e| e.contains("crates/sample/Cargo.toml:2:")));
         Ok(())
     }
 
@@ -4218,7 +4329,11 @@ mod tests {
             .and_then(|p| p.parent())
             .ok_or("repo root")?;
         let res = check_zero_regex(repo_root);
-        assert!(res.is_ok(), "Check 34 Zero Regex Invariant failed on repository root: {:?}", res.err());
+        assert!(
+            res.is_ok(),
+            "Check 34 Zero Regex Invariant failed on repository root: {:?}",
+            res.err()
+        );
         Ok(())
     }
 
@@ -4229,7 +4344,11 @@ mod tests {
             .and_then(|p| p.parent())
             .ok_or("repo root")?;
         let res = check_compiler_ast_purity(repo_root);
-        assert!(res.is_ok(), "Check 34 Compiler AST Purity failed on audited modules: {:?}", res.err());
+        assert!(
+            res.is_ok(),
+            "Check 34 Compiler AST Purity failed on audited modules: {:?}",
+            res.err()
+        );
 
         let structural_path = repo_root
             .join("crates")
@@ -4255,7 +4374,11 @@ mod tests {
     fn test_check_34_purity_a_rejects_regex() -> Result<(), Box<dyn std::error::Error>> {
         let clean = "pub fn add(a: i32, b: i32) -> i32 { a + b }";
         let res_clean = audit_source_purity(clean, "sample/src/lib.rs", false);
-        assert!(res_clean.is_ok(), "Clean source must pass: {:?}", res_clean.err());
+        assert!(
+            res_clean.is_ok(),
+            "Clean source must pass: {:?}",
+            res_clean.err()
+        );
 
         let pat = ["Reg", "ex::"].concat();
         let mutant = format!("pub fn check() {{ {}new(\"\"); }}", pat);
@@ -4267,186 +4390,454 @@ mod tests {
     }
 
     #[test]
-    fn test_check_34_purity_b_rejects_static_string_slices() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_34_purity_b_rejects_static_string_slices(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let clean = "pub const ALL: &'static [Self] = &[Self::VariantA, Self::VariantB];";
         let res_clean = audit_source_purity(clean, "sample/src/lib.rs", false);
-        assert!(res_clean.is_ok(), "Clean enum array must pass: {:?}", res_clean.err());
+        assert!(
+            res_clean.is_ok(),
+            "Clean enum array must pass: {:?}",
+            res_clean.err()
+        );
 
         let slice_kw = [": &[", "&str]"].concat();
         let mutant = format!("pub const KEYWORDS{kw} = &[\"forbidden\"];", kw = slice_kw);
         let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
-        assert!(res_mutant.is_err(), "Mutant with static string slice array must fail");
+        assert!(
+            res_mutant.is_err(),
+            "Mutant with static string slice array must fail"
+        );
         let errs = res_mutant.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("static string-slice array detected")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("static string-slice array detected")));
         Ok(())
     }
 
     #[test]
-    fn test_check_34_purity_c_rejects_hollow_gate_stubs() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_34_purity_c_rejects_hollow_gate_stubs() -> Result<(), Box<dyn std::error::Error>>
+    {
         let clean = "pub fn check_gate(repo_root: &Path) -> Result<(), Vec<String>> { if repo_root.is_dir() { Ok(()) } else { Err(vec![]) } }";
         let res_clean = audit_source_purity(clean, "sample/src/checks/gate.rs", false);
-        assert!(res_clean.is_ok(), "Clean genuine gate must pass: {:?}", res_clean.err());
+        assert!(
+            res_clean.is_ok(),
+            "Clean genuine gate must pass: {:?}",
+            res_clean.err()
+        );
 
         let hollow_pat = ["let", " _ = "].concat();
         let mutant = format!("pub fn check_gate(repo_root: &Path) -> Result<(), Vec<String>> {{ {}repo_root; Ok(()) }}", hollow_pat);
         let res_mutant = audit_source_purity(&mutant, "sample/src/checks/gate.rs", false);
-        assert!(res_mutant.is_err(), "Mutant with hollow gate stub must fail");
+        assert!(
+            res_mutant.is_err(),
+            "Mutant with hollow gate stub must fail"
+        );
         let errs = res_mutant.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("hollow gate stub detected")));
         Ok(())
     }
 
     #[test]
-    fn test_check_34_purity_d_rejects_fail_open_error_swallowing() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_34_purity_d_rejects_fail_open_error_swallowing(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let clean = "for entry_res in WalkDir::new(dir) { let entry = match entry_res { Ok(e) => e, Err(err) => return Err(vec![err.to_string()]) }; }";
         let res_clean = audit_source_purity(clean, "sample/src/checks/gate.rs", false);
-        assert!(res_clean.is_ok(), "Clean fail-closed loop must pass: {:?}", res_clean.err());
+        assert!(
+            res_clean.is_ok(),
+            "Clean fail-closed loop must pass: {:?}",
+            res_clean.err()
+        );
 
         let fm_pat = [".filter_map(", "|e|", " e.ok())"].concat();
         let mutant = format!("for entry in WalkDir::new(dir).into_iter(){} {{ }}", fm_pat);
         let res_mutant = audit_source_purity(&mutant, "sample/src/checks/gate.rs", false);
-        assert!(res_mutant.is_err(), "Mutant with fail-open filter_map must fail");
+        assert!(
+            res_mutant.is_err(),
+            "Mutant with fail-open filter_map must fail"
+        );
         let errs = res_mutant.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("fail-open error swallowing detected")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("fail-open error swallowing detected")));
         Ok(())
     }
 
     #[test]
-    fn test_check_34_purity_e_rejects_cross_string_byte_slicing() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_34_purity_e_rejects_cross_string_byte_slicing(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let clean = "let lower = s.to_ascii_lowercase(); let slice = lower.get(..4);";
         let res_clean = audit_source_purity(clean, "sample/src/lib.rs", false);
-        assert!(res_clean.is_ok(), "Clean character boundary slicing must pass: {:?}", res_clean.err());
+        assert!(
+            res_clean.is_ok(),
+            "Clean character boundary slicing must pass: {:?}",
+            res_clean.err()
+        );
 
         let bad_slice = [".to_lowercase()", "[..4]"].concat();
         let mutant = format!("let slice = &s{};", bad_slice);
         let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
-        assert!(res_mutant.is_err(), "Mutant with cross-string byte indexing must fail");
+        assert!(
+            res_mutant.is_err(),
+            "Mutant with cross-string byte indexing must fail"
+        );
         let errs = res_mutant.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("cross-string UTF-8 byte-slice hazard detected")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("cross-string UTF-8 byte-slice hazard detected")));
         Ok(())
     }
 
     #[test]
-    fn test_check_34_purity_f_rejects_missing_seven_section_rustdoc() -> Result<(), Box<dyn std::error::Error>> {
-        let clean = r#"
-/// High-integrity parity check.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// Deterministic.
-///
-/// ## 3. Preconditions
-/// repo_root is valid directory.
-///
-/// ## 4. Postconditions
-/// Returns Ok(()) on verification.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// O(1).
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// Fails closed.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-PARITY-CHECK].
-pub fn check_audit() -> Result<(), Vec<String>> {
-    Ok(())
-}
-"#;
-        let res_clean = audit_source_purity(clean, "sample/src/checks/parity_gates.rs", true);
-        assert!(res_clean.is_ok(), "Clean function with all 7 sections must pass: {:?}", res_clean.err());
+    fn test_check_34_purity_f_rejects_missing_seven_section_rustdoc(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let clean_tiered = concat!(
+            "//! Sample parity module documented with a Tier A 4-Block Contract.\n",
+            "//!\n",
+            "//! Safety & Traceability: Realises: [REQ-PARITY-MOD]\n",
+            "//! Contract: Enforces deterministic baseline parity checks across audited artifacts.\n",
+            "//! Bounds & Faults: O(N) bounded traversal; fails closed with diagnostic vectors.\n\n",
+            "/// Public gate carrier documented with a Tier A 4-Block Contract.\n",
+            "///\n",
+            "/// Safety & Traceability: Realises: [REQ-PARITY-CARRIER]\n",
+            "/// Contract: Wraps immutable verification threshold `limit`.\n",
+            "/// Bounds & Faults: O(1) stack footprint; infallible value type.\n",
+            "pub struct SampleGate {\n",
+            "    pub limit: usize,\n",
+            "}\n\n",
+            "impl SampleGate {\n",
+            "    /// Evaluates the configured gate limit via a Tier A 4-Block Contract.\n",
+            "    ///\n",
+            "    /// Safety & Traceability: Realises: [REQ-PARITY-INHERENT-PUB]\n",
+            "    /// Contract: Pure read-only accessor returning `self.limit`.\n",
+            "    /// Bounds & Faults: O(1) time and space; infallible.\n",
+            "    pub fn configured_limit(&self) -> usize {\n",
+            "        self.limit\n",
+            "    }\n\n",
+            "    /// Computes internal clamped offset as a Tier B/C private method.\n",
+            "    /// Realises: [REQ-PARITY-PRIV-METHOD]\n",
+            "    fn clamped_offset(&self) -> usize {\n",
+            "        self.limit.saturating_add(1)\n",
+            "    }\n",
+            "}\n\n",
+            "impl Default for SampleGate {\n",
+            "    /// Constructs a zero-limit `SampleGate` via Tier B/C trait implementation.\n",
+            "    /// Realises: [REQ-PARITY-DEFAULT-IMPL]\n",
+            "    fn default() -> Self {\n",
+            "        Self { limit: 0 }\n",
+            "    }\n",
+            "}\n\n",
+            "/// High-integrity parity check documented with full 7-section Tier A Rustdoc.\n",
+            "///\n",
+            "/// ## 1. Safety Intent & Regulatory Scope\n",
+            "/// Conforms to DO-178C Level A.\n",
+            "///\n",
+            "/// ## 2. Invariants & Mathematical Properties\n",
+            "/// Deterministic.\n",
+            "///\n",
+            "/// ## 3. Preconditions\n",
+            "/// repo_root is valid directory.\n",
+            "///\n",
+            "/// ## 4. Postconditions\n",
+            "/// Returns Ok(()) on verification.\n",
+            "///\n",
+            "/// ## 5. Algorithmic Complexity Bounds\n",
+            "/// O(1).\n",
+            "///\n",
+            "/// ## 6. Failure Modes & Fault Tolerance\n",
+            "/// Fails closed.\n",
+            "///\n",
+            "/// ## 7. Realization & Traceability\n",
+            "/// Realises: [REQ-PARITY-CHECK]\n",
+            "pub fn check_audit() -> Result<(), Vec<String>> {\n",
+            "    let gate = SampleGate::default();\n",
+            "    if gate.configured_limit() == gate.clamped_offset() {\n",
+            "        return Err(Vec::new());\n",
+            "    }\n",
+            "    Ok(())\n",
+            "}\n\n",
+            "/// Public helper documented with a Tier A 4-Block Contract.\n",
+            "///\n",
+            "/// Safety & Traceability: Realises: [REQ-PARITY-PUB-4BLOCK]\n",
+            "/// Contract: Increments `count` with saturating arithmetic.\n",
+            "/// Bounds & Faults: O(1) time and space; never overflows.\n",
+            "pub fn increment_bound(count: usize) -> usize {\n",
+            "    crate_step(local_step(count))\n",
+            "}\n\n",
+            "/// Crate-internal helper documented under Tier B/C.\n",
+            "/// Realises: [REQ-PARITY-CRATE-FN]\n",
+            "pub(crate) fn crate_step(v: usize) -> usize {\n",
+            "    super_step(v)\n",
+            "}\n\n",
+            "/// Parent-module helper documented under Tier B/C.\n",
+            "/// Realises: [REQ-PARITY-SUPER-FN]\n",
+            "pub(super) fn super_step(v: usize) -> usize {\n",
+            "    v.saturating_add(1)\n",
+            "}\n\n",
+            "/// Private helper documented under Tier B/C without 7-section boilerplate.\n",
+            "/// Realises: [REQ-PARITY-PRIV-FN]\n",
+            "fn local_step(v: usize) -> usize {\n",
+            "    v.saturating_add(1)\n",
+            "}\n",
+        );
+        let res_clean =
+            audit_source_purity(clean_tiered, "sample/src/checks/parity_gates.rs", true);
+        assert!(
+            res_clean.is_ok(),
+            "Clean Tier A (7-section & 4-Block) and Tier B/C items must pass Check 34: {:?}",
+            res_clean.err()
+        );
 
-        let mutant = r#"
-/// Partial doc missing section 7.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// Deterministic.
-///
-/// ## 3. Preconditions
-/// repo_root is valid directory.
-///
-/// ## 4. Postconditions
-/// Returns Ok(()) on verification.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// O(1).
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// Fails closed.
-pub fn check_audit() -> Result<(), Vec<String>> {
-    Ok(())
-}
-"#;
-        let res_mutant = audit_source_purity(mutant, "sample/src/checks/parity_gates.rs", true);
-        assert!(res_mutant.is_err(), "Mutant missing section 7 must fail");
-        let errs = res_mutant.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("function missing mandatory 7-section Rustdoc")));
+        let partial_tier_a = concat!(
+            "/// Partial doc missing section 7 and Realises tag.\n",
+            "/// ## 1. Safety Intent & Regulatory Scope\n",
+            "/// Conforms to DO-178C Level A.\n",
+            "/// ## 2. Invariants & Mathematical Properties\n",
+            "/// Deterministic.\n",
+            "/// ## 3. Preconditions\n",
+            "/// repo_root is valid directory.\n",
+            "/// ## 4. Postconditions\n",
+            "/// Returns Ok(()) on verification.\n",
+            "/// ## 5. Algorithmic Complexity Bounds\n",
+            "/// O(1).\n",
+            "/// ## 6. Failure Modes & Fault Tolerance\n",
+            "/// Fails closed.\n",
+            "pub fn check_audit() -> Result<(), Vec<String>> {\n",
+            "    Ok(())\n",
+            "}\n",
+        );
+        let res_partial_a =
+            audit_source_purity(partial_tier_a, "sample/src/checks/parity_gates.rs", true);
+        assert!(
+            res_partial_a.is_err(),
+            "Tier A pub fn missing section 7 must fail"
+        );
+        let errs_partial_a = res_partial_a.err().ok_or("expected Err")?;
+        assert!(
+            errs_partial_a.iter().any(|e| e.contains(
+                "Tier A fn 'check_audit' missing valid 7-section Rustdoc or 4-Block Contract"
+            )),
+            "{:?}",
+            errs_partial_a
+        );
+
+        let downgraded_pub = concat!(
+            "/// Concise two-line docstring is invalid on unrestricted Tier A pub fn.\n",
+            "/// Realises: [REQ-DOWNGRADED-PUB]\n",
+            "pub fn downgraded_api() {}\n",
+        );
+        assert!(
+            audit_source_purity(downgraded_pub, "sample/src/checks/parity_gates.rs", true).is_err(),
+            "Unrestricted pub fn downgraded to Tier B/C summary must fail closed"
+        );
+
+        let downgraded_mod = concat!(
+            "//! Two-line module docstring lacking Tier A 7-section or 4-Block Contract.\n",
+            "//! Realises: [REQ-DOWNGRADED-MOD]\n\n",
+            "/// Private helper with valid Tier B/C docstring.\n",
+            "/// Realises: [REQ-VALID-HELPER]\n",
+            "fn valid_helper() {}\n",
+        );
+        assert!(
+            audit_source_purity(downgraded_mod, "sample/src/checks/parity_gates.rs", true).is_err(),
+            "Tier A //! module header downgraded to 2-line Tier B/C format must fail closed"
+        );
+
+        let undocumented_priv = "fn undocumented_helper() {}\n";
+        assert!(
+            audit_source_purity(undocumented_priv, "sample/src/checks/parity_gates.rs", true)
+                .is_err(),
+            "Undocumented private Tier B/C fn must fail closed"
+        );
+
+        let missing_realises_priv =
+            "/// Private helper missing traceability tag.\nfn untraced_helper() {}\n";
+        assert!(
+            audit_source_purity(
+                missing_realises_priv,
+                "sample/src/checks/parity_gates.rs",
+                true
+            )
+            .is_err(),
+            "Private Tier B/C fn missing Realises: [...] must fail closed"
+        );
+
+        let pub_4block_missing_realises = concat!(
+            "/// Public helper with 4-Block headers lacking Realises bracketed ID.\n",
+            "/// Safety & Traceability: Manually verified.\n",
+            "/// Contract: Preserves invariants.\n",
+            "/// Bounds & Faults: O(1) time and space.\n",
+            "pub fn untraced_pub_api() {}\n",
+        );
+        assert!(
+            audit_source_purity(
+                pub_4block_missing_realises,
+                "sample/src/checks/parity_gates.rs",
+                true
+            )
+            .is_err(),
+            "Tier A 4-Block pub fn missing Realises: [...] must fail closed"
+        );
+
+        let undocumented_pub_crate = "pub(crate) fn undocumented_crate_helper() {}\n";
+        assert!(
+            audit_source_purity(
+                undocumented_pub_crate,
+                "sample/src/checks/parity_gates.rs",
+                true
+            )
+            .is_err(),
+            "Undocumented pub(crate) Tier B/C fn must fail closed"
+        );
+
+        let undocumented_trait_impl = concat!(
+            "/// Public carrier with valid Tier A 4-Block Contract.\n",
+            "/// Safety & Traceability: Realises: [REQ-CARRIER-01]\n",
+            "/// Contract: Unit struct.\n",
+            "/// Bounds & Faults: O(1) stack.\n",
+            "pub struct UnitGate;\n\n",
+            "impl Default for UnitGate {\n",
+            "    fn default() -> Self {\n",
+            "        Self\n",
+            "    }\n",
+            "}\n",
+        );
+        assert!(
+            audit_source_purity(
+                undocumented_trait_impl,
+                "sample/src/checks/parity_gates.rs",
+                true
+            )
+            .is_err(),
+            "Undocumented impl Trait for Type method must fail closed"
+        );
+
+        for marker in ["TODO", "TBD", "FIXME", "XXX"] {
+            let placeholder_priv = format!(
+                "/// Helper summary with {marker} placeholder.\n/// Realises: [REQ-PLACEHOLDER]\nfn helper_with_marker() {{}}\n"
+            );
+            assert!(
+                audit_source_purity(&placeholder_priv, "sample/src/checks/parity_gates.rs", true)
+                    .is_err(),
+                "Placeholder marker {marker} in Tier B/C docstring must fail closed"
+            );
+
+            let placeholder_mod = format!(
+                "//! Module header with {marker} placeholder.\n//! Safety & Traceability: Realises: [REQ-MOD-PLACEHOLDER]\n//! Contract: Deterministic.\n//! Bounds & Faults: O(1).\n"
+            );
+            assert!(
+                audit_source_purity(&placeholder_mod, "sample/src/checks/parity_gates.rs", true)
+                    .is_err(),
+                "Placeholder marker {marker} in Tier A //! module header must fail closed"
+            );
+        }
+
         Ok(())
     }
 
     #[test]
-    fn test_check_34_hardening_b_rejects_static_lifetime_string_slice_const() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_34_hardening_b_rejects_static_lifetime_string_slice_const(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let clean = "pub const ALL: &'static [Self] = &[Self::VariantA, Self::VariantB];";
         let res_clean = audit_source_purity(clean, "sample/src/lib.rs", false);
-        assert!(res_clean.is_ok(), "Clean typed enum array must pass: {:?}", res_clean.err());
+        assert!(
+            res_clean.is_ok(),
+            "Clean typed enum array must pass: {:?}",
+            res_clean.err()
+        );
 
         let ty = ["&'static [", "&'static str]"].concat();
         let mutant = format!("pub const BAD: {} = &[\"a\"];", ty);
         let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
-        assert!(res_mutant.is_err(), "Mutant with 'static string-slice const must fail");
+        assert!(
+            res_mutant.is_err(),
+            "Mutant with 'static string-slice const must fail"
+        );
         let errs = res_mutant.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("static string-slice array detected")), "{:?}", errs);
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("static string-slice array detected")),
+            "{:?}",
+            errs
+        );
 
         let arr_ty = ["[&'static ", "str; 2]"].concat();
         let mutant_arr = format!("pub const BAD: {} = [\"a\", \"b\"];", arr_ty);
         let res_arr = audit_source_purity(&mutant_arr, "sample/src/lib.rs", false);
-        assert!(res_arr.is_err(), "Mutant with 'static string array must fail");
+        assert!(
+            res_arr.is_err(),
+            "Mutant with 'static string array must fail"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_check_34_hardening_b_rejects_static_str_array_into_iter() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_34_hardening_b_rejects_static_str_array_into_iter(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let clean = "fn kinds() -> std::array::IntoIter<Kind, 3> { [Kind::A, Kind::B, Kind::C].into_iter() }";
         let res_clean = audit_source_purity(clean, "sample/src/lib.rs", false);
-        assert!(res_clean.is_ok(), "Clean typed IntoIter must pass: {:?}", res_clean.err());
+        assert!(
+            res_clean.is_ok(),
+            "Clean typed IntoIter must pass: {:?}",
+            res_clean.err()
+        );
 
         let iter_ty = ["IntoIter<", "&'static str, 3>"].concat();
-        let mutant = format!("fn names() -> std::array::{} {{ [\"a\", \"b\", \"c\"].into_iter() }}", iter_ty);
+        let mutant = format!(
+            "fn names() -> std::array::{} {{ [\"a\", \"b\", \"c\"].into_iter() }}",
+            iter_ty
+        );
         let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
-        assert!(res_mutant.is_err(), "Mutant with 'static str array iterator must fail");
+        assert!(
+            res_mutant.is_err(),
+            "Mutant with 'static str array iterator must fail"
+        );
         let errs = res_mutant.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("static string-slice array detected")), "{:?}", errs);
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("static string-slice array detected")),
+            "{:?}",
+            errs
+        );
         Ok(())
     }
 
     #[test]
-    fn test_check_34_hardening_e_rejects_direct_range_slice_indexing() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_34_hardening_e_rejects_direct_range_slice_indexing(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let clean = "let sub = s.get(1..3);";
         let res_clean = audit_source_purity(clean, "sample/src/checks/parity_gates.rs", true);
-        assert!(res_clean.is_ok(), "Clean .get(..) slicing must pass: {:?}", res_clean.err());
+        assert!(
+            res_clean.is_ok(),
+            "Clean .get(..) slicing must pass: {:?}",
+            res_clean.err()
+        );
 
         let mutant = "let sub = &s[1..3];";
         let res_mutant = audit_source_purity(mutant, "sample/src/checks/parity_gates.rs", true);
-        assert!(res_mutant.is_err(), "Mutant with direct panicking range indexing must fail");
+        assert!(
+            res_mutant.is_err(),
+            "Mutant with direct panicking range indexing must fail"
+        );
         let errs = res_mutant.err().ok_or("expected Err")?;
         assert!(
-            errs.iter().any(|e| e.contains("direct panicking range-slice indexing detected")),
+            errs.iter()
+                .any(|e| e.contains("direct panicking range-slice indexing detected")),
             "{:?}",
             errs
         );
 
         let res_unaudited = audit_source_purity(mutant, "sample/src/lib.rs", false);
-        assert!(res_unaudited.is_ok(), "Rule (e) applies only when check_rustdoc is true: {:?}", res_unaudited.err());
+        assert!(
+            res_unaudited.is_ok(),
+            "Rule (e) applies only when check_rustdoc is true: {:?}",
+            res_unaudited.err()
+        );
         Ok(())
     }
 
     #[test]
-    fn test_check_34_hardening_f_rejects_duplicate_boilerplate_rustdoc() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_34_hardening_f_rejects_duplicate_boilerplate_rustdoc(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let body = r#"///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A.
@@ -4473,10 +4864,14 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             body = body
         );
         let res_mutant = audit_source_purity(&mutant, "sample/src/checks/parity_gates.rs", true);
-        assert!(res_mutant.is_err(), "Mutant with duplicated 7-section Rustdoc bodies must fail");
+        assert!(
+            res_mutant.is_err(),
+            "Mutant with duplicated 7-section Rustdoc bodies must fail"
+        );
         let errs = res_mutant.err().ok_or("expected Err")?;
         assert!(
-            errs.iter().any(|e| e.contains("duplicate/boilerplate 7-section Rustdoc detected")),
+            errs.iter()
+                .any(|e| e.contains("duplicate/boilerplate 7-section")),
             "{:?}",
             errs
         );
@@ -4488,12 +4883,17 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             unique = unique_body
         );
         let res_clean = audit_source_purity(&clean, "sample/src/checks/parity_gates.rs", true);
-        assert!(res_clean.is_ok(), "Function-specific Rustdoc bodies must pass: {:?}", res_clean.err());
+        assert!(
+            res_clean.is_ok(),
+            "Function-specific Rustdoc bodies must pass: {:?}",
+            res_clean.err()
+        );
         Ok(())
     }
 
     #[test]
-    fn test_reproduce_defect_318_stale_backlog_hallucinations_and_attribution_errors() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_reproduce_defect_318_stale_backlog_hallucinations_and_attribution_errors(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
@@ -4508,7 +4908,8 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     }
 
     #[test]
-    fn test_defect_318_mutation_rejects_stale_root_handoff() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_318_mutation_rejects_stale_root_handoff(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c318_root_handoff")?;
         let handoff = tmp.path.join("HANDOFF.md");
         File::create(&handoff)?;
@@ -4518,7 +4919,8 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     }
 
     #[test]
-    fn test_defect_318_mutation_rejects_stale_attribution_error() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_318_mutation_rejects_stale_attribution_error(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c318_stale_attr")?;
         let designs = tmp.path.join("docs").join("designs");
         fs::create_dir_all(&designs)?;
@@ -4534,7 +4936,8 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     }
 
     #[test]
-    fn test_defect_318_mutation_rejects_stale_work_package_queue() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_318_mutation_rejects_stale_work_package_queue(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c318_stale_queue")?;
         let designs = tmp.path.join("docs").join("designs");
         fs::create_dir_all(&designs)?;
@@ -4550,7 +4953,8 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     }
 
     #[test]
-    fn test_reproduce_defect_321_root_master_handover_checkpoint_rejected() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_reproduce_defect_321_root_master_handover_checkpoint_rejected(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c321_root_rejection")?;
         fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let schema_dir = tmp.path.join("schema");
@@ -4561,18 +4965,28 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         File::create(&checkpoint)?;
 
         let res_no_checkpoint = check_no_master_handover_checkpoint(&tmp.path);
-        assert!(res_no_checkpoint.is_err(), "Must reject root MASTER_HANDOVER_CHECKPOINT.md");
+        assert!(
+            res_no_checkpoint.is_err(),
+            "Must reject root MASTER_HANDOVER_CHECKPOINT.md"
+        );
 
         let res_upstream = verify_upstream_blueprint_domain_cleanliness(&tmp.path);
-        assert!(res_upstream.is_err(), "Upstream cleanliness must reject root MASTER_HANDOVER_CHECKPOINT.md");
+        assert!(
+            res_upstream.is_err(),
+            "Upstream cleanliness must reject root MASTER_HANDOVER_CHECKPOINT.md"
+        );
 
         let res_handoff = check_handoff_and_backlog_integrity(&tmp.path);
-        assert!(res_handoff.is_err(), "Handoff integrity must reject root MASTER_HANDOVER_CHECKPOINT.md");
+        assert!(
+            res_handoff.is_err(),
+            "Handoff integrity must reject root MASTER_HANDOVER_CHECKPOINT.md"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_defect_321_docs_master_handover_checkpoint_rejected() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_321_docs_master_handover_checkpoint_rejected(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c321_docs_rejection")?;
         fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         let schema_dir = tmp.path.join("schema");
@@ -4585,24 +4999,37 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         File::create(&checkpoint)?;
 
         let res_no_checkpoint = check_no_master_handover_checkpoint(&tmp.path);
-        assert!(res_no_checkpoint.is_err(), "Must reject docs/architecture/MASTER_HANDOVER_CHECKPOINT.md");
+        assert!(
+            res_no_checkpoint.is_err(),
+            "Must reject docs/architecture/MASTER_HANDOVER_CHECKPOINT.md"
+        );
 
         let res_upstream = verify_upstream_blueprint_domain_cleanliness(&tmp.path);
-        assert!(res_upstream.is_err(), "Upstream cleanliness must reject docs MASTER_HANDOVER_CHECKPOINT.md");
+        assert!(
+            res_upstream.is_err(),
+            "Upstream cleanliness must reject docs MASTER_HANDOVER_CHECKPOINT.md"
+        );
 
         let res_handoff = check_handoff_and_backlog_integrity(&tmp.path);
-        assert!(res_handoff.is_err(), "Handoff integrity must reject docs MASTER_HANDOVER_CHECKPOINT.md");
+        assert!(
+            res_handoff.is_err(),
+            "Handoff integrity must reject docs MASTER_HANDOVER_CHECKPOINT.md"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_defect_321_root_checkpoint_variant_rejected() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_321_root_checkpoint_variant_rejected() -> Result<(), Box<dyn std::error::Error>>
+    {
         let tmp = TempDir::new("c321_variant_rejection")?;
         let variant = tmp.path.join("MASTER_HANDOVER_CHECKPOINT_V2.md");
         File::create(&variant)?;
 
         let res = check_no_master_handover_checkpoint(&tmp.path);
-        assert!(res.is_err(), "Must reject root checkpoint variant MASTER_HANDOVER_CHECKPOINT_V2.md");
+        assert!(
+            res.is_err(),
+            "Must reject root checkpoint variant MASTER_HANDOVER_CHECKPOINT_V2.md"
+        );
         Ok(())
     }
 
@@ -4637,7 +5064,8 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     }
 
     #[test]
-    fn test_issue_441_documentation_contains_no_retired_script_references() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_441_documentation_contains_no_retired_script_references(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
@@ -4652,7 +5080,8 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     }
 
     #[test]
-    fn test_defect_441_mutation_rejects_retired_script_in_markdown() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_441_mutation_rejects_retired_script_in_markdown(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c441_script_rejection")?;
         let docs = tmp.path.join("docs").join("operations");
         fs::create_dir_all(&docs)?;
@@ -4669,23 +5098,31 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     }
 
     #[test]
-    fn test_defect_450_retired_python_in_pipeline_docs_fails() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_450_retired_python_in_pipeline_docs_fails(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c450_pipeline_retired")?;
         let pipeline_dir = tmp.path.join(".pipeline");
         fs::create_dir_all(&pipeline_dir)?;
         let const_file = pipeline_dir.join("constitution.md");
         let mut f = File::create(&const_file)?;
-        writeln!(f, "# Constitution\nRuns validators/spec_validator.py for quality gate")?;
+        writeln!(
+            f,
+            "# Constitution\nRuns validators/spec_validator.py for quality gate"
+        )?;
 
         let res = check_zero_retired_scripts_in_documentation(&tmp.path);
-        assert!(res.is_err(), "Must reject retired Python validator in .pipeline/constitution.md");
+        assert!(
+            res.is_err(),
+            "Must reject retired Python validator in .pipeline/constitution.md"
+        );
         let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("spec_validator.py")));
         Ok(())
     }
 
     #[test]
-    fn test_defect_459_feat42_design_blueprint_compliance() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_459_feat42_design_blueprint_compliance() -> Result<(), Box<dyn std::error::Error>>
+    {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
@@ -4701,7 +5138,8 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     }
 
     #[test]
-    fn test_defect_459_mutation_rejects_sysml_core_in_design() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_459_mutation_rejects_sysml_core_in_design(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c459_sysml_core_mutation")?;
         let designs = tmp.path.join("docs").join("designs");
         fs::create_dir_all(&designs)?;
@@ -4710,14 +5148,18 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         writeln!(f, "# FEAT-42\nparticipant Core as sysml-core Parser")?;
 
         let res = check_feat42_design_blueprint_compliance(&tmp.path);
-        assert!(res.is_err(), "Must reject sysml-core in FEAT-42 design blueprint");
+        assert!(
+            res.is_err(),
+            "Must reject sysml-core in FEAT-42 design blueprint"
+        );
         let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("sysml-core")));
         Ok(())
     }
 
     #[test]
-    fn test_check_37_blueprint_grounding_passes_on_live_repo() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_37_blueprint_grounding_passes_on_live_repo(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
@@ -4733,10 +5175,15 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     }
 
     #[test]
-    fn test_check_37_rejects_fictional_crates_and_nonexistent_paths() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_37_rejects_fictional_crates_and_nonexistent_paths(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c37_mutations")?;
         fs::create_dir_all(tmp.path.join(".pipeline").join("upstream"))?;
-        let bp_dir = tmp.path.join("docs").join("architecture").join("blueprints");
+        let bp_dir = tmp
+            .path
+            .join("docs")
+            .join("architecture")
+            .join("blueprints");
         fs::create_dir_all(&bp_dir)?;
         fs::create_dir_all(tmp.path.join("crates").join("deap-core").join("src"))?;
         File::create(
@@ -4759,9 +5206,8 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             clean_res.err()
         );
 
-        let target_bp = bp_dir.join(
-            CanonicalArchitectureBlueprint::DeapSysmlV2IngestionEngineBlueprint.as_str(),
-        );
+        let target_bp = bp_dir
+            .join(CanonicalArchitectureBlueprint::DeapSysmlV2IngestionEngineBlueprint.as_str());
         let mut f = File::create(&target_bp)?;
         writeln!(
             f,
@@ -4796,7 +5242,8 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             errs
         );
         assert!(
-            errs.iter().any(|e| e.contains("\\u2014") || e.contains("em dash")),
+            errs.iter()
+                .any(|e| e.contains("\\u2014") || e.contains("em dash")),
             "Must report em dash violation: {:?}",
             errs
         );
@@ -4976,9 +5423,14 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-CHECK-37-DOWNSTREAM-CANONICAL-EXEMPTION].
     #[test]
-    fn test_check_37_exempts_downstream_from_canonical_architecture_blueprints() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_37_exempts_downstream_from_canonical_architecture_blueprints(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c37_downstream_blueprints_dir")?;
-        let bp_dir = tmp.path.join("docs").join("architecture").join("blueprints");
+        let bp_dir = tmp
+            .path
+            .join("docs")
+            .join("architecture")
+            .join("blueprints");
         fs::create_dir_all(&bp_dir)?;
         File::create(bp_dir.join(".gitkeep"))?;
 
@@ -5050,7 +5502,8 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-CHECK-34-CLIPPY-ALLOW-TOKEN-SCAN].
     #[test]
-    fn test_issue_525_scan_clippy_allow_tokens_and_manifest_forbid_gate() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_525_scan_clippy_allow_tokens_and_manifest_forbid_gate(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let kw = ["all", "ow(clip", "py::"].concat();
 
         // 1. Comments, strings, raw strings, and character literals must NOT trigger false positives
@@ -5081,28 +5534,24 @@ pub fn check_audit() -> Result<(), Vec<String>> {
              pub fn bad() {{}}\n"
         );
         let dirty_viols = scan_clippy_allow_tokens(&dirty_src, "crates/sample/src/lib.rs");
-        assert_eq!(dirty_viols.len(), 4, "Expected 4 violations, got: {:?}", dirty_viols);
+        assert_eq!(
+            dirty_viols.len(),
+            4,
+            "Expected 4 violations, got: {:?}",
+            dirty_viols
+        );
         let v0 = dirty_viols.first().ok_or("missing v0")?;
         assert_eq!(v0.line, 1);
-        assert_eq!(
-            v0.attribute,
-            format!("#![{kw}indexing_slicing)]")
-        );
+        assert_eq!(v0.attribute, format!("#![{kw}indexing_slicing)]"));
         let v1 = dirty_viols.get(1).ok_or("missing v1")?;
         assert_eq!(v1.line, 2);
         assert_eq!(v1.attribute, format!("#[{kw}unwrap_used)]"));
         let v2 = dirty_viols.get(2).ok_or("missing v2")?;
         assert_eq!(v2.line, 3);
-        assert_eq!(
-            v2.attribute,
-            format!("#[{kw}type_complexity)]")
-        );
+        assert_eq!(v2.attribute, format!("#[{kw}type_complexity)]"));
         let v3 = dirty_viols.get(3).ok_or("missing v3")?;
         assert_eq!(v3.line, 8);
-        assert_eq!(
-            v3.attribute,
-            format!("#[cfg_attr(test,{kw}panic))]")
-        );
+        assert_eq!(v3.attribute, format!("#[cfg_attr(test,{kw}panic))]"));
 
         let purity_res = audit_source_purity(&dirty_src, "crates/deap-core/src/rules.rs", false);
         assert!(
@@ -5148,7 +5597,9 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         assert!(bad_errs.iter().any(|e| e.contains("unsafe_code")));
         assert!(bad_errs.iter().any(|e| e.contains("unwrap_used")));
         assert!(bad_errs.iter().any(|e| e.contains("type_complexity")));
-        assert!(bad_errs.iter().any(|e| e.contains("missing [lints] workspace = true")));
+        assert!(bad_errs
+            .iter()
+            .any(|e| e.contains("missing [lints] workspace = true")));
 
         // 4. Live repository root must pass WorkspaceManifestForbidGate and check_zero_regex
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -5205,28 +5656,27 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-CHECK-34-COMPILER-PURITY-GATE].
     #[test]
-    fn test_issue_526_self_hosting_purity_and_fail_closed_gates() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_526_self_hosting_purity_and_fail_closed_gates(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // 1. Chained range-slice indexing `arr[0][1..2]` must be rejected
         let chained_mutant = "let sub = &arr[0][1..2];";
-        let res_chained = audit_source_purity(chained_mutant, "sample/src/checks/parity_gates.rs", true);
+        let res_chained =
+            audit_source_purity(chained_mutant, "sample/src/checks/parity_gates.rs", true);
         assert!(
             res_chained.is_err(),
             "Chained range-slice indexing arr[0][1..2] must be rejected"
         );
-        assert!(
-            res_chained
-                .err()
-                .ok_or("expected Err")?
-                .iter()
-                .any(|e| e.contains("direct panicking range-slice indexing detected"))
-        );
+        assert!(res_chained
+            .err()
+            .ok_or("expected Err")?
+            .iter()
+            .any(|e| e.contains("direct panicking range-slice indexing detected")));
 
         // 2. String literal `"mod tests"` or closed `mod tests { ... }` before production code must not bypass Check 34
         let hollow = ["let", " _ = "].concat();
         let mod_str = ["mod", " tests"].concat();
-        let literal_bypass_mutant = format!(
-            "pub fn prod(x: i32) {{\n    let s = \"{mod_str}\";\n    {hollow}x;\n}}\n"
-        );
+        let literal_bypass_mutant =
+            format!("pub fn prod(x: i32) {{\n    let s = \"{mod_str}\";\n    {hollow}x;\n}}\n");
         let res_lit_bypass =
             audit_source_purity(&literal_bypass_mutant, "sample/src/lib.rs", false);
         assert!(
@@ -5247,11 +5697,16 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         // 3. C-PURITY-03 test anti-gaming violations inside `mod tests`
         let ign = ["#[ig", "nore]"].concat();
         let res_ign = audit_source_purity(
-            &format!("mod tests {{\n    #[test]\n    {ign}\n    fn t() {{ assert_eq!(1, 1); }}\n}}\n"),
+            &format!(
+                "mod tests {{\n    #[test]\n    {ign}\n    fn t() {{ assert_eq!(1, 1); }}\n}}\n"
+            ),
             "sample/src/checks/parity_gates.rs",
             true,
         );
-        assert!(res_ign.is_err(), "C-PURITY-03 must reject #[ignore] in mod tests");
+        assert!(
+            res_ign.is_err(),
+            "C-PURITY-03 must reject #[ignore] in mod tests"
+        );
 
         let taut = ["assert!", "(true)"].concat();
         let res_taut = audit_source_purity(
@@ -5259,7 +5714,10 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             "sample/src/checks/parity_gates.rs",
             true,
         );
-        assert!(res_taut.is_err(), "C-PURITY-03 must reject tautological assert!(true)");
+        assert!(
+            res_taut.is_err(),
+            "C-PURITY-03 must reject tautological assert!(true)"
+        );
 
         let vacuous = ["if p.ex", "ists() { return; }"].concat();
         let res_vacuous = audit_source_purity(
@@ -5285,7 +5743,10 @@ pub fn check_audit() -> Result<(), Vec<String>> {
 
         let decoy_mod = ["mod", " tests {}"].concat();
         let res_decoy = audit_source_purity(&decoy_mod, "sample/src/checks/parity_gates.rs", true);
-        assert!(res_decoy.is_err(), "C-PURITY-03 must reject empty decoy mod tests {{}}");
+        assert!(
+            res_decoy.is_err(),
+            "C-PURITY-03 must reject empty decoy mod tests {{}}"
+        );
 
         // 4. Rule (d) must reject `Err(_) => continue` and `if let Ok(...) = fs::read_to_string(...)`
         let err_cont = ["Err(_)", " => continue"].concat();
@@ -5294,7 +5755,10 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             "sample/src/lib.rs",
             false,
         );
-        assert!(res_err_cont.is_err(), "Rule (d) must reject fail-open Err(_) => continue");
+        assert!(
+            res_err_cont.is_err(),
+            "Rule (d) must reject fail-open Err(_) => continue"
+        );
 
         let if_ok_read = ["if let ", "Ok(c) = fs::read_to_string(p)"].concat();
         let res_if_ok = audit_source_purity(
@@ -5370,7 +5834,10 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             reconcile_crate.join("Cargo.toml"),
             "[package]\nname = \"reconcile-backlog\"\nversion = \"0.1.0\"\n",
         )?;
-        fs::write(reconcile_crate.join("src").join("main.rs"), "fn main() {}\n")?;
+        fs::write(
+            reconcile_crate.join("src").join("main.rs"),
+            "fn main() {}\n",
+        )?;
 
         assert_eq!(
             enclosing_upstream_compiler_root(&dogfood_dir),
@@ -5441,7 +5908,8 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-CHECK-33-ZERO-PYTHON-SCRIPTS].
     #[test]
-    fn test_check_33_hardened_artifacts_and_substring_loophole_closed() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_33_hardened_artifacts_and_substring_loophole_closed(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c33_hardened")?;
         let pycache = tmp.path.join("__pycache__");
         fs::create_dir_all(&pycache)?;
@@ -5459,7 +5927,10 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             ),
         )?;
         let res = check_zero_python_scripts(&tmp.path);
-        assert!(res.is_err(), "Check 33 must reject __pycache__, requirements.txt, and banner/never evasion lines");
+        assert!(
+            res.is_err(),
+            "Check 33 must reject __pycache__, requirements.txt, and banner/never evasion lines"
+        );
         let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("__pycache__")));
         assert!(errs.iter().any(|e| e.contains("requirements.txt")));
@@ -5468,5 +5939,3 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         Ok(())
     }
 }
-
-
