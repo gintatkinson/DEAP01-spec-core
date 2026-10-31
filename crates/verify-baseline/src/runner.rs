@@ -282,7 +282,8 @@ pub fn write_defect_dossier(repo_root: &Path, check_name: &str, errors: &[String
                 "all downstream projects must strictly satisfy baseline gates before delivery",
             ),
         ],
-        impact: "Halts pipeline verification and downstream implementation until resolved.".to_string(),
+        impact: "Halts pipeline verification and downstream implementation until resolved."
+            .to_string(),
         architectural_models: "DEAP Platform Specification and Baseline Architecture.".to_string(),
         remediation: format!("Resolve the following violations:\n- {}", err_summary),
         verification: "Re-run verify-baseline until all checks pass cleanly.".to_string(),
@@ -293,7 +294,7 @@ pub fn write_defect_dossier(repo_root: &Path, check_name: &str, errors: &[String
     let md_path = defects_dir.join(format!("defect_{}.md", ts));
 
     if let Ok(json_str) = dossier.to_json() {
-        if let Err(err) = fs::write(&json_path, json_str) {
+        if let Err(err) = crate::write_atomic_file(&json_path, json_str) {
             eprintln!(
                 "Warning: Failed to write JSON defect dossier '{}': {}",
                 json_path.display(),
@@ -301,7 +302,7 @@ pub fn write_defect_dossier(repo_root: &Path, check_name: &str, errors: &[String
             );
         }
     }
-    if let Err(err) = fs::write(&md_path, dossier.to_markdown()) {
+    if let Err(err) = crate::write_atomic_file(&md_path, dossier.to_markdown()) {
         eprintln!(
             "Warning: Failed to write Markdown defect dossier '{}': {}",
             md_path.display(),
@@ -356,11 +357,12 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             })
             .unwrap_or(false);
 
-    let effective_allow_missing = if !is_strict && !options.allow_missing_specs && has_clean_landing_zones(&repo_root) {
-        true
-    } else {
-        options.allow_missing_specs && !is_strict
-    };
+    let effective_allow_missing =
+        if !is_strict && !options.allow_missing_specs && has_clean_landing_zones(&repo_root) {
+            true
+        } else {
+            options.allow_missing_specs && !is_strict
+        };
 
     if options.spec_only {
         let spec_options = SpecAuditOptions {
@@ -440,7 +442,11 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
         for e in &errs {
             eprintln!("ERROR: {}", e);
         }
-        write_defect_dossier(&repo_root, "Check 12 (Zero duplicate master core blueprints)", &errs);
+        write_defect_dossier(
+            &repo_root,
+            "Check 12 (Zero duplicate master core blueprints)",
+            &errs,
+        );
         return Err(());
     }
     println!("Success: Check 12 verified (Zero duplicate master core blueprints in downstream repository).");
@@ -492,7 +498,11 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
         for e in &errs {
             eprintln!("ERROR: {}", e);
         }
-        write_defect_dossier(&repo_root, "Check 16 (Upstream template clean landing zones)", &errs);
+        write_defect_dossier(
+            &repo_root,
+            "Check 16 (Upstream template clean landing zones)",
+            &errs,
+        );
         return Err(());
     }
     println!("Success: Check 16 verified (Upstream template clean landing zone gate passed).");
@@ -531,7 +541,11 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             for e in &errs {
                 eprintln!("ERROR: {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 18 (Upstream blueprint domain cleanliness)", &errs);
+            write_defect_dossier(
+                &repo_root,
+                "Check 18 (Upstream blueprint domain cleanliness)",
+                &errs,
+            );
             return Err(());
         }
     }
@@ -550,7 +564,11 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 19 (Domain-agnostic AST cleanliness)", &errs);
+            write_defect_dossier(
+                &repo_root,
+                "Check 19 (Domain-agnostic AST cleanliness)",
+                &errs,
+            );
             return Err(());
         }
     }
@@ -564,11 +582,17 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             println!("Success: Check 20 verified (WBS & Enterprise Deliverables Suite validated: Markdown structure, CSV RFC 4180 with 12 headers, JSON AST, and zero em dashes).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 20 failed (WBS & Enterprise Deliverables Suite violations found):");
+            eprintln!(
+                "ERROR: Check 20 failed (WBS & Enterprise Deliverables Suite violations found):"
+            );
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 20 (WBS & Enterprise deliverables suite)", &errs);
+            write_defect_dossier(
+                &repo_root,
+                "Check 20 (WBS & Enterprise deliverables suite)",
+                &errs,
+            );
             return Err(());
         }
     }
@@ -600,7 +624,9 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             println!("Success: Check 22 verified (Physical Invariant Semantic Prose Gate passed -- zero ungrounded operational assertions).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 22 failed (Physical Invariant Semantic Prose Gate violations found):");
+            eprintln!(
+                "ERROR: Check 22 failed (Physical Invariant Semantic Prose Gate violations found):"
+            );
             for e in &errs {
                 eprintln!("  - {}", e);
             }
@@ -642,7 +668,9 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             println!("Success: Level 1C ICD Completeness verified (zero dangling ports, 100% port contract parity).");
         }
         Err(errs) => {
-            eprintln!("ERROR: ICD Completeness failed (Interface & Signal Dictionary violations found):");
+            eprintln!(
+                "ERROR: ICD Completeness failed (Interface & Signal Dictionary violations found):"
+            );
             for e in &errs {
                 eprintln!("  - {}", e);
             }
@@ -657,7 +685,9 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             println!("Success: Check 25 verified (Operational-to-Resource Allocation passed -- zero orphan activities or phantom allocation tags).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 25 failed (Operational-to-Resource Allocation violations found):");
+            eprintln!(
+                "ERROR: Check 25 failed (Operational-to-Resource Allocation violations found):"
+            );
             for e in &errs {
                 eprintln!("  - {}", e);
             }
@@ -672,7 +702,9 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             println!("Success: Check 26 verified (Standards & SI 7D Parameter Metrology passed -- all parameter dimensions, units, and SDO baselines valid).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 26 failed (Standards & SI 7D Parameter Metrology violations found):");
+            eprintln!(
+                "ERROR: Check 26 failed (Standards & SI 7D Parameter Metrology violations found):"
+            );
             for e in &errs {
                 eprintln!("  - {}", e);
             }
@@ -687,17 +719,27 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             println!("Success: Check 27 verified (Cross-Document Diagram Parity Gate passed -- zero disparity in subgraphs, nodes, ports, or connections).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 27 failed (Cross-Document Diagram Parity Gate violations found):");
+            eprintln!(
+                "ERROR: Check 27 failed (Cross-Document Diagram Parity Gate violations found):"
+            );
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 27 (Cross-document diagram parity)", &errs);
+            write_defect_dossier(
+                &repo_root,
+                "Check 27 (Cross-document diagram parity)",
+                &errs,
+            );
             return Err(());
         }
     }
 
     // Check 28: ConOps and Mission Intent completeness
-    match check_conops_and_mission_intent_completeness(&repo_root, effective_allow_missing, is_strict) {
+    match check_conops_and_mission_intent_completeness(
+        &repo_root,
+        effective_allow_missing,
+        is_strict,
+    ) {
         Ok(ParityOutcome::ConopsDirMissing) => {
             println!("Success: Check 28 verified (Downstream repository detected -- docs/conops/ directory not present).");
         }
@@ -708,7 +750,9 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             println!("Success: Check 28 verified (ConOps & Mission Intent Completeness passed -- all mandatory sections, tables, and METL rosters valid).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 28 failed (ConOps & Mission Intent Completeness violations found):");
+            eprintln!(
+                "ERROR: Check 28 failed (ConOps & Mission Intent Completeness violations found):"
+            );
             for e in &errs {
                 eprintln!("  - {}", e);
             }
@@ -745,7 +789,11 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 30 (Executive deliverable traceability)", &errs);
+            write_defect_dossier(
+                &repo_root,
+                "Check 30 (Executive deliverable traceability)",
+                &errs,
+            );
             return Err(());
         }
     }
@@ -759,7 +807,9 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             println!("Success: Check 30A verified (Coverage-Digest Population Gate passed -- zero phantom realizations).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 30A failed (Coverage-Digest Population Gate violations found):");
+            eprintln!(
+                "ERROR: Check 30A failed (Coverage-Digest Population Gate violations found):"
+            );
             for e in &errs {
                 eprintln!("  - {}", e);
             }
@@ -776,7 +826,9 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             println!("Success: Check 30B verified (Obligation-Witness Registry Gate passed -- zero phantom witnesses).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 30B failed (Obligation-Witness Registry Gate violations found):");
+            eprintln!(
+                "ERROR: Check 30B failed (Obligation-Witness Registry Gate violations found):"
+            );
             for e in &errs {
                 eprintln!("  - {}", e);
             }
@@ -797,7 +849,11 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 30C (Architecture viewpoint diagrams)", &errs);
+            write_defect_dossier(
+                &repo_root,
+                "Check 30C (Architecture viewpoint diagrams)",
+                &errs,
+            );
             return Err(());
         }
     }
@@ -839,7 +895,11 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
         for e in &errs {
             eprintln!("  - {}", e);
         }
-        write_defect_dossier(&repo_root, "Check 33 (Zero Python Scripts Invariant)", &errs);
+        write_defect_dossier(
+            &repo_root,
+            "Check 33 (Zero Python Scripts Invariant)",
+            &errs,
+        );
         return Err(());
     }
     println!("Success: Check 33 verified (Zero Python Scripts Invariant passed -- zero .py files exist on disk).");
@@ -885,9 +945,7 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
 
     // Check 37: Architecture Blueprint Grounding Gate
     if let Err(errs) = check_blueprint_grounding(&repo_root) {
-        eprintln!(
-            "ERROR: Check 37 failed (Architecture Blueprint Grounding Gate violated):"
-        );
+        eprintln!("ERROR: Check 37 failed (Architecture Blueprint Grounding Gate violated):");
         for e in &errs {
             eprintln!("  - {}", e);
         }
@@ -902,9 +960,7 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
 
     // Check 38: Presentation Anti-Hardcoding AST Gate
     if let Err(errs) = check_38_presentation_anti_hardcoding_ast_gate(&repo_root) {
-        eprintln!(
-            "ERROR: Check 38 failed (Presentation Anti-Hardcoding AST Gate violated):"
-        );
+        eprintln!("ERROR: Check 38 failed (Presentation Anti-Hardcoding AST Gate violated):");
         for e in &errs {
             eprintln!("  - {}", e);
         }
@@ -971,18 +1027,18 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
     // Platform Checks
     let dest = &options.destination;
     let is_flutter = dest.join("pubspec.yaml").is_file();
-    let is_react = dest.join("tsconfig.json").is_file() || (dest.join("package.json").is_file() && !is_flutter);
+    let is_react = dest.join("tsconfig.json").is_file()
+        || (dest.join("package.json").is_file() && !is_flutter);
 
     if is_flutter {
-        println!("Verifying conformance for platform 'flutter' at '{}'...", dest.display());
+        println!(
+            "Verifying conformance for platform 'flutter' at '{}'...",
+            dest.display()
+        );
         let pubspec_text = std::fs::read_to_string(dest.join("pubspec.yaml")).unwrap_or_default();
         let consumes_tier1_sdk =
             !pubspec_text.contains("name: app_flutter") && pubspec_text.contains("app_flutter:");
-        let baseline_files = [
-            "pubspec.yaml",
-            "analysis_options.yaml",
-            "lib/main.dart",
-        ];
+        let baseline_files = ["pubspec.yaml", "analysis_options.yaml", "lib/main.dart"];
         let mut missing_files = Vec::new();
         for f in &baseline_files {
             if !dest.join(f).exists() {
@@ -993,19 +1049,33 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             missing_files.push("lib/domain/validation.dart".to_string());
         }
         let repo_resolvers = [
-            dest.join("lib").join("domain").join("repository_resolver.dart"),
-            dest.join("lib").join("core").join("di").join("repository_resolver.dart"),
+            dest.join("lib")
+                .join("domain")
+                .join("repository_resolver.dart"),
+            dest.join("lib")
+                .join("core")
+                .join("di")
+                .join("repository_resolver.dart"),
         ];
         if !consumes_tier1_sdk && !repo_resolvers.iter().any(|p| p.exists()) && !options.no_domain {
-            missing_files.push("lib/domain/repository_resolver.dart (or lib/core/di/repository_resolver.dart)".to_string());
+            missing_files.push(
+                "lib/domain/repository_resolver.dart (or lib/core/di/repository_resolver.dart)"
+                    .to_string(),
+            );
         }
 
         if !missing_files.is_empty() {
-            eprintln!("ERROR: Flutter baseline file(s) missing: {}", missing_files.join(", "));
+            eprintln!(
+                "ERROR: Flutter baseline file(s) missing: {}",
+                missing_files.join(", ")
+            );
             write_defect_dossier(
                 &repo_root,
                 "Flutter Baseline Files",
-                &[format!("Missing Flutter baseline files: {}", missing_files.join(", "))],
+                &[format!(
+                    "Missing Flutter baseline files: {}",
+                    missing_files.join(", ")
+                )],
             );
             return Err(());
         }
@@ -1016,7 +1086,10 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
             println!("Skipping build and test suite execution (--no-domain specified, domain implementation pending).");
         }
     } else if is_react {
-        println!("Verifying conformance for platform 'react' at '{}'...", dest.display());
+        println!(
+            "Verifying conformance for platform 'react' at '{}'...",
+            dest.display()
+        );
         let baseline_files = [
             "package.json",
             "tsconfig.json",
@@ -1029,17 +1102,26 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
                 missing_files.push(f.to_string());
             }
         }
-        let repo_resolver = dest.join("src").join("domain").join("RepositoryResolver.ts");
+        let repo_resolver = dest
+            .join("src")
+            .join("domain")
+            .join("RepositoryResolver.ts");
         if !repo_resolver.exists() && !options.no_domain {
             missing_files.push("src/domain/RepositoryResolver.ts".to_string());
         }
 
         if !missing_files.is_empty() {
-            eprintln!("ERROR: React baseline file(s) missing: {}", missing_files.join(", "));
+            eprintln!(
+                "ERROR: React baseline file(s) missing: {}",
+                missing_files.join(", ")
+            );
             write_defect_dossier(
                 &repo_root,
                 "React Baseline Files",
-                &[format!("Missing React baseline files: {}", missing_files.join(", "))],
+                &[format!(
+                    "Missing React baseline files: {}",
+                    missing_files.join(", ")
+                )],
             );
             return Err(());
         }
@@ -1128,10 +1210,9 @@ mod tests {
         ];
         let has_specs = spec_zones.iter().any(|d| {
             d.is_dir()
-                && WalkDir::new(d)
-                    .into_iter()
-                    .filter_map(|e| e.ok())
-                    .any(|e| e.file_type().is_file() && e.file_name().to_string_lossy().ends_with(".md"))
+                && WalkDir::new(d).into_iter().filter_map(|e| e.ok()).any(|e| {
+                    e.file_type().is_file() && e.file_name().to_string_lossy().ends_with(".md")
+                })
         });
 
         if has_specs {
@@ -1149,7 +1230,11 @@ mod tests {
             .and_then(|p| p.parent())
             .ok_or("repo root")?;
         let res = check_zero_regex(repo_root);
-        assert!(res.is_ok(), "Check 34 Zero Regex Invariant failed on repo: {:?}", res.err());
+        assert!(
+            res.is_ok(),
+            "Check 34 Zero Regex Invariant failed on repo: {:?}",
+            res.err()
+        );
         Ok(())
     }
 
@@ -1159,7 +1244,8 @@ mod tests {
             .parent()
             .and_then(|p| p.parent())
             .ok_or("repo root")?;
-        let runner_src = fs::read_to_string(repo_root.join("crates/verify-baseline/src/runner.rs"))?;
+        let runner_src =
+            fs::read_to_string(repo_root.join("crates/verify-baseline/src/runner.rs"))?;
 
         let mut check_identifiers = Vec::new();
         for line in runner_src.lines() {
@@ -1225,4 +1311,3 @@ mod tests {
         Ok(())
     }
 }
-

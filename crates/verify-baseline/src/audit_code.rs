@@ -2977,7 +2977,7 @@ pub fn run_audit_code(workspace_root: &Path, args: &AuditCodeArgs) -> Result<(),
         }
 
         let dossier_path = defects_dir.join(format!("DEFECT-{}.md", finding.slug));
-        if let Err(err) = fs::write(&dossier_path, &dossier_md) {
+        if let Err(err) = crate::write_atomic_file(&dossier_path, &dossier_md) {
             eprintln!(
                 "[AUDIT-CODE IO ERROR] Failed to write {}: {err}",
                 dossier_path.display()
@@ -3139,6 +3139,76 @@ mod tests {
         let single_res = collect_target_source_files(&f_a, &mut single_out);
         assert_eq!(single_res, Ok(()));
         assert_eq!(single_out, vec![f_a]);
+        Ok(())
+    }
+
+    /// Verifies that `run_audit_code` and `runner::write_defect_dossier` persist defect dossiers
+    /// atomically via sibling temp-file rename without mutating pre-opened reader descriptors.
+    #[test]
+    fn test_audit_code_and_runner_atomic_write_snapshot_isolation(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use std::io::Read;
+
+        let scratch = ScopedTempDir::new("atomic_persist")?;
+        let root = &scratch.path;
+        let src_dir = root.join("src");
+        let defects_dir = root.join(".pipeline").join("defects");
+        fs::create_dir_all(&src_dir)?;
+        fs::create_dir_all(&defects_dir)?;
+
+        let sample_rs = src_dir.join("sample.rs");
+        fs::write(
+            &sample_rs,
+            "pub fn untraced_demo_fn(x: u32) -> u32 {\n    x.saturating_add(1)\n}\n",
+        )?;
+
+        let expected_dossier = defects_dir.join("DEFECT-src-sample-rs-e0605-trace-l1.md");
+        fs::write(&expected_dossier, "STALE_PRE_EXISTING_SNAPSHOT\n")?;
+        let mut pre_open_reader = fs::File::open(&expected_dossier)?;
+
+        let args = AuditCodeArgs {
+            path: PathBuf::from("src/sample.rs"),
+            pillar: Some(AuditPillar::SemanticTraceability),
+            issue: None,
+            repo: None,
+            publish: false,
+            dry_run: true,
+        };
+        let res = run_audit_code(root, &args);
+        assert_eq!(res, Ok(()));
+
+        let mut old_fd_snapshot = String::new();
+        pre_open_reader.read_to_string(&mut old_fd_snapshot)?;
+        assert_eq!(
+            old_fd_snapshot, "STALE_PRE_EXISTING_SNAPSHOT\n",
+            "atomic write must replace target via rename rather than truncating open reader inode in-place"
+        );
+
+        let persisted = fs::read_to_string(&expected_dossier)?;
+        assert!(persisted.starts_with("## 1. Context and References"));
+
+        crate::runner::write_defect_dossier(
+            root,
+            "Check 10 (.gitignore exists)",
+            &["synthetic atomic runner probe".to_string()],
+        );
+        let mut saw_runner_json = false;
+        let mut saw_runner_md = false;
+        for entry_res in fs::read_dir(&defects_dir)? {
+            let entry = entry_res?;
+            let fname = entry.file_name().to_string_lossy().into_owned();
+            assert!(
+                !fname.contains(".tmp."),
+                "atomic write left temporary file behind: {fname}"
+            );
+            if fname.starts_with("defect_") && fname.ends_with(".json") {
+                saw_runner_json = true;
+            }
+            if fname.starts_with("defect_") && fname.ends_with(".md") {
+                saw_runner_md = true;
+            }
+        }
+        assert!(saw_runner_json && saw_runner_md);
         Ok(())
     }
 }

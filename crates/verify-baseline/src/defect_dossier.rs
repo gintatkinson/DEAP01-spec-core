@@ -1954,7 +1954,7 @@ pub fn ensure_persisted_in_pipeline_defects(
     fs::create_dir_all(&defects_dir)
         .map_err(|e| format!("Failed to create '{}': {}", defects_dir.display(), e))?;
     let dest_path = defects_dir.join(file_name);
-    fs::write(&dest_path, content).map_err(|e| {
+    crate::write_atomic_file(&dest_path, content).map_err(|e| {
         format!(
             "Failed to persist defect dossier to '{}': {}",
             dest_path.display(),
