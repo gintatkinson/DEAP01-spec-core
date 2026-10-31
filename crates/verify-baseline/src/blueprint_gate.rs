@@ -1257,7 +1257,10 @@ pub fn check_2_metadata_table(content: &str) -> Result<BlueprintMetadata, Vec<St
         ]);
     };
 
-    let sep_line = top_lines.get(h_idx + 1).copied().unwrap_or("");
+    let sep_line = top_lines
+        .get(h_idx.saturating_add(1))
+        .copied()
+        .unwrap_or("");
     let sep_valid =
         split_markdown_table_row(sep_line).is_some_and(|cols| is_table_separator_row(&cols, 2));
     if !sep_valid {
@@ -1267,8 +1270,8 @@ pub fn check_2_metadata_table(content: &str) -> Result<BlueprintMetadata, Vec<St
         );
     }
 
-    for (offset, line) in top_lines.iter().skip(h_idx + 2).enumerate() {
-        let line_no = h_idx + 3 + offset;
+    for (offset, line) in top_lines.iter().skip(h_idx.saturating_add(2)).enumerate() {
+        let line_no = h_idx.saturating_add(3).saturating_add(offset);
         let trimmed = line.trim();
         if trimmed.is_empty() {
             break;
@@ -1431,7 +1434,7 @@ pub fn check_3_sections(content: &str) -> Result<Vec<(usize, usize, &'static str
     let mut start_indices: Vec<(usize, &'static str)> = Vec::with_capacity(7);
 
     for (sec_idx, required_header) in REQUIRED_BLUEPRINT_SECTIONS.iter().enumerate() {
-        let positions = found_positions.get(sec_idx).map_or(&[][..], Vec::as_slice);
+        let positions: &[usize] = found_positions.get(sec_idx).map_or(&[], Vec::as_slice);
         if positions.is_empty() {
             errors.push(format!(
                 "Check 3 failed: missing required section header '{required_header}'"
@@ -1456,8 +1459,8 @@ pub fn check_3_sections(content: &str) -> Result<Vec<(usize, usize, &'static str
             if pos <= p_pos {
                 errors.push(format!(
                     "Check 3 failed: section header '{header}' (line {}) appears before '{p_header}' (line {})",
-                    pos + 1,
-                    p_pos + 1
+                    pos.saturating_add(1),
+                    p_pos.saturating_add(1)
                 ));
             }
         }
@@ -1471,7 +1474,7 @@ pub fn check_3_sections(content: &str) -> Result<Vec<(usize, usize, &'static str
     let mut ranges = Vec::with_capacity(7);
     for (i, &(start_idx, header)) in start_indices.iter().enumerate() {
         let end_idx = start_indices
-            .get(i + 1)
+            .get(i.saturating_add(1))
             .map_or(total_lines, |&(next_start, _)| next_start);
         ranges.push((start_idx, end_idx, header));
     }
@@ -1585,7 +1588,10 @@ pub fn check_4_derivation_table(
         ]);
     };
 
-    let sep_line = section_1_lines.get(h_idx + 1).copied().unwrap_or("");
+    let sep_line = section_1_lines
+        .get(h_idx.saturating_add(1))
+        .copied()
+        .unwrap_or("");
     let sep_valid =
         split_markdown_table_row(sep_line).is_some_and(|cols| is_table_separator_row(&cols, 5));
     if !sep_valid {
@@ -1596,8 +1602,12 @@ pub fn check_4_derivation_table(
     }
 
     let mut rows = Vec::new();
-    for (offset, line) in section_1_lines.iter().skip(h_idx + 2).enumerate() {
-        let row_num = offset + 1;
+    for (offset, line) in section_1_lines
+        .iter()
+        .skip(h_idx.saturating_add(2))
+        .enumerate()
+    {
+        let row_num = offset.saturating_add(1);
         let trimmed = line.trim();
         if trimmed.is_empty() || !trimmed.starts_with('|') {
             break;
@@ -1617,7 +1627,7 @@ pub fn check_4_derivation_table(
             if is_empty_or_placeholder_cell(cell) {
                 errors.push(format!(
                     "Check 4 failed: derivation table row {row_num} column {} is empty or contains a placeholder ('{cell}')",
-                    col_idx + 1
+                    col_idx.saturating_add(1)
                 ));
             }
         }
@@ -1723,11 +1733,11 @@ fn parse_single_component(
         let trimmed = line.trim();
         if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
             in_fence = !in_fence;
-            idx += 1;
+            idx = idx.saturating_add(1);
             continue;
         }
         if in_fence {
-            idx += 1;
+            idx = idx.saturating_add(1);
             continue;
         }
 
@@ -1751,7 +1761,7 @@ fn parse_single_component(
                     && c4 == "description"
                 {
                     found_prop_table = true;
-                    let sep_line = comp_lines.get(idx + 1).copied().unwrap_or("");
+                    let sep_line = comp_lines.get(idx.saturating_add(1)).copied().unwrap_or("");
                     if !split_markdown_table_row(sep_line)
                         .is_some_and(|s| is_table_separator_row(&s, 5))
                     {
@@ -1759,7 +1769,7 @@ fn parse_single_component(
                             "Check 5 failed: Component '{comp_name}' property table header must be followed by a 5-column separator row"
                         ));
                     }
-                    idx += 2;
+                    idx = idx.saturating_add(2);
                     while let Some(&row_line) = comp_lines.get(idx) {
                         let r_trim = row_line.trim();
                         if r_trim.is_empty() || !r_trim.starts_with('|') {
@@ -1773,14 +1783,14 @@ fn parse_single_component(
                                 "Check 5 failed: Component '{comp_name}' property row has {} columns; expected 5",
                                 r_cols.len()
                             ));
-                            idx += 1;
+                            idx = idx.saturating_add(1);
                             continue;
                         }
                         for (c_i, cell) in r_cols.iter().enumerate() {
                             if is_empty_or_placeholder_cell(cell) {
                                 errors.push(format!(
                                     "Check 5 failed: Component '{comp_name}' property row column {} is empty or placeholder",
-                                    c_i + 1
+                                    c_i.saturating_add(1)
                                 ));
                             }
                         }
@@ -1807,7 +1817,7 @@ fn parse_single_component(
                             unit,
                             description: desc,
                         });
-                        idx += 1;
+                        idx = idx.saturating_add(1);
                     }
                     continue;
                 } else if c0 == "port"
@@ -1817,7 +1827,7 @@ fn parse_single_component(
                     && c4 == "description"
                 {
                     found_port_table = true;
-                    let sep_line = comp_lines.get(idx + 1).copied().unwrap_or("");
+                    let sep_line = comp_lines.get(idx.saturating_add(1)).copied().unwrap_or("");
                     if !split_markdown_table_row(sep_line)
                         .is_some_and(|s| is_table_separator_row(&s, 5))
                     {
@@ -1825,7 +1835,7 @@ fn parse_single_component(
                             "Check 5 failed: Component '{comp_name}' port table header must be followed by a 5-column separator row"
                         ));
                     }
-                    idx += 2;
+                    idx = idx.saturating_add(2);
                     while let Some(&row_line) = comp_lines.get(idx) {
                         let r_trim = row_line.trim();
                         if r_trim.is_empty() || !r_trim.starts_with('|') {
@@ -1839,14 +1849,14 @@ fn parse_single_component(
                                 "Check 5 failed: Component '{comp_name}' port row has {} columns; expected 5",
                                 r_cols.len()
                             ));
-                            idx += 1;
+                            idx = idx.saturating_add(1);
                             continue;
                         }
                         for (c_i, cell) in r_cols.iter().enumerate() {
                             if is_empty_or_placeholder_cell(cell) {
                                 errors.push(format!(
                                     "Check 5 failed: Component '{comp_name}' port row column {} is empty or placeholder",
-                                    c_i + 1
+                                    c_i.saturating_add(1)
                                 ));
                             }
                         }
@@ -1873,13 +1883,13 @@ fn parse_single_component(
                             protocol,
                             description: desc,
                         });
-                        idx += 1;
+                        idx = idx.saturating_add(1);
                     }
                     continue;
                 }
             }
         }
-        idx += 1;
+        idx = idx.saturating_add(1);
     }
 
     if !found_prop_table {
@@ -1999,10 +2009,10 @@ pub fn check_5_components(section_2_lines: &[&str]) -> Result<Vec<ComponentSpec>
 
     for (i, (start_idx, comp_name)) in component_starts.iter().enumerate() {
         let end_idx = component_starts
-            .get(i + 1)
+            .get(i.saturating_add(1))
             .map_or(total_lines, |(next_start, _)| *next_start);
         let sub_lines = section_2_lines
-            .get((*start_idx + 1)..end_idx)
+            .get(start_idx.saturating_add(1)..end_idx)
             .unwrap_or(&[]);
         let spec = parse_single_component(comp_name, sub_lines, &mut errors);
         specs.push(spec);
@@ -2146,7 +2156,11 @@ fn mermaid_line_has_unquoted_angle(trimmed: &str) -> bool {
         let tail = masked.get(after_start..).unwrap_or("");
         if let Some(rel_end) = tail.find(">>") {
             let end_idx = after_start.saturating_add(rel_end).saturating_add(2);
-            masked.replace_range(start..end_idx, " ");
+            if masked.get(start..end_idx).is_some() {
+                masked.replace_range(start..end_idx, " ");
+            } else {
+                break;
+            }
         } else {
             break;
         }
@@ -3190,78 +3204,61 @@ pub fn check_8_bdd_and_test_target(
     }
 }
 
-/// Scans a single line inside a Section 6 ` ```rust ` block for Check 34 Zero Regex violations,
-/// Clippy `"forbid"` calls (`.unwrap()`, `.expect(`, `panic!(`, `todo!(`, `unimplemented!(`, and
-/// direct `[a..b]` range slice indexing), and Check 19 Domain Cleanliness violations.
-///
-/// # Summary
-/// Applies `deap_core::source_ast::scan_rust_line_preserving_lex_state` to obtain comment- and
-/// string-masked code, then checks all Check 34, Clippy-forbid, and Check 19 invariants.
-///
-/// # Parameters
-/// - `raw_line`: Unmodified line inside a Section 6 ` ```rust ` block.
-/// - `line_no`: 1-based line number within Section 6.
-/// - `lex_state`: Mutable lexical scanner state tracking multi-line strings and block comments.
-/// - `errors`: Mutable diagnostic accumulator.
-///
-/// # Returns
-/// Unit `()`; appends any violation diagnostics to `errors`.
-///
-/// # Errors
-/// Appends formatted Check 9 error strings to `errors`.
-///
-/// # Panics
-/// Never panics.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// scan_rust_contract_line("let x = opt;", 4, &mut state, &mut errors);
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, Check 19, Check 34, and workspace Clippy `"forbid"` safety rules.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Dynamically constructs forbidden token patterns so `blueprint_gate.rs` itself remains 100%
-///   Check 19 and Check 34 compliant.
-///
-/// ## 3. Preconditions
-/// Preconditions: `raw_line` is inside a fenced ` ```rust ` block in Section 6.
-///
-/// ## 4. Postconditions
-/// Postconditions: Appends an error for every Check 34, Clippy-forbid, or Check 19 violation on `raw_line`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L)$ where $L$ is the byte length of `raw_line`.
-/// - Space Complexity: $O(L)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Preserves lexical state across multi-line raw strings and block comments.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-9-LINE-SCANNER]
+/// Checks whether `haystack` contains `prefix` immediately followed by `suffix`.
+/// Realises: [REQ-VERIFY-034]
+fn has_split_token(haystack: &str, prefix: &str, suffix: &str) -> bool {
+    haystack.match_indices(prefix).any(|(idx, _)| {
+        haystack
+            .get(idx.saturating_add(prefix.len())..)
+            .is_some_and(|rest| rest.starts_with(suffix))
+    })
+}
+
+/// Scans a single Section 6 Rust contract line for Check 34 zero-regex violations,
+/// Clippy-forbid fallible/aborting calls or direct range slicing, and Check 19 domain tokens.
+/// Realises: [REQ-BLUEPRINT-CHECK-9-LINE-SCANNER]
 fn scan_rust_contract_line(
     raw_line: &str,
     line_no: usize,
     lex_state: &mut deap_core::source_ast::RustStringScannerState,
     errors: &mut Vec<String>,
 ) {
+    const FORBIDDEN_REGEX_TOKENS: [(&str, &str); 5] = [
+        ("re", "gex::"),
+        ("Re", "gex::new"),
+        ("Re", "gexSet"),
+        ("use re", "gex"),
+        ("extern crate r", "egex"),
+    ];
+    const FORBIDDEN_PANIC_TOKENS: [(&str, &str); 5] = [
+        (".un", "wrap()"),
+        (".ex", "pect("),
+        ("pan", "ic!("),
+        ("to", "do!("),
+        ("unimple", "mented!("),
+    ];
+    const FORBIDDEN_DOMAIN_TOKENS: [(&str, &str, &str, &str); 9] = [
+        ("FLIGHT_ENVE", "LOPE_MAP", "flight_enve", "lope_map"),
+        (
+            "STANDARD_MI",
+            "SSION_PROFILES",
+            "standard_mi",
+            "ssion_profiles",
+        ),
+        ("Tactic", "alUAV", "tactic", "aluav"),
+        ("rudde", "rvator", "rudde", "rvator"),
+        ("empen", "nage", "empen", "nage"),
+        ("fusel", "age", "fusel", "age"),
+        ("aile", "ron", "aile", "ron"),
+        ("avion", "ics", "avion", "ics"),
+        ("airf", "rame", "airf", "rame"),
+    ];
+
     let code_only = deap_core::source_ast::scan_rust_line_preserving_lex_state(raw_line, lex_state);
 
-    let regex_ns = ["re", "gex::"].concat();
-    let regex_new = ["Re", "gex::new"].concat();
-    let regex_set = ["Re", "gexSet"].concat();
-    let use_regex = ["use ", "re", "gex"].concat();
-    let extern_regex = ["extern crate ", "re", "gex"].concat();
-
-    if code_only.contains(&regex_ns)
-        || code_only.contains(&regex_new)
-        || code_only.contains(&regex_set)
-        || code_only.contains(&use_regex)
-        || code_only.contains(&extern_regex)
+    if FORBIDDEN_REGEX_TOKENS
+        .iter()
+        .any(|(prefix, suffix)| has_split_token(&code_only, prefix, suffix))
     {
         errors.push(format!(
             "Check 9 violation (Section 6 line {line_no} -- Check 34 Zero Regex): Forbidden regex usage in Rust code block: '{}'",
@@ -3269,17 +3266,9 @@ fn scan_rust_contract_line(
         ));
     }
 
-    let unwrap_tok = [".unw", "rap()"].concat();
-    let expect_tok = [".exp", "ect("].concat();
-    let panic_tok = ["pan", "ic!("].concat();
-    let todo_tok = ["to", "do!("].concat();
-    let unimpl_tok = ["unimple", "mented!("].concat();
-
-    if code_only.contains(&unwrap_tok)
-        || code_only.contains(&expect_tok)
-        || code_only.contains(&panic_tok)
-        || code_only.contains(&todo_tok)
-        || code_only.contains(&unimpl_tok)
+    if FORBIDDEN_PANIC_TOKENS
+        .iter()
+        .any(|(prefix, suffix)| has_split_token(&code_only, prefix, suffix))
     {
         errors.push(format!(
             "Check 9 violation (Section 6 line {line_no} -- Clippy-Forbid): Forbidden panicking macro or unwrap/expect call in Rust code block: '{}'",
@@ -3294,22 +3283,13 @@ fn scan_rust_contract_line(
         ));
     }
 
-    let forbidden_domain_tokens = [
-        ["FLIGHT_", "ENVELOPE_", "MAP"].concat(),
-        ["STANDARD_", "MISSION_", "PROFILES"].concat(),
-        ["Tactical", "UAV"].concat(),
-        ["rudder", "vator"].concat(),
-        ["empen", "nage"].concat(),
-        ["fusel", "age"].concat(),
-        ["aile", "ron"].concat(),
-        ["avion", "ics"].concat(),
-        ["airf", "rame"].concat(),
-    ];
     let lower_raw = raw_line.to_ascii_lowercase();
-    for dom_tok in &forbidden_domain_tokens {
-        if raw_line.contains(dom_tok) || lower_raw.contains(&dom_tok.to_ascii_lowercase()) {
+    for (disp_prefix, disp_suffix, low_prefix, low_suffix) in FORBIDDEN_DOMAIN_TOKENS {
+        if has_split_token(raw_line, disp_prefix, disp_suffix)
+            || has_split_token(&lower_raw, low_prefix, low_suffix)
+        {
             errors.push(format!(
-                "Check 9 violation (Section 6 line {line_no} -- Check 19 Domain Cleanliness): Forbidden hardcoded domain token '{dom_tok}' in Rust code block"
+                "Check 9 violation (Section 6 line {line_no} -- Check 19 Domain Cleanliness): Forbidden hardcoded domain token '{disp_prefix}{disp_suffix}' in Rust code block"
             ));
         }
     }
@@ -3321,7 +3301,7 @@ fn scan_rust_contract_line(
 /// # Summary
 /// Verifies Section 6 contains `>= 1` fenced ` ```rust ` block and scans each block using
 /// `deap_core::source_ast` lexical masking to reject Check 34 Zero Regex violations, Clippy
-/// `"forbid"` violations (`.unwrap()`, `.expect(`, `panic!(`, `todo!(`, `unimplemented!(`, direct
+/// `"forbid"` violations (fallible unwrapping, aborting macros, and direct
 /// `[a..b]` range slice indexing), and Check 19 Domain Cleanliness violations.
 ///
 /// # Parameters
@@ -4808,5 +4788,28 @@ mod tests {
             })
         );
         Ok(())
+    }
+
+    #[test]
+    fn test_has_split_token_and_contract_scanner() {
+        assert!(has_split_token("alpha_beta_gamma", "alpha_", "beta"));
+        assert!(has_split_token(
+            "\u{1F680}prefix_suffix",
+            "prefix_",
+            "suffix"
+        ));
+        assert!(!has_split_token("prefix_gap_suffix", "prefix_", "suffix"));
+        assert!(!has_split_token("short", "longer_prefix", "suffix"));
+
+        let mut lex_state = deap_core::source_ast::RustStringScannerState::Normal;
+        let mut errors = Vec::new();
+        let bad_regex_line = format!("let r = {}{}(\"x\");", "Re", "gex::new");
+        scan_rust_contract_line(&bad_regex_line, 1, &mut lex_state, &mut errors);
+        assert_eq!(errors.len(), 1);
+
+        let mut panic_errors = Vec::new();
+        let bad_unwrap_line = format!("let v = opt{}{};", ".un", "wrap()");
+        scan_rust_contract_line(&bad_unwrap_line, 2, &mut lex_state, &mut panic_errors);
+        assert_eq!(panic_errors.len(), 1);
     }
 }

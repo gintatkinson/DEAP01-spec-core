@@ -646,10 +646,7 @@ pub fn derive_defect_title(file_location: &str, symptom: &str) -> String {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-SECTION1-VALIDATOR]
-fn validate_section_1_context(
-    sec1_lines: &[String],
-    errors: &mut Vec<String>,
-) -> (String, String) {
+fn validate_section_1_context(sec1_lines: &[String], errors: &mut Vec<String>) -> (String, String) {
     let mut comment_target: Option<(usize, String)> = None;
     let mut first_bullet_idx: Option<usize> = None;
     let mut file_bullet: Option<String> = None;
@@ -982,10 +979,10 @@ fn validate_fences_ascii_art_and_em_dash(
     let mut in_mermaid_fence = false;
 
     for (idx, raw_line) in full_content.lines().enumerate() {
-        let line_no = idx + 1;
+        let line_no = idx.saturating_add(1);
         let trimmed = raw_line.trim_start();
         if let Some(after_ticks) = trimmed.strip_prefix("```") {
-            fence_count += 1;
+            fence_count = fence_count.saturating_add(1);
             if !in_any_fence {
                 in_any_fence = true;
                 let tag = after_ticks.trim();
@@ -1059,61 +1056,45 @@ fn is_valid_upstream_crate_name(name: &str) -> bool {
         || name == "reconcile-backlog"
 }
 
-/// Inspects a line of code for forbidden regex crate tokens without containing scanner false-positive needles.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ISO 26262 ASIL D Check 34 Zero Regex Invariant mandates.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Detects inline `regex::`, `Regex::new`, `RegexSet`, and `use regex` patterns using segmented token matching.
-///
-/// ## 3. Preconditions
-/// - `line` is a valid UTF-8 string slice.
-///
-/// ## 4. Postconditions
-/// - Returns `Some(detected_token)` if a forbidden pattern is present, or `None`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L)$ linear in line byte length.
-/// - Space Complexity: $O(1)$ auxiliary allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking total function.
-///
-/// ## 7. Realization & Traceability
+/// Checks whether `haystack` contains `prefix` immediately followed by `suffix`.
+/// Realises: [REQ-VERIFY-034]
+fn has_split_token(haystack: &str, prefix: &str, suffix: &str) -> bool {
+    haystack.match_indices(prefix).any(|(idx, _)| {
+        haystack
+            .get(idx.saturating_add(prefix.len())..)
+            .is_some_and(|rest| rest.starts_with(suffix))
+    })
+}
+
+/// Inspects a proposed code line for forbidden regular-expression crate tokens using split-token matching.
 /// Realises: [REQ-CHECK-FORBIDDEN-REGEX-TOKENS]
 fn check_forbidden_regex_tokens(line: &str) -> Option<String> {
-    let needle_inline = concat!("reg", "ex::");
-    let needle_cap_new = concat!("Reg", "ex::new");
-    let needle_set = concat!("Reg", "exSet");
-    let needle_use = concat!("use ", "regex");
-    let needle_extern = concat!("extern crate ", "regex");
+    const FORBIDDEN_REGEX_TOKENS: [(&str, &str); 5] = [
+        ("re", "gex::"),
+        ("Re", "gex::new"),
+        ("Re", "gexSet"),
+        ("use re", "gex"),
+        ("extern crate r", "egex"),
+    ];
 
     let stripped_diff = line
         .trim_start()
         .trim_start_matches(['+', '-'])
         .trim_start();
-    let collapsed = stripped_diff.split_whitespace().collect::<Vec<_>>().join(" ");
+    let collapsed = stripped_diff
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     let normalized = collapsed
         .replace(" :: ", "::")
         .replace(" ::", "::")
         .replace(":: ", "::");
 
     for candidate in [line, collapsed.as_str(), normalized.as_str()] {
-        if candidate.contains(needle_inline) {
-            return Some(needle_inline.to_string());
-        }
-        if candidate.contains(needle_cap_new) {
-            return Some(needle_cap_new.to_string());
-        }
-        if candidate.contains(needle_set) {
-            return Some(needle_set.to_string());
-        }
-        if candidate.contains(needle_use) {
-            return Some(needle_use.to_string());
-        }
-        if candidate.contains(needle_extern) {
-            return Some(needle_extern.to_string());
+        for (prefix, suffix) in FORBIDDEN_REGEX_TOKENS {
+            if has_split_token(candidate, prefix, suffix) {
+                return Some(format!("{prefix}{suffix}"));
+            }
         }
     }
     None
@@ -1214,11 +1195,7 @@ fn validate_section_6_zero_regex(sec6_lines: &[String], errors: &mut Vec<String>
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-DOMAIN-CLEANLINESS-GATE]
-pub fn domain_cleanliness_gate(
-    sec6_lines: &[String],
-    is_upstream: bool,
-    errors: &mut Vec<String>,
-) {
+pub fn domain_cleanliness_gate(sec6_lines: &[String], is_upstream: bool, errors: &mut Vec<String>) {
     if !is_upstream {
         return;
     }
@@ -1544,7 +1521,8 @@ pub fn validate_defect_dossier_scoped(
             }
         }
         None => {
-            errors.push("Missing mandatory '## Audit Source' section header (Check 2).".to_string());
+            errors
+                .push("Missing mandatory '## Audit Source' section header (Check 2).".to_string());
         }
     }
 
@@ -1564,7 +1542,9 @@ pub fn validate_defect_dossier_scoped(
                 end_idx = a_idx;
             }
         }
-        lines.get(start_idx.saturating_add(1)..end_idx).unwrap_or(&[])
+        lines
+            .get(start_idx.saturating_add(1)..end_idx)
+            .unwrap_or(&[])
     };
 
     // 3. Check SEVERITY line
@@ -1971,13 +1951,8 @@ pub fn ensure_persisted_in_pipeline_defects(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "defect_dossier.md".to_string());
     let defects_dir = PathBuf::from(".pipeline").join("defects");
-    fs::create_dir_all(&defects_dir).map_err(|e| {
-        format!(
-            "Failed to create '{}': {}",
-            defects_dir.display(),
-            e
-        )
-    })?;
+    fs::create_dir_all(&defects_dir)
+        .map_err(|e| format!("Failed to create '{}': {}", defects_dir.display(), e))?;
     let dest_path = defects_dir.join(file_name);
     fs::write(&dest_path, content).map_err(|e| {
         format!(
@@ -2457,5 +2432,34 @@ pub fn run_check_defect(args: &DefectDossierArgs) -> Result<(), i32> {
             }
             Err(1)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_has_split_token_and_forbidden_regex_scanner() {
+        assert!(has_split_token("alpha_beta_gamma", "alpha_", "beta"));
+        assert!(has_split_token("\u{1F50D}token_tail", "token_", "tail"));
+        assert!(!has_split_token("token_gap_tail", "token_", "tail"));
+
+        let sample_use = format!("+ {} {};", "use", "regex");
+        assert_eq!(
+            check_forbidden_regex_tokens(&sample_use),
+            Some(format!("{}{}", "use re", "gex"))
+        );
+
+        let sample_spaced = format!("let x = {} :: new(\"a\");", "Regex");
+        assert_eq!(
+            check_forbidden_regex_tokens(&sample_spaced),
+            Some(format!("{}{}", "Re", "gex::new"))
+        );
+
+        assert_eq!(
+            check_forbidden_regex_tokens("let ok = text.strip_prefix(\"abc\");"),
+            None
+        );
     }
 }
