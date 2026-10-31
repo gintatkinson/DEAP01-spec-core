@@ -278,31 +278,6 @@ impl std::ops::Deref for DocstringError {
     type Target = str;
 
     /// Dereferences `DocstringError` to its underlying `&str` diagnostic message slice.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A ergonomic string inspection (`DocstringError::deref`).
-    /// Allows `str` methods such as `.contains(...)` to be invoked directly on `DocstringError`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Delegates directly to `DocstringError::as_str(self)`.
-    ///
-    /// ## 3. Preconditions
-    /// - `self: &DocstringError` is a valid borrowed error instance.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `&str` pointing to the inner diagnostic message.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(1) delegation to `as_str`.
-    /// - Space Complexity: O(1) zero allocation.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Standard library `std::ops::Deref` trait implementation.
-    /// - State: Pure read-only borrow.
-    /// - Action: Never panics.
-    /// - Resource: Zero heap allocation.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-FEAT-42-DOCSTRING-ERROR-DEREF]
     fn deref(&self) -> &Self::Target {
         self.as_str()
@@ -311,31 +286,6 @@ impl std::ops::Deref for DocstringError {
 
 impl std::fmt::Display for DocstringError {
     /// Formats the diagnostic message of `DocstringError` into `f`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A human-readable diagnostic formatting (`DocstringError::fmt`).
-    /// Writes the exact underlying error message string to the formatter stream.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - `format!("{err}") == err.as_str()`.
-    ///
-    /// ## 3. Preconditions
-    /// - `self: &DocstringError` and `f: &mut std::fmt::Formatter<'_>` are valid references.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `std::fmt::Result` from `f.write_str(self.as_str())`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(M) where M is `self.as_str().len()`.
-    /// - Space Complexity: O(1) streaming write into `f`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Propagates formatter sink errors via `std::fmt::Result`.
-    /// - State: Mutates only the target `Formatter` buffer.
-    /// - Action: Zero intermediate allocations.
-    /// - Resource: Bounded by underlying message length.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-FEAT-42-DOCSTRING-ERROR-DISPLAY]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
@@ -346,31 +296,6 @@ impl std::error::Error for DocstringError {}
 
 impl From<DocstringError> for String {
     /// Converts a `DocstringError` into its owned `String` diagnostic message.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A error conversion compatibility (`String::from(DocstringError)`).
-    /// Enables seamless `?` propagation in callers and unit tests returning `Result<_, String>`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Equivalent to `err.into_message()`.
-    ///
-    /// ## 3. Preconditions
-    /// - `err: DocstringError` is an owned error value.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns the inner `String` diagnostic message without cloning.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(1) ownership transfer.
-    /// - Space Complexity: O(1) zero extra allocation.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Standard `From<DocstringError> for String` trait implementation.
-    /// - State: Consumes `err` by value.
-    /// - Action: Infallible conversion.
-    /// - Resource: Zero additional heap memory.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-FEAT-42-DOCSTRING-ERROR-INTO-STRING]
     fn from(err: DocstringError) -> Self {
         err.into_message()
@@ -459,32 +384,6 @@ pub struct DocstringInjectionReport {
 }
 
 /// Internal descriptor for a single AST item being enriched with a 7-section docstring.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and FEAT-42 Section 3.2 per-function interpolation (`ItemSynthesisContext`).
-/// Aggregates all item-specific AST attributes required to synthesize a unique 7-section docstring.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Combines `file_rel`, `owner_name`, `item_kind`, `item_name`, `ordinal_index`, `params`,
-///   `return_type`, `fields_or_variants`, and `invariants` to guarantee unique normalized bodies.
-///
-/// ## 3. Preconditions
-/// - Populated by `inject_rust_file_docstrings` or `inject_dart_file_docstrings` at each item declaration.
-///
-/// ## 4. Postconditions
-/// - Consumed by `synthesize_7_section_docstring` to produce `Vec<String>` docstring lines.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(P + F) where P is parameter count and F is field/variant count.
-/// - Space Complexity: O(P + F) for borrowed and owned metadata slices.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Internal module struct with explicit fields.
-/// - State: Short-lived stack/heap value per item.
-/// - Action: Pure data carrier.
-/// - Resource: Freed immediately after item docstring synthesis.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-ITEM-SYNTHESIS-CONTEXT]
 struct ItemSynthesisContext<'a> {
     file_rel: &'a str,
@@ -503,32 +402,6 @@ struct ItemSynthesisContext<'a> {
 }
 
 /// Classification of an enclosing Rust block on `impl_owner_stack` for Tier A versus Tier B/C resolution.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and DEAP Rust Coding Standard v2.0 Section 4.1 (`RustOwnerKind`).
-/// Distinguishes inherent `impl Type` blocks (where `pub fn` methods are Tier A) from `impl Trait for Type`
-/// and `trait` definition blocks (where member methods are Tier B/C).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Closed three-variant partition `{InherentImpl, TraitImpl, TraitDef}` over enclosing Rust owner scopes.
-///
-/// ## 3. Preconditions
-/// - Pushed onto `impl_owner_stack` when `inject_rust_file_docstrings` opens an `impl` or `trait` brace block.
-///
-/// ## 4. Postconditions
-/// - Governs `is_tier_a` evaluation in `classify_rust_item_with_tier_ast`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(1) discriminant comparison.
-/// - Space Complexity: O(1) single-byte copy discriminant.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Exhaustive `match` prevents ambiguous owner classification.
-/// - State: Immutable `Copy` value on the owner stack.
-/// - Action: Cannot panic.
-/// - Resource: Zero heap allocation.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-RUST-OWNER-KIND]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RustOwnerKind {
@@ -541,33 +414,6 @@ enum RustOwnerKind {
 }
 
 /// Intermediate state for a multi-line Rust `impl` header prior to its opening `{` brace.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and DEAP Rust Coding Standard v2.0 Section 4.1 (`PendingRustImpl`).
-/// Tracks target type identity, inherent-versus-trait classification, and `where`-clause progression across
-/// multi-line `impl` headers without confusing Higher-Ranked Trait Bounds (`for<'a>`) with `impl Trait for Type`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Once `in_where_clause` transitions to `true`, subsequent `for<'a>` tokens in `where` predicates never
-///   promote `kind` from `InherentImpl` to `TraitImpl`.
-///
-/// ## 3. Preconditions
-/// - Initialized when an unbraced `impl` header line is detected at top-level parenthesis depth.
-///
-/// ## 4. Postconditions
-/// - Consumed into `impl_owner_stack` upon reaching `{` or cleared upon `;` / `}`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(1) field updates per continuation line.
-/// - Space Complexity: O(I) where I is the byte length of `target`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Strongly typed struct avoiding disconnected boolean state flags.
-/// - State: Cleared deterministically on block open or statement termination.
-/// - Action: Never panics.
-/// - Resource: Single `String` allocation for `target`.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-PENDING-RUST-IMPL]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PendingRustImpl {
@@ -577,32 +423,6 @@ struct PendingRustImpl {
 }
 
 /// Canonical block header discriminant for the Tier A Concise 4-Block Contract.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and DEAP Rust Coding Standard v2.0 Section 4.1 (`FourBlockHeader`).
-/// Identifies the three structured contract sections required alongside a summary line on Tier A items
-/// using Option A2 (`Safety & Traceability`, `Contract`, `Bounds & Faults`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Maps bijectively to bitmask positions `0b0010`, `0b0100`, and `0b1000` in `has_valid_four_block_contract`.
-///
-/// ## 3. Preconditions
-/// - Produced by `classify_four_block_header` from a stripped doc-comment line.
-///
-/// ## 4. Postconditions
-/// - Enables deterministic content-completeness verification for each of the three contract headers.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(1) discriminant projection.
-/// - Space Complexity: O(1) stack value.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Closed enum over the three normative Option A2 headers.
-/// - State: Pure immutable `Copy` value.
-/// - Action: Exhaustive `match` bit projection.
-/// - Resource: Zero heap allocation.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-FOUR-BLOCK-HEADER]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FourBlockHeader {
@@ -807,34 +627,6 @@ pub fn run_docstring_injection(
 }
 
 /// Collects all non-test `.rs` and non-generated `.dart` files under `root` in sorted order.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 36 file discovery parity (`collect_injectable_source_files`).
-/// Matches the exact directory and file filtering rules of Check 36 (`docstring_gate.rs`) so
-/// 100% of audited production files are covered.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Excludes `target`, `.git`, `build`, `Pods`, `ephemeral`, `.dart_tool`, `tests`, `benches`,
-///   `examples`, and `generated` subdirectories below `root` (`e.depth() > 0`).
-/// - Sorts all discovered paths lexicographically.
-///
-/// ## 3. Preconditions
-/// - `root: &Path` is an existing file or directory path.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(Vec<PathBuf>)` of eligible `.rs` and `.dart` files, or `Err(String)` on I/O failure.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(F log F) where F is the number of directory entries under `root`.
-/// - Space Complexity: O(F) for the returned `Vec<PathBuf>`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Propagates `WalkDir` traversal errors as `Err(String)`.
-/// - State: Stateless directory scan.
-/// - Action: Never excludes `root` itself (`e.depth() == 0`).
-/// - Resource: Bounded by workspace file count.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-COLLECT-INJECTABLE-FILES]
 fn collect_injectable_source_files(root: &Path) -> Result<Vec<PathBuf>, String> {
     if root.is_file() {
@@ -1637,37 +1429,6 @@ pub fn inject_dart_file_docstrings(
 }
 
 /// Checks whether `doc_lines` satisfies tiered Rust/Dart documentation compliance (`is_tier_a`) without per-file deduplication state.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and DEAP Rust Coding Standard v2.0 Section 4.1 (`is_compliant_docblock`).
-/// Enforces Tier A requirements (Full 7-Section Rustdoc or Concise 4-Block Contract plus summary and `Realises:`)
-/// on public API and module surfaces, and Tier B/C requirements (concise non-placeholder summary plus `Realises:`)
-/// on private helpers, restricted-visibility items, and trait implementations.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Always rejects empty `doc_lines`, placeholder markers, malformed prefixes, hybrid H1 headers, and missing/vacuous `Realises: [...]` tags.
-/// - Treats inner `//!` module docblocks as Tier A regardless of caller `is_tier_a` flag.
-/// - When `effective_tier_a` holds, requires either all 7 numbered H2 sections or all 3 4-Block Contract headers alongside a non-empty summary line.
-/// - When `!effective_tier_a` holds (Tier B/C), accepts any docblock carrying at least one non-empty descriptive summary line and a non-empty `Realises: [...]` tag.
-///
-/// ## 3. Preconditions
-/// - `doc_lines: &[String]` contains the contiguous `///` or `//!` lines of a candidate docblock.
-/// - `is_tier_a: bool` indicates whether the target AST declaration is a Tier A public surface.
-///
-/// ## 4. Postconditions
-/// - Returns `true` iff `doc_lines` satisfies all structural and traceability rules for its tier.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(D) where D is the total byte length of `doc_lines`.
-/// - Space Complexity: O(D) for the joined traceability inspection buffer.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Returns `false` immediately on empty or placeholder-tainted slices.
-/// - State: Pure read-only predicate with zero side effects.
-/// - Action: Non-panicking slice and iterator operations throughout.
-/// - Resource: Single joined `String` buffer bounded by single-item docblock length.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-IS-COMPLIANT-DOCBLOCK]
 fn is_compliant_docblock(doc_lines: &[String], is_tier_a: bool) -> bool {
     if doc_lines.is_empty()
@@ -1696,35 +1457,6 @@ fn is_compliant_docblock(doc_lines: &[String], is_tier_a: bool) -> bool {
 }
 
 /// Evaluates `is_compliant_docblock` and enforces per-file normalized body uniqueness on 7-section callable docblocks.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 34/36 deduplication equivalence (`is_compliant_docblock_in_file`).
-/// Combines structural tier validation (`is_compliant_docblock`) with per-file `seen_docblocks` uniqueness
-/// verification for 7-section callable docstrings.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Delegates tier structural checks to `is_compliant_docblock(current_doc, is_tier_a)`.
-/// - When `check_uniqueness` is `true` and `current_doc` uses the 7-section format, inserts `normalize_docblock_body(current_doc)`
-///   into `seen_docblocks` and rejects duplicate bodies.
-///
-/// ## 3. Preconditions
-/// - `current_doc: &[String]` holds the contiguous `///` lines preceding an item.
-/// - `seen_docblocks: &mut BTreeSet<String>` tracks normalized 7-section callable bodies in the active file.
-///
-/// ## 4. Postconditions
-/// - Returns `true` iff `current_doc` is tier-compliant and passes applicable callable uniqueness checks.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(D log S) where D is `current_doc` byte length and S is `seen_docblocks.len()`.
-/// - Space Complexity: O(D) for the joined and normalized buffers.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Short-circuits cleanly on non-compliant docblocks without mutating `seen_docblocks`.
-/// - State: Updates `seen_docblocks` only for structurally valid 7-section callable docblocks.
-/// - Action: Zero panicking indexing.
-/// - Resource: Bounded by single-item docstring size.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-IS-COMPLIANT-DOCBLOCK-IN-FILE]
 fn is_compliant_docblock_in_file(
     current_doc: &[String],
@@ -1750,31 +1482,6 @@ fn is_compliant_docblock_in_file(
 }
 
 /// Checks whether a joined docblock contains all 7 canonical DO-178C numbered H2 section headers.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 Option A1 (`has_all_seven_sections`).
-/// Verifies presence of `## 1. Safety Intent & Regulatory Scope` through `## 7. Realization & Traceability`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Conjunction over the 7 normative H2 section header literals.
-///
-/// ## 3. Preconditions
-/// - `joined: &str` is the newline-joined text of a candidate docblock.
-///
-/// ## 4. Postconditions
-/// - Returns `true` iff every numbered section header `## 1.` through `## 7.` appears in `joined`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(D) where D is `joined.len()`.
-/// - Space Complexity: O(1) zero heap allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Accepts empty or arbitrary UTF-8 slices safely.
-/// - State: Pure stateless predicate.
-/// - Action: Short-circuits on first missing section header.
-/// - Resource: Zero memory allocation.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-HAS-ALL-SEVEN-SECTIONS]
 fn has_all_seven_sections(joined: &str) -> bool {
     joined.contains("## 1. Safety Intent & Regulatory Scope")
@@ -1787,31 +1494,6 @@ fn has_all_seven_sections(joined: &str) -> bool {
 }
 
 /// Strips the leading `///` or `//!` doc-comment marker and surrounding whitespace from a single line.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A doc-comment lexical normalization (`strip_outer_doc_marker`).
-/// Provides uniform borrowed payload extraction across outer (`///`) and inner (`//!`) Rustdoc lines.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Strips at most one outer `///` or `//!` prefix and trims leading/trailing ASCII and Unicode whitespace.
-///
-/// ## 3. Preconditions
-/// - `line: &str` is a raw or trimmed doc-comment line.
-///
-/// ## 4. Postconditions
-/// - Returns a borrowed `&str` slice containing the trimmed interior comment text.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `line.len()`.
-/// - Space Complexity: O(1) zero heap allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Safely returns `line.trim()` if neither `///` nor `//!` is present.
-/// - State: Pure zero-copy slice projection.
-/// - Action: Uses non-panicking `strip_prefix`.
-/// - Resource: Zero heap allocation.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-STRIP-OUTER-DOC-MARKER]
 fn strip_outer_doc_marker(line: &str) -> &str {
     let trimmed = line.trim();
@@ -1823,33 +1505,6 @@ fn strip_outer_doc_marker(line: &str) -> &str {
 }
 
 /// Classifies a stripped doc-comment line against the three Tier A 4-Block Contract headers.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 Option A2 (`classify_four_block_header`).
-/// Recognizes `Safety & Traceability`, `Contract`, and `Bounds & Faults` headers across plain, bulleted,
-/// bolded, or H2/H3 markdown forms while rejecting ordinary prose prefixes such as `"Contractors..."`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Matches a header label only when followed immediately (after optional closing `**`) by end-of-line or `':'`.
-/// - Returns `(FourBlockHeader, inline_tail)` where `inline_tail` is the trimmed text following `':'` (or `""`).
-///
-/// ## 3. Preconditions
-/// - `line_text: &str` is a doc-comment line already stripped of its leading `///` or `//!` marker.
-///
-/// ## 4. Postconditions
-/// - Returns `Some((header, inline_tail))` on a valid 4-Block header line, or `None` for summary/body prose.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `line_text.len()`.
-/// - Space Complexity: O(1) zero heap allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Non-panicking `strip_prefix` chains over borrowed `&str` slices.
-/// - State: Pure stateless classifier.
-/// - Action: Rejects partial word prefix collisions cleanly.
-/// - Resource: Zero heap allocation.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-CLASSIFY-FOUR-BLOCK-HEADER]
 fn classify_four_block_header(line_text: &str) -> Option<(FourBlockHeader, &str)> {
     let clean = line_text
@@ -1889,33 +1544,6 @@ fn classify_four_block_header(line_text: &str) -> Option<(FourBlockHeader, &str)
 }
 
 /// Verifies that `doc_lines` satisfies the Tier A Concise 4-Block Contract (summary + 3 populated contract blocks).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 Option A2 (`has_valid_four_block_contract`).
-/// Ensures Tier A 4-Block docblocks contain a non-empty summary line prior to the contract headers and
-/// non-empty content for all three contract blocks (`Safety & Traceability`, `Contract`, `Bounds & Faults`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Accumulates a 4-bit completion mask (`0b0001` summary, `0b0010` safety/traceability, `0b0100` contract, `0b1000` bounds/faults).
-/// - Accepts both single-line (`Contract: ...`) and multi-line (`Contract:\n- ...`) block bodies while rejecting empty header stubs.
-///
-/// ## 3. Preconditions
-/// - `doc_lines: &[String]` contains the contiguous `///` or `//!` lines of a candidate Tier A docblock.
-///
-/// ## 4. Postconditions
-/// - Returns `true` iff `mask == 0b1111`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(D) where D is total byte length of `doc_lines`.
-/// - Space Complexity: O(1) three single-byte bitmasks on stack.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Handles empty lines and arbitrary markdown formatting safely.
-/// - State: Bitmask state avoids compound boolean flag proliferation.
-/// - Action: Never panics.
-/// - Resource: Zero heap allocation.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-HAS-VALID-FOUR-BLOCK-CONTRACT]
 fn has_valid_four_block_contract(doc_lines: &[String]) -> bool {
     let mut mask: u8 = 0;
@@ -1958,32 +1586,6 @@ fn has_valid_four_block_contract(doc_lines: &[String]) -> bool {
 }
 
 /// Checks whether `doc_lines` contains at least one non-empty descriptive summary line distinct from `Realises:`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 (`has_non_empty_tier_bc_summary`).
-/// Prevents `Realises:`-only or punctuation-only comment stubs from passing Tier B/C or Tier A validation.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns `true` when at least one non-heading line outside `Realises:` contains alphanumeric prose, or when
-///   descriptive alphanumeric prose precedes `Realises:` on the same line (excluding bare `Safety & Traceability:`).
-///
-/// ## 3. Preconditions
-/// - `doc_lines: &[String]` contains the contiguous `///` or `//!` lines of a candidate docblock.
-///
-/// ## 4. Postconditions
-/// - Returns `true` iff non-empty descriptive prose exists in `doc_lines`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(D) where D is total byte length of `doc_lines`.
-/// - Space Complexity: O(1) zero heap allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Accepts empty or single-line docblocks safely.
-/// - State: Pure stateless scan.
-/// - Action: Uses non-panicking `split_once` and character iterators.
-/// - Resource: Zero heap allocation.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-HAS-NON-EMPTY-TIER-BC-SUMMARY]
 fn has_non_empty_tier_bc_summary(doc_lines: &[String]) -> bool {
     for line in doc_lines {
@@ -2006,33 +1608,6 @@ fn has_non_empty_tier_bc_summary(doc_lines: &[String]) -> bool {
 }
 
 /// Extracts all requirement IDs from `Realises: [...]` tags across `doc_lines`, including inline 4-Block `Safety & Traceability: Realises: [...]` lines.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A bidirectional requirement traceability (`extract_all_realises_ids`).
-/// Ensures unforced conflict checks and `--force` requirement preservation extract requirement IDs regardless
-/// of whether `Realises:` starts the line or follows `Safety & Traceability:`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves all IDs extracted by `extract_realises_ids_from_doc_lines` and appends any bracketed IDs
-///   following `"Realises:"` on inline contract lines in declaration order without duplicates.
-///
-/// ## 3. Preconditions
-/// - `doc_lines: &[String]` holds the `///` or `//!` lines of an existing docblock.
-///
-/// ## 4. Postconditions
-/// - Returns `Vec<String>` of unique trimmed requirement identifiers bound in `doc_lines`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(D * R) where D is `doc_lines` byte length and R is extracted requirement count.
-/// - Space Complexity: O(R) for the returned requirement ID vector.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Gracefully ignores unclosed brackets without panicking.
-/// - State: Pure extraction into a local `Vec<String>`.
-/// - Action: Uses `.get(..)` and `saturating_add` exclusively.
-/// - Resource: Bounded by requirement tag count on a single item.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-EXTRACT-ALL-REALISES-IDS]
 fn extract_all_realises_ids(doc_lines: &[String]) -> Vec<String> {
     let mut ids = extract_realises_ids_from_doc_lines(doc_lines);
@@ -2059,36 +1634,6 @@ fn extract_all_realises_ids(doc_lines: &[String]) -> Vec<String> {
 }
 
 /// Detects doubled doc-comment prefixes, legacy H1 section headers, or duplicate `Realises:` lines in `current_doc`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 36 docstring canonicalization
-/// (`has_malformed_prefix_or_hybrid_headers`).
-/// Ensures hybrid docblocks combining legacy H1 headers, repeated comment markers, or multiple
-/// `Realises:` lines are flagged as non-compliant so `inject_rust_file_docstrings` and
-/// `inject_dart_file_docstrings` re-synthesize them cleanly.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns `true` if any line stripped of its outer `///` or `//!` marker still begins with `///` or `//!`.
-/// - Returns `true` if any line stripped of its outer marker begins with a single-hash H1 header (`# ` but not `## `).
-/// - Returns `true` if more than one line in `current_doc` starts a `Realises:` traceability declaration.
-///
-/// ## 3. Preconditions
-/// - `current_doc: &[String]` contains the contiguous doc-comment lines preceding a source item.
-///
-/// ## 4. Postconditions
-/// - Returns `true` iff `current_doc` exhibits any doubled prefix, H1 header, or duplicate `Realises:` declaration line.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(D) where D is the total byte length of `current_doc`.
-/// - Space Complexity: O(1) constant auxiliary memory.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Accepts empty or non-empty line slices safely.
-/// - State: Pure read-only predicate with zero side effects.
-/// - Action: Uses non-panicking `strip_prefix` and `starts_with` slice checks.
-/// - Resource: Zero heap allocations.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-HAS-MALFORMED-PREFIX-OR-HYBRID-HEADERS]
 fn has_malformed_prefix_or_hybrid_headers(current_doc: &[String]) -> bool {
     let mut realises_count: usize = 0;
@@ -2113,35 +1658,6 @@ fn has_malformed_prefix_or_hybrid_headers(current_doc: &[String]) -> bool {
 }
 
 /// Formats a single canonical `///` docstring line at `indent`, stripping any accidental leading `///` or `//!` markers from `text`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 36 docstring canonicalization
-/// (`format_normalized_doc_line`).
-/// Prevents `synthesize_7_section_docstring` from emitting doubled doc-comment markers when
-/// `text` originates from pre-existing comment lines.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Repeatedly strips leading `///` and `//!` prefixes and leading whitespace from `text` before formatting.
-/// - Emits `"{indent}///"` when the normalized payload is empty, or `"{indent}/// {clean}"` otherwise.
-///
-/// ## 3. Preconditions
-/// - `indent: &str` is the leading whitespace of the target AST item.
-/// - `text: &str` is the single-line docstring content payload to format.
-///
-/// ## 4. Postconditions
-/// - Returns an owned `String` starting with `"{indent}///"` and guaranteed not to have a secondary `///` or `//!` prefix.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `indent.len() + text.len()`.
-/// - Space Complexity: O(N) for the formatted output `String`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Handles empty strings and arbitrary repeated comment prefixes gracefully.
-/// - State: Pure string formatting helper.
-/// - Action: Zero panics or direct byte indexing.
-/// - Resource: Single `String` allocation per formatted line.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-FORMAT-NORMALIZED-DOC-LINE]
 fn format_normalized_doc_line(indent: &str, text: &str) -> String {
     let mut clean = text.trim();
@@ -2159,32 +1675,6 @@ fn format_normalized_doc_line(indent: &str, text: &str) -> String {
 }
 
 /// Normalizes a `///` docblock identically to Check 34 (`structural.rs:827-839`) and Check 36 (`docstring_gate.rs:965-977`).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 34/36 deduplication parity (`normalize_docblock_body`).
-/// Computes the exact normalized string key inserted into `seen_docblocks`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Skips line 1 (`skip(1)`), removes lines containing `"Realises:"`, strips leading `///` and `//!`
-///   markers, trims whitespace, drops empty lines, and joins with `"\n"`.
-///
-/// ## 3. Preconditions
-/// - `doc_lines: &[String]` is a slice of `///` docstring lines.
-///
-/// ## 4. Postconditions
-/// - Returns the canonical normalized body string used for per-file uniqueness verification.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(D) where D is the total byte length of `doc_lines`.
-/// - Space Complexity: O(D) for the joined normalized string.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Handles single-line or empty slices cleanly by returning `String::new()`.
-/// - State: Pure function.
-/// - Action: Zero byte indexing.
-/// - Resource: Single `String` allocation.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-NORMALIZE-DOCBLOCK-BODY]
 fn normalize_docblock_body(doc_lines: &[String]) -> String {
     doc_lines
@@ -2203,38 +1693,6 @@ fn normalize_docblock_body(doc_lines: &[String]) -> String {
 }
 
 /// Synthesizes a complete, Check-34/36-unique 7-section `///` docblock for `ctx`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and FEAT-42 Section 3.2 EBNF grammar (`synthesize_7_section_docstring`).
-/// Generates all 7 mandatory H2 sections (`## 1. Safety Intent & Regulatory Scope` through
-/// `## 7. Realization & Traceability`) with item-specific parameter, return-type, field/variant,
-/// complexity, failure-mode, and `Realises: [...]` interpolation.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Guarantees that the normalized body is unique in `seen_docblocks` across the enclosing source file.
-/// - Preserves any non-placeholder summary line and any existing `Realises: [...]` requirement IDs
-///   from `ctx.existing_doc`.
-///
-/// ## 3. Preconditions
-/// - `ctx: &ItemSynthesisContext` contains the extracted AST signature and context for the target item.
-/// - `seen_docblocks: &mut BTreeSet<String>` tracks normalized bodies already emitted in the file.
-///
-/// ## 4. Postconditions
-/// - Returns `Vec<String>` of indented `///` lines containing all 7 sections and registers the
-///   normalized body in `seen_docblocks`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(P + F + I) where P is parameter count, F is field/variant count, and I is invariant count.
-/// - Space Complexity: O(P + F + I) for the formatted docstring line vector.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Adapts phrasing cleanly between callable items (`fn`, `method`, `constructor`) and
-///   structural classifiers (`struct`, `enum`, `trait`, `class`, `mixin`, `extension`, `typedef`).
-/// - State: Updates `seen_docblocks` with the newly synthesized normalized body.
-/// - Action: Appends a disambiguating ordinal suffix if two items in the same file have identical signatures.
-/// - Resource: Bounded by single-item docstring line count (~28 lines).
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-SYNTHESIZE-7-SECTION-DOC]
 fn synthesize_7_section_docstring(
     ctx: &ItemSynthesisContext<'_>,
@@ -2505,34 +1963,6 @@ fn synthesize_7_section_docstring(
 }
 
 /// Inspects lines starting at `start_idx` in `raw_lines` to extract Rust callable signatures, struct fields, or enum variants.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and FEAT-42 Section 3.2 AST attribute interpolation (`inspect_rust_item_details`).
-/// Extracts formal parameters, return types, struct fields, enum variants, and body `assert!`
-/// expressions so synthesized Rust docstrings reflect the item's concrete AST structure.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Scans `raw_lines` starting at `start_idx` using `.get(..)` and balanced `{`/`}` brace-depth tracking without fixed line-window truncation or panicking.
-///
-/// ## 3. Preconditions
-/// - `raw_lines: &[&str]` is the full line slice of the Rust source file.
-/// - `start_idx: usize` is the 0-based index of the item declaration line.
-/// - `kind: SourceItemKind` is the classified kind of the item at `start_idx`.
-///
-/// ## 4. Postconditions
-/// - Returns `(params, return_type, fields_or_variants, invariants)` for `ItemSynthesisContext`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(B) where B is the number of lines spanned by the target AST item in `raw_lines`.
-/// - Space Complexity: O(P + F) where P is parameter count and F is field/variant count.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Safely bounds lookahead at item termination (`brace_depth <= 0` or `;`) and EOF via `.get(..)`.
-/// - State: Pure read-only lookahead over `raw_lines`.
-/// - Action: Never panics.
-/// - Resource: Bounded small vectors.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-INSPECT-RUST-ITEM-DETAILS]
 fn inspect_rust_item_details(
     raw_lines: &[&str],
@@ -2681,35 +2111,6 @@ fn inspect_rust_item_details(
 }
 
 /// Inspects lines starting at `start_idx` in `raw_lines` to extract Dart callable signatures, `assert(...)` invariants, class/mixin/extension fields, or enum variants.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and FEAT-42 Section 3.2 AST attribute interpolation (`inspect_dart_item_details`).
-/// Extracts formal parameters, return types, class/mixin/extension fields, enum variants, and callable
-/// `assert(...)` expressions so synthesized Dart docstrings reflect the item's concrete AST structure.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Scans `raw_lines` starting at `start_idx` using `.get(..)` and balanced delimiter tracking (`update_ast_delimiter_depths`) without arbitrary count caps or panicking indexing.
-/// - Deduplicates extracted `fields_or_variants` and `invariants` in declaration order.
-///
-/// ## 3. Preconditions
-/// - `raw_lines: &[&str]` is the full line slice of the Dart source file.
-/// - `start_idx: usize` is the 0-based index of the item declaration line.
-/// - `kind: SourceItemKind` and `item_name: &str` identify the classified Dart AST item at `start_idx`.
-///
-/// ## 4. Postconditions
-/// - Returns `(params, return_type, fields_or_variants, invariants)` for `ItemSynthesisContext`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(B) where B is the number of lines spanned by the target Dart AST item in `raw_lines`.
-/// - Space Complexity: O(P + F + I) where P is parameter count, F is field/variant count, and I is invariant count.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Safely bounds lookahead at item termination (`item_brace_depth == 0` or `;`) and EOF via `.get(..)`.
-/// - State: Pure read-only lookahead over `raw_lines`.
-/// - Action: Never panics or unwraps.
-/// - Resource: Bounded vectors proportional to item members.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-INSPECT-DART-ITEM-DETAILS]
 fn inspect_dart_item_details(
     raw_lines: &[&str],
@@ -2942,32 +2343,6 @@ pub fn collect_all_parts<'a>(
 }
 
 /// Extracts the first argument expression of a Rust `assert!(...)` or `debug_assert!(...)` invocation with balanced delimiter tracking.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and FEAT-42 Section 3.2 invariant extraction (`extract_balanced_rust_assert_cond`).
-/// Ensures `assert!(...)` conditions containing nested function calls, tuple/array literals, or commas are extracted intact without premature truncation.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Tracks `paren_depth` (initialized to `1`), `bracket_depth`, `brace_depth`, string literals, and character literals.
-/// - Returns `after_open_paren.get(..idx).map(str::trim)` when a top-level `,` (`paren_depth == 1 && bracket_depth == 0 && brace_depth == 0`) or closing `)` (`paren_depth == 0`) is encountered.
-///
-/// ## 3. Preconditions
-/// - `after_open_paren: &str` is the slice immediately following `"assert!("` or `"debug_assert!("`.
-///
-/// ## 4. Postconditions
-/// - Returns `Some(condition_slice)` when the balanced condition argument is delimited on the line, or `None` if unclosed.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `after_open_paren.len()`.
-/// - Space Complexity: O(1) zero heap allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Uses `.get(..idx)` slice projection with zero direct indexing.
-/// - State: Pure lexical state machine over a single line slice.
-/// - Action: Returns `None` gracefully on multiline or unclosed macro invocations.
-/// - Resource: Zero heap allocations.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-EXTRACT-BALANCED-RUST-ASSERT-COND]
 fn extract_balanced_rust_assert_cond(after_open_paren: &str) -> Option<&str> {
     let mut paren_depth: i32 = 1;
@@ -3030,32 +2405,6 @@ fn extract_balanced_rust_assert_cond(after_open_paren: &str) -> Option<&str> {
 }
 
 /// Computes the net `{` minus `}` brace depth delta on a comment-stripped Rust line outside string and char literals.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and FEAT-42 Section 3.2 callable body boundary tracking (`count_rust_line_brace_delta`).
-/// Prevents inner `{ ... }` control-flow blocks from prematurely terminating `inspect_rust_item_details` invariant scans.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Increments `delta` and sets `saw_open = true` on each `{` outside string/character literals; decrements `delta` on each `}`.
-/// - Distinguishes Rust lifetime annotations (`'a`, `'static`) from character literals (`'{'`, `'}'`).
-///
-/// ## 3. Preconditions
-/// - `code: &str` is a comment-stripped Rust source line.
-///
-/// ## 4. Postconditions
-/// - Returns `(net_brace_delta, saw_open_brace)` for `code`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `code.len()`.
-/// - Space Complexity: O(1) constant stack memory.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Uses saturating arithmetic and `.get(..)` slice bounds.
-/// - State: Pure stateless lexical scan.
-/// - Action: Never panics on malformed literals or lifetimes.
-/// - Resource: Zero heap allocations.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-COUNT-RUST-LINE-BRACE-DELTA]
 fn count_rust_line_brace_delta(code: &str) -> (i32, bool) {
     let mut delta: i32 = 0;
@@ -3110,32 +2459,6 @@ fn count_rust_line_brace_delta(code: &str) -> (i32, bool) {
 }
 
 /// Checks whether a SysML `ConstraintDef` name (`c_name`) matches an `ActionDef` or callable name (`act_name`).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and FEAT-42 AC-03 schema constraint-to-action traceability (`constraint_matches_action`).
-/// Matches both direct action-named constraints and compiler-emitted `invariant_<act_name>_<idx>` constraint definitions.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns `true` if `schema_identifiers_match(c_name, act_name)` holds.
-/// - Also returns `true` when `c_name` starts with `invariant_` or `INVARIANT_` and the stripped body (or its prefix before the first or last `'_'`) matches `act_name`.
-///
-/// ## 3. Preconditions
-/// - `c_name: &str` is a candidate `ConstraintDef::name`; `act_name: &str` is an `ActionDef` or callable identifier.
-///
-/// ## 4. Postconditions
-/// - Returns `true` iff `c_name` is traceable to `act_name`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N + M) where N is `c_name.len()` and M is `act_name.len()`.
-/// - Space Complexity: O(1) zero heap allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Non-panicking `strip_prefix`, `split_once`, and `rsplit_once`.
-/// - State: Pure stateless comparator.
-/// - Action: Returns `false` for unrelated constraint names.
-/// - Resource: Zero heap allocations.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-CONSTRAINT-MATCHES-ACTION]
 fn constraint_matches_action(c_name: &str, act_name: &str) -> bool {
     if schema_identifiers_match(c_name, act_name) {
@@ -3163,35 +2486,6 @@ fn constraint_matches_action(c_name: &str, act_name: &str) -> bool {
 }
 
 /// Resolves optional requirement ID and constraint expression from `schema_model` for `(owner_name, item_name)`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and FEAT-42 AC-03 schema-to-docstring forward binding (`resolve_schema_context`).
-/// Binds SysML v2 `RequirementDef` and `ConstraintDef` declarations from `--schema` into synthesized
-/// safety docstrings when a matching part, action, or requirement is present in the model.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Searches `PartDef::satisfied_requirements`, inline `PartDef::requirements`, `PartDef::safety_realises`,
-///   `RequirementDef::satisfied_by`, `PartDef::constraints`, `PackageDef::action_defs`, `PackageDef::requirement_defs`,
-///   and `PackageDef::constraint_defs` deterministically without falling back to unrelated `.first()` package entries.
-///
-/// ## 3. Preconditions
-/// - `schema_model: Option<&PackageDef>` is the optional parsed SysML v2 model.
-/// - `owner_name: Option<&str>` and `item_name: &str` identify the target source item.
-///
-/// ## 4. Postconditions
-/// - Returns `(Option<req_id>, Option<constraint_expr>)` matched from `schema_model`, or `(None, None)` when unmatched.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(P + A + R + C) where P is total part count, A is action count, R is requirement count, and C is constraint count.
-/// - Space Complexity: O(P) for collected package and part reference slices.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Returns `(None, None)` when `schema_model` is `None` or the item has no schema match.
-/// - State: Pure read-only lookup.
-/// - Action: Never panics and never attributes unrelated package-level requirements to unmapped items.
-/// - Resource: Bounded reference vectors and at most two `String` clones.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-RESOLVE-SCHEMA-CONTEXT]
 fn resolve_schema_context(
     schema_model: Option<&PackageDef>,
@@ -3781,33 +3075,6 @@ pub fn resolve_schema_context_strict(
 }
 
 /// Compares a schema element identifier (`schema_ident`) against a source AST identifier (`source_ident`).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and FEAT-42 Section 3.2 deterministic symbol correspondence (`schema_identifiers_match`).
-/// Prevents false-positive requirement or constraint bindings on unrelated source symbols while matching
-/// exact or snake_case/PascalCase equivalent identifiers.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Symmetric equivalence relation over non-empty alphanumeric normalized tokens.
-/// - Returns `false` if either identifier has zero ASCII alphanumeric characters.
-///
-/// ## 3. Preconditions
-/// - `schema_ident: &str` and `source_ident: &str` are candidate symbol names.
-///
-/// ## 4. Postconditions
-/// - Returns `true` iff `schema_ident` and `source_ident` match case-insensitively after stripping `_` and `-`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N + M) where N is `schema_ident.len()` and M is `source_ident.len()`.
-/// - Space Complexity: O(1) streaming iterator comparison with zero heap allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Handles empty strings and punctuation safely.
-/// - State: Pure stateless comparator.
-/// - Action: Never panics.
-/// - Resource: Zero heap allocations.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-SCHEMA-IDENTIFIERS-MATCH]
 fn schema_identifiers_match(schema_ident: &str, source_ident: &str) -> bool {
     let mut a_iter = schema_ident
@@ -3834,32 +3101,6 @@ fn schema_identifiers_match(schema_ident: &str, source_ident: &str) -> bool {
 }
 
 /// Extracts the target type identifier and owner kind (`InherentImpl` vs `TraitImpl`) from a single-line Rust `impl` header with `{`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 (`extract_rust_impl_target_and_kind`).
-/// Distinguishes inherent `impl Type {` headers from `impl Trait for Type {` headers while preserving target type attribution.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Requires `extract_rust_impl_header_prefix(code)` to confirm an opening `impl` block header.
-/// - Classifies `TraitImpl` whenever `scan_rust_impl_segment(code)` locates a top-level trait-separating `for` token, even for non-nominal tuple or slice targets.
-///
-/// ## 3. Preconditions
-/// - `code: &str` is a comment-stripped Rust source line at parenthesis depth zero.
-///
-/// ## 4. Postconditions
-/// - Returns `Some((target_ident, owner_kind))` when `code` opens a Rust `impl` block, or `None` otherwise.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `code.len()`.
-/// - Space Complexity: O(I) where I is the target identifier byte length.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Non-panicking delegation to `extract_rust_impl_header_prefix`, `parse_rust_impl_header`, and `scan_rust_impl_segment`.
-/// - State: Pure stateless classifier.
-/// - Action: Returns `None` cleanly for non-`impl` lines.
-/// - Resource: At most one `String` allocation on match.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-0605], [REQ-FEAT-42-EXTRACT-IMPL-TARGET]
 fn extract_rust_impl_target_and_kind(code: &str) -> Option<(String, RustOwnerKind)> {
     extract_rust_impl_header_prefix(code)?;
@@ -3882,33 +3123,6 @@ fn extract_rust_impl_target_and_kind(code: &str) -> Option<(String, RustOwnerKin
 }
 
 /// Scans a Rust `impl` header line segment for a top-level trait-separating `for` keyword and top-level `where` clause.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 (`scan_rust_impl_segment`).
-/// Prevents `for<'a>` Higher-Ranked Trait Bounds and generic `Fn(...) -> R` bounds from misclassifying inherent `impl` blocks as trait implementations.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Tracks balanced `<...>`, `(...)`, and `[...]` delimiter depths while skipping `->` return-type arrows and `r#` raw identifiers.
-/// - Stops scanning immediately upon encountering a top-level `where` keyword or `{` block opener.
-/// - Ignores HRTB `for<'a>` tokens whose trailing `<` opens a lifetime parameter list.
-///
-/// ## 3. Preconditions
-/// - `segment: &str` is a comment-stripped Rust `impl` header line or continuation line.
-///
-/// ## 4. Postconditions
-/// - Returns `(Some(after_for_slice), saw_where)` if a trait-separating `for` keyword appears before `where`/`{`, or `(None, saw_where)`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) single-pass character scan where N is `segment.len()`.
-/// - Space Complexity: O(1) zero heap allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Uses `.get(..)` and saturating depth arithmetic exclusively.
-/// - State: Pure stack-local depth counters.
-/// - Action: Never panics on malformed or partial generic bounds.
-/// - Resource: Zero heap allocations.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-SCAN-RUST-IMPL-SEGMENT]
 fn scan_rust_impl_segment(segment: &str) -> (Option<&str>, bool) {
     let mut angle_depth: usize = 0;
@@ -3969,31 +3183,6 @@ fn scan_rust_impl_segment(segment: &str) -> (Option<&str>, bool) {
 }
 
 /// Extracts the leading nominal target type identifier from the slice following `for` in `impl Trait for Type`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A method-to-classifier attribution (`extract_target_from_trait_for_tail`).
-/// Strips leading reference (`&`), lifetime (`'a`), and mutability (`mut`) modifiers before extracting the target identifier.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Truncates at `{` or ` where ` prior to stripping reference and lifetime prefixes.
-///
-/// ## 3. Preconditions
-/// - `after_for: &str` is the trimmed slice immediately following a trait-separating `for` keyword.
-///
-/// ## 4. Postconditions
-/// - Returns `Some(type_ident)` for nominal target types, or `None` for tuple/slice/unit targets.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `after_for.len()`.
-/// - Space Complexity: O(I) where I is the extracted identifier byte length.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Non-panicking `split_once`, `strip_prefix`, and `.get(..)` operations.
-/// - State: Pure stateless extractor.
-/// - Action: Returns `None` cleanly for non-nominal target types.
-/// - Resource: Single `String` allocation on nominal match.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-EXTRACT-TARGET-FROM-TRAIT-FOR-TAIL]
 fn extract_target_from_trait_for_tail(after_for: &str) -> Option<String> {
     let before_brace = after_for
@@ -4019,33 +3208,6 @@ fn extract_target_from_trait_for_tail(after_for: &str) -> Option<String> {
 }
 
 /// Advances a multi-line `PendingRustImpl` state across a continuation line and pushes onto `impl_owner_stack` on `{`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 (`advance_pending_rust_impl`).
-/// Updates multi-line `impl` headers deterministically across `for Type`, `where`, and `{` lines.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Inspects `scan_rust_impl_segment(code)` only while `!pending.in_where_clause`, preventing HRTB `for<'a>` predicates
-///   after `where` from mutating `pending.kind` or `pending.target`.
-///
-/// ## 3. Preconditions
-/// - `code: &str` is a non-empty comment-stripped continuation line at `brace_depth == 0 && paren_depth == 0`.
-/// - `pending_impl: &mut Option<PendingRustImpl>` holds the active pending multi-line `impl` state.
-///
-/// ## 4. Postconditions
-/// - Transitions `pending_impl` into `impl_owner_stack` when `code` opens `{`, clears `pending_impl` on `;`/`}`, or updates `pending_impl` in place.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `code.len()`.
-/// - Space Complexity: O(1) auxiliary memory beyond target identifier updates.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Operates safely if `pending_impl` is `None`.
-/// - State: Atomic ownership transfer via `.take()` upon `{`.
-/// - Action: Never panics.
-/// - Resource: Zero extra allocations unless `target` is updated after `for`.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-ADVANCE-PENDING-RUST-IMPL]
 fn advance_pending_rust_impl(
     code: &str,
@@ -4080,31 +3242,6 @@ fn advance_pending_rust_impl(
 }
 
 /// Strips any leading inline `#[...]` attributes on the same line as a Rust item declaration.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A Rust visibility inspection (`strip_leading_inline_rust_attrs`).
-/// Ensures inline attributes such as `#[inline] pub fn ...` do not obscure the leading `pub ` visibility token.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Advances past balanced `[` and `]` brackets for each leading `#[...]` attribute prefix.
-///
-/// ## 3. Preconditions
-/// - `code: &str` is a comment-stripped Rust source line.
-///
-/// ## 4. Postconditions
-/// - Returns the borrowed trailing `&str` slice following any balanced inline `#[...]` prefixes.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `code.len()`.
-/// - Space Complexity: O(1) zero heap allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Halts safely and returns the unconsumed slice if an inline attribute bracket is unclosed on the line.
-/// - State: Pure borrowed slice projection.
-/// - Action: Uses `.get(..)` and saturating depth counters.
-/// - Resource: Zero heap allocation.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-STRIP-LEADING-INLINE-RUST-ATTRS]
 fn strip_leading_inline_rust_attrs(code: &str) -> &str {
     let mut rest = code.trim_start();
@@ -4132,31 +3269,6 @@ fn strip_leading_inline_rust_attrs(code: &str) -> &str {
 }
 
 /// Strips restricted Rust visibility qualifiers (`pub(crate)`, `pub(super)`, `pub(self)`, `pub(in ...)`) from `code`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 (`strip_restricted_pub_visibility`).
-/// Allows restricted-visibility items such as `pub(in crate::...) fn` or `pub (crate) fn` to be classified as Tier B/C items.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Matches `pub` followed by optional whitespace and a balanced `(...)` visibility scope specifier.
-///
-/// ## 3. Preconditions
-/// - `code: &str` is a comment-stripped, attribute-stripped Rust declaration line.
-///
-/// ## 4. Postconditions
-/// - Returns `Some(trailing_decl)` after the closing `)` of `pub(...)`, or `None` if `code` has no restricted `pub(...)` prefix.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `code.len()`.
-/// - Space Complexity: O(1) zero heap allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Returns `None` if parentheses are unbalanced on the line.
-/// - State: Pure borrowed slice projection.
-/// - Action: Uses `.strip_prefix` and `.get(..)` exclusively.
-/// - Resource: Zero heap allocation.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-STRIP-RESTRICTED-PUB-VISIBILITY]
 fn strip_restricted_pub_visibility(code: &str) -> Option<&str> {
     let after_pub = code.strip_prefix("pub")?.trim_start();
@@ -4180,34 +3292,6 @@ fn strip_restricted_pub_visibility(code: &str) -> Option<&str> {
 }
 
 /// Classifies a Rust declaration line and computes its Tier A (`true`) versus Tier B/C (`false`) documentation tier.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and DEAP Rust Coding Standard v2.0 Section 4.1 (`classify_rust_item_with_tier_ast`).
-/// Assigns `is_tier_a = true` strictly to exact-`pub ` items at module scope or inside inherent `impl Type` blocks,
-/// and assigns `is_tier_a = false` to private items, `pub(crate)`/`pub(super)`/`pub(in ...)` items, and `impl Trait for Type` methods.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `has_exact_pub` holds iff the attribute-stripped declaration begins with `pub` + whitespace and the next non-whitespace byte is not `'('`.
-/// - `is_tier_a == (has_exact_pub && matches!(enclosing_owner_kind, None | Some(RustOwnerKind::InherentImpl)))`.
-///
-/// ## 3. Preconditions
-/// - `code: &str` is a comment-stripped Rust source line at parenthesis depth zero.
-/// - `enclosing_owner_kind: Option<RustOwnerKind>` reflects the top of `impl_owner_stack`.
-///
-/// ## 4. Postconditions
-/// - Returns `Some((kind, item_name, is_tier_a))` for recognized Rust AST items, or `None` otherwise.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `code.len()`.
-/// - Space Complexity: O(I) where I is `item_name.len()`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Delegates item kind/name extraction to `classify_rust_item_line_ast` with fallback over `strip_restricted_pub_visibility`.
-/// - State: Pure stateless classifier.
-/// - Action: Zero panics or direct slice indexing.
-/// - Resource: Single `String` allocation for `item_name` on match.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-CLASSIFY-RUST-ITEM-WITH-TIER]
 fn classify_rust_item_with_tier_ast(
     code: &str,
@@ -4233,31 +3317,6 @@ fn classify_rust_item_with_tier_ast(
 }
 
 /// Checks whether a joined docblock contains `Realises: [<non-empty>]`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 36 traceability validation (`docblock_has_non_empty_realises`).
-/// Ensures vacuous `Realises: []` tags are recognized as incomplete and re-synthesized.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns `true` iff `"Realises: ["` is followed on the same line by `']'` with non-empty trimmed interior text.
-///
-/// ## 3. Preconditions
-/// - `doc_block: &str` is a newline-joined docstring block.
-///
-/// ## 4. Postconditions
-/// - Returns a boolean indicating whether a non-empty requirement realization tag is present.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `doc_block.len()`.
-/// - Space Complexity: O(1) zero allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Safe `split_once` operations.
-/// - State: Pure predicate.
-/// - Action: Never panics.
-/// - Resource: Zero heap allocations.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-DOCBLOCK-NON-EMPTY-REALISES]
 fn docblock_has_non_empty_realises(doc_block: &str) -> bool {
     if let Some((_, after_prefix)) = doc_block.split_once("Realises: [") {
@@ -4269,62 +3328,12 @@ fn docblock_has_non_empty_realises(doc_block: &str) -> bool {
 }
 
 /// Checks whether any line in `doc_lines` is a forbidden placeholder docstring.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 36 anti-placeholder governance (`any_placeholder_in_doc`).
-/// Ensures `/// Member documentation.` stubs and unfinished marker tokens are detected and replaced during docstring injection.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Evaluates `has_placeholder_doc_line(line)` over every element of `doc_lines`.
-///
-/// ## 3. Preconditions
-/// - `doc_lines: &[String]` is a slice of `///` or `//!` lines.
-///
-/// ## 4. Postconditions
-/// - Returns `true` if any line in `doc_lines` is a placeholder stub, or `false` otherwise.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(D) where D is total byte length of `doc_lines`.
-/// - Space Complexity: O(1) auxiliary memory.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Accepts empty or non-empty slices.
-/// - State: Pure predicate.
-/// - Action: Short-circuits on first placeholder match.
-/// - Resource: Bounded by single line length.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-ANY-PLACEHOLDER-IN-DOC]
 fn any_placeholder_in_doc(doc_lines: &[String]) -> bool {
     doc_lines.iter().any(|l| has_placeholder_doc_line(l))
 }
 
 /// Replaces balanced inline backtick code spans and double-quoted literals on a single line with spaces.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A lexical placeholder precision (`strip_balanced_code_and_quote_spans`).
-/// Prevents documented Rust macro references in backticks or quoted diagnostic examples from false-positiving as unfinished doc placeholders.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Elides a `` `...` `` or `"..."` span only when a matching closing delimiter exists on the same line; unclosed delimiters remain visible to placeholder scanning.
-///
-/// ## 3. Preconditions
-/// - `raw: &str` is a single doc-comment line stripped of its leading `///` or `//!` prefix.
-///
-/// ## 4. Postconditions
-/// - Returns a `String` containing all unquoted/unbackticked prose tokens separated by whitespace.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `raw.len()`.
-/// - Space Complexity: O(N) for the filtered single-line buffer.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Uses `char_indices`, `.get(..)`, and `saturating_add` without direct byte indexing.
-/// - State: Pure local scan over `raw`.
-/// - Action: Never panics on multi-byte UTF-8 or unclosed delimiters.
-/// - Resource: Single `String` allocation bounded by `raw.len()`.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-STRIP-BALANCED-CODE-AND-QUOTE-SPANS]
 fn strip_balanced_code_and_quote_spans(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
@@ -4352,32 +3361,6 @@ fn strip_balanced_code_and_quote_spans(raw: &str) -> String {
 }
 
 /// Checks whether a single docstring line contains forbidden placeholder phrases or unfinished marker tokens.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 (`has_placeholder_doc_line`).
-/// Rejects both legacy stub phrases and unfinished four-letter/three-letter placeholder markers across Tier A and Tier B/C docblocks.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Evaluates lowercased leading phrase tokens without runtime needle concatenation.
-/// - Scans standalone alphanumeric/underscore/`!` tokens outside balanced code/quote spans case-insensitively so macro tokens ending in `!` are never misclassified.
-///
-/// ## 3. Preconditions
-/// - `doc_line: &str` is a `///` or `//!` comment line (or stripped summary string).
-///
-/// ## 4. Postconditions
-/// - Returns `true` iff `doc_line` contains a banned placeholder phrase or unfinished marker token.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `doc_line.len()`.
-/// - Space Complexity: O(N) for single-line comparison buffers.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Safe prefix stripping and case-insensitive token comparison.
-/// - State: Pure function.
-/// - Action: Never panics.
-/// - Resource: Bounded by single-line byte length.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-HAS-PLACEHOLDER-DOC-LINE]
 fn has_placeholder_doc_line(doc_line: &str) -> bool {
     let raw = strip_outer_doc_marker(doc_line);
@@ -4406,31 +3389,6 @@ fn has_placeholder_doc_line(doc_line: &str) -> bool {
 }
 
 /// Extracts the leading whitespace slice from `raw_line`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A source formatting preservation (`leading_whitespace`).
-/// Ensures synthesized `///` lines match the exact indentation column of the target declaration.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns the prefix of `raw_line` preceding the first non-whitespace character using `.get(..)`.
-///
-/// ## 3. Preconditions
-/// - `raw_line: &str` is an untrimmed source line.
-///
-/// ## 4. Postconditions
-/// - Returns a borrowed `&str` containing only leading spaces/tabs.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(W) where W is the leading whitespace byte count.
-/// - Space Complexity: O(1) zero allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Uses `.get(..)` with fallback to `""`.
-/// - State: Pure slice projection.
-/// - Action: Never panics.
-/// - Resource: Zero heap allocation.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-LEADING-WHITESPACE]
 fn leading_whitespace(raw_line: &str) -> &str {
     let trimmed_len = raw_line.trim_start().len();
@@ -4439,32 +3397,6 @@ fn leading_whitespace(raw_line: &str) -> &str {
 }
 
 /// Derives an uppercase requirement tag prefix from a file path (`file_rel`).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A deterministic requirement ID synthesis (`derive_module_req_tag`).
-/// Produces a stable uppercase module token (e.g., `VERIFY-BASELINE-RUNNER`) for `Realises: [REQ-...]` tags.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Filters path components (`crates`, `src`, `app_flutter`, `lib`) and joins remaining stem tokens
-///   in uppercase ASCII separated by `'-'`.
-///
-/// ## 3. Preconditions
-/// - `file_rel: &str` is a relative or absolute file path.
-///
-/// ## 4. Postconditions
-/// - Returns a non-empty uppercase ASCII tag string.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(P) where P is `file_rel.len()`.
-/// - Space Complexity: O(P) for the formatted tag string.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Falls back to `"MODULE"` if no alphanumeric path segments exist.
-/// - State: Pure string transformation.
-/// - Action: Infallible character filtering.
-/// - Resource: Single `String` allocation.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-DERIVE-MODULE-REQ-TAG]
 fn derive_module_req_tag(file_rel: &str) -> String {
     let path = Path::new(file_rel);
@@ -4525,31 +3457,6 @@ fn derive_module_req_tag(file_rel: &str) -> String {
 }
 
 /// Sanitizes an identifier into an uppercase hyphenated requirement ID segment.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A requirement identifier formatting (`sanitize_req_segment`).
-/// Converts snake_case or camelCase identifiers into clean `UPPER-HYPHEN` requirement tokens.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Emits only `[A-Z0-9-]` characters with no leading, trailing, or consecutive hyphens.
-///
-/// ## 3. Preconditions
-/// - `raw: &str` is an identifier or path stem.
-///
-/// ## 4. Postconditions
-/// - Returns a non-empty uppercase requirement segment string (or `"ITEM"` if `raw` has no alphanumerics).
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `raw.len()`.
-/// - Space Complexity: O(N) for the returned `String`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Handles arbitrary punctuation safely.
-/// - State: Pure function.
-/// - Action: Never panics.
-/// - Resource: Single `String` allocation.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-SANITIZE-REQ-SEGMENT]
 fn sanitize_req_segment(raw: &str) -> String {
     let mut out = String::new();

@@ -144,7 +144,9 @@ impl TrackerIssue {
         if self.state.eq_ignore_ascii_case("closed") {
             return true;
         }
-        self.labels.iter().any(|label| is_resolved_label(label.name()))
+        self.labels
+            .iter()
+            .any(|label| is_resolved_label(label.name()))
     }
 }
 
@@ -176,7 +178,9 @@ impl TrackerIssue {
 /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-IS-RESOLVED-LABEL] | SysML v2: ActionDef(is_resolved_label)
 pub fn is_resolved_label(label: &str) -> bool {
     let l_norm = normalize_label(label);
-    l_norm == "status:fixed-resolved" || l_norm == "status::fixed-resolved" || l_norm == "fixed-resolved"
+    l_norm == "status:fixed-resolved"
+        || l_norm == "status::fixed-resolved"
+        || l_norm == "fixed-resolved"
 }
 
 /// Normalizes issue labels for robust matching.
@@ -241,7 +245,9 @@ pub fn canonicalize_spec_type(raw: &str) -> String {
     match norm.as_str() {
         "epic" | "epics" => "epic".to_string(),
         "feature" | "features" | "feat" => "feature".to_string(),
-        "user-story" | "user-stories" | "user_story" | "user_stories" | "us" => "user-story".to_string(),
+        "user-story" | "user-stories" | "user_story" | "user_stories" | "us" => {
+            "user-story".to_string()
+        }
         "use-case" | "use-cases" | "use_case" | "use_cases" | "uc" => "use-case".to_string(),
         other => other.to_string(),
     }
@@ -297,7 +303,8 @@ pub fn infer_spec_type_from_title(title: &str) -> Option<String> {
                 || rem.starts_with('_')
                 || rem.starts_with(':')
                 || rem.starts_with(|c: char| c.is_ascii_digit())
-                || (rem.starts_with('s') && (rem.len() == 1 || rem[1..].starts_with([' ', '-', '_', ':'])))
+                || (rem.starts_with('s')
+                    && (rem.len() == 1 || rem[1..].starts_with([' ', '-', '_', ':'])))
             {
                 return Some((*canonical).to_string());
             }
@@ -340,11 +347,17 @@ pub fn normalize_title(title: &str) -> String {
 
     let lower = trimmed.to_ascii_lowercase();
     const PREFIX_KEYWORDS: &[&str] = &[
-        "user-story", "user story", "user_story",
-        "use-case", "use case", "use_case",
-        "feature", "feat",
+        "user-story",
+        "user story",
+        "user_story",
+        "use-case",
+        "use case",
+        "use_case",
+        "feature",
+        "feat",
         "epic",
-        "us", "uc",
+        "us",
+        "uc",
     ];
 
     let mut matched_len = 0;
@@ -371,7 +384,10 @@ pub fn normalize_title(title: &str) -> String {
 
             let mut temp_rem = rem;
             let mut temp_consumed = consumed;
-            while temp_rem.starts_with('-') || temp_rem.starts_with(' ') || temp_rem.starts_with('_') {
+            while temp_rem.starts_with('-')
+                || temp_rem.starts_with(' ')
+                || temp_rem.starts_with('_')
+            {
                 temp_rem = &temp_rem[1..];
                 temp_consumed += 1;
             }
@@ -447,235 +463,45 @@ pub fn normalize_title(title: &str) -> String {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT] | SysML v2: PartDef(TrackerClient)
 pub trait TrackerClient {
-    /// Executes deterministic fn `TrackerClient::fetch_all_issues` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TrackerClient::fetch_all_issues` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `TrackerClient::fetch_all_issues` (declaration #11) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `TrackerClient::fetch_all_issues` in `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<Vec<TrackerIssue>, String>` from `TrackerClient::fetch_all_issues` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(fetch_all_issues)) bounded over input/member dimension of `TrackerClient::fetch_all_issues`.
-    /// - Space Complexity: O(K(fetch_all_issues)) bounded auxiliary memory for `TrackerClient::fetch_all_issues`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `TrackerClient::fetch_all_issues` (`Result<Vec<TrackerIssue>, String>`).
-    /// - State: Maintains consistent state invariants across `TrackerClient::fetch_all_issues` without partial mutation on error.
-    /// - Action: Executes `TrackerClient::fetch_all_issues` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `TrackerClient::fetch_all_issues` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-FETCH-ALL-ISSUES] | SysML v2: ActionDef(TrackerClient::fetch_all_issues)
+    /// Fetches all open and closed issues from the backing issue tracker.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-FETCH-ALL-ISSUES]
     fn fetch_all_issues(&self) -> Result<Vec<TrackerIssue>, String>;
-    /// Executes deterministic fn `TrackerClient::update_issue_body` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TrackerClient::update_issue_body` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `TrackerClient::update_issue_body` (declaration #12) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::update_issue_body`.
-    /// - `body: &str` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::update_issue_body`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `TrackerClient::update_issue_body` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(issue_number)) bounded over input/member dimension of `TrackerClient::update_issue_body`.
-    /// - Space Complexity: O(N(issue_number)) bounded auxiliary memory for `TrackerClient::update_issue_body`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `TrackerClient::update_issue_body` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `TrackerClient::update_issue_body` without partial mutation on error.
-    /// - Action: Executes `TrackerClient::update_issue_body` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `TrackerClient::update_issue_body` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-UPDATE-ISSUE-BODY] | SysML v2: ActionDef(TrackerClient::update_issue_body)
+    /// Replaces the markdown body of `issue_number` in the backing tracker.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-UPDATE-ISSUE-BODY]
     fn update_issue_body(&self, issue_number: u64, body: &str) -> Result<(), String>;
-    /// Executes deterministic fn `TrackerClient::update_issue_title` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TrackerClient::update_issue_title` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `TrackerClient::update_issue_title` within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::update_issue_title`.
-    /// - `title: &str` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::update_issue_title`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `TrackerClient::update_issue_title` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(title)) bounded over input/member dimension of `TrackerClient::update_issue_title`.
-    /// - Space Complexity: O(N(title)) bounded auxiliary memory for `TrackerClient::update_issue_title`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `TrackerClient::update_issue_title` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `TrackerClient::update_issue_title` without partial mutation on error.
-    /// - Action: Executes `TrackerClient::update_issue_title` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `TrackerClient::update_issue_title` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-UPDATE-ISSUE-TITLE] | SysML v2: ActionDef(TrackerClient::update_issue_title)
+    /// Updates the title of `issue_number` in the backing tracker (no-op by default).
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-UPDATE-ISSUE-TITLE]
     fn update_issue_title(&self, issue_number: u64, title: &str) -> Result<(), String> {
         let _ = (issue_number, title);
         Ok(())
     }
-    /// Executes deterministic fn `TrackerClient::add_label` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TrackerClient::add_label` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `TrackerClient::add_label` (declaration #13) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::add_label`.
-    /// - `label: &str` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::add_label`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `TrackerClient::add_label` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(issue_number)) bounded over input/member dimension of `TrackerClient::add_label`.
-    /// - Space Complexity: O(N(issue_number)) bounded auxiliary memory for `TrackerClient::add_label`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `TrackerClient::add_label` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `TrackerClient::add_label` without partial mutation on error.
-    /// - Action: Executes `TrackerClient::add_label` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `TrackerClient::add_label` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-ADD-LABEL] | SysML v2: ActionDef(TrackerClient::add_label)
+    /// Attaches `label` to `issue_number` in the backing tracker.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-ADD-LABEL]
     fn add_label(&self, issue_number: u64, label: &str) -> Result<(), String>;
-    /// Executes deterministic fn `TrackerClient::create_issue` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TrackerClient::create_issue` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `TrackerClient::create_issue` (declaration #14) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `title: &str` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::create_issue`.
-    /// - `body: &str` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::create_issue`.
-    /// - `label: &str` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::create_issue`.
-    /// - `repo: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::create_issue`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(u64, String), String>` from `TrackerClient::create_issue` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(title)) bounded over input/member dimension of `TrackerClient::create_issue`.
-    /// - Space Complexity: O(N(title)) bounded auxiliary memory for `TrackerClient::create_issue`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `TrackerClient::create_issue` (`Result<(u64, String), String>`).
-    /// - State: Maintains consistent state invariants across `TrackerClient::create_issue` without partial mutation on error.
-    /// - Action: Executes `TrackerClient::create_issue` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `TrackerClient::create_issue` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-CREATE-ISSUE] | SysML v2: ActionDef(TrackerClient::create_issue)
-    fn create_issue(&self, title: &str, body: &str, label: &str, repo: Option<&str>) -> Result<(u64, String), String>;
-    /// Executes deterministic fn `TrackerClient::ensure_label_exists` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TrackerClient::ensure_label_exists` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `TrackerClient::ensure_label_exists` (declaration #15) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `label: &str` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::ensure_label_exists`.
-    /// - `repo: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::ensure_label_exists`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `TrackerClient::ensure_label_exists` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(label)) bounded over input/member dimension of `TrackerClient::ensure_label_exists`.
-    /// - Space Complexity: O(N(label)) bounded auxiliary memory for `TrackerClient::ensure_label_exists`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `TrackerClient::ensure_label_exists` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `TrackerClient::ensure_label_exists` without partial mutation on error.
-    /// - Action: Executes `TrackerClient::ensure_label_exists` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `TrackerClient::ensure_label_exists` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-ENSURE-LABEL-EXISTS] | SysML v2: ActionDef(TrackerClient::ensure_label_exists)
+    /// Creates a new issue with `title`, `body`, and `label`, returning `(issue_number, url)`.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-CREATE-ISSUE]
+    fn create_issue(
+        &self,
+        title: &str,
+        body: &str,
+        label: &str,
+        repo: Option<&str>,
+    ) -> Result<(u64, String), String>;
+    /// Ensures `label` is defined in the target tracker repository before assignment.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-ENSURE-LABEL-EXISTS]
     fn ensure_label_exists(&self, label: &str, repo: Option<&str>) -> Result<(), String>;
-    /// Executes deterministic fn `TrackerClient::reopen_issue` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TrackerClient::reopen_issue` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `TrackerClient::reopen_issue` (declaration #16) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::reopen_issue`.
-    /// - `comment: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::reopen_issue`.
-    /// - `repo: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `TrackerClient::reopen_issue`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `TrackerClient::reopen_issue` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(issue_number)) bounded over input/member dimension of `TrackerClient::reopen_issue`.
-    /// - Space Complexity: O(N(issue_number)) bounded auxiliary memory for `TrackerClient::reopen_issue`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `TrackerClient::reopen_issue` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `TrackerClient::reopen_issue` without partial mutation on error.
-    /// - Action: Executes `TrackerClient::reopen_issue` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `TrackerClient::reopen_issue` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-REOPEN-ISSUE] | SysML v2: ActionDef(TrackerClient::reopen_issue)
-    fn reopen_issue(&self, issue_number: u64, comment: Option<&str>, repo: Option<&str>) -> Result<(), String>;
+    /// Reopens `issue_number`, strips resolved status labels, and records an optional comment.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-REOPEN-ISSUE]
+    fn reopen_issue(
+        &self,
+        issue_number: u64,
+        comment: Option<&str>,
+        repo: Option<&str>,
+    ) -> Result<(), String>;
 }
 
-/// Executes deterministic struct `OfflineState` within `crates/reconcile-backlog/src/tracker.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `OfflineState` in `crates/reconcile-backlog/src/tracker.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `OfflineState` across member set `[issues: Vec<TrackerIssue>, labels: Vec<String>, next_id: u64]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `OfflineState` members (`issues: Vec<TrackerIssue>, labels: Vec<String>, next_id: u64`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `OfflineState` representation for struct `OfflineState`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(3)) bounded over input/member dimension of `OfflineState`.
-/// - Space Complexity: O(M(3)) bounded auxiliary memory for `OfflineState`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `OfflineState` (`OfflineState`).
-/// - State: Maintains consistent state invariants across `OfflineState` without partial mutation on error.
-/// - Action: Executes `OfflineState` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `OfflineState` (`RECONCILE-BACKLOG-TRACKER`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINESTATE] | SysML v2: PartDef(OfflineState)
+/// In-memory issue, label, and monotonic ID state guarded by [`OfflineTracker`].
+/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINESTATE]
 #[derive(Default)]
 struct OfflineState {
     issues: Vec<TrackerIssue>,
@@ -790,95 +616,22 @@ impl OfflineTracker {
 
 impl Default for OfflineTracker {
     /// Constructs an empty offline tracker; equivalent to [`OfflineTracker::new`].
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `OfflineTracker::default` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `OfflineTracker::default` (declaration #21) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `OfflineTracker::default` in `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Self` from `OfflineTracker::default` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(default)) bounded over input/member dimension of `OfflineTracker::default`.
-    /// - Space Complexity: O(K(default)) bounded auxiliary memory for `OfflineTracker::default`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `OfflineTracker::default` (`Self`).
-    /// - State: Maintains consistent state invariants across `OfflineTracker::default` without partial mutation on error.
-    /// - Action: Executes `OfflineTracker::default` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `OfflineTracker::default` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-DEFAULT] | SysML v2: ActionDef(OfflineTracker::default)
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-DEFAULT]
     fn default() -> Self {
         Self::new()
     }
 }
 
 impl TrackerClient for OfflineTracker {
-    /// Executes deterministic fn `OfflineTracker::fetch_all_issues` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `OfflineTracker::fetch_all_issues` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `OfflineTracker::fetch_all_issues` (declaration #22) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `OfflineTracker::fetch_all_issues` in `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<Vec<TrackerIssue>, String>` from `OfflineTracker::fetch_all_issues` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(fetch_all_issues)) bounded over input/member dimension of `OfflineTracker::fetch_all_issues`.
-    /// - Space Complexity: O(K(fetch_all_issues)) bounded auxiliary memory for `OfflineTracker::fetch_all_issues`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `OfflineTracker::fetch_all_issues` (`Result<Vec<TrackerIssue>, String>`).
-    /// - State: Maintains consistent state invariants across `OfflineTracker::fetch_all_issues` without partial mutation on error.
-    /// - Action: Executes `OfflineTracker::fetch_all_issues` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `OfflineTracker::fetch_all_issues` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-FETCH-ALL-ISSUES] | SysML v2: ActionDef(OfflineTracker::fetch_all_issues)
+    /// Returns a cloned snapshot of all in-memory issues or a mutex poison error.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-FETCH-ALL-ISSUES]
     fn fetch_all_issues(&self) -> Result<Vec<TrackerIssue>, String> {
         let guard = self.state.lock().map_err(|e| e.to_string())?;
         Ok(guard.issues.clone())
     }
 
-    /// Executes deterministic fn `OfflineTracker::update_issue_body` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `OfflineTracker::update_issue_body` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `OfflineTracker::update_issue_body` (declaration #23) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::update_issue_body`.
-    /// - `body: &str` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::update_issue_body`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `OfflineTracker::update_issue_body` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(issue_number)) bounded over input/member dimension of `OfflineTracker::update_issue_body`.
-    /// - Space Complexity: O(N(issue_number)) bounded auxiliary memory for `OfflineTracker::update_issue_body`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `OfflineTracker::update_issue_body` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `OfflineTracker::update_issue_body` without partial mutation on error.
-    /// - Action: Executes `OfflineTracker::update_issue_body` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `OfflineTracker::update_issue_body` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-UPDATE-ISSUE-BODY] | SysML v2: ActionDef(OfflineTracker::update_issue_body)
+    /// Replaces the body of `issue_number` in memory, returning an error if the issue is missing.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-UPDATE-ISSUE-BODY]
     fn update_issue_body(&self, issue_number: u64, body: &str) -> Result<(), String> {
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         let issue = guard
@@ -890,33 +643,8 @@ impl TrackerClient for OfflineTracker {
         Ok(())
     }
 
-    /// Executes deterministic fn `OfflineTracker::update_issue_title` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `OfflineTracker::update_issue_title` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `OfflineTracker::update_issue_title` within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::update_issue_title`.
-    /// - `title: &str` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::update_issue_title`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `OfflineTracker::update_issue_title` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(issues)) bounded over input/member dimension of `OfflineTracker::update_issue_title`.
-    /// - Space Complexity: O(N(title)) bounded auxiliary memory for `OfflineTracker::update_issue_title`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `OfflineTracker::update_issue_title` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `OfflineTracker::update_issue_title` without partial mutation on error.
-    /// - Action: Executes `OfflineTracker::update_issue_title` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `OfflineTracker::update_issue_title` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-UPDATE-ISSUE-TITLE] | SysML v2: ActionDef(OfflineTracker::update_issue_title)
+    /// Updates the title of `issue_number` in memory, returning an error if the issue is missing.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-UPDATE-ISSUE-TITLE]
     fn update_issue_title(&self, issue_number: u64, title: &str) -> Result<(), String> {
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         let issue = guard
@@ -928,33 +656,8 @@ impl TrackerClient for OfflineTracker {
         Ok(())
     }
 
-    /// Executes deterministic fn `OfflineTracker::add_label` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `OfflineTracker::add_label` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `OfflineTracker::add_label` (declaration #24) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::add_label`.
-    /// - `label: &str` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::add_label`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `OfflineTracker::add_label` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(issue_number)) bounded over input/member dimension of `OfflineTracker::add_label`.
-    /// - Space Complexity: O(N(issue_number)) bounded auxiliary memory for `OfflineTracker::add_label`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `OfflineTracker::add_label` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `OfflineTracker::add_label` without partial mutation on error.
-    /// - Action: Executes `OfflineTracker::add_label` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `OfflineTracker::add_label` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-ADD-LABEL] | SysML v2: ActionDef(OfflineTracker::add_label)
+    /// Appends `label` to `issue_number` in memory, returning an error if the issue is missing.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-ADD-LABEL]
     fn add_label(&self, issue_number: u64, label: &str) -> Result<(), String> {
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         let issue = guard
@@ -966,36 +669,15 @@ impl TrackerClient for OfflineTracker {
         Ok(())
     }
 
-    /// Executes deterministic fn `OfflineTracker::create_issue` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `OfflineTracker::create_issue` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `OfflineTracker::create_issue` (declaration #25) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `title: &str` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::create_issue`.
-    /// - `body: &str` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::create_issue`.
-    /// - `label: &str` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::create_issue`.
-    /// - `repo: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::create_issue`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(u64, String), String>` from `OfflineTracker::create_issue` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(title)) bounded over input/member dimension of `OfflineTracker::create_issue`.
-    /// - Space Complexity: O(N(title)) bounded auxiliary memory for `OfflineTracker::create_issue`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `OfflineTracker::create_issue` (`Result<(u64, String), String>`).
-    /// - State: Maintains consistent state invariants across `OfflineTracker::create_issue` without partial mutation on error.
-    /// - Action: Executes `OfflineTracker::create_issue` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `OfflineTracker::create_issue` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-CREATE-ISSUE] | SysML v2: ActionDef(OfflineTracker::create_issue)
-    fn create_issue(&self, title: &str, body: &str, label: &str, repo: Option<&str>) -> Result<(u64, String), String> {
+    /// Allocates the next sequential issue ID and records a new open issue in memory.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-CREATE-ISSUE]
+    fn create_issue(
+        &self,
+        title: &str,
+        body: &str,
+        label: &str,
+        repo: Option<&str>,
+    ) -> Result<(u64, String), String> {
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         let id = guard.next_id;
         guard.next_id += 1;
@@ -1015,33 +697,8 @@ impl TrackerClient for OfflineTracker {
         Ok((id, url))
     }
 
-    /// Executes deterministic fn `OfflineTracker::ensure_label_exists` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `OfflineTracker::ensure_label_exists` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `OfflineTracker::ensure_label_exists` (declaration #26) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `label: &str` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::ensure_label_exists`.
-    /// - `_repo: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::ensure_label_exists`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `OfflineTracker::ensure_label_exists` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(label)) bounded over input/member dimension of `OfflineTracker::ensure_label_exists`.
-    /// - Space Complexity: O(N(label)) bounded auxiliary memory for `OfflineTracker::ensure_label_exists`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `OfflineTracker::ensure_label_exists` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `OfflineTracker::ensure_label_exists` without partial mutation on error.
-    /// - Action: Executes `OfflineTracker::ensure_label_exists` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `OfflineTracker::ensure_label_exists` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-ENSURE-LABEL-EXISTS] | SysML v2: ActionDef(OfflineTracker::ensure_label_exists)
+    /// Registers `label` in the offline label set if no normalized equivalent exists.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-ENSURE-LABEL-EXISTS]
     fn ensure_label_exists(&self, label: &str, _repo: Option<&str>) -> Result<(), String> {
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         let norm = normalize_label(label);
@@ -1051,35 +708,14 @@ impl TrackerClient for OfflineTracker {
         Ok(())
     }
 
-    /// Executes deterministic fn `OfflineTracker::reopen_issue` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `OfflineTracker::reopen_issue` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `OfflineTracker::reopen_issue` (declaration #27) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::reopen_issue`.
-    /// - `comment: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::reopen_issue`.
-    /// - `_repo: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `OfflineTracker::reopen_issue`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `OfflineTracker::reopen_issue` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(issue_number)) bounded over input/member dimension of `OfflineTracker::reopen_issue`.
-    /// - Space Complexity: O(N(issue_number)) bounded auxiliary memory for `OfflineTracker::reopen_issue`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `OfflineTracker::reopen_issue` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `OfflineTracker::reopen_issue` without partial mutation on error.
-    /// - Action: Executes `OfflineTracker::reopen_issue` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `OfflineTracker::reopen_issue` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-REOPEN-ISSUE] | SysML v2: ActionDef(OfflineTracker::reopen_issue)
-    fn reopen_issue(&self, issue_number: u64, comment: Option<&str>, _repo: Option<&str>) -> Result<(), String> {
+    /// Reopens `issue_number` in memory, strips resolved status labels, and appends any non-empty comment.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-REOPEN-ISSUE]
+    fn reopen_issue(
+        &self,
+        issue_number: u64,
+        comment: Option<&str>,
+        _repo: Option<&str>,
+    ) -> Result<(), String> {
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         let issue = guard
             .issues
@@ -1197,76 +833,40 @@ impl GitHubTracker {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-WITH-REPO] | SysML v2: ActionDef(GitHubTracker::with_repo)
     pub fn with_repo(repo: impl Into<String>) -> Self {
-        Self { repo: Some(repo.into()) }
+        Self {
+            repo: Some(repo.into()),
+        }
     }
 }
 
 impl Default for GitHubTracker {
     /// Constructs a tracker bound to the current repository; equivalent to [`GitHubTracker::new`].
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `GitHubTracker::default` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `GitHubTracker::default` (declaration #31) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `GitHubTracker::default` in `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Self` from `GitHubTracker::default` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(default)) bounded over input/member dimension of `GitHubTracker::default`.
-    /// - Space Complexity: O(K(default)) bounded auxiliary memory for `GitHubTracker::default`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `GitHubTracker::default` (`Self`).
-    /// - State: Maintains consistent state invariants across `GitHubTracker::default` without partial mutation on error.
-    /// - Action: Executes `GitHubTracker::default` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `GitHubTracker::default` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-DEFAULT] | SysML v2: ActionDef(GitHubTracker::default)
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-DEFAULT]
     fn default() -> Self {
         Self::new()
     }
 }
 
 impl TrackerClient for GitHubTracker {
-    /// Executes deterministic fn `GitHubTracker::fetch_all_issues` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `GitHubTracker::fetch_all_issues` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `GitHubTracker::fetch_all_issues` (declaration #32) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `GitHubTracker::fetch_all_issues` in `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<Vec<TrackerIssue>, String>` from `GitHubTracker::fetch_all_issues` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(fetch_all_issues)) bounded over input/member dimension of `GitHubTracker::fetch_all_issues`.
-    /// - Space Complexity: O(K(fetch_all_issues)) bounded auxiliary memory for `GitHubTracker::fetch_all_issues`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `GitHubTracker::fetch_all_issues` (`Result<Vec<TrackerIssue>, String>`).
-    /// - State: Maintains consistent state invariants across `GitHubTracker::fetch_all_issues` without partial mutation on error.
-    /// - Action: Executes `GitHubTracker::fetch_all_issues` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `GitHubTracker::fetch_all_issues` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-FETCH-ALL-ISSUES] | SysML v2: ActionDef(GitHubTracker::fetch_all_issues)
+    /// Queries `gh issue list` for all open and closed repository issues and deserializes the JSON payload.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-FETCH-ALL-ISSUES]
     fn fetch_all_issues(&self) -> Result<Vec<TrackerIssue>, String> {
         let mut cmd = Command::new("gh");
-        cmd.args(["issue", "list", "--limit", "1000", "--state", "all", "--json", "number,title,state,labels,body,url"]);
+        cmd.args([
+            "issue",
+            "list",
+            "--limit",
+            "1000",
+            "--state",
+            "all",
+            "--json",
+            "number,title,state,labels,body,url",
+        ]);
         if let Some(ref r) = self.repo {
             cmd.args(["--repo", r]);
         }
-        let output = cmd.output()
+        let output = cmd
+            .output()
             .map_err(|e| format!("Failed to execute 'gh issue list': {}", e))?;
 
         if !output.status.success() {
@@ -1281,63 +881,60 @@ impl TrackerClient for GitHubTracker {
         Ok(issues)
     }
 
-    /// Executes deterministic fn `GitHubTracker::update_issue_body` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `GitHubTracker::update_issue_body` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `GitHubTracker::update_issue_body` (declaration #33) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::update_issue_body`.
-    /// - `body: &str` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::update_issue_body`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `GitHubTracker::update_issue_body` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(issue_number)) bounded over input/member dimension of `GitHubTracker::update_issue_body`.
-    /// - Space Complexity: O(N(issue_number)) bounded auxiliary memory for `GitHubTracker::update_issue_body`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `GitHubTracker::update_issue_body` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `GitHubTracker::update_issue_body` without partial mutation on error.
-    /// - Action: Executes `GitHubTracker::update_issue_body` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `GitHubTracker::update_issue_body` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATE-ISSUE-BODY] | SysML v2: ActionDef(GitHubTracker::update_issue_body)
+    /// Updates `issue_number`'s body via `gh issue edit --body-file` with closed-loop readback verification.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATE-ISSUE-BODY]
     fn update_issue_body(&self, issue_number: u64, body: &str) -> Result<(), String> {
         use std::io::Write;
         let mut temp_file = tempfile_named()?;
-        temp_file.write_all(body.as_bytes())
+        temp_file
+            .write_all(body.as_bytes())
             .map_err(|e| format!("Failed to write temporary issue body file: {}", e))?;
-        temp_file.flush()
+        temp_file
+            .flush()
             .map_err(|e| format!("Failed to flush temporary issue body file: {}", e))?;
         let temp_path = temp_file.path.clone();
 
         let mut cmd = Command::new("gh");
-        cmd.args(["issue", "edit", &issue_number.to_string(), "--body-file", &temp_path]);
+        cmd.args([
+            "issue",
+            "edit",
+            &issue_number.to_string(),
+            "--body-file",
+            &temp_path,
+        ]);
         if let Some(ref r) = self.repo {
             cmd.args(["--repo", r]);
         }
-        let output = cmd.output()
+        let output = cmd
+            .output()
             .map_err(|e| format!("Failed to execute 'gh issue edit': {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("'gh issue edit' failed for issue #{}: {}", issue_number, stderr));
+            return Err(format!(
+                "'gh issue edit' failed for issue #{}: {}",
+                issue_number, stderr
+            ));
         }
 
         // Closed-loop readback verification
         let mut view_cmd = Command::new("gh");
-        view_cmd.args(["issue", "view", &issue_number.to_string(), "--json", "number,body"]);
+        view_cmd.args([
+            "issue",
+            "view",
+            &issue_number.to_string(),
+            "--json",
+            "number,body",
+        ]);
         if let Some(ref r) = self.repo {
             view_cmd.args(["--repo", r]);
         }
-        let view_output = view_cmd.output()
-            .map_err(|e| format!("Failed to execute 'gh issue view' for closed-loop verification: {}", e))?;
+        let view_output = view_cmd.output().map_err(|e| {
+            format!(
+                "Failed to execute 'gh issue view' for closed-loop verification: {}",
+                e
+            )
+        })?;
 
         if !view_output.status.success() {
             let stderr = String::from_utf8_lossy(&view_output.stderr);
@@ -1347,32 +944,8 @@ impl TrackerClient for GitHubTracker {
             ));
         }
 
-        /// Executes deterministic struct `GitHubTracker::UpdateViewPayload` within `crates/reconcile-backlog/src/tracker.rs`.
-        ///
-        /// ## 1. Safety Intent & Regulatory Scope
-        /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `GitHubTracker::UpdateViewPayload` in `crates/reconcile-backlog/src/tracker.rs`.
-        ///
-        /// ## 2. Invariants & Mathematical Properties
-        /// - Preserves structural type invariants for struct `GitHubTracker::UpdateViewPayload` across member set `[number: u64, body: Option<String>]`.
-        ///
-        /// ## 3. Preconditions
-        /// - Caller supplies well-formed values for `GitHubTracker::UpdateViewPayload` members (`number: u64, body: Option<String>`).
-        ///
-        /// ## 4. Postconditions
-        /// - Defines the authoritative `GitHubTracker::UpdateViewPayload` representation for struct `GitHubTracker::UpdateViewPayload`.
-        ///
-        /// ## 5. Algorithmic Complexity Bounds
-        /// - Time Complexity: O(M(2)) bounded over input/member dimension of `GitHubTracker::UpdateViewPayload`.
-        /// - Space Complexity: O(M(2)) bounded auxiliary memory for `GitHubTracker::UpdateViewPayload`.
-        ///
-        /// ## 6. Failure Modes & Fault Tolerance
-        /// - Interface: Validates boundary inputs and types for `GitHubTracker::UpdateViewPayload` (`GitHubTracker::UpdateViewPayload`).
-        /// - State: Maintains consistent state invariants across `GitHubTracker::UpdateViewPayload` without partial mutation on error.
-        /// - Action: Executes `GitHubTracker::UpdateViewPayload` deterministically with zero unbounded recursion or blocking.
-        /// - Resource: Bounds stack and heap allocations within `GitHubTracker::UpdateViewPayload` (`RECONCILE-BACKLOG-TRACKER`).
-        ///
-        /// ## 7. Realization & Traceability
-        /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATEVIEWPAYLOAD] | SysML v2: PartDef(GitHubTracker::UpdateViewPayload)
+        /// Deserialization payload for closed-loop `gh issue view` body readback verification.
+        /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATEVIEWPAYLOAD]
         #[derive(Deserialize)]
         struct UpdateViewPayload {
             number: u64,
@@ -1381,8 +954,12 @@ impl TrackerClient for GitHubTracker {
         }
 
         let view_str = String::from_utf8_lossy(&view_output.stdout);
-        let parsed: UpdateViewPayload = serde_json::from_str(&view_str)
-            .map_err(|e| format!("Failed to parse 'gh issue view' closed-loop verification output: {}", e))?;
+        let parsed: UpdateViewPayload = serde_json::from_str(&view_str).map_err(|e| {
+            format!(
+                "Failed to parse 'gh issue view' closed-loop verification output: {}",
+                e
+            )
+        })?;
 
         if parsed.number != issue_number {
             return Err(format!(
@@ -1401,142 +978,106 @@ impl TrackerClient for GitHubTracker {
         Ok(())
     }
 
-    /// Executes deterministic fn `GitHubTracker::update_issue_title` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `GitHubTracker::update_issue_title` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `GitHubTracker::update_issue_title` within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::update_issue_title`.
-    /// - `title: &str` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::update_issue_title`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `GitHubTracker::update_issue_title` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(title)) bounded over input/member dimension of `GitHubTracker::update_issue_title`.
-    /// - Space Complexity: O(N(title)) bounded auxiliary memory for `GitHubTracker::update_issue_title`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `GitHubTracker::update_issue_title` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `GitHubTracker::update_issue_title` without partial mutation on error.
-    /// - Action: Executes `GitHubTracker::update_issue_title` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `GitHubTracker::update_issue_title` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATE-ISSUE-TITLE] | SysML v2: ActionDef(GitHubTracker::update_issue_title)
+    /// Updates `issue_number`'s title via `gh issue edit --title`, rejecting empty titles.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATE-ISSUE-TITLE]
     fn update_issue_title(&self, issue_number: u64, title: &str) -> Result<(), String> {
         let trimmed = title.trim();
         if trimmed.is_empty() {
-            return Err(format!("Cannot set empty title for issue #{}", issue_number));
+            return Err(format!(
+                "Cannot set empty title for issue #{}",
+                issue_number
+            ));
         }
         let mut cmd = Command::new("gh");
-        cmd.args(["issue", "edit", &issue_number.to_string(), "--title", trimmed]);
+        cmd.args([
+            "issue",
+            "edit",
+            &issue_number.to_string(),
+            "--title",
+            trimmed,
+        ]);
         if let Some(ref r) = self.repo {
             cmd.args(["--repo", r]);
         }
-        let output = cmd.output()
+        let output = cmd
+            .output()
             .map_err(|e| format!("Failed to execute 'gh issue edit --title': {}", e))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("'gh issue edit --title' failed for issue #{}: {}", issue_number, stderr));
+            return Err(format!(
+                "'gh issue edit --title' failed for issue #{}: {}",
+                issue_number, stderr
+            ));
         }
         Ok(())
     }
 
-    /// Executes deterministic fn `GitHubTracker::add_label` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `GitHubTracker::add_label` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `GitHubTracker::add_label` (declaration #35) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::add_label`.
-    /// - `label: &str` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::add_label`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `GitHubTracker::add_label` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(issue_number)) bounded over input/member dimension of `GitHubTracker::add_label`.
-    /// - Space Complexity: O(N(issue_number)) bounded auxiliary memory for `GitHubTracker::add_label`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `GitHubTracker::add_label` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `GitHubTracker::add_label` without partial mutation on error.
-    /// - Action: Executes `GitHubTracker::add_label` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `GitHubTracker::add_label` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-ADD-LABEL] | SysML v2: ActionDef(GitHubTracker::add_label)
+    /// Attaches `label` to `issue_number` via `gh issue edit --add-label`.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-ADD-LABEL]
     fn add_label(&self, issue_number: u64, label: &str) -> Result<(), String> {
         let mut cmd = Command::new("gh");
-        cmd.args(["issue", "edit", &issue_number.to_string(), "--add-label", label]);
+        cmd.args([
+            "issue",
+            "edit",
+            &issue_number.to_string(),
+            "--add-label",
+            label,
+        ]);
         if let Some(ref r) = self.repo {
             cmd.args(["--repo", r]);
         }
-        let output = cmd.output()
+        let output = cmd
+            .output()
             .map_err(|e| format!("Failed to execute 'gh issue edit --add-label': {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("'gh issue edit --add-label' failed for issue #{}: {}", issue_number, stderr));
+            return Err(format!(
+                "'gh issue edit --add-label' failed for issue #{}: {}",
+                issue_number, stderr
+            ));
         }
 
         Ok(())
     }
 
-    /// Executes deterministic fn `GitHubTracker::create_issue` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `GitHubTracker::create_issue` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `GitHubTracker::create_issue` (declaration #36) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `title: &str` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::create_issue`.
-    /// - `body: &str` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::create_issue`.
-    /// - `label: &str` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::create_issue`.
-    /// - `repo: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::create_issue`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(u64, String), String>` from `GitHubTracker::create_issue` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(title)) bounded over input/member dimension of `GitHubTracker::create_issue`.
-    /// - Space Complexity: O(N(title)) bounded auxiliary memory for `GitHubTracker::create_issue`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `GitHubTracker::create_issue` (`Result<(u64, String), String>`).
-    /// - State: Maintains consistent state invariants across `GitHubTracker::create_issue` without partial mutation on error.
-    /// - Action: Executes `GitHubTracker::create_issue` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `GitHubTracker::create_issue` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-CREATE-ISSUE] | SysML v2: ActionDef(GitHubTracker::create_issue)
-    fn create_issue(&self, title: &str, body: &str, label: &str, repo: Option<&str>) -> Result<(u64, String), String> {
+    /// Creates a new GitHub issue via `gh issue create --body-file` and verifies the created issue number.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-CREATE-ISSUE]
+    fn create_issue(
+        &self,
+        title: &str,
+        body: &str,
+        label: &str,
+        repo: Option<&str>,
+    ) -> Result<(u64, String), String> {
         use std::io::Write;
         let target_repo = repo.or(self.repo.as_deref());
         let mut temp_file = tempfile_named()?;
-        temp_file.write_all(body.as_bytes())
+        temp_file
+            .write_all(body.as_bytes())
             .map_err(|e| format!("Failed to write temporary issue body file: {}", e))?;
-        temp_file.flush()
+        temp_file
+            .flush()
             .map_err(|e| format!("Failed to flush temporary issue body file: {}", e))?;
         let temp_path = temp_file.path.clone();
 
         let mut cmd = Command::new("gh");
-        cmd.args(["issue", "create", "--title", title, "--label", label, "--body-file", &temp_path]);
+        cmd.args([
+            "issue",
+            "create",
+            "--title",
+            title,
+            "--label",
+            label,
+            "--body-file",
+            &temp_path,
+        ]);
         if let Some(r) = target_repo {
             cmd.args(["--repo", r]);
         }
 
-        let output = cmd.output()
+        let output = cmd
+            .output()
             .map_err(|e| format!("Failed to execute 'gh issue create': {}", e))?;
 
         if !output.status.success() {
@@ -1570,8 +1111,12 @@ impl TrackerClient for GitHubTracker {
         if let Some(r) = target_repo {
             view_cmd.args(["--repo", r]);
         }
-        let view_output = view_cmd.output()
-            .map_err(|e| format!("Failed to execute 'gh issue view' for closed-loop verification: {}", e))?;
+        let view_output = view_cmd.output().map_err(|e| {
+            format!(
+                "Failed to execute 'gh issue view' for closed-loop verification: {}",
+                e
+            )
+        })?;
 
         if !view_output.status.success() {
             let stderr = String::from_utf8_lossy(&view_output.stderr);
@@ -1582,8 +1127,12 @@ impl TrackerClient for GitHubTracker {
         }
 
         let view_str = String::from_utf8_lossy(&view_output.stdout);
-        let parsed: TrackerIssue = serde_json::from_str(&view_str)
-            .map_err(|e| format!("Failed to parse 'gh issue view' verification output for issue #{}: {}", number, e))?;
+        let parsed: TrackerIssue = serde_json::from_str(&view_str).map_err(|e| {
+            format!(
+                "Failed to parse 'gh issue view' verification output for issue #{}: {}",
+                number, e
+            )
+        })?;
 
         if parsed.number != number {
             return Err(format!(
@@ -1595,33 +1144,8 @@ impl TrackerClient for GitHubTracker {
         Ok((number, url))
     }
 
-    /// Executes deterministic fn `GitHubTracker::ensure_label_exists` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `GitHubTracker::ensure_label_exists` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `GitHubTracker::ensure_label_exists` (declaration #37) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `label: &str` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::ensure_label_exists`.
-    /// - `repo: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::ensure_label_exists`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `GitHubTracker::ensure_label_exists` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(label)) bounded over input/member dimension of `GitHubTracker::ensure_label_exists`.
-    /// - Space Complexity: O(N(label)) bounded auxiliary memory for `GitHubTracker::ensure_label_exists`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `GitHubTracker::ensure_label_exists` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `GitHubTracker::ensure_label_exists` without partial mutation on error.
-    /// - Action: Executes `GitHubTracker::ensure_label_exists` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `GitHubTracker::ensure_label_exists` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-ENSURE-LABEL-EXISTS] | SysML v2: ActionDef(GitHubTracker::ensure_label_exists)
+    /// Ensures `label` exists in the target GitHub repository, creating it via `gh label create` when absent.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-ENSURE-LABEL-EXISTS]
     fn ensure_label_exists(&self, label: &str, repo: Option<&str>) -> Result<(), String> {
         let target_repo = repo.or(self.repo.as_deref());
         let mut list_cmd = Command::new("gh");
@@ -1629,39 +1153,16 @@ impl TrackerClient for GitHubTracker {
         if let Some(r) = target_repo {
             list_cmd.args(["--repo", r]);
         }
-        let output = list_cmd.output()
+        let output = list_cmd
+            .output()
             .map_err(|e| format!("Failed to execute 'gh label list': {}", e))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("'gh label list' exited with error: {}", stderr));
         }
 
-        /// Executes deterministic struct `GitHubTracker::GhLabelItem` within `crates/reconcile-backlog/src/tracker.rs`.
-        ///
-        /// ## 1. Safety Intent & Regulatory Scope
-        /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `GitHubTracker::GhLabelItem` in `crates/reconcile-backlog/src/tracker.rs`.
-        ///
-        /// ## 2. Invariants & Mathematical Properties
-        /// - Preserves structural type invariants for struct `GitHubTracker::GhLabelItem` across member set `[name: String]`.
-        ///
-        /// ## 3. Preconditions
-        /// - Caller supplies well-formed values for `GitHubTracker::GhLabelItem` members (`name: String`).
-        ///
-        /// ## 4. Postconditions
-        /// - Defines the authoritative `GitHubTracker::GhLabelItem` representation for struct `GitHubTracker::GhLabelItem`.
-        ///
-        /// ## 5. Algorithmic Complexity Bounds
-        /// - Time Complexity: O(M(1)) bounded over input/member dimension of `GitHubTracker::GhLabelItem`.
-        /// - Space Complexity: O(M(1)) bounded auxiliary memory for `GitHubTracker::GhLabelItem`.
-        ///
-        /// ## 6. Failure Modes & Fault Tolerance
-        /// - Interface: Validates boundary inputs and types for `GitHubTracker::GhLabelItem` (`GitHubTracker::GhLabelItem`).
-        /// - State: Maintains consistent state invariants across `GitHubTracker::GhLabelItem` without partial mutation on error.
-        /// - Action: Executes `GitHubTracker::GhLabelItem` deterministically with zero unbounded recursion or blocking.
-        /// - Resource: Bounds stack and heap allocations within `GitHubTracker::GhLabelItem` (`RECONCILE-BACKLOG-TRACKER`).
-        ///
-        /// ## 7. Realization & Traceability
-        /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-GHLABELITEM] | SysML v2: PartDef(GitHubTracker::GhLabelItem)
+        /// Deserialization record for an entry returned by `gh label list --json name`.
+        /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-GHLABELITEM]
         #[derive(Deserialize)]
         struct GhLabelItem {
             name: String,
@@ -1672,24 +1173,34 @@ impl TrackerClient for GitHubTracker {
             .map_err(|e| format!("Failed to parse 'gh label list' output: {}", e))?;
 
         let norm_target = normalize_label(label);
-        let exists = labels.iter().any(|l| normalize_label(&l.name) == norm_target || l.name.eq_ignore_ascii_case(label));
+        let exists = labels
+            .iter()
+            .any(|l| normalize_label(&l.name) == norm_target || l.name.eq_ignore_ascii_case(label));
 
         if !exists {
             let mut create_cmd = Command::new("gh");
             create_cmd.args([
-                "label", "create", label,
-                "--color", "0366d6",
-                "--description", &format!("{} specification", label),
+                "label",
+                "create",
+                label,
+                "--color",
+                "0366d6",
+                "--description",
+                &format!("{} specification", label),
             ]);
             if let Some(r) = target_repo {
                 create_cmd.args(["--repo", r]);
             }
-            let create_out = create_cmd.output()
+            let create_out = create_cmd
+                .output()
                 .map_err(|e| format!("Failed to execute 'gh label create': {}", e))?;
             if !create_out.status.success() {
                 let stderr = String::from_utf8_lossy(&create_out.stderr);
                 if !stderr.to_lowercase().contains("already exists") {
-                    return Err(format!("'gh label create' failed for label '{}': {}", label, stderr));
+                    return Err(format!(
+                        "'gh label create' failed for label '{}': {}",
+                        label, stderr
+                    ));
                 }
             }
         }
@@ -1697,54 +1208,47 @@ impl TrackerClient for GitHubTracker {
         Ok(())
     }
 
-    /// Executes deterministic fn `GitHubTracker::reopen_issue` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `GitHubTracker::reopen_issue` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `GitHubTracker::reopen_issue` (declaration #39) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number: u64` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::reopen_issue`.
-    /// - `comment: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::reopen_issue`.
-    /// - `repo: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `GitHubTracker::reopen_issue`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), String>` from `GitHubTracker::reopen_issue` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(issue_number)) bounded over input/member dimension of `GitHubTracker::reopen_issue`.
-    /// - Space Complexity: O(N(issue_number)) bounded auxiliary memory for `GitHubTracker::reopen_issue`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `GitHubTracker::reopen_issue` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `GitHubTracker::reopen_issue` without partial mutation on error.
-    /// - Action: Executes `GitHubTracker::reopen_issue` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `GitHubTracker::reopen_issue` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-REOPEN-ISSUE] | SysML v2: ActionDef(GitHubTracker::reopen_issue)
-    fn reopen_issue(&self, issue_number: u64, comment: Option<&str>, repo: Option<&str>) -> Result<(), String> {
+    /// Reopens `issue_number` via `gh issue reopen`, removes resolved status labels, and posts any non-empty comment.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-REOPEN-ISSUE]
+    fn reopen_issue(
+        &self,
+        issue_number: u64,
+        comment: Option<&str>,
+        repo: Option<&str>,
+    ) -> Result<(), String> {
         let target_repo = repo.or(self.repo.as_deref());
         let mut reopen_cmd = Command::new("gh");
         reopen_cmd.args(["issue", "reopen", &issue_number.to_string()]);
         if let Some(r) = target_repo {
             reopen_cmd.args(["--repo", r]);
         }
-        let output = reopen_cmd.output()
+        let output = reopen_cmd
+            .output()
             .map_err(|e| format!("Failed to execute 'gh issue reopen': {}", e))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if !stderr.to_lowercase().contains("already open") {
-                return Err(format!("'gh issue reopen' failed for issue #{}: {}", issue_number, stderr));
+                return Err(format!(
+                    "'gh issue reopen' failed for issue #{}: {}",
+                    issue_number, stderr
+                ));
             }
         }
 
         // Remove stale resolved labels
-        for label in ["status:fixed-resolved", "status::fixed-resolved", "fixed-resolved"] {
+        for label in [
+            "status:fixed-resolved",
+            "status::fixed-resolved",
+            "fixed-resolved",
+        ] {
             let mut remove_cmd = Command::new("gh");
-            remove_cmd.args(["issue", "edit", &issue_number.to_string(), "--remove-label", label]);
+            remove_cmd.args([
+                "issue",
+                "edit",
+                &issue_number.to_string(),
+                "--remove-label",
+                label,
+            ]);
             if let Some(r) = target_repo {
                 remove_cmd.args(["--repo", r]);
             }
@@ -1756,22 +1260,34 @@ impl TrackerClient for GitHubTracker {
             if !trimmed.is_empty() {
                 use std::io::Write;
                 let mut temp_file = tempfile_named()?;
-                temp_file.write_all(trimmed.as_bytes())
+                temp_file
+                    .write_all(trimmed.as_bytes())
                     .map_err(|e| format!("Failed to write temporary comment file: {}", e))?;
-                temp_file.flush()
+                temp_file
+                    .flush()
                     .map_err(|e| format!("Failed to flush temporary comment file: {}", e))?;
                 let temp_path = temp_file.path.clone();
 
                 let mut comment_cmd = Command::new("gh");
-                comment_cmd.args(["issue", "comment", &issue_number.to_string(), "--body-file", &temp_path]);
+                comment_cmd.args([
+                    "issue",
+                    "comment",
+                    &issue_number.to_string(),
+                    "--body-file",
+                    &temp_path,
+                ]);
                 if let Some(r) = target_repo {
                     comment_cmd.args(["--repo", r]);
                 }
-                let c_output = comment_cmd.output()
+                let c_output = comment_cmd
+                    .output()
                     .map_err(|e| format!("Failed to execute 'gh issue comment': {}", e))?;
                 if !c_output.status.success() {
                     let stderr = String::from_utf8_lossy(&c_output.stderr);
-                    return Err(format!("'gh issue comment' failed for issue #{}: {}", issue_number, stderr));
+                    return Err(format!(
+                        "'gh issue comment' failed for issue #{}: {}",
+                        issue_number, stderr
+                    ));
                 }
             }
         }
@@ -1780,64 +1296,16 @@ impl TrackerClient for GitHubTracker {
     }
 }
 
-/// Helper struct for temporary file without extra crate dependencies.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `TempFileNamed` in `crates/reconcile-backlog/src/tracker.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `TempFileNamed` across member set `[path: String, file: Option<std::fs::File>]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `TempFileNamed` members (`path: String, file: Option<std::fs::File>`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `TempFileNamed` representation for struct `TempFileNamed`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(2)) bounded over input/member dimension of `TempFileNamed`.
-/// - Space Complexity: O(M(2)) bounded auxiliary memory for `TempFileNamed`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `TempFileNamed` (`TempFileNamed`).
-/// - State: Maintains consistent state invariants across `TempFileNamed` without partial mutation on error.
-/// - Action: Executes `TempFileNamed` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `TempFileNamed` (`RECONCILE-BACKLOG-TRACKER`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEMPFILENAMED] | SysML v2: PartDef(TempFileNamed)
+/// RAII temporary file handle that unlinks its backing path on drop.
+/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEMPFILENAMED]
 struct TempFileNamed {
     path: String,
     file: Option<std::fs::File>,
 }
 
 impl std::io::Write for TempFileNamed {
-    /// Executes deterministic fn `TempFileNamed::write` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TempFileNamed::write` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `TempFileNamed::write` (declaration #41) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `buf: &[u8]` must satisfy domain and type-safety constraints prior to invoking `TempFileNamed::write`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `std::io::Result<usize>` from `TempFileNamed::write` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(buf)) bounded over input/member dimension of `TempFileNamed::write`.
-    /// - Space Complexity: O(N(buf)) bounded auxiliary memory for `TempFileNamed::write`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `TempFileNamed::write` (`std::io::Result<usize>`).
-    /// - State: Maintains consistent state invariants across `TempFileNamed::write` without partial mutation on error.
-    /// - Action: Executes `TempFileNamed::write` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `TempFileNamed::write` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEMPFILENAMED-WRITE] | SysML v2: ActionDef(TempFileNamed::write)
+    /// Writes `buf` to the active temporary file handle, failing if the handle is already closed.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEMPFILENAMED-WRITE]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.file
             .as_mut()
@@ -1845,32 +1313,8 @@ impl std::io::Write for TempFileNamed {
             .write(buf)
     }
 
-    /// Executes deterministic fn `TempFileNamed::flush` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TempFileNamed::flush` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `TempFileNamed::flush` (declaration #42) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `TempFileNamed::flush` in `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `std::io::Result<()>` from `TempFileNamed::flush` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(flush)) bounded over input/member dimension of `TempFileNamed::flush`.
-    /// - Space Complexity: O(K(flush)) bounded auxiliary memory for `TempFileNamed::flush`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `TempFileNamed::flush` (`std::io::Result<()>`).
-    /// - State: Maintains consistent state invariants across `TempFileNamed::flush` without partial mutation on error.
-    /// - Action: Executes `TempFileNamed::flush` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `TempFileNamed::flush` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEMPFILENAMED-FLUSH] | SysML v2: ActionDef(TempFileNamed::flush)
+    /// Flushes buffered bytes to the temporary file handle, failing if the handle is already closed.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEMPFILENAMED-FLUSH]
     fn flush(&mut self) -> std::io::Result<()> {
         self.file
             .as_mut()
@@ -1880,32 +1324,8 @@ impl std::io::Write for TempFileNamed {
 }
 
 impl Drop for TempFileNamed {
-    /// Executes deterministic fn `TempFileNamed::drop` within `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `TempFileNamed::drop` in `crates/reconcile-backlog/src/tracker.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `TempFileNamed::drop` (declaration #43) within `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `TempFileNamed::drop` in `RECONCILE-BACKLOG-TRACKER`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `TempFileNamed::drop` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(drop)) bounded over input/member dimension of `TempFileNamed::drop`.
-    /// - Space Complexity: O(K(drop)) bounded auxiliary memory for `TempFileNamed::drop`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `TempFileNamed::drop` (`()`).
-    /// - State: Maintains consistent state invariants across `TempFileNamed::drop` without partial mutation on error.
-    /// - Action: Executes `TempFileNamed::drop` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `TempFileNamed::drop` (`RECONCILE-BACKLOG-TRACKER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEMPFILENAMED-DROP] | SysML v2: ActionDef(TempFileNamed::drop)
+    /// Closes the open file handle and removes the temporary file path from disk.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEMPFILENAMED-DROP]
     fn drop(&mut self) {
         let _ = self.file.take();
         let _ = std::fs::remove_file(&self.path);
@@ -1914,32 +1334,8 @@ impl Drop for TempFileNamed {
 
 static TEMP_FILE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Executes deterministic fn `tempfile_named` within `crates/reconcile-backlog/src/tracker.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `tempfile_named` in `crates/reconcile-backlog/src/tracker.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `tempfile_named` (declaration #44) within `RECONCILE-BACKLOG-TRACKER`.
-///
-/// ## 3. Preconditions
-/// - Invoked within a valid execution context for `tempfile_named` in `RECONCILE-BACKLOG-TRACKER`.
-///
-/// ## 4. Postconditions
-/// - Returns `Result<TempFileNamed, String>` from `tempfile_named` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(K(tempfile_named)) bounded over input/member dimension of `tempfile_named`.
-/// - Space Complexity: O(K(tempfile_named)) bounded auxiliary memory for `tempfile_named`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `tempfile_named` (`Result<TempFileNamed, String>`).
-/// - State: Maintains consistent state invariants across `tempfile_named` without partial mutation on error.
-/// - Action: Executes `tempfile_named` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `tempfile_named` (`RECONCILE-BACKLOG-TRACKER`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEMPFILE-NAMED] | SysML v2: ActionDef(tempfile_named)
+/// Creates a uniquely named RAII temporary markdown file in the system temp directory.
+/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEMPFILE-NAMED]
 fn tempfile_named() -> Result<TempFileNamed, String> {
     let nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
     let pid = std::process::id();
@@ -1955,31 +1351,7 @@ fn tempfile_named() -> Result<TempFileNamed, String> {
 }
 
 /// Extracts the numeric specification ordinal from a title prefix when present.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `extract_spec_ordinal` in `crates/reconcile-backlog/src/tracker.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `extract_spec_ordinal` within `RECONCILE-BACKLOG-TRACKER`.
-///
-/// ## 3. Preconditions
-/// - `title: &str` must satisfy domain and type-safety constraints prior to invoking `extract_spec_ordinal`.
-///
-/// ## 4. Postconditions
-/// - Returns `Option<u64>` from `extract_spec_ordinal` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(title)) bounded over input/member dimension of `extract_spec_ordinal`.
-/// - Space Complexity: O(N(title)) bounded auxiliary memory for `extract_spec_ordinal`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `extract_spec_ordinal` (`Option<u64>`).
-/// - State: Maintains consistent state invariants across `extract_spec_ordinal` without partial mutation on error.
-/// - Action: Executes `extract_spec_ordinal` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `extract_spec_ordinal` (`RECONCILE-BACKLOG-TRACKER`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-EXTRACT-SPEC-ORDINAL] | SysML v2: ActionDef(extract_spec_ordinal)
+/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-EXTRACT-SPEC-ORDINAL]
 fn extract_spec_ordinal(title: &str) -> Option<u64> {
     let lower = title.trim().to_ascii_lowercase();
     let prefixes = [
@@ -1998,10 +1370,7 @@ fn extract_spec_ordinal(title: &str) -> Option<u64> {
     for prefix in prefixes {
         if let Some(after_prefix) = lower.strip_prefix(prefix) {
             let trimmed = after_prefix.trim_start_matches([' ', '_', '-']);
-            let digit_str: String = trimmed
-                .chars()
-                .take_while(|c| c.is_ascii_digit())
-                .collect();
+            let digit_str: String = trimmed.chars().take_while(|c| c.is_ascii_digit()).collect();
             if !digit_str.is_empty() {
                 let after_digits = trimmed.trim_start_matches(|c: char| c.is_ascii_digit());
                 if after_digits.is_empty()
@@ -2021,31 +1390,7 @@ fn extract_spec_ordinal(title: &str) -> Option<u64> {
 }
 
 /// Checks whether two specification titles have compatible numeric ordinals when both specify an ordinal.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `ordinal_compatible` in `crates/reconcile-backlog/src/tracker.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `ordinal_compatible` within `RECONCILE-BACKLOG-TRACKER`.
-///
-/// ## 3. Preconditions
-/// - `query_title: &str` and `candidate_title: &str` must satisfy domain and type-safety constraints prior to invoking `ordinal_compatible`.
-///
-/// ## 4. Postconditions
-/// - Returns `bool` from `ordinal_compatible` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(query_title) + N(candidate_title)) bounded over input/member dimension of `ordinal_compatible`.
-/// - Space Complexity: O(N(query_title) + N(candidate_title)) bounded auxiliary memory for `ordinal_compatible`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `ordinal_compatible` (`bool`).
-/// - State: Maintains consistent state invariants across `ordinal_compatible` without partial mutation on error.
-/// - Action: Executes `ordinal_compatible` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `ordinal_compatible` (`RECONCILE-BACKLOG-TRACKER`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-ORDINAL-COMPATIBLE] | SysML v2: ActionDef(ordinal_compatible)
+/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-ORDINAL-COMPATIBLE]
 fn ordinal_compatible(query_title: &str, candidate_title: &str) -> bool {
     match (
         extract_spec_ordinal(query_title),
@@ -2380,25 +1725,41 @@ mod tests {
         // Explicit type lookup must return isolated issues without collision
         assert_eq!(
             index
-                .find_issue_for_type(None, Some("epic"), "Epic 01: [ConOps] Human Engineer Interface")
+                .find_issue_for_type(
+                    None,
+                    Some("epic"),
+                    "Epic 01: [ConOps] Human Engineer Interface"
+                )
                 .map(|i| i.number),
             Some(10)
         );
         assert_eq!(
             index
-                .find_issue_for_type(None, Some("feature"), "Feature 01: [ConOps] Human Engineer Interface")
+                .find_issue_for_type(
+                    None,
+                    Some("feature"),
+                    "Feature 01: [ConOps] Human Engineer Interface"
+                )
                 .map(|i| i.number),
             Some(25)
         );
         assert_eq!(
             index
-                .find_issue_for_type(None, Some("user-story"), "User Story 01: [ConOps] Human Engineer Interface")
+                .find_issue_for_type(
+                    None,
+                    Some("user-story"),
+                    "User Story 01: [ConOps] Human Engineer Interface"
+                )
                 .map(|i| i.number),
             Some(30)
         );
         assert_eq!(
             index
-                .find_issue_for_type(None, Some("use-case"), "Use Case 01: [ConOps] Human Engineer Interface")
+                .find_issue_for_type(
+                    None,
+                    Some("use-case"),
+                    "Use Case 01: [ConOps] Human Engineer Interface"
+                )
                 .map(|i| i.number),
             Some(40)
         );
@@ -2480,7 +1841,8 @@ mod tests {
     }
 
     #[test]
-    fn test_reopen_issue_strips_resolved_labels_and_persists_comment() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_reopen_issue_strips_resolved_labels_and_persists_comment(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tracker = OfflineTracker::with_issues(vec![
             TrackerIssue {
                 number: 101,
@@ -2497,9 +1859,7 @@ mod tests {
                 number: 102,
                 title: "Defect 102".to_string(),
                 state: "CLOSED".to_string(),
-                labels: vec![
-                    TrackerLabel::String("status::fixed-resolved".to_string()),
-                ],
+                labels: vec![TrackerLabel::String("status::fixed-resolved".to_string())],
                 body: None,
                 url: None,
             },
@@ -2507,9 +1867,7 @@ mod tests {
                 number: 103,
                 title: "Defect 103".to_string(),
                 state: "CLOSED".to_string(),
-                labels: vec![
-                    TrackerLabel::String("fixed-resolved".to_string()),
-                ],
+                labels: vec![TrackerLabel::String("fixed-resolved".to_string())],
                 body: Some("Another body".to_string()),
                 url: None,
             },
@@ -2520,23 +1878,41 @@ mod tests {
         tracker.reopen_issue(103, Some("Reopen comment 103"), None)?;
 
         let issues = tracker.fetch_all_issues()?;
-        let i101 = issues.iter().find(|i| i.number == 101).ok_or("missing 101")?;
+        let i101 = issues
+            .iter()
+            .find(|i| i.number == 101)
+            .ok_or("missing 101")?;
         assert_eq!(i101.state, "OPEN");
-        assert!(!i101.is_resolved(), "Reopened issue 101 must not be resolved");
+        assert!(
+            !i101.is_resolved(),
+            "Reopened issue 101 must not be resolved"
+        );
         assert_eq!(i101.labels.len(), 1);
         assert_eq!(i101.labels.first().ok_or("missing label")?.name(), "bug");
         let body101 = i101.body.as_deref().ok_or("missing body 101")?;
         assert!(body101.contains("Original body"));
         assert!(body101.contains("Audit reopen reason"));
 
-        let i102 = issues.iter().find(|i| i.number == 102).ok_or("missing 102")?;
+        let i102 = issues
+            .iter()
+            .find(|i| i.number == 102)
+            .ok_or("missing 102")?;
         assert_eq!(i102.state, "OPEN");
-        assert!(!i102.is_resolved(), "Reopened issue 102 must not be resolved");
+        assert!(
+            !i102.is_resolved(),
+            "Reopened issue 102 must not be resolved"
+        );
         assert!(i102.labels.is_empty());
 
-        let i103 = issues.iter().find(|i| i.number == 103).ok_or("missing 103")?;
+        let i103 = issues
+            .iter()
+            .find(|i| i.number == 103)
+            .ok_or("missing 103")?;
         assert_eq!(i103.state, "OPEN");
-        assert!(!i103.is_resolved(), "Reopened issue 103 must not be resolved");
+        assert!(
+            !i103.is_resolved(),
+            "Reopened issue 103 must not be resolved"
+        );
         assert!(i103.labels.is_empty());
         let body103 = i103.body.as_deref().ok_or("missing body 103")?;
         assert!(body103.contains("Another body"));
@@ -2544,24 +1920,40 @@ mod tests {
 
         let err = tracker.reopen_issue(999, None, None);
         assert!(err.is_err());
-        assert!(err.err().ok_or("expected err")?.contains("issue #999 not found"));
+        assert!(err
+            .err()
+            .ok_or("expected err")?
+            .contains("issue #999 not found"));
         Ok(())
     }
 
     #[test]
-    fn test_offline_tracker_error_parity_on_nonexistent_issue() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_offline_tracker_error_parity_on_nonexistent_issue(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tracker = OfflineTracker::new();
         let res_update = tracker.update_issue_body(999, "new body");
-        assert!(res_update.is_err(), "update_issue_body on nonexistent issue must fail");
         assert!(
-            res_update.err().ok_or("expected err")?.contains("issue #999 not found"),
+            res_update.is_err(),
+            "update_issue_body on nonexistent issue must fail"
+        );
+        assert!(
+            res_update
+                .err()
+                .ok_or("expected err")?
+                .contains("issue #999 not found"),
             "Error message must specify issue #999 not found"
         );
 
         let res_label = tracker.add_label(999, "bug");
-        assert!(res_label.is_err(), "add_label on nonexistent issue must fail");
         assert!(
-            res_label.err().ok_or("expected err")?.contains("issue #999 not found"),
+            res_label.is_err(),
+            "add_label on nonexistent issue must fail"
+        );
+        assert!(
+            res_label
+                .err()
+                .ok_or("expected err")?
+                .contains("issue #999 not found"),
             "Error message must specify issue #999 not found"
         );
         Ok(())
@@ -2575,7 +1967,10 @@ mod tests {
             let path = temp.path.clone();
             temp.write_all(b"temporary test data")?;
             temp.flush()?;
-            assert!(std::path::Path::new(&path).exists(), "Temp file must exist while in scope");
+            assert!(
+                std::path::Path::new(&path).exists(),
+                "Temp file must exist while in scope"
+            );
             path
         };
         assert!(
@@ -2769,7 +2164,8 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEST-TEMPFILENAMED-CLOSED-HANDLE] | SysML v2: VerificationCaseDef(test_temp_file_named_write_and_flush_after_handle_closed_returns_err) | Issue: #499
     #[test]
-    fn test_temp_file_named_write_and_flush_after_handle_closed_returns_err() -> Result<(), String> {
+    fn test_temp_file_named_write_and_flush_after_handle_closed_returns_err() -> Result<(), String>
+    {
         use std::io::Write;
         let mut temp = tempfile_named()?;
         temp.write_all(b"ok").map_err(|e| e.to_string())?;
@@ -2786,5 +2182,3 @@ mod tests {
         Ok(())
     }
 }
-
-
