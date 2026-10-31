@@ -161,7 +161,7 @@ During forward projection and reverse synchronization, model complexity can exce
 ### 3.2 Incremental AST Parser Caching
 To ensure sub-second turnaround during multi-agent synchronization loops, `IncrementalAstCache` in `crates/deap-core/src/sysml_ast.rs` and `crates/compile-sysml/src/semantic/digest.rs` enforce:
 1. **Content-Hash Keyed Cache:** `.pipeline/cache/ast/<sha256>.bin` stores pre-parsed representations of the AST keyed by SHA-256 content digests.
-2. **Selective Delta Parsing:** Only files whose SHA-256 fingerprint has changed are re-lexed and re-parsed by `crates/compile-sysml/src/parser/grammar.rs`. Unchanged modules are loaded directly from disk cache.
+2. **Selective Delta Parsing:** Only files whose SHA-256 fingerprint has changed are re-lexed and re-parsed by `crates/compile-sysml/src/parser/grammar/mod.rs`. Unchanged modules are loaded directly from disk cache.
 
 ### 3.3 Dual-LLM Air-Gapped Agent Dispatch Protocol
 To guarantee mathematical determinism, total intellectual property containment, and complete immunity to cloud rate-limiting or content censorship, DEAP utilizes a dual-LLM air-gapped agent dispatch architecture orchestrated by `compile-sysml` and `verify-baseline`:

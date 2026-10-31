@@ -7,7 +7,7 @@ package BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blue
     attribute Target_Crates : String = "crates/compile-sysml, crates/deap-core, crates/ingest-sysml, crates/verify-baseline";
     attribute Tracked_Issues : String = "#493, #495, #496, #497, #504, #505, #509";
     attribute Generation_Mode : String = "subagent";
-    attribute Specification_Source : String = "crates/compile-sysml/src/parser/grammar.rs:182-335 / crates/compile-sysml/src/semantic/serializer.rs:250-820 / #493";
+    attribute Specification_Source : String = "crates/compile-sysml/src/parser/grammar/mod.rs:182-335 / crates/compile-sysml/src/semantic/serializer.rs:250-820 / #493";
     doc /* [unit: `bytes`] */
     attribute span_offset_drift_bytes : Real;
     doc /* [unit: `branches`] */
