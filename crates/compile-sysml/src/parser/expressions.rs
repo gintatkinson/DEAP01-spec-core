@@ -13,6 +13,10 @@ static EXPR_EOF_TOKEN: Token = Token {
     },
 };
 
+/// Maximum recursion and nesting depth permitted when parsing or formatting expressions.
+/// Realises: [REQ-PARSER-EXPRESSIONS-MAX-EXPR-DEPTH]
+const MAX_EXPR_DEPTH: usize = 64;
+
 /// Binary operations supported in SysML v2 constraints and expressions.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -251,6 +255,16 @@ impl Expr {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-EXPRESSIONS-EXPR-TO-STRING-REPR] | SysML v2: ActionDef(Expr::to_string_repr)
     pub fn to_string_repr(&self) -> String {
+        self.to_string_repr_bounded(0)
+    }
+
+    /// Formats an expression tree into algebraic syntax up to `MAX_EXPR_DEPTH`, returning `"..."` when exceeded.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPR-TO-STRING-REPR]
+    fn to_string_repr_bounded(&self, depth: usize) -> String {
+        if depth >= MAX_EXPR_DEPTH {
+            return String::from("...");
+        }
+        let next_depth = depth.saturating_add(1);
         match self {
             Expr::Ident(name) => name.clone(),
             Expr::Number(val) => {
@@ -262,21 +276,26 @@ impl Expr {
             }
             Expr::StringLit(s) => format!("\"{}\"", s),
             Expr::BoolLit(b) => format!("{}", b),
-            Expr::Unary { op, expr } => format!("{}{}", op.as_str(), expr.to_string_repr()),
+            Expr::Unary { op, expr } => {
+                format!("{}{}", op.as_str(), expr.to_string_repr_bounded(next_depth))
+            }
             Expr::Binary { op, left, right } => {
                 format!(
                     "{} {} {}",
-                    left.to_string_repr(),
+                    left.to_string_repr_bounded(next_depth),
                     op.as_str(),
-                    right.to_string_repr()
+                    right.to_string_repr_bounded(next_depth)
                 )
             }
             Expr::Call { func, args } => {
-                let arg_strs: Vec<String> = args.iter().map(|a| a.to_string_repr()).collect();
+                let arg_strs: Vec<String> = args
+                    .iter()
+                    .map(|a| a.to_string_repr_bounded(next_depth))
+                    .collect();
                 format!("{}({})", func, arg_strs.join(", "))
             }
             Expr::Member { object, member } => {
-                format!("{}.{}", object.to_string_repr(), member)
+                format!("{}.{}", object.to_string_repr_bounded(next_depth), member)
             }
             Expr::Raw(text) => text.clone(),
         }
@@ -372,38 +391,22 @@ impl<'a> ExpressionParser<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE] | SysML v2: ActionDef(ExpressionParser::parse)
     pub fn parse(&mut self) -> Result<Expr, String> {
-        let expr = self.parse_binary_expr(0)?;
+        let expr = self.parse_binary_expr(0, 0)?;
         Ok(expr)
     }
 
-    /// Executes deterministic fn `ExpressionParser::parse_binary_expr` within `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `ExpressionParser::parse_binary_expr` in `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `ExpressionParser::parse_binary_expr` (declaration #10) within `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 3. Preconditions
-    /// - `min_precedence: u8` must satisfy domain and type-safety constraints prior to invoking `ExpressionParser::parse_binary_expr`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<Expr, String>` from `ExpressionParser::parse_binary_expr` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(min_precedence)) bounded over input/member dimension of `ExpressionParser::parse_binary_expr`.
-    /// - Space Complexity: O(N(min_precedence)) bounded auxiliary memory for `ExpressionParser::parse_binary_expr`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `ExpressionParser::parse_binary_expr` (`Result<Expr, String>`).
-    /// - State: Maintains consistent state invariants across `ExpressionParser::parse_binary_expr` without partial mutation on error.
-    /// - Action: Executes `ExpressionParser::parse_binary_expr` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `ExpressionParser::parse_binary_expr` (`PARSER-EXPRESSIONS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE-BINARY-EXPR] | SysML v2: ActionDef(ExpressionParser::parse_binary_expr)
-    fn parse_binary_expr(&mut self, min_precedence: u8) -> Result<Expr, String> {
-        let mut left = self.parse_unary_or_primary()?;
+    /// Parses binary operator expressions via precedence climbing while enforcing `MAX_EXPR_DEPTH`.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE-BINARY-EXPR]
+    fn parse_binary_expr(&mut self, min_precedence: u8, depth: usize) -> Result<Expr, String> {
+        if depth >= MAX_EXPR_DEPTH {
+            return Err(format!(
+                "Expression recursion depth exceeds maximum limit of {}",
+                MAX_EXPR_DEPTH
+            ));
+        }
+
+        let mut left = self.parse_unary_or_primary(depth)?;
+        let mut chain_depth = depth;
 
         while let Some(op) = self.peek_binary_op() {
             let (prec, assoc_right) = binary_precedence(&op);
@@ -411,9 +414,21 @@ impl<'a> ExpressionParser<'a> {
                 break;
             }
 
+            chain_depth = chain_depth.saturating_add(1);
+            if chain_depth >= MAX_EXPR_DEPTH {
+                return Err(format!(
+                    "Expression recursion depth exceeds maximum limit of {}",
+                    MAX_EXPR_DEPTH
+                ));
+            }
+
             self.advance(); // consume operator
-            let next_prec = if assoc_right { prec } else { prec + 1 };
-            let right = self.parse_binary_expr(next_prec)?;
+            let next_prec = if assoc_right {
+                prec
+            } else {
+                prec.saturating_add(1)
+            };
+            let right = self.parse_binary_expr(next_prec, chain_depth)?;
             left = Expr::Binary {
                 op,
                 left: Box::new(left),
@@ -424,41 +439,25 @@ impl<'a> ExpressionParser<'a> {
         Ok(left)
     }
 
-    /// Executes deterministic fn `ExpressionParser::parse_unary_or_primary` within `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `ExpressionParser::parse_unary_or_primary` in `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `ExpressionParser::parse_unary_or_primary` (declaration #11) within `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `ExpressionParser::parse_unary_or_primary` in `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<Expr, String>` from `ExpressionParser::parse_unary_or_primary` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(parse_unary_or_primary)) bounded over input/member dimension of `ExpressionParser::parse_unary_or_primary`.
-    /// - Space Complexity: O(K(parse_unary_or_primary)) bounded auxiliary memory for `ExpressionParser::parse_unary_or_primary`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `ExpressionParser::parse_unary_or_primary` (`Result<Expr, String>`).
-    /// - State: Maintains consistent state invariants across `ExpressionParser::parse_unary_or_primary` without partial mutation on error.
-    /// - Action: Executes `ExpressionParser::parse_unary_or_primary` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `ExpressionParser::parse_unary_or_primary` (`PARSER-EXPRESSIONS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE-UNARY-OR-PRIMARY] | SysML v2: ActionDef(ExpressionParser::parse_unary_or_primary)
-    fn parse_unary_or_primary(&mut self) -> Result<Expr, String> {
+    /// Parses prefix unary operators or delegates to primary expression parsing within `MAX_EXPR_DEPTH`.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE-UNARY-OR-PRIMARY]
+    fn parse_unary_or_primary(&mut self, depth: usize) -> Result<Expr, String> {
+        if depth >= MAX_EXPR_DEPTH {
+            return Err(format!(
+                "Expression recursion depth exceeds maximum limit of {}",
+                MAX_EXPR_DEPTH
+            ));
+        }
+
         if self.is_at_end() {
             return Err("Unexpected end of expression tokens".to_string());
         }
 
+        let next_depth = depth.saturating_add(1);
         match &self.peek().kind {
             TokenKind::Minus => {
                 self.advance();
-                let expr = self.parse_unary_or_primary()?;
+                let expr = self.parse_unary_or_primary(next_depth)?;
                 Ok(Expr::Unary {
                     op: UnaryOp::Neg,
                     expr: Box::new(expr),
@@ -466,49 +465,33 @@ impl<'a> ExpressionParser<'a> {
             }
             TokenKind::Exclamation => {
                 self.advance();
-                let expr = self.parse_unary_or_primary()?;
+                let expr = self.parse_unary_or_primary(next_depth)?;
                 Ok(Expr::Unary {
                     op: UnaryOp::Not,
                     expr: Box::new(expr),
                 })
             }
-            _ => self.parse_primary(),
+            _ => self.parse_primary(depth),
         }
     }
 
-    /// Executes deterministic fn `ExpressionParser::parse_primary` within `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `ExpressionParser::parse_primary` in `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `ExpressionParser::parse_primary` (declaration #12) within `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `ExpressionParser::parse_primary` in `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<Expr, String>` from `ExpressionParser::parse_primary` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(parse_primary)) bounded over input/member dimension of `ExpressionParser::parse_primary`.
-    /// - Space Complexity: O(K(parse_primary)) bounded auxiliary memory for `ExpressionParser::parse_primary`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `ExpressionParser::parse_primary` (`Result<Expr, String>`).
-    /// - State: Maintains consistent state invariants across `ExpressionParser::parse_primary` without partial mutation on error.
-    /// - Action: Executes `ExpressionParser::parse_primary` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `ExpressionParser::parse_primary` (`PARSER-EXPRESSIONS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE-PRIMARY] | SysML v2: ActionDef(ExpressionParser::parse_primary)
-    fn parse_primary(&mut self) -> Result<Expr, String> {
+    /// Parses literals, identifiers, calls, parenthesized groups, and postfix member chains within `MAX_EXPR_DEPTH`.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE-PRIMARY]
+    fn parse_primary(&mut self, depth: usize) -> Result<Expr, String> {
+        if depth >= MAX_EXPR_DEPTH {
+            return Err(format!(
+                "Expression recursion depth exceeds maximum limit of {}",
+                MAX_EXPR_DEPTH
+            ));
+        }
+
         if self.is_at_end() {
             return Err("Expected primary expression, found EOF".to_string());
         }
 
+        let next_depth = depth.saturating_add(1);
         let tok = self.advance();
-        let mut expr = match &tok.kind {
+        let expr = match &tok.kind {
             TokenKind::IntLit(n) => Expr::Number(*n as f64),
             TokenKind::RealLit(f) => Expr::Number(*f),
             TokenKind::StringLit(s) => Expr::StringLit(s.clone()),
@@ -516,28 +499,13 @@ impl<'a> ExpressionParser<'a> {
             TokenKind::Ident(name) => {
                 let ident = name.clone();
                 if self.peek_kind() == Some(&TokenKind::OpenParen) {
-                    self.advance(); // consume '('
-                    let mut args = Vec::new();
-                    while self.peek_kind() != Some(&TokenKind::CloseParen) && !self.is_at_end() {
-                        args.push(self.parse_binary_expr(0)?);
-                        if self.peek_kind() == Some(&TokenKind::Comma) {
-                            self.advance();
-                        } else {
-                            break;
-                        }
-                    }
-                    if self.peek_kind() == Some(&TokenKind::CloseParen) {
-                        self.advance();
-                    } else {
-                        return Err(format!("Expected ')' after function arguments for {}", ident));
-                    }
-                    Expr::Call { func: ident, args }
+                    self.parse_call_expr(ident, next_depth)?
                 } else {
                     Expr::Ident(ident)
                 }
             }
             TokenKind::OpenParen => {
-                let inner = self.parse_binary_expr(0)?;
+                let inner = self.parse_binary_expr(0, next_depth)?;
                 if self.peek_kind() == Some(&TokenKind::CloseParen) {
                     self.advance();
                     inner
@@ -550,8 +518,45 @@ impl<'a> ExpressionParser<'a> {
             }
         };
 
-        // Check for member accesses `.`
+        self.parse_member_chain(expr, depth)
+    }
+
+    /// Parses a parenthesized function argument list for `ident` at recursion depth `arg_depth`.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE-PRIMARY]
+    fn parse_call_expr(&mut self, ident: String, arg_depth: usize) -> Result<Expr, String> {
+        self.advance(); // consume '('
+        let mut args = Vec::new();
+        while self.peek_kind() != Some(&TokenKind::CloseParen) && !self.is_at_end() {
+            args.push(self.parse_binary_expr(0, arg_depth)?);
+            if self.peek_kind() == Some(&TokenKind::Comma) {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        if self.peek_kind() == Some(&TokenKind::CloseParen) {
+            self.advance();
+            Ok(Expr::Call { func: ident, args })
+        } else {
+            Err(format!(
+                "Expected ')' after function arguments for {}",
+                ident
+            ))
+        }
+    }
+
+    /// Parses zero or more postfix `.field` member accesses while enforcing `MAX_EXPR_DEPTH`.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE-PRIMARY]
+    fn parse_member_chain(&mut self, mut expr: Expr, depth: usize) -> Result<Expr, String> {
+        let mut member_depth = depth;
         while self.peek_kind() == Some(&TokenKind::Dot) {
+            member_depth = member_depth.saturating_add(1);
+            if member_depth >= MAX_EXPR_DEPTH {
+                return Err(format!(
+                    "Expression recursion depth exceeds maximum limit of {}",
+                    MAX_EXPR_DEPTH
+                ));
+            }
             self.advance(); // consume '.'
             if let Some(TokenKind::Ident(field_name)) = self.peek_kind().cloned() {
                 self.advance();
@@ -563,7 +568,6 @@ impl<'a> ExpressionParser<'a> {
                 return Err("Expected field identifier following '.'".to_string());
             }
         }
-
         Ok(expr)
     }
 
@@ -663,7 +667,7 @@ impl<'a> ExpressionParser<'a> {
     fn advance(&mut self) -> &Token {
         let idx = self.pos;
         if self.pos < self.tokens.len() {
-            self.pos += 1;
+            self.pos = self.pos.saturating_add(1);
         }
         self.tokens
             .get(idx)
@@ -698,7 +702,9 @@ impl<'a> ExpressionParser<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-IS-AT-END] | SysML v2: ActionDef(ExpressionParser::is_at_end)
     fn is_at_end(&self) -> bool {
-        self.tokens.get(self.pos).is_none_or(|t| t.kind == TokenKind::Eof)
+        self.tokens
+            .get(self.pos)
+            .is_none_or(|t| t.kind == TokenKind::Eof)
     }
 
     /// Executes deterministic fn `ExpressionParser::peek_binary_op` within `crates/compile-sysml/src/parser/expressions.rs`.
@@ -868,5 +874,137 @@ mod tests {
 
         assert_eq!(expr.to_string_repr(), "abs(fcc.speed) <= limits.max");
         Ok(())
+    }
+
+    #[test]
+    fn test_parse_parenthesized_depth_bounds() -> Result<(), Box<dyn std::error::Error>> {
+        let max_valid_parens = MAX_EXPR_DEPTH - 1;
+        let valid_src = format!(
+            "{}x{}",
+            "(".repeat(max_valid_parens),
+            ")".repeat(max_valid_parens)
+        );
+        let tokens = Scanner::new(&valid_src).scan_all()?;
+        let parsed = parse_expression(&tokens)?;
+        assert_eq!(parsed.to_string_repr(), "x");
+
+        let exceeded_src = format!(
+            "{}x{}",
+            "(".repeat(MAX_EXPR_DEPTH),
+            ")".repeat(MAX_EXPR_DEPTH)
+        );
+        let exceeded_tokens = Scanner::new(&exceeded_src).scan_all()?;
+        assert!(parse_expression(&exceeded_tokens).is_err());
+
+        let very_deep_src = format!("{}x{}", "(".repeat(256), ")".repeat(256));
+        let very_deep_tokens = Scanner::new(&very_deep_src).scan_all()?;
+        assert!(parse_expression(&very_deep_tokens).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_unary_call_binary_and_member_depth_bounds(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let max_ops = MAX_EXPR_DEPTH - 1;
+
+        // Unary at bound vs beyond bound
+        let valid_unary = format!("{}x", "-".repeat(max_ops));
+        assert!(parse_expression(&Scanner::new(&valid_unary).scan_all()?).is_ok());
+        let deep_unary = format!("{}x", "-".repeat(MAX_EXPR_DEPTH));
+        assert!(parse_expression(&Scanner::new(&deep_unary).scan_all()?).is_err());
+
+        // Nested calls at bound vs beyond bound
+        let valid_calls = format!("{}x{}", "f(".repeat(max_ops), ")".repeat(max_ops));
+        assert!(parse_expression(&Scanner::new(&valid_calls).scan_all()?).is_ok());
+        let deep_calls = format!(
+            "{}x{}",
+            "f(".repeat(MAX_EXPR_DEPTH),
+            ")".repeat(MAX_EXPR_DEPTH)
+        );
+        assert!(parse_expression(&Scanner::new(&deep_calls).scan_all()?).is_err());
+
+        // Right-associative binary (`^`) at bound vs beyond bound
+        let valid_pow = std::iter::repeat_n("x", MAX_EXPR_DEPTH)
+            .collect::<Vec<_>>()
+            .join(" ^ ");
+        assert!(parse_expression(&Scanner::new(&valid_pow).scan_all()?).is_ok());
+        let deep_pow = std::iter::repeat_n("x", MAX_EXPR_DEPTH + 1)
+            .collect::<Vec<_>>()
+            .join(" ^ ");
+        assert!(parse_expression(&Scanner::new(&deep_pow).scan_all()?).is_err());
+
+        // Left-associative binary (`+`) at bound vs beyond bound
+        let valid_add = std::iter::repeat_n("x", MAX_EXPR_DEPTH)
+            .collect::<Vec<_>>()
+            .join(" + ");
+        assert!(parse_expression(&Scanner::new(&valid_add).scan_all()?).is_ok());
+        let deep_add = std::iter::repeat_n("x", MAX_EXPR_DEPTH + 1)
+            .collect::<Vec<_>>()
+            .join(" + ");
+        assert!(parse_expression(&Scanner::new(&deep_add).scan_all()?).is_err());
+
+        // Member chain (`.a`) at bound vs beyond bound
+        let valid_member = format!("x{}", ".a".repeat(max_ops));
+        assert!(parse_expression(&Scanner::new(&valid_member).scan_all()?).is_ok());
+        let deep_member = format!("x{}", ".a".repeat(MAX_EXPR_DEPTH));
+        assert!(parse_expression(&Scanner::new(&deep_member).scan_all()?).is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_to_string_repr_depth_bounds() {
+        let mut at_bound = Expr::Ident("x".to_string());
+        for _ in 0..(MAX_EXPR_DEPTH - 1) {
+            at_bound = Expr::Unary {
+                op: UnaryOp::Neg,
+                expr: Box::new(at_bound),
+            };
+        }
+        assert_eq!(
+            at_bound.to_string_repr(),
+            format!("{}x", "-".repeat(MAX_EXPR_DEPTH - 1))
+        );
+
+        let mut beyond_bound = Expr::Ident("x".to_string());
+        for _ in 0..(MAX_EXPR_DEPTH + 32) {
+            beyond_bound = Expr::Unary {
+                op: UnaryOp::Neg,
+                expr: Box::new(beyond_bound),
+            };
+        }
+        assert_eq!(
+            beyond_bound.to_string_repr(),
+            format!("{}...", "-".repeat(MAX_EXPR_DEPTH))
+        );
+
+        // Also verify Member, Call, and Binary variants truncate cleanly beyond MAX_EXPR_DEPTH
+        let mut deep_member = Expr::Ident("root".to_string());
+        for _ in 0..(MAX_EXPR_DEPTH + 10) {
+            deep_member = Expr::Member {
+                object: Box::new(deep_member),
+                member: "m".to_string(),
+            };
+        }
+        assert!(deep_member.to_string_repr().starts_with("....m"));
+
+        let mut deep_call = Expr::Ident("x".to_string());
+        for _ in 0..(MAX_EXPR_DEPTH + 10) {
+            deep_call = Expr::Call {
+                func: "fn_call".to_string(),
+                args: vec![deep_call],
+            };
+        }
+        assert!(deep_call.to_string_repr().contains("fn_call(...)"));
+
+        let mut deep_bin = Expr::Ident("x".to_string());
+        for _ in 0..(MAX_EXPR_DEPTH + 10) {
+            deep_bin = Expr::Binary {
+                op: BinaryOp::Add,
+                left: Box::new(deep_bin),
+                right: Box::new(Expr::Number(1.0)),
+            };
+        }
+        assert!(deep_bin.to_string_repr().starts_with("... + ... + 1.0"));
     }
 }
