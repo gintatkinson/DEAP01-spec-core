@@ -376,103 +376,79 @@ pub fn generate_digest(pkg: &PackageDef, sysml_text: &str) -> SchemaDigest {
     SchemaDigest::compute(pkg, sysml_text)
 }
 
-/// Executes deterministic fn `count_part_structural_elements` within `crates/compile-sysml/src/semantic/digest.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `count_part_structural_elements` in `crates/compile-sysml/src/semantic/digest.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `count_part_structural_elements` (declaration #11) within `SEMANTIC-DIGEST`.
-///
-/// ## 3. Preconditions
-/// - `part: &PartDef` must satisfy domain and type-safety constraints prior to invoking `count_part_structural_elements`.
-///
-/// ## 4. Postconditions
-/// - Returns `usize` from `count_part_structural_elements` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(part)) bounded over input/member dimension of `count_part_structural_elements`.
-/// - Space Complexity: O(N(part)) bounded auxiliary memory for `count_part_structural_elements`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `count_part_structural_elements` (`usize`).
-/// - State: Maintains consistent state invariants across `count_part_structural_elements` without partial mutation on error.
-/// - Action: Executes `count_part_structural_elements` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `count_part_structural_elements` (`SEMANTIC-DIGEST`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SEMANTIC-DIGEST-COUNT-PART-STRUCTURAL-ELEMENTS] | SysML v2: ActionDef(count_part_structural_elements)
-fn count_part_structural_elements(part: &PartDef) -> usize {
-    let direct = part.parts.len()
-        + part.attributes.len()
-        + part.ports.len()
-        + part.actions.len()
-        + part.operations.len()
-        + part.capabilities.len()
-        + part.interactions.len()
-        + part.constraints.len()
-        + part.calcs.len()
-        + part.test_cases.len()
-        + part.requirements.len()
-        + part.connections.len()
-        + part.states.len()
-        + part.use_cases.len()
-        + part.item_defs.len()
-        + part.hazards.len()
-        + part.risks.len();
-
-    let nested: usize = part.parts.iter().map(count_part_structural_elements).sum();
-    direct + nested
+/// Iteratively counts all direct and nested structural AST elements within a `PartDef` subtree.
+/// Uses an explicit `Vec<&PartDef>` work-stack and saturating arithmetic with zero call-stack recursion.
+/// Realises: [REQ-SEMANTIC-DIGEST-COUNT-PART-STRUCTURAL-ELEMENTS]
+fn count_part_structural_elements(root_part: &PartDef) -> usize {
+    let mut total: usize = 0;
+    let mut stack: Vec<&PartDef> = vec![root_part];
+    while let Some(part) = stack.pop() {
+        let direct = part
+            .parts
+            .len()
+            .saturating_add(part.attributes.len())
+            .saturating_add(part.ports.len())
+            .saturating_add(part.actions.len())
+            .saturating_add(part.operations.len())
+            .saturating_add(part.capabilities.len())
+            .saturating_add(part.interactions.len())
+            .saturating_add(part.constraints.len())
+            .saturating_add(part.calcs.len())
+            .saturating_add(part.test_cases.len())
+            .saturating_add(part.requirements.len())
+            .saturating_add(part.connections.len())
+            .saturating_add(part.states.len())
+            .saturating_add(part.use_cases.len())
+            .saturating_add(part.item_defs.len())
+            .saturating_add(part.hazards.len())
+            .saturating_add(part.risks.len());
+        total = total.saturating_add(direct);
+        for child in part.parts.iter().rev() {
+            stack.push(child);
+        }
+    }
+    total
 }
 
-/// Count structural AST definitions within a PackageDef.
+/// Counts all structural AST definitions across a `PackageDef` hierarchy using iterative work-stacks.
 ///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `count_structural_elements` in `crates/compile-sysml/src/semantic/digest.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `count_structural_elements` (declaration #12) within `SEMANTIC-DIGEST`.
-///
-/// ## 3. Preconditions
-/// - `pkg: &PackageDef` must satisfy domain and type-safety constraints prior to invoking `count_structural_elements`.
-///
-/// ## 4. Postconditions
-/// - Returns `usize` from `count_structural_elements` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(pkg)) bounded over input/member dimension of `count_structural_elements`.
-/// - Space Complexity: O(N(pkg)) bounded auxiliary memory for `count_structural_elements`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `count_structural_elements` (`usize`).
-/// - State: Maintains consistent state invariants across `count_structural_elements` without partial mutation on error.
-/// - Action: Executes `count_structural_elements` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `count_structural_elements` (`SEMANTIC-DIGEST`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SEMANTIC-DIGEST-COUNT-STRUCTURAL-ELEMENTS] | SysML v2: ActionDef(count_structural_elements)
+/// Safety & Traceability: Realises: [REQ-SEMANTIC-DIGEST-COUNT-STRUCTURAL-ELEMENTS]
+/// Contract: Traverses `pkg`, all nested `packages`, and all nested `PartDef` trees in deterministic
+/// pre-order without mutating the AST, returning the saturating sum of structural definitions.
+/// Bounds & Faults: $O(V)$ time and $O(V)$ heap work-stack space over AST node count $V$ with $O(1)$
+/// call-stack frames; total function using `saturating_add` that never panics or overflows.
 pub fn count_structural_elements(pkg: &PackageDef) -> usize {
-    let direct = pkg.part_defs.len()
-        + pkg.attribute_defs.len()
-        + pkg.port_defs.len()
-        + pkg.action_defs.len()
-        + pkg.operation_defs.len()
-        + pkg.capability_defs.len()
-        + pkg.interaction_defs.len()
-        + pkg.constraint_defs.len()
-        + pkg.calc_defs.len()
-        + pkg.test_case_defs.len()
-        + pkg.requirement_defs.len()
-        + pkg.connection_defs.len()
-        + pkg.state_defs.len()
-        + pkg.use_case_defs.len()
-        + pkg.item_defs.len()
-        + pkg.hazard_defs.len()
-        + pkg.risk_defs.len();
-
-    let part_nested: usize = pkg.part_defs.iter().map(count_part_structural_elements).sum();
-    let nested: usize = pkg.packages.iter().map(count_structural_elements).sum();
-    direct + part_nested + nested
+    let mut total: usize = 0;
+    let mut stack: Vec<&PackageDef> = vec![pkg];
+    while let Some(curr) = stack.pop() {
+        let direct = curr
+            .part_defs
+            .len()
+            .saturating_add(curr.attribute_defs.len())
+            .saturating_add(curr.port_defs.len())
+            .saturating_add(curr.action_defs.len())
+            .saturating_add(curr.operation_defs.len())
+            .saturating_add(curr.capability_defs.len())
+            .saturating_add(curr.interaction_defs.len())
+            .saturating_add(curr.constraint_defs.len())
+            .saturating_add(curr.calc_defs.len())
+            .saturating_add(curr.test_case_defs.len())
+            .saturating_add(curr.requirement_defs.len())
+            .saturating_add(curr.connection_defs.len())
+            .saturating_add(curr.state_defs.len())
+            .saturating_add(curr.use_case_defs.len())
+            .saturating_add(curr.item_defs.len())
+            .saturating_add(curr.hazard_defs.len())
+            .saturating_add(curr.risk_defs.len());
+        total = total.saturating_add(direct);
+        for part in &curr.part_defs {
+            total = total.saturating_add(count_part_structural_elements(part));
+        }
+        for sub_pkg in curr.packages.iter().rev() {
+            stack.push(sub_pkg);
+        }
+    }
+    total
 }
 
 /// Compute a file manifest for a slice of SysML files.
@@ -516,7 +492,10 @@ pub fn compute_file_manifest(files: &[PathBuf]) -> Vec<FileDigestEntry> {
         let rel_p = p.strip_prefix(".").unwrap_or(p);
         let rel_p = if !rel_p.is_absolute() {
             rel_p
-        } else if let Some(stripped) = cwd.as_ref().and_then(|cwd_path| rel_p.strip_prefix(cwd_path).ok()) {
+        } else if let Some(stripped) = cwd
+            .as_ref()
+            .and_then(|cwd_path| rel_p.strip_prefix(cwd_path).ok())
+        {
             stripped
         } else if let Some(schema_ws_root) = rel_p
             .ancestors()
@@ -649,7 +628,6 @@ pub fn write_atomic(path: &Path, content: &str) -> Result<(), io::Error> {
     write_res
 }
 
-
 /// Compute SHA-256 hash formatted as lowercase hexadecimal (FIPS 180-4).
 ///
 /// # Summary
@@ -758,315 +736,206 @@ fn compute_node_counts(pkg: &PackageDef) -> BTreeMap<String, usize> {
     counts
 }
 
-/// Executes deterministic fn `bump_count` within `crates/compile-sysml/src/semantic/digest.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `bump_count` in `crates/compile-sysml/src/semantic/digest.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `bump_count` (declaration #18) within `SEMANTIC-DIGEST`.
-///
-/// ## 3. Preconditions
-/// - `counts: &mut BTreeMap<String, usize>` must satisfy domain and type-safety constraints prior to invoking `bump_count`.
-/// - `key: &str` must satisfy domain and type-safety constraints prior to invoking `bump_count`.
-/// - `n: usize` must satisfy domain and type-safety constraints prior to invoking `bump_count`.
-///
-/// ## 4. Postconditions
-/// - Returns `()` from `bump_count` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(counts)) bounded over input/member dimension of `bump_count`.
-/// - Space Complexity: O(N(counts)) bounded auxiliary memory for `bump_count`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `bump_count` (`()`).
-/// - State: Maintains consistent state invariants across `bump_count` without partial mutation on error.
-/// - Action: Executes `bump_count` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `bump_count` (`SEMANTIC-DIGEST`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SEMANTIC-DIGEST-BUMP-COUNT] | SysML v2: ActionDef(bump_count)
+/// Increments `key` in `counts` by `n` using saturating addition so counters never overflow.
+/// Realises: [REQ-SEMANTIC-DIGEST-BUMP-COUNT]
 fn bump_count(counts: &mut BTreeMap<String, usize>, key: &str, n: usize) {
-    *counts.entry(key.to_string()).or_insert(0) += n;
+    let entry = counts.entry(key.to_string()).or_insert(0);
+    *entry = entry.saturating_add(n);
 }
 
-/// Executes deterministic fn `accumulate_package_counts` within `crates/compile-sysml/src/semantic/digest.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `accumulate_package_counts` in `crates/compile-sysml/src/semantic/digest.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `accumulate_package_counts` (declaration #19) within `SEMANTIC-DIGEST`.
-///
-/// ## 3. Preconditions
-/// - `pkg: &PackageDef` must satisfy domain and type-safety constraints prior to invoking `accumulate_package_counts`.
-/// - `counts: &mut BTreeMap<String, usize>` must satisfy domain and type-safety constraints prior to invoking `accumulate_package_counts`.
-///
-/// ## 4. Postconditions
-/// - Returns `()` from `accumulate_package_counts` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(pkg)) bounded over input/member dimension of `accumulate_package_counts`.
-/// - Space Complexity: O(N(pkg)) bounded auxiliary memory for `accumulate_package_counts`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `accumulate_package_counts` (`()`).
-/// - State: Maintains consistent state invariants across `accumulate_package_counts` without partial mutation on error.
-/// - Action: Executes `accumulate_package_counts` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `accumulate_package_counts` (`SEMANTIC-DIGEST`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SEMANTIC-DIGEST-ACCUMULATE-PACKAGE-COUNTS] | SysML v2: ActionDef(accumulate_package_counts)
+/// Iteratively accumulates per-kind AST definition counts across `pkg` and all nested subpackages.
+/// Pushes child packages in reverse slice order onto a `Vec` work-stack to preserve pre-order traversal.
+/// Realises: [REQ-SEMANTIC-DIGEST-ACCUMULATE-PACKAGE-COUNTS]
 fn accumulate_package_counts(pkg: &PackageDef, counts: &mut BTreeMap<String, usize>) {
-    bump_count(counts, "attribute_defs", pkg.attribute_defs.len());
-    bump_count(counts, "port_defs", pkg.port_defs.len());
-    bump_count(counts, "action_defs", pkg.action_defs.len());
-    bump_count(counts, "capability_defs", pkg.capability_defs.len());
-    bump_count(counts, "operation_defs", pkg.operation_defs.len());
-    bump_count(counts, "interaction_defs", pkg.interaction_defs.len());
-    bump_count(counts, "constraint_defs", pkg.constraint_defs.len());
-    bump_count(counts, "calc_defs", pkg.calc_defs.len());
-    bump_count(counts, "test_case_defs", pkg.test_case_defs.len());
-    bump_count(counts, "requirement_defs", pkg.requirement_defs.len());
-    bump_count(counts, "state_defs", pkg.state_defs.len());
-    bump_count(counts, "use_case_defs", pkg.use_case_defs.len());
-    bump_count(counts, "item_defs", pkg.item_defs.len());
-    bump_count(counts, "hazard_defs", pkg.hazard_defs.len());
-    bump_count(counts, "risk_defs", pkg.risk_defs.len());
-    bump_count(counts, "connection_defs", pkg.connection_defs.len());
-    bump_count(counts, "part_defs", pkg.part_defs.len());
+    let mut stack: Vec<&PackageDef> = vec![pkg];
+    while let Some(curr) = stack.pop() {
+        bump_count(counts, "attribute_defs", curr.attribute_defs.len());
+        bump_count(counts, "port_defs", curr.port_defs.len());
+        bump_count(counts, "action_defs", curr.action_defs.len());
+        bump_count(counts, "capability_defs", curr.capability_defs.len());
+        bump_count(counts, "operation_defs", curr.operation_defs.len());
+        bump_count(counts, "interaction_defs", curr.interaction_defs.len());
+        bump_count(counts, "constraint_defs", curr.constraint_defs.len());
+        bump_count(counts, "calc_defs", curr.calc_defs.len());
+        bump_count(counts, "test_case_defs", curr.test_case_defs.len());
+        bump_count(counts, "requirement_defs", curr.requirement_defs.len());
+        bump_count(counts, "state_defs", curr.state_defs.len());
+        bump_count(counts, "use_case_defs", curr.use_case_defs.len());
+        bump_count(counts, "item_defs", curr.item_defs.len());
+        bump_count(counts, "hazard_defs", curr.hazard_defs.len());
+        bump_count(counts, "risk_defs", curr.risk_defs.len());
+        bump_count(counts, "connection_defs", curr.connection_defs.len());
+        bump_count(counts, "part_defs", curr.part_defs.len());
 
-    for part in &pkg.part_defs {
-        accumulate_part_counts(part, counts);
-    }
+        for part in &curr.part_defs {
+            accumulate_part_counts(part, counts);
+        }
 
-    for subpkg in &pkg.packages {
-        bump_count(counts, "packages", 1);
-        accumulate_package_counts(subpkg, counts);
-    }
-}
-
-/// Executes deterministic fn `accumulate_part_counts` within `crates/compile-sysml/src/semantic/digest.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `accumulate_part_counts` in `crates/compile-sysml/src/semantic/digest.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `accumulate_part_counts` (declaration #20) within `SEMANTIC-DIGEST`.
-///
-/// ## 3. Preconditions
-/// - `part: &PartDef` must satisfy domain and type-safety constraints prior to invoking `accumulate_part_counts`.
-/// - `counts: &mut BTreeMap<String, usize>` must satisfy domain and type-safety constraints prior to invoking `accumulate_part_counts`.
-///
-/// ## 4. Postconditions
-/// - Returns `()` from `accumulate_part_counts` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(part)) bounded over input/member dimension of `accumulate_part_counts`.
-/// - Space Complexity: O(N(part)) bounded auxiliary memory for `accumulate_part_counts`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `accumulate_part_counts` (`()`).
-/// - State: Maintains consistent state invariants across `accumulate_part_counts` without partial mutation on error.
-/// - Action: Executes `accumulate_part_counts` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `accumulate_part_counts` (`SEMANTIC-DIGEST`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SEMANTIC-DIGEST-ACCUMULATE-PART-COUNTS] | SysML v2: ActionDef(accumulate_part_counts)
-fn accumulate_part_counts(part: &PartDef, counts: &mut BTreeMap<String, usize>) {
-    bump_count(counts, "attribute_defs", part.attributes.len());
-    bump_count(counts, "port_defs", part.ports.len());
-    bump_count(counts, "action_defs", part.actions.len());
-    bump_count(counts, "capability_defs", part.capabilities.len());
-    bump_count(counts, "operation_defs", part.operations.len());
-    bump_count(counts, "interaction_defs", part.interactions.len());
-    bump_count(counts, "constraint_defs", part.constraints.len());
-    bump_count(counts, "calc_defs", part.calcs.len());
-    bump_count(counts, "test_case_defs", part.test_cases.len());
-    bump_count(counts, "requirement_defs", part.requirements.len());
-    bump_count(counts, "state_defs", part.states.len());
-    bump_count(counts, "use_case_defs", part.use_cases.len());
-    bump_count(counts, "item_defs", part.item_defs.len());
-    bump_count(counts, "hazard_defs", part.hazards.len());
-    bump_count(counts, "risk_defs", part.risks.len());
-    bump_count(counts, "connection_defs", part.connections.len());
-    bump_count(counts, "part_defs", part.parts.len());
-
-    for sub in &part.parts {
-        accumulate_part_counts(sub, counts);
+        for subpkg in curr.packages.iter().rev() {
+            bump_count(counts, "packages", 1);
+            stack.push(subpkg);
+        }
     }
 }
 
-/// Executes deterministic fn `collect_schema_nodes` within `crates/compile-sysml/src/semantic/digest.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `collect_schema_nodes` in `crates/compile-sysml/src/semantic/digest.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `collect_schema_nodes` (declaration #21) within `SEMANTIC-DIGEST`.
-///
-/// ## 3. Preconditions
-/// - `pkg: &PackageDef` must satisfy domain and type-safety constraints prior to invoking `collect_schema_nodes`.
-///
-/// ## 4. Postconditions
-/// - Returns `Vec<String>` from `collect_schema_nodes` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(pkg)) bounded over input/member dimension of `collect_schema_nodes`.
-/// - Space Complexity: O(N(pkg)) bounded auxiliary memory for `collect_schema_nodes`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `collect_schema_nodes` (`Vec<String>`).
-/// - State: Maintains consistent state invariants across `collect_schema_nodes` without partial mutation on error.
-/// - Action: Executes `collect_schema_nodes` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `collect_schema_nodes` (`SEMANTIC-DIGEST`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SEMANTIC-DIGEST-COLLECT-SCHEMA-NODES] | SysML v2: ActionDef(collect_schema_nodes)
+/// Iteratively accumulates per-kind AST definition counts across a `PartDef` composition tree.
+/// Pushes nested `parts` in reverse slice order onto a `Vec` work-stack to preserve pre-order traversal.
+/// Realises: [REQ-SEMANTIC-DIGEST-ACCUMULATE-PART-COUNTS]
+fn accumulate_part_counts(root_part: &PartDef, counts: &mut BTreeMap<String, usize>) {
+    let mut stack: Vec<&PartDef> = vec![root_part];
+    while let Some(part) = stack.pop() {
+        bump_count(counts, "attribute_defs", part.attributes.len());
+        bump_count(counts, "port_defs", part.ports.len());
+        bump_count(counts, "action_defs", part.actions.len());
+        bump_count(counts, "capability_defs", part.capabilities.len());
+        bump_count(counts, "operation_defs", part.operations.len());
+        bump_count(counts, "interaction_defs", part.interactions.len());
+        bump_count(counts, "constraint_defs", part.constraints.len());
+        bump_count(counts, "calc_defs", part.calcs.len());
+        bump_count(counts, "test_case_defs", part.test_cases.len());
+        bump_count(counts, "requirement_defs", part.requirements.len());
+        bump_count(counts, "state_defs", part.states.len());
+        bump_count(counts, "use_case_defs", part.use_cases.len());
+        bump_count(counts, "item_defs", part.item_defs.len());
+        bump_count(counts, "hazard_defs", part.hazards.len());
+        bump_count(counts, "risk_defs", part.risks.len());
+        bump_count(counts, "connection_defs", part.connections.len());
+        bump_count(counts, "part_defs", part.parts.len());
+
+        for sub in part.parts.iter().rev() {
+            stack.push(sub);
+        }
+    }
+}
+
+/// Iteratively collects sorted unique identifier names across `pkg`, nested subpackages, and parts.
+/// Uses an explicit `Vec<&PackageDef>` work-stack pushing children in reverse order for pre-order traversal.
+/// Realises: [REQ-SEMANTIC-DIGEST-COLLECT-SCHEMA-NODES]
 fn collect_schema_nodes(pkg: &PackageDef) -> Vec<String> {
     let mut nodes = BTreeSet::new();
-    nodes.insert(pkg.name.clone());
+    let mut stack: Vec<&PackageDef> = vec![pkg];
+    while let Some(curr) = stack.pop() {
+        nodes.insert(curr.name.clone());
 
-    for a in &pkg.attribute_defs {
-        nodes.insert(a.name.clone());
-    }
-    for p in &pkg.port_defs {
-        nodes.insert(p.name.clone());
-    }
-    for act in &pkg.action_defs {
-        nodes.insert(act.name.clone());
-    }
-    for cap in &pkg.capability_defs {
-        nodes.insert(cap.name.clone());
-    }
-    for op in &pkg.operation_defs {
-        nodes.insert(op.name.clone());
-    }
-    for inter in &pkg.interaction_defs {
-        nodes.insert(inter.name.clone());
-    }
-    for c in &pkg.constraint_defs {
-        nodes.insert(c.name.clone());
-    }
-    for calc in &pkg.calc_defs {
-        nodes.insert(calc.name.clone());
-    }
-    for tc in &pkg.test_case_defs {
-        nodes.insert(tc.name.clone());
-    }
-    for r in &pkg.requirement_defs {
-        nodes.insert(r.name.clone());
-    }
-    for s in &pkg.state_defs {
-        nodes.insert(s.name.clone());
-    }
-    for conn in &pkg.connection_defs {
-        nodes.insert(conn.name.clone());
-    }
-    for uc in &pkg.use_case_defs {
-        nodes.insert(uc.name.clone());
-    }
-    for item in &pkg.item_defs {
-        nodes.insert(item.name.clone());
-    }
-    for hz in &pkg.hazard_defs {
-        nodes.insert(hz.name.clone());
-    }
-    for rk in &pkg.risk_defs {
-        nodes.insert(rk.name.clone());
-    }
+        for a in &curr.attribute_defs {
+            nodes.insert(a.name.clone());
+        }
+        for p in &curr.port_defs {
+            nodes.insert(p.name.clone());
+        }
+        for act in &curr.action_defs {
+            nodes.insert(act.name.clone());
+        }
+        for cap in &curr.capability_defs {
+            nodes.insert(cap.name.clone());
+        }
+        for op in &curr.operation_defs {
+            nodes.insert(op.name.clone());
+        }
+        for inter in &curr.interaction_defs {
+            nodes.insert(inter.name.clone());
+        }
+        for c in &curr.constraint_defs {
+            nodes.insert(c.name.clone());
+        }
+        for calc in &curr.calc_defs {
+            nodes.insert(calc.name.clone());
+        }
+        for tc in &curr.test_case_defs {
+            nodes.insert(tc.name.clone());
+        }
+        for r in &curr.requirement_defs {
+            nodes.insert(r.name.clone());
+        }
+        for s in &curr.state_defs {
+            nodes.insert(s.name.clone());
+        }
+        for conn in &curr.connection_defs {
+            nodes.insert(conn.name.clone());
+        }
+        for uc in &curr.use_case_defs {
+            nodes.insert(uc.name.clone());
+        }
+        for item in &curr.item_defs {
+            nodes.insert(item.name.clone());
+        }
+        for hz in &curr.hazard_defs {
+            nodes.insert(hz.name.clone());
+        }
+        for rk in &curr.risk_defs {
+            nodes.insert(rk.name.clone());
+        }
 
-    for part in &pkg.part_defs {
-        collect_part_nodes(part, &mut nodes);
-    }
+        for part in &curr.part_defs {
+            collect_part_nodes(part, &mut nodes);
+        }
 
-    for sub in &pkg.packages {
-        let sub_nodes = collect_schema_nodes(sub);
-        nodes.extend(sub_nodes);
+        for sub in curr.packages.iter().rev() {
+            stack.push(sub);
+        }
     }
 
     nodes.into_iter().collect()
 }
 
-/// Executes deterministic fn `collect_part_nodes` within `crates/compile-sysml/src/semantic/digest.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `collect_part_nodes` in `crates/compile-sysml/src/semantic/digest.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `collect_part_nodes` (declaration #22) within `SEMANTIC-DIGEST`.
-///
-/// ## 3. Preconditions
-/// - `part: &PartDef` must satisfy domain and type-safety constraints prior to invoking `collect_part_nodes`.
-/// - `nodes: &mut BTreeSet<String>` must satisfy domain and type-safety constraints prior to invoking `collect_part_nodes`.
-///
-/// ## 4. Postconditions
-/// - Returns `()` from `collect_part_nodes` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(part)) bounded over input/member dimension of `collect_part_nodes`.
-/// - Space Complexity: O(N(part)) bounded auxiliary memory for `collect_part_nodes`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `collect_part_nodes` (`()`).
-/// - State: Maintains consistent state invariants across `collect_part_nodes` without partial mutation on error.
-/// - Action: Executes `collect_part_nodes` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `collect_part_nodes` (`SEMANTIC-DIGEST`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SEMANTIC-DIGEST-COLLECT-PART-NODES] | SysML v2: ActionDef(collect_part_nodes)
-fn collect_part_nodes(part: &PartDef, nodes: &mut BTreeSet<String>) {
-    nodes.insert(part.name.clone());
-    for a in &part.attributes {
-        nodes.insert(a.name.clone());
-    }
-    for p in &part.ports {
-        nodes.insert(p.name.clone());
-    }
-    for act in &part.actions {
-        nodes.insert(act.name.clone());
-    }
-    for cap in &part.capabilities {
-        nodes.insert(cap.name.clone());
-    }
-    for op in &part.operations {
-        nodes.insert(op.name.clone());
-    }
-    for inter in &part.interactions {
-        nodes.insert(inter.name.clone());
-    }
-    for c in &part.constraints {
-        nodes.insert(c.name.clone());
-    }
-    for calc in &part.calcs {
-        nodes.insert(calc.name.clone());
-    }
-    for tc in &part.test_cases {
-        nodes.insert(tc.name.clone());
-    }
-    for r in &part.requirements {
-        nodes.insert(r.name.clone());
-    }
-    for s in &part.states {
-        nodes.insert(s.name.clone());
-    }
-    for conn in &part.connections {
-        nodes.insert(conn.name.clone());
-    }
-    for uc in &part.use_cases {
-        nodes.insert(uc.name.clone());
-    }
-    for item in &part.item_defs {
-        nodes.insert(item.name.clone());
-    }
-    for hz in &part.hazards {
-        nodes.insert(hz.name.clone());
-    }
-    for rk in &part.risks {
-        nodes.insert(rk.name.clone());
-    }
-    for sub in &part.parts {
-        collect_part_nodes(sub, nodes);
+/// Iteratively collects identifier names across a `PartDef` composition subtree into `nodes`.
+/// Uses an explicit `Vec<&PartDef>` work-stack pushing nested parts in reverse order for pre-order traversal.
+/// Realises: [REQ-SEMANTIC-DIGEST-COLLECT-PART-NODES]
+fn collect_part_nodes(root_part: &PartDef, nodes: &mut BTreeSet<String>) {
+    let mut stack: Vec<&PartDef> = vec![root_part];
+    while let Some(part) = stack.pop() {
+        nodes.insert(part.name.clone());
+        for a in &part.attributes {
+            nodes.insert(a.name.clone());
+        }
+        for p in &part.ports {
+            nodes.insert(p.name.clone());
+        }
+        for act in &part.actions {
+            nodes.insert(act.name.clone());
+        }
+        for cap in &part.capabilities {
+            nodes.insert(cap.name.clone());
+        }
+        for op in &part.operations {
+            nodes.insert(op.name.clone());
+        }
+        for inter in &part.interactions {
+            nodes.insert(inter.name.clone());
+        }
+        for c in &part.constraints {
+            nodes.insert(c.name.clone());
+        }
+        for calc in &part.calcs {
+            nodes.insert(calc.name.clone());
+        }
+        for tc in &part.test_cases {
+            nodes.insert(tc.name.clone());
+        }
+        for r in &part.requirements {
+            nodes.insert(r.name.clone());
+        }
+        for s in &part.states {
+            nodes.insert(s.name.clone());
+        }
+        for conn in &part.connections {
+            nodes.insert(conn.name.clone());
+        }
+        for uc in &part.use_cases {
+            nodes.insert(uc.name.clone());
+        }
+        for item in &part.item_defs {
+            nodes.insert(item.name.clone());
+        }
+        for hz in &part.hazards {
+            nodes.insert(hz.name.clone());
+        }
+        for rk in &part.risks {
+            nodes.insert(rk.name.clone());
+        }
+        for sub in part.parts.iter().rev() {
+            stack.push(sub);
+        }
     }
 }
 
@@ -1098,7 +967,7 @@ fn collect_part_nodes(part: &PartDef, nodes: &mut BTreeSet<String>) {
 /// Realises: [REQ-SEMANTIC-DIGEST-EXTRACT-OPERATIONAL-ACTIVITIES] | SysML v2: ActionDef(extract_operational_activities)
 fn extract_operational_activities(pkg: &PackageDef) -> Vec<OperationalActivity> {
     let mut activities = Vec::new();
-    let mut idx = 1;
+    let mut idx: usize = 1;
 
     for p in pkg.get_all_packages() {
         for act in &p.action_defs {
@@ -1107,10 +976,18 @@ fn extract_operational_activities(pkg: &PackageDef) -> Vec<OperationalActivity> 
                 name: act.name.clone(),
                 doc: act.doc.clone().unwrap_or_default(),
                 performer: act.performer.clone().unwrap_or_default(),
-                inputs: act.in_params.iter().map(|param| param.name.clone()).collect(),
-                outputs: act.out_params.iter().map(|param| param.name.clone()).collect(),
+                inputs: act
+                    .in_params
+                    .iter()
+                    .map(|param| param.name.clone())
+                    .collect(),
+                outputs: act
+                    .out_params
+                    .iter()
+                    .map(|param| param.name.clone())
+                    .collect(),
             });
-            idx += 1;
+            idx = idx.saturating_add(1);
         }
     }
 
@@ -1121,10 +998,18 @@ fn extract_operational_activities(pkg: &PackageDef) -> Vec<OperationalActivity> 
                 name: act.name.clone(),
                 doc: act.doc.clone().unwrap_or_default(),
                 performer: act.performer.clone().unwrap_or_else(|| part.name.clone()),
-                inputs: act.in_params.iter().map(|param| param.name.clone()).collect(),
-                outputs: act.out_params.iter().map(|param| param.name.clone()).collect(),
+                inputs: act
+                    .in_params
+                    .iter()
+                    .map(|param| param.name.clone())
+                    .collect(),
+                outputs: act
+                    .out_params
+                    .iter()
+                    .map(|param| param.name.clone())
+                    .collect(),
             });
-            idx += 1;
+            idx = idx.saturating_add(1);
         }
     }
 
@@ -1159,7 +1044,7 @@ fn extract_operational_activities(pkg: &PackageDef) -> Vec<OperationalActivity> 
 /// Realises: [REQ-SEMANTIC-DIGEST-EXTRACT-OPERATIONAL-EXCHANGES] | SysML v2: ActionDef(extract_operational_exchanges)
 fn extract_operational_exchanges(pkg: &PackageDef) -> Vec<OperationalExchange> {
     let mut exchanges = Vec::new();
-    let mut idx = 1;
+    let mut idx: usize = 1;
 
     for p in pkg.get_all_packages() {
         for conn in &p.connection_defs {
@@ -1172,7 +1057,7 @@ fn extract_operational_exchanges(pkg: &PackageDef) -> Vec<OperationalExchange> {
                 target_part: conn.target_part.clone().unwrap_or_default(),
                 protocol: conn.protocol.clone().unwrap_or_default(),
             });
-            idx += 1;
+            idx = idx.saturating_add(1);
         }
     }
 
@@ -1183,11 +1068,14 @@ fn extract_operational_exchanges(pkg: &PackageDef) -> Vec<OperationalExchange> {
                 name: conn.name.clone(),
                 source_port: conn.source_port.clone(),
                 target_port: conn.target_port.clone(),
-                source_part: conn.source_part.clone().unwrap_or_else(|| part.name.clone()),
+                source_part: conn
+                    .source_part
+                    .clone()
+                    .unwrap_or_else(|| part.name.clone()),
                 target_part: conn.target_part.clone().unwrap_or_default(),
                 protocol: conn.protocol.clone().unwrap_or_default(),
             });
-            idx += 1;
+            idx = idx.saturating_add(1);
         }
     }
 
@@ -1322,28 +1210,22 @@ mod tests {
     fn test_compute_digest_counts_and_hash() -> Result<(), Box<dyn std::error::Error>> {
         let pkg = PackageDef {
             name: "DigestTest".to_string(),
-            attribute_defs: vec![
-                AttributeDef {
-                    name: "param1".to_string(),
-                    type_name: "Real".to_string(),
-                    default_value: Some("1.0".to_string()),
-                    doc: None,
-                },
-            ],
-            part_defs: vec![
-                PartDef {
-                    name: "ComponentA".to_string(),
-                    ports: vec![
-                        PortDef {
-                            name: "p1".to_string(),
-                            direction: "out".to_string(),
-                            type_name: "Data".to_string(),
-                            ..Default::default()
-                        },
-                    ],
+            attribute_defs: vec![AttributeDef {
+                name: "param1".to_string(),
+                type_name: "Real".to_string(),
+                default_value: Some("1.0".to_string()),
+                doc: None,
+            }],
+            part_defs: vec![PartDef {
+                name: "ComponentA".to_string(),
+                ports: vec![PortDef {
+                    name: "p1".to_string(),
+                    direction: "out".to_string(),
+                    type_name: "Data".to_string(),
                     ..Default::default()
-                },
-            ],
+                }],
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -1352,10 +1234,34 @@ mod tests {
 
         assert_eq!(digest.total_lines, 3);
         assert!(!digest.sha256.is_empty());
-        assert_eq!(*digest.node_counts.get("packages").ok_or("expected value is absent")?, 1);
-        assert_eq!(*digest.node_counts.get("part_defs").ok_or("expected value is absent")?, 1);
-        assert_eq!(*digest.node_counts.get("port_defs").ok_or("expected value is absent")?, 1);
-        assert_eq!(*digest.node_counts.get("attribute_defs").ok_or("expected value is absent")?, 1);
+        assert_eq!(
+            *digest
+                .node_counts
+                .get("packages")
+                .ok_or("expected value is absent")?,
+            1
+        );
+        assert_eq!(
+            *digest
+                .node_counts
+                .get("part_defs")
+                .ok_or("expected value is absent")?,
+            1
+        );
+        assert_eq!(
+            *digest
+                .node_counts
+                .get("port_defs")
+                .ok_or("expected value is absent")?,
+            1
+        );
+        assert_eq!(
+            *digest
+                .node_counts
+                .get("attribute_defs")
+                .ok_or("expected value is absent")?,
+            1
+        );
         assert!(digest.schema_nodes.contains(&"DigestTest".to_string()));
         assert!(digest.schema_nodes.contains(&"ComponentA".to_string()));
         assert!(digest.schema_nodes.contains(&"p1".to_string()));
@@ -1405,8 +1311,7 @@ mod tests {
             "compile_sysml_manifest_test_{}_{}",
             std::process::id(),
             std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                ?
+                .duration_since(std::time::UNIX_EPOCH)?
                 .as_nanos()
         ));
         fs::create_dir_all(&temp_dir)?;
@@ -1424,26 +1329,82 @@ mod tests {
         assert_eq!(manifest.len(), 2);
 
         // Entry 1 verification
-        assert_eq!(manifest.first().ok_or("missing first element of manifest")?.path, "subsystem_a.sysml");
-        assert_eq!(manifest.first().ok_or("missing first element of manifest")?.sha256, compute_sha256(content1.as_bytes()));
-        assert_eq!(manifest.first().ok_or("missing first element of manifest")?.bytes, content1.len() as u64);
-        assert_eq!(manifest.first().ok_or("missing first element of manifest")?.lines, content1.lines().count());
-        assert_eq!(manifest.first().ok_or("missing first element of manifest")?.entities, 2); // ComponentA and mass
+        assert_eq!(
+            manifest
+                .first()
+                .ok_or("missing first element of manifest")?
+                .path,
+            "subsystem_a.sysml"
+        );
+        assert_eq!(
+            manifest
+                .first()
+                .ok_or("missing first element of manifest")?
+                .sha256,
+            compute_sha256(content1.as_bytes())
+        );
+        assert_eq!(
+            manifest
+                .first()
+                .ok_or("missing first element of manifest")?
+                .bytes,
+            content1.len() as u64
+        );
+        assert_eq!(
+            manifest
+                .first()
+                .ok_or("missing first element of manifest")?
+                .lines,
+            content1.lines().count()
+        );
+        assert_eq!(
+            manifest
+                .first()
+                .ok_or("missing first element of manifest")?
+                .entities,
+            2
+        ); // ComponentA and mass
 
         // Entry 2 verification
-        assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.path, "subsystem_b.sysml");
-        assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.sha256, compute_sha256(content2.as_bytes()));
-        assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.bytes, content2.len() as u64);
-        assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.lines, content2.lines().count());
-        assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.entities, 1); // ComponentB
+        assert_eq!(
+            manifest.get(1).ok_or("missing element 1 of manifest")?.path,
+            "subsystem_b.sysml"
+        );
+        assert_eq!(
+            manifest
+                .get(1)
+                .ok_or("missing element 1 of manifest")?
+                .sha256,
+            compute_sha256(content2.as_bytes())
+        );
+        assert_eq!(
+            manifest
+                .get(1)
+                .ok_or("missing element 1 of manifest")?
+                .bytes,
+            content2.len() as u64
+        );
+        assert_eq!(
+            manifest
+                .get(1)
+                .ok_or("missing element 1 of manifest")?
+                .lines,
+            content2.lines().count()
+        );
+        assert_eq!(
+            manifest
+                .get(1)
+                .ok_or("missing element 1 of manifest")?
+                .entities,
+            1
+        ); // ComponentB
 
         // Verify SchemaDigest integration and serialization round-trip
         let digest = SchemaDigest::default().with_file_manifest(manifest.clone());
         assert_eq!(digest.file_manifest, manifest);
 
         let json = serde_json::to_string_pretty(&digest)?;
-        let deserialized: SchemaDigest =
-            serde_json::from_str(&json)?;
+        let deserialized: SchemaDigest = serde_json::from_str(&json)?;
         assert_eq!(deserialized.file_manifest, manifest);
 
         fs::remove_dir_all(&temp_dir)?;
@@ -1539,7 +1500,8 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-DIGEST-COMPUTE-FILE-MANIFEST] | SysML v2: TestCaseDef(test_arch_06_compute_file_manifest_deterministic_relative_paths)
     #[test]
-    fn test_arch_06_compute_file_manifest_deterministic_relative_paths() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_arch_06_compute_file_manifest_deterministic_relative_paths(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let pid = std::process::id();
         let dir_a = std::env::temp_dir().join(format!("deap_arch06_manifest_a_{pid}"));
         let dir_b = std::env::temp_dir().join(format!("deap_arch06_manifest_b_{pid}"));
@@ -1563,7 +1525,10 @@ mod tests {
         let _ = fs::remove_dir_all(&dir_a);
         let _ = fs::remove_dir_all(&dir_b);
 
-        assert_eq!(manifest_a, manifest_b, "Manifests from distinct temp roots must be identical");
+        assert_eq!(
+            manifest_a, manifest_b,
+            "Manifests from distinct temp roots must be identical"
+        );
         let entry = manifest_a.first().ok_or("missing manifest entry")?;
         assert!(
             !Path::new(&entry.path).is_absolute(),
@@ -1599,7 +1564,8 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-DIGEST-WRITE-ATOMIC, REQ-SEMANTIC-DIGEST-SCHEMADIGEST-WRITE-TO-FILE] | SysML v2: TestCaseDef(test_arch_04_write_atomic_pid_scoped_temp_and_cleanup)
     #[test]
-    fn test_arch_04_write_atomic_pid_scoped_temp_and_cleanup() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_arch_04_write_atomic_pid_scoped_temp_and_cleanup(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let pid = std::process::id();
         let tmp_dir = std::env::temp_dir().join(format!("deap_arch04_write_atomic_{pid}"));
         let _ = fs::remove_dir_all(&tmp_dir);
@@ -1621,7 +1587,10 @@ mod tests {
         let dir_target = tmp_dir.join("dir_target.sysml");
         fs::create_dir_all(dir_target.join("nested"))?;
         let err_res = write_atomic(&dir_target, "should fail rename");
-        assert!(err_res.is_err(), "Renaming a file over a non-empty directory must fail");
+        assert!(
+            err_res.is_err(),
+            "Renaming a file over a non-empty directory must fail"
+        );
         let expected_tmp = tmp_dir.join(format!(".dir_target.sysml.tmp.{pid}"));
         assert!(
             !expected_tmp.exists(),
@@ -1643,6 +1612,178 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&tmp_dir);
+        Ok(())
+    }
+
+    #[test]
+    fn test_digest_iterative_stacks_parity_and_bounded_stack_deep_nesting() -> Result<(), String> {
+        // 1. Multi-branch nested PackageDef & PartDef tree: verify exact counts, schema_nodes, and digest hash
+        let leaf_part = PartDef {
+            name: "PartA1a".to_string(),
+            attributes: vec![AttributeDef {
+                name: "leaf_attr".to_string(),
+                type_name: "Real".to_string(),
+                default_value: None,
+                doc: None,
+            }],
+            ..Default::default()
+        };
+        let sub_part_a1 = PartDef {
+            name: "PartA1".to_string(),
+            parts: vec![leaf_part],
+            ports: vec![PortDef {
+                name: "port_a1".to_string(),
+                direction: "in".to_string(),
+                type_name: "Signal".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let sub_part_a2 = PartDef {
+            name: "PartA2".to_string(),
+            ..Default::default()
+        };
+        let root_part_a = PartDef {
+            name: "PartA".to_string(),
+            parts: vec![sub_part_a1, sub_part_a2],
+            ..Default::default()
+        };
+        let nested_pkg_a1 = PackageDef {
+            name: "SubPkgA1".to_string(),
+            requirement_defs: vec![RequirementDef {
+                name: "ReqDeep".to_string(),
+                req_id: "REQ-DEEP-01".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let sub_pkg_a = PackageDef {
+            name: "SubPkgA".to_string(),
+            part_defs: vec![root_part_a],
+            packages: vec![nested_pkg_a1],
+            ..Default::default()
+        };
+        let sub_pkg_b = PackageDef {
+            name: "SubPkgB".to_string(),
+            attribute_defs: vec![AttributeDef {
+                name: "pkg_b_attr".to_string(),
+                type_name: "Integer".to_string(),
+                default_value: None,
+                doc: None,
+            }],
+            ..Default::default()
+        };
+        let root_pkg = PackageDef {
+            name: "RootPkg".to_string(),
+            packages: vec![sub_pkg_a, sub_pkg_b],
+            ..Default::default()
+        };
+
+        // Structural elements:
+        // SubPkgA: 1 part_def (PartA) + PartA(2 parts: PartA1, PartA2) + PartA1(1 part: PartA1a, 1 port: port_a1) + PartA1a(1 attr: leaf_attr) = 6
+        // SubPkgA1: 1 requirement_def (ReqDeep) = 1
+        // SubPkgB: 1 attribute_def (pkg_b_attr) = 1
+        // Total = 8
+        assert_eq!(count_structural_elements(&root_pkg), 8);
+        let digest = SchemaDigest::compute(&root_pkg, "package RootPkg {}\n");
+        assert_eq!(digest.node_counts.get("packages").copied(), Some(4));
+        assert_eq!(digest.node_counts.get("part_defs").copied(), Some(4));
+        assert_eq!(digest.node_counts.get("port_defs").copied(), Some(1));
+        assert_eq!(digest.node_counts.get("attribute_defs").copied(), Some(2));
+        assert_eq!(digest.node_counts.get("requirement_defs").copied(), Some(1));
+        assert_eq!(
+            digest.schema_nodes,
+            vec![
+                "PartA".to_string(),
+                "PartA1".to_string(),
+                "PartA1a".to_string(),
+                "PartA2".to_string(),
+                "ReqDeep".to_string(),
+                "RootPkg".to_string(),
+                "SubPkgA".to_string(),
+                "SubPkgA1".to_string(),
+                "SubPkgB".to_string(),
+                "leaf_attr".to_string(),
+                "pkg_b_attr".to_string(),
+                "port_a1".to_string(),
+            ]
+        );
+        assert_eq!(digest.sha256, compute_sha256(b"package RootPkg {}\n"));
+
+        // 2. Depth 64, 65 (MAX_AST_DEPTH + 1), and 4,000 inside a fixed 256 KiB stack thread
+        for depth in [64usize, 65, 4_000] {
+            let mut deep_part = PartDef {
+                name: format!("DeepPart_{}", depth.saturating_sub(1)),
+                attributes: vec![AttributeDef {
+                    name: "terminal_attr".to_string(),
+                    type_name: "Real".to_string(),
+                    default_value: None,
+                    doc: None,
+                }],
+                ..Default::default()
+            };
+            for idx in (0..depth.saturating_sub(1)).rev() {
+                deep_part = PartDef {
+                    name: format!("DeepPart_{idx}"),
+                    parts: vec![deep_part],
+                    ..Default::default()
+                };
+            }
+
+            let mut deep_pkg = PackageDef {
+                name: format!("DeepPkg_{}", depth.saturating_sub(1)),
+                part_defs: vec![deep_part],
+                ..Default::default()
+            };
+            for idx in (0..depth.saturating_sub(1)).rev() {
+                deep_pkg = PackageDef {
+                    name: format!("DeepPkg_{idx}"),
+                    packages: vec![deep_pkg],
+                    ..Default::default()
+                };
+            }
+
+            let (elem_count, pkg_count, part_count, node_len) =
+                std::thread::scope(|s| -> Result<(usize, usize, usize, usize), String> {
+                    let handle = std::thread::Builder::new()
+                        .name(format!("bounded_digest_{depth}"))
+                        .stack_size(256 * 1024)
+                        .spawn_scoped(s, || {
+                            let elems = count_structural_elements(&deep_pkg);
+                            let counts = compute_node_counts(&deep_pkg);
+                            let nodes = collect_schema_nodes(&deep_pkg);
+                            (
+                                elems,
+                                counts.get("packages").copied().unwrap_or(0),
+                                counts.get("part_defs").copied().unwrap_or(0),
+                                nodes.len(),
+                            )
+                        })
+                        .map_err(|e| format!("failed to spawn scoped thread: {e}"))?;
+                    handle
+                        .join()
+                        .map_err(|_| "bounded-stack digest thread panicked".to_string())
+                })?;
+
+            // depth PartDefs + 1 terminal_attr = depth + 1 structural elements
+            assert_eq!(elem_count, depth.saturating_add(1));
+            assert_eq!(pkg_count, depth);
+            assert_eq!(part_count, depth);
+            // depth DeepPkg_* + depth DeepPart_* + 1 terminal_attr = 2 * depth + 1 unique names
+            assert_eq!(node_len, depth.saturating_mul(2).saturating_add(1));
+
+            // Iteratively dismantle deep package and part trees in O(1) stack frames
+            let mut extracted_parts: Vec<PartDef> = Vec::new();
+            let mut pkg_drain = vec![deep_pkg];
+            while let Some(mut p) = pkg_drain.pop() {
+                extracted_parts.append(&mut p.part_defs);
+                pkg_drain.append(&mut p.packages);
+            }
+            while let Some(mut pt) = extracted_parts.pop() {
+                extracted_parts.append(&mut pt.parts);
+            }
+        }
+
         Ok(())
     }
 }

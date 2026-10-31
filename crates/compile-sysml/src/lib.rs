@@ -68,8 +68,9 @@ pub use semantic::serializer::{to_sysml, SysmlSerializable};
 pub use semantic::symbols::{Symbol, SymbolKind, SymbolTable};
 pub use semantic::validator::{DiagnosticSeverity, SemanticDiagnostic, SemanticValidator};
 pub use stpa::{
-    compile_stpa_to_constraints, compile_stpa_to_constraints_filtered, emit_safety_suite, expand_cartesian_stpa, generate_fmeca_matrix,
-    transpile_safety_suite, transpile_stpa, FmecaRow, FmecaScoringConfig, UnsafeControlAction,
+    compile_stpa_to_constraints, compile_stpa_to_constraints_filtered, emit_safety_suite,
+    expand_cartesian_stpa, generate_fmeca_matrix, transpile_safety_suite, transpile_stpa, FmecaRow,
+    FmecaScoringConfig, UnsafeControlAction,
 };
 pub use sync::{
     forward_sync_sysml_to_specs, reverse_sync_specs_to_sysml, ForwardSyncOptions,
@@ -143,34 +144,16 @@ pub struct MbdExportBundle {
     pub layer_contracts_json: String,
 }
 
-/// Recursively collects all `PartDef` nodes in pre-order traversal from a slice of parts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Guarantees complete hierarchical part discovery across nested SysML v2 composition trees
-/// for DO-331 MBD bus, statechart, and layer-contract synthesis.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic pre-order declaration sequence across arbitrary composition depth.
-///
-/// ## 3. Preconditions
-/// - `parts` is a valid slice of `PartDef` AST nodes; `out` is the destination accumulator vector.
-///
-/// ## 4. Postconditions
-/// - Appends every root and nested `PartDef` in `parts` to `out` in pre-order.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time complexity: $O(V)$ where $V$ is the total number of `PartDef` nodes in the hierarchy.
-/// - Space complexity: $O(V)$ for the accumulated `PartDef` clones plus $O(D)$ call-stack depth.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Finite tree traversal over owned AST vectors; cannot loop indefinitely or panic.
-///
-/// ## 7. Realization & Traceability
+/// Iteratively collects all `PartDef` references in pre-order traversal using an explicit `Vec` work-stack.
+/// Preserves declaration order across arbitrary nesting depth with $O(1)$ call-stack usage and zero deep clones.
 /// Realises: [REQ-COMPILER-SYSML-COLLECT-PARTS]
-fn collect_model_parts_recursive(parts: &[PartDef], out: &mut Vec<PartDef>) {
-    for part in parts {
-        out.push(part.clone());
-        collect_model_parts_recursive(&part.parts, out);
+fn collect_model_parts_iterative<'a>(parts: &'a [PartDef], out: &mut Vec<&'a PartDef>) {
+    let mut stack: Vec<&'a PartDef> = parts.iter().rev().collect();
+    while let Some(part) = stack.pop() {
+        out.push(part);
+        for child in part.parts.iter().rev() {
+            stack.push(child);
+        }
     }
 }
 
@@ -239,7 +222,9 @@ pub fn escape_matlab_single_quoted(s: &str) -> String {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-FLATTEN-ITERATIVE]
-fn flatten_package_tree_iterative(mut root: deap_core::sysml_ast::PackageDef) -> deap_core::sysml_ast::PackageDef {
+fn flatten_package_tree_iterative(
+    mut root: deap_core::sysml_ast::PackageDef,
+) -> deap_core::sysml_ast::PackageDef {
     let mut stack: Vec<deap_core::sysml_ast::PackageDef> = std::mem::take(&mut root.packages);
     stack.reverse();
     while let Some(mut sub) = stack.pop() {
@@ -252,7 +237,11 @@ fn flatten_package_tree_iterative(mut root: deap_core::sysml_ast::PackageDef) ->
     if !root.item_defs.is_empty() {
         for part in &mut root.part_defs {
             for item in &root.item_defs {
-                if !part.item_defs.iter().any(|existing| existing.name == item.name) {
+                if !part
+                    .item_defs
+                    .iter()
+                    .any(|existing| existing.name == item.name)
+                {
                     part.item_defs.push(item.clone());
                 }
             }
@@ -415,8 +404,8 @@ pub fn escape_xml(s: &str) -> String {
 pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExportBundle {
     let pkg_name = model.package_name.as_deref().unwrap_or("SysML_Model");
     let pkg_name_xml = escape_xml(pkg_name);
-    let mut all_parts = Vec::new();
-    collect_model_parts_recursive(&model.parts, &mut all_parts);
+    let mut all_parts: Vec<&PartDef> = Vec::new();
+    collect_model_parts_iterative(&model.parts, &mut all_parts);
 
     let mut all_reqs: Vec<RequirementDef> = Vec::with_capacity(model.requirements.len());
     let mut seen_reqs: std::collections::BTreeSet<(String, String)> =
@@ -496,7 +485,9 @@ pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExp
         slreq_xml.push_str(&format!(
             "  <slreq:Requirement id=\"{id_xml}\" name=\"{name_xml}\" layer=\"{layer_xml}\">\n"
         ));
-        slreq_xml.push_str(&format!("    <slreq:Summary>{summary_xml}</slreq:Summary>\n"));
+        slreq_xml.push_str(&format!(
+            "    <slreq:Summary>{summary_xml}</slreq:Summary>\n"
+        ));
         slreq_xml.push_str(&format!(
             "    <slreq:SatisfiedBy>{satisfied_by_xml}</slreq:SatisfiedBy>\n"
         ));
@@ -550,9 +541,8 @@ pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExp
     }
     stateflow_sfx.push_str("</StateflowChart>\n");
 
-    let mut simulink_bus_m = format!(
-        "% Auto-generated Simulink.Bus definitions for package {pkg_name}\n"
-    );
+    let mut simulink_bus_m =
+        format!("% Auto-generated Simulink.Bus definitions for package {pkg_name}\n");
     for port_def in &model.ports {
         simulink_bus_m.push_str(&format!(
             "{}_Bus = Simulink.Bus;\n{}_Bus.Elements = [\n",
@@ -611,7 +601,7 @@ pub fn synthesize_mbd_bundle(model: &deap_core::sysml_ast::SysmlModel) -> MbdExp
 
     let descriptors: Vec<deap_core::sysml_ast::TypeDescriptor> = all_parts
         .iter()
-        .map(|part| deap_core::sysml_ast::TypeDescriptor::from_part_def(pkg_name, part))
+        .map(|&part| deap_core::sysml_ast::TypeDescriptor::from_part_def(pkg_name, part))
         .collect();
     let layer_contracts_json = match serde_json::to_string_pretty(&descriptors) {
         Ok(json) => json,
@@ -664,11 +654,11 @@ pub fn export_mbd_artifacts(
         )
     })?;
     let pkg_name = model.package_name.as_deref().unwrap_or("SysML_Model");
-    let mut all_parts = Vec::new();
-    collect_model_parts_recursive(&model.parts, &mut all_parts);
+    let mut all_parts: Vec<&PartDef> = Vec::new();
+    collect_model_parts_iterative(&model.parts, &mut all_parts);
     let descriptors: Vec<deap_core::sysml_ast::TypeDescriptor> = all_parts
         .iter()
-        .map(|part| deap_core::sysml_ast::TypeDescriptor::from_part_def(pkg_name, part))
+        .map(|&part| deap_core::sysml_ast::TypeDescriptor::from_part_def(pkg_name, part))
         .collect();
     let layer_contracts_json = serde_json::to_string_pretty(&descriptors)
         .map_err(|e| format!("Failed to serialize MBD TypeDescriptor contracts to JSON: {e}"))?;
@@ -793,7 +783,10 @@ mod tests {
             }
         "#;
         let pkg = parse_sysml(src).map_err(|e| format!("{e:?}"))?;
-        let part = pkg.part_defs.first().ok_or("FlightController should exist")?;
+        let part = pkg
+            .part_defs
+            .first()
+            .ok_or("FlightController should exist")?;
         assert_eq!(
             part.triggers_hazards,
             vec!["H-01".to_string(), "H-02".to_string()]
@@ -856,10 +849,8 @@ mod tests {
         assert!(bundle.layer_contracts_json.contains("FlightController"));
         assert!(bundle.layer_contracts_json.contains("Domain"));
 
-        let tmp_dir = std::env::temp_dir().join(format!(
-            "deap_mbd_export_test_{}",
-            std::process::id()
-        ));
+        let tmp_dir =
+            std::env::temp_dir().join(format!("deap_mbd_export_test_{}", std::process::id()));
         std::fs::remove_dir_all(&tmp_dir).unwrap_or(());
         let written = export_mbd_artifacts(&model, &tmp_dir)?;
         assert_eq!(written.len(), 4);
@@ -901,7 +892,8 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-COMPILER-SYSML-TEST-DEFECT-06-MBD-XML-ESCAPING]
     #[test]
-    fn test_defect_06_synthesize_mbd_bundle_transition_endpoints_and_xml_escaping() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_06_synthesize_mbd_bundle_transition_endpoints_and_xml_escaping(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let src = r#"
             package AvionicsPkg {
                 part def FlightController {
@@ -938,17 +930,23 @@ mod tests {
         let bundle = synthesize_mbd_bundle(&model);
 
         assert!(
-            bundle.slreq_xml.contains("id=\"REQ-&quot;01&quot;-&apos;A&apos;\""),
+            bundle
+                .slreq_xml
+                .contains("id=\"REQ-&quot;01&quot;-&apos;A&apos;\""),
             "slreq_xml must escape quotes and apostrophes in id attribute:\n{}",
             bundle.slreq_xml
         );
         assert!(
-            bundle.slreq_xml.contains("name=\"Req&lt;Pitch&amp;Roll&gt;\""),
+            bundle
+                .slreq_xml
+                .contains("name=\"Req&lt;Pitch&amp;Roll&gt;\""),
             "slreq_xml must escape <, &, > in name attribute:\n{}",
             bundle.slreq_xml
         );
         assert!(
-            bundle.slreq_xml.contains("layer=\"Safety &amp; &quot;Control&quot; &lt;&apos;L1&apos;&gt;\""),
+            bundle
+                .slreq_xml
+                .contains("layer=\"Safety &amp; &quot;Control&quot; &lt;&apos;L1&apos;&gt;\""),
             "slreq_xml must escape all 5 XML entities in layer attribute:\n{}",
             bundle.slreq_xml
         );
@@ -958,7 +956,9 @@ mod tests {
             bundle.slreq_xml
         );
         assert!(
-            bundle.slreq_xml.contains("<slreq:SatisfiedBy>FlightController&lt;Primary&amp;Backup&gt;</slreq:SatisfiedBy>"),
+            bundle.slreq_xml.contains(
+                "<slreq:SatisfiedBy>FlightController&lt;Primary&amp;Backup&gt;</slreq:SatisfiedBy>"
+            ),
             "slreq_xml must escape SatisfiedBy element:\n{}",
             bundle.slreq_xml
         );
@@ -979,7 +979,9 @@ mod tests {
             bundle.stateflow_sfx
         );
         assert!(
-            bundle.stateflow_sfx.contains("source=\"SafeMode\" target=\"Init\""),
+            bundle
+                .stateflow_sfx
+                .contains("source=\"SafeMode\" target=\"Init\""),
             "stateflow_sfx must populate structured source and target for from..to transition:\n{}",
             bundle.stateflow_sfx
         );
@@ -989,7 +991,9 @@ mod tests {
             bundle.stateflow_sfx
         );
         assert!(
-            bundle.stateflow_sfx.contains("entry=\"&quot;Init &lt; &apos;Safe&apos; &amp; Fast &gt;&quot;\""),
+            bundle
+                .stateflow_sfx
+                .contains("entry=\"&quot;Init &lt; &apos;Safe&apos; &amp; Fast &gt;&quot;\""),
             "stateflow_sfx must escape all 5 XML entities in state entry attribute:\n{}",
             bundle.stateflow_sfx
         );
@@ -1027,7 +1031,8 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-COMPILER-SYSML-TEST-ARCH-03-FLATTEN-DEEP]
     #[test]
-    fn test_arch_03_flatten_package_to_model_deep_hierarchy() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_arch_03_flatten_package_to_model_deep_hierarchy(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let src = r#"
             package Root {
                 port def RootPort;
@@ -1218,12 +1223,106 @@ mod tests {
 
         let bundle = synthesize_mbd_bundle(&model);
         assert!(
-            bundle
-                .simulink_bus_m
-                .contains("Simulink.BusElement('Name', 'Controller''s_State', 'DataType', 'Real''s_Type');"),
+            bundle.simulink_bus_m.contains(
+                "Simulink.BusElement('Name', 'Controller''s_State', 'DataType', 'Real''s_Type');"
+            ),
             "simulink_bus_m must escape single quotes in MATLAB string literals:\n{}",
             bundle.simulink_bus_m
         );
     }
-}
 
+    #[test]
+    fn test_collect_model_parts_preorder_and_bounded_stack_deep_nesting() -> Result<(), String> {
+        // 1. Multi-branch tree: verify exact pre-order [A, A1, A1a, A1b, A2, B, B1]
+        let make_part = |name: &str, children: Vec<PartDef>| PartDef {
+            name: name.to_string(),
+            parts: children,
+            ..Default::default()
+        };
+        let tree = vec![
+            make_part(
+                "A",
+                vec![
+                    make_part(
+                        "A1",
+                        vec![make_part("A1a", vec![]), make_part("A1b", vec![])],
+                    ),
+                    make_part("A2", vec![]),
+                ],
+            ),
+            make_part("B", vec![make_part("B1", vec![])]),
+        ];
+        let mut model = deap_core::sysml_ast::SysmlModel::default();
+        model.package_name = Some("PreOrderPkg".to_string());
+        model.parts = tree;
+        let mut collected: Vec<&PartDef> = Vec::new();
+        collect_model_parts_iterative(&model.parts, &mut collected);
+        let direct_names: Vec<&str> = collected.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(direct_names, vec!["A", "A1", "A1a", "A1b", "A2", "B", "B1"]);
+        let bundle = synthesize_mbd_bundle(&model);
+        let bus_names: Vec<&str> = bundle
+            .simulink_bus_m
+            .lines()
+            .filter_map(|line| line.strip_suffix("_Bus = Simulink.Bus;"))
+            .collect();
+        assert_eq!(
+            bus_names,
+            vec!["A", "A1", "A1a", "A1b", "A2", "B", "B1"],
+            "Part traversal must preserve exact pre-order declaration sequence"
+        );
+
+        // 2. Depth 64, 65 (MAX_AST_DEPTH + 1), and 4,000 inside a fixed 256 KiB stack thread
+        for depth in [64usize, 65, 4_000] {
+            let mut curr = PartDef {
+                name: format!("Part_{}", depth.saturating_sub(1)),
+                ..Default::default()
+            };
+            for idx in (0..depth.saturating_sub(1)).rev() {
+                curr = PartDef {
+                    name: format!("Part_{idx}"),
+                    parts: vec![curr],
+                    ..Default::default()
+                };
+            }
+            let mut deep_model = deap_core::sysml_ast::SysmlModel::default();
+            deep_model.package_name = Some("DeepStackPkg".to_string());
+            deep_model.parts = vec![curr];
+
+            let count_and_order =
+                std::thread::scope(|s| -> Result<(usize, String, String), String> {
+                    let handle = std::thread::Builder::new()
+                        .name(format!("bounded_lib_parts_{depth}"))
+                        .stack_size(256 * 1024)
+                        .spawn_scoped(s, || {
+                            let b = synthesize_mbd_bundle(&deep_model);
+                            let names: Vec<String> = b
+                                .simulink_bus_m
+                                .lines()
+                                .filter_map(|l| l.strip_suffix("_Bus = Simulink.Bus;"))
+                                .map(str::to_string)
+                                .collect();
+                            let first = names.first().cloned().unwrap_or_default();
+                            let last = names.last().cloned().unwrap_or_default();
+                            (names.len(), first, last)
+                        })
+                        .map_err(|e| format!("failed to spawn scoped thread: {e}"))?;
+                    handle
+                        .join()
+                        .map_err(|_| "bounded-stack thread panicked".to_string())
+                })?;
+
+            assert_eq!(count_and_order.0, depth);
+            assert_eq!(count_and_order.1, "Part_0");
+            assert_eq!(
+                count_and_order.2,
+                format!("Part_{}", depth.saturating_sub(1))
+            );
+
+            // Iteratively dismantle deep tree in O(1) stack frames so Drop cannot recurse
+            while let Some(mut node) = deep_model.parts.pop() {
+                deep_model.parts.append(&mut node.parts);
+            }
+        }
+        Ok(())
+    }
+}
