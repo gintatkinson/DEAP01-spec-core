@@ -107,13 +107,13 @@ fn normalize_table_key(cell: &str) -> String {
 /// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-STRIP-ENCLOSING-CELL-DELIMITERS] | SysML v2: ActionDef(strip_enclosing_cell_delimiters)
 fn strip_enclosing_cell_delimiters(val: &str) -> &str {
     let trimmed = val.trim();
-    if trimmed.len() >= 2 {
-        for delim in ['`', '"', '\''] {
-            if trimmed.starts_with(delim) && trimmed.ends_with(delim) {
-                let inner = &trimmed[delim.len_utf8()..trimmed.len() - delim.len_utf8()];
-                if !inner.contains(delim) {
-                    return inner.trim();
-                }
+    for delim in ['`', '"', '\''] {
+        if let Some(inner) = trimmed
+            .strip_prefix(delim)
+            .and_then(|s| s.strip_suffix(delim))
+        {
+            if !inner.contains(delim) {
+                return inner.trim();
             }
         }
     }
@@ -293,7 +293,7 @@ pub fn parse_frontmatter(content: &str) -> Option<SpecFrontmatter> {
     let mut yaml_closing_idx = None;
     let mut yaml_lines = Vec::new();
     if let Some(start) = yaml_start_idx {
-        for (idx, line) in content.lines().enumerate().skip(start + 1) {
+        for (idx, line) in content.lines().enumerate().skip(start.saturating_add(1)) {
             let trimmed = line.trim();
             if trimmed == "---" {
                 yaml_closing_idx = Some(idx);
@@ -310,7 +310,10 @@ pub fn parse_frontmatter(content: &str) -> Option<SpecFrontmatter> {
                 continue;
             }
             if let Some((k, v)) = line.split_once(':') {
-                let key = k.trim().trim_matches(|c| c == '\'' || c == '"').to_lowercase();
+                let key = k
+                    .trim()
+                    .trim_matches(|c| c == '\'' || c == '"')
+                    .to_lowercase();
                 let val = v.trim().trim_matches(|c| c == '\'' || c == '"').to_string();
                 if key.is_empty() {
                     continue;
@@ -340,21 +343,16 @@ pub fn parse_frontmatter(content: &str) -> Option<SpecFrontmatter> {
         None
     };
 
-    let search_start = yaml_end_line.map(|idx| idx + 1).unwrap_or(0);
+    let search_start = yaml_end_line.map_or(0, |idx| idx.saturating_add(1));
     let mut in_table = false;
     let mut in_html_comment = false;
-    let mut pre_table_count = 0;
+    let mut pre_table_count: usize = 0;
 
     let parse_issue_number = |v: &str| -> Option<u64> {
-        let inner = if let Some(bracket_end) = v.find(']') {
-            if v.starts_with('[') {
-                &v[1..bracket_end]
-            } else {
-                v
-            }
-        } else {
-            v
-        };
+        let inner = v
+            .strip_prefix('[')
+            .and_then(|after_open| after_open.split_once(']'))
+            .map_or(v, |(inside, _)| inside);
         let cleaned = inner
             .trim_matches('*')
             .trim_matches('`')
@@ -448,7 +446,7 @@ pub fn parse_frontmatter(content: &str) -> Option<SpecFrontmatter> {
         } else if in_table {
             break;
         } else if !line_trimmed.is_empty() {
-            pre_table_count += 1;
+            pre_table_count = pre_table_count.saturating_add(1);
             if pre_table_count >= 25 {
                 break;
             }
@@ -511,7 +509,11 @@ pub fn parse_frontmatter(content: &str) -> Option<SpecFrontmatter> {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-UPDATE-FRONTMATTER-ISSUE-ID] | SysML v2: ActionDef(update_frontmatter_issue_id)
 pub fn update_frontmatter_issue_id(content: &str, issue_id: u64) -> String {
-    let newline = if content.contains("\r\n") { "\r\n" } else { "\n" };
+    let newline = if content.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
     let trailing_newline = content.ends_with('\n');
 
     let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
@@ -533,14 +535,17 @@ pub fn update_frontmatter_issue_id(content: &str, issue_id: u64) -> String {
     let mut yaml_issue_id_idx = None;
 
     if let Some(start) = yaml_start_idx {
-        for (idx, line) in lines.iter().enumerate().skip(start + 1) {
+        for (idx, line) in lines.iter().enumerate().skip(start.saturating_add(1)) {
             let trimmed = line.trim();
             if trimmed == "---" {
                 yaml_closing_idx = Some(idx);
                 break;
             }
             if let Some((k, _)) = trimmed.split_once(':') {
-                let key = k.trim().trim_matches(|c| c == '\'' || c == '"').to_lowercase();
+                let key = k
+                    .trim()
+                    .trim_matches(|c| c == '\'' || c == '"')
+                    .to_lowercase();
                 if key == "issue_id" {
                     yaml_issue_id_idx = Some(idx);
                 }
@@ -559,19 +564,19 @@ pub fn update_frontmatter_issue_id(content: &str, issue_id: u64) -> String {
             yaml_end_idx = yaml_closing_idx;
         } else if let Some(closing) = yaml_closing_idx {
             lines.insert(closing, format!("issue_id: {}", issue_id));
-            yaml_end_idx = Some(closing + 1);
+            yaml_end_idx = Some(closing.saturating_add(1));
         }
     }
 
     // Now update or inject into the CommonMark 2-column metadata table
-    let search_start = yaml_end_idx.map(|idx| idx + 1).unwrap_or(0);
+    let search_start = yaml_end_idx.map_or(0, |idx| idx.saturating_add(1));
     let mut table_header_idx = None;
     let mut table_delim_idx = None;
     let mut table_issue_id_idx = None;
     let mut table_fallback_id_idx = None;
     let mut in_table = false;
     let mut in_html_comment = false;
-    let mut pre_table_count = 0;
+    let mut pre_table_count: usize = 0;
 
     for (idx, line) in lines.iter().enumerate().skip(search_start) {
         let line_trimmed = line.trim();
@@ -584,9 +589,17 @@ pub fn update_frontmatter_issue_id(content: &str, issue_id: u64) -> String {
             let parts: Vec<&str> = inner.split('|').map(|s| s.trim()).collect();
             if parts.len() >= 2 {
                 let key = normalize_table_key(parts.first().copied().unwrap_or_default());
-                if key == "attribute" || key == "metadata" || key == "property" || key == "field" || key == "key" {
+                if key == "attribute"
+                    || key == "metadata"
+                    || key == "property"
+                    || key == "field"
+                    || key == "key"
+                {
                     table_header_idx = Some(idx);
-                } else if parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c == '-' || c == ':')) {
+                } else if parts
+                    .iter()
+                    .all(|p| !p.is_empty() && p.chars().all(|c| c == '-' || c == ':'))
+                {
                     table_delim_idx = Some(idx);
                 } else if key == "issue_id" || key == "issue" {
                     table_issue_id_idx = Some(idx);
@@ -609,7 +622,7 @@ pub fn update_frontmatter_issue_id(content: &str, issue_id: u64) -> String {
         } else if in_table {
             break;
         } else if !line_trimmed.is_empty() {
-            pre_table_count += 1;
+            pre_table_count = pre_table_count.saturating_add(1);
             if pre_table_count >= 25 {
                 break;
             }
@@ -622,10 +635,10 @@ pub fn update_frontmatter_issue_id(content: &str, issue_id: u64) -> String {
     if let Some(line) = target_table_row_idx.and_then(|idx| lines.get_mut(idx)) {
         *line = target_issue_row;
     } else if let Some(delim_idx) = table_delim_idx {
-        lines.insert(delim_idx + 1, target_issue_row);
+        lines.insert(delim_idx.saturating_add(1), target_issue_row);
     } else if let Some(header_idx) = table_header_idx {
-        lines.insert(header_idx + 1, "| :--- | :--- |".to_string());
-        lines.insert(header_idx + 2, target_issue_row);
+        lines.insert(header_idx.saturating_add(1), "| :--- | :--- |".to_string());
+        lines.insert(header_idx.saturating_add(2), target_issue_row);
     } else if !has_yaml {
         // No metadata table and no YAML: inject CommonMark metadata table at the start
         let mut new_lines = vec![
@@ -664,7 +677,10 @@ mod tests {
 # Epic 01: System Architecture and Compiler Primacy
 "#;
         let fm = parse_frontmatter(content).ok_or("Parsed CommonMark table")?;
-        assert_eq!(fm.title, "Epic 01: System Architecture and Compiler Primacy");
+        assert_eq!(
+            fm.title,
+            "Epic 01: System Architecture and Compiler Primacy"
+        );
         assert_eq!(fm.spec_type, "epic");
         assert_eq!(fm.issue_id, Some(101));
         assert_eq!(fm.subsystem.as_deref(), Some("System Architecture"));
@@ -695,7 +711,8 @@ mod tests {
     }
 
     #[test]
-    fn test_commonmark_2column_metadata_table_parser_red_probe() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_commonmark_2column_metadata_table_parser_red_probe(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"| Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #430 |
@@ -709,16 +726,31 @@ mod tests {
 
 # Feature 42: CommonMark 2-Column Metadata Parser
 "#;
-        let fm = parse_frontmatter(content)
-            .ok_or("RED PROBE FAILED: parse_frontmatter returned None for CommonMark 2-column table")?;
+        let fm = parse_frontmatter(content).ok_or(
+            "RED PROBE FAILED: parse_frontmatter returned None for CommonMark 2-column table",
+        )?;
         assert_eq!(fm.issue_id, Some(430));
         assert_eq!(fm.title, "Feature 42: CommonMark 2-Column Metadata Parser");
         assert_eq!(fm.spec_type, "feature");
-        assert_eq!(fm.raw_fields.get("actors").map(|s| s.as_str()), Some("Subagent Worker"));
-        assert_eq!(fm.raw_fields.get("subject").map(|s| s.as_str()), Some("crates/reconcile-backlog"));
+        assert_eq!(
+            fm.raw_fields.get("actors").map(|s| s.as_str()),
+            Some("Subagent Worker")
+        );
+        assert_eq!(
+            fm.raw_fields.get("subject").map(|s| s.as_str()),
+            Some("crates/reconcile-backlog")
+        );
         assert_eq!(fm.raw_fields.get("level").map(|s| s.as_str()), Some("2"));
-        assert_eq!(fm.raw_fields.get("generation_mode").map(|s| s.as_str()), Some("autonomous"));
-        assert_eq!(fm.raw_fields.get("specification_source").map(|s| s.as_str()), Some("[schema/model.sysml](../../schema/model.sysml)"));
+        assert_eq!(
+            fm.raw_fields.get("generation_mode").map(|s| s.as_str()),
+            Some("autonomous")
+        );
+        assert_eq!(
+            fm.raw_fields
+                .get("specification_source")
+                .map(|s| s.as_str()),
+            Some("[schema/model.sysml](../../schema/model.sysml)")
+        );
 
         let updated = update_frontmatter_issue_id(content, 999);
         assert!(updated.contains("| **Issue ID** | #999 |"));
@@ -812,7 +844,8 @@ type: feature
     }
 
     #[test]
-    fn test_frontmatter_21_plus_line_table_truncation_red_probe() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_frontmatter_21_plus_line_table_truncation_red_probe(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"| Attribute | Specification Detail |
 | :--- | :--- |
 | **Title** | Feature 42: Comprehensive Metadata Table |
@@ -845,25 +878,51 @@ type: feature
 "#;
         let fm = parse_frontmatter(content).ok_or("Failed to parse 21+ line table")?;
         assert_eq!(fm.issue_id, Some(777));
-        assert_eq!(fm.raw_fields.get("generation_mode").map(|s| s.as_str()), Some("autonomous"));
-        assert_eq!(fm.raw_fields.get("verification_gate").map(|s| s.as_str()), Some("Check 35"));
-        assert_eq!(fm.raw_fields.get("safety_level").map(|s| s.as_str()), Some("ASIL D"));
-        assert_eq!(fm.raw_fields.get("target_platform").map(|s| s.as_str()), Some("native"));
+        assert_eq!(
+            fm.raw_fields.get("generation_mode").map(|s| s.as_str()),
+            Some("autonomous")
+        );
+        assert_eq!(
+            fm.raw_fields.get("verification_gate").map(|s| s.as_str()),
+            Some("Check 35")
+        );
+        assert_eq!(
+            fm.raw_fields.get("safety_level").map(|s| s.as_str()),
+            Some("ASIL D")
+        );
+        assert_eq!(
+            fm.raw_fields.get("target_platform").map(|s| s.as_str()),
+            Some("native")
+        );
 
         let updated = update_frontmatter_issue_id(content, 888);
         assert!(updated.contains("| **Issue ID** | #888 |"));
         assert!(!updated.contains("#777"));
-        let count_issue_id_rows = updated.lines().filter(|l| l.contains("**Issue ID**")).count();
-        assert_eq!(count_issue_id_rows, 1, "Duplicate Issue ID row injected into 21+ line table");
+        let count_issue_id_rows = updated
+            .lines()
+            .filter(|l| l.contains("**Issue ID**"))
+            .count();
+        assert_eq!(
+            count_issue_id_rows, 1,
+            "Duplicate Issue ID row injected into 21+ line table"
+        );
 
-        let fm_roundtrip = parse_frontmatter(&updated).ok_or("Failed roundtrip parse of updated 21+ line table")?;
+        let fm_roundtrip = parse_frontmatter(&updated)
+            .ok_or("Failed roundtrip parse of updated 21+ line table")?;
         assert_eq!(fm_roundtrip.issue_id, Some(888));
-        assert_eq!(fm_roundtrip.raw_fields.get("target_platform").map(|s| s.as_str()), Some("native"));
+        assert_eq!(
+            fm_roundtrip
+                .raw_fields
+                .get("target_platform")
+                .map(|s| s.as_str()),
+            Some("native")
+        );
         Ok(())
     }
 
     #[test]
-    fn test_frontmatter_hybrid_yaml_and_commonmark_table_red_probe() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_frontmatter_hybrid_yaml_and_commonmark_table_red_probe(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"---
 title: "Feature 42: Source-Code AST Ingestion"
 type: feature
@@ -887,13 +946,17 @@ date: "2026-10-17"
         assert_eq!(fm.issue_id, Some(457));
         assert_eq!(fm.part.as_deref(), Some("ASTCompiler"));
         assert_eq!(fm.epic.as_deref(), Some("EPIC-01"));
-        assert_eq!(fm.raw_fields.get("actors").map(|s| s.as_str()), Some("Subagent Worker"));
+        assert_eq!(
+            fm.raw_fields.get("actors").map(|s| s.as_str()),
+            Some("Subagent Worker")
+        );
 
         let updated = update_frontmatter_issue_id(content, 458);
         assert!(updated.contains("issue_id: 458"));
         assert!(updated.contains("| **Issue ID** | #458 |"));
 
-        let fm_updated = parse_frontmatter(&updated).ok_or("Failed to parse updated hybrid specification")?;
+        let fm_updated =
+            parse_frontmatter(&updated).ok_or("Failed to parse updated hybrid specification")?;
         assert_eq!(fm_updated.issue_id, Some(458));
         assert_eq!(fm_updated.title, "Feature 42: Source-Code AST Ingestion");
         assert_eq!(fm_updated.spec_type, "feature");
@@ -901,7 +964,8 @@ date: "2026-10-17"
     }
 
     #[test]
-    fn test_frontmatter_multi_span_backticks_and_quotes_red_probe() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_frontmatter_multi_span_backticks_and_quotes_red_probe(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"| Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #101 |
@@ -914,9 +978,12 @@ date: "2026-10-17"
 
 # Feature 01: Core Invariants
 "#;
-        let fm = parse_frontmatter(content).ok_or("Failed to parse table with multi-span backticks")?;
+        let fm =
+            parse_frontmatter(content).ok_or("Failed to parse table with multi-span backticks")?;
         assert_eq!(
-            fm.raw_fields.get("satisfied_requirements").map(|s| s.as_str()),
+            fm.raw_fields
+                .get("satisfied_requirements")
+                .map(|s| s.as_str()),
             Some("`REQ_COA_005`, `REQ_COA_006`")
         );
         assert_eq!(
@@ -924,13 +991,20 @@ date: "2026-10-17"
             Some("`EPIC-01-Architecture` (`#101`)")
         );
         assert_eq!(fm.epic.as_deref(), Some("`EPIC-01-Architecture` (`#101`)"));
-        assert_eq!(fm.raw_fields.get("single_span").map(|s| s.as_str()), Some("SingleSpanToken"));
-        assert_eq!(fm.raw_fields.get("quoted_field").map(|s| s.as_str()), Some("Plain Quoted String"));
+        assert_eq!(
+            fm.raw_fields.get("single_span").map(|s| s.as_str()),
+            Some("SingleSpanToken")
+        );
+        assert_eq!(
+            fm.raw_fields.get("quoted_field").map(|s| s.as_str()),
+            Some("Plain Quoted String")
+        );
         Ok(())
     }
 
     #[test]
-    fn test_frontmatter_id_precedence_and_part_preservation_red_probe() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_frontmatter_id_precedence_and_part_preservation_red_probe(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"| Attribute | Specification Detail |
 | :--- | :--- |
 | **ID** | FEAT-42 |
@@ -944,30 +1018,44 @@ date: "2026-10-17"
 "#;
         let fm = parse_frontmatter(content).ok_or("Failed to parse specification")?;
         assert_eq!(fm.part.as_deref(), Some("ExplicitPartDef"));
-        assert_eq!(fm.raw_fields.get("part").map(|s| s.as_str()), Some("ExplicitPartDef"));
+        assert_eq!(
+            fm.raw_fields.get("part").map(|s| s.as_str()),
+            Some("ExplicitPartDef")
+        );
         assert_eq!(fm.raw_fields.get("id").map(|s| s.as_str()), Some("FEAT-42"));
         assert_eq!(fm.issue_id, Some(457));
 
         let updated = update_frontmatter_issue_id(content, 999);
-        assert!(updated.contains("| **ID** | FEAT-42 |"), "Explicit ID row destroyed by update_frontmatter_issue_id");
+        assert!(
+            updated.contains("| **ID** | FEAT-42 |"),
+            "Explicit ID row destroyed by update_frontmatter_issue_id"
+        );
         assert!(updated.contains("| **Issue ID** | #999 |"));
         assert!(!updated.contains("#457"));
 
-        let fm_updated = parse_frontmatter(&updated).ok_or("Failed to parse updated specification")?;
-        assert_eq!(fm_updated.raw_fields.get("id").map(|s| s.as_str()), Some("FEAT-42"));
+        let fm_updated =
+            parse_frontmatter(&updated).ok_or("Failed to parse updated specification")?;
+        assert_eq!(
+            fm_updated.raw_fields.get("id").map(|s| s.as_str()),
+            Some("FEAT-42")
+        );
         assert_eq!(fm_updated.part.as_deref(), Some("ExplicitPartDef"));
         assert_eq!(fm_updated.issue_id, Some(999));
         Ok(())
     }
 
     #[test]
-    fn test_frontmatter_unclosed_yaml_fence_and_yaml_insert_offset_red_probe() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_frontmatter_unclosed_yaml_fence_and_yaml_insert_offset_red_probe(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let unclosed = r#"---
 Some markdown content starting with horizontal rule
 No metadata table here.
 "#;
         let updated = update_frontmatter_issue_id(unclosed, 123);
-        assert!(updated.contains("| **Issue ID** | #123 |"), "CommonMark table not injected when --- is unclosed");
+        assert!(
+            updated.contains("| **Issue ID** | #123 |"),
+            "CommonMark table not injected when --- is unclosed"
+        );
 
         let yaml_doc = r#"---
 title: "Doc Title"
@@ -1016,7 +1104,8 @@ type: feature
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-HTML-COMMENT-PREAMBLE-GUARD] | SysML v2: TestCaseDef(test_defect_08_preamble_html_comments_and_blank_lines_before_table)
     #[test]
-    fn test_defect_08_preamble_html_comments_and_blank_lines_before_table() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_08_preamble_html_comments_and_blank_lines_before_table(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut preamble = String::new();
         for idx in 1..=30 {
             preamble.push_str(&format!("<!-- Preamble comment line {} -->\n\n", idx));
@@ -1070,7 +1159,8 @@ type: feature
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-MULTILINE-HTML-COMMENT-GUARD] | SysML v2: TestCaseDef(test_issue_522_multiline_html_comment_preamble_and_idempotency) | Issue: #522
     #[test]
-    fn test_issue_522_multiline_html_comment_preamble_and_idempotency() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_522_multiline_html_comment_preamble_and_idempotency(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut preamble = String::from("<!--\n");
         for idx in 1..=30 {
             if idx == 15 {
@@ -1130,7 +1220,8 @@ type: feature
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-COMPOUND-HTML-COMMENT-GUARD] | SysML v2: TestCaseDef(test_issue_506_compound_html_comment_state_and_stray_arrow) | Issue: #506
     #[test]
-    fn test_issue_506_compound_html_comment_state_and_stray_arrow() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_506_compound_html_comment_state_and_stray_arrow(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut in_comment = false;
         assert!(
             !advance_html_comment_state("Plain text arrow -->", &mut in_comment),
@@ -1148,7 +1239,10 @@ type: feature
         );
 
         assert!(
-            advance_html_comment_state("--> <!-- middle closed --> <!-- trailing open", &mut in_comment),
+            advance_html_comment_state(
+                "--> <!-- middle closed --> <!-- trailing open",
+                &mut in_comment
+            ),
             "Compound close-then-reopen comment line must return true"
         );
         assert!(
@@ -1195,6 +1289,68 @@ type: feature
             1,
             "update_frontmatter_issue_id must not inject a duplicate CommonMark table after compound HTML comments"
         );
+        Ok(())
+    }
+
+    /// Verifies panic-free frontmatter parsing and updating across multi-byte UTF-8 boundaries and degenerate delimiters.
+    /// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-UTF8-BOUNDARY-SAFETY]
+    #[test]
+    fn test_frontmatter_multibyte_utf8_and_degenerate_delimiters(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let content = r#"| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | [#42](https://example.org/日本語/🛰️) |
+| **Title** | "Feature 42: Ωmega -- Δelta 🛰️" |
+| **Type** | `feature` |
+| **Subsystem** | '日本語サブシステム' |
+| **Single Tick** | ` |
+| **Single Quote** | " |
+| **Empty Brackets** | [] |
+| **Multi Span** | `REQ_Ω_01`, `REQ_Δ_02` |
+"#;
+        let fm = parse_frontmatter(content).ok_or("Failed to parse UTF-8 frontmatter")?;
+        assert_eq!(fm.issue_id, Some(42));
+        assert_eq!(fm.title, "Feature 42: Ωmega -- Δelta 🛰️");
+        assert_eq!(fm.spec_type, "feature");
+        assert_eq!(fm.subsystem.as_deref(), Some("日本語サブシステム"));
+        assert_eq!(
+            fm.raw_fields.get("single_tick").map(String::as_str),
+            Some("`")
+        );
+        assert_eq!(
+            fm.raw_fields.get("single_quote").map(String::as_str),
+            Some("\"")
+        );
+        assert_eq!(
+            fm.raw_fields.get("empty_brackets").map(String::as_str),
+            Some("[]")
+        );
+        assert_eq!(
+            fm.raw_fields.get("multi_span").map(String::as_str),
+            Some("`REQ_Ω_01`, `REQ_Δ_02`")
+        );
+
+        for malformed_id in ["[", "]", "[]", "[🚀]", "[#abc]", "[#77"] {
+            let doc = format!(
+                "| Attribute | Specification Detail |\n| :--- | :--- |\n| **Issue ID** | {malformed_id} |\n| **Title** | Ω |\n"
+            );
+            let parsed = parse_frontmatter(&doc).ok_or("Expected table metadata")?;
+            let expected = if malformed_id == "[#77" {
+                Some(77)
+            } else {
+                None
+            };
+            assert_eq!(
+                parsed.issue_id, expected,
+                "Unexpected issue_id for {malformed_id}"
+            );
+        }
+
+        let header_only = "| Attribute | Specification Detail |\n| **Title** | Ωmega 🛰️ |\n";
+        let updated = update_frontmatter_issue_id(header_only, 314);
+        let reparsed = parse_frontmatter(&updated).ok_or("Failed to reparse header-only update")?;
+        assert_eq!(reparsed.issue_id, Some(314));
+        assert_eq!(reparsed.title, "Ωmega 🛰️");
         Ok(())
     }
 }

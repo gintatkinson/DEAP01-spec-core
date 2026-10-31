@@ -98,16 +98,22 @@ struct ParsedCheckline {
 /// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-PARSE-CHECKLIST-LINE] | SysML v2: ActionDef(parse_checklist_line)
 fn parse_checklist_line(line: &str) -> Option<ParsedCheckline> {
     let trimmed = line.trim_start();
-    let indent_len = line.len() - trimmed.len();
+    let indent_len = line.len().saturating_sub(trimmed.len());
 
     // Check for checkbox prefix with str::strip_prefix
     let (checked, after_box) = if let Some(rest) = trimmed.strip_prefix("- [ ] ") {
         (false, rest)
-    } else if let Some(rest) = trimmed.strip_prefix("- [x] ").or_else(|| trimmed.strip_prefix("- [X] ")) {
+    } else if let Some(rest) = trimmed
+        .strip_prefix("- [x] ")
+        .or_else(|| trimmed.strip_prefix("- [X] "))
+    {
         (true, rest)
     } else if let Some(rest) = trimmed.strip_prefix("- [ ]") {
         (false, rest)
-    } else if let Some(rest) = trimmed.strip_prefix("- [x]").or_else(|| trimmed.strip_prefix("- [X]")) {
+    } else if let Some(rest) = trimmed
+        .strip_prefix("- [x]")
+        .or_else(|| trimmed.strip_prefix("- [X]"))
+    {
         (true, rest)
     } else {
         // Fallback for optional whitespace between '-' and '['
@@ -115,7 +121,10 @@ fn parse_checklist_line(line: &str) -> Option<ParsedCheckline> {
         let after_dash_trimmed = after_dash.trim_start();
         if let Some(rest) = after_dash_trimmed.strip_prefix("[ ] ") {
             (false, rest)
-        } else if let Some(rest) = after_dash_trimmed.strip_prefix("[x] ").or_else(|| after_dash_trimmed.strip_prefix("[X] ")) {
+        } else if let Some(rest) = after_dash_trimmed
+            .strip_prefix("[x] ")
+            .or_else(|| after_dash_trimmed.strip_prefix("[X] "))
+        {
             (true, rest)
         } else if let Some(rest) = after_dash_trimmed.strip_prefix("[ ]") {
             (false, rest)
@@ -129,7 +138,7 @@ fn parse_checklist_line(line: &str) -> Option<ParsedCheckline> {
 
     // Calculate exact byte position of the checkbox mark character in `line`
     let bracket_offset = trimmed.find('[')?;
-    let mark_pos = indent_len + bracket_offset + 1;
+    let mark_pos = indent_len.saturating_add(bracket_offset).saturating_add(1);
 
     // Parse issue number (#123) and clean title from `after_box`
     let (issue_number, text) = extract_checklist_title_and_issue(after_box);
@@ -172,30 +181,30 @@ fn clean_title_formatting(raw: &str) -> String {
     let mut t = raw.trim();
 
     // 1. Strip trailing parenthetical annotations like `(clauses ...)`, `(refs #...)`, `(#...)`, `(justification ...)`
-    if t.ends_with(')') {
-        if let Some(open_paren) = t.rfind('(') {
-            let inside = t[open_paren + 1..t.len() - 1].trim();
-            if inside.starts_with('#')
-                || inside.starts_with("refs")
+    if let Some(without_close) = t.strip_suffix(')') {
+        if let Some((before_paren, inside_raw)) = without_close.rsplit_once('(') {
+            let inside = inside_raw.trim();
+            let has_clause_tag = inside.starts_with("refs")
                 || inside.starts_with("clauses")
-                || inside.starts_with("justification")
-                || inside.contains('#')
-            {
-                t = t[..open_paren].trim();
+                || inside.starts_with("justification");
+            if inside.contains('#') || has_clause_tag {
+                t = before_paren.trim();
             }
         }
     }
 
     // 2. If there is a bold prefix like `**Prefix:** Title` or `**Prefix**: Title`, extract the title after bold prefix
-    if t.starts_with("**") {
-        if let Some(close_bold) = t[2..].find("**") {
-            let inside_bold = &t[2..2 + close_bold];
-            let after_bold = t[2 + close_bold + 2..].trim();
+    if let Some(after_open_bold) = t.strip_prefix("**") {
+        if let Some((inside_bold, after_close_bold)) = after_open_bold.split_once("**") {
+            let after_bold = after_close_bold.trim();
             if inside_bold.ends_with(':') || inside_bold.ends_with('-') {
                 if !after_bold.is_empty() {
                     t = after_bold;
                 }
-            } else if let Some(rest) = after_bold.strip_prefix(':').or_else(|| after_bold.strip_prefix('-')) {
+            } else if let Some(rest) = after_bold
+                .strip_prefix(':')
+                .or_else(|| after_bold.strip_prefix('-'))
+            {
                 let candidate = rest.trim();
                 if !candidate.is_empty() {
                     t = candidate;
@@ -205,17 +214,17 @@ fn clean_title_formatting(raw: &str) -> String {
     }
 
     // Strip enclosing bold/italic formatting
-    while (t.starts_with("**") && t.ends_with("**")) && t.len() >= 4 {
-        t = t[2..t.len() - 2].trim();
+    while let Some(inner) = t.strip_prefix("**").and_then(|s| s.strip_suffix("**")) {
+        t = inner.trim();
     }
-    while (t.starts_with('*') && t.ends_with('*')) && t.len() >= 2 {
-        t = t[1..t.len() - 1].trim();
+    while let Some(inner) = t.strip_prefix('*').and_then(|s| s.strip_suffix('*')) {
+        t = inner.trim();
     }
-    while (t.starts_with("__") && t.ends_with("__")) && t.len() >= 4 {
-        t = t[2..t.len() - 2].trim();
+    while let Some(inner) = t.strip_prefix("__").and_then(|s| s.strip_suffix("__")) {
+        t = inner.trim();
     }
-    while (t.starts_with('_') && t.ends_with('_')) && t.len() >= 2 {
-        t = t[1..t.len() - 1].trim();
+    while let Some(inner) = t.strip_prefix('_').and_then(|s| s.strip_suffix('_')) {
+        t = inner.trim();
     }
 
     // Strip trailing separator punctuation
@@ -258,19 +267,16 @@ pub fn extract_checklist_title_and_issue(raw_text: &str) -> (Option<u64>, String
     let mut title_candidate = trimmed;
 
     if let Some(after_hash) = trimmed.strip_prefix('#') {
-        let digits_len = after_hash.chars().take_while(|c| c.is_ascii_digit()).count();
+        let after_digits = after_hash.trim_start_matches(|c: char| c.is_ascii_digit());
+        let digits_len = after_hash.len().saturating_sub(after_digits.len());
         if digits_len > 0 {
-            if let Ok(num) = after_hash[..digits_len].parse::<u64>() {
+            if let Some(Ok(num)) = after_hash.get(..digits_len).map(str::parse::<u64>) {
                 found_issue = Some(num);
-                let after_digits = &after_hash[digits_len..];
                 let after_digits_trimmed = after_digits.trim_start();
-                let after_sep = if let Some(rest) = after_digits_trimmed.strip_prefix('-') {
-                    rest
-                } else if let Some(rest) = after_digits_trimmed.strip_prefix(':') {
-                    rest
-                } else {
-                    after_digits_trimmed
-                };
+                let after_sep = after_digits_trimmed
+                    .strip_prefix('-')
+                    .or_else(|| after_digits_trimmed.strip_prefix(':'))
+                    .unwrap_or(after_digits_trimmed);
                 title_candidate = after_sep.trim_start();
             }
         }
@@ -278,39 +284,26 @@ pub fn extract_checklist_title_and_issue(raw_text: &str) -> (Option<u64>, String
 
     // 2. If no prefix issue, scan raw_text for inline #<digits>
     if found_issue.is_none() {
-        let bytes = trimmed.as_bytes();
-        let mut i = 0;
-        while i < bytes.len() {
-            if bytes.get(i).copied() == Some(b'#') {
-                let start = i + 1;
-                let mut end = start;
-                while bytes.get(end).is_some_and(u8::is_ascii_digit) {
-                    end += 1;
-                }
-                if end > start {
-                    if let Ok(num) = trimmed[start..end].parse::<u64>() {
-                        found_issue = Some(num);
-                        break;
-                    }
+        for segment in trimmed.split('#').skip(1) {
+            let after_digits = segment.trim_start_matches(|c: char| c.is_ascii_digit());
+            let digits_len = segment.len().saturating_sub(after_digits.len());
+            if digits_len > 0 {
+                if let Some(Ok(num)) = segment.get(..digits_len).map(str::parse::<u64>) {
+                    found_issue = Some(num);
+                    break;
                 }
             }
-            i += 1;
         }
     }
 
     // 3. Extract title:
     // If text has Markdown link syntax [...](...), extract the text between outer [ and ],
     // ignoring the (...) URL target and any trailing annotations.
-    let title = if let Some(open_b) = title_candidate.find('[') {
-        if let Some(sep) = title_candidate[open_b..].find("](") {
-            let inside_link = &title_candidate[open_b + 1..open_b + sep];
-            clean_title_formatting(inside_link)
-        } else {
-            clean_title_formatting(title_candidate)
-        }
-    } else {
-        clean_title_formatting(title_candidate)
-    };
+    let link_text = title_candidate
+        .split_once('[')
+        .and_then(|(_, after_open)| after_open.split_once("]("))
+        .map_or(title_candidate, |(inside_link, _)| inside_link);
+    let title = clean_title_formatting(link_text);
 
     (found_issue, title)
 }
@@ -404,95 +397,69 @@ pub fn clean_unpopulated_placeholders(content: &str) -> String {
 pub fn clean_unpopulated_placeholders_counted(content: &str) -> (String, usize) {
     let target = "to be populated";
     let replacement = "- None allocated (structural subsystem component)";
+    let after_phase_kw = " after phase";
     let mut result = String::with_capacity(content.len());
     let mut rest = content;
-    let mut purged_count = 0;
+    let mut purged_count: usize = 0;
 
     while let Some(pos) = rest.to_ascii_lowercase().find(target) {
-        // Forward matching: check for optional trailing phase specifier e.g. " after phase [digits/alnum]"
-        let mut cur_offset = target.len();
-        let after_target = &rest[pos + cur_offset..];
-        let after_lower = after_target.to_ascii_lowercase();
+        let after_target_pos = pos.saturating_add(target.len());
+        let (Some(before), Some(after_target)) = (rest.get(..pos), rest.get(after_target_pos..))
+        else {
+            break;
+        };
 
-        if after_lower.starts_with(" after phase") {
-            cur_offset += " after phase".len();
-            // Skip optional spaces/tabs between "after phase" and phase identifier
-            let rem = &rest[pos + cur_offset..];
+        // Forward matching: check for optional trailing phase specifier e.g. " after phase [digits/alnum]"
+        let after_phase = if after_target
+            .get(..after_phase_kw.len())
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(after_phase_kw))
+        {
+            let rem = after_target.get(after_phase_kw.len()..).unwrap_or("");
             let rem_trimmed = rem.trim_start_matches([' ', '\t']);
-            cur_offset += rem.len() - rem_trimmed.len();
-            // Consume optional alphanumeric phase identifier (e.g., "1", "2", "3", "IV")
-            let id_len = rem_trimmed.chars().take_while(|c| c.is_ascii_alphanumeric()).count();
-            cur_offset += id_len;
-        }
+            rem_trimmed.trim_start_matches(|c: char| c.is_ascii_alphanumeric())
+        } else {
+            after_target
+        };
 
         // Forward scanning: consume trailing closing envelope on the line
         // Envelope characters: spaces, tabs, closing parenthesis ')', markdown emphasis '*', '_'
-        let forward_slice = &rest[pos + cur_offset..];
-        let forward_bytes = forward_slice.as_bytes();
-        let mut i = 0;
-        // Skip horizontal spaces/tabs
-        while forward_bytes.get(i).is_some_and(|&b| b == b' ' || b == b'\t') {
-            i += 1;
-        }
-        // Skip optional ')'
-        if forward_bytes.get(i).copied() == Some(b')') {
-            i += 1;
-        }
-        // Skip horizontal spaces/tabs
-        while forward_bytes.get(i).is_some_and(|&b| b == b' ' || b == b'\t') {
-            i += 1;
-        }
-        // Skip closing markdown emphasis: '*' or '_'
-        while forward_bytes.get(i).is_some_and(|&b| b == b'*' || b == b'_') {
-            i += 1;
-        }
-        // Skip optional ')' (in case formatted like (*...*))
-        if forward_bytes.get(i).copied() == Some(b')') {
-            i += 1;
-        }
-        // Skip trailing horizontal spaces/tabs up to newline
-        while forward_bytes.get(i).is_some_and(|&b| b == b' ' || b == b'\t') {
-            i += 1;
-        }
-        let end_idx = pos + cur_offset + i;
+        let s1 = after_phase.trim_start_matches([' ', '\t']);
+        let s2 = s1.strip_prefix(')').unwrap_or(s1);
+        let s3 = s2.trim_start_matches([' ', '\t']);
+        let s4 = s3.trim_start_matches(['*', '_']);
+        let s5 = s4.strip_prefix(')').unwrap_or(s4);
+        let next_rest = s5.trim_start_matches([' ', '\t']);
 
-        // Backward scanning: check line preceding the placeholder in `rest`
-        let before = &rest[..pos];
-        let line_start = before.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
-        let line_prefix = &rest[line_start..pos];
+        // Backward scanning: check line preceding the placeholder in `before`
+        let (prior_lines, line_prefix) = match before.rsplit_once('\n') {
+            Some((prior, prefix)) => (Some(prior), prefix),
+            None => (None, before),
+        };
 
-        // Measure leading indentation on this line
-        let indent_len = line_prefix.len() - line_prefix.trim_start_matches([' ', '\t']).len();
-        let after_indent = &line_prefix[indent_len..];
+        let after_indent = line_prefix.trim_start_matches([' ', '\t']);
+        let indent_len = line_prefix.len().saturating_sub(after_indent.len());
+        let leading_indent = line_prefix.get(..indent_len).unwrap_or("");
 
         // Check if after_indent contains only markdown markers/envelope:
         // bullets ('-', '*', '+'), emphasis ('*', '_'), parentheses ('('), whitespace (' ', '\t')
-        let is_pure_envelope = !after_indent.chars().any(|c| {
-            c != '-' && c != '*' && c != '+' && c != '_' && c != '(' && c != ' ' && c != '\t'
-        });
+        let is_pure_envelope = after_indent
+            .chars()
+            .all(|c| matches!(c, '-' | '*' | '+' | '_' | '(' | ' ' | '\t'));
 
-        let start_idx = if is_pure_envelope {
-            line_start + indent_len
+        let preserved_line_prefix = if is_pure_envelope {
+            leading_indent
         } else {
-            // If there was preceding non-envelope text, peel only trailing envelope from `before`
-            let mut j = pos;
-            while j > line_start {
-                let Some(prev_char) = rest.get(..j).and_then(|s| s.chars().next_back()) else {
-                    break;
-                };
-                if prev_char == ' ' || prev_char == '\t' || prev_char == '*' || prev_char == '_' || prev_char == '(' {
-                    j -= prev_char.len_utf8();
-                } else {
-                    break;
-                }
-            }
-            j
+            line_prefix.trim_end_matches([' ', '\t', '*', '_', '('])
         };
 
-        result.push_str(&rest[..start_idx]);
+        if let Some(prior) = prior_lines {
+            result.push_str(prior);
+            result.push('\n');
+        }
+        result.push_str(preserved_line_prefix);
         result.push_str(replacement);
-        rest = &rest[end_idx..];
-        purged_count += 1;
+        rest = next_rest;
+        purged_count = purged_count.saturating_add(1);
     }
 
     result.push_str(rest);
@@ -531,7 +498,7 @@ pub fn parse_checklists(content: &str) -> Vec<ChecklistItem> {
     for (idx, line) in content.lines().enumerate() {
         if let Some(parsed) = parse_checklist_line(line) {
             items.push(ChecklistItem {
-                line_number: idx + 1,
+                line_number: idx.saturating_add(1),
                 checked: parsed.checked,
                 issue_number: parsed.issue_number,
                 text: parsed.text,
@@ -570,25 +537,27 @@ pub fn parse_checklists(content: &str) -> Vec<ChecklistItem> {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-RECONCILE-CHECKLIST-CONTENT] | SysML v2: ActionDef(reconcile_checklist_content)
-pub fn reconcile_checklist_content<F>(
-    content: &str,
-    is_item_resolved: F,
-) -> (String, usize)
+pub fn reconcile_checklist_content<F>(content: &str, is_item_resolved: F) -> (String, usize)
 where
     F: Fn(Option<u64>, &str) -> Option<bool>,
 {
     let mut new_lines = Vec::new();
-    let mut modified_count = 0;
+    let mut modified_count: usize = 0;
 
     for line in content.lines() {
         if let Some(parsed) = parse_checklist_line(line) {
-            if let Some(target_resolved) = is_item_resolved(parsed.issue_number, parsed.text.trim()) {
+            if let Some(target_resolved) = is_item_resolved(parsed.issue_number, parsed.text.trim())
+            {
                 if target_resolved != parsed.checked {
                     let mark = if target_resolved { "x" } else { " " };
-                    let new_line = format!("{}{}{}", &line[..parsed.mark_pos], mark, &line[parsed.mark_pos + 1..]);
-                    new_lines.push(new_line);
-                    modified_count += 1;
-                    continue;
+                    let after_mark = parsed.mark_pos.saturating_add(1);
+                    if let (Some(prefix), Some(suffix)) =
+                        (line.get(..parsed.mark_pos), line.get(after_mark..))
+                    {
+                        new_lines.push(format!("{prefix}{mark}{suffix}"));
+                        modified_count = modified_count.saturating_add(1);
+                        continue;
+                    }
                 }
             }
         }
@@ -792,7 +761,11 @@ fn get_spec_stem(path: &str) -> String {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-SPEC-MATCHES-EPIC] | SysML v2: ActionDef(spec_matches_epic)
-fn spec_matches_epic(epic: &crate::LoadedSpec, child: &crate::LoadedSpec, total_epics: usize) -> bool {
+fn spec_matches_epic(
+    epic: &crate::LoadedSpec,
+    child: &crate::LoadedSpec,
+    total_epics: usize,
+) -> bool {
     if child.rel_path == epic.rel_path {
         return false;
     }
@@ -818,7 +791,8 @@ fn spec_matches_epic(epic: &crate::LoadedSpec, child: &crate::LoadedSpec, total_
         }
     }
 
-    if let (Some(sub_c), Some(sub_p)) = (&child.frontmatter.subsystem, &epic.frontmatter.subsystem) {
+    if let (Some(sub_c), Some(sub_p)) = (&child.frontmatter.subsystem, &epic.frontmatter.subsystem)
+    {
         if !sub_c.is_empty() && sub_c.eq_ignore_ascii_case(sub_p) {
             return true;
         }
@@ -861,7 +835,11 @@ fn spec_matches_epic(epic: &crate::LoadedSpec, child: &crate::LoadedSpec, total_
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-SPEC-MATCHES-FEATURE] | SysML v2: ActionDef(spec_matches_feature)
-fn spec_matches_feature(feat: &crate::LoadedSpec, child: &crate::LoadedSpec, total_features: usize) -> bool {
+fn spec_matches_feature(
+    feat: &crate::LoadedSpec,
+    child: &crate::LoadedSpec,
+    total_features: usize,
+) -> bool {
     if child.rel_path == feat.rel_path {
         return false;
     }
@@ -890,7 +868,8 @@ fn spec_matches_feature(feat: &crate::LoadedSpec, child: &crate::LoadedSpec, tot
         }
     }
 
-    if let (Some(sub_c), Some(sub_f)) = (&child.frontmatter.subsystem, &feat.frontmatter.subsystem) {
+    if let (Some(sub_c), Some(sub_f)) = (&child.frontmatter.subsystem, &feat.frontmatter.subsystem)
+    {
         if !sub_c.is_empty() && sub_c.eq_ignore_ascii_case(sub_f) {
             return true;
         }
@@ -944,13 +923,21 @@ fn format_canonical_checklist_item(
 ) -> String {
     let issue_num = spec.frontmatter.issue_id.or_else(|| {
         issue_index
-            .find_issue_for_type(None, Some(&spec.frontmatter.spec_type), &spec.frontmatter.title)
+            .find_issue_for_type(
+                None,
+                Some(&spec.frontmatter.spec_type),
+                &spec.frontmatter.title,
+            )
             .map(|i| i.number)
     });
 
     let (is_resolved, issue_ref) = match issue_num {
         Some(num) => {
-            let resolved = issue_index.by_number.get(&num).map(|i| i.is_resolved()).unwrap_or(false);
+            let resolved = issue_index
+                .by_number
+                .get(&num)
+                .map(|i| i.is_resolved())
+                .unwrap_or(false);
             (resolved, format!("#{}", num))
         }
         None => (false, "#[IssueID]".to_string()),
@@ -969,7 +956,10 @@ fn format_canonical_checklist_item(
     };
 
     let _ = (repo_slug, default_branch);
-    let stripped = spec.rel_path.strip_prefix("docs/").unwrap_or(&spec.rel_path);
+    let stripped = spec
+        .rel_path
+        .strip_prefix("docs/")
+        .unwrap_or(&spec.rel_path);
     let link = format!("../{}", stripped);
 
     let clause_suffix = if let Some(clauses) = spec.frontmatter.raw_fields.get("clauses") {
@@ -982,7 +972,10 @@ fn format_canonical_checklist_item(
         String::new()
     };
 
-    format!("- [{}] {} - [{}]({}){}", mark, issue_ref, title, link, clause_suffix)
+    format!(
+        "- [{}] {} - [{}]({}){}",
+        mark, issue_ref, title, link, clause_suffix
+    )
 }
 
 /// Executes deterministic fn `contains_spec_reference` within `crates/reconcile-backlog/src/checklist.rs`.
@@ -1076,7 +1069,7 @@ fn reconcile_or_inject_section(
     next_delimiters: &[&str],
 ) -> String {
     if let Some(heading_pos) = content.find(heading) {
-        let after_heading_pos = heading_pos + heading.len();
+        let after_heading_pos = heading_pos.saturating_add(heading.len());
         let rest = content.get(after_heading_pos..).unwrap_or("");
 
         // Find end of section
@@ -1135,8 +1128,12 @@ fn reconcile_or_inject_section(
                         if let Some(canonical) = new_items.get(idx) {
                             let is_checked =
                                 trimmed.starts_with("- [x]") || trimmed.starts_with("- [X]");
-                            if is_checked && canonical.starts_with("- [ ] ") {
-                                lines.push(format!("- [x] {}", canonical.get(6..).unwrap_or("")));
+                            if is_checked {
+                                if let Some(rest_item) = canonical.strip_prefix("- [ ] ") {
+                                    lines.push(format!("- [x] {rest_item}"));
+                                } else {
+                                    lines.push(canonical.clone());
+                                }
                             } else {
                                 lines.push(canonical.clone());
                             }
@@ -1166,7 +1163,11 @@ fn reconcile_or_inject_section(
             "{}{}{}{}",
             content.get(..after_heading_pos).unwrap_or(content),
             new_body,
-            if after_section.starts_with('\n') { "" } else { "\n" },
+            if after_section.starts_with('\n') {
+                ""
+            } else {
+                "\n"
+            },
             after_section
         )
     } else {
@@ -1225,7 +1226,7 @@ pub fn synthesize_and_reconcile_hierarchy(
             .iter()
             .filter(|s| s.rel_path != parent_spec.rel_path && is_spec_epic(s))
             .count()
-            + 1;
+            .saturating_add(1);
         let mut child_features: Vec<&crate::LoadedSpec> = Vec::new();
         let mut child_use_cases: Vec<&crate::LoadedSpec> = Vec::new();
         let mut child_user_stories: Vec<&crate::LoadedSpec> = Vec::new();
@@ -1233,9 +1234,12 @@ pub fn synthesize_and_reconcile_hierarchy(
         for child in child_specs {
             if is_spec_feature(child) && spec_matches_epic(parent_spec, child, total_epics) {
                 child_features.push(child);
-            } else if is_spec_use_case(child) && spec_matches_epic(parent_spec, child, total_epics) {
+            } else if is_spec_use_case(child) && spec_matches_epic(parent_spec, child, total_epics)
+            {
                 child_use_cases.push(child);
-            } else if is_spec_user_story(child) && spec_matches_epic(parent_spec, child, total_epics) {
+            } else if is_spec_user_story(child)
+                && spec_matches_epic(parent_spec, child, total_epics)
+            {
                 child_user_stories.push(child);
             }
         }
@@ -1246,15 +1250,21 @@ pub fn synthesize_and_reconcile_hierarchy(
 
         let feat_items: Vec<String> = child_features
             .iter()
-            .map(|f| format_canonical_checklist_item(f, repo_slug, default_branch, issue_index, None))
+            .map(|f| {
+                format_canonical_checklist_item(f, repo_slug, default_branch, issue_index, None)
+            })
             .collect();
         let uc_items: Vec<String> = child_use_cases
             .iter()
-            .map(|u| format_canonical_checklist_item(u, repo_slug, default_branch, issue_index, None))
+            .map(|u| {
+                format_canonical_checklist_item(u, repo_slug, default_branch, issue_index, None)
+            })
             .collect();
         let us_items: Vec<String> = child_user_stories
             .iter()
-            .map(|s| format_canonical_checklist_item(s, repo_slug, default_branch, issue_index, None))
+            .map(|s| {
+                format_canonical_checklist_item(s, repo_slug, default_branch, issue_index, None)
+            })
             .collect();
 
         // 1. Reconcile or inject ## 2. Requirements & Checklist
@@ -1275,8 +1285,11 @@ pub fn synthesize_and_reconcile_hierarchy(
             if let Some(pos) = updated.find("\n## 3. Architecture") {
                 updated.insert_str(pos, &sec);
             } else if let Some(pos) = updated.find("\n## 1. Context") {
-                let after_pos = pos + "\n## 1. Context".len();
-                let next_pos = updated[after_pos..].find("\n## ").map(|p| after_pos + p).unwrap_or(updated.len());
+                let after_pos = pos.saturating_add("\n## 1. Context".len());
+                let next_pos = updated
+                    .get(after_pos..)
+                    .and_then(|tail| tail.find("\n## "))
+                    .map_or(updated.len(), |p| after_pos.saturating_add(p));
                 updated.insert_str(next_pos, &sec);
             } else if let Some(pos) = updated.find("\n## ") {
                 updated.insert_str(pos, &sec);
@@ -1322,8 +1335,11 @@ pub fn synthesize_and_reconcile_hierarchy(
 
             // Insert after ## 2. Requirements & Checklist
             if let Some(pos) = updated.find("## 2. Requirements & Checklist") {
-                let rest_idx = pos + "## 2. Requirements & Checklist".len();
-                let next_sec = updated[rest_idx..].find("\n## ").map(|p| rest_idx + p).unwrap_or(updated.len());
+                let rest_idx = pos.saturating_add("## 2. Requirements & Checklist".len());
+                let next_sec = updated
+                    .get(rest_idx..)
+                    .and_then(|tail| tail.find("\n## "))
+                    .map_or(updated.len(), |p| rest_idx.saturating_add(p));
                 updated.insert_str(next_sec, &assoc_block);
             } else if let Some(pos) = updated.find("\n## 3. Architecture") {
                 updated.insert_str(pos, &assoc_block);
@@ -1336,14 +1352,16 @@ pub fn synthesize_and_reconcile_hierarchy(
             .iter()
             .filter(|s| s.rel_path != parent_spec.rel_path && is_spec_feature(s))
             .count()
-            + 1;
+            .saturating_add(1);
         let mut child_use_cases: Vec<&crate::LoadedSpec> = Vec::new();
         let mut child_user_stories: Vec<&crate::LoadedSpec> = Vec::new();
 
         for child in child_specs {
             if is_spec_use_case(child) && spec_matches_feature(parent_spec, child, total_features) {
                 child_use_cases.push(child);
-            } else if is_spec_user_story(child) && spec_matches_feature(parent_spec, child, total_features) {
+            } else if is_spec_user_story(child)
+                && spec_matches_feature(parent_spec, child, total_features)
+            {
                 child_user_stories.push(child);
             }
         }
@@ -1353,11 +1371,15 @@ pub fn synthesize_and_reconcile_hierarchy(
 
         let uc_items: Vec<String> = child_use_cases
             .iter()
-            .map(|u| format_canonical_checklist_item(u, repo_slug, default_branch, issue_index, None))
+            .map(|u| {
+                format_canonical_checklist_item(u, repo_slug, default_branch, issue_index, None)
+            })
             .collect();
         let us_items: Vec<String> = child_user_stories
             .iter()
-            .map(|s| format_canonical_checklist_item(s, repo_slug, default_branch, issue_index, None))
+            .map(|s| {
+                format_canonical_checklist_item(s, repo_slug, default_branch, issue_index, None)
+            })
             .collect();
 
         if updated.contains("### Associated Use Cases & User Stories")
@@ -1513,7 +1535,8 @@ mod tests {
             assert!(
                 cleaned.contains(canonical_replacement),
                 "Cleaned text did not contain canonical replacement for '{}':\n{}",
-                raw, cleaned
+                raw,
+                cleaned
             );
             // Postcondition assertion
             assert!(
@@ -1525,23 +1548,34 @@ mod tests {
             assert!(
                 !cleaned.contains("*- None"),
                 "Syntax corruption '*- None' found for '{}':\n{}",
-                raw, cleaned
+                raw,
+                cleaned
             );
             assert!(
                 !cleaned.contains("_- None"),
                 "Syntax corruption '_- None' found for '{}':\n{}",
-                raw, cleaned
+                raw,
+                cleaned
             );
             assert!(
                 !cleaned.contains("- - None"),
                 "Syntax corruption '- - None' found for '{}':\n{}",
-                raw, cleaned
+                raw,
+                cleaned
             );
 
             // Idempotency: running cleaner on already-cleaned text produces count == 0 and identical output
             let (second_cleaned, second_count) = clean_unpopulated_placeholders_counted(&cleaned);
-            assert_eq!(second_count, 0, "Idempotency failed: second pass count = {} on '{}'", second_count, raw);
-            assert_eq!(second_cleaned, cleaned, "Idempotency failed: output changed on second pass for '{}'", raw);
+            assert_eq!(
+                second_count, 0,
+                "Idempotency failed: second pass count = {} on '{}'",
+                second_count, raw
+            );
+            assert_eq!(
+                second_cleaned, cleaned,
+                "Idempotency failed: output changed on second pass for '{}'",
+                raw
+            );
         }
 
         // 2. Multi-block counting: 3 blocks in one string -> count == 3
@@ -1556,20 +1590,29 @@ mod tests {
 *To be populated after Phase 3*
 "#;
         let (cleaned_multi, multi_count) = clean_unpopulated_placeholders_counted(multi_block);
-        assert_eq!(multi_count, 3, "Multi-block test failed: expected count 3, got {}", multi_count);
+        assert_eq!(
+            multi_count, 3,
+            "Multi-block test failed: expected count 3, got {}",
+            multi_count
+        );
         assert!(
             !contains_unpopulated_placeholders(&cleaned_multi),
             "Postcondition failed on multi-block:\n{}",
             cleaned_multi
         );
         let occurrences = cleaned_multi.matches(canonical_replacement).count();
-        assert_eq!(occurrences, 3, "Expected 3 occurrences of canonical replacement, got {}", occurrences);
+        assert_eq!(
+            occurrences, 3,
+            "Expected 3 occurrences of canonical replacement, got {}",
+            occurrences
+        );
         assert!(!cleaned_multi.contains("*- None"));
         assert!(!cleaned_multi.contains("_- None"));
         assert!(!cleaned_multi.contains("- - None"));
 
         // Idempotency on multi-block
-        let (idempotent_multi, idempotent_count) = clean_unpopulated_placeholders_counted(&cleaned_multi);
+        let (idempotent_multi, idempotent_count) =
+            clean_unpopulated_placeholders_counted(&cleaned_multi);
         assert_eq!(idempotent_count, 0);
         assert_eq!(idempotent_multi, cleaned_multi);
     }
@@ -1628,7 +1671,8 @@ mod tests {
 
 #### Associated User Stories
 *To be populated after Phase 3*
-"#.to_string(),
+"#
+            .to_string(),
         };
 
         // 2. Child use case specification
@@ -1644,7 +1688,8 @@ mod tests {
             },
             content: r#"# Use Case 01: Process Radar Tracks
 | **#10** | Feature | [Feature 01: [ConOps] Radar Tracker](../features/FEAT-01-Tracker.md) |
-"#.to_string(),
+"#
+            .to_string(),
         };
 
         // 3. Child user story specification
@@ -1661,7 +1706,8 @@ mod tests {
             content: r#"# User Story 01: Ingest Radar Telemetry
 ## Required Features
 - [ ] [Feature 01: [ConOps] Radar Tracker](../features/FEAT-01-Tracker.md)
-"#.to_string(),
+"#
+            .to_string(),
         };
 
         // 4. Parent Epic without ## 2. Requirements & Checklist
@@ -1682,64 +1728,79 @@ Air defense subsystem operations.
 
 ## 3. Architecture
 Subsystem composition.
-"#.to_string(),
+"#
+            .to_string(),
         };
 
         let mut issue_index = crate::tracker::IssueIndex::default();
-        issue_index.by_number.insert(10, TrackerIssue {
-            number: 10,
-            title: "Feature 01: [ConOps] Radar Tracker".to_string(),
-            labels: vec![],
-            state: "CLOSED".to_string(), // resolved!
-            body: None,
-            url: None,
-        });
-        issue_index.by_number.insert(20, TrackerIssue {
-            number: 20,
-            title: "Use Case 01: Process Radar Tracks".to_string(),
-            labels: vec![],
-            state: "OPEN".to_string(),
-            body: None,
-            url: None,
-        });
-        issue_index.by_number.insert(30, TrackerIssue {
-            number: 30,
-            title: "User Story 01: Ingest Radar Telemetry".to_string(),
-            labels: vec![],
-            state: "OPEN".to_string(),
-            body: None,
-            url: None,
-        });
+        issue_index.by_number.insert(
+            10,
+            TrackerIssue {
+                number: 10,
+                title: "Feature 01: [ConOps] Radar Tracker".to_string(),
+                labels: vec![],
+                state: "CLOSED".to_string(), // resolved!
+                body: None,
+                url: None,
+            },
+        );
+        issue_index.by_number.insert(
+            20,
+            TrackerIssue {
+                number: 20,
+                title: "Use Case 01: Process Radar Tracks".to_string(),
+                labels: vec![],
+                state: "OPEN".to_string(),
+                body: None,
+                url: None,
+            },
+        );
+        issue_index.by_number.insert(
+            30,
+            TrackerIssue {
+                number: 30,
+                title: "User Story 01: Ingest Radar Telemetry".to_string(),
+                labels: vec![],
+                state: "OPEN".to_string(),
+                body: None,
+                url: None,
+            },
+        );
 
         let all_specs = vec![epic.clone(), feat.clone(), uc.clone(), us.clone()];
 
         // Test Epic hierarchy synthesis:
-        let reconciled_epic = synthesize_and_reconcile_hierarchy(
-            &epic,
-            &all_specs,
-            "org/repo",
-            "main",
-            &issue_index,
-        );
+        let reconciled_epic =
+            synthesize_and_reconcile_hierarchy(&epic, &all_specs, "org/repo", "main", &issue_index);
 
-        assert!(reconciled_epic.contains("## 2. Requirements & Checklist"), "Epic must synthesize ## 2. Requirements & Checklist");
+        assert!(
+            reconciled_epic.contains("## 2. Requirements & Checklist"),
+            "Epic must synthesize ## 2. Requirements & Checklist"
+        );
         assert!(reconciled_epic.contains("- [x] #10 - [Feature 01: [ConOps] Radar Tracker](../features/FEAT-01-Tracker.md)"), "Epic checklist must canonically format child feature with [x] and relative link when issue is resolved");
-        assert!(reconciled_epic.contains("### Associated Use Cases & User Stories"), "Epic must synthesize Associated Use Cases & User Stories");
-        assert!(reconciled_epic.contains("#### Associated Use Cases"), "Epic must synthesize Associated Use Cases");
+        assert!(
+            reconciled_epic.contains("### Associated Use Cases & User Stories"),
+            "Epic must synthesize Associated Use Cases & User Stories"
+        );
+        assert!(
+            reconciled_epic.contains("#### Associated Use Cases"),
+            "Epic must synthesize Associated Use Cases"
+        );
         assert!(reconciled_epic.contains("- [ ] #20 - [Use Case 01: Process Radar Tracks](../use-cases/UC-01-ProcessRadarTracks.md)"));
-        assert!(reconciled_epic.contains("#### Associated User Stories"), "Epic must synthesize Associated User Stories");
+        assert!(
+            reconciled_epic.contains("#### Associated User Stories"),
+            "Epic must synthesize Associated User Stories"
+        );
         assert!(reconciled_epic.contains("- [ ] #30 - [User Story 01: Ingest Radar Telemetry](../user-stories/US-01-IngestRadarTelemetry.md)"));
 
         // Test Feature hierarchy synthesis:
-        let reconciled_feat = synthesize_and_reconcile_hierarchy(
-            &feat,
-            &all_specs,
-            "org/repo",
-            "main",
-            &issue_index,
-        );
+        let reconciled_feat =
+            synthesize_and_reconcile_hierarchy(&feat, &all_specs, "org/repo", "main", &issue_index);
 
-        assert!(!reconciled_feat.contains("To be populated"), "Feature must replace placeholder blocks");
+        assert!(
+            !reconciled_feat.contains("To be populated"),
+            "Feature must replace placeholder blocks"
+        );
         assert!(reconciled_feat.contains("- [ ] #20 - [Use Case 01: Process Radar Tracks](../use-cases/UC-01-ProcessRadarTracks.md)"));
         assert!(reconciled_feat.contains("- [ ] #30 - [User Story 01: Ingest Radar Telemetry](../user-stories/US-01-IngestRadarTelemetry.md)"));
 
@@ -1748,15 +1809,15 @@ Subsystem composition.
         path_to_issue.insert("docs/features/FEAT-01-Tracker.md".to_string(), 10);
         path_to_issue.insert("features/FEAT-01-Tracker.md".to_string(), 10);
 
-        let input_body = "- [ ] [Feature 01: [ConOps] Radar Tracker](../features/FEAT-01-Tracker.md)";
-        let projected = crate::project_body_for_tracker(
-            input_body,
-            Some("org/repo"),
-            "main",
-            &path_to_issue,
-        );
+        let input_body =
+            "- [ ] [Feature 01: [ConOps] Radar Tracker](../features/FEAT-01-Tracker.md)";
+        let projected =
+            crate::project_body_for_tracker(input_body, Some("org/repo"), "main", &path_to_issue);
 
-        assert!(!projected.contains("](#10)"), "Projected body must NOT contain broken intra-page anchor link [Title](#10)!");
+        assert!(
+            !projected.contains("](#10)"),
+            "Projected body must NOT contain broken intra-page anchor link [Title](#10)!"
+        );
         assert!(projected.contains("- [ ] #10 - [Feature 01: [ConOps] Radar Tracker](https://github.com/org/repo/blob/main/docs/features/FEAT-01-Tracker.md)"), "Projected body must translate markdown link to canonical repo blob URL with issue prefix, found:\n{}", projected);
     }
 
@@ -1830,13 +1891,8 @@ Subsystem composition.
         let issue_index = crate::tracker::IssueIndex::default();
         let all_specs = vec![feat.clone(), uc];
 
-        let reconciled_feat = synthesize_and_reconcile_hierarchy(
-            &feat,
-            &all_specs,
-            "org/repo",
-            "main",
-            &issue_index,
-        );
+        let reconciled_feat =
+            synthesize_and_reconcile_hierarchy(&feat, &all_specs, "org/repo", "main", &issue_index);
 
         assert!(
             reconciled_feat.contains("- [x] #20 - [Use Case 01: Process Radar Tracks](../use-cases/UC-01-ProcessRadarTracks.md)"),
@@ -1863,12 +1919,15 @@ Subsystem composition.
         assert_eq!(title1, "Feature 01: [ConOps] Human Engineer Interface");
 
         // 2. Markdown link without prefix issue
-        let (issue2, title2) = extract_checklist_title_and_issue("[Feature 01: Interface](docs/features/FEAT-01.md)");
+        let (issue2, title2) =
+            extract_checklist_title_and_issue("[Feature 01: Interface](docs/features/FEAT-01.md)");
         assert_eq!(issue2, None);
         assert_eq!(title2, "Feature 01: Interface");
 
         // 3. Markdown link with inline issue number
-        let (issue3, title3) = extract_checklist_title_and_issue("[Feature 01: Interface](docs/features/FEAT-01.md) (#11)");
+        let (issue3, title3) = extract_checklist_title_and_issue(
+            "[Feature 01: Interface](docs/features/FEAT-01.md) (#11)",
+        );
         assert_eq!(issue3, Some(11));
         assert_eq!(title3, "Feature 01: Interface");
 
@@ -1878,12 +1937,14 @@ Subsystem composition.
         assert_eq!(title4, "Feature 01: Human Engineer");
 
         // 5. Bold title with inline issue number
-        let (issue5, title5) = extract_checklist_title_and_issue("**Feature 01: Human Engineer** (#12)");
+        let (issue5, title5) =
+            extract_checklist_title_and_issue("**Feature 01: Human Engineer** (#12)");
         assert_eq!(issue5, Some(12));
         assert_eq!(title5, "Feature 01: Human Engineer");
 
         // 6. Italic title with refs parenthetical
-        let (issue6, title6) = extract_checklist_title_and_issue("*Feature 01: Human Engineer* (refs #13)");
+        let (issue6, title6) =
+            extract_checklist_title_and_issue("*Feature 01: Human Engineer* (refs #13)");
         assert_eq!(issue6, Some(13));
         assert_eq!(title6, "Feature 01: Human Engineer");
 
@@ -1915,7 +1976,8 @@ Subsystem composition.
         });
 
         assert_eq!(count, 3);
-        assert!(reconciled.contains("- [x] [Feature 01: Human Engineer Interface](../features/FEAT-01.md)"));
+        assert!(reconciled
+            .contains("- [x] [Feature 01: Human Engineer Interface](../features/FEAT-01.md)"));
         assert!(reconciled.contains("- [x] [Feature 02: CI Runner](../features/FEAT-02.md) (#20)"));
         assert!(reconciled.contains("- [ ] **Feature 03: Radar Tracking** (#30)"));
     }
@@ -2003,7 +2065,8 @@ Subsystem composition.
         let issue_index = crate::tracker::IssueIndex::default();
         let all_specs = vec![epic.clone(), feat.clone(), uc.clone(), us.clone()];
 
-        let reconciled_epic = synthesize_and_reconcile_hierarchy(&epic, &all_specs, "org/repo", "main", &issue_index);
+        let reconciled_epic =
+            synthesize_and_reconcile_hierarchy(&epic, &all_specs, "org/repo", "main", &issue_index);
         assert!(
             reconciled_epic.contains("Feature 01: Core Engine"),
             "Single-epic workspace must bind child feature when child_specs includes parent_spec, got:\n{}",
@@ -2020,7 +2083,8 @@ Subsystem composition.
             reconciled_epic
         );
 
-        let reconciled_feat = synthesize_and_reconcile_hierarchy(&feat, &all_specs, "org/repo", "main", &issue_index);
+        let reconciled_feat =
+            synthesize_and_reconcile_hierarchy(&feat, &all_specs, "org/repo", "main", &issue_index);
         assert!(
             reconciled_feat.contains("Use Case 01: Execute Task"),
             "Single-feature workspace must bind child use case when child_specs includes parent_spec, got:\n{}",
@@ -2179,13 +2243,7 @@ Subsystem composition.
         );
 
         // Pass child_specs WITHOUT feat_radar (only 1 other feature in slice)
-        let children_for_feat = vec![
-            epic_radar,
-            epic_sonar,
-            feat_sonar,
-            uc_sonar,
-            us_sonar,
-        ];
+        let children_for_feat = vec![epic_radar, epic_sonar, feat_sonar, uc_sonar, us_sonar];
         let reconciled_feat = synthesize_and_reconcile_hierarchy(
             &feat_radar,
             &children_for_feat,
@@ -2204,5 +2262,105 @@ Subsystem composition.
             reconciled_feat
         );
     }
-}
 
+    /// Verifies panic-free checklist parsing, placeholder purging, and hierarchy synthesis across multi-byte UTF-8 boundaries and malformed delimiters.
+    /// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-UTF8-BOUNDARY-SAFETY]
+    #[test]
+    fn test_checklist_multibyte_utf8_boundaries_and_malformed_inputs() {
+        use crate::frontmatter::SpecFrontmatter;
+        use crate::LoadedSpec;
+        use std::path::PathBuf;
+
+        let (issue1, title1) = extract_checklist_title_and_issue(
+            "#42 - [**Ωmega Prefix:** Feature Δ: 日本語 🛰️](docs/FEAT-42.md) (clauses REQ-Ω-01)",
+        );
+        assert_eq!(issue1, Some(42));
+        assert_eq!(title1, "Feature Δ: 日本語 🛰️");
+
+        let (issue2, title2) = extract_checklist_title_and_issue("_Italic → 🚀_ (refs #99)");
+        assert_eq!(issue2, Some(99));
+        assert_eq!(title2, "Italic → 🚀");
+
+        let (issue_overflow, title_overflow) =
+            extract_checklist_title_and_issue("Title Ω #99999999999999999999999999999 (#55)");
+        assert_eq!(issue_overflow, Some(55));
+        assert_eq!(title_overflow, "Title Ω #99999999999999999999999999999");
+
+        for degenerate in [
+            "", "*", "**", "***", "_", "__", "()", "(", ")", "[]()", "[Ω", "#",
+        ] {
+            let _ = extract_checklist_title_and_issue(degenerate);
+        }
+
+        let raw_placeholders = "#### 日本語 🛰️\n  - *(To be populated after Phase 3B)*\nПримечание Ω *(To be populated)*\n";
+        let (cleaned, purged) = clean_unpopulated_placeholders_counted(raw_placeholders);
+        assert_eq!(purged, 2);
+        assert!(!contains_unpopulated_placeholders(&cleaned));
+        assert!(cleaned
+            .contains("#### 日本語 🛰️\n  - None allocated (structural subsystem component)\n"));
+        assert!(cleaned.contains("Примечание Ω- None allocated (structural subsystem component)\n"));
+        let (cleaned_twice, purged_twice) = clean_unpopulated_placeholders_counted(&cleaned);
+        assert_eq!(purged_twice, 0);
+        assert_eq!(cleaned_twice, cleaned);
+
+        let nbsp_checklist = "\u{00A0}- [ ] #10 - Feature Ω: 日本語 🛰️";
+        let (toggled_on, mod_on) = reconcile_checklist_content(nbsp_checklist, |id, _| {
+            assert_eq!(id, Some(10));
+            Some(true)
+        });
+        assert_eq!(mod_on, 1);
+        assert_eq!(toggled_on, "\u{00A0}- [x] #10 - Feature Ω: 日本語 🛰️");
+        let (toggled_off, mod_off) = reconcile_checklist_content(&toggled_on, |_, _| Some(false));
+        assert_eq!(mod_off, 1);
+        assert_eq!(toggled_off, nbsp_checklist);
+
+        let epic = LoadedSpec {
+            path: PathBuf::from("docs/epics/EPIC-01-UTF8.md"),
+            rel_path: "docs/epics/EPIC-01-UTF8.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Epic 01: Ωmega 日本語".to_string(),
+                spec_type: "epic".to_string(),
+                issue_id: Some(1),
+                subsystem: Some("Ωmega".to_string()),
+                ..Default::default()
+            },
+            content: "# Epic 01: Ωmega 日本語\n\n## 1. Context\nContext αβγ 🛰️.\n\n## 4. Verification\nGate Δ.\n".to_string(),
+        };
+        let feat = LoadedSpec {
+            path: PathBuf::from("docs/features/FEAT-01-UTF8.md"),
+            rel_path: "docs/features/FEAT-01-UTF8.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Feature 01: Δelta 🛰️".to_string(),
+                spec_type: "feature".to_string(),
+                issue_id: Some(2),
+                subsystem: Some("Ωmega".to_string()),
+                ..Default::default()
+            },
+            content: "# Feature 01: Δelta 🛰️\n".to_string(),
+        };
+        let uc = LoadedSpec {
+            path: PathBuf::from("docs/use-cases/UC-01-UTF8.md"),
+            rel_path: "docs/use-cases/UC-01-UTF8.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Use Case 01: 日本語 → Ω".to_string(),
+                spec_type: "use_case".to_string(),
+                issue_id: Some(3),
+                subsystem: Some("Ωmega".to_string()),
+                ..Default::default()
+            },
+            content: "# Use Case 01: 日本語 → Ω\n".to_string(),
+        };
+        let issue_index = crate::tracker::IssueIndex::default();
+        let synthesized = synthesize_and_reconcile_hierarchy(
+            &epic,
+            &[feat, uc],
+            "org/repo",
+            "main",
+            &issue_index,
+        );
+        assert!(synthesized.contains("## 2. Requirements & Checklist"));
+        assert!(synthesized.contains("Feature 01: Δelta 🛰️"));
+        assert!(synthesized.contains("Use Case 01: 日本語 → Ω"));
+        assert!(synthesized.contains("## 4. Verification"));
+    }
+}

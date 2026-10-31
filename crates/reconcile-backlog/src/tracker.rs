@@ -297,15 +297,13 @@ pub fn infer_spec_type_from_title(title: &str) -> Option<String> {
     ];
     for (prefix, canonical) in PREFIXES {
         if let Some(rem) = lower.strip_prefix(prefix) {
-            if rem.is_empty()
-                || rem.starts_with(' ')
-                || rem.starts_with('-')
-                || rem.starts_with('_')
-                || rem.starts_with(':')
-                || rem.starts_with(|c: char| c.is_ascii_digit())
-                || (rem.starts_with('s')
-                    && (rem.len() == 1 || rem[1..].starts_with([' ', '-', '_', ':'])))
-            {
+            let has_direct_boundary = rem.is_empty()
+                || rem.starts_with([' ', '-', '_', ':'])
+                || rem.starts_with(|c: char| c.is_ascii_digit());
+            let has_plural_boundary = rem.strip_prefix('s').is_some_and(|after_s| {
+                after_s.is_empty() || after_s.starts_with([' ', '-', '_', ':'])
+            });
+            if has_direct_boundary || has_plural_boundary {
                 return Some((*canonical).to_string());
             }
         }
@@ -363,56 +361,26 @@ pub fn normalize_title(title: &str) -> String {
     let mut matched_len = 0;
     for kw in PREFIX_KEYWORDS {
         if let Some(kw_rest) = lower.strip_prefix(kw) {
-            let mut rem = kw_rest;
-            let mut consumed = kw.len();
+            let rem = kw_rest.strip_prefix('s').unwrap_or(kw_rest);
 
-            if rem.starts_with('s') {
-                rem = &rem[1..];
-                consumed += 1;
-            }
-
-            if rem.starts_with(':') {
-                rem = &rem[1..];
-                consumed += 1;
-                while rem.starts_with(' ') || rem.starts_with('\t') {
-                    rem = &rem[1..];
-                    consumed += 1;
-                }
-                matched_len = consumed;
+            if let Some(after_colon) = rem.strip_prefix(':') {
+                let final_rem = after_colon.trim_start_matches([' ', '\t']);
+                matched_len = lower.len().saturating_sub(final_rem.len());
                 break;
             }
 
-            let mut temp_rem = rem;
-            let mut temp_consumed = consumed;
-            while temp_rem.starts_with('-')
-                || temp_rem.starts_with(' ')
-                || temp_rem.starts_with('_')
-            {
-                temp_rem = &temp_rem[1..];
-                temp_consumed += 1;
-            }
-
-            let digit_count = temp_rem.chars().take_while(|c| c.is_ascii_digit()).count();
-            if digit_count > 0 {
-                temp_rem = &temp_rem[digit_count..];
-                temp_consumed += digit_count;
-
-                while temp_rem.starts_with(' ')
-                    || temp_rem.starts_with(':')
-                    || temp_rem.starts_with('-')
-                    || temp_rem.starts_with('_')
-                {
-                    temp_rem = &temp_rem[1..];
-                    temp_consumed += 1;
-                }
-                matched_len = temp_consumed;
+            let after_sep = rem.trim_start_matches(['-', ' ', '_']);
+            let after_digits = after_sep.trim_start_matches(|c: char| c.is_ascii_digit());
+            if after_digits.len() < after_sep.len() {
+                let final_rem = after_digits.trim_start_matches([' ', ':', '-', '_']);
+                matched_len = lower.len().saturating_sub(final_rem.len());
                 break;
             }
         }
     }
 
     let stripped = if matched_len > 0 {
-        &trimmed[matched_len..]
+        trimmed.get(matched_len..).unwrap_or(trimmed)
     } else {
         trimmed
     };
@@ -608,7 +576,7 @@ impl OfflineTracker {
             state: std::sync::Mutex::new(OfflineState {
                 issues,
                 labels: Vec::new(),
-                next_id: max_id + 1,
+                next_id: max_id.saturating_add(1),
             }),
         }
     }
@@ -680,7 +648,7 @@ impl TrackerClient for OfflineTracker {
     ) -> Result<(u64, String), String> {
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         let id = guard.next_id;
-        guard.next_id += 1;
+        guard.next_id = guard.next_id.saturating_add(1);
         let url = format!(
             "https://github.com/{}/issues/{}",
             repo.unwrap_or("local/offline"),
@@ -2180,5 +2148,42 @@ mod tests {
             "Expected Err when flushing closed TempFileNamed handle"
         );
         Ok(())
+    }
+
+    /// Verifies panic-free title type inference and normalization across multi-byte UTF-8 boundaries and prefix edge cases.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-UTF8-BOUNDARY-SAFETY]
+    #[test]
+    fn test_tracker_multibyte_utf8_boundaries_and_prefix_edge_cases() {
+        assert_eq!(
+            infer_spec_type_from_title("Features: Ωmega 🛰️").as_deref(),
+            Some("feature")
+        );
+        assert_eq!(infer_spec_type_from_title("Epics").as_deref(), Some("epic"));
+        assert_eq!(
+            infer_spec_type_from_title("US_01: 日本語").as_deref(),
+            Some("user-story")
+        );
+        assert_eq!(
+            infer_spec_type_from_title("UC-02: Δelta").as_deref(),
+            Some("use-case")
+        );
+        assert_eq!(infer_spec_type_from_title("Feature🚀"), None);
+        assert_eq!(infer_spec_type_from_title("Features🚀"), None);
+        assert_eq!(infer_spec_type_from_title(""), None);
+        assert_eq!(infer_spec_type_from_title("\"\""), None);
+
+        assert_eq!(
+            normalize_title("Feature 01: Ωmega_Δelta 日本語"),
+            "ωmega δelta 日本語"
+        );
+        assert_eq!(
+            normalize_title("Features:   Éclair_Subsystem"),
+            "éclair subsystem"
+        );
+        assert_eq!(normalize_title("User_Story_09: АБВ_ГДЕ"), "абв где");
+        assert_eq!(normalize_title("Feature 01:"), "feature 01");
+        assert_eq!(normalize_title("Features:"), "features");
+        assert_eq!(normalize_title("US"), "us");
+        assert_eq!(normalize_title("---"), "");
     }
 }
