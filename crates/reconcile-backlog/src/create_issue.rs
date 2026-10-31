@@ -6,6 +6,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::tracker::{normalize_title, GitHubTracker, IssueIndex, OfflineTracker, TrackerClient};
+use crate::ReconcileError;
 
 /// CLI arguments for `create-issue` subcommand.
 ///
@@ -107,21 +108,21 @@ impl CreateIssueArgs {
     /// - Invoked within a valid execution context for `CreateIssueArgs::resolve` in `RECONCILE-BACKLOG-CREATE-ISSUE`.
     ///
     /// ## 4. Postconditions
-    /// - Returns `Result<ResolvedCreateIssueParams, String>` from `CreateIssueArgs::resolve` with deterministic post-execution state.
+    /// - Returns `Result<ResolvedCreateIssueParams, ReconcileError>` from `CreateIssueArgs::resolve` with deterministic post-execution state.
     ///
     /// ## 5. Algorithmic Complexity Bounds
     /// - Time Complexity: O(K(resolve)) bounded over input/member dimension of `CreateIssueArgs::resolve`.
     /// - Space Complexity: O(K(resolve)) bounded auxiliary memory for `CreateIssueArgs::resolve`.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `CreateIssueArgs::resolve` (`Result<ResolvedCreateIssueParams, String>`).
+    /// - Interface: Validates boundary inputs and types for `CreateIssueArgs::resolve` (`Result<ResolvedCreateIssueParams, ReconcileError>`).
     /// - State: Maintains consistent state invariants across `CreateIssueArgs::resolve` without partial mutation on error.
     /// - Action: Executes `CreateIssueArgs::resolve` deterministically with zero unbounded recursion or blocking.
     /// - Resource: Bounds stack and heap allocations within `CreateIssueArgs::resolve` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-CREATEISSUEARGS-RESOLVE] | SysML v2: ActionDef(CreateIssueArgs::resolve)
-    pub fn resolve(&self) -> Result<ResolvedCreateIssueParams, String> {
+    pub fn resolve(&self) -> Result<ResolvedCreateIssueParams, ReconcileError> {
         let mut pos_idx = 0;
 
         let body_file = if let Some(ref bf) = self.body_file {
@@ -130,7 +131,7 @@ impl CreateIssueArgs {
             pos_idx += 1;
             p.clone()
         } else {
-            return Err("Missing required body file. Specify via --body-file <FILE> or positional argument <body-file>".to_string());
+            return Err(ReconcileError::Validation("Missing required body file. Specify via --body-file <FILE> or positional argument <body-file>".to_string()));
         };
 
         let label = if let Some(ref l) = self.label {
@@ -139,7 +140,7 @@ impl CreateIssueArgs {
             pos_idx += 1;
             p.clone()
         } else {
-            return Err("Missing required label. Specify via --label <LABEL> or positional argument <label>".to_string());
+            return Err(ReconcileError::Validation("Missing required label. Specify via --label <LABEL> or positional argument <label>".to_string()));
         };
 
         let title = if let Some(ref t) = self.title {
@@ -148,7 +149,7 @@ impl CreateIssueArgs {
             pos_idx += 1;
             p.clone()
         } else {
-            return Err("Missing required title. Specify via --title <TITLE> or positional argument <title>".to_string());
+            return Err(ReconcileError::Validation("Missing required title. Specify via --title <TITLE> or positional argument <title>".to_string()));
         };
 
         let repo = self
@@ -179,45 +180,59 @@ impl CreateIssueArgs {
 /// - `body_file: &str` must satisfy domain and type-safety constraints prior to invoking `validate_body_file`.
 ///
 /// ## 4. Postconditions
-/// - Returns `Result<String, String>` from `validate_body_file` with deterministic post-execution state.
+/// - Returns `Result<String, ReconcileError>` from `validate_body_file` with deterministic post-execution state.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N(body_file)) bounded over input/member dimension of `validate_body_file`.
 /// - Space Complexity: O(N(body_file)) bounded auxiliary memory for `validate_body_file`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `validate_body_file` (`Result<String, String>`).
+/// - Interface: Validates boundary inputs and types for `validate_body_file` (`Result<String, ReconcileError>`).
 /// - State: Maintains consistent state invariants across `validate_body_file` without partial mutation on error.
 /// - Action: Executes `validate_body_file` deterministically with zero unbounded recursion or blocking.
 /// - Resource: Bounds stack and heap allocations within `validate_body_file` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-VALIDATE-BODY-FILE] | SysML v2: ActionDef(validate_body_file)
-pub fn validate_body_file(body_file: &str) -> Result<String, String> {
+pub fn validate_body_file(body_file: &str) -> Result<String, ReconcileError> {
     let path = Path::new(body_file);
     if !path.is_file() {
-        return Err(format!("FATAL: Body file not found: {}", body_file));
+        return Err(ReconcileError::Io(format!(
+            "FATAL: Body file not found: {}",
+            body_file
+        )));
     }
 
-    let metadata = fs::metadata(path)
-        .map_err(|e| format!("FATAL: Cannot read metadata for {}: {}", body_file, e))?;
+    let metadata = fs::metadata(path).map_err(|e| {
+        ReconcileError::Io(format!(
+            "FATAL: Cannot read metadata for {}: {}",
+            body_file, e
+        ))
+    })?;
 
     if metadata.len() == 0 {
-        return Err(format!("FATAL: Body file is empty: {}", body_file));
+        return Err(ReconcileError::Validation(format!(
+            "FATAL: Body file is empty: {}",
+            body_file
+        )));
     }
 
-    let content = fs::read_to_string(path)
-        .map_err(|e| format!("FATAL: Cannot read body file {}: {}", body_file, e))?;
+    let content = fs::read_to_string(path).map_err(|e| {
+        ReconcileError::Io(format!("FATAL: Cannot read body file {}: {}", body_file, e))
+    })?;
 
     if content.trim().is_empty() {
-        return Err(format!("FATAL: Body file is empty: {}", body_file));
+        return Err(ReconcileError::Validation(format!(
+            "FATAL: Body file is empty: {}",
+            body_file
+        )));
     }
 
     if content.contains("{{REQUIRED_") {
-        return Err(format!(
+        return Err(ReconcileError::Validation(format!(
             "FATAL: Unreplaced {{{{REQUIRED_*}}}} escape token detected in: {}",
             body_file
-        ));
+        )));
     }
 
     // Check for unreplaced checklist placeholder tokens (Issue #223 blocking registration gate)
@@ -239,19 +254,19 @@ pub fn validate_body_file(body_file: &str) -> Result<String, String> {
                 || trimmed.contains("#[StoryIssueID]")
                 || trimmed.contains("#[EpicIssueID]"))
         {
-            return Err(format!(
+            return Err(ReconcileError::Validation(format!(
                 "FATAL: Unresolved checklist placeholder token detected in: {}. Sibling specifications must be registered on the tracker before publishing.",
                 body_file
-            ));
+            )));
         }
     }
 
     let fence_count = content.lines().filter(|l| l.contains("```")).count();
     if fence_count % 2 != 0 {
-        return Err(format!(
+        return Err(ReconcileError::Parse(format!(
             "FATAL: Unbalanced code fences in: {} (found {} fences)",
             body_file, fence_count
-        ));
+        )));
     }
 
     Ok(content)
@@ -269,28 +284,35 @@ pub fn validate_body_file(body_file: &str) -> Result<String, String> {
 /// - `reopen_file: &str` must satisfy domain and type-safety constraints prior to invoking `validate_reopen_analysis_file`.
 ///
 /// ## 4. Postconditions
-/// - Returns `Result<String, String>` from `validate_reopen_analysis_file` with deterministic post-execution state.
+/// - Returns `Result<String, ReconcileError>` from `validate_reopen_analysis_file` with deterministic post-execution state.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N(reopen_file)) bounded over input/member dimension of `validate_reopen_analysis_file`.
 /// - Space Complexity: O(N(reopen_file)) bounded auxiliary memory for `validate_reopen_analysis_file`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `validate_reopen_analysis_file` (`Result<String, String>`).
+/// - Interface: Validates boundary inputs and types for `validate_reopen_analysis_file` (`Result<String, ReconcileError>`).
 /// - State: Maintains consistent state invariants across `validate_reopen_analysis_file` without partial mutation on error.
 /// - Action: Executes `validate_reopen_analysis_file` deterministically with zero unbounded recursion or blocking.
 /// - Resource: Bounds stack and heap allocations within `validate_reopen_analysis_file` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-VALIDATE-REOPEN-ANALYSIS-FILE] | SysML v2: ActionDef(validate_reopen_analysis_file)
-pub fn validate_reopen_analysis_file(reopen_file: &str) -> Result<String, String> {
+pub fn validate_reopen_analysis_file(reopen_file: &str) -> Result<String, ReconcileError> {
     let path = Path::new(reopen_file);
     if !path.is_file() {
-        return Err(format!("FATAL: Reopen analysis file not found: {}", reopen_file));
+        return Err(ReconcileError::Io(format!(
+            "FATAL: Reopen analysis file not found: {}",
+            reopen_file
+        )));
     }
 
-    let content = fs::read_to_string(path)
-        .map_err(|e| format!("FATAL: Cannot read reopen analysis file {}: {}", reopen_file, e))?;
+    let content = fs::read_to_string(path).map_err(|e| {
+        ReconcileError::Io(format!(
+            "FATAL: Cannot read reopen analysis file {}: {}",
+            reopen_file, e
+        ))
+    })?;
 
     Ok(content)
 }
@@ -341,14 +363,14 @@ pub enum IssueActionOutcome {
 /// - `params: &ResolvedCreateIssueParams` must satisfy domain and type-safety constraints prior to invoking `run_create_issue`.
 ///
 /// ## 4. Postconditions
-/// - Returns `Result<IssueActionOutcome, String>` from `run_create_issue` with deterministic post-execution state.
+/// - Returns `Result<IssueActionOutcome, ReconcileError>` from `run_create_issue` with deterministic post-execution state.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N(tracker)) bounded over input/member dimension of `run_create_issue`.
 /// - Space Complexity: O(N(tracker)) bounded auxiliary memory for `run_create_issue`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `run_create_issue` (`Result<IssueActionOutcome, String>`).
+/// - Interface: Validates boundary inputs and types for `run_create_issue` (`Result<IssueActionOutcome, ReconcileError>`).
 /// - State: Maintains consistent state invariants across `run_create_issue` without partial mutation on error.
 /// - Action: Executes `run_create_issue` deterministically with zero unbounded recursion or blocking.
 /// - Resource: Bounds stack and heap allocations within `run_create_issue` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
@@ -358,7 +380,7 @@ pub enum IssueActionOutcome {
 pub fn run_create_issue<T: TrackerClient>(
     tracker: &T,
     params: &ResolvedCreateIssueParams,
-) -> Result<IssueActionOutcome, String> {
+) -> Result<IssueActionOutcome, ReconcileError> {
     // 1. Precondition validation
     let body_content = validate_body_file(&params.body_file)?;
 
@@ -369,7 +391,7 @@ pub fn run_create_issue<T: TrackerClient>(
     };
 
     // 2. Idempotency & duplicate search
-    let issues = tracker.fetch_all_issues()?;
+    let issues = tracker.fetch_all_issues().map_err(ReconcileError::GitHub)?;
     let issue_index = IssueIndex::build(issues.clone());
 
     // Enforce Issue #223 blocking registration gate against live tracker index
@@ -382,35 +404,40 @@ pub fn run_create_issue<T: TrackerClient>(
         .find_issue_for_type(None, Some(&params.label), &params.title)
         .cloned()
         .or_else(|| {
-            issues.iter().find(|i| {
-                let matches_type = i
-                    .labels
-                    .iter()
-                    .any(|l| crate::tracker::canonicalize_spec_type(l.name()) == target_type)
-                    || crate::tracker::infer_spec_type_from_title(&i.title).as_deref()
-                        == Some(&target_type);
-                if !matches_type {
-                    return false;
-                }
-                let norm_existing = normalize_title(&i.title);
-                (!norm_target.is_empty() && norm_existing == norm_target)
-                    || i.title.trim().eq_ignore_ascii_case(params.title.trim())
-            }).cloned()
+            issues
+                .iter()
+                .find(|i| {
+                    let matches_type =
+                        i.labels.iter().any(|l| {
+                            crate::tracker::canonicalize_spec_type(l.name()) == target_type
+                        }) || crate::tracker::infer_spec_type_from_title(&i.title).as_deref()
+                            == Some(&target_type);
+                    if !matches_type {
+                        return false;
+                    }
+                    let norm_existing = normalize_title(&i.title);
+                    (!norm_target.is_empty() && norm_existing == norm_target)
+                        || i.title.trim().eq_ignore_ascii_case(params.title.trim())
+                })
+                .cloned()
         });
 
     if let Some(existing_issue) = existing {
         let is_closed = existing_issue.state.eq_ignore_ascii_case("closed");
-        let issue_url = existing_issue.url.clone().unwrap_or_else(|| {
-            format!("https://github.com/issues/{}", existing_issue.number)
-        });
+        let issue_url = existing_issue
+            .url
+            .clone()
+            .unwrap_or_else(|| format!("https://github.com/issues/{}", existing_issue.number));
 
         if is_closed {
             // Reopen and post analysis comment if provided
-            tracker.reopen_issue(
-                existing_issue.number,
-                reopen_analysis_content.as_deref(),
-                params.repo.as_deref(),
-            )?;
+            tracker
+                .reopen_issue(
+                    existing_issue.number,
+                    reopen_analysis_content.as_deref(),
+                    params.repo.as_deref(),
+                )
+                .map_err(ReconcileError::GitHub)?;
             Ok(IssueActionOutcome::Reopened {
                 number: existing_issue.number,
                 url: issue_url,
@@ -424,7 +451,9 @@ pub fn run_create_issue<T: TrackerClient>(
         }
     } else {
         // New issue: ensure label exists, create issue, report issue number and URL, exit 0
-        tracker.ensure_label_exists(&params.label, params.repo.as_deref())?;
+        tracker
+            .ensure_label_exists(&params.label, params.repo.as_deref())
+            .map_err(ReconcileError::GitHub)?;
 
         let body_path = Path::new(&params.body_file);
         let candidate_root = body_path
@@ -444,14 +473,21 @@ pub fn run_create_issue<T: TrackerClient>(
         for spec in crate::load_specifications(workspace_root) {
             if let Some(id) = spec.frontmatter.issue_id.or_else(|| {
                 issue_index
-                    .find_issue_for_type(None, Some(&spec.frontmatter.spec_type), &spec.frontmatter.title)
+                    .find_issue_for_type(
+                        None,
+                        Some(&spec.frontmatter.spec_type),
+                        &spec.frontmatter.title,
+                    )
                     .map(|i| i.number)
             }) {
                 spec_path_to_issue.insert(spec.rel_path.clone(), id);
                 if let Some(stripped) = spec.rel_path.strip_prefix("docs/") {
                     spec_path_to_issue.insert(stripped.to_string(), id);
                 }
-                if let Some(fname) = Path::new(&spec.rel_path).file_name().and_then(|f| f.to_str()) {
+                if let Some(fname) = Path::new(&spec.rel_path)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                {
                     spec_path_to_issue.insert(fname.to_string(), id);
                 }
             }
@@ -472,12 +508,14 @@ pub fn run_create_issue<T: TrackerClient>(
             &spec_path_to_issue,
         );
 
-        let (number, url) = tracker.create_issue(
-            &params.title,
-            &projected_body,
-            &params.label,
-            params.repo.as_deref(),
-        )?;
+        let (number, url) = tracker
+            .create_issue(
+                &params.title,
+                &projected_body,
+                &params.label,
+                params.repo.as_deref(),
+            )
+            .map_err(ReconcileError::GitHub)?;
         Ok(IssueActionOutcome::Created { number, url })
     }
 }
@@ -494,21 +532,21 @@ pub fn run_create_issue<T: TrackerClient>(
 /// - `args: &CreateIssueArgs` must satisfy domain and type-safety constraints prior to invoking `execute_create_issue`.
 ///
 /// ## 4. Postconditions
-/// - Returns `Result<(), String>` from `execute_create_issue` with deterministic post-execution state.
+/// - Returns `Result<(), ReconcileError>` from `execute_create_issue` with deterministic post-execution state.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N(args)) bounded over input/member dimension of `execute_create_issue`.
 /// - Space Complexity: O(N(args)) bounded auxiliary memory for `execute_create_issue`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `execute_create_issue` (`Result<(), String>`).
+/// - Interface: Validates boundary inputs and types for `execute_create_issue` (`Result<(), ReconcileError>`).
 /// - State: Maintains consistent state invariants across `execute_create_issue` without partial mutation on error.
 /// - Action: Executes `execute_create_issue` deterministically with zero unbounded recursion or blocking.
 /// - Resource: Bounds stack and heap allocations within `execute_create_issue` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-EXECUTE-CREATE-ISSUE] | SysML v2: ActionDef(execute_create_issue)
-pub fn execute_create_issue(args: &CreateIssueArgs) -> Result<(), String> {
+pub fn execute_create_issue(args: &CreateIssueArgs) -> Result<(), ReconcileError> {
     let params = args.resolve()?;
 
     let provider_norm = params.provider.trim().to_lowercase();
@@ -526,10 +564,10 @@ pub fn execute_create_issue(args: &CreateIssueArgs) -> Result<(), String> {
             run_create_issue(&tracker, &params)?
         }
         other => {
-            return Err(format!(
+            return Err(ReconcileError::Validation(format!(
                 "Unsupported issue tracker provider '{}'. Supported providers: github, offline",
                 other
-            ));
+            )));
         }
     };
 
@@ -571,7 +609,10 @@ mod tests {
         }
 
         fn path_str(&self) -> Result<&str, Box<dyn std::error::Error>> {
-            Ok(self.path.to_str().ok_or("temp file path is not valid UTF-8")?)
+            Ok(self
+                .path
+                .to_str()
+                .ok_or("temp file path is not valid UTF-8")?)
         }
     }
 
@@ -626,17 +667,23 @@ mod tests {
     fn test_validate_body_file_errors() -> Result<(), Box<dyn std::error::Error>> {
         // Empty file
         let empty_tf = TempFile::new("empty", "")?;
-        let err = validate_body_file(empty_tf.path_str()?).err().ok_or("expected empty-file rejection")?;
+        let err = validate_body_file(empty_tf.path_str()?)
+            .err()
+            .ok_or("expected empty-file rejection")?;
         assert!(err.contains("empty"));
 
         // Unbalanced fences
         let fence_tf = TempFile::new("fence", "```rust\nlet a = 1;")?;
-        let err = validate_body_file(fence_tf.path_str()?).err().ok_or("expected unbalanced-fence rejection")?;
+        let err = validate_body_file(fence_tf.path_str()?)
+            .err()
+            .ok_or("expected unbalanced-fence rejection")?;
         assert!(err.contains("Unbalanced code fences"));
 
         // Unreplaced token
         let token_tf = TempFile::new("token", "Sample {{REQUIRED_FOO}} here\n```\nblock\n```\n")?;
-        let err = validate_body_file(token_tf.path_str()?).err().ok_or("expected unreplaced-token rejection")?;
+        let err = validate_body_file(token_tf.path_str()?)
+            .err()
+            .ok_or("expected unreplaced-token rejection")?;
         assert!(err.contains("Unreplaced {{REQUIRED_*}} escape token"));
 
         // Unresolved checklist placeholder token probe (Issue #223 RED phase)
@@ -644,22 +691,39 @@ mod tests {
             "placeholder_checklist",
             "# Epic\n## 2. Requirements & Checklist\n- [ ] #[IssueID] - Feature 01\n```\nblock\n```\n",
         )?;
-        let err = validate_body_file(ph_tf.path_str()?).err().ok_or("expected placeholder-token rejection")?;
+        let err = validate_body_file(ph_tf.path_str()?)
+            .err()
+            .ok_or("expected placeholder-token rejection")?;
         assert!(err.contains("Unresolved checklist placeholder token"));
 
         // Multi-space checkbox prefix with unreplaced placeholder
-        let ph_multi = TempFile::new("multi_space", "# Epic\n-   [ ] #[IssueID] - Sibling\n```\nblock\n```\n")?;
-        let err = validate_body_file(ph_multi.path_str()?).err().ok_or("expected multi-space rejection")?;
+        let ph_multi = TempFile::new(
+            "multi_space",
+            "# Epic\n-   [ ] #[IssueID] - Sibling\n```\nblock\n```\n",
+        )?;
+        let err = validate_body_file(ph_multi.path_str()?)
+            .err()
+            .ok_or("expected multi-space rejection")?;
         assert!(err.contains("Unresolved checklist placeholder token"));
 
         // Tab checkbox prefix with unreplaced placeholder
-        let ph_tab = TempFile::new("tab_space", "# Epic\n-\t[x] #[StoryIssueID] - Sibling\n```\nblock\n```\n")?;
-        let err = validate_body_file(ph_tab.path_str()?).err().ok_or("expected tab rejection")?;
+        let ph_tab = TempFile::new(
+            "tab_space",
+            "# Epic\n-\t[x] #[StoryIssueID] - Sibling\n```\nblock\n```\n",
+        )?;
+        let err = validate_body_file(ph_tab.path_str()?)
+            .err()
+            .ok_or("expected tab rejection")?;
         assert!(err.contains("Unresolved checklist placeholder token"));
 
         // Indented multi-space checkbox prefix
-        let ph_indent = TempFile::new("indent_space", "# Epic\n   -  [X] #[UseCaseIssueID] - Sibling\n```\nblock\n```\n")?;
-        let err = validate_body_file(ph_indent.path_str()?).err().ok_or("expected indented rejection")?;
+        let ph_indent = TempFile::new(
+            "indent_space",
+            "# Epic\n   -  [X] #[UseCaseIssueID] - Sibling\n```\nblock\n```\n",
+        )?;
+        let err = validate_body_file(ph_indent.path_str()?)
+            .err()
+            .ok_or("expected indented rejection")?;
         assert!(err.contains("Unresolved checklist placeholder token"));
 
         // Valid file
@@ -698,7 +762,13 @@ mod tests {
             self.inner.add_label(issue_number, label)
         }
 
-        fn create_issue(&self, title: &str, body: &str, label: &str, repo: Option<&str>) -> Result<(u64, String), String> {
+        fn create_issue(
+            &self,
+            title: &str,
+            body: &str,
+            label: &str,
+            repo: Option<&str>,
+        ) -> Result<(u64, String), String> {
             self.inner.create_issue(title, body, label, repo)
         }
 
@@ -706,7 +776,12 @@ mod tests {
             self.inner.ensure_label_exists(label, repo)
         }
 
-        fn reopen_issue(&self, issue_number: u64, comment: Option<&str>, repo: Option<&str>) -> Result<(), String> {
+        fn reopen_issue(
+            &self,
+            issue_number: u64,
+            comment: Option<&str>,
+            repo: Option<&str>,
+        ) -> Result<(), String> {
             if let Ok(mut g) = self.reopen_calls.lock() {
                 g.push((
                     issue_number,
@@ -719,7 +794,8 @@ mod tests {
     }
 
     #[test]
-    fn test_run_create_issue_blocks_unregistered_checklist_issues() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_run_create_issue_blocks_unregistered_checklist_issues(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let body_tf = TempFile::new(
             "unregistered_body",
             "# Epic 01\n## Checklist\n- [ ] #999 - Nonexistent Feature\n```rust\nfn f() {}\n```\n",
@@ -734,7 +810,10 @@ mod tests {
             provider: "offline".to_string(),
         };
         let res = run_create_issue(&tracker, &params);
-        assert!(res.is_err(), "Expected error for unregistered checklist issue #999");
+        assert!(
+            res.is_err(),
+            "Expected error for unregistered checklist issue #999"
+        );
         let err = res.err().ok_or("expected error")?;
         assert!(err.contains("unresolvable checklist issue reference '#999'"));
         assert!(err.contains("Publish gate blocked"));
@@ -742,14 +821,16 @@ mod tests {
     }
 
     #[test]
-    fn test_run_create_issue_projects_relative_links_and_persists_payload() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_run_create_issue_projects_relative_links_and_persists_payload(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Create temp workspace structure: <temp_dir>/docs/features/FEAT-02.md
         let rand_id = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let ws_dir = std::env::temp_dir().join(format!("test_ws_{}", rand_id));
         let feats_dir = ws_dir.join("docs").join("features");
         fs::create_dir_all(&feats_dir)?;
 
-        let feat_content = "---\ntitle: \"Feature 02: Baseline Verifier\"\nissue_id: 20\n---\n# Feature 02\n";
+        let feat_content =
+            "---\ntitle: \"Feature 02: Baseline Verifier\"\nissue_id: 20\n---\n# Feature 02\n";
         fs::write(feats_dir.join("FEAT-02.md"), feat_content)?;
 
         let epic_content = "# Epic 01\n## Checklist\n- [ ] #20 - [Feature 02](../features/FEAT-02.md)\nSchema: [Model](../../schema/core.sysml)\n```\ncode\n```\n";
@@ -787,13 +868,21 @@ mod tests {
         );
 
         let all_issues = tracker.fetch_all_issues()?;
-        let created = all_issues.iter().find(|i| i.number == 21).ok_or("Created issue not found")?;
+        let created = all_issues
+            .iter()
+            .find(|i| i.number == 21)
+            .ok_or("Created issue not found")?;
         let body = created.body.as_ref().ok_or("Created issue body is None")?;
 
         // Must project link to canonical GitHub URL with issue #20
-        assert!(body.contains("#20 - [Feature 02](https://github.com/org/repo/blob/main/docs/features/FEAT-02.md)"));
+        assert!(body.contains(
+            "#20 - [Feature 02](https://github.com/org/repo/blob/main/docs/features/FEAT-02.md)"
+        ));
         assert!(body.contains("[Model](https://github.com/org/repo/blob/main/schema/core.sysml)"));
-        assert!(!body.contains("../features/FEAT-02.md"), "Raw relative spec link must not remain");
+        assert!(
+            !body.contains("../features/FEAT-02.md"),
+            "Raw relative spec link must not remain"
+        );
 
         // Cleanup
         let _ = fs::remove_dir_all(ws_dir);
@@ -890,28 +979,49 @@ mod tests {
         );
 
         let all_issues = tracker.fetch_all_issues()?;
-        let issue_10 = all_issues.iter().find(|i| i.number == 10).ok_or("issue 10 missing")?;
+        let issue_10 = all_issues
+            .iter()
+            .find(|i| i.number == 10)
+            .ok_or("issue 10 missing")?;
         assert_eq!(issue_10.state, "OPEN");
-        assert!(!issue_10.is_resolved(), "Reopened issue 10 must not be resolved");
         assert!(
-            issue_10.body.as_ref().map(|b| b.contains("Reopen rationale with details")).unwrap_or(false),
+            !issue_10.is_resolved(),
+            "Reopened issue 10 must not be resolved"
+        );
+        assert!(
+            issue_10
+                .body
+                .as_ref()
+                .map(|b| b.contains("Reopen rationale with details"))
+                .unwrap_or(false),
             "Reopened issue 10 body must contain reopen comment"
         );
-        let issue_20 = all_issues.iter().find(|i| i.number == 20).ok_or("issue 20 missing")?;
+        let issue_20 = all_issues
+            .iter()
+            .find(|i| i.number == 20)
+            .ok_or("issue 20 missing")?;
         assert_eq!(issue_20.state, "OPEN");
-        let issue_21 = all_issues.iter().find(|i| i.number == 21).ok_or("issue 21 missing")?;
+        let issue_21 = all_issues
+            .iter()
+            .find(|i| i.number == 21)
+            .ok_or("issue 21 missing")?;
         assert_eq!(issue_21.state, "OPEN");
         assert_eq!(issue_21.title, "Bug 03: Brittle Shell Sprawl");
         assert!(issue_21.labels.iter().any(|l| match l {
             TrackerLabel::String(s) => s == "bug",
             _ => false,
         }));
-        assert!(issue_21.body.as_ref().map(|b| b.contains("# Issue Content")).unwrap_or(false));
+        assert!(issue_21
+            .body
+            .as_ref()
+            .map(|b| b.contains("# Issue Content"))
+            .unwrap_or(false));
         Ok(())
     }
 
     #[test]
-    fn test_create_issue_does_not_collide_feature_with_existing_epic() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_create_issue_does_not_collide_feature_with_existing_epic(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let body_tf = TempFile::new(
             "feat_collision",
             "# Feature 01: [ConOps] Human Engineer Interface\n\nBody content\n",
@@ -939,16 +1049,20 @@ mod tests {
         let outcome = run_create_issue(&tracker, &params)?;
         match outcome {
             IssueActionOutcome::Created { number, .. } => {
-                assert_ne!(number, 10, "Feature must be created as new issue, not collide with Epic #10");
+                assert_ne!(
+                    number, 10,
+                    "Feature must be created as new issue, not collide with Epic #10"
+                );
             }
             IssueActionOutcome::AlreadyOpen { number, .. } => {
                 return Err(format!("Feature must NOT be treated as AlreadyOpen due to Epic #10 collision! (got issue #{})", number).into());
             }
             IssueActionOutcome::Reopened { number, .. } => {
-                return Err(format!("Feature must NOT be reopened! (got issue #{})", number).into());
+                return Err(
+                    format!("Feature must NOT be reopened! (got issue #{})", number).into(),
+                );
             }
         }
         Ok(())
     }
 }
-

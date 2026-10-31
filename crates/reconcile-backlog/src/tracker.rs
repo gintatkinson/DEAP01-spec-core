@@ -2,6 +2,7 @@
 //!
 //! Realises: [Issue Tracker as Canonical SSOT, Closed-Loop Payload Verification]
 
+use crate::ReconcileError;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::process::Command;
@@ -580,73 +581,97 @@ impl OfflineTracker {
             }),
         }
     }
-}
 
-impl Default for OfflineTracker {
-    /// Constructs an empty offline tracker; equivalent to [`OfflineTracker::new`].
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-DEFAULT]
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl TrackerClient for OfflineTracker {
-    /// Returns a cloned snapshot of all in-memory issues or a mutex poison error.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-FETCH-ALL-ISSUES]
-    fn fetch_all_issues(&self) -> Result<Vec<TrackerIssue>, String> {
-        let guard = self.state.lock().map_err(|e| e.to_string())?;
+    /// Reads a cloned snapshot of all in-memory issues under typed [`ReconcileError`] reporting.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-FETCH-TYPED]
+    fn fetch_all_issues_typed(&self) -> Result<Vec<TrackerIssue>, ReconcileError> {
+        let guard = self
+            .state
+            .lock()
+            .map_err(|e| ReconcileError::GitHub(e.to_string()))?;
         Ok(guard.issues.clone())
     }
 
-    /// Replaces the body of `issue_number` in memory, returning an error if the issue is missing.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-UPDATE-ISSUE-BODY]
-    fn update_issue_body(&self, issue_number: u64, body: &str) -> Result<(), String> {
-        let mut guard = self.state.lock().map_err(|e| e.to_string())?;
+    /// Mutates the stored markdown body for `issue_number` in memory using [`ReconcileError`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-UPDATE-BODY-TYPED]
+    fn update_issue_body_typed(&self, issue_number: u64, body: &str) -> Result<(), ReconcileError> {
+        let mut guard = self
+            .state
+            .lock()
+            .map_err(|e| ReconcileError::GitHub(e.to_string()))?;
         let issue = guard
             .issues
             .iter_mut()
             .find(|i| i.number == issue_number)
-            .ok_or_else(|| format!("Offline tracker: issue #{} not found", issue_number))?;
+            .ok_or_else(|| {
+                ReconcileError::GitHub(format!(
+                    "Offline tracker: issue #{} not found",
+                    issue_number
+                ))
+            })?;
         issue.body = Some(body.to_string());
         Ok(())
     }
 
-    /// Updates the title of `issue_number` in memory, returning an error if the issue is missing.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-UPDATE-ISSUE-TITLE]
-    fn update_issue_title(&self, issue_number: u64, title: &str) -> Result<(), String> {
-        let mut guard = self.state.lock().map_err(|e| e.to_string())?;
+    /// Mutates the stored title for `issue_number` in memory using [`ReconcileError`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-UPDATE-TITLE-TYPED]
+    fn update_issue_title_typed(
+        &self,
+        issue_number: u64,
+        title: &str,
+    ) -> Result<(), ReconcileError> {
+        let mut guard = self
+            .state
+            .lock()
+            .map_err(|e| ReconcileError::GitHub(e.to_string()))?;
         let issue = guard
             .issues
             .iter_mut()
             .find(|i| i.number == issue_number)
-            .ok_or_else(|| format!("Offline tracker: issue #{} not found", issue_number))?;
+            .ok_or_else(|| {
+                ReconcileError::GitHub(format!(
+                    "Offline tracker: issue #{} not found",
+                    issue_number
+                ))
+            })?;
         issue.title = title.to_string();
         Ok(())
     }
 
-    /// Appends `label` to `issue_number` in memory, returning an error if the issue is missing.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-ADD-LABEL]
-    fn add_label(&self, issue_number: u64, label: &str) -> Result<(), String> {
-        let mut guard = self.state.lock().map_err(|e| e.to_string())?;
+    /// Appends `label` onto `issue_number` in memory using [`ReconcileError`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-ADD-LABEL-TYPED]
+    fn add_label_typed(&self, issue_number: u64, label: &str) -> Result<(), ReconcileError> {
+        let mut guard = self
+            .state
+            .lock()
+            .map_err(|e| ReconcileError::GitHub(e.to_string()))?;
         let issue = guard
             .issues
             .iter_mut()
             .find(|i| i.number == issue_number)
-            .ok_or_else(|| format!("Offline tracker: issue #{} not found", issue_number))?;
+            .ok_or_else(|| {
+                ReconcileError::GitHub(format!(
+                    "Offline tracker: issue #{} not found",
+                    issue_number
+                ))
+            })?;
         issue.labels.push(TrackerLabel::String(label.to_string()));
         Ok(())
     }
 
-    /// Allocates the next sequential issue ID and records a new open issue in memory.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-CREATE-ISSUE]
-    fn create_issue(
+    /// Allocates a new sequential offline issue record with typed [`ReconcileError`] diagnostics.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-CREATE-TYPED]
+    fn create_issue_typed(
         &self,
         title: &str,
         body: &str,
         label: &str,
         repo: Option<&str>,
-    ) -> Result<(u64, String), String> {
-        let mut guard = self.state.lock().map_err(|e| e.to_string())?;
+    ) -> Result<(u64, String), ReconcileError> {
+        let mut guard = self
+            .state
+            .lock()
+            .map_err(|e| ReconcileError::GitHub(e.to_string()))?;
         let id = guard.next_id;
         guard.next_id = guard.next_id.saturating_add(1);
         let url = format!(
@@ -665,10 +690,13 @@ impl TrackerClient for OfflineTracker {
         Ok((id, url))
     }
 
-    /// Registers `label` in the offline label set if no normalized equivalent exists.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-ENSURE-LABEL-EXISTS]
-    fn ensure_label_exists(&self, label: &str, _repo: Option<&str>) -> Result<(), String> {
-        let mut guard = self.state.lock().map_err(|e| e.to_string())?;
+    /// Inserts `label` into the offline label registry if absent, returning [`ReconcileError`] on lock poison.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-ENSURE-LABEL-TYPED]
+    fn ensure_label_exists_typed(&self, label: &str) -> Result<(), ReconcileError> {
+        let mut guard = self
+            .state
+            .lock()
+            .map_err(|e| ReconcileError::GitHub(e.to_string()))?;
         let norm = normalize_label(label);
         if !guard.labels.iter().any(|l| normalize_label(l) == norm) {
             guard.labels.push(label.to_string());
@@ -676,20 +704,27 @@ impl TrackerClient for OfflineTracker {
         Ok(())
     }
 
-    /// Reopens `issue_number` in memory, strips resolved status labels, and appends any non-empty comment.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-REOPEN-ISSUE]
-    fn reopen_issue(
+    /// Transitions `issue_number` back to open state in memory under typed [`ReconcileError`] handling.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-REOPEN-TYPED]
+    fn reopen_issue_typed(
         &self,
         issue_number: u64,
         comment: Option<&str>,
-        _repo: Option<&str>,
-    ) -> Result<(), String> {
-        let mut guard = self.state.lock().map_err(|e| e.to_string())?;
+    ) -> Result<(), ReconcileError> {
+        let mut guard = self
+            .state
+            .lock()
+            .map_err(|e| ReconcileError::GitHub(e.to_string()))?;
         let issue = guard
             .issues
             .iter_mut()
             .find(|i| i.number == issue_number)
-            .ok_or_else(|| format!("Offline tracker: issue #{} not found", issue_number))?;
+            .ok_or_else(|| {
+                ReconcileError::GitHub(format!(
+                    "Offline tracker: issue #{} not found",
+                    issue_number
+                ))
+            })?;
 
         issue.state = "OPEN".to_string();
         issue.labels.retain(|l| !is_resolved_label(l.name()));
@@ -710,6 +745,74 @@ impl TrackerClient for OfflineTracker {
             }
         }
         Ok(())
+    }
+}
+
+impl Default for OfflineTracker {
+    /// Constructs an empty offline tracker; equivalent to [`OfflineTracker::new`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-DEFAULT]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TrackerClient for OfflineTracker {
+    /// Returns a cloned snapshot of all in-memory issues or a mutex poison error.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-FETCH-ALL-ISSUES]
+    fn fetch_all_issues(&self) -> Result<Vec<TrackerIssue>, String> {
+        self.fetch_all_issues_typed().map_err(String::from)
+    }
+
+    /// Replaces the body of `issue_number` in memory, returning an error if the issue is missing.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-UPDATE-ISSUE-BODY]
+    fn update_issue_body(&self, issue_number: u64, body: &str) -> Result<(), String> {
+        self.update_issue_body_typed(issue_number, body)
+            .map_err(String::from)
+    }
+
+    /// Updates the title of `issue_number` in memory, returning an error if the issue is missing.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-UPDATE-ISSUE-TITLE]
+    fn update_issue_title(&self, issue_number: u64, title: &str) -> Result<(), String> {
+        self.update_issue_title_typed(issue_number, title)
+            .map_err(String::from)
+    }
+
+    /// Appends `label` to `issue_number` in memory, returning an error if the issue is missing.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-ADD-LABEL]
+    fn add_label(&self, issue_number: u64, label: &str) -> Result<(), String> {
+        self.add_label_typed(issue_number, label)
+            .map_err(String::from)
+    }
+
+    /// Allocates the next sequential issue ID and records a new open issue in memory.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-CREATE-ISSUE]
+    fn create_issue(
+        &self,
+        title: &str,
+        body: &str,
+        label: &str,
+        repo: Option<&str>,
+    ) -> Result<(u64, String), String> {
+        self.create_issue_typed(title, body, label, repo)
+            .map_err(String::from)
+    }
+
+    /// Registers `label` in the offline label set if no normalized equivalent exists.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-ENSURE-LABEL-EXISTS]
+    fn ensure_label_exists(&self, label: &str, _repo: Option<&str>) -> Result<(), String> {
+        self.ensure_label_exists_typed(label).map_err(String::from)
+    }
+
+    /// Reopens `issue_number` in memory, strips resolved status labels, and appends any non-empty comment.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-OFFLINETRACKER-REOPEN-ISSUE]
+    fn reopen_issue(
+        &self,
+        issue_number: u64,
+        comment: Option<&str>,
+        _repo: Option<&str>,
+    ) -> Result<(), String> {
+        self.reopen_issue_typed(issue_number, comment)
+            .map_err(String::from)
     }
 }
 
@@ -805,20 +908,10 @@ impl GitHubTracker {
             repo: Some(repo.into()),
         }
     }
-}
 
-impl Default for GitHubTracker {
-    /// Constructs a tracker bound to the current repository; equivalent to [`GitHubTracker::new`].
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-DEFAULT]
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl TrackerClient for GitHubTracker {
-    /// Queries `gh issue list` for all open and closed repository issues and deserializes the JSON payload.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-FETCH-ALL-ISSUES]
-    fn fetch_all_issues(&self) -> Result<Vec<TrackerIssue>, String> {
+    /// Queries `gh issue list` and deserializes issues into typed [`ReconcileError`] variants.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-FETCH-TYPED]
+    fn fetch_all_issues_typed(&self) -> Result<Vec<TrackerIssue>, ReconcileError> {
         let mut cmd = Command::new("gh");
         cmd.args([
             "issue",
@@ -835,31 +928,105 @@ impl TrackerClient for GitHubTracker {
         }
         let output = cmd
             .output()
-            .map_err(|e| format!("Failed to execute 'gh issue list': {}", e))?;
+            .map_err(|e| ReconcileError::Io(format!("Failed to execute 'gh issue list': {}", e)))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("'gh issue list' exited with error: {}", stderr));
+            return Err(ReconcileError::GitHub(format!(
+                "'gh issue list' exited with error: {}",
+                stderr
+            )));
         }
 
         let json_str = String::from_utf8_lossy(&output.stdout);
-        let issues: Vec<TrackerIssue> = serde_json::from_str(&json_str)
-            .map_err(|e| format!("Failed to parse 'gh issue list' JSON output: {}", e))?;
+        let issues: Vec<TrackerIssue> = serde_json::from_str(&json_str).map_err(|e| {
+            ReconcileError::Parse(format!(
+                "Failed to parse 'gh issue list' JSON output: {}",
+                e
+            ))
+        })?;
 
         Ok(issues)
     }
 
-    /// Updates `issue_number`'s body via `gh issue edit --body-file` with closed-loop readback verification.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATE-ISSUE-BODY]
-    fn update_issue_body(&self, issue_number: u64, body: &str) -> Result<(), String> {
+    /// Verifies remote body persistence for `issue_number` after `gh issue edit --body-file`.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-VERIFY-UPDATED-BODY]
+    fn verify_updated_issue_body(
+        &self,
+        issue_number: u64,
+        body: &str,
+    ) -> Result<(), ReconcileError> {
+        let mut view_cmd = Command::new("gh");
+        view_cmd.args([
+            "issue",
+            "view",
+            &issue_number.to_string(),
+            "--json",
+            "number,body",
+        ]);
+        if let Some(ref r) = self.repo {
+            view_cmd.args(["--repo", r]);
+        }
+        let view_output = view_cmd.output().map_err(|e| {
+            ReconcileError::Io(format!(
+                "Failed to execute 'gh issue view' for closed-loop verification: {}",
+                e
+            ))
+        })?;
+
+        if !view_output.status.success() {
+            let stderr = String::from_utf8_lossy(&view_output.stderr);
+            return Err(ReconcileError::GitHub(format!(
+                "'gh issue view' closed-loop verification failed for issue #{}: {}",
+                issue_number, stderr
+            )));
+        }
+
+        /// Deserialization payload for closed-loop `gh issue view` body readback verification.
+        /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATEVIEWPAYLOAD]
+        #[derive(Deserialize)]
+        struct UpdateViewPayload {
+            number: u64,
+            #[serde(default)]
+            body: Option<String>,
+        }
+
+        let view_str = String::from_utf8_lossy(&view_output.stdout);
+        let parsed: UpdateViewPayload = serde_json::from_str(&view_str).map_err(|e| {
+            ReconcileError::Parse(format!(
+                "Failed to parse 'gh issue view' closed-loop verification output: {}",
+                e
+            ))
+        })?;
+
+        if parsed.number != issue_number {
+            return Err(ReconcileError::Validation(format!(
+                "Closed-loop verification mismatch: expected issue #{}, got #{}",
+                issue_number, parsed.number
+            )));
+        }
+
+        if !body.trim().is_empty() && parsed.body.as_deref().unwrap_or("").trim().is_empty() {
+            return Err(ReconcileError::Validation(format!(
+                "Closed-loop verification error: remote body for issue #{} is empty",
+                issue_number
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Executes `gh issue edit --body-file` and closed-loop readback under [`ReconcileError`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATE-BODY-TYPED]
+    fn update_issue_body_typed(&self, issue_number: u64, body: &str) -> Result<(), ReconcileError> {
         use std::io::Write;
         let mut temp_file = tempfile_named()?;
-        temp_file
-            .write_all(body.as_bytes())
-            .map_err(|e| format!("Failed to write temporary issue body file: {}", e))?;
-        temp_file
-            .flush()
-            .map_err(|e| format!("Failed to flush temporary issue body file: {}", e))?;
+        temp_file.write_all(body.as_bytes()).map_err(|e| {
+            ReconcileError::Io(format!("Failed to write temporary issue body file: {}", e))
+        })?;
+        temp_file.flush().map_err(|e| {
+            ReconcileError::Io(format!("Failed to flush temporary issue body file: {}", e))
+        })?;
         let temp_path = temp_file.path.clone();
 
         let mut cmd = Command::new("gh");
@@ -875,86 +1042,32 @@ impl TrackerClient for GitHubTracker {
         }
         let output = cmd
             .output()
-            .map_err(|e| format!("Failed to execute 'gh issue edit': {}", e))?;
+            .map_err(|e| ReconcileError::Io(format!("Failed to execute 'gh issue edit': {}", e)))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!(
+            return Err(ReconcileError::GitHub(format!(
                 "'gh issue edit' failed for issue #{}: {}",
                 issue_number, stderr
-            ));
+            )));
         }
 
-        // Closed-loop readback verification
-        let mut view_cmd = Command::new("gh");
-        view_cmd.args([
-            "issue",
-            "view",
-            &issue_number.to_string(),
-            "--json",
-            "number,body",
-        ]);
-        if let Some(ref r) = self.repo {
-            view_cmd.args(["--repo", r]);
-        }
-        let view_output = view_cmd.output().map_err(|e| {
-            format!(
-                "Failed to execute 'gh issue view' for closed-loop verification: {}",
-                e
-            )
-        })?;
-
-        if !view_output.status.success() {
-            let stderr = String::from_utf8_lossy(&view_output.stderr);
-            return Err(format!(
-                "'gh issue view' closed-loop verification failed for issue #{}: {}",
-                issue_number, stderr
-            ));
-        }
-
-        /// Deserialization payload for closed-loop `gh issue view` body readback verification.
-        /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATEVIEWPAYLOAD]
-        #[derive(Deserialize)]
-        struct UpdateViewPayload {
-            number: u64,
-            #[serde(default)]
-            body: Option<String>,
-        }
-
-        let view_str = String::from_utf8_lossy(&view_output.stdout);
-        let parsed: UpdateViewPayload = serde_json::from_str(&view_str).map_err(|e| {
-            format!(
-                "Failed to parse 'gh issue view' closed-loop verification output: {}",
-                e
-            )
-        })?;
-
-        if parsed.number != issue_number {
-            return Err(format!(
-                "Closed-loop verification mismatch: expected issue #{}, got #{}",
-                issue_number, parsed.number
-            ));
-        }
-
-        if !body.trim().is_empty() && parsed.body.as_deref().unwrap_or("").trim().is_empty() {
-            return Err(format!(
-                "Closed-loop verification error: remote body for issue #{} is empty",
-                issue_number
-            ));
-        }
-
-        Ok(())
+        self.verify_updated_issue_body(issue_number, body)
     }
 
-    /// Updates `issue_number`'s title via `gh issue edit --title`, rejecting empty titles.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATE-ISSUE-TITLE]
-    fn update_issue_title(&self, issue_number: u64, title: &str) -> Result<(), String> {
+    /// Executes `gh issue edit --title` after validating non-empty input under [`ReconcileError`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATE-TITLE-TYPED]
+    fn update_issue_title_typed(
+        &self,
+        issue_number: u64,
+        title: &str,
+    ) -> Result<(), ReconcileError> {
         let trimmed = title.trim();
         if trimmed.is_empty() {
-            return Err(format!(
+            return Err(ReconcileError::Validation(format!(
                 "Cannot set empty title for issue #{}",
                 issue_number
-            ));
+            )));
         }
         let mut cmd = Command::new("gh");
         cmd.args([
@@ -967,22 +1080,22 @@ impl TrackerClient for GitHubTracker {
         if let Some(ref r) = self.repo {
             cmd.args(["--repo", r]);
         }
-        let output = cmd
-            .output()
-            .map_err(|e| format!("Failed to execute 'gh issue edit --title': {}", e))?;
+        let output = cmd.output().map_err(|e| {
+            ReconcileError::Io(format!("Failed to execute 'gh issue edit --title': {}", e))
+        })?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!(
+            return Err(ReconcileError::GitHub(format!(
                 "'gh issue edit --title' failed for issue #{}: {}",
                 issue_number, stderr
-            ));
+            )));
         }
         Ok(())
     }
 
-    /// Attaches `label` to `issue_number` via `gh issue edit --add-label`.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-ADD-LABEL]
-    fn add_label(&self, issue_number: u64, label: &str) -> Result<(), String> {
+    /// Executes `gh issue edit --add-label` for `issue_number` under [`ReconcileError`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-ADD-LABEL-TYPED]
+    fn add_label_typed(&self, issue_number: u64, label: &str) -> Result<(), ReconcileError> {
         let mut cmd = Command::new("gh");
         cmd.args([
             "issue",
@@ -994,39 +1107,92 @@ impl TrackerClient for GitHubTracker {
         if let Some(ref r) = self.repo {
             cmd.args(["--repo", r]);
         }
-        let output = cmd
-            .output()
-            .map_err(|e| format!("Failed to execute 'gh issue edit --add-label': {}", e))?;
+        let output = cmd.output().map_err(|e| {
+            ReconcileError::Io(format!(
+                "Failed to execute 'gh issue edit --add-label': {}",
+                e
+            ))
+        })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!(
+            return Err(ReconcileError::GitHub(format!(
                 "'gh issue edit --add-label' failed for issue #{}: {}",
                 issue_number, stderr
-            ));
+            )));
         }
 
         Ok(())
     }
 
-    /// Creates a new GitHub issue via `gh issue create --body-file` and verifies the created issue number.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-CREATE-ISSUE]
-    fn create_issue(
+    /// Performs closed-loop `gh issue view` verification on newly created issue `number`.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-VERIFY-CREATED-ISSUE]
+    fn verify_created_issue(
+        &self,
+        number: u64,
+        target_repo: Option<&str>,
+    ) -> Result<(), ReconcileError> {
+        let mut view_cmd = Command::new("gh");
+        view_cmd.args([
+            "issue",
+            "view",
+            &number.to_string(),
+            "--json",
+            "number,title,state,body,url",
+        ]);
+        if let Some(r) = target_repo {
+            view_cmd.args(["--repo", r]);
+        }
+        let view_output = view_cmd.output().map_err(|e| {
+            ReconcileError::Io(format!(
+                "Failed to execute 'gh issue view' for closed-loop verification: {}",
+                e
+            ))
+        })?;
+
+        if !view_output.status.success() {
+            let stderr = String::from_utf8_lossy(&view_output.stderr);
+            return Err(ReconcileError::GitHub(format!(
+                "'gh issue view' closed-loop verification failed for created issue #{}: {}",
+                number, stderr
+            )));
+        }
+
+        let view_str = String::from_utf8_lossy(&view_output.stdout);
+        let parsed: TrackerIssue = serde_json::from_str(&view_str).map_err(|e| {
+            ReconcileError::Parse(format!(
+                "Failed to parse 'gh issue view' verification output for issue #{}: {}",
+                number, e
+            ))
+        })?;
+
+        if parsed.number != number {
+            return Err(ReconcileError::Validation(format!(
+                "Closed-loop verification mismatch: expected issue #{}, got #{}",
+                number, parsed.number
+            )));
+        }
+        Ok(())
+    }
+
+    /// Creates a new GitHub issue via `gh issue create` and verifies its remote record under [`ReconcileError`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-CREATE-TYPED]
+    fn create_issue_typed(
         &self,
         title: &str,
         body: &str,
         label: &str,
         repo: Option<&str>,
-    ) -> Result<(u64, String), String> {
+    ) -> Result<(u64, String), ReconcileError> {
         use std::io::Write;
         let target_repo = repo.or(self.repo.as_deref());
         let mut temp_file = tempfile_named()?;
-        temp_file
-            .write_all(body.as_bytes())
-            .map_err(|e| format!("Failed to write temporary issue body file: {}", e))?;
-        temp_file
-            .flush()
-            .map_err(|e| format!("Failed to flush temporary issue body file: {}", e))?;
+        temp_file.write_all(body.as_bytes()).map_err(|e| {
+            ReconcileError::Io(format!("Failed to write temporary issue body file: {}", e))
+        })?;
+        temp_file.flush().map_err(|e| {
+            ReconcileError::Io(format!("Failed to flush temporary issue body file: {}", e))
+        })?;
         let temp_path = temp_file.path.clone();
 
         let mut cmd = Command::new("gh");
@@ -1044,13 +1210,16 @@ impl TrackerClient for GitHubTracker {
             cmd.args(["--repo", r]);
         }
 
-        let output = cmd
-            .output()
-            .map_err(|e| format!("Failed to execute 'gh issue create': {}", e))?;
+        let output = cmd.output().map_err(|e| {
+            ReconcileError::Io(format!("Failed to execute 'gh issue create': {}", e))
+        })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("'gh issue create' failed: {}", stderr));
+            return Err(ReconcileError::GitHub(format!(
+                "'gh issue create' failed: {}",
+                stderr
+            )));
         }
 
         let output_str = String::from_utf8_lossy(&output.stdout);
@@ -1065,56 +1234,24 @@ impl TrackerClient for GitHubTracker {
             .rsplit('/')
             .next()
             .and_then(|seg| seg.trim().parse::<u64>().ok())
-            .ok_or_else(|| format!("Could not parse issue number from created URL: '{}'", url))?;
+            .ok_or_else(|| {
+                ReconcileError::Parse(format!(
+                    "Could not parse issue number from created URL: '{}'",
+                    url
+                ))
+            })?;
 
-        // Closed-loop readback verification
-        let mut view_cmd = Command::new("gh");
-        view_cmd.args([
-            "issue",
-            "view",
-            &number.to_string(),
-            "--json",
-            "number,title,state,body,url",
-        ]);
-        if let Some(r) = target_repo {
-            view_cmd.args(["--repo", r]);
-        }
-        let view_output = view_cmd.output().map_err(|e| {
-            format!(
-                "Failed to execute 'gh issue view' for closed-loop verification: {}",
-                e
-            )
-        })?;
-
-        if !view_output.status.success() {
-            let stderr = String::from_utf8_lossy(&view_output.stderr);
-            return Err(format!(
-                "'gh issue view' closed-loop verification failed for created issue #{}: {}",
-                number, stderr
-            ));
-        }
-
-        let view_str = String::from_utf8_lossy(&view_output.stdout);
-        let parsed: TrackerIssue = serde_json::from_str(&view_str).map_err(|e| {
-            format!(
-                "Failed to parse 'gh issue view' verification output for issue #{}: {}",
-                number, e
-            )
-        })?;
-
-        if parsed.number != number {
-            return Err(format!(
-                "Closed-loop verification mismatch: expected issue #{}, got #{}",
-                number, parsed.number
-            ));
-        }
-
+        self.verify_created_issue(number, target_repo)?;
         Ok((number, url))
     }
 
-    /// Ensures `label` exists in the target GitHub repository, creating it via `gh label create` when absent.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-ENSURE-LABEL-EXISTS]
-    fn ensure_label_exists(&self, label: &str, repo: Option<&str>) -> Result<(), String> {
+    /// Queries `gh label list` and creates `label` if missing, reporting typed [`ReconcileError`] variants.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-ENSURE-LABEL-TYPED]
+    fn ensure_label_exists_typed(
+        &self,
+        label: &str,
+        repo: Option<&str>,
+    ) -> Result<(), ReconcileError> {
         let target_repo = repo.or(self.repo.as_deref());
         let mut list_cmd = Command::new("gh");
         list_cmd.args(["label", "list", "--limit", "1000", "--json", "name"]);
@@ -1123,10 +1260,13 @@ impl TrackerClient for GitHubTracker {
         }
         let output = list_cmd
             .output()
-            .map_err(|e| format!("Failed to execute 'gh label list': {}", e))?;
+            .map_err(|e| ReconcileError::Io(format!("Failed to execute 'gh label list': {}", e)))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("'gh label list' exited with error: {}", stderr));
+            return Err(ReconcileError::GitHub(format!(
+                "'gh label list' exited with error: {}",
+                stderr
+            )));
         }
 
         /// Deserialization record for an entry returned by `gh label list --json name`.
@@ -1137,8 +1277,9 @@ impl TrackerClient for GitHubTracker {
         }
 
         let json_str = String::from_utf8_lossy(&output.stdout);
-        let labels: Vec<GhLabelItem> = serde_json::from_str(&json_str)
-            .map_err(|e| format!("Failed to parse 'gh label list' output: {}", e))?;
+        let labels: Vec<GhLabelItem> = serde_json::from_str(&json_str).map_err(|e| {
+            ReconcileError::Parse(format!("Failed to parse 'gh label list' output: {}", e))
+        })?;
 
         let norm_target = normalize_label(label);
         let exists = labels
@@ -1159,16 +1300,16 @@ impl TrackerClient for GitHubTracker {
             if let Some(r) = target_repo {
                 create_cmd.args(["--repo", r]);
             }
-            let create_out = create_cmd
-                .output()
-                .map_err(|e| format!("Failed to execute 'gh label create': {}", e))?;
+            let create_out = create_cmd.output().map_err(|e| {
+                ReconcileError::Io(format!("Failed to execute 'gh label create': {}", e))
+            })?;
             if !create_out.status.success() {
                 let stderr = String::from_utf8_lossy(&create_out.stderr);
                 if !stderr.to_lowercase().contains("already exists") {
-                    return Err(format!(
+                    return Err(ReconcileError::GitHub(format!(
                         "'gh label create' failed for label '{}': {}",
                         label, stderr
-                    ));
+                    )));
                 }
             }
         }
@@ -1176,30 +1317,74 @@ impl TrackerClient for GitHubTracker {
         Ok(())
     }
 
-    /// Reopens `issue_number` via `gh issue reopen`, removes resolved status labels, and posts any non-empty comment.
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-REOPEN-ISSUE]
-    fn reopen_issue(
+    /// Posts a non-empty reopen comment onto `issue_number` via `gh issue comment --body-file`.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-POST-REOPEN-COMMENT]
+    fn post_reopen_comment(
+        &self,
+        issue_number: u64,
+        trimmed_comment: &str,
+        target_repo: Option<&str>,
+    ) -> Result<(), ReconcileError> {
+        use std::io::Write;
+        let mut temp_file = tempfile_named()?;
+        temp_file
+            .write_all(trimmed_comment.as_bytes())
+            .map_err(|e| {
+                ReconcileError::Io(format!("Failed to write temporary comment file: {}", e))
+            })?;
+        temp_file.flush().map_err(|e| {
+            ReconcileError::Io(format!("Failed to flush temporary comment file: {}", e))
+        })?;
+        let temp_path = temp_file.path.clone();
+
+        let mut comment_cmd = Command::new("gh");
+        comment_cmd.args([
+            "issue",
+            "comment",
+            &issue_number.to_string(),
+            "--body-file",
+            &temp_path,
+        ]);
+        if let Some(r) = target_repo {
+            comment_cmd.args(["--repo", r]);
+        }
+        let c_output = comment_cmd.output().map_err(|e| {
+            ReconcileError::Io(format!("Failed to execute 'gh issue comment': {}", e))
+        })?;
+        if !c_output.status.success() {
+            let stderr = String::from_utf8_lossy(&c_output.stderr);
+            return Err(ReconcileError::GitHub(format!(
+                "'gh issue comment' failed for issue #{}: {}",
+                issue_number, stderr
+            )));
+        }
+        Ok(())
+    }
+
+    /// Reopens `issue_number`, strips resolved status labels, and appends any comment under [`ReconcileError`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-REOPEN-TYPED]
+    fn reopen_issue_typed(
         &self,
         issue_number: u64,
         comment: Option<&str>,
         repo: Option<&str>,
-    ) -> Result<(), String> {
+    ) -> Result<(), ReconcileError> {
         let target_repo = repo.or(self.repo.as_deref());
         let mut reopen_cmd = Command::new("gh");
         reopen_cmd.args(["issue", "reopen", &issue_number.to_string()]);
         if let Some(r) = target_repo {
             reopen_cmd.args(["--repo", r]);
         }
-        let output = reopen_cmd
-            .output()
-            .map_err(|e| format!("Failed to execute 'gh issue reopen': {}", e))?;
+        let output = reopen_cmd.output().map_err(|e| {
+            ReconcileError::Io(format!("Failed to execute 'gh issue reopen': {}", e))
+        })?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if !stderr.to_lowercase().contains("already open") {
-                return Err(format!(
+                return Err(ReconcileError::GitHub(format!(
                     "'gh issue reopen' failed for issue #{}: {}",
                     issue_number, stderr
-                ));
+                )));
             }
         }
 
@@ -1226,41 +1411,80 @@ impl TrackerClient for GitHubTracker {
         if let Some(comment_text) = comment {
             let trimmed = comment_text.trim();
             if !trimmed.is_empty() {
-                use std::io::Write;
-                let mut temp_file = tempfile_named()?;
-                temp_file
-                    .write_all(trimmed.as_bytes())
-                    .map_err(|e| format!("Failed to write temporary comment file: {}", e))?;
-                temp_file
-                    .flush()
-                    .map_err(|e| format!("Failed to flush temporary comment file: {}", e))?;
-                let temp_path = temp_file.path.clone();
-
-                let mut comment_cmd = Command::new("gh");
-                comment_cmd.args([
-                    "issue",
-                    "comment",
-                    &issue_number.to_string(),
-                    "--body-file",
-                    &temp_path,
-                ]);
-                if let Some(r) = target_repo {
-                    comment_cmd.args(["--repo", r]);
-                }
-                let c_output = comment_cmd
-                    .output()
-                    .map_err(|e| format!("Failed to execute 'gh issue comment': {}", e))?;
-                if !c_output.status.success() {
-                    let stderr = String::from_utf8_lossy(&c_output.stderr);
-                    return Err(format!(
-                        "'gh issue comment' failed for issue #{}: {}",
-                        issue_number, stderr
-                    ));
-                }
+                self.post_reopen_comment(issue_number, trimmed, target_repo)?;
             }
         }
 
         Ok(())
+    }
+}
+
+impl Default for GitHubTracker {
+    /// Constructs a tracker bound to the current repository; equivalent to [`GitHubTracker::new`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-DEFAULT]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TrackerClient for GitHubTracker {
+    /// Queries `gh issue list` for all open and closed repository issues and deserializes the JSON payload.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-FETCH-ALL-ISSUES]
+    fn fetch_all_issues(&self) -> Result<Vec<TrackerIssue>, String> {
+        self.fetch_all_issues_typed().map_err(String::from)
+    }
+
+    /// Updates `issue_number`'s body via `gh issue edit --body-file` with closed-loop readback verification.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATE-ISSUE-BODY]
+    fn update_issue_body(&self, issue_number: u64, body: &str) -> Result<(), String> {
+        self.update_issue_body_typed(issue_number, body)
+            .map_err(String::from)
+    }
+
+    /// Updates `issue_number`'s title via `gh issue edit --title`, rejecting empty titles.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-UPDATE-ISSUE-TITLE]
+    fn update_issue_title(&self, issue_number: u64, title: &str) -> Result<(), String> {
+        self.update_issue_title_typed(issue_number, title)
+            .map_err(String::from)
+    }
+
+    /// Attaches `label` to `issue_number` via `gh issue edit --add-label`.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-ADD-LABEL]
+    fn add_label(&self, issue_number: u64, label: &str) -> Result<(), String> {
+        self.add_label_typed(issue_number, label)
+            .map_err(String::from)
+    }
+
+    /// Creates a new GitHub issue via `gh issue create --body-file` and verifies the created issue number.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-CREATE-ISSUE]
+    fn create_issue(
+        &self,
+        title: &str,
+        body: &str,
+        label: &str,
+        repo: Option<&str>,
+    ) -> Result<(u64, String), String> {
+        self.create_issue_typed(title, body, label, repo)
+            .map_err(String::from)
+    }
+
+    /// Ensures `label` exists in the target GitHub repository, creating it via `gh label create` when absent.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-ENSURE-LABEL-EXISTS]
+    fn ensure_label_exists(&self, label: &str, repo: Option<&str>) -> Result<(), String> {
+        self.ensure_label_exists_typed(label, repo)
+            .map_err(String::from)
+    }
+
+    /// Reopens `issue_number` via `gh issue reopen`, removes resolved status labels, and posts any non-empty comment.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-GITHUBTRACKER-REOPEN-ISSUE]
+    fn reopen_issue(
+        &self,
+        issue_number: u64,
+        comment: Option<&str>,
+        repo: Option<&str>,
+    ) -> Result<(), String> {
+        self.reopen_issue_typed(issue_number, comment, repo)
+            .map_err(String::from)
     }
 }
 
@@ -1304,14 +1528,15 @@ static TEMP_FILE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU6
 
 /// Creates a uniquely named RAII temporary markdown file in the system temp directory.
 /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TEMPFILE-NAMED]
-fn tempfile_named() -> Result<TempFileNamed, String> {
+fn tempfile_named() -> Result<TempFileNamed, ReconcileError> {
     let nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
     let pid = std::process::id();
     let seq = TEMP_FILE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!("reconcile_body_{}_{}_{}.md", pid, nanos, seq));
     let path_str = path.display().to_string();
-    let file = std::fs::File::create(&path)
-        .map_err(|e| format!("Unable to create temp file {}: {}", path_str, e))?;
+    let file = std::fs::File::create(&path).map_err(|e| {
+        ReconcileError::Io(format!("Unable to create temp file {}: {}", path_str, e))
+    })?;
     Ok(TempFileNamed {
         path: path_str,
         file: Some(file),

@@ -38,7 +38,10 @@ pub mod create_issue;
 pub mod frontmatter;
 pub mod tracker;
 
-use checklist::{clean_unpopulated_placeholders_counted, contains_unpopulated_placeholders, reconcile_checklist_content};
+use checklist::{
+    clean_unpopulated_placeholders_counted, contains_unpopulated_placeholders,
+    reconcile_checklist_content,
+};
 pub use checklist::{synthesize_and_reconcile_hierarchy, SpecDocument};
 use frontmatter::{parse_frontmatter, update_frontmatter_issue_id, SpecFrontmatter};
 use tracker::{IssueIndex, TrackerClient};
@@ -47,7 +50,191 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use walkdir::WalkDir;
+
+static ATOMIC_WRITE_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Typed error enumeration covering all fallible backlog reconciliation, parsing, validation, and tracker operations.
+///
+/// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-RECONCILEERROR]
+/// Contract: Classifies every failure deterministically into `Io`, `Parse`, `Validation`, or `GitHub` while exposing string-slice dereferencing for diagnostic compatibility.
+/// Bounds & Faults: O(1) variant dispatch over owned UTF-8 diagnostic message storage; zero panics or allocations during inspection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReconcileError {
+    /// Filesystem read, metadata, directory creation, or atomic persistence failure.
+    Io(String),
+    /// Markdown structure, code-fence balance, or tracker JSON deserialization failure.
+    Parse(String),
+    /// CLI argument, checklist publish-gate, or specification precondition violation.
+    Validation(String),
+    /// External issue tracker CLI (`gh`) or in-memory tracker synchronization failure.
+    GitHub(String),
+}
+
+impl ReconcileError {
+    /// Returns the underlying UTF-8 diagnostic message slice for any [`ReconcileError`] variant.
+    ///
+    /// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-RECONCILEERROR-AS-STR]
+    /// Contract: Pure borrowed projection returning the exact message payload stored inside `self`.
+    /// Bounds & Faults: O(1) time and space; total and infallible across all variants.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Io(msg) | Self::Parse(msg) | Self::Validation(msg) | Self::GitHub(msg) => {
+                msg.as_str()
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for ReconcileError {
+    /// Writes the diagnostic message slice of this [`ReconcileError`] into the target formatter.
+    /// Realises: [REQ-RECONCILE-BACKLOG-RECONCILEERROR-DISPLAY]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Marks [`ReconcileError`] as a standard diagnostic error without nested source chaining.
+/// Realises: [REQ-RECONCILE-BACKLOG-RECONCILEERROR-STD-ERROR]
+impl std::error::Error for ReconcileError {}
+
+impl std::ops::Deref for ReconcileError {
+    type Target = str;
+
+    /// Dereferences [`ReconcileError`] to `str` via [`ReconcileError::as_str`] for transparent string inspection.
+    /// Realises: [REQ-RECONCILE-BACKLOG-RECONCILEERROR-DEREF]
+    fn deref(&self) -> &Self::Target {
+        self.as_str()
+    }
+}
+
+impl AsRef<str> for ReconcileError {
+    /// Borrows the diagnostic message of [`ReconcileError`] as a `&str` slice.
+    /// Realises: [REQ-RECONCILE-BACKLOG-RECONCILEERROR-AS-REF]
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl From<String> for ReconcileError {
+    /// Converts an owned diagnostic `String` into [`ReconcileError::Validation`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-RECONCILEERROR-FROM-STRING]
+    fn from(msg: String) -> Self {
+        Self::Validation(msg)
+    }
+}
+
+impl From<ReconcileError> for String {
+    /// Extracts the owned diagnostic `String` payload from any [`ReconcileError`] variant.
+    /// Realises: [REQ-RECONCILE-BACKLOG-STRING-FROM-RECONCILEERROR]
+    fn from(err: ReconcileError) -> Self {
+        match err {
+            ReconcileError::Io(msg)
+            | ReconcileError::Parse(msg)
+            | ReconcileError::Validation(msg)
+            | ReconcileError::GitHub(msg) => msg,
+        }
+    }
+}
+
+impl PartialEq<str> for ReconcileError {
+    /// Compares the diagnostic message slice of [`ReconcileError`] against an unsized `str`.
+    /// Realises: [REQ-RECONCILE-BACKLOG-RECONCILEERROR-EQ-STR]
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl PartialEq<&str> for ReconcileError {
+    /// Compares the diagnostic message slice of [`ReconcileError`] against a borrowed `&str`.
+    /// Realises: [REQ-RECONCILE-BACKLOG-RECONCILEERROR-EQ-REF-STR]
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl PartialEq<String> for ReconcileError {
+    /// Compares the diagnostic message slice of [`ReconcileError`] against an owned `String`.
+    /// Realises: [REQ-RECONCILE-BACKLOG-RECONCILEERROR-EQ-STRING]
+    fn eq(&self, other: &String) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+impl PartialEq<ReconcileError> for str {
+    /// Compares an unsized `str` against the diagnostic message slice of [`ReconcileError`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-STR-EQ-RECONCILEERROR]
+    fn eq(&self, other: &ReconcileError) -> bool {
+        self == other.as_str()
+    }
+}
+
+impl PartialEq<ReconcileError> for &str {
+    /// Compares a borrowed `&str` against the diagnostic message slice of [`ReconcileError`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-REF-STR-EQ-RECONCILEERROR]
+    fn eq(&self, other: &ReconcileError) -> bool {
+        *self == other.as_str()
+    }
+}
+
+impl PartialEq<ReconcileError> for String {
+    /// Compares an owned `String` against the diagnostic message slice of [`ReconcileError`].
+    /// Realises: [REQ-RECONCILE-BACKLOG-STRING-EQ-RECONCILEERROR]
+    fn eq(&self, other: &ReconcileError) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+/// Persists `content` to `path` atomically via a PID- and sequence-scoped temporary sibling file, `sync_all`, and `fs::rename`.
+///
+/// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-WRITE-ATOMIC]
+/// Contract: Creates missing non-empty parent directories, writes all bytes to `.{file_name}.tmp.{pid}.{seq}`, flushes durability via `sync_all`, and atomically renames over `path`.
+/// Bounds & Faults: O(N) filesystem I/O over `content.len()`; unlinks the temporary file on any write/sync/rename failure and returns `ReconcileError::Io`.
+pub fn write_atomic(path: &Path, content: &[u8]) -> Result<(), ReconcileError> {
+    let Some(raw_name) = path.file_name() else {
+        return Err(ReconcileError::Io(format!(
+            "Cannot atomically write '{}': target path has no file name",
+            path.display()
+        )));
+    };
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| {
+                ReconcileError::Io(format!(
+                    "Failed to create parent directory '{}' for '{}': {}",
+                    parent.display(),
+                    path.display(),
+                    e
+                ))
+            })?;
+        }
+    }
+    let file_name = raw_name.to_string_lossy();
+    let pid = std::process::id();
+    let seq = ATOMIC_WRITE_SEQ.fetch_add(1, Ordering::Relaxed);
+    let tmp_name = format!(".{file_name}.tmp.{pid}.{seq}");
+    let tmp_path = path.with_file_name(tmp_name);
+
+    let write_res = (|| -> Result<(), std::io::Error> {
+        let mut file = fs::File::create(&tmp_path)?;
+        std::io::Write::write_all(&mut file, content)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&tmp_path, path)?;
+        Ok(())
+    })();
+
+    if let Err(err) = write_res {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(ReconcileError::Io(format!(
+            "Failed to atomically write '{}': {}",
+            path.display(),
+            err
+        )));
+    }
+    Ok(())
+}
 
 /// Represents a loaded specification document.
 ///
@@ -222,7 +409,12 @@ pub struct ReconcileSummary {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RECONCILE-BACKLOG-LOAD-SPECIFICATIONS] | SysML v2: ActionDef(load_specifications)
 pub fn load_specifications(workspace_root: &Path) -> Vec<LoadedSpec> {
-    let spec_subdirs = ["docs/epics", "docs/features", "docs/user-stories", "docs/use-cases"];
+    let spec_subdirs = [
+        "docs/epics",
+        "docs/features",
+        "docs/user-stories",
+        "docs/use-cases",
+    ];
     let mut specs = Vec::new();
 
     for subdir in &spec_subdirs {
@@ -289,14 +481,14 @@ pub fn load_specifications(workspace_root: &Path) -> Vec<LoadedSpec> {
 /// - `options: &ReconcileOptions` must satisfy domain and type-safety constraints prior to invoking `run_reconciliation`.
 ///
 /// ## 4. Postconditions
-/// - Returns `Result<ReconcileSummary, String>` from `run_reconciliation` with deterministic post-execution state.
+/// - Returns `Result<ReconcileSummary, ReconcileError>` from `run_reconciliation` with deterministic post-execution state.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N(tracker)) bounded over input/member dimension of `run_reconciliation`.
 /// - Space Complexity: O(N(tracker)) bounded auxiliary memory for `run_reconciliation`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `run_reconciliation` (`Result<ReconcileSummary, String>`).
+/// - Interface: Validates boundary inputs and types for `run_reconciliation` (`Result<ReconcileSummary, ReconcileError>`).
 /// - State: Maintains consistent state invariants across `run_reconciliation` without partial mutation on error.
 /// - Action: Executes `run_reconciliation` deterministically with zero unbounded recursion or blocking.
 /// - Resource: Bounds stack and heap allocations within `run_reconciliation` (`RECONCILE-BACKLOG`).
@@ -306,7 +498,7 @@ pub fn load_specifications(workspace_root: &Path) -> Vec<LoadedSpec> {
 pub fn run_reconciliation<T: TrackerClient>(
     tracker: &T,
     options: &ReconcileOptions,
-) -> Result<ReconcileSummary, String> {
+) -> Result<ReconcileSummary, ReconcileError> {
     let mut summary = ReconcileSummary::default();
     let mut specs = load_specifications(&options.workspace_root);
     summary.total_specs_scanned = specs.len();
@@ -315,15 +507,19 @@ pub fn run_reconciliation<T: TrackerClient>(
     let issues = if options.offline {
         Vec::new()
     } else {
-        tracker.fetch_all_issues()?
+        tracker.fetch_all_issues().map_err(ReconcileError::GitHub)?
     };
     let mut issue_index = IssueIndex::build(issues);
 
     // Step 2: Hierarchy synthesis, frontmatter reconciliation, and placeholder purge
-    let repo_slug = options.repo.clone()
+    let repo_slug = options
+        .repo
+        .clone()
         .or_else(|| detect_git_repo(&options.workspace_root))
         .unwrap_or_default();
-    let default_branch = options.default_branch.clone()
+    let default_branch = options
+        .default_branch
+        .clone()
         .or_else(|| detect_git_branch(&options.workspace_root))
         .unwrap_or_else(|| "main".to_string());
     let upstream_prefix = detect_upstream_prefix(&options.workspace_root);
@@ -364,7 +560,8 @@ pub fn run_reconciliation<T: TrackerClient>(
 
         // Check for prohibited unpopulated placeholders
         if contains_unpopulated_placeholders(&spec.content) {
-            let (cleaned_content, purged_count) = clean_unpopulated_placeholders_counted(&spec.content);
+            let (cleaned_content, purged_count) =
+                clean_unpopulated_placeholders_counted(&spec.content);
             if purged_count > 0 {
                 spec.content = cleaned_content;
                 modified = true;
@@ -387,17 +584,18 @@ pub fn run_reconciliation<T: TrackerClient>(
         }
 
         // Step 3: Reconcile checklists
-        let (reconciled_body, check_count) = reconcile_checklist_content(&spec.content, |issue_num, item_title| {
-            if let Some(num) = issue_num {
-                if let Some(issue) = issue_index.by_number.get(&num) {
+        let (reconciled_body, check_count) =
+            reconcile_checklist_content(&spec.content, |issue_num, item_title| {
+                if let Some(num) = issue_num {
+                    if let Some(issue) = issue_index.by_number.get(&num) {
+                        return Some(issue.is_resolved());
+                    }
+                }
+                if let Some(issue) = issue_index.find_issue(None, item_title) {
                     return Some(issue.is_resolved());
                 }
-            }
-            if let Some(issue) = issue_index.find_issue(None, item_title) {
-                return Some(issue.is_resolved());
-            }
-            None
-        });
+                None
+            });
 
         if check_count > 0 {
             spec.content = reconciled_body;
@@ -406,19 +604,21 @@ pub fn run_reconciliation<T: TrackerClient>(
         }
 
         if modified && !options.dry_run {
-            fs::write(&spec.path, &spec.content)
-                .map_err(|e| format!("Failed to write updated spec '{}': {}", spec.path.display(), e))?;
+            write_atomic(&spec.path, spec.content.as_bytes())?;
         }
-
     }
 
     // Step 4: Remote sync if enabled with relative link projection
     if options.sync_bodies && !options.offline && !options.dry_run {
         let spec_path_to_issue = build_spec_path_to_issue_map(&specs);
 
-        let repo_name = options.repo.clone()
+        let repo_name = options
+            .repo
+            .clone()
             .or_else(|| detect_git_repo(&options.workspace_root));
-        let default_branch = options.default_branch.clone()
+        let default_branch = options
+            .default_branch
+            .clone()
             .or_else(|| detect_git_branch(&options.workspace_root))
             .unwrap_or_else(|| "main".to_string());
 
@@ -438,7 +638,9 @@ pub fn run_reconciliation<T: TrackerClient>(
                         .get(&issue_id)
                         .is_some_and(|i| i.title.trim() == desired_title);
                     if !title_matches {
-                        tracker.update_issue_title(issue_id, desired_title)?;
+                        tracker
+                            .update_issue_title(issue_id, desired_title)
+                            .map_err(ReconcileError::GitHub)?;
                     }
                 }
 
@@ -455,7 +657,9 @@ pub fn run_reconciliation<T: TrackerClient>(
                     .and_then(|i| i.body.as_deref())
                     .is_some_and(|b| b.trim_end() == projected_body.trim_end());
                 if !already_up_to_date {
-                    tracker.update_issue_body(issue_id, &projected_body)?;
+                    tracker
+                        .update_issue_body(issue_id, &projected_body)
+                        .map_err(ReconcileError::GitHub)?;
                 }
                 summary.remote_issues_synced += 1;
             }
@@ -499,7 +703,10 @@ fn build_spec_path_to_issue_map(specs: &[LoadedSpec]) -> BTreeMap<String, u64> {
             if let Some(stripped) = spec.rel_path.strip_prefix("docs/") {
                 spec_path_to_issue.insert(stripped.to_string(), issue_id);
             }
-            if let Some(fname) = Path::new(&spec.rel_path).file_name().and_then(|f| f.to_str()) {
+            if let Some(fname) = Path::new(&spec.rel_path)
+                .file_name()
+                .and_then(|f| f.to_str())
+            {
                 spec_path_to_issue.insert(fname.to_string(), issue_id);
             }
         }
@@ -535,7 +742,10 @@ fn build_spec_path_to_issue_map(specs: &[LoadedSpec]) -> BTreeMap<String, u64> {
 /// Realises: [REQ-RECONCILE-BACKLOG-RESOLVE-CANONICAL-SPEC-TIER] | SysML v2: ActionDef(resolve_canonical_spec_tier)
 fn resolve_canonical_spec_tier(spec: &LoadedSpec) -> String {
     let canonical = tracker::canonicalize_spec_type(&spec.frontmatter.spec_type);
-    if matches!(canonical.as_str(), "use-case" | "user-story" | "feature" | "epic") {
+    if matches!(
+        canonical.as_str(),
+        "use-case" | "user-story" | "feature" | "epic"
+    ) {
         return canonical;
     }
     if spec.rel_path.contains("use-cases/") {
@@ -586,7 +796,11 @@ fn backpatch_spec_references_in_content(
         return (content.to_string(), false);
     }
 
-    let newline = if content.contains("\r\n") { "\r\n" } else { "\n" };
+    let newline = if content.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
     let trailing_newline = content.ends_with('\n');
     let mut modified = false;
     let mut out_lines = Vec::new();
@@ -662,14 +876,14 @@ fn backpatch_spec_references_in_content(
 /// - `specs`, `issue_index`, `tracker`, and `options` must satisfy domain and type-safety constraints prior to invoking `register_unallocated_specs_bottom_up`.
 ///
 /// ## 4. Postconditions
-/// - Returns `Result<(usize, usize), String>` with the counts of updated frontmatters and back-patched spec files.
+/// - Returns `Result<(usize, usize), ReconcileError>` with the counts of updated frontmatters and back-patched spec files.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N(specs)^2) bounded over input/member dimension of `register_unallocated_specs_bottom_up`.
 /// - Space Complexity: O(N(specs)) bounded auxiliary memory for `register_unallocated_specs_bottom_up`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `register_unallocated_specs_bottom_up` (`Result<(usize, usize), String>`).
+/// - Interface: Validates boundary inputs and types for `register_unallocated_specs_bottom_up` (`Result<(usize, usize), ReconcileError>`).
 /// - State: Maintains consistent state invariants across `register_unallocated_specs_bottom_up` without partial mutation on error.
 /// - Action: Executes `register_unallocated_specs_bottom_up` deterministically with zero unbounded recursion or blocking.
 /// - Resource: Bounds stack and heap allocations within `register_unallocated_specs_bottom_up` (`RECONCILE-BACKLOG`).
@@ -684,7 +898,7 @@ fn register_unallocated_specs_bottom_up<T: TrackerClient>(
     repo_slug: &str,
     default_branch: &str,
     upstream_prefix: &str,
-) -> Result<(usize, usize), String> {
+) -> Result<(usize, usize), ReconcileError> {
     let mut frontmatters_updated = 0usize;
     let mut checklists_backpatched = 0usize;
     let mut ensured_labels = std::collections::BTreeSet::new();
@@ -727,16 +941,16 @@ fn register_unallocated_specs_bottom_up<T: TrackerClient>(
                         spec.frontmatter.issue_id = Some(existing_num);
                         frontmatters_updated += 1;
                         if !options.dry_run {
-                            fs::write(&spec.path, &spec.content).map_err(|e| {
-                                format!("Failed to write updated spec '{}': {}", spec.path.display(), e)
-                            })?;
+                            write_atomic(&spec.path, spec.content.as_bytes())?;
                         }
                     }
                 }
                 Some(existing_num)
             } else if current_issue_id.is_none() && !options.dry_run {
                 if ensured_labels.insert(canonical_type.clone()) {
-                    tracker.ensure_label_exists(&canonical_type, repo_opt)?;
+                    tracker
+                        .ensure_label_exists(&canonical_type, repo_opt)
+                        .map_err(ReconcileError::GitHub)?;
                 }
                 let path_map = build_spec_path_to_issue_map(specs);
                 let projected_body = match specs.get(idx) {
@@ -749,19 +963,14 @@ fn register_unallocated_specs_bottom_up<T: TrackerClient>(
                     ),
                     None => continue,
                 };
-                let (new_num, new_url) = tracker.create_issue(
-                    &title,
-                    &projected_body,
-                    &canonical_type,
-                    repo_opt,
-                )?;
+                let (new_num, new_url) = tracker
+                    .create_issue(&title, &projected_body, &canonical_type, repo_opt)
+                    .map_err(ReconcileError::GitHub)?;
                 if let Some(spec) = specs.get_mut(idx) {
                     spec.content = update_frontmatter_issue_id(&spec.content, new_num);
                     spec.frontmatter.issue_id = Some(new_num);
                     frontmatters_updated += 1;
-                    fs::write(&spec.path, &spec.content).map_err(|e| {
-                        format!("Failed to write registered spec '{}': {}", spec.path.display(), e)
-                    })?;
+                    write_atomic(&spec.path, spec.content.as_bytes())?;
                     issue_index.insert_issue(tracker::TrackerIssue {
                         number: new_num,
                         title: spec.frontmatter.title.clone(),
@@ -791,13 +1000,7 @@ fn register_unallocated_specs_bottom_up<T: TrackerClient>(
                             other.content = patched;
                             checklists_backpatched += 1;
                             if !options.dry_run {
-                                fs::write(&other.path, &other.content).map_err(|e| {
-                                    format!(
-                                        "Failed to write back-patched spec '{}': {}",
-                                        other.path.display(),
-                                        e
-                                    )
-                                })?;
+                                write_atomic(&other.path, other.content.as_bytes())?;
                             }
                         }
                     }
@@ -823,14 +1026,14 @@ fn register_unallocated_specs_bottom_up<T: TrackerClient>(
 /// - `issue_index: &IssueIndex` must satisfy domain and type-safety constraints prior to invoking `validate_checklist_publish_integrity`.
 ///
 /// ## 4. Postconditions
-/// - Returns `Result<(), String>` from `validate_checklist_publish_integrity` with deterministic post-execution state.
+/// - Returns `Result<(), ReconcileError>` from `validate_checklist_publish_integrity` with deterministic post-execution state.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N(spec_rel_path)) bounded over input/member dimension of `validate_checklist_publish_integrity`.
 /// - Space Complexity: O(N(spec_rel_path)) bounded auxiliary memory for `validate_checklist_publish_integrity`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `validate_checklist_publish_integrity` (`Result<(), String>`).
+/// - Interface: Validates boundary inputs and types for `validate_checklist_publish_integrity` (`Result<(), ReconcileError>`).
 /// - State: Maintains consistent state invariants across `validate_checklist_publish_integrity` without partial mutation on error.
 /// - Action: Executes `validate_checklist_publish_integrity` deterministically with zero unbounded recursion or blocking.
 /// - Resource: Bounds stack and heap allocations within `validate_checklist_publish_integrity` (`RECONCILE-BACKLOG`).
@@ -841,7 +1044,7 @@ pub fn validate_checklist_publish_integrity(
     spec_rel_path: &str,
     content: &str,
     issue_index: &IssueIndex,
-) -> Result<(), String> {
+) -> Result<(), ReconcileError> {
     for item in checklist::parse_checklists(content) {
         if item.full_line.contains("#[IssueID]")
             || item.full_line.contains("#[FeatureIssueID]")
@@ -849,18 +1052,18 @@ pub fn validate_checklist_publish_integrity(
             || item.full_line.contains("#[StoryIssueID]")
             || item.full_line.contains("#[EpicIssueID]")
         {
-            return Err(format!(
+            return Err(ReconcileError::Validation(format!(
                 "Publish gate blocked: specification '{}' contains unresolved checklist placeholder token. Sibling must be registered before publishing.",
                 spec_rel_path
-            ));
+            )));
         }
 
         if let Some(num) = item.issue_number {
             if !issue_index.by_number.contains_key(&num) {
-                return Err(format!(
+                return Err(ReconcileError::Validation(format!(
                     "Publish gate blocked: specification '{}' contains unresolvable checklist issue reference '#{}'. Sibling must be registered on live tracker before publishing.",
                     spec_rel_path, num
-                ));
+                )));
             }
         }
 
@@ -875,12 +1078,16 @@ pub fn validate_checklist_publish_integrity(
                     end += 1;
                 }
                 if end > start {
-                    if let Some(num) = item.full_line.get(start..end).and_then(|s| s.parse::<u64>().ok()) {
+                    if let Some(num) = item
+                        .full_line
+                        .get(start..end)
+                        .and_then(|s| s.parse::<u64>().ok())
+                    {
                         if !issue_index.by_number.contains_key(&num) {
-                            return Err(format!(
+                            return Err(ReconcileError::Validation(format!(
                                 "Publish gate blocked: specification '{}' contains unresolvable checklist issue reference '#{}'. Sibling must be registered on live tracker before publishing.",
                                 spec_rel_path, num
-                            ));
+                            )));
                         }
                     }
                     i = end;
@@ -1012,7 +1219,14 @@ pub fn detect_git_repo(workspace_root: &Path) -> Option<String> {
 
     // 2. gh repo view
     if let Ok(output) = Command::new("gh")
-        .args(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
+        .args([
+            "repo",
+            "view",
+            "--json",
+            "nameWithOwner",
+            "-q",
+            ".nameWithOwner",
+        ])
         .current_dir(workspace_root)
         .output()
     {
@@ -1177,10 +1391,14 @@ fn rewrite_projected_links(
                     continue;
                 }
 
-                let fname = Path::new(target).file_name().and_then(|f| f.to_str()).unwrap_or("");
+                let fname = Path::new(target)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or("");
                 let stripped = target.trim_start_matches('.').trim_start_matches('/');
 
-                let matching_issue = spec_path_to_issue.get(target)
+                let matching_issue = spec_path_to_issue
+                    .get(target)
                     .or_else(|| spec_path_to_issue.get(stripped))
                     .or_else(|| {
                         if !fname.is_empty() {
@@ -1211,7 +1429,11 @@ fn rewrite_projected_links(
 
                     let canonical_target = if let Some(r) = repo {
                         let clean_repo = clean_repo_name(r);
-                        let branch = if default_branch.trim().is_empty() { "main" } else { default_branch.trim() };
+                        let branch = if default_branch.trim().is_empty() {
+                            "main"
+                        } else {
+                            default_branch.trim()
+                        };
                         let doc_path = if let Some(pos) = target.find("docs/") {
                             target.get(pos..).unwrap_or("").to_string()
                         } else if target.contains("epics/") {
@@ -1243,7 +1465,10 @@ fn rewrite_projected_links(
                     if already_has_issue {
                         result.push_str(&format!("[{}]({})", text, canonical_target));
                     } else {
-                        result.push_str(&format!("#{} - [{}]({})", issue_num, text, canonical_target));
+                        result.push_str(&format!(
+                            "#{} - [{}]({})",
+                            issue_num, text, canonical_target
+                        ));
                     }
 
                     rest = rest.get(total_end..).unwrap_or("");
@@ -1251,7 +1476,11 @@ fn rewrite_projected_links(
                 } else if let Some(r) = repo {
                     let clean_repo = clean_repo_name(r);
                     if !clean_repo.is_empty() {
-                        let branch = if default_branch.trim().is_empty() { "main" } else { default_branch.trim() };
+                        let branch = if default_branch.trim().is_empty() {
+                            "main"
+                        } else {
+                            default_branch.trim()
+                        };
                         if let Some(pos) = target.find("schema/") {
                             let s_path = target.get(pos..).unwrap_or("");
                             let blob = format!(
@@ -1270,7 +1499,11 @@ fn rewrite_projected_links(
                             result.push_str(&format!("[{}]({})", text, blob));
                             rest = rest.get(total_end..).unwrap_or("");
                             continue;
-                        } else if let Some(subdir) = ["epics/", "features/", "user-stories/", "use-cases/"].iter().find(|s| target.contains(*s)) {
+                        } else if let Some(subdir) =
+                            ["epics/", "features/", "user-stories/", "use-cases/"]
+                                .iter()
+                                .find(|s| target.contains(*s))
+                        {
                             if let Some(pos) = target.find(subdir) {
                                 let s_path = target.get(pos..).unwrap_or("");
                                 let blob = format!(
@@ -1569,7 +1802,8 @@ mod tests {
     }
 
     #[test]
-    fn test_relative_links_in_projected_issue_bodies_red_probe() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_relative_links_in_projected_issue_bodies_red_probe(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let guard = TempDirGuard::new("reconcile_red_probe");
         let temp_dir = guard.path().to_path_buf();
         let epics_dir = temp_dir.join("docs/epics");
@@ -1600,7 +1834,10 @@ type: user-story
 ## Required Features
 - [ ] [Feature 01: [ConOps] Human Engineer Interface](../features/FEAT-01-HumanEngineer.md)
 "#;
-        fs::write(stories_dir.join("US-01-BootstrapSystemVisionAction.md"), story_content)?;
+        fs::write(
+            stories_dir.join("US-01-BootstrapSystemVisionAction.md"),
+            story_content,
+        )?;
 
         let issues = vec![
             TrackerIssue {
@@ -1636,8 +1873,14 @@ type: user-story
         assert_eq!(summary.remote_issues_synced, 2);
 
         let synced_issues = tracker.fetch_all_issues()?;
-        let synced_story = synced_issues.iter().find(|i| i.number == 89).ok_or("synced story #89 missing")?;
-        let body = synced_story.body.as_ref().ok_or("Body should have been synced")?;
+        let synced_story = synced_issues
+            .iter()
+            .find(|i| i.number == 89)
+            .ok_or("synced story #89 missing")?;
+        let body = synced_story
+            .body
+            .as_ref()
+            .ok_or("Body should have been synced")?;
 
         // The probe: Projected body must NOT contain relative filesystem links that 404 on the remote tracker!
         assert!(
@@ -1667,7 +1910,9 @@ type: user-story
             body
         );
         assert!(
-            body.contains("https://github.com/gintatkinson/dumpiler-01/blob/main/schema/model.sysml"),
+            body.contains(
+                "https://github.com/gintatkinson/dumpiler-01/blob/main/schema/model.sysml"
+            ),
             "Projected body should contain translated blob URL, found:\n{}",
             body
         );
@@ -1727,12 +1972,8 @@ type: user-story
 - Direct link: ../../../features/FEAT-05.md
 "#;
         let empty_map = BTreeMap::new();
-        let projected = project_body_for_tracker(
-            raw_body,
-            Some("owner/myrepo"),
-            "develop",
-            &empty_map,
-        );
+        let projected =
+            project_body_for_tracker(raw_body, Some("owner/myrepo"), "develop", &empty_map);
 
         assert!(!projected.contains("../epics/EPIC-01.md"));
         assert!(!projected.contains("../../features/FEAT-02.md"));
@@ -1740,11 +1981,20 @@ type: user-story
         assert!(!projected.contains("../use-cases/UC-04.md"));
         assert!(!projected.contains("../../../features/FEAT-05.md"));
 
-        assert!(projected.contains("[Epic](https://github.com/owner/myrepo/blob/develop/docs/epics/EPIC-01.md)"));
-        assert!(projected.contains("[Feature](https://github.com/owner/myrepo/blob/develop/docs/features/FEAT-02.md)"));
-        assert!(projected.contains("[Story](https://github.com/owner/myrepo/blob/develop/docs/user-stories/US-03.md)"));
-        assert!(projected.contains("[Use Case](https://github.com/owner/myrepo/blob/develop/docs/use-cases/UC-04.md)"));
-        assert!(projected.contains("https://github.com/owner/myrepo/blob/develop/docs/features/FEAT-05.md"));
+        assert!(projected.contains(
+            "[Epic](https://github.com/owner/myrepo/blob/develop/docs/epics/EPIC-01.md)"
+        ));
+        assert!(projected.contains(
+            "[Feature](https://github.com/owner/myrepo/blob/develop/docs/features/FEAT-02.md)"
+        ));
+        assert!(projected.contains(
+            "[Story](https://github.com/owner/myrepo/blob/develop/docs/user-stories/US-03.md)"
+        ));
+        assert!(projected.contains(
+            "[Use Case](https://github.com/owner/myrepo/blob/develop/docs/use-cases/UC-04.md)"
+        ));
+        assert!(projected
+            .contains("https://github.com/owner/myrepo/blob/develop/docs/features/FEAT-05.md"));
     }
 
     #[test]
@@ -1775,11 +2025,15 @@ type: user-story
         map.insert("epics/EPIC-01.md".to_string(), 10);
 
         let projected = project_body_for_tracker(raw_body, None, "main", &map);
-        assert_eq!(projected, "#10 - [EPIC-01](../epics/EPIC-01.md) and [schema](../../schema/model.sysml)");
+        assert_eq!(
+            projected,
+            "#10 - [EPIC-01](../epics/EPIC-01.md) and [schema](../../schema/model.sysml)"
+        );
     }
 
     #[test]
-    fn test_publish_gate_blocks_unregistered_checklist_issue_numbers() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_publish_gate_blocks_unregistered_checklist_issue_numbers(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Epic: Test
 ## 2. Requirements & Checklist
 - [ ] #999 - Feature 99: Ghost Feature (justification)
@@ -1798,23 +2052,26 @@ type: user-story
             },
         );
 
-        let err = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index)
-            .err()
-            .ok_or("expected publish gate to reject unregistered issue #999")?;
+        let err =
+            validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index)
+                .err()
+                .ok_or("expected publish gate to reject unregistered issue #999")?;
         assert!(err.contains("contains unresolvable checklist issue reference '#999'"));
         Ok(())
     }
 
     #[test]
-    fn test_publish_gate_blocks_placeholder_checklist_tokens() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_publish_gate_blocks_placeholder_checklist_tokens(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Epic: Test
 ## 2. Requirements & Checklist
 - [ ] #[IssueID] - Feature 01: Test Feature (justification)
 "#;
         let issue_index = IssueIndex::default();
-        let err = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index)
-            .err()
-            .ok_or("expected publish gate to reject placeholder token")?;
+        let err =
+            validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index)
+                .err()
+                .ok_or("expected publish gate to reject placeholder token")?;
         assert!(err.contains("contains unresolved checklist placeholder token"));
         Ok(())
     }
@@ -1838,12 +2095,14 @@ type: user-story
             },
         );
 
-        let res = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index);
+        let res =
+            validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index);
         assert!(res.is_ok());
     }
 
     #[test]
-    fn test_publish_gate_blocks_unregistered_inline_issue_numbers() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_publish_gate_blocks_unregistered_inline_issue_numbers(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Epic: Test
 ## 2. Requirements & Checklist
 - [ ] [Feature 99: Ghost Feature](../features/FEAT-99.md) (#999)
@@ -1861,9 +2120,10 @@ type: user-story
             },
         );
 
-        let err = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index)
-            .err()
-            .ok_or("expected publish gate to reject unregistered inline issue #999")?;
+        let err =
+            validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index)
+                .err()
+                .ok_or("expected publish gate to reject unregistered inline issue #999")?;
         assert!(err.contains("Publish gate blocked"));
         assert!(err.contains("contains unresolvable checklist issue reference '#999'"));
         Ok(())
@@ -1888,12 +2148,14 @@ type: user-story
             },
         );
 
-        let res = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index);
+        let res =
+            validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index);
         assert!(res.is_ok());
     }
 
     #[test]
-    fn test_reconciliation_workflow_reconciles_markdown_linked_and_inline_issues() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_reconciliation_workflow_reconciles_markdown_linked_and_inline_issues(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let guard = TempDirGuard::new("reconcile_md_links");
         let temp_dir = guard.path().to_path_buf();
         let stories_dir = temp_dir.join("docs/user-stories");
@@ -1952,10 +2214,14 @@ type: user-story
         };
 
         let summary = run_reconciliation(&tracker, &options)?;
-        assert_eq!(summary.checklists_updated, 2, "Expected both checklist items to be updated to [x]");
+        assert_eq!(
+            summary.checklists_updated, 2,
+            "Expected both checklist items to be updated to [x]"
+        );
 
         let updated = fs::read_to_string(&story_path)?;
-        assert!(updated.contains("- [x] [Feature 01: Human Engineer Interface](../features/FEAT-01.md)"));
+        assert!(updated
+            .contains("- [x] [Feature 01: Human Engineer Interface](../features/FEAT-01.md)"));
         assert!(updated.contains("- [x] [Feature 02: CI Runner](../features/FEAT-02.md) (#20)"));
 
         let _ = fs::remove_dir_all(&temp_dir);
@@ -1963,7 +2229,8 @@ type: user-story
     }
 
     #[test]
-    fn test_issue_439_reconcile_workflow_placeholder_telemetry() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_439_reconcile_workflow_placeholder_telemetry(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let guard = TempDirGuard::new("reconcile_telemetry_test");
         let temp_dir = guard.path().to_path_buf();
         let epics_dir = temp_dir.join("docs/epics");
@@ -2001,16 +2268,24 @@ type: epic
 
         // Pass 1: should purge all 3 blocks and increment telemetry by 3
         let summary1 = run_reconciliation(&tracker, &options)?;
-        assert_eq!(summary1.placeholders_purged, 3, "Expected 3 placeholders purged in pass 1");
+        assert_eq!(
+            summary1.placeholders_purged, 3,
+            "Expected 3 placeholders purged in pass 1"
+        );
 
         let updated_content = fs::read_to_string(&epic_path)?;
         assert!(!contains_unpopulated_placeholders(&updated_content));
-        let count_none = updated_content.matches("- None allocated (structural subsystem component)").count();
+        let count_none = updated_content
+            .matches("- None allocated (structural subsystem component)")
+            .count();
         assert_eq!(count_none, 3, "Expected 3 allocations in updated spec");
 
         // Pass 2 (Idempotency): running reconciliation again over same spec should purge 0
         let summary2 = run_reconciliation(&tracker, &options)?;
-        assert_eq!(summary2.placeholders_purged, 0, "Expected 0 placeholders purged on pass 2");
+        assert_eq!(
+            summary2.placeholders_purged, 0,
+            "Expected 0 placeholders purged on pass 2"
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
         Ok(())
@@ -2044,7 +2319,8 @@ type: epic
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-RECONCILE-BACKLOG-TEST-SYNC-TITLES-AND-NESTED-BRACKET-LINKS] | SysML v2: VerificationCaseDef(test_run_reconciliation_syncs_updated_issue_titles_and_nested_bracket_links)
     #[test]
-    fn test_run_reconciliation_syncs_updated_issue_titles_and_nested_bracket_links() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_run_reconciliation_syncs_updated_issue_titles_and_nested_bracket_links(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let guard = TempDirGuard::new("reconcile_title_nested_links");
         let temp_dir = guard.path().to_path_buf();
         let uc_dir = temp_dir.join("docs/use-cases");
@@ -2141,7 +2417,8 @@ type: use-case
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-RECONCILE-BACKLOG-TEST-ZERO-CLIPPY-ALLOW-OVERRIDES] | SysML v2: VerificationCaseDef(test_issue_506_zero_clippy_allow_overrides_and_production_unwraps) | Issue: #506
     #[test]
-    fn test_issue_506_zero_clippy_allow_overrides_and_production_unwraps() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_506_zero_clippy_allow_overrides_and_production_unwraps(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let forbidden_allow = concat!("#![allow", "(", "\n    clippy::");
         let forbidden_inline_allow = concat!("#![allow", "(", "clippy::");
         for (name, src) in [
@@ -2167,7 +2444,10 @@ type: use-case
         let created_path = {
             let guard = TempDirGuard::new("reconcile_raii_drop_probe");
             fs::create_dir_all(guard.path())?;
-            assert!(guard.path().exists(), "TempDirGuard directory should exist while guard is in scope");
+            assert!(
+                guard.path().exists(),
+                "TempDirGuard directory should exist while guard is in scope"
+            );
             guard.path().to_path_buf()
         };
         assert!(
@@ -2204,7 +2484,8 @@ type: use-case
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-RECONCILE-BACKLOG-TEST-DEFECT-08-ZERO-CLIPPY-SUPPRESSIONS] | SysML v2: VerificationCaseDef(test_defect_08_zero_blanket_clippy_allow_suppressions) | Issue: #499
     #[test]
-    fn test_defect_08_zero_blanket_clippy_allow_suppressions() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_08_zero_blanket_clippy_allow_suppressions(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let forbidden_inner_multiline = concat!("#![allow", "(", "\n    clippy::");
         let forbidden_inner_inline = concat!("#![allow", "(", "clippy::");
         let forbidden_outer_multiline = concat!("#[allow", "(", "\n    clippy::");
@@ -2243,6 +2524,103 @@ type: use-case
         }
         Ok(())
     }
+
+    /// Verifies `ReconcileError` variants, `as_str`, `Display`, `Deref<Target = str>`, `AsRef<str>`, `From`, and `PartialEq` string comparisons.
+    #[test]
+    fn test_reconcile_error_variants_deref_display_from_and_partial_eq() {
+        let io_err = ReconcileError::Io("disk write failed".to_string());
+        let parse_err = ReconcileError::Parse("unbalanced fences".to_string());
+        let val_err = ReconcileError::Validation("missing checklist issue #42".to_string());
+        let gh_err = ReconcileError::GitHub("gh issue list exited 1".to_string());
+
+        assert_eq!(io_err.as_str(), "disk write failed");
+        assert_eq!(parse_err.as_str(), "unbalanced fences");
+        assert_eq!(val_err.as_str(), "missing checklist issue #42");
+        assert_eq!(gh_err.as_str(), "gh issue list exited 1");
+
+        assert_eq!(format!("{io_err}"), "disk write failed");
+        assert_eq!(format!("{parse_err}"), "unbalanced fences");
+        assert_eq!(format!("{val_err}"), "missing checklist issue #42");
+        assert_eq!(format!("{gh_err}"), "gh issue list exited 1");
+
+        assert!(val_err.contains("checklist issue #42"));
+        assert!(gh_err.starts_with("gh issue"));
+        assert_eq!(io_err.as_ref(), "disk write failed");
+
+        let std_err: &dyn std::error::Error = &io_err;
+        assert_eq!(std_err.to_string(), "disk write failed");
+
+        assert_eq!(io_err, "disk write failed");
+        assert_eq!("disk write failed", io_err);
+        assert_eq!(*io_err, *"disk write failed");
+        assert_eq!(io_err, "disk write failed".to_string());
+        assert_eq!("disk write failed".to_string(), io_err);
+        assert_ne!(
+            ReconcileError::Io("same".to_string()),
+            ReconcileError::Parse("same".to_string())
+        );
+
+        let converted = ReconcileError::from("converted validation message".to_string());
+        assert_eq!(
+            converted,
+            ReconcileError::Validation("converted validation message".to_string())
+        );
+        assert_eq!(converted.as_str(), "converted validation message");
+
+        let back_to_string = String::from(gh_err);
+        assert_eq!(back_to_string, "gh issue list exited 1");
+    }
+
+    /// Verifies `write_atomic` creates parent directories, atomically replaces existing files without lingering `.tmp.` artifacts, and cleans up temp files on failure.
+    #[test]
+    fn test_write_atomic_creates_parents_overwrites_and_cleans_temp_on_failure(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let guard = TempDirGuard::new("reconcile_write_atomic");
+        let nested_file = guard.path().join("nested/sub/SPEC-01.md");
+
+        write_atomic(&nested_file, b"# Initial Spec\n")?;
+        let first_read = fs::read_to_string(&nested_file)?;
+        assert_eq!(first_read, "# Initial Spec\n");
+
+        write_atomic(&nested_file, b"# Updated Spec v2\n")?;
+        let second_read = fs::read_to_string(&nested_file)?;
+        assert_eq!(second_read, "# Updated Spec v2\n");
+
+        let parent_dir = nested_file
+            .parent()
+            .ok_or("expected parent dir for nested_file")?;
+        for entry_res in fs::read_dir(parent_dir)? {
+            let entry = entry_res?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            assert!(
+                !name.contains(".tmp."),
+                "Unexpected lingering atomic write temp file: {name}"
+            );
+        }
+
+        // Negative case 1: empty path with no filename fails closed with Io variant
+        let empty_err = write_atomic(Path::new(""), b"payload")
+            .err()
+            .ok_or("expected write_atomic on empty path to return Err")?;
+        assert!(matches!(empty_err, ReconcileError::Io(_)));
+
+        // Negative case 2: renaming over an existing directory fails and removes the temp sibling file
+        let existing_dir_target = guard.path().join("nested/sub/dir_collision");
+        fs::create_dir_all(&existing_dir_target)?;
+        let collision_err = write_atomic(&existing_dir_target, b"cannot overwrite directory")
+            .err()
+            .ok_or("expected write_atomic over directory target to fail")?;
+        assert!(matches!(collision_err, ReconcileError::Io(_)));
+
+        for entry_res in fs::read_dir(parent_dir)? {
+            let entry = entry_res?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            assert!(
+                !name.contains(".tmp."),
+                "Temp file must be unlinked when atomic rename fails, found: {name}"
+            );
+        }
+
+        Ok(())
+    }
 }
-
-
