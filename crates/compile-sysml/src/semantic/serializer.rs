@@ -1,5 +1,10 @@
 //! SysML v2 / KerML canonical textual notation serializer / pretty-printer.
+//!
+//! Safety & Traceability: Realises: [REQ-SEMANTIC-SERIALIZER-MODULE]
+//! Contract: Renders deterministic SysML v2 textual notation from typed AST nodes with canonical 4-space block indentation.
+//! Bounds & Faults: Caps recursive AST serialization depth at `MAX_AST_DEPTH` (64) with saturating arithmetic and zero panics.
 
+pub use super::symbols::MAX_AST_DEPTH;
 use deap_core::sysml_ast::*;
 
 /// Helper to format doc comments as standard SysML v2 doc blocks.
@@ -141,6 +146,14 @@ pub fn to_sysml<T: SysmlSerializable>(item: &T) -> String {
     item.to_sysml(0)
 }
 
+/// Internal depth-bounded serialization contract capping recursive AST container formatting at `MAX_AST_DEPTH`.
+/// Realises: [REQ-SEMANTIC-SERIALIZER-BOUNDED-TRAIT]
+trait BoundedSysmlSerializable {
+    /// Formats `self` at `indent` spaces when `depth < MAX_AST_DEPTH`, terminating recursion safely at `MAX_AST_DEPTH`.
+    /// Realises: [REQ-SEMANTIC-SERIALIZER-TO-SYSML-BOUNDED]
+    fn to_sysml_bounded(&self, indent: usize, depth: usize) -> String;
+}
+
 /// Strips leading/trailing whitespace and enclosing double-quote delimiters (`"`) from a string slice.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -205,7 +218,6 @@ fn format_real_literal(val: f64) -> String {
     }
 }
 
-
 impl SysmlSerializable for AttributeDef {
     /// Executes deterministic fn `AttributeDef::to_sysml` within `crates/compile-sysml/src/semantic/serializer.rs`.
     ///
@@ -241,11 +253,8 @@ impl SysmlSerializable for AttributeDef {
             .as_ref()
             .map(|v| {
                 let trimmed = v.trim();
-                if let Some(inner) = trimmed
-                    .strip_prefix('"')
-                    .and_then(|s| s.strip_suffix('"'))
-                {
-                    let mut escaped = String::with_capacity(trimmed.len() + 4);
+                if let Some(inner) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+                    let mut escaped = String::with_capacity(trimmed.len().saturating_add(4));
                     escaped.push('"');
                     let mut prev_bs = false;
                     for ch in inner.chars() {
@@ -264,7 +273,10 @@ impl SysmlSerializable for AttributeDef {
                 }
             })
             .unwrap_or_default();
-        format!("{}{}attribute {} : {}{};", doc, pad, self.name, self.type_name, def_val)
+        format!(
+            "{}{}attribute {} : {}{};",
+            doc, pad, self.name, self.type_name, def_val
+        )
     }
 }
 
@@ -303,7 +315,10 @@ impl SysmlSerializable for FlowDef {
         } else {
             String::new()
         };
-        format!("{}{}flow {}{} : {};", doc, pad, dir, self.name, self.item_type)
+        format!(
+            "{}{}flow {}{} : {};",
+            doc, pad, dir, self.name, self.item_type
+        )
     }
 }
 
@@ -356,7 +371,10 @@ impl SysmlSerializable for PortDef {
             if self.name == self.type_name {
                 lines.push(format!("{}port def {} {{", pad, self.name));
             } else {
-                lines.push(format!("{}port {}{}{} : {} {{", pad, dir, conj, self.name, self.type_name));
+                lines.push(format!(
+                    "{}port {}{}{} : {} {{",
+                    pad, dir, conj, self.name, self.type_name
+                ));
             }
             if !self.protocol_family.is_empty() {
                 lines.push(format!(
@@ -380,8 +398,9 @@ impl SysmlSerializable for PortDef {
                     strip_enclosing_quotes(v)
                 ));
             }
+            let child_indent = indent.saturating_add(4);
             for flow in &self.item_flows {
-                lines.push(flow.to_sysml(indent + 4));
+                lines.push(flow.to_sysml(child_indent));
             }
             lines.push(format!("{}}}", pad));
             lines.join("\n")
@@ -389,7 +408,10 @@ impl SysmlSerializable for PortDef {
             if self.name == self.type_name {
                 format!("{}{}port def {};", doc, pad, self.name)
             } else {
-                format!("{}{}port {}{}{} : {};", doc, pad, dir, conj, self.name, self.type_name)
+                format!(
+                    "{}{}port {}{}{} : {};",
+                    doc, pad, dir, conj, self.name, self.type_name
+                )
             }
         }
     }
@@ -449,9 +471,8 @@ impl SysmlSerializable for ActionDef {
         };
 
         let kw = if self.is_def { "action def" } else { "action" };
-        let has_body = self.performer.is_some()
-            || !self.steps.is_empty()
-            || !self.parameters.is_empty();
+        let has_body =
+            self.performer.is_some() || !self.steps.is_empty() || !self.parameters.is_empty();
 
         if has_body {
             let mut lines = Vec::new();
@@ -459,8 +480,9 @@ impl SysmlSerializable for ActionDef {
                 lines.push(doc.trim_end().to_string());
             }
             lines.push(format!("{}{} {}{} {{", pad, kw, self.name, params_header));
+            let child_indent = indent.saturating_add(4);
             for attr in &self.parameters {
-                lines.push(attr.to_sysml(indent + 4));
+                lines.push(attr.to_sysml(child_indent));
             }
             if let Some(perf) = &self.performer {
                 lines.push(format!("{}    perform {};", pad, perf));
@@ -579,11 +601,12 @@ impl SysmlSerializable for RequirementDef {
         if !self.text.is_empty() {
             lines.push(format!("{}    text = \"{}\";", pad, self.text));
         }
+        let child_indent = indent.saturating_add(4);
         for a in &self.attributes {
-            lines.push(a.to_sysml(indent + 4));
+            lines.push(a.to_sysml(child_indent));
         }
         for c in &self.constraints {
-            lines.push(c.to_sysml(indent + 4));
+            lines.push(c.to_sysml(child_indent));
         }
         for a in &self.assumes {
             lines.push(format!("{}    assume {};", pad, a));
@@ -618,33 +641,20 @@ impl SysmlSerializable for RequirementDef {
 }
 
 impl SysmlSerializable for StateDef {
-    /// Executes deterministic fn `StateDef::to_sysml` within `crates/compile-sysml/src/semantic/serializer.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `StateDef::to_sysml` in `crates/compile-sysml/src/semantic/serializer.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `StateDef::to_sysml` (declaration #11) within `SEMANTIC-SERIALIZER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `indent: usize` must satisfy domain and type-safety constraints prior to invoking `StateDef::to_sysml`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `String` from `StateDef::to_sysml` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(indent)) bounded over input/member dimension of `StateDef::to_sysml`.
-    /// - Space Complexity: O(N(indent)) bounded auxiliary memory for `StateDef::to_sysml`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `StateDef::to_sysml` (`String`).
-    /// - State: Maintains consistent state invariants across `StateDef::to_sysml` without partial mutation on error.
-    /// - Action: Executes `StateDef::to_sysml` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `StateDef::to_sysml` (`SEMANTIC-SERIALIZER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-SERIALIZER-STATEDEF-TO-SYSML] | SysML v2: ActionDef(StateDef::to_sysml)
+    /// Serializes `StateDef` into canonical SysML v2 notation starting at recursion depth zero.
+    /// Realises: [REQ-SEMANTIC-SERIALIZER-STATEDEF-TO-SYSML]
     fn to_sysml(&self, indent: usize) -> String {
+        self.to_sysml_bounded(indent, 0)
+    }
+}
+
+impl BoundedSysmlSerializable for StateDef {
+    /// Serializes `StateDef` and nested `sub_states` up to `MAX_AST_DEPTH` with saturating depth/indent arithmetic.
+    /// Realises: [REQ-SEMANTIC-SERIALIZER-STATEDEF-TO-SYSML]
+    fn to_sysml_bounded(&self, indent: usize, depth: usize) -> String {
+        if depth >= MAX_AST_DEPTH {
+            return String::new();
+        }
         let pad = " ".repeat(indent);
         let doc = format_doc_comment(&self.doc, indent);
         let mut lines = Vec::new();
@@ -661,24 +671,31 @@ impl SysmlSerializable for StateDef {
         if let Some(exit) = &self.exit_action {
             lines.push(format!("{}    exit {};", pad, exit));
         }
-        for sub in &self.sub_states {
-            if sub.entry_action.is_none()
-                && sub.do_action.is_none()
-                && sub.exit_action.is_none()
-                && sub.transitions.is_empty()
-                && sub.sub_states.is_empty()
-            {
-                let sub_doc = format_doc_comment(&sub.doc, indent + 4);
-                if !sub_doc.is_empty() {
-                    lines.push(sub_doc.trim_end().to_string());
+        let child_indent = indent.saturating_add(4);
+        let next_depth = depth.saturating_add(1);
+        if next_depth < MAX_AST_DEPTH {
+            for sub in &self.sub_states {
+                if sub.entry_action.is_none()
+                    && sub.do_action.is_none()
+                    && sub.exit_action.is_none()
+                    && sub.transitions.is_empty()
+                    && sub.sub_states.is_empty()
+                {
+                    let sub_doc = format_doc_comment(&sub.doc, child_indent);
+                    if !sub_doc.is_empty() {
+                        lines.push(sub_doc.trim_end().to_string());
+                    }
+                    lines.push(format!("{}    state {};", pad, sub.name));
+                } else {
+                    let rendered = sub.to_sysml_bounded(child_indent, next_depth);
+                    if !rendered.is_empty() {
+                        lines.push(rendered);
+                    }
                 }
-                lines.push(format!("{}    state {};", pad, sub.name));
-            } else {
-                lines.push(sub.to_sysml(indent + 4));
             }
         }
         for t in &self.transitions {
-            let t_doc = format_doc_comment(&t.doc, indent + 4);
+            let t_doc = format_doc_comment(&t.doc, child_indent);
             if !t_doc.is_empty() {
                 lines.push(t_doc.trim_end().to_string());
             }
@@ -725,7 +742,11 @@ impl SysmlSerializable for ConnectionDef {
     fn to_sysml(&self, indent: usize) -> String {
         let pad = " ".repeat(indent);
         let doc = format_doc_comment(&self.doc, indent);
-        let kw = if self.is_flow { "flow def" } else { "connection def" };
+        let kw = if self.is_flow {
+            "flow def"
+        } else {
+            "connection def"
+        };
         let mut lines = Vec::new();
         if !doc.is_empty() {
             lines.push(doc.trim_end().to_string());
@@ -733,9 +754,15 @@ impl SysmlSerializable for ConnectionDef {
         lines.push(format!("{}{} {} {{", pad, kw, self.name));
         if !self.source_port.is_empty() && !self.target_port.is_empty() {
             if self.is_flow {
-                lines.push(format!("{}    flow from {} to {};", pad, self.source_port, self.target_port));
+                lines.push(format!(
+                    "{}    flow from {} to {};",
+                    pad, self.source_port, self.target_port
+                ));
             } else {
-                lines.push(format!("{}    connect {} to {};", pad, self.source_port, self.target_port));
+                lines.push(format!(
+                    "{}    connect {} to {};",
+                    pad, self.source_port, self.target_port
+                ));
             }
         }
         append_connection_metadata_lines(self, &pad, &mut lines);
@@ -774,12 +801,18 @@ fn append_connection_metadata_lines(conn: &ConnectionDef, pad: &str, lines: &mut
     let inferred_source = conn.source_port.split_once('.').map(|(owner, _)| owner);
     if conn.source_part.as_deref() != inferred_source {
         let sp = strip_enclosing_quotes(conn.source_part.as_deref().unwrap_or(""));
-        lines.push(format!("{}    attribute source_part : String = \"{}\";", pad, sp));
+        lines.push(format!(
+            "{}    attribute source_part : String = \"{}\";",
+            pad, sp
+        ));
     }
     let inferred_target = conn.target_port.split_once('.').map(|(owner, _)| owner);
     if conn.target_part.as_deref() != inferred_target {
         let tp = strip_enclosing_quotes(conn.target_part.as_deref().unwrap_or(""));
-        lines.push(format!("{}    attribute target_part : String = \"{}\";", pad, tp));
+        lines.push(format!(
+            "{}    attribute target_part : String = \"{}\";",
+            pad, tp
+        ));
     }
     if let Some(flow_ref) = &conn.item_flow_ref {
         lines.push(format!(
@@ -789,7 +822,10 @@ fn append_connection_metadata_lines(conn: &ConnectionDef, pad: &str, lines: &mut
         ));
     }
     if conn.severity != 1 {
-        lines.push(format!("{}    attribute severity : Integer = {};", pad, conn.severity));
+        lines.push(format!(
+            "{}    attribute severity : Integer = {};",
+            pad, conn.severity
+        ));
     }
     if let Some(proto) = &conn.protocol {
         lines.push(format!(
@@ -842,8 +878,9 @@ impl SysmlSerializable for ItemDef {
             lines.push(doc.trim_end().to_string());
         }
         lines.push(format!("{}item def {} {{", pad, self.name));
+        let child_indent = indent.saturating_add(4);
         for a in &self.attributes {
-            lines.push(a.to_sysml(indent + 4));
+            lines.push(a.to_sysml(child_indent));
         }
         lines.push(format!("{}}}", pad));
         lines.join("\n")
@@ -885,7 +922,10 @@ impl SysmlSerializable for HazardDef {
             lines.push(doc.trim_end().to_string());
         }
         lines.push(format!("{}hazard def {} {{", pad, self.name));
-        lines.push(format!("{}    attribute severity : Integer = {};", pad, self.severity));
+        lines.push(format!(
+            "{}    attribute severity : Integer = {};",
+            pad, self.severity
+        ));
         if let Some(sp) = &self.source_port {
             lines.push(format!(
                 "{}    attribute source_port : String = \"{}\";",
@@ -947,7 +987,10 @@ impl SysmlSerializable for RiskDef {
             lines.push(doc.trim_end().to_string());
         }
         lines.push(format!("{}risk def {} {{", pad, self.name));
-        lines.push(format!("{}    attribute severity : Integer = {};", pad, self.severity));
+        lines.push(format!(
+            "{}    attribute severity : Integer = {};",
+            pad, self.severity
+        ));
         if let Some(h) = &self.hazard_ref {
             lines.push(format!(
                 "{}    attribute hazard_ref : String = \"{}\";",
@@ -1006,8 +1049,7 @@ fn is_simple_sysml_identifier(value: &str) -> bool {
     let valid_start = chars
         .next()
         .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
-    valid_start
-        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | ':' | '.' | '-'))
+    valid_start && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | ':' | '.' | '-'))
 }
 
 /// Normalizes a `UseCaseDef` clause value (`objective`, `precondition`, `include`, `extend`, `step`, `postcondition`) into canonical quoted or identifier SysML v2 notation.
@@ -1113,7 +1155,11 @@ impl SysmlSerializable for UseCaseDef {
             ));
         }
         for inc in &self.includes {
-            let target = inc.trim().strip_prefix("use case").map(str::trim).unwrap_or(inc.trim());
+            let target = inc
+                .trim()
+                .strip_prefix("use case")
+                .map(str::trim)
+                .unwrap_or(inc.trim());
             lines.push(format!(
                 "{}    include {};",
                 pad,
@@ -1121,7 +1167,11 @@ impl SysmlSerializable for UseCaseDef {
             ));
         }
         for ext in &self.extends {
-            let target = ext.trim().strip_prefix("use case").map(str::trim).unwrap_or(ext.trim());
+            let target = ext
+                .trim()
+                .strip_prefix("use case")
+                .map(str::trim)
+                .unwrap_or(ext.trim());
             lines.push(format!(
                 "{}    extend {};",
                 pad,
@@ -1193,13 +1243,20 @@ impl SysmlSerializable for CalcDef {
                 .as_ref()
                 .map(|v| format!(" = {}", v))
                 .unwrap_or_default();
-            lines.push(format!("{}    in {} : {}{};", pad, p.name, p.type_name, def_val));
+            lines.push(format!(
+                "{}    in {} : {}{};",
+                pad, p.name, p.type_name, def_val
+            ));
         }
         if let Some(expr) = &self.expression {
             for expr_line in expr.lines() {
                 let trimmed = expr_line.trim();
                 if !trimmed.is_empty() {
-                    lines.push(format!("{}    return {};", pad, trimmed.trim_end_matches(';')));
+                    lines.push(format!(
+                        "{}    return {};",
+                        pad,
+                        trimmed.trim_end_matches(';')
+                    ));
                 }
             }
         }
@@ -1301,7 +1358,10 @@ impl SysmlSerializable for OperationDef {
             .as_ref()
             .map(|r| format!(" : {}", r))
             .unwrap_or_default();
-        format!("{}{}operation def {}{}{};", doc, pad, self.name, param_str, ret_str)
+        format!(
+            "{}{}operation def {}{}{};",
+            doc, pad, self.name, param_str, ret_str
+        )
     }
 }
 
@@ -1411,33 +1471,52 @@ impl SysmlSerializable for TestCaseDef {
 }
 
 impl SysmlSerializable for PartDef {
-    /// Executes deterministic fn `PartDef::to_sysml` within `crates/compile-sysml/src/semantic/serializer.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `PartDef::to_sysml` in `crates/compile-sysml/src/semantic/serializer.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `PartDef::to_sysml` (declaration #22) within `SEMANTIC-SERIALIZER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `indent: usize` must satisfy domain and type-safety constraints prior to invoking `PartDef::to_sysml`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `String` from `PartDef::to_sysml` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(indent)) bounded over input/member dimension of `PartDef::to_sysml`.
-    /// - Space Complexity: O(N(indent)) bounded auxiliary memory for `PartDef::to_sysml`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `PartDef::to_sysml` (`String`).
-    /// - State: Maintains consistent state invariants across `PartDef::to_sysml` without partial mutation on error.
-    /// - Action: Executes `PartDef::to_sysml` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `PartDef::to_sysml` (`SEMANTIC-SERIALIZER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-SERIALIZER-PARTDEF-TO-SYSML] | SysML v2: ActionDef(PartDef::to_sysml)
+    /// Serializes `PartDef` into canonical SysML v2 notation starting at recursion depth zero.
+    /// Realises: [REQ-SEMANTIC-SERIALIZER-PARTDEF-TO-SYSML]
     fn to_sysml(&self, indent: usize) -> String {
+        self.to_sysml_bounded(indent, 0)
+    }
+}
+
+/// Appends non-recursive post-state leaf definitions declared directly inside `part` at `child_indent`.
+/// Realises: [REQ-SEMANTIC-SERIALIZER-PARTDEF-TO-SYSML]
+fn append_part_leaf_tail(part: &PartDef, child_indent: usize, lines: &mut Vec<String>) {
+    for conn in &part.connections {
+        lines.push(conn.to_sysml(child_indent));
+    }
+    for uc in &part.use_cases {
+        lines.push(uc.to_sysml(child_indent));
+    }
+    for item in &part.item_defs {
+        lines.push(item.to_sysml(child_indent));
+    }
+    for hz in &part.hazards {
+        lines.push(hz.to_sysml(child_indent));
+    }
+    for rk in &part.risks {
+        lines.push(rk.to_sysml(child_indent));
+    }
+    for tc in &part.test_cases {
+        lines.push(tc.to_sysml(child_indent));
+    }
+    for cap in &part.capabilities {
+        lines.push(cap.to_sysml(child_indent));
+    }
+    for op in &part.operations {
+        lines.push(op.to_sysml(child_indent));
+    }
+    for inter in &part.interactions {
+        lines.push(inter.to_sysml(child_indent));
+    }
+}
+
+impl BoundedSysmlSerializable for PartDef {
+    /// Serializes `PartDef`, nested `states`, and nested `parts` up to `MAX_AST_DEPTH` with saturating arithmetic.
+    /// Realises: [REQ-SEMANTIC-SERIALIZER-PARTDEF-TO-SYSML]
+    fn to_sysml_bounded(&self, indent: usize, depth: usize) -> String {
+        if depth >= MAX_AST_DEPTH {
+            return String::new();
+        }
         let pad = " ".repeat(indent);
         let doc = format_doc_comment(&self.doc, indent);
         let kw = if self.is_def { "part def" } else { "part" };
@@ -1462,59 +1541,45 @@ impl SysmlSerializable for PartDef {
         if let Some(lyr) = &self.layer {
             lines.push(format!("{}    @Layer(\"{}\");", pad, lyr));
         }
+        let child_indent = indent.saturating_add(4);
+        let next_depth = depth.saturating_add(1);
         for a in &self.attributes {
-            lines.push(a.to_sysml(indent + 4));
+            lines.push(a.to_sysml(child_indent));
         }
         for p in &self.ports {
-            lines.push(p.to_sysml(indent + 4));
+            lines.push(p.to_sysml(child_indent));
         }
         for act in &self.actions {
-            lines.push(act.to_sysml(indent + 4));
+            lines.push(act.to_sysml(child_indent));
         }
         for con in &self.constraints {
-            lines.push(con.to_sysml(indent + 4));
+            lines.push(con.to_sysml(child_indent));
         }
         for c in &self.calcs {
-            lines.push(c.to_sysml(indent + 4));
+            lines.push(c.to_sysml(child_indent));
         }
         for req in &self.requirements {
-            lines.push(req.to_sysml(indent + 4));
+            lines.push(req.to_sysml(child_indent));
         }
         for sat_req in &self.satisfied_requirements {
             lines.push(format!("{}    satisfy requirement {};", pad, sat_req));
         }
-        for st in &self.states {
-            lines.push(st.to_sysml(indent + 4));
+        if next_depth < MAX_AST_DEPTH {
+            for st in &self.states {
+                let rendered = st.to_sysml_bounded(child_indent, next_depth);
+                if !rendered.is_empty() {
+                    lines.push(rendered);
+                }
+            }
         }
-        for conn in &self.connections {
-            lines.push(conn.to_sysml(indent + 4));
-        }
-        for uc in &self.use_cases {
-            lines.push(uc.to_sysml(indent + 4));
-        }
-        for item in &self.item_defs {
-            lines.push(item.to_sysml(indent + 4));
-        }
-        for hz in &self.hazards {
-            lines.push(hz.to_sysml(indent + 4));
-        }
-        for rk in &self.risks {
-            lines.push(rk.to_sysml(indent + 4));
-        }
-        for tc in &self.test_cases {
-            lines.push(tc.to_sysml(indent + 4));
-        }
-        for cap in &self.capabilities {
-            lines.push(cap.to_sysml(indent + 4));
-        }
-        for op in &self.operations {
-            lines.push(op.to_sysml(indent + 4));
-        }
-        for inter in &self.interactions {
-            lines.push(inter.to_sysml(indent + 4));
-        }
-        for sub in &self.parts {
-            lines.push(sub.to_sysml(indent + 4));
+        append_part_leaf_tail(self, child_indent, &mut lines);
+        if next_depth < MAX_AST_DEPTH {
+            for sub in &self.parts {
+                let rendered = sub.to_sysml_bounded(child_indent, next_depth);
+                if !rendered.is_empty() {
+                    lines.push(rendered);
+                }
+            }
         }
 
         lines.push(format!("{}}}", pad));
@@ -1569,52 +1634,83 @@ impl SysmlSerializable for ImportDef {
 }
 
 impl SysmlSerializable for PackageDef {
-    /// Executes deterministic fn `PackageDef::to_sysml` within `crates/compile-sysml/src/semantic/serializer.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `PackageDef::to_sysml` in `crates/compile-sysml/src/semantic/serializer.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `PackageDef::to_sysml` (declaration #24) within `SEMANTIC-SERIALIZER`.
-    ///
-    /// ## 3. Preconditions
-    /// - `indent: usize` must satisfy domain and type-safety constraints prior to invoking `PackageDef::to_sysml`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `String` from `PackageDef::to_sysml` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(indent)) bounded over input/member dimension of `PackageDef::to_sysml`.
-    /// - Space Complexity: O(N(indent)) bounded auxiliary memory for `PackageDef::to_sysml`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `PackageDef::to_sysml` (`String`).
-    /// - State: Maintains consistent state invariants across `PackageDef::to_sysml` without partial mutation on error.
-    /// - Action: Executes `PackageDef::to_sysml` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `PackageDef::to_sysml` (`SEMANTIC-SERIALIZER`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-SERIALIZER-PACKAGEDEF-TO-SYSML] | SysML v2: ActionDef(PackageDef::to_sysml)
+    /// Serializes `PackageDef` into canonical SysML v2 notation starting at recursion depth zero.
+    /// Realises: [REQ-SEMANTIC-SERIALIZER-PACKAGEDEF-TO-SYSML]
     fn to_sysml(&self, indent: usize) -> String {
+        self.to_sysml_bounded(indent, 0)
+    }
+}
+
+/// Serializes an unnamed synthetic multi-package forest root while propagating `next_depth` to subpackages.
+/// Realises: [REQ-SEMANTIC-SERIALIZER-PACKAGEDEF-TO-SYSML]
+fn serialize_synthetic_forest_root(pkg: &PackageDef, next_depth: usize) -> String {
+    let mut top_sections = Vec::new();
+    let doc = format_doc_comment(&pkg.doc, 0);
+    if !doc.is_empty() {
+        top_sections.push(doc.trim_end().to_string());
+    }
+    if !pkg.imports.is_empty() {
+        let import_block = pkg
+            .imports
+            .iter()
+            .map(|imp| imp.to_sysml(0))
+            .collect::<Vec<_>>()
+            .join("\n");
+        top_sections.push(import_block);
+    }
+    if next_depth < MAX_AST_DEPTH {
+        for sub in &pkg.packages {
+            let rendered = sub.to_sysml_bounded(0, next_depth);
+            if !rendered.is_empty() {
+                top_sections.push(rendered);
+            }
+        }
+    }
+    top_sections.join("\n\n")
+}
+
+/// Appends non-recursive post-state leaf definitions declared directly inside `pkg` at `child_indent`.
+/// Realises: [REQ-SEMANTIC-SERIALIZER-PACKAGEDEF-TO-SYSML]
+fn append_package_leaf_tail(pkg: &PackageDef, child_indent: usize, lines: &mut Vec<String>) {
+    for conn in &pkg.connection_defs {
+        lines.push(conn.to_sysml(child_indent));
+    }
+    for uc in &pkg.use_case_defs {
+        lines.push(uc.to_sysml(child_indent));
+    }
+    for it in &pkg.item_defs {
+        lines.push(it.to_sysml(child_indent));
+    }
+    for hz in &pkg.hazard_defs {
+        lines.push(hz.to_sysml(child_indent));
+    }
+    for rk in &pkg.risk_defs {
+        lines.push(rk.to_sysml(child_indent));
+    }
+    for tc in &pkg.test_case_defs {
+        lines.push(tc.to_sysml(child_indent));
+    }
+    for cap in &pkg.capability_defs {
+        lines.push(cap.to_sysml(child_indent));
+    }
+    for op in &pkg.operation_defs {
+        lines.push(op.to_sysml(child_indent));
+    }
+    for inter in &pkg.interaction_defs {
+        lines.push(inter.to_sysml(child_indent));
+    }
+}
+
+impl BoundedSysmlSerializable for PackageDef {
+    /// Serializes `PackageDef` and nested `state_defs`, `part_defs`, and `packages` up to `MAX_AST_DEPTH`.
+    /// Realises: [REQ-SEMANTIC-SERIALIZER-PACKAGEDEF-TO-SYSML]
+    fn to_sysml_bounded(&self, indent: usize, depth: usize) -> String {
+        if depth >= MAX_AST_DEPTH {
+            return String::new();
+        }
+        let next_depth = depth.saturating_add(1);
         if indent == 0 && crate::parser::grammar::is_synthetic_forest_root(self) {
-            let mut top_sections = Vec::new();
-            let doc = format_doc_comment(&self.doc, 0);
-            if !doc.is_empty() {
-                top_sections.push(doc.trim_end().to_string());
-            }
-            if !self.imports.is_empty() {
-                let import_block = self
-                    .imports
-                    .iter()
-                    .map(|imp| imp.to_sysml(0))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                top_sections.push(import_block);
-            }
-            for sub in &self.packages {
-                top_sections.push(sub.to_sysml(0));
-            }
-            return top_sections.join("\n\n");
+            return serialize_synthetic_forest_root(self, next_depth);
         }
 
         let pad = " ".repeat(indent);
@@ -1626,66 +1722,53 @@ impl SysmlSerializable for PackageDef {
         }
         lines.push(format!("{}package {} {{", pad, self.name));
 
+        let child_indent = indent.saturating_add(4);
         for imp in &self.imports {
-            lines.push(imp.to_sysml(indent + 4));
+            lines.push(imp.to_sysml(child_indent));
         }
-
         for a in &self.attribute_defs {
-            lines.push(a.to_sysml(indent + 4));
+            lines.push(a.to_sysml(child_indent));
         }
         for p in &self.port_defs {
-            lines.push(p.to_sysml(indent + 4));
+            lines.push(p.to_sysml(child_indent));
         }
         for act in &self.action_defs {
-            lines.push(act.to_sysml(indent + 4));
+            lines.push(act.to_sysml(child_indent));
         }
         for con in &self.constraint_defs {
-            lines.push(con.to_sysml(indent + 4));
+            lines.push(con.to_sysml(child_indent));
         }
         for c in &self.calc_defs {
-            lines.push(c.to_sysml(indent + 4));
+            lines.push(c.to_sysml(child_indent));
         }
         for req in &self.requirement_defs {
-            lines.push(req.to_sysml(indent + 4));
+            lines.push(req.to_sysml(child_indent));
         }
         for sat_req in &self.satisfied_requirements {
             lines.push(format!("{}    satisfy requirement {};", pad, sat_req));
         }
-        for st in &self.state_defs {
-            lines.push(st.to_sysml(indent + 4));
+        if next_depth < MAX_AST_DEPTH {
+            for st in &self.state_defs {
+                let rendered = st.to_sysml_bounded(child_indent, next_depth);
+                if !rendered.is_empty() {
+                    lines.push(rendered);
+                }
+            }
         }
-        for conn in &self.connection_defs {
-            lines.push(conn.to_sysml(indent + 4));
-        }
-        for uc in &self.use_case_defs {
-            lines.push(uc.to_sysml(indent + 4));
-        }
-        for it in &self.item_defs {
-            lines.push(it.to_sysml(indent + 4));
-        }
-        for hz in &self.hazard_defs {
-            lines.push(hz.to_sysml(indent + 4));
-        }
-        for rk in &self.risk_defs {
-            lines.push(rk.to_sysml(indent + 4));
-        }
-        for tc in &self.test_case_defs {
-            lines.push(tc.to_sysml(indent + 4));
-        }
-        for cap in &self.capability_defs {
-            lines.push(cap.to_sysml(indent + 4));
-        }
-        for op in &self.operation_defs {
-            lines.push(op.to_sysml(indent + 4));
-        }
-        for inter in &self.interaction_defs {
-            lines.push(inter.to_sysml(indent + 4));
-        }
-        for part in &self.part_defs {
-            lines.push(part.to_sysml(indent + 4));
-        }
-        for sub in &self.packages {
-            lines.push(sub.to_sysml(indent + 4));
+        append_package_leaf_tail(self, child_indent, &mut lines);
+        if next_depth < MAX_AST_DEPTH {
+            for part in &self.part_defs {
+                let rendered = part.to_sysml_bounded(child_indent, next_depth);
+                if !rendered.is_empty() {
+                    lines.push(rendered);
+                }
+            }
+            for sub in &self.packages {
+                let rendered = sub.to_sysml_bounded(child_indent, next_depth);
+                if !rendered.is_empty() {
+                    lines.push(rendered);
+                }
+            }
         }
 
         lines.push(format!("{}}}", pad));
@@ -1702,28 +1785,22 @@ mod tests {
         let pkg = PackageDef {
             name: "AutonomousPlatform".to_string(),
             doc: Some("Simple autonomous platform".to_string()),
-            attribute_defs: vec![
-                AttributeDef {
-                    name: "massKg".to_string(),
-                    type_name: "Real".to_string(),
-                    default_value: Some("15.5".to_string()),
-                    doc: None,
-                },
-            ],
-            part_defs: vec![
-                PartDef {
-                    name: "StructuralFrame".to_string(),
-                    ports: vec![
-                        PortDef {
-                            name: "bus".to_string(),
-                            direction: "out".to_string(),
-                            type_name: "CAN".to_string(),
-                            ..Default::default()
-                        },
-                    ],
+            attribute_defs: vec![AttributeDef {
+                name: "massKg".to_string(),
+                type_name: "Real".to_string(),
+                default_value: Some("15.5".to_string()),
+                doc: None,
+            }],
+            part_defs: vec![PartDef {
+                name: "StructuralFrame".to_string(),
+                ports: vec![PortDef {
+                    name: "bus".to_string(),
+                    direction: "out".to_string(),
+                    type_name: "CAN".to_string(),
                     ..Default::default()
-                },
-            ],
+                }],
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -1792,8 +1869,11 @@ mod tests {
         assert!(sysml.contains("requirement def REQ_0001_Test {"));
         assert!(sysml.contains("    id = \"REQ-0001\";"));
         assert!(sysml.contains("    text = \"The system shall perform verification.\";"));
-        assert!(sysml.contains("    attribute uuidv5 : String = \"5a4d7a99-0419-5c2b-ba0e-ccabdb05f1c9\";"));
-        assert!(sysml.contains("    attribute ac_01_test : String = \"Given: X. When: Y. Then: Z.\";"));
+        assert!(sysml
+            .contains("    attribute uuidv5 : String = \"5a4d7a99-0419-5c2b-ba0e-ccabdb05f1c9\";"));
+        assert!(
+            sysml.contains("    attribute ac_01_test : String = \"Given: X. When: Y. Then: Z.\";")
+        );
         assert!(sysml.contains("    verify by AC_01_Test;"));
         assert!(sysml.contains("    satisfy by TestEngine;"));
     }
@@ -1825,7 +1905,8 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-REQUIREMENTDEF-TO-SYSML] | SysML v2: TestCaseDef(test_serialize_requirement_def_with_assumes_requires_derived_from)
     #[test]
-    fn test_serialize_requirement_def_with_assumes_requires_derived_from() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_serialize_requirement_def_with_assumes_requires_derived_from(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let req = RequirementDef {
             name: "REQ_0032_Test".to_string(),
             req_id: "REQ-0032".to_string(),
@@ -1939,7 +2020,8 @@ mod tests {
         assert!(sysml_text.contains("    import ScalarValues::*;"));
         assert!(sysml_text.contains("    import Base::Types::*;"));
         assert!(sysml_text.contains("    import NestedSys::**;"));
-        assert!(sysml_text.contains("    doc /* Specific imported element */\n    import Specific::Item;"));
+        assert!(sysml_text
+            .contains("    doc /* Specific imported element */\n    import Specific::Item;"));
     }
 
     #[test]
@@ -2019,9 +2101,15 @@ package FlightStateMachine {
         let parsed = crate::parser::grammar::SysmlParser::parse_source(src, "FlightStateMachine")?;
         assert_eq!(parsed.state_defs.len(), 1);
         if let Some(root_state) = parsed.state_defs.first() {
-            assert_eq!(root_state.doc.as_deref(), Some("Root flight mode state machine"));
+            assert_eq!(
+                root_state.doc.as_deref(),
+                Some("Root flight mode state machine")
+            );
             assert_eq!(root_state.sub_states.len(), 2);
-            assert_eq!(root_state.sub_states.first().and_then(|s| s.doc.as_deref()), Some("Ground idle leaf state"));
+            assert_eq!(
+                root_state.sub_states.first().and_then(|s| s.doc.as_deref()),
+                Some("Ground idle leaf state")
+            );
             let s1 = root_state.sub_states.get(1).ok_or("missing sub_state 1")?;
             assert_eq!(s1.doc.as_deref(), Some("Airborne composite state"));
             assert_eq!(
@@ -2043,14 +2131,14 @@ package FlightStateMachine {
             serialized
         );
         assert!(
-            serialized.contains(
-                "transition GroundIdle_to_Airborne first GroundIdle then Airborne;"
-            ),
+            serialized
+                .contains("transition GroundIdle_to_Airborne first GroundIdle then Airborne;"),
             "expected full GroundIdle_to_Airborne transition clause, got:\n{}",
             serialized
         );
 
-        let reparsed = crate::parser::grammar::SysmlParser::parse_source(&serialized, "FlightStateMachine")?;
+        let reparsed =
+            crate::parser::grammar::SysmlParser::parse_source(&serialized, "FlightStateMachine")?;
         assert_eq!(reparsed, parsed);
 
         let empty_transition_state = StateDef {
@@ -2091,7 +2179,8 @@ package FlightStateMachine {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-USECASEDEF-ROUNDTRIP] | SysML v2: TestCaseDef(test_serialize_use_case_def_full_fields_roundtrip)
     #[test]
-    fn test_serialize_use_case_def_full_fields_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_serialize_use_case_def_full_fields_roundtrip() -> Result<(), Box<dyn std::error::Error>>
+    {
         let src = "\
 package MissionUseCases {
     use case def ExecuteAutonomousSortie {
@@ -2110,7 +2199,10 @@ package MissionUseCases {
         let parsed = crate::parser::grammar::SysmlParser::parse_source(src, "MissionUseCases")?;
         assert_eq!(parsed.use_case_defs.len(), 1);
         if let Some(uc) = parsed.use_case_defs.first() {
-            assert_eq!(uc.preconditions, vec!["VehiclePreFlightCheckComplete".to_string()]);
+            assert_eq!(
+                uc.preconditions,
+                vec!["VehiclePreFlightCheckComplete".to_string()]
+            );
             assert_eq!(uc.includes, vec!["ValidateFlightPlan".to_string()]);
             assert_eq!(uc.extends, vec!["EmergencyAbortSortie".to_string()]);
             assert_eq!(uc.postconditions, vec!["TelemetryLogPersisted".to_string()]);
@@ -2122,7 +2214,8 @@ package MissionUseCases {
         assert!(serialized.contains("extend EmergencyAbortSortie;"));
         assert!(serialized.contains("postcondition TelemetryLogPersisted;"));
 
-        let reparsed = crate::parser::grammar::SysmlParser::parse_source(&serialized, "MissionUseCases")?;
+        let reparsed =
+            crate::parser::grammar::SysmlParser::parse_source(&serialized, "MissionUseCases")?;
         assert_eq!(reparsed, parsed);
 
         let unquoted_uc = UseCaseDef {
@@ -2194,12 +2287,16 @@ package MissionUseCases {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-FORMAT-DOC-COMMENT] | SysML v2: TestCaseDef(test_format_doc_comment_escapes_nested_block_comment_open_and_close)
     #[test]
-    fn test_format_doc_comment_escapes_nested_block_comment_open_and_close() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_format_doc_comment_escapes_nested_block_comment_open_and_close(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let doc = Some("Scans crates/*/src/**/*.rs and excludes crates/*/tests/*.rs".to_string());
         let formatted = super::format_doc_comment(&doc, 4);
         assert!(formatted.contains("crates/ * /src/ ** / *.rs"));
         assert!(formatted.contains("crates/ * /tests/ *.rs"));
-        let sysml_src = format!("package BlueprintPkg {{\n{}    part def Guard;\n}}\n", formatted);
+        let sysml_src = format!(
+            "package BlueprintPkg {{\n{}    part def Guard;\n}}\n",
+            formatted
+        );
         let parsed = crate::parser::grammar::SysmlParser::parse_source(&sysml_src, "BlueprintPkg")?;
         assert_eq!(parsed.part_defs.len(), 1);
         Ok(())
@@ -2232,7 +2329,8 @@ package MissionUseCases {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-PORTDEF-TO-SYSML] | SysML v2: TestCaseDef(test_port_def_with_body_and_item_flow_syntax_roundtrip)
     #[test]
-    fn test_port_def_with_body_and_item_flow_syntax_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_port_def_with_body_and_item_flow_syntax_roundtrip(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let src = "\
 package PortPkg {
     port def TelemetryPort {
@@ -2264,7 +2362,11 @@ package PortPkg {
             assert_eq!(f3.name, "bus");
         }
         let serialized = parsed.to_sysml(0);
-        assert!(serialized.contains("port def TelemetryPort {"), "got:\n{}", serialized);
+        assert!(
+            serialized.contains("port def TelemetryPort {"),
+            "got:\n{}",
+            serialized
+        );
         assert!(!serialized.contains("port inout TelemetryPort : TelemetryPort"));
         let reparsed = crate::parser::grammar::SysmlParser::parse_source(&serialized, "PortPkg")?;
         assert_eq!(reparsed.port_defs, parsed.port_defs);
@@ -2298,7 +2400,8 @@ package PortPkg {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-USECASEDEF-TO-SYSML] | SysML v2: TestCaseDef(test_use_case_def_include_and_extend_use_case_keyword_roundtrip)
     #[test]
-    fn test_use_case_def_include_and_extend_use_case_keyword_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_use_case_def_include_and_extend_use_case_keyword_roundtrip(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let src = "\
 package MissionUseCases {
     use case def ExecuteSortie {
@@ -2313,11 +2416,20 @@ package MissionUseCases {
             assert_eq!(uc.extends, vec!["EmergencyAbortSortie".to_string()]);
         }
         let serialized = parsed.to_sysml(0);
-        assert!(serialized.contains("include ValidateFlightPlan;"), "got:\n{}", serialized);
-        assert!(serialized.contains("extend EmergencyAbortSortie;"), "got:\n{}", serialized);
+        assert!(
+            serialized.contains("include ValidateFlightPlan;"),
+            "got:\n{}",
+            serialized
+        );
+        assert!(
+            serialized.contains("extend EmergencyAbortSortie;"),
+            "got:\n{}",
+            serialized
+        );
         assert!(!serialized.contains("include use case"));
         assert!(!serialized.contains("extend use case"));
-        let reparsed = crate::parser::grammar::SysmlParser::parse_source(&serialized, "MissionUseCases")?;
+        let reparsed =
+            crate::parser::grammar::SysmlParser::parse_source(&serialized, "MissionUseCases")?;
         assert_eq!(reparsed, parsed);
         Ok(())
     }
@@ -2349,7 +2461,8 @@ package MissionUseCases {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-ROUNDTRIP-505] | SysML v2: TestCaseDef(test_issue_505_hazard_risk_action_connection_state_roundtrip)
     #[test]
-    fn test_issue_505_hazard_risk_action_connection_state_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_505_hazard_risk_action_connection_state_roundtrip(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let src = "\
 package Roundtrip505 {
     port def BusPort {
@@ -2389,10 +2502,23 @@ package Roundtrip505 {
 }";
         let parsed = crate::parser::grammar::SysmlParser::parse_source(src, "Roundtrip505")?;
         let act0 = parsed.action_defs.first().ok_or("act0")?;
-        assert_eq!(act0.in_params.first().and_then(|p| p.default_value.as_deref()), Some("10.0"));
-        assert_eq!(act0.out_params.first().and_then(|p| p.default_value.as_deref()), Some("0.0"));
+        assert_eq!(
+            act0.in_params
+                .first()
+                .and_then(|p| p.default_value.as_deref()),
+            Some("10.0")
+        );
+        assert_eq!(
+            act0.out_params
+                .first()
+                .and_then(|p| p.default_value.as_deref()),
+            Some("0.0")
+        );
         assert_eq!(act0.parameters.len(), 1);
-        assert_eq!(parsed.connection_defs.first().ok_or("c0")?.latency_ms, Some(0.25));
+        assert_eq!(
+            parsed.connection_defs.first().ok_or("c0")?.latency_ms,
+            Some(0.25)
+        );
         let h0 = parsed.hazard_defs.first().ok_or("h0")?;
         assert_eq!(h0.source_port.as_deref(), Some("Bus.pwrOut"));
         assert_eq!(h0.target_port.as_deref(), Some("Actuator.pwrIn"));
@@ -2406,11 +2532,166 @@ package Roundtrip505 {
         let serialized = parsed.to_sysml(0);
         assert!(!serialized.contains("\"\""));
         assert!(serialized.contains("attribute latency_ms : Real = 0.25;"));
-        let reparsed = crate::parser::grammar::SysmlParser::parse_source(&serialized, "Roundtrip505")?;
+        let reparsed =
+            crate::parser::grammar::SysmlParser::parse_source(&serialized, "Roundtrip505")?;
         assert_eq!(reparsed, parsed);
         Ok(())
     }
+
+    #[test]
+    fn test_serialize_package_part_state_depth_bound_64_and_65() {
+        let total_levels: usize = 65;
+
+        let mut curr_pkg = PackageDef {
+            name: format!("Pkg_{}", total_levels.saturating_sub(1)),
+            ..Default::default()
+        };
+        for idx in (0..total_levels.saturating_sub(1)).rev() {
+            curr_pkg = PackageDef {
+                name: format!("Pkg_{idx}"),
+                packages: vec![curr_pkg],
+                ..Default::default()
+            };
+        }
+        let pkg_out = curr_pkg.to_sysml(0);
+        assert!(pkg_out.contains("package Pkg_0 {"));
+        assert!(pkg_out.contains("package Pkg_63 {"));
+        assert!(
+            !pkg_out.contains("Pkg_64"),
+            "Pkg_64 at depth 64 (>= MAX_AST_DEPTH) must not be serialized"
+        );
+
+        let mut curr_part = PartDef {
+            name: format!("Part_{}", total_levels.saturating_sub(1)),
+            ..Default::default()
+        };
+        for idx in (0..total_levels.saturating_sub(1)).rev() {
+            curr_part = PartDef {
+                name: format!("Part_{idx}"),
+                parts: vec![curr_part],
+                ..Default::default()
+            };
+        }
+        let part_out = curr_part.to_sysml(0);
+        assert!(part_out.contains("part def Part_0 {"));
+        assert!(part_out.contains("part def Part_63 {"));
+        assert!(
+            !part_out.contains("Part_64"),
+            "Part_64 at depth 64 (>= MAX_AST_DEPTH) must not be serialized"
+        );
+
+        let mut curr_state = StateDef {
+            name: format!("State_{}", total_levels.saturating_sub(1)),
+            ..Default::default()
+        };
+        for idx in (0..total_levels.saturating_sub(1)).rev() {
+            curr_state = StateDef {
+                name: format!("State_{idx}"),
+                sub_states: vec![curr_state],
+                ..Default::default()
+            };
+        }
+        let state_out = curr_state.to_sysml(0);
+        assert!(state_out.contains("state def State_0 {"));
+        assert!(state_out.contains("state def State_63 {"));
+        assert!(
+            !state_out.contains("State_64"),
+            "State_64 at depth 64 (>= MAX_AST_DEPTH) must not be serialized"
+        );
+    }
+
+    #[test]
+    fn test_serialize_deep_nesting_bounded_stack_and_synthetic_forest_root() -> Result<(), String> {
+        assert_eq!(MAX_AST_DEPTH, 64);
+        let deep_levels: usize = 1_500;
+
+        let mut deep_pkg = PackageDef {
+            name: format!("Pkg_{}", deep_levels.saturating_sub(1)),
+            ..Default::default()
+        };
+        for idx in (0..deep_levels.saturating_sub(1)).rev() {
+            deep_pkg = PackageDef {
+                name: format!("Pkg_{idx}"),
+                packages: vec![deep_pkg],
+                ..Default::default()
+            };
+        }
+
+        let mut deep_synthetic = PackageDef {
+            name: "LeafNamedPkg".to_string(),
+            ..Default::default()
+        };
+        for _ in 0..deep_levels {
+            deep_synthetic = PackageDef {
+                name: String::new(),
+                packages: vec![deep_synthetic],
+                ..Default::default()
+            };
+        }
+
+        let mut deep_part = PartDef {
+            name: format!("Part_{}", deep_levels.saturating_sub(1)),
+            ..Default::default()
+        };
+        for idx in (0..deep_levels.saturating_sub(1)).rev() {
+            deep_part = PartDef {
+                name: format!("Part_{idx}"),
+                parts: vec![deep_part],
+                ..Default::default()
+            };
+        }
+
+        let mut deep_state = StateDef {
+            name: format!("State_{}", deep_levels.saturating_sub(1)),
+            ..Default::default()
+        };
+        for idx in (0..deep_levels.saturating_sub(1)).rev() {
+            deep_state = StateDef {
+                name: format!("State_{idx}"),
+                sub_states: vec![deep_state],
+                ..Default::default()
+            };
+        }
+
+        let (pkg_out, synth_out, part_out, state_out) =
+            std::thread::scope(|s| -> Result<(String, String, String, String), String> {
+                let handle = std::thread::Builder::new()
+                    .name("bounded_serializer_1500".to_string())
+                    .stack_size(512 * 1024)
+                    .spawn_scoped(s, || {
+                        (
+                            deep_pkg.to_sysml(0),
+                            deep_synthetic.to_sysml(0),
+                            deep_part.to_sysml(0),
+                            deep_state.to_sysml(0),
+                        )
+                    })
+                    .map_err(|e| format!("failed to spawn scoped thread: {e}"))?;
+                handle
+                    .join()
+                    .map_err(|_| "bounded-stack serializer thread panicked".to_string())
+            })?;
+
+        assert!(pkg_out.contains("package Pkg_63 {"));
+        assert!(!pkg_out.contains("Pkg_64"));
+        assert!(synth_out.is_empty());
+        assert!(part_out.contains("part def Part_63 {"));
+        assert!(!part_out.contains("Part_64"));
+        assert!(state_out.contains("state def State_63 {"));
+        assert!(!state_out.contains("State_64"));
+
+        let mut pkg_drain = vec![deep_pkg, deep_synthetic];
+        while let Some(mut node) = pkg_drain.pop() {
+            pkg_drain.append(&mut node.packages);
+        }
+        let mut part_drain = vec![deep_part];
+        while let Some(mut node) = part_drain.pop() {
+            part_drain.append(&mut node.parts);
+        }
+        let mut state_drain = vec![deep_state];
+        while let Some(mut node) = state_drain.pop() {
+            state_drain.append(&mut node.sub_states);
+        }
+        Ok(())
+    }
 }
-
-
-
