@@ -205,7 +205,7 @@ schema/  -->  ingest-sysml (./target/release/ingest-sysml)  -->  .pipeline/schem
 
 ## 5. Downstream Specification Projection & Traceability Threads
 
-Forward specification generation via `crates/compile-sysml/src/sync/forward.rs` decomposes the canonical SysML v2 AST model into an unbroken digital thread:
+Forward specification generation via `crates/compile-sysml/src/sync/forward/mod.rs` decomposes the canonical SysML v2 AST model into an unbroken digital thread:
 
 1. **Epics (`docs/epics/EPIC-*.md`)**: Realize architectural subsystem packages, defining high-level capabilities and tracking child features.
 2. **Features (`docs/features/feat-*.md`)**: Realize `PartDef` components and `item def` payloads. Every Feature mandates YAML frontmatter declaring `sysml_source`, `part_def`, `ports`, `state_defs`, and `requirements`.

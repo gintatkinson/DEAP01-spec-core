@@ -7,7 +7,7 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
     attribute Target_Crates : String = "crates/compile-sysml, crates/reconcile-backlog, crates/ingest-sysml, crates/assemble-conops, crates/verify-baseline";
     attribute Tracked_Issues : String = "#497, #506, #507";
     attribute Generation_Mode : String = "subagent";
-    attribute Specification_Source : String = "crates/compile-sysml/src/sync/forward.rs:1585-2078 / #507";
+    attribute Specification_Source : String = "crates/compile-sysml/src/sync/forward/mod.rs:1585-2078 / #507";
     doc /* compile-sysml --forward-sync docs */
     action def CompileSysmlForwardSyncDocs;
     doc /* Resolve Parent Epic by pkg_name == ConOps */
