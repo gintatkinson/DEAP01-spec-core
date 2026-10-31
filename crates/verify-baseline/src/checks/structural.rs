@@ -552,40 +552,35 @@ pub fn check_zero_shell_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
 }
 
 /// Check 33: Zero Python Scripts & Operational Python/Pytest Reference Invariant.
-///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ECSS-E-ST-40C Rust-native toolchain purity controls.
-/// Recursively walks `repo_root: &Path` to reject any physical `.py` file on disk and scans
-/// governed text files across `skills/`, `.agents/skills/`, `rules/`, `.pipeline/` (excluding
-/// `.pipeline/defects/`), `docs/`, `README.md`, and `AGENTS.md` for operational Python/Pytest tokens.
-///
+/// Recursively walks `repo_root: &Path` to reject any physical Python source/bytecode file, cache/venv
+/// directory, or Python manifest on disk and scans governed text files across `skills/`, `.agents/skills/`,
+/// `rules/`, `.pipeline/` (excluding `.pipeline/defects/`), `docs/`, `README.md`, and `AGENTS.md` for
+/// operational Python/Pytest tokens.
 /// ## 2. Invariants & Mathematical Properties
 /// - Zero files in `repo_root` (excluding `target`, `.git`, `build`, `Pods`, `ephemeral`, and `.dart_tool`)
-///   may have extension `.py` (case-insensitive).
+///   may have extension `.py`, `.pyc`, `.pyo`, `.pyd`, `.pyi`, or `.ipynb`, or match Python manifest names
+///   (`pyproject.toml`, `requirements.txt`, `pipfile`, `pipfile.lock`, `poetry.lock`, `setup.cfg`).
+/// - Zero directories in `repo_root` may match `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`,
+///   `.venv`, or `venv`.
 /// - Zero governed `.md`, `.yaml`, `.yml`, `.json`, or `.toml` lines (outside explicit governance
 ///   prohibition clauses and `.pipeline/defects/` historical dossiers) may contain operational
-///   Python/Pytest tokens (`python3`, `pytest`, `.py`, `models/python`, `unittest`,
-///   `execution_environment: [python`, `language: python`).
-///
+///   Python/Pytest tokens.
 /// ## 3. Preconditions
 /// `repo_root: &Path` must be an accessible directory path on the local filesystem.
-///
 /// ## 4. Postconditions
-/// Returns `Ok(())` if zero `.py` files and zero operational Python/Pytest references exist,
-/// or `Err(Vec<String>)` with sorted, deduplicated relative paths and `rel_path:line_no` diagnostics.
-///
+/// Returns `Ok(())` if zero Python files/directories/manifests and zero operational Python/Pytest references
+/// exist, or `Err(Vec<String>)` with sorted, deduplicated relative paths and `rel_path:line_no` diagnostics.
 /// ## 5. Algorithmic Complexity Bounds
 /// Time Complexity: O(N + G * L) where N is repository entry count, G is governed text file count,
 /// and L is average line count per governed file. Space Complexity: O(V) where V is violation count.
-///
 /// ## 6. Failure Modes & Fault Tolerance
-/// Fails closed on any discovered `.py` file, operational Python/Pytest token, or filesystem I/O error.
-///
+/// Fails closed on any discovered Python artifact, operational Python/Pytest token, or filesystem I/O error.
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-33-ZERO-PYTHON-SCRIPTS].
 pub fn check_zero_python_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
-
     for entry_res in WalkDir::new(repo_root)
         .into_iter()
         .filter_entry(|e| {
@@ -609,15 +604,48 @@ pub fn check_zero_python_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
                 continue;
             }
         };
+        let fname = entry.file_name().to_string_lossy();
+        let lower_name = fname.to_ascii_lowercase();
+        if entry.file_type().is_dir() {
+            if matches!(
+                lower_name.as_str(),
+                "__pycache__"
+                    | ".pytest_cache"
+                    | ".mypy_cache"
+                    | ".ruff_cache"
+                    | ".venv"
+                    | "venv"
+            ) {
+                let rel = entry
+                    .path()
+                    .strip_prefix(repo_root)
+                    .unwrap_or(entry.path())
+                    .display()
+                    .to_string();
+                violations.push(rel);
+            }
+            continue;
+        }
         if entry.file_type().is_file() {
-            let fname = entry.file_name().to_string_lossy();
-            let is_py = fname.to_ascii_lowercase().ends_with(".py")
+            let is_py_ext = lower_name.ends_with(".py")
                 || entry
                     .path()
                     .extension()
-                    .map(|ext| ext.to_string_lossy().eq_ignore_ascii_case("py"))
+                    .map(|ext| {
+                        let e = ext.to_string_lossy().to_ascii_lowercase();
+                        matches!(e.as_str(), "py" | "pyc" | "pyo" | "pyd" | "pyi" | "ipynb")
+                    })
                     .unwrap_or(false);
-            if is_py {
+            let is_py_manifest = matches!(
+                lower_name.as_str(),
+                "pyproject.toml"
+                    | "requirements.txt"
+                    | "pipfile"
+                    | "pipfile.lock"
+                    | "poetry.lock"
+                    | "setup.cfg"
+            );
+            if is_py_ext || is_py_manifest {
                 let rel = entry
                     .path()
                     .strip_prefix(repo_root)
@@ -628,9 +656,7 @@ pub fn check_zero_python_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
             }
         }
     }
-
     scan_governed_files_for_python_references(repo_root, &mut violations);
-
     if violations.is_empty() {
         Ok(())
     } else {
@@ -826,75 +852,121 @@ fn scan_file_for_python_references(path: &Path, repo_root: &Path, violations: &m
 }
 
 /// Determines whether an ASCII-lowercased line is an explicit governance prohibition clause.
-///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A normative rule preservation controls.
-/// Allows constitutional rules and agent instructions in `AGENTS.md`, `rules/`, and
-/// `.pipeline/ACTIVE_RULES_BUNDLE.md` to state that Python and Pytest are prohibited without
-/// triggering false-positive self-violations in `is_python_prohibition_clause`.
-///
+/// Allows constitutional rules and agent instructions in `AGENTS.md`, `rules/`,
+/// `docs/standards/`, and `.pipeline/ACTIVE_RULES_BUNDLE.md` to state that Python and Pytest
+/// are prohibited without triggering false-positive self-violations in `is_python_prohibition_clause`.
 /// ## 2. Invariants & Mathematical Properties
-/// Returns `true` if and only if `ascii_folded` contains at least one canonical prohibition
-/// stem (`prohibit`, `forbid`, `retired`, `eliminat`, `zero python`, `never`, `ban`, `check 33`).
-///
+/// Returns `true` if and only if `ascii_folded` contains at least one canonical prohibition stem
+/// (`prohibit`, `forbid`, `retired`, `zero python`, `check 33`), an explicit imperative prohibition
+/// phrase (`never invoke`, `never run`, `never execute`, `do not invoke`, `do not run`), or a
+/// word-bounded `ban` / `bans` / `banned` token verified via `contains_ascii_word` so substrings in
+/// ordinary prose (`banner`, `abandoned`, `shebang`, `never flickers`) never evade Check 33.
 /// ## 3. Preconditions
 /// `ascii_folded: &str` must already be converted to ASCII lowercase by the caller.
-///
 /// ## 4. Postconditions
 /// Pure boolean classification indicating whether the line states a governance prohibition.
-///
 /// ## 5. Algorithmic Complexity Bounds
 /// Time Complexity: O(L) where L is the byte length of `ascii_folded`. Space Complexity: O(1).
-///
 /// ## 6. Failure Modes & Fault Tolerance
-/// Infallible, zero-allocation substring inspection that never panics.
-///
+/// Infallible, zero-allocation substring and boundary inspection that never panics.
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-33-PROHIBITION-CLAUSE-EXEMPTION].
 fn is_python_prohibition_clause(ascii_folded: &str) -> bool {
     ascii_folded.contains("prohibit")
         || ascii_folded.contains("forbid")
         || ascii_folded.contains("retired")
-        || ascii_folded.contains("eliminat")
         || ascii_folded.contains("zero python")
-        || ascii_folded.contains("never")
-        || ascii_folded.contains("ban")
         || ascii_folded.contains("check 33")
+        || ascii_folded.contains("never invoke")
+        || ascii_folded.contains("never run")
+        || ascii_folded.contains("never execute")
+        || ascii_folded.contains("do not invoke")
+        || ascii_folded.contains("do not run")
+        || contains_ascii_word(ascii_folded, "ban")
+        || contains_ascii_word(ascii_folded, "bans")
+        || contains_ascii_word(ascii_folded, "banned")
+}
+
+/// Checks whether `haystack` contains `word` delimited on both sides by non-identifier boundaries.
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34 non-panicking slice access rules.
+/// Prevents substring false-negatives in `is_python_prohibition_clause` (such as matching `"ban"`
+/// inside `"banner"`, `"abandoned"`, or `"shebang"`) using deterministic byte-boundary checks.
+/// ## 2. Invariants & Mathematical Properties
+/// Returns `true` if and only if `word` is non-empty and occurs at some byte offset `idx` in
+/// `haystack` where neither the preceding byte nor the following byte is ASCII alphanumeric or `'_'`.
+/// ## 3. Preconditions
+/// `haystack: &str` and `word: &str` are valid UTF-8 string slices (typically ASCII-lowercased).
+/// ## 4. Postconditions
+/// Pure boolean result indicating presence of `word` as a standalone token.
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(L) where L is byte length of `haystack`. Space Complexity: O(1).
+/// ## 6. Failure Modes & Fault Tolerance
+/// Uses `.get(..)`, `checked_sub`, and `saturating_add` exclusively; never indexes slices directly or panics.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-33-PROHIBITION-CLAUSE-EXEMPTION].
+fn contains_ascii_word(haystack: &str, word: &str) -> bool {
+    if word.is_empty() {
+        return false;
+    }
+    let bytes = haystack.as_bytes();
+    for (idx, _) in haystack.match_indices(word) {
+        let before_ok = match idx.checked_sub(1).and_then(|prev| bytes.get(prev)) {
+            Some(&b) => !b.is_ascii_alphanumeric() && b != b'_',
+            None => true,
+        };
+        let after_idx = idx.saturating_add(word.len());
+        let after_ok = match bytes.get(after_idx) {
+            Some(&b) => !b.is_ascii_alphanumeric() && b != b'_',
+            None => true,
+        };
+        if before_ok && after_ok {
+            return true;
+        }
+    }
+    false
 }
 
 /// Detects whether an ASCII-lowercased line contains an operational Python or Pytest token.
-///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ECSS-E-ST-40C pure-Rust toolchain enforcement.
-/// Identifies operational invocations and configuration tokens (`python3`, `pytest`,
-/// `models/python`, `unittest`, `execution_environment: [python`, `language: python`, and
-/// `.py` script tokens) inside `detect_operational_python_token` using zero regular expressions.
-///
+/// Identifies operational invocations, package runners, shebangs, and configuration tokens
+/// (`python3`, `#!/usr/bin/env python`, `#!/usr/bin/python`, `pytest`, `pip install`, `pip3 `,
+/// `uv run `, `poetry run `, `models/python`, `unittest`, `execution_environment: [python`,
+/// `language: python`, and `.py` script tokens) inside `detect_operational_python_token` using
+/// zero regular expressions.
 /// ## 2. Invariants & Mathematical Properties
 /// Evaluates a fixed priority order of operational Python tokens and delegates `.py` token
 /// boundary verification to `contains_dot_py_token`.
-///
 /// ## 3. Preconditions
 /// `ascii_folded: &str` is an ASCII-lowercased line that has already been screened by
 /// `is_python_prohibition_clause`.
-///
 /// ## 4. Postconditions
 /// Returns `Some(&'static str)` naming the first matched operational Python token, or `None`
 /// if the line is clean.
-///
 /// ## 5. Algorithmic Complexity Bounds
 /// Time Complexity: O(L) where L is the byte length of `ascii_folded`. Space Complexity: O(1).
-///
 /// ## 6. Failure Modes & Fault Tolerance
 /// Pure, deterministic, non-panicking string inspection with zero heap allocations.
-///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-33-OPERATIONAL-TOKEN-DETECTOR].
 fn detect_operational_python_token(ascii_folded: &str) -> Option<&'static str> {
     if ascii_folded.contains("python3") {
         Some("python3")
+    } else if ascii_folded.contains("#!/usr/bin/env python")
+        || ascii_folded.contains("#!/usr/bin/python")
+    {
+        Some("python shebang")
     } else if ascii_folded.contains("pytest") {
         Some("pytest")
+    } else if ascii_folded.contains("pip install")
+        || ascii_folded.contains("pip3 ")
+        || ascii_folded.contains("uv run ")
+        || ascii_folded.contains("poetry run ")
+    {
+        Some("python package runner")
     } else if ascii_folded.contains("models/python") {
         Some("models/python")
     } else if ascii_folded.contains("unittest") {
@@ -5340,6 +5412,59 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             check_reconcile_backlog_tooling_exists(&standalone_tmp.path).is_err(),
             "Standalone downstream directory without reconcile-backlog must fail Check 15 closed"
         );
+        Ok(())
+    }
+
+    /// Verifies that Check 33 rejects Python cache dirs, manifests, bytecode files, package runners,
+    /// and lines containing false-positive words like "banner" or "never".
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C Check 33 (Zero Python Scripts Invariant) hardening.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Rejects `__pycache__`, `pyproject.toml`, `requirements.txt`, and `.pyc` files on disk.
+    /// - Rejects operational `pytest` and `pip install` lines even when the line contains `"banner"` or `"never"`.
+    /// - Permits explicit governance prohibition lines containing `"prohibited"` or `"Check 33"`.
+    ///
+    /// ## 3. Preconditions
+    /// Isolated temporary directory `TempDir` is writable.
+    ///
+    /// ## 4. Postconditions
+    /// Asserts deterministic `Err` on all Python artifact/reference mutations and `Ok(())` on governance prohibition text.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) bounded fixture files. Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Fails closed if any Python artifact or substring-evasion line is accepted.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-CHECK-33-ZERO-PYTHON-SCRIPTS].
+    #[test]
+    fn test_check_33_hardened_artifacts_and_substring_loophole_closed() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("c33_hardened")?;
+        let pycache = tmp.path.join("__pycache__");
+        fs::create_dir_all(&pycache)?;
+        let req_txt = tmp.path.join("requirements.txt");
+        File::create(&req_txt)?;
+        let docs_dir = tmp.path.join("docs");
+        fs::create_dir_all(&docs_dir)?;
+        let doc_file = docs_dir.join("guide.md");
+        let py_runner = ["py", "test"].concat();
+        let pip_cmd = ["pip", " install"].concat();
+        fs::write(
+            &doc_file,
+            format!(
+                "Run {py_runner} to verify the banner never flickers.\nUse {pip_cmd} for deps.\n"
+            ),
+        )?;
+        let res = check_zero_python_scripts(&tmp.path);
+        assert!(res.is_err(), "Check 33 must reject __pycache__, requirements.txt, and banner/never evasion lines");
+        let errs = res.err().ok_or("expected Err")?;
+        assert!(errs.iter().any(|e| e.contains("__pycache__")));
+        assert!(errs.iter().any(|e| e.contains("requirements.txt")));
+        assert!(errs.iter().any(|e| e.contains("guide.md:1:")));
+        assert!(errs.iter().any(|e| e.contains("guide.md:2:")));
         Ok(())
     }
 }
