@@ -7,7 +7,7 @@
 //!
 //! ## 2. Invariants & Mathematical Properties
 //! - Zero non-local process termination: no function in `driver.rs` invokes `std::process::exit`;
-//!   all operational outcomes are returned as explicit `Result<i32, (i32, String)>` or `i32` values.
+//!   all operational outcomes are returned as explicit `Result<i32, DriverError>`, `Result<i32, (i32, String)>`, or `i32` values.
 //! - Unified fail-closed schema validation (`ARCH-01`, `ARCH-02`): all schema-consuming handlers
 //!   route through `load_and_validate_schema` / `load_schema_package_for_cli` with zero silent
 //!   `.ok()` or `.unwrap_or_default()` error masking.
@@ -26,7 +26,7 @@
 //!
 //! ## 6. Failure Modes & Fault Tolerance
 //! - Missing or empty schemas, lexical/syntactic parse errors, semantic validation errors, or I/O
-//!   write errors fail closed immediately and return structured `(exit_code, diagnostic_message)` tuples.
+//!   write errors fail closed immediately as typed `DriverError` diagnostics converted into structured `(exit_code, diagnostic_message)` tuples at external boundaries.
 //!
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-COMPILER-SYSML-DRIVER], [DO-330-TQL-4-CLI]
@@ -86,6 +86,87 @@ If starting from unstructured OEM prose manuals, PDF documentation, or BOM markd
   2. Execute Step 0.0 Level 0 OEM Ground Truth Ingestion:
      ./target/release/ingest-sysml --schema <path_to_markdown> --format markdown --out .pipeline/schema.sysml
   3. Re-run ./target/release/compile-sysml --compile to satisfy the compilation gate.";
+
+/// Typed operational error returned by internal `compile-sysml` pipeline and codegen handlers.
+/// Safety & Traceability: Realises: [REQ-COMPILER-SYSML-DRIVER], [DO-330-TQL-4-CLI]
+/// Contract: Partitions CLI flag, target resolution, schema validation, filesystem I/O, and codegen failures into closed variants with deterministic process exit codes.
+/// Bounds & Faults: Total value type; `Cli`, `Resolution`, `Validation`, and `Io` map to exit code `1`, while `Codegen(code, _)` preserves its subsystem exit code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DriverError {
+    /// Invalid or conflicting command-line flags or unexpected dispatch mode.
+    Cli(String),
+    /// Missing schema, scoring configuration, or input target path during resolution.
+    Resolution(String),
+    /// Empty schema, lexical/grammatical parse failure, zero elements, or semantic validation failure.
+    Validation(String),
+    /// Filesystem read or atomic write failure.
+    Io(String),
+    /// Downstream codegen, synchronization, STPA, or docstring synthesizer failure carrying an explicit exit code.
+    Codegen(i32, String),
+}
+
+impl DriverError {
+    /// Returns the human-readable diagnostic message carried by this error variant.
+    /// Safety & Traceability: Realises: [REQ-COMPILER-SYSML-DRIVER]
+    /// Contract: Borrows the inner UTF-8 diagnostic string slice without cloning or reformatting.
+    /// Bounds & Faults: O(1) time and O(1) space; total projection that never panics.
+    pub fn message(&self) -> &str {
+        match self {
+            Self::Cli(msg)
+            | Self::Resolution(msg)
+            | Self::Validation(msg)
+            | Self::Io(msg)
+            | Self::Codegen(_, msg) => msg.as_str(),
+        }
+    }
+
+    /// Returns the deterministic OS process exit code associated with this error variant.
+    /// Safety & Traceability: Realises: [REQ-COMPILER-SYSML-DRIVER], [DO-330-TQL-4-CLI]
+    /// Contract: Maps `Cli`, `Resolution`, `Validation`, and `Io` to `1` and `Codegen(code, _)` to `code`.
+    /// Bounds & Faults: O(1) compile-time `const fn` evaluation with zero heap allocation and zero panics.
+    pub const fn exit_code(&self) -> i32 {
+        match self {
+            Self::Cli(_) | Self::Resolution(_) | Self::Validation(_) | Self::Io(_) => 1,
+            Self::Codegen(code, _) => *code,
+        }
+    }
+}
+
+impl std::fmt::Display for DriverError {
+    /// Formats `DriverError` by writing its underlying diagnostic message slice.
+    /// Realises: [REQ-COMPILER-SYSML-DRIVER]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.message())
+    }
+}
+
+impl std::error::Error for DriverError {}
+
+impl std::ops::Deref for DriverError {
+    type Target = str;
+
+    /// Dereferences `DriverError` to its inner diagnostic `str` slice for direct string inspection.
+    /// Realises: [REQ-COMPILER-SYSML-DRIVER]
+    fn deref(&self) -> &Self::Target {
+        self.message()
+    }
+}
+
+impl From<DriverError> for (i32, String) {
+    /// Converts `DriverError` into an `(exit_code, diagnostic_message)` tuple at external CLI boundaries.
+    /// Realises: [REQ-COMPILER-SYSML-DRIVER]
+    fn from(err: DriverError) -> Self {
+        let code = err.exit_code();
+        let msg = match err {
+            DriverError::Cli(m)
+            | DriverError::Resolution(m)
+            | DriverError::Validation(m)
+            | DriverError::Io(m)
+            | DriverError::Codegen(_, m) => m,
+        };
+        (code, msg)
+    }
+}
 
 /// Target SysML schema input resolved from CLI flags or default paths.
 ///
@@ -176,18 +257,18 @@ fn resolve_schema_dir_pipeline_fallback(path: &Path) -> Option<SchemaTarget> {
 /// - `dir` is an existing directory path (`dir.is_dir() == true`).
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(SchemaTarget)` with at least one `.sysml` file, or `Err(String)` if no `.sysml` file exists.
+/// - Returns `Ok(SchemaTarget)` with at least one `.sysml` file, or `Err(DriverError::Resolution)` if no `.sysml` file exists.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(F \log F)$ where $F$ is the number of discovered files.
 /// - Space Complexity: $O(F)$ for the discovered path vector.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Directories devoid of `.sysml` files and fallbacks return a descriptive `Err(String)`.
+/// - Directories devoid of `.sysml` files and fallbacks return a descriptive `Err(DriverError::Resolution)`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-RESOLVE-DIR-TARGET]
-fn resolve_directory_schema_target(dir: PathBuf) -> Result<SchemaTarget, String> {
+fn resolve_directory_schema_target(dir: PathBuf) -> Result<SchemaTarget, DriverError> {
     let files = discover_sysml_files(&dir);
     if let [only] = files.as_slice() {
         return Ok(SchemaTarget::SingleFile(only.clone()));
@@ -200,11 +281,52 @@ fn resolve_directory_schema_target(dir: PathBuf) -> Result<SchemaTarget, String>
         return Ok(SchemaTarget::SingleFile(direct_fallback));
     }
     resolve_schema_dir_pipeline_fallback(&dir).ok_or_else(|| {
-        format!(
+        DriverError::Resolution(format!(
             "Error: No .sysml files found in directory: {}",
             dir.display()
-        )
+        ))
     })
+}
+
+/// Resolves input schema path into a `SchemaTarget` returning typed `DriverError::Resolution` on missing paths.
+/// Realises: [REQ-COMPILER-SYSML-RESOLVE-TARGETS]
+fn resolve_schema_targets_typed(
+    explicit_path: Option<PathBuf>,
+) -> Result<SchemaTarget, DriverError> {
+    if let Some(path) = explicit_path {
+        if path.is_file() {
+            return Ok(SchemaTarget::SingleFile(path));
+        }
+        if path.is_dir() {
+            return resolve_directory_schema_target(path);
+        }
+        return resolve_schema_dir_pipeline_fallback(&path).ok_or_else(|| {
+            DriverError::Resolution(format!(
+                "Error: Schema file does not exist: {}",
+                path.display()
+            ))
+        });
+    }
+
+    let schema_dir = Path::new("schema");
+    if schema_dir.is_dir() {
+        let files = discover_sysml_files(schema_dir);
+        if let [only] = files.as_slice() {
+            return Ok(SchemaTarget::SingleFile(only.clone()));
+        }
+        if !files.is_empty() {
+            return Ok(SchemaTarget::Directory(schema_dir.to_path_buf(), files));
+        }
+    }
+
+    let pipeline_fallback = Path::new(".pipeline/schema.sysml");
+    if pipeline_fallback.is_file() {
+        return Ok(SchemaTarget::SingleFile(pipeline_fallback.to_path_buf()));
+    }
+
+    Err(DriverError::Resolution(
+        SCHEMA_REMEDIATION_MESSAGE.to_string(),
+    ))
 }
 
 /// Resolve input schema path into either a single file or a directory containing `.sysml` files.
@@ -238,38 +360,7 @@ fn resolve_directory_schema_target(dir: PathBuf) -> Result<SchemaTarget, String>
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-RESOLVE-TARGETS], [DO-330-TQL-4-CLI]
 pub fn resolve_schema_targets(explicit_path: Option<PathBuf>) -> Result<SchemaTarget, String> {
-    if let Some(path) = explicit_path {
-        if path.is_file() {
-            return Ok(SchemaTarget::SingleFile(path));
-        }
-        if path.is_dir() {
-            return resolve_directory_schema_target(path);
-        }
-        return resolve_schema_dir_pipeline_fallback(&path).ok_or_else(|| {
-            format!(
-                "Error: Schema file does not exist: {}",
-                path.display()
-            )
-        });
-    }
-
-    let schema_dir = Path::new("schema");
-    if schema_dir.is_dir() {
-        let files = discover_sysml_files(schema_dir);
-        if let [only] = files.as_slice() {
-            return Ok(SchemaTarget::SingleFile(only.clone()));
-        }
-        if !files.is_empty() {
-            return Ok(SchemaTarget::Directory(schema_dir.to_path_buf(), files));
-        }
-    }
-
-    let pipeline_fallback = Path::new(".pipeline/schema.sysml");
-    if pipeline_fallback.is_file() {
-        return Ok(SchemaTarget::SingleFile(pipeline_fallback.to_path_buf()));
-    }
-
-    Err(SCHEMA_REMEDIATION_MESSAGE.to_string())
+    resolve_schema_targets_typed(explicit_path).map_err(|e| <(i32, String)>::from(e).1)
 }
 
 /// Resolve a single concrete schema file path for legacy/single-file callers.
@@ -332,34 +423,34 @@ pub fn resolve_schema_file(explicit_path: Option<PathBuf>) -> Result<PathBuf, St
 /// - `target` is a valid `SchemaTarget` resolved by `resolve_schema_targets`.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok((PackageDef, String))` upon clean lexical and grammatical parsing, or `Err(String)` on failure.
+/// - Returns `Ok((PackageDef, String))` upon clean lexical and grammatical parsing, or `Err(DriverError)` on failure.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(N)$ where $N$ is the total byte length of the schema source files.
 /// - Space Complexity: $O(N)$ for the in-memory `PackageDef` AST.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Unreadable files, empty schema files, or syntax errors return descriptive `Err(String)` values.
+/// - Unreadable files return `DriverError::Io`; empty schema files or syntax errors return `DriverError::Validation`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-PARSE-RESOLVED-TARGET]
 fn parse_resolved_schema_target(
     target: &SchemaTarget,
-) -> Result<(deap_core::sysml_ast::PackageDef, String), String> {
+) -> Result<(deap_core::sysml_ast::PackageDef, String), DriverError> {
     match target {
         SchemaTarget::SingleFile(schema_file) => {
             let content = fs::read_to_string(schema_file).map_err(|e| {
-                format!(
+                DriverError::Io(format!(
                     "Error reading schema file '{}': {}",
                     schema_file.display(),
                     e
-                )
+                ))
             })?;
             if content.trim().is_empty() {
-                return Err(format!(
+                return Err(DriverError::Validation(format!(
                     "Error: Schema file '{}' is empty.",
                     schema_file.display()
-                ));
+                )));
             }
             let display_name = schema_file
                 .file_stem()
@@ -367,11 +458,11 @@ fn parse_resolved_schema_target(
                 .unwrap_or("SysML_Model")
                 .to_string();
             let parsed = parse_sysml(&content).map_err(|err| {
-                format!(
+                DriverError::Validation(format!(
                     "Error parsing schema file '{}': {}",
                     schema_file.display(),
                     err
-                )
+                ))
             })?;
             Ok((parsed, display_name))
         }
@@ -382,15 +473,46 @@ fn parse_resolved_schema_target(
                 .unwrap_or("SysML_Model")
                 .to_string();
             let parsed = parse_sysml_tree(files).map_err(|err| {
-                format!(
+                DriverError::Validation(format!(
                     "Error parsing schema directory '{}': {}",
                     dir.display(),
                     err
-                )
+                ))
             })?;
             Ok((parsed, dir_name))
         }
     }
+}
+
+/// Resolves, parses, checks structural element cardinality, and optionally validates semantics returning `DriverError`.
+/// Realises: [REQ-COMPILER-SYSML-LOAD-AND-VALIDATE-SCHEMA]
+fn load_and_validate_schema_typed(
+    explicit_path: Option<PathBuf>,
+    require_validation: bool,
+) -> Result<(SchemaTarget, deap_core::sysml_ast::PackageDef, String), DriverError> {
+    let target = resolve_schema_targets_typed(explicit_path)?;
+    let (pkg, display_name) = parse_resolved_schema_target(&target)?;
+
+    if count_structural_elements(&pkg) == 0 {
+        return Err(DriverError::Validation(format!(
+            "Error: Schema '{display_name}' contains 0 structural elements."
+        )));
+    }
+
+    if require_validation {
+        let mut validator = SemanticValidator::new(&pkg);
+        validator.validate();
+        if validator.has_errors() {
+            let msgs: Vec<String> = validator
+                .errors()
+                .into_iter()
+                .map(|err| format!("Error: Semantic validation error: {}", err.message))
+                .collect();
+            return Err(DriverError::Validation(msgs.join("\n")));
+        }
+    }
+
+    Ok((target, pkg, display_name))
 }
 
 /// Resolves, parses, checks structural element cardinality, and optionally validates semantics of a SysML schema.
@@ -426,29 +548,16 @@ pub fn load_and_validate_schema(
     explicit_path: Option<PathBuf>,
     require_validation: bool,
 ) -> Result<(SchemaTarget, deap_core::sysml_ast::PackageDef, String), String> {
-    let target = resolve_schema_targets(explicit_path)?;
-    let (pkg, display_name) = parse_resolved_schema_target(&target)?;
+    load_and_validate_schema_typed(explicit_path, require_validation)
+        .map_err(|e| <(i32, String)>::from(e).1)
+}
 
-    if count_structural_elements(&pkg) == 0 {
-        return Err(format!(
-            "Error: Schema '{display_name}' contains 0 structural elements."
-        ));
-    }
-
-    if require_validation {
-        let mut validator = SemanticValidator::new(&pkg);
-        validator.validate();
-        if validator.has_errors() {
-            let msgs: Vec<String> = validator
-                .errors()
-                .into_iter()
-                .map(|err| format!("Error: Semantic validation error: {}", err.message))
-                .collect();
-            return Err(msgs.join("\n"));
-        }
-    }
-
-    Ok((target, pkg, display_name))
+/// Resolves, parses, and semantically validates a SysML schema target for internal CLI handlers returning `DriverError`.
+/// Realises: [REQ-COMPILER-SYSML-LOAD-PACKAGE-CLI]
+fn load_schema_package_typed(
+    explicit_path: Option<PathBuf>,
+) -> Result<(SchemaTarget, deap_core::sysml_ast::PackageDef, String), DriverError> {
+    load_and_validate_schema_typed(explicit_path, true)
 }
 
 /// Resolves, parses, and semantically validates a single-file or multi-file SysML schema target for CLI modes.
@@ -504,11 +613,11 @@ pub fn load_schema_package_for_cli(
 /// - Space Complexity: $O(1)$ auxiliary path buffers.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Returns `Err(String)` if atomic write to `schema/model.sysml` fails.
+/// - Returns `Err(DriverError::Io)` if atomic write to `schema/model.sysml` fails.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-SYNC-DOWNSTREAM-MODEL]
-fn sync_downstream_model_sysml(output_path: &Path, sysml_text: &str) -> Result<(), String> {
+fn sync_downstream_model_sysml(output_path: &Path, sysml_text: &str) -> Result<(), DriverError> {
     if !output_path.ends_with(".pipeline/schema.sysml") {
         return Ok(());
     }
@@ -526,11 +635,11 @@ fn sync_downstream_model_sysml(output_path: &Path, sysml_text: &str) -> Result<(
             || (sysml_entries.len() == 1 && sysml_entries.first() == Some(&model_out))
         {
             write_atomic(&model_out, sysml_text).map_err(|e| {
-                format!(
+                DriverError::Io(format!(
                     "Error writing synchronized schema model to '{}': {}",
                     model_out.display(),
                     e
-                )
+                ))
             })?;
         }
     }
@@ -646,18 +755,18 @@ fn is_default_compilation_paths(output_path: &Path, digest_path: &Path) -> bool 
 /// - `files` is a non-empty slice of blueprint `.sysml` paths; `dry_run` controls filesystem persistence.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(0)` when all blueprint triplets compile cleanly, or `Err((1, String))` on the first failure.
+/// - Returns `Ok(0)` when all blueprint triplets compile cleanly, or `Err(DriverError)` on the first failure.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(\sum_i N_i \log N_i)$ across all blueprint files in `files`.
 /// - Space Complexity: $O(\max_i N_i)$ for the active blueprint AST and serialized text buffer.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Propagates structured `Err((1, msg))` immediately on any validation or I/O failure.
+/// - Propagates typed `Err(DriverError)` immediately on any validation or I/O failure.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-BLUEPRINT-TRIPLET-DIR], [DO-330-TQL-4-GATE]
-fn compile_blueprint_triplet_dir(files: &[PathBuf], dry_run: bool) -> Result<i32, (i32, String)> {
+fn compile_blueprint_triplet_dir(files: &[PathBuf], dry_run: bool) -> Result<i32, DriverError> {
     for schema_file in files {
         let digest_sidecar = schema_file.with_extension("digest.json");
         compile_single_or_merged_schema(
@@ -677,7 +786,7 @@ fn compile_blueprint_triplet_dir(files: &[PathBuf], dry_run: bool) -> Result<i32
 /// and SHA-256 `SchemaDigest` emission (`ARCH-04`, `ARCH-05`) under DO-178C Level A and DO-330 TQL-4.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Validates non-empty structural element count and full `SemanticValidator` soundness via `load_and_validate_schema`.
+/// - Validates non-empty structural element count and full `SemanticValidator` soundness via `load_and_validate_schema_typed`.
 /// - When `dry_run` is `true`, performs full validation, serialization, and SHA-256 digest computation
 ///   with zero filesystem writes.
 /// - When `dry_run` is `false`, persists `output_path` and `digest_path` atomically via `write_atomic`.
@@ -686,14 +795,14 @@ fn compile_blueprint_triplet_dir(files: &[PathBuf], dry_run: bool) -> Result<i32
 /// - `explicit_schema` is an optional schema file or directory path; `output_path` and `digest_path` are target paths.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(0)` on clean compilation or `Err((1, String))` on any validation or I/O error.
+/// - Returns `Ok(0)` on clean compilation or `Err(DriverError)` on any validation or I/O error.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(N \log N)$ in schema size and AST node count.
 /// - Space Complexity: $O(N)$ for AST and serialized output buffers.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Returns structured `Err((1, msg))` without calling `process::exit`.
+/// - Returns typed `Err(DriverError)` without calling `process::exit`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-GATE-DRY-RUN], [DO-330-TQL-4-GATE]
@@ -702,9 +811,8 @@ fn compile_single_or_merged_schema(
     output_path: &Path,
     digest_path: &Path,
     dry_run: bool,
-) -> Result<i32, (i32, String)> {
-    let (target, pkg, display_name) =
-        load_and_validate_schema(explicit_schema, true).map_err(|e| (1, e))?;
+) -> Result<i32, DriverError> {
+    let (target, pkg, display_name) = load_and_validate_schema_typed(explicit_schema, true)?;
     let total_elements = count_structural_elements(&pkg);
     let sysml_text = pkg.to_sysml(0);
 
@@ -726,27 +834,21 @@ fn compile_single_or_merged_schema(
     }
 
     write_atomic(output_path, &sysml_text).map_err(|e| {
-        (
-            1,
-            format!(
-                "Error writing compiled schema to '{}': {}",
-                output_path.display(),
-                e
-            ),
-        )
+        DriverError::Io(format!(
+            "Error writing compiled schema to '{}': {}",
+            output_path.display(),
+            e
+        ))
     })?;
 
-    sync_downstream_model_sysml(output_path, &sysml_text).map_err(|e| (1, e))?;
+    sync_downstream_model_sysml(output_path, &sysml_text)?;
 
     digest.write_to_file(digest_path).map_err(|e| {
-        (
-            1,
-            format!(
-                "Error writing schema digest to '{}': {}",
-                digest_path.display(),
-                e
-            ),
-        )
+        DriverError::Io(format!(
+            "Error writing schema digest to '{}': {}",
+            digest_path.display(),
+            e
+        ))
     })?;
 
     println!(
@@ -777,14 +879,14 @@ fn compile_single_or_merged_schema(
 /// - `explicit_schema` is an optional schema file or directory path; `output_path` and `digest_path` are target paths.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(0)` on clean compilation or `Err((1, String))` on any validation or I/O error.
+/// - Returns `Ok(0)` on clean compilation or `Err(DriverError)` on any validation or I/O error.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(N \log N)$ in schema size and AST node count.
 /// - Space Complexity: $O(N)$ for AST and serialized output buffers.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Returns structured `Err((1, msg))` without calling `process::exit`.
+/// - Returns typed `Err(DriverError)` without calling `process::exit`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-GATE-DRY-RUN], [REQ-COMPILER-SYSML-BLUEPRINT-TRIPLET-DIR], [DO-330-TQL-4-GATE]
@@ -793,10 +895,10 @@ fn run_compilation_gate_with_dry_run(
     output_path: &Path,
     digest_path: &Path,
     dry_run: bool,
-) -> Result<i32, (i32, String)> {
+) -> Result<i32, DriverError> {
     if is_default_compilation_paths(output_path, digest_path) {
         if let Ok(SchemaTarget::Directory(ref dir, ref files)) =
-            resolve_schema_targets(explicit_schema.clone())
+            resolve_schema_targets_typed(explicit_schema.clone())
         {
             if is_blueprint_triplet_dir(dir, files) {
                 return compile_blueprint_triplet_dir(files, dry_run);
@@ -847,7 +949,8 @@ pub fn run_compilation_gate(
 ) -> i32 {
     match run_compilation_gate_with_dry_run(explicit_schema, output_path, digest_path, false) {
         Ok(code) => code,
-        Err((code, msg)) => {
+        Err(err) => {
+            let (code, msg) = <(i32, String)>::from(err);
             eprintln!("{msg}");
             code
         }
@@ -869,14 +972,14 @@ pub fn run_compilation_gate(
 /// - `target_dir` is the target Rust/Dart source file or directory path.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(0)` on clean docstring injection or `Err((exit_code, message))` on violation/error.
+/// - Returns `Ok(0)` on clean docstring injection or `Err(DriverError::Codegen)` on violation/error.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(N)$ over scanned source files and optional schema AST.
 /// - Space Complexity: $O(N)$ for source AST and schema buffers.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Propagates `DocstringExitCode` (`1` for violation, `2` for I/O or schema error) without calling `process::exit`.
+/// - Propagates `DocstringExitCode` (`1` for error, `2` for idempotency or unforced conflict) via `DriverError::Codegen`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-HANDLE-DOCSTRINGS]
@@ -885,10 +988,10 @@ fn handle_inject_docstrings(
     schema: Option<PathBuf>,
     dry_run: bool,
     force: bool,
-) -> Result<i32, (i32, String)> {
-    let schema_model = if schema.is_some() || resolve_schema_targets(None).is_ok() {
-        let (_, pkg, _) = load_and_validate_schema(schema, false).map_err(|e| {
-            (
+) -> Result<i32, DriverError> {
+    let schema_model = if schema.is_some() || resolve_schema_targets_typed(None).is_ok() {
+        let (_, pkg, _) = load_and_validate_schema_typed(schema, false).map_err(|e| {
+            DriverError::Codegen(
                 DocstringExitCode::Error.code(),
                 format!("Error during docstring injection: {e}"),
             )
@@ -915,7 +1018,7 @@ fn handle_inject_docstrings(
             );
             Ok(DocstringExitCode::Clean.code())
         }
-        Err((code, msg)) => Err((
+        Err((code, msg)) => Err(DriverError::Codegen(
             code.code(),
             format!("Error during docstring injection: {msg}"),
         )),
@@ -935,14 +1038,14 @@ fn handle_inject_docstrings(
 /// - `extract_dir` is an existing directory containing Rust or Dart source files.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(0)` on successful extraction or `Err((exit_code, message))` on failure.
+/// - Returns `Ok(0)` on successful extraction or `Err(DriverError::Codegen)` on failure.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(N)$ over extracted source files.
 /// - Space Complexity: $O(N)$ for extracted `PackageDef` AST.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Propagates `DocstringExitCode` errors cleanly as `Err((code, String))`.
+/// - Propagates `DocstringExitCode` errors cleanly via `DriverError::Codegen`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-HANDLE-EXTRACT-SOURCE]
@@ -951,7 +1054,7 @@ fn handle_extract_source(
     out: &Path,
     digest: &Path,
     dry_run: bool,
-) -> Result<i32, (i32, String)> {
+) -> Result<i32, DriverError> {
     match run_extract_source(extract_dir, out, digest, dry_run) {
         Ok(pkg) => {
             println!(
@@ -962,14 +1065,17 @@ fn handle_extract_source(
             );
             Ok(DocstringExitCode::Clean.code())
         }
-        Err((code, msg)) => Err((code.code(), format!("Error during source extraction: {msg}"))),
+        Err((code, msg)) => Err(DriverError::Codegen(
+            code.code(),
+            format!("Error during source extraction: {msg}"),
+        )),
     }
 }
 
 /// Executes `--export-mbd` mode (`CommandMode::ExportMbd`).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Validates the input SysML v2 schema via `load_schema_package_for_cli` (`ARCH-02`), flattens nested
+/// Validates the input SysML v2 schema via `load_schema_package_typed` (`ARCH-02`), flattens nested
 /// packages, and exports grounded MBD verification artifacts while honoring `dry_run` (`ARCH-04`).
 ///
 /// ## 2. Invariants & Mathematical Properties
@@ -980,14 +1086,14 @@ fn handle_extract_source(
 /// - `mbd_dir` is the target output directory; `schema` is an optional schema path.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(0)` when MBD artifacts are synthesized (and written when `!dry_run`), or `Err((1, String))` on error.
+/// - Returns `Ok(0)` when MBD artifacts are synthesized (and written when `!dry_run`), or `Err(DriverError)` on error.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(N \log N)$ over schema AST elements.
 /// - Space Complexity: $O(N)$ for the flattened `SysmlModel` and MBD bundle.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Schema validation or filesystem write failures return `Err((1, String))`.
+/// - Schema validation or filesystem write failures return typed `Err(DriverError)`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-HANDLE-EXPORT-MBD]
@@ -995,8 +1101,8 @@ fn handle_export_mbd(
     mbd_dir: &Path,
     schema: Option<PathBuf>,
     dry_run: bool,
-) -> Result<i32, (i32, String)> {
-    let (_, pkg, _) = load_schema_package_for_cli(schema).map_err(|e| (1, e))?;
+) -> Result<i32, DriverError> {
+    let (_, pkg, _) = load_schema_package_typed(schema)?;
     let model = flatten_package_to_model(pkg, None);
     if dry_run {
         let _bundle = synthesize_mbd_bundle(&model);
@@ -1007,7 +1113,7 @@ fn handle_export_mbd(
         return Ok(0);
     }
     let written = export_mbd_artifacts(&model, mbd_dir)
-        .map_err(|e| (1, format!("Error exporting MBD artifacts: {e}")))?;
+        .map_err(|e| DriverError::Codegen(1, format!("Error exporting MBD artifacts: {e}")))?;
     println!(
         "[MBD Export] Emitted {} artifact(s) to '{}'",
         written.len(),
@@ -1019,7 +1125,7 @@ fn handle_export_mbd(
 /// Executes `--slice-package` mode (`CommandMode::SlicePackage`).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Validates the input SysML v2 schema via `load_schema_package_for_cli` (`ARCH-02`), slices the
+/// Validates the input SysML v2 schema via `load_schema_package_typed` (`ARCH-02`), slices the
 /// target subsystem package within a 4096-token budget, and fails closed on JSON serialization (`ARCH-01`).
 ///
 /// ## 2. Invariants & Mathematical Properties
@@ -1030,28 +1136,31 @@ fn handle_export_mbd(
 /// - `target_pkg` is a non-empty package or part identifier; `schema` is an optional schema path.
 ///
 /// ## 4. Postconditions
-/// - Prints pretty-printed JSON slice to `stdout` and returns `Ok(0)`, or returns `Err((1, String))`.
+/// - Prints pretty-printed JSON slice to `stdout` and returns `Ok(0)`, or returns `Err(DriverError)`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(N \log N)$ over schema AST elements.
 /// - Space Complexity: $O(N)$ for flattened model and JSON buffer.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Unknown package names, token budget violations, or JSON serialization errors return `Err((1, String))`.
+/// - Unknown package names, token budget violations, or JSON serialization errors return typed `Err(DriverError)`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-HANDLE-SLICE-PACKAGE]
-fn handle_slice_package(
-    target_pkg: &str,
-    schema: Option<PathBuf>,
-) -> Result<i32, (i32, String)> {
-    let (_, pkg, _) = load_schema_package_for_cli(schema).map_err(|e| (1, e))?;
+fn handle_slice_package(target_pkg: &str, schema: Option<PathBuf>) -> Result<i32, DriverError> {
+    let (_, pkg, _) = load_schema_package_typed(schema)?;
     let model = flatten_package_to_model(pkg, Some(target_pkg));
     let slice = model
         .slice_package_subsystem(target_pkg, 4096)
-        .map_err(|e| (1, format!("Error slicing package '{target_pkg}': {e}")))?;
-    let json = serde_json::to_string_pretty(&slice)
-        .map_err(|e| (1, format!("Error serializing sliced package '{target_pkg}': {e}")))?;
+        .map_err(|e| {
+            DriverError::Codegen(1, format!("Error slicing package '{target_pkg}': {e}"))
+        })?;
+    let json = serde_json::to_string_pretty(&slice).map_err(|e| {
+        DriverError::Codegen(
+            1,
+            format!("Error serializing sliced package '{target_pkg}': {e}"),
+        )
+    })?;
     println!("{json}");
     Ok(0)
 }
@@ -1059,7 +1168,7 @@ fn handle_slice_package(
 /// Executes `--emit-flutter-contracts` mode (`CommandMode::EmitFlutterContracts`).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Validates the input SysML v2 schema via `load_schema_package_for_cli` (`ARCH-02`), preserves
+/// Validates the input SysML v2 schema via `load_schema_package_typed` (`ARCH-02`), preserves
 /// the unflattened `PackageDef` hierarchy alongside the flattened `SysmlModel`, delegates modular
 /// contract emission to `flutter_codegen::emit_modular_flutter_contracts` (`ARCH-01`), and honors `dry_run` (`ARCH-04`).
 ///
@@ -1072,14 +1181,14 @@ fn handle_slice_package(
 ///
 /// ## 4. Postconditions
 /// - Emits deterministic modular Flutter/C-ABI contract files (when `!dry_run`) and returns `Ok(0)`,
-///   or returns `Err((1, String))` on validation/codegen error.
+///   or returns `Err(DriverError)` on validation/codegen error.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(N \log N)$ over schema AST and topology nodes.
 /// - Space Complexity: $O(N)$ for generated Dart source buffers.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Semantic validation errors, modularity bound violations, corrupted `topology_data.json` files, or write failures return `Err((1, String))`.
+/// - Semantic validation errors, modularity bound violations, corrupted `topology_data.json` files, or write failures return typed `Err(DriverError)`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-HANDLE-FLUTTER-CONTRACTS], [REQ-0607]
@@ -1087,13 +1196,13 @@ fn handle_emit_flutter_contracts(
     target_dir: &Path,
     schema: Option<PathBuf>,
     dry_run: bool,
-) -> Result<i32, (i32, String)> {
-    let (_, pkg, _) = load_schema_package_for_cli(schema).map_err(|e| (1, e))?;
+) -> Result<i32, DriverError> {
+    let (_, pkg, _) = load_schema_package_typed(schema)?;
     let model = flatten_package_to_model(pkg.clone(), None);
     let report = crate::flutter_codegen::emit_modular_flutter_contracts(
         target_dir, &pkg, &model, None, dry_run,
     )
-    .map_err(|e| (1, format!("Error emitting Flutter contracts: {e}")))?;
+    .map_err(|e| DriverError::Codegen(1, format!("Error emitting Flutter contracts: {e}")))?;
     if dry_run {
         println!(
             "[Flutter Codegen] [DRY RUN] Would emit contracts (schema hash: 0x{:016X}) to '{}'",
@@ -1123,7 +1232,7 @@ fn handle_emit_flutter_contracts(
 /// Executes `--emit-modular-rust` mode (`CommandMode::EmitModularRust`).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Validates the input SysML v2 schema via `load_schema_package_for_cli` (`ARCH-02`) and emits
+/// Validates the input SysML v2 schema via `load_schema_package_typed` (`ARCH-02`) and emits
 /// a bounded, hierarchical Rust module tree via `emit_modular_rust_tree` under DO-178C Level A,
 /// DO-330 TQL-4, and ISO 26262 ASIL D modularity rules (`ARCH-04`).
 ///
@@ -1136,14 +1245,14 @@ fn handle_emit_flutter_contracts(
 ///
 /// ## 4. Postconditions
 /// - Emits the modular Rust source tree (when `!dry_run`), prints the deterministic tree SHA-256 summary,
-///   and returns `Ok(0)`, or returns `Err((1, String))` with joined diagnostics on failure.
+///   and returns `Ok(0)`, or returns `Err(DriverError)` with joined diagnostics on failure.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(N \log N)$ over AST elements and emitted module files.
 /// - Space Complexity: $O(N)$ for planned unit buffers and manifest hashes.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Schema validation failures, modularity diagnostic violations, or atomic file write errors return `Err((1, String))`.
+/// - Schema validation failures, modularity diagnostic violations, or atomic file write errors return typed `Err(DriverError)`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0607]
@@ -1151,8 +1260,8 @@ fn handle_emit_modular_rust(
     target_dir: &Path,
     schema: Option<PathBuf>,
     dry_run: bool,
-) -> Result<i32, (i32, String)> {
-    let (_, pkg, _) = load_schema_package_for_cli(schema).map_err(|e| (1, e))?;
+) -> Result<i32, DriverError> {
+    let (_, pkg, _) = load_schema_package_typed(schema)?;
     let opts = crate::modular_codegen::emitters::rust_emitter::ModularRustOptions {
         target_dir: target_dir.to_path_buf(),
         dry_run,
@@ -1166,7 +1275,7 @@ fn handle_emit_modular_rust(
                     .map(|d| d.to_string())
                     .collect::<Vec<_>>()
                     .join("\n");
-                (1, joined)
+                DriverError::Codegen(1, joined)
             })?;
     if dry_run {
         println!(
@@ -1200,40 +1309,41 @@ fn handle_emit_modular_rust(
 /// - `scoring_config_path` is an optional path to a JSON file conforming to `FmecaScoringConfig`.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(Option<FmecaScoringConfig>)` or a descriptive `Err(String)`.
+/// - Returns `Ok(Option<FmecaScoringConfig>)` or a typed `Err(DriverError)`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(B)$ where $B$ is the byte length of the JSON configuration file.
 /// - Space Complexity: $O(B)$ for the parsed `FmecaScoringConfig` map.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Missing or malformed JSON files return `Err(String)` without panicking.
+/// - Missing paths return `DriverError::Resolution`, read failures return `DriverError::Io`, and malformed JSON returns `DriverError::Validation`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-LOAD-SCORING-CONFIG]
 fn load_scoring_config(
     scoring_config_path: Option<&Path>,
-) -> Result<Option<FmecaScoringConfig>, String> {
+) -> Result<Option<FmecaScoringConfig>, DriverError> {
     let Some(cfg_path) = scoring_config_path else {
         return Ok(None);
     };
     if !cfg_path.exists() {
-        return Err(format!(
+        return Err(DriverError::Resolution(format!(
             "Error: FMECA scoring config does not exist: {}",
             cfg_path.display()
-        ));
+        )));
     }
     let cfg_text = fs::read_to_string(cfg_path)
-        .map_err(|e| format!("Failed to read scoring config: {e}"))?;
-    let cfg: FmecaScoringConfig = serde_json::from_str(&cfg_text)
-        .map_err(|e| format!("Failed to parse scoring config JSON: {e}"))?;
+        .map_err(|e| DriverError::Io(format!("Failed to read scoring config: {e}")))?;
+    let cfg: FmecaScoringConfig = serde_json::from_str(&cfg_text).map_err(|e| {
+        DriverError::Validation(format!("Failed to parse scoring config JSON: {e}"))
+    })?;
     Ok(Some(cfg))
 }
 
 /// Executes `--stpa-transpile` mode (`CommandMode::StpaTranspile`).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Validates the input SysML v2 schema via `load_and_validate_schema(schema, true)` (`ARCH-02`)
+/// Validates the input SysML v2 schema via `load_and_validate_schema_typed(schema, true)` (`ARCH-02`)
 /// and emits the 10-pillar STPA safety artifact suite while honoring `dry_run` (`ARCH-04`).
 ///
 /// ## 2. Invariants & Mathematical Properties
@@ -1251,7 +1361,7 @@ fn load_scoring_config(
 /// - Space Complexity: $O(N)$ for synthesized safety artifact strings.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Schema validation, scoring config, or file write errors return `Err((1, String))`.
+/// - Schema validation, scoring config, or file write errors return typed `Err(DriverError)`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-HANDLE-STPA-TRANSPILE]
@@ -1260,12 +1370,11 @@ fn handle_stpa_transpile(
     out_dir: &Path,
     scoring_config_path: Option<&Path>,
     dry_run: bool,
-) -> Result<i32, (i32, String)> {
-    let scoring_config = load_scoring_config(scoring_config_path).map_err(|e| (1, e))?;
-    let (_, pkg, _) = load_and_validate_schema(schema, true).map_err(|e| (1, e))?;
+) -> Result<i32, DriverError> {
+    let scoring_config = load_scoring_config(scoring_config_path)?;
+    let (_, pkg, _) = load_and_validate_schema_typed(schema, true)?;
     if dry_run {
-        let registry_entries =
-            crate::stpa::fmeca::load_failure_mode_registry_for_out_dir(out_dir);
+        let registry_entries = crate::stpa::fmeca::load_failure_mode_registry_for_out_dir(out_dir);
         let _suite = if registry_entries.is_empty() {
             transpile_safety_suite(&pkg, scoring_config.as_ref())
         } else {
@@ -1282,7 +1391,7 @@ fn handle_stpa_transpile(
         return Ok(0);
     }
     emit_safety_suite(&pkg, out_dir, scoring_config.as_ref())
-        .map_err(|e| (1, format!("Error during STPA transpilation: {e}")))?;
+        .map_err(|e| DriverError::Codegen(1, format!("Error during STPA transpilation: {e}")))?;
     println!(
         "[STPA Transpile] Emitted safety artifact suite to '{}'",
         out_dir.display()
@@ -1298,7 +1407,7 @@ fn handle_stpa_transpile(
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Eliminates silent `.ok()` masking on `--schema`: if `schema` is supplied (or default schema
-///   targets exist on disk), loads via `load_and_validate_schema(schema, false)` and fails closed
+///   targets exist on disk), loads via `load_and_validate_schema_typed(schema, false)` and fails closed
 ///   on any directory/read/parse error.
 /// - Persists explicit `--out` targets via `write_atomic` when `dry_run` is `false`.
 ///
@@ -1313,7 +1422,7 @@ fn handle_stpa_transpile(
 /// - Space Complexity: $O(M + N)$ for parsed AST and serialized SysML text.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Missing STPA file, unreadable/corrupt base schema, or atomic write failure returns `Err((1, String))`.
+/// - Missing STPA file, unreadable/corrupt base schema, or atomic write failure returns typed `Err(DriverError)`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-HANDLE-STPA-CONSTRAINTS]
@@ -1322,22 +1431,23 @@ fn handle_stpa_to_constraints(
     schema: Option<PathBuf>,
     out: &Path,
     dry_run: bool,
-) -> Result<i32, (i32, String)> {
+) -> Result<i32, DriverError> {
     if !stpa_file.exists() {
-        return Err((
-            1,
-            format!("Error: STPA file does not exist: {}", stpa_file.display()),
-        ));
+        return Err(DriverError::Resolution(format!(
+            "Error: STPA file does not exist: {}",
+            stpa_file.display()
+        )));
     }
     let content = fs::read_to_string(stpa_file).map_err(|e| {
-        (
-            1,
-            format!("Error reading STPA file '{}': {}", stpa_file.display(), e),
-        )
+        DriverError::Io(format!(
+            "Error reading STPA file '{}': {}",
+            stpa_file.display(),
+            e
+        ))
     })?;
 
-    let base_model = if schema.is_some() || resolve_schema_targets(None).is_ok() {
-        let (_, pkg, _) = load_and_validate_schema(schema, false).map_err(|e| (1, e))?;
+    let base_model = if schema.is_some() || resolve_schema_targets_typed(None).is_ok() {
+        let (_, pkg, _) = load_and_validate_schema_typed(schema, false)?;
         Some(pkg)
     } else {
         None
@@ -1353,10 +1463,7 @@ fn handle_stpa_to_constraints(
 
     if !dry_run && out != Path::new(".pipeline/schema.sysml") {
         write_atomic(out, &sysml_code).map_err(|e| {
-            (
-                1,
-                format!("Error writing SysML to '{}': {}", out.display(), e),
-            )
+            DriverError::Io(format!("Error writing SysML to '{}': {}", out.display(), e))
         })?;
         println!(
             "Successfully compiled STPA constraints to '{}'",
@@ -1371,7 +1478,7 @@ fn handle_stpa_to_constraints(
 /// Executes `--forward-sync` mode (`CommandMode::ForwardSync`).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Validates the input SysML v2 SSOT schema via `load_and_validate_schema(schema, true)` (`ARCH-02`)
+/// Validates the input SysML v2 SSOT schema via `load_and_validate_schema_typed(schema, true)` (`ARCH-02`)
 /// before forward-synchronizing Agile Markdown specifications under DO-178C Level A and DO-330 TQL-4.
 ///
 /// ## 2. Invariants & Mathematical Properties
@@ -1382,14 +1489,14 @@ fn handle_stpa_to_constraints(
 /// - `docs` and optional `out_dir` identify target specification directories.
 ///
 /// ## 4. Postconditions
-/// - Synchronizes Markdown specifications from `pkg` and returns `Ok(0)`, or `Err((1, String))` on error.
+/// - Synchronizes Markdown specifications from `pkg` and returns `Ok(0)`, or `Err(DriverError)` on error.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(N \log N)$ over AST elements and generated specification files.
 /// - Space Complexity: $O(N)$ for in-memory specification buffers.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Schema validation errors, landing-zone guard rejections, or I/O errors return `Err((1, String))`.
+/// - Schema validation errors, landing-zone guard rejections, or I/O errors return typed `Err(DriverError)`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-HANDLE-FORWARD-SYNC]
@@ -1399,8 +1506,8 @@ fn handle_forward_sync(
     out_dir: Option<PathBuf>,
     dry_run: bool,
     force: bool,
-) -> Result<i32, (i32, String)> {
-    let (target, pkg, _) = load_and_validate_schema(schema, true).map_err(|e| (1, e))?;
+) -> Result<i32, DriverError> {
+    let (target, pkg, _) = load_and_validate_schema_typed(schema, true)?;
     let schema_path = match target {
         SchemaTarget::SingleFile(p) => p,
         SchemaTarget::Directory(dir, _) => dir,
@@ -1413,7 +1520,7 @@ fn handle_forward_sync(
         force,
     };
     forward_sync_sysml_to_specs(&pkg, &opts)
-        .map_err(|e| (1, format!("Error during forward sync: {e}")))?;
+        .map_err(|e| DriverError::Codegen(1, format!("Error during forward sync: {e}")))?;
     Ok(0)
 }
 
@@ -1426,7 +1533,7 @@ fn handle_forward_sync(
 /// ## 2. Invariants & Mathematical Properties
 /// - Eliminates silent `unwrap_or_default()` and `.ok()` fallback to a blank `System_SSOT` package
 ///   when an explicit `--schema` is supplied or a default schema exists on disk: any read or parse
-///   error fails closed with `Err((1, ...))` so `.pipeline/schema.sysml` is never clobbered.
+///   error fails closed with `Err(DriverError)` so `.pipeline/schema.sysml` is never clobbered.
 /// - Delegates persistence to `reverse_sync_specs_to_sysml_with_dry_run` to honor `dry_run`.
 ///
 /// ## 3. Preconditions
@@ -1441,7 +1548,7 @@ fn handle_forward_sync(
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Corrupt/unreadable base schemas, missing `docs/` directories, or overwrite guard violations
-///   return `Err((1, String))`.
+///   return typed `Err(DriverError)`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-HANDLE-REVERSE-SYNC]
@@ -1452,9 +1559,9 @@ fn handle_reverse_sync(
     digest: PathBuf,
     force: bool,
     dry_run: bool,
-) -> Result<i32, (i32, String)> {
-    let base_pkg = if schema.is_some() || resolve_schema_targets(None).is_ok() {
-        let (_, pkg, _) = load_and_validate_schema(schema.clone(), false).map_err(|e| (1, e))?;
+) -> Result<i32, DriverError> {
+    let base_pkg = if schema.is_some() || resolve_schema_targets_typed(None).is_ok() {
+        let (_, pkg, _) = load_and_validate_schema_typed(schema.clone(), false)?;
         Some(pkg)
     } else {
         None
@@ -1469,7 +1576,7 @@ fn handle_reverse_sync(
     };
 
     reverse_sync_specs_to_sysml_with_dry_run(base_pkg.as_ref(), &opts, dry_run)
-        .map_err(|e| (1, format!("Error during reverse sync: {e}")))?;
+        .map_err(|e| DriverError::Codegen(1, format!("Error during reverse sync: {e}")))?;
     Ok(0)
 }
 
@@ -1486,7 +1593,7 @@ fn handle_reverse_sync(
 /// - `schema` is an optional input path; `out` and `digest` are output file paths.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(0)` on clean compilation or `Err((1, String))` on failure.
+/// - Returns `Ok(0)` on clean compilation or `Err(DriverError)` on failure.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(N \log N)$ over input schema size.
@@ -1502,7 +1609,7 @@ fn handle_compile(
     out: &Path,
     digest: &Path,
     dry_run: bool,
-) -> Result<i32, (i32, String)> {
+) -> Result<i32, DriverError> {
     run_compilation_gate_with_dry_run(schema, out, digest, dry_run)
 }
 
@@ -1519,18 +1626,18 @@ fn handle_compile(
 /// - `mode` is a pipeline or usage `CommandMode` variant.
 ///
 /// ## 4. Postconditions
-/// - Returns `Result<i32, (i32, String)>` from the matched handler.
+/// - Returns `Result<i32, DriverError>` from the matched handler.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(N \log N)$ bounded by the invoked pipeline handler.
 /// - Space Complexity: $O(N)$.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Propagates handler errors directly as `Err((code, msg))`.
+/// - Propagates handler errors directly as typed `Err(DriverError)`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-DISPATCH-PIPELINE]
-fn dispatch_pipeline_mode(mode: CommandMode) -> Result<i32, (i32, String)> {
+fn dispatch_pipeline_mode(mode: CommandMode) -> Result<i32, DriverError> {
     match mode {
         CommandMode::StpaTranspile {
             schema,
@@ -1569,7 +1676,9 @@ fn dispatch_pipeline_mode(mode: CommandMode) -> Result<i32, (i32, String)> {
             println!("compile-sysml: Specify --compile, --stpa-transpile, --stpa, --forward-sync, --reverse-sync, --inject-safety-docstrings, or --extract-source. Run with --help for usage.");
             Ok(0)
         }
-        _ => Err((1, "Internal error: unexpected command mode".to_string())),
+        _ => Err(DriverError::Cli(
+            "Internal error: unexpected command mode".to_string(),
+        )),
     }
 }
 
@@ -1587,18 +1696,18 @@ fn dispatch_pipeline_mode(mode: CommandMode) -> Result<i32, (i32, String)> {
 /// - `mode` is a codegen, slicing, pipeline, or usage `CommandMode` variant.
 ///
 /// ## 4. Postconditions
-/// - Returns `Result<i32, (i32, String)>` produced by the matched SESE handler.
+/// - Returns `Result<i32, DriverError>` produced by the matched SESE handler.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(N \log N)$ bounded by the invoked codegen or pipeline handler.
 /// - Space Complexity: $O(N)$.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Propagates handler errors directly as `Err((code, msg))` with zero `std::process::exit` calls.
+/// - Propagates handler errors directly as typed `Err(DriverError)` with zero `std::process::exit` calls.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0607], [REQ-COMPILER-SYSML-EXECUTE]
-fn dispatch_codegen_mode(mode: CommandMode) -> Result<i32, (i32, String)> {
+fn dispatch_codegen_mode(mode: CommandMode) -> Result<i32, DriverError> {
     match mode {
         CommandMode::SlicePackage { target_pkg, schema } => {
             handle_slice_package(&target_pkg, schema)
@@ -1617,33 +1726,10 @@ fn dispatch_codegen_mode(mode: CommandMode) -> Result<i32, (i32, String)> {
     }
 }
 
-/// Executes a parsed `Cli` configuration in-process without calling `std::process::exit`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Provides the primary testable library orchestration entrypoint (`ARCH-05`) under DO-178C Level A
-/// and DO-330 TQL-4 Humble Object design rules.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Converts `cli` via `Cli::into_mode()` and dispatches to the corresponding SESE handler ($v(G) \le 6$).
-/// - Never invokes `std::process::exit`, enabling direct in-process unit and integration testing.
-///
-/// ## 3. Preconditions
-/// - `cli` is a populated `Cli` struct.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(exit_code)` on success or `Err((exit_code, error_message))` on failure.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N \log N)$ bounded by the selected pipeline handler.
-/// - Space Complexity: $O(N)$ proportional to AST and output buffer sizes.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Conflicting CLI flags, missing files, validation errors, or I/O failures return `Err((code, msg))`.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-COMPILER-SYSML-EXECUTE], [DO-330-TQL-4-CLI]
-pub fn execute(cli: Cli) -> Result<i32, (i32, String)> {
-    let mode = cli.into_mode().map_err(|e| (1, e))?;
+/// Dispatches a parsed `Cli` configuration to its typed SESE handler returning `Result<i32, DriverError>`.
+/// Realises: [REQ-COMPILER-SYSML-EXECUTE]
+fn dispatch_cli(cli: Cli) -> Result<i32, DriverError> {
+    let mode = cli.into_mode().map_err(DriverError::Cli)?;
     match mode {
         CommandMode::InjectDocstrings {
             target_dir,
@@ -1664,6 +1750,35 @@ pub fn execute(cli: Cli) -> Result<i32, (i32, String)> {
         } => handle_export_mbd(&mbd_dir, schema, dry_run),
         other => dispatch_codegen_mode(other),
     }
+}
+
+/// Executes a parsed `Cli` configuration in-process without calling `std::process::exit`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Provides the primary testable library orchestration entrypoint (`ARCH-05`) under DO-178C Level A
+/// and DO-330 TQL-4 Humble Object design rules.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Converts `cli` via `dispatch_cli` and maps `DriverError` via `From<DriverError>` into `(i32, String)` ($v(G) \le 6$).
+/// - Never invokes `std::process::exit`, enabling direct in-process unit and integration testing.
+///
+/// ## 3. Preconditions
+/// - `cli` is a populated `Cli` struct.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(exit_code)` on success or `Err((exit_code, error_message))` on failure.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N \log N)$ bounded by the selected pipeline handler.
+/// - Space Complexity: $O(N)$ proportional to AST and output buffer sizes.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Conflicting CLI flags, missing files, validation errors, or I/O failures return `Err((code, msg))`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-EXECUTE], [DO-330-TQL-4-CLI]
+pub fn execute(cli: Cli) -> Result<i32, (i32, String)> {
+    dispatch_cli(cli).map_err(<(i32, String)>::from)
 }
 
 /// Executes a parsed `Cli` configuration, emitting any error diagnostic to `stderr` and returning the exit code.
@@ -1812,11 +1927,7 @@ mod tests {
         )?;
 
         let resolved = resolve_schema_targets(Some(temp_ws.clone()));
-        let code = run_compilation_gate(
-            Some(temp_ws.clone()),
-            &pipeline_schema,
-            &pipeline_digest,
-        );
+        let code = run_compilation_gate(Some(temp_ws.clone()), &pipeline_schema, &pipeline_digest);
         let model_exists = schema_dir.join("model.sysml").is_file();
         let _ = fs::remove_dir_all(&temp_ws);
 
@@ -1956,7 +2067,9 @@ mod tests {
             "--schema",
             &invalid_schema.to_string_lossy(),
         ]);
-        let mbd_err = execute(mbd_cli).err().ok_or("ExportMbd must reject cyclic inheritance")?;
+        let mbd_err = execute(mbd_cli)
+            .err()
+            .ok_or("ExportMbd must reject cyclic inheritance")?;
         assert_eq!(mbd_err.0, 1);
         assert!(mbd_err.1.contains("Semantic validation error"));
 
@@ -1967,8 +2080,9 @@ mod tests {
             "--schema",
             &invalid_schema.to_string_lossy(),
         ]);
-        let slice_err =
-            execute(slice_cli).err().ok_or("SlicePackage must reject cyclic inheritance")?;
+        let slice_err = execute(slice_cli)
+            .err()
+            .ok_or("SlicePackage must reject cyclic inheritance")?;
         assert_eq!(slice_err.0, 1);
         assert!(slice_err.1.contains("Semantic validation error"));
 
@@ -1980,8 +2094,9 @@ mod tests {
             "--schema",
             &invalid_schema.to_string_lossy(),
         ]);
-        let flutter_err =
-            execute(flutter_cli).err().ok_or("EmitFlutterContracts must reject cyclic inheritance")?;
+        let flutter_err = execute(flutter_cli)
+            .err()
+            .ok_or("EmitFlutterContracts must reject cyclic inheritance")?;
         let _ = fs::remove_dir_all(&temp_ws);
         assert_eq!(flutter_err.0, 1);
         assert!(flutter_err.1.contains("Semantic validation error"));
@@ -2038,7 +2153,10 @@ mod tests {
             "--dry-run",
         ]);
         assert_eq!(execute_cli(compile_cli), 0);
-        assert!(!compiled_out.exists(), "Compile --dry-run must not write out");
+        assert!(
+            !compiled_out.exists(),
+            "Compile --dry-run must not write out"
+        );
         assert!(
             !compiled_digest.exists(),
             "Compile --dry-run must not write digest"
@@ -2055,7 +2173,10 @@ mod tests {
             "--dry-run",
         ]);
         assert_eq!(execute_cli(mbd_cli), 0);
-        assert!(!mbd_out.exists(), "ExportMbd --dry-run must not create mbd_out");
+        assert!(
+            !mbd_out.exists(),
+            "ExportMbd --dry-run must not create mbd_out"
+        );
 
         // 3. EmitFlutterContracts --dry-run
         let flutter_out = temp_ws.join("flutter_dry");
@@ -2113,6 +2234,129 @@ mod tests {
             !stpa_out.exists(),
             "StpaToConstraints --dry-run must not write stpa_out"
         );
+        Ok(())
+    }
+
+    /// Verifies `DriverError` variants preserve exact exit codes, message projection, `Display`, `Error`, `Deref<Target = str>`, and `From<DriverError> for (i32, String)`.
+    #[test]
+    fn test_driver_error_contract_and_deref() -> Result<(), Box<dyn std::error::Error>> {
+        let cases = [
+            (
+                DriverError::Cli("conflicting flags".to_string()),
+                1,
+                "conflicting flags",
+            ),
+            (
+                DriverError::Resolution("missing schema".to_string()),
+                1,
+                "missing schema",
+            ),
+            (
+                DriverError::Validation("0 structural elements".to_string()),
+                1,
+                "0 structural elements",
+            ),
+            (
+                DriverError::Io("permission denied".to_string()),
+                1,
+                "permission denied",
+            ),
+            (
+                DriverError::Codegen(1, "codegen failed".to_string()),
+                1,
+                "codegen failed",
+            ),
+            (
+                DriverError::Codegen(2, "unforced docstring conflict".to_string()),
+                2,
+                "unforced docstring conflict",
+            ),
+        ];
+
+        for (err, expected_code, expected_msg) in cases {
+            assert_eq!(err.exit_code(), expected_code);
+            assert_eq!(err.message(), expected_msg);
+            assert_eq!(format!("{err}"), expected_msg);
+            assert!(err.contains(expected_msg));
+            let dyn_err: &dyn std::error::Error = &err;
+            assert_eq!(dyn_err.to_string(), expected_msg);
+            let tuple: (i32, String) = err.into();
+            assert_eq!(tuple, (expected_code, expected_msg.to_string()));
+        }
+        Ok(())
+    }
+
+    /// Verifies internal `dispatch_*` and `handle_*` functions produce typed `DriverError` variants across CLI, resolution, validation, I/O, and codegen failure modes.
+    #[test]
+    fn test_internal_dispatch_and_handlers_return_typed_driver_errors(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let temp_ws = unique_temp_dir("driver_error_variants");
+
+        let cli_err = dispatch_pipeline_mode(CommandMode::ExportMbd {
+            mbd_dir: temp_ws.join("mbd"),
+            schema: None,
+            dry_run: true,
+        })
+        .err()
+        .ok_or("expected DriverError::Cli on unexpected pipeline mode")?;
+        assert!(matches!(cli_err, DriverError::Cli(_)));
+        assert_eq!(cli_err.exit_code(), 1);
+        assert!(cli_err.contains("unexpected command mode"));
+
+        let missing_schema = temp_ws.join("does_not_exist.sysml");
+        let res_err = handle_compile(
+            Some(missing_schema),
+            &temp_ws.join("out.sysml"),
+            &temp_ws.join("digest.json"),
+            true,
+        )
+        .err()
+        .ok_or("expected DriverError::Resolution on missing schema")?;
+        assert!(matches!(res_err, DriverError::Resolution(_)));
+        assert_eq!(res_err.exit_code(), 1);
+        assert!(res_err.contains("Schema file does not exist"));
+
+        let empty_pkg_schema = temp_ws.join("empty_pkg.sysml");
+        fs::write(&empty_pkg_schema, "package EmptyPkg {}\n")?;
+        let val_err = handle_compile(
+            Some(empty_pkg_schema),
+            &temp_ws.join("out.sysml"),
+            &temp_ws.join("digest.json"),
+            true,
+        )
+        .err()
+        .ok_or("expected DriverError::Validation on 0-element schema")?;
+        assert!(matches!(val_err, DriverError::Validation(_)));
+        assert_eq!(val_err.exit_code(), 1);
+        assert!(val_err.contains("0 structural elements"));
+
+        let dir_as_stpa_file = temp_ws.join("stpa_dir");
+        fs::create_dir_all(&dir_as_stpa_file)?;
+        let io_err = handle_stpa_to_constraints(
+            &dir_as_stpa_file,
+            None,
+            &temp_ws.join("constraints.sysml"),
+            true,
+        )
+        .err()
+        .ok_or("expected DriverError::Io when reading directory as STPA file")?;
+        assert!(matches!(io_err, DriverError::Io(_)));
+        assert_eq!(io_err.exit_code(), 1);
+        assert!(io_err.contains("Error reading STPA file"));
+
+        let valid_schema = temp_ws.join("valid.sysml");
+        fs::write(
+            &valid_schema,
+            "package ValidPkg {\n    part def UnitA {}\n}\n",
+        )?;
+        let codegen_err = handle_slice_package("UnknownSubsystem", Some(valid_schema))
+            .err()
+            .ok_or("expected DriverError::Codegen on unknown sliced package")?;
+        let _ = fs::remove_dir_all(&temp_ws);
+        assert!(matches!(codegen_err, DriverError::Codegen(1, _)));
+        assert_eq!(codegen_err.exit_code(), 1);
+        assert!(codegen_err.contains("Error slicing package"));
+
         Ok(())
     }
 }
