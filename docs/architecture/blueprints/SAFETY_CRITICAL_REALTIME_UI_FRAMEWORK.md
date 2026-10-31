@@ -226,7 +226,7 @@ DEAP01-spec-core/
 | Crate | Key Modules | Responsibility |
 | :--- | :--- | :--- |
 | **`crates/deap-core`** | `crates/deap-core/src/sysml_ast.rs`, `crates/deap-core/src/rules.rs` | Canonical SysML v2 AST structures (`PartDef`, `PortDef`, `ActionDef`, `StateDef`, `TransitionDef`, `ConstraintDef`, `RequirementDef`, `TestCaseDef`, `FlowDef`, `AttributeDef`) and deterministic workspace traversal rules (`ExcludedDir`). |
-| **`crates/compile-sysml`** | `crates/compile-sysml/src/lib.rs`, `crates/compile-sysml/src/stpa/safety_suite.rs` | Deterministic SysML v2 parser (`parse_sysml`, `SysmlParser`), bidirectional specification synchronization (`forward_sync_sysml_to_specs`, `reverse_sync_specs_to_sysml`), and 10-pillar STPA/FMECA safety suite synthesis (`ProofTemplate`, `emit_safety_suite`, `transpile_safety_suite`). |
+| **`crates/compile-sysml`** | `crates/compile-sysml/src/lib.rs`, `crates/compile-sysml/src/stpa/safety_suite/mod.rs` | Deterministic SysML v2 parser (`parse_sysml`, `SysmlParser`), bidirectional specification synchronization (`forward_sync_sysml_to_specs`, `reverse_sync_specs_to_sysml`), and 10-pillar STPA/FMECA safety suite synthesis (`ProofTemplate`, `emit_safety_suite`, `transpile_safety_suite`). |
 | **`crates/verify-baseline`** | `crates/verify-baseline/src/runner.rs`, `crates/verify-baseline/src/checks/parity_gates.rs` | Sequential fail-closed verification runner (`BaselineOptions`, `has_concrete_specifications`) executing Checks 10 through 36 and semantic diagram-to-AST parity gates (`ParityOutcome`, `DiagramType`). |
 | **`crates/ingest-sysml`** | `crates/ingest-sysml/src/main.rs` | Level 0 structural schema ingestion into normalized SysML v2 AST packages (`./target/release/ingest-sysml`). |
 | **`crates/assemble-conops`** | `crates/assemble-conops/src/main.rs` | Deterministic assembly of Concept of Operations and Tactical Mission Intent units (`./target/release/assemble-conops`). |
@@ -285,7 +285,7 @@ flowchart TD
 ## 8. Verification, Formal Coverage & BDD Acceptance Strategy
 
 ### 8.1 100% Modified Condition/Decision Coverage (MC/DC)
-For safety-critical decision logic modeled in `crates/deap-core/src/sysml_ast.rs` (`ConstraintDef`, `TransitionDef`) and synthesized via `crates/compile-sysml/src/stpa/safety_suite.rs` (`ProofTemplate`), all Boolean expressions in state transitions (e.g., `if (signal_a < threshold_1 && signal_b > threshold_2 && invariant_active)`) undergo formal condition isolation:
+For safety-critical decision logic modeled in `crates/deap-core/src/sysml_ast.rs` (`ConstraintDef`, `TransitionDef`) and synthesized via `crates/compile-sysml/src/stpa/safety_suite/mod.rs` (`ProofTemplate`), all Boolean expressions in state transitions (e.g., `if (signal_a < threshold_1 && signal_b > threshold_2 && invariant_active)`) undergo formal condition isolation:
 - Every condition must be shown to independently affect the decision outcome.
 - Condition trees are statically extracted and verified via native Rust semantic acceptance test harnesses (`crates/verify-baseline/src/runner.rs` and `crates/verify-baseline/src/checks/parity_gates.rs`).
 
