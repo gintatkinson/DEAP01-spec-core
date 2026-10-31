@@ -1,5 +1,9 @@
 //! STPA Safety Artifact Suite Transpiler.
 //!
+//! Safety & Traceability: Realises: [REQ-STPA-SAFETY-SUITE-MODULE]
+//! Contract: Synthesizes the 10-pillar STPA, FMECA, RTA, Hazard Log, and SLDV safety artifact suite deterministically from SysML v2 `PackageDef` AST models using checked slice accessors and saturating arithmetic.
+//! Bounds & Faults: Enforces bounded expression recursion (`MAX_EXPR_DEPTH = 64`), atomic artifact persistence, and non-panicking UTF-8 boundary scanning across all lowering and table-parsing paths.
+//!
 //! Generates the 10-pillar safety artifact suite from SysML v2 AST models:
 //! 1. 01_LOSSES_HAZARDS_TOPOLOGY.md
 //! 2. 02_UCA_COMBINATORIAL_MATRIX.md
@@ -16,15 +20,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
-use deap_core::sysml_ast::{
-    AttributeDef, ConnectionDef, ConstraintDef, PackageDef, PartDef, RequirementDef,
-};
-use crate::semantic::digest::write_atomic;
 use super::fmeca::{
     generate_fmeca_matrix_with_registry, load_failure_mode_registry_for_out_dir, FmecaRow,
     FmecaScoringConfig, RegistryFailureEntry,
 };
 use super::uca::{expand_cartesian_stpa, UnsafeControlAction};
+use crate::semantic::digest::write_atomic;
+use deap_core::sysml_ast::{
+    AttributeDef, ConnectionDef, ConstraintDef, PackageDef, PartDef, RequirementDef,
+};
 
 /// Collects symbolic parameter tokens from package- and part-scoped AST attribute defaults and constraint expressions.
 ///
@@ -214,18 +218,18 @@ fn extract_constraint_tokens(expr: &str, tokens: &mut BTreeMap<String, String>) 
             let before = expr.get(..idx).unwrap_or("");
             let before_trimmed = before.trim_end();
             let id_start = before_trimmed
-                .rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-                .map(|p| p + 1)
-                .unwrap_or(0);
+                .char_indices()
+                .rev()
+                .take_while(|&(_, c)| c.is_ascii_alphanumeric() || c == '_')
+                .last()
+                .map_or(before_trimmed.len(), |(pos, _)| pos);
             let key = before_trimmed.get(id_start..).unwrap_or("");
-            let key_valid = !key.is_empty()
-                && key
-                    .as_bytes()
-                    .first()
-                    .is_some_and(|b| b.is_ascii_alphabetic() || *b == b'_')
-                && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+            let key_valid = key.as_bytes().split_first().is_some_and(|(&first, rest)| {
+                (first.is_ascii_alphabetic() || first == b'_')
+                    && rest.iter().all(|b| b.is_ascii_alphanumeric() || *b == b'_')
+            });
 
-            let after = expr.get(idx + op.len()..).unwrap_or("");
+            let after = tail.strip_prefix(op).unwrap_or("");
             let after_trimmed = after.trim_start();
             let val_len = after_trimmed
                 .find(|c: char| c.is_whitespace() || c == ';')
@@ -236,13 +240,15 @@ fn extract_constraint_tokens(expr: &str, tokens: &mut BTreeMap<String, String>) 
                 tokens
                     .entry(key.to_string())
                     .or_insert_with(|| val.to_string());
-                idx += op.len() + (after.len() - after_trimmed.len()) + val_len;
+                let leading_ws = after.len().saturating_sub(after_trimmed.len());
+                let consumed = op.len().saturating_add(leading_ws).saturating_add(val_len);
+                idx = idx.saturating_add(consumed);
                 continue;
             }
-            idx += op.len();
+            idx = idx.saturating_add(op.len());
         } else {
             let step = tail.chars().next().map_or(1, char::len_utf8);
-            idx += step;
+            idx = idx.saturating_add(step);
         }
     }
 }
@@ -443,15 +449,25 @@ pub fn emit_safety_suite(
     out_dir: &Path,
     scoring_config: Option<&FmecaScoringConfig>,
 ) -> Result<(), String> {
-    fs::create_dir_all(out_dir)
-        .map_err(|e| format!("Failed to create output directory '{}': {}", out_dir.display(), e))?;
+    fs::create_dir_all(out_dir).map_err(|e| {
+        format!(
+            "Failed to create output directory '{}': {}",
+            out_dir.display(),
+            e
+        )
+    })?;
 
     let registry_entries = load_failure_mode_registry_for_out_dir(out_dir);
     let artifacts = transpile_safety_suite_with_registry(pkg, scoring_config, &registry_entries);
     for (filename, content) in artifacts {
         let dest = out_dir.join(&filename);
-        write_atomic(&dest, &content)
-            .map_err(|e| format!("Failed to write safety artifact '{}': {}", dest.display(), e))?;
+        write_atomic(&dest, &content).map_err(|e| {
+            format!(
+                "Failed to write safety artifact '{}': {}",
+                dest.display(),
+                e
+            )
+        })?;
     }
 
     Ok(())
@@ -483,7 +499,6 @@ pub fn emit_safety_suite(
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-STPA-SAFETY-SUITE-SANITIZE-MERMAID-ID] | SysML v2: ActionDef(sanitize_mermaid_id)
-#[allow(dead_code)]
 fn sanitize_mermaid_id(id: &str) -> String {
     let clean: String = id
         .chars()
@@ -575,7 +590,7 @@ fn render_losses_hazards_topology(pkg: &PackageDef, ucas: &[UnsafeControlAction]
         for (i, c_name) in controller_names.iter().enumerate() {
             out.push_str(&format!(
                 "| L-{} | Loss of safe function of {} |\n",
-                i + 1,
+                i.saturating_add(1),
                 c_name
             ));
         }
@@ -586,10 +601,7 @@ fn render_losses_hazards_topology(pkg: &PackageDef, ucas: &[UnsafeControlAction]
     let default_proc = format!("{}_Process", base_pkg);
     let default_sens = format!("{}_Sensors", base_pkg);
 
-    let primary_controller = controller_names
-        .first()
-        .cloned()
-        .unwrap_or(default_ctrl);
+    let primary_controller = controller_names.first().cloned().unwrap_or(default_ctrl);
 
     let actuator_name = non_internal_parts
         .get(1)
@@ -832,15 +844,22 @@ struct LossScenarioPkgScope<'a> {
     base_pkg: &'a str,
 }
 
+/// Returns a cycled element reference from `slice` at `idx` using checked remainder and `.get()`.
+/// Realises: [REQ-STPA-SAFETY-SUITE-RESOLVE-LOSS-ANCHORS]
+fn get_cycled<T>(slice: &[T], idx: usize) -> Option<&T> {
+    let rem = idx.checked_rem(slice.len())?;
+    slice.get(rem)
+}
+
 /// Cycles across AST `ports`, `states`, `attributes`, `connections`, and `constraints`/`requirements`
 /// for index `idx` to ground Class-1 and Class-2 STPA loss scenarios.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C full `[0..]`
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C full
 /// AST member coverage objectives for fn `resolve_loss_scenario_anchors` in `crates/compile-sysml/src/stpa/safety_suite.rs` (refs #697).
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Indexes every non-empty slice via `.get(idx % slice.len())` (and `.get((idx + 1) % ports.len())`
+/// - Indexes every non-empty slice via `get_cycled(slice, idx)` (and `get_cycled(&p.ports, idx.saturating_add(1))`
 ///   for secondary port path anchors) so multi-port and multi-state `PartDef` declarations are
 ///   exhaustively exercised across the loss scenario matrix.
 ///
@@ -857,7 +876,7 @@ struct LossScenarioPkgScope<'a> {
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Handles `part == None` and empty AST collections cleanly.
 /// - State: Pure read-only AST inspection.
-/// - Action: Guards all modulo operations behind `!slice.is_empty()` and `.get(...)`.
+/// - Action: Guards all remainder operations via `checked_rem` and `.get(...)` inside `get_cycled`.
 /// - Resource: Bounded short-lived allocations.
 ///
 /// ## 7. Realization & Traceability
@@ -870,15 +889,10 @@ fn resolve_loss_scenario_anchors(
 ) -> LossScenarioAnchors {
     let (ingress_port, path_port) = match part.filter(|p| !p.ports.is_empty()) {
         Some(p) => {
-            let len = p.ports.len();
-            let first = p
-                .ports
-                .get(idx % len)
+            let first = get_cycled(&p.ports, idx)
                 .map(|port| format!("port {}", sanitize_markdown_cell(&port.name)))
                 .unwrap_or_else(|| "controller input boundary".to_string());
-            let second = p
-                .ports
-                .get(idx.saturating_add(1) % len)
+            let second = get_cycled(&p.ports, idx.saturating_add(1))
                 .map(|port| format!("port {}", sanitize_markdown_cell(&port.name)))
                 .unwrap_or_else(|| "actuation output channel".to_string());
             (first, second)
@@ -890,22 +904,14 @@ fn resolve_loss_scenario_anchors(
     };
 
     let state = part
-        .filter(|p| !p.states.is_empty())
-        .and_then(|p| p.states.get(idx % p.states.len()))
+        .and_then(|p| get_cycled(&p.states, idx))
         .map(|st| format!("state {}", sanitize_markdown_cell(&st.name)))
         .unwrap_or_else(|| "active operational mode".to_string());
 
-    let attribute = if let Some(a) = part
-        .filter(|p| !p.attributes.is_empty())
-        .and_then(|p| p.attributes.get(idx % p.attributes.len()))
-    {
+    let attribute = if let Some(a) = part.and_then(|p| get_cycled(&p.attributes, idx)) {
         format_attribute_anchor(a)
-    } else if !scope.pkg_attrs.is_empty() {
-        scope
-            .pkg_attrs
-            .get(idx % scope.pkg_attrs.len())
-            .map(format_attribute_anchor)
-            .unwrap_or_else(|| "process-model state variable".to_string())
+    } else if let Some(a) = get_cycled(scope.pkg_attrs, idx) {
+        format_attribute_anchor(a)
     } else {
         "process-model state variable".to_string()
     };
@@ -919,31 +925,20 @@ fn resolve_loss_scenario_anchors(
         })
         .collect();
 
-    let connection = if !incident_conns.is_empty() {
-        incident_conns
-            .get(idx % incident_conns.len())
-            .map(|c| {
-                let proto = c.protocol.as_deref().unwrap_or(c.name.as_str());
-                format!(
-                    "connection {} ({})",
-                    sanitize_markdown_cell(&c.name),
-                    sanitize_markdown_cell(proto)
-                )
-            })
-            .unwrap_or_else(|| format!("{} interface {}", sanitize_markdown_cell(controller_name), path_port))
-    } else if !scope.connections.is_empty() {
-        scope
-            .connections
-            .get(idx % scope.connections.len())
-            .map(|c| {
-                let proto = c.protocol.as_deref().unwrap_or(c.name.as_str());
-                format!(
-                    "connection {} ({})",
-                    sanitize_markdown_cell(&c.name),
-                    sanitize_markdown_cell(proto)
-                )
-            })
-            .unwrap_or_else(|| format!("{} interface {}", sanitize_markdown_cell(controller_name), path_port))
+    let connection = if let Some(c) = get_cycled(&incident_conns, idx) {
+        let proto = c.protocol.as_deref().unwrap_or(c.name.as_str());
+        format!(
+            "connection {} ({})",
+            sanitize_markdown_cell(&c.name),
+            sanitize_markdown_cell(proto)
+        )
+    } else if let Some(c) = get_cycled(scope.connections, idx) {
+        let proto = c.protocol.as_deref().unwrap_or(c.name.as_str());
+        format!(
+            "connection {} ({})",
+            sanitize_markdown_cell(&c.name),
+            sanitize_markdown_cell(proto)
+        )
     } else {
         format!(
             "{} interface {}",
@@ -960,37 +955,26 @@ fn resolve_loss_scenario_anchors(
         &[]
     };
 
-    let guard = if !active_constraints.is_empty() {
-        active_constraints
-            .get(idx % active_constraints.len())
-            .map(|c| {
-                if c.expression.trim().is_empty() {
-                    format!("ConstraintDef {}", sanitize_markdown_cell(&c.name))
-                } else {
-                    format!(
-                        "ConstraintDef {} ({})",
-                        sanitize_markdown_cell(&c.name),
-                        sanitize_markdown_cell(&c.expression)
-                    )
-                }
-            })
-            .unwrap_or_else(|| format!("{} operational invariant", sanitize_markdown_cell(scope.base_pkg)))
-    } else if !scope.reqs.is_empty() {
-        scope
-            .reqs
-            .get(idx % scope.reqs.len())
-            .map(|r| {
-                if r.req_id.trim().is_empty() {
-                    format!("RequirementDef {}", sanitize_markdown_cell(&r.name))
-                } else {
-                    format!(
-                        "RequirementDef {} ({})",
-                        sanitize_markdown_cell(&r.name),
-                        sanitize_markdown_cell(&r.req_id)
-                    )
-                }
-            })
-            .unwrap_or_else(|| format!("{} operational invariant", sanitize_markdown_cell(scope.base_pkg)))
+    let guard = if let Some(c) = get_cycled(active_constraints, idx) {
+        if c.expression.trim().is_empty() {
+            format!("ConstraintDef {}", sanitize_markdown_cell(&c.name))
+        } else {
+            format!(
+                "ConstraintDef {} ({})",
+                sanitize_markdown_cell(&c.name),
+                sanitize_markdown_cell(&c.expression)
+            )
+        }
+    } else if let Some(r) = get_cycled(scope.reqs, idx) {
+        if r.req_id.trim().is_empty() {
+            format!("RequirementDef {}", sanitize_markdown_cell(&r.name))
+        } else {
+            format!(
+                "RequirementDef {} ({})",
+                sanitize_markdown_cell(&r.name),
+                sanitize_markdown_cell(&r.req_id)
+            )
+        }
     } else {
         format!(
             "{} operational invariant",
@@ -1127,20 +1111,8 @@ fn render_loss_scenarios(
         let part = all_parts
             .iter()
             .find(|p| p.name == u.controller)
-            .or_else(|| {
-                if non_internal_parts.is_empty() {
-                    None
-                } else {
-                    non_internal_parts.get(i % non_internal_parts.len()).copied()
-                }
-            })
-            .or_else(|| {
-                if all_parts.is_empty() {
-                    None
-                } else {
-                    all_parts.get(i % all_parts.len())
-                }
-            });
+            .or_else(|| get_cycled(&non_internal_parts, i).copied())
+            .or_else(|| get_cycled(&all_parts, i));
 
         let anchors = resolve_loss_scenario_anchors(i, &u.controller, part, &scope);
 
@@ -1377,7 +1349,9 @@ fn render_safety_constraints(
                     .map(str::trim)
                     .filter(|s| !s.is_empty())
                     .map(sanitize_markdown_cell)
-                    .unwrap_or_else(|| format!("{} == true (Derived: AST ConstraintDef)", clean_name))
+                    .unwrap_or_else(|| {
+                        format!("{} == true (Derived: AST ConstraintDef)", clean_name)
+                    })
             } else {
                 sanitize_markdown_cell(&c.expression)
             };
@@ -1625,7 +1599,10 @@ fn render_regulatory_objectives_assessment(
         pkg.name.trim()
     };
     let all_parts = pkg.get_all_parts();
-    let part_count = all_parts.iter().filter(|p| !p.name.starts_with('_')).count();
+    let part_count = all_parts
+        .iter()
+        .filter(|p| !p.name.starts_with('_'))
+        .count();
     let all_constraints = pkg.get_all_constraints();
     let all_calcs = pkg.get_all_calcs();
 
@@ -1652,10 +1629,7 @@ fn render_regulatory_objectives_assessment(
                 classification_rows.push((clean_field, sanitize_markdown_cell(val)));
             }
         } else if key == "RegulatoryClass" {
-            classification_rows.push((
-                "Regulatory Class".to_string(),
-                sanitize_markdown_cell(val),
-            ));
+            classification_rows.push(("Regulatory Class".to_string(), sanitize_markdown_cell(val)));
         } else if let Some(raw_field) = key.strip_prefix("IntegrityLevel_") {
             let formatted = raw_field.replace('_', " ");
             let clean_field = sanitize_markdown_cell(&formatted);
@@ -1669,10 +1643,7 @@ fn render_regulatory_objectives_assessment(
             if primary_integrity.is_none() {
                 primary_integrity = Some(val.as_str());
             }
-            classification_rows.push((
-                "Integrity Level".to_string(),
-                sanitize_markdown_cell(val),
-            ));
+            classification_rows.push(("Integrity Level".to_string(), sanitize_markdown_cell(val)));
         }
     }
 
@@ -1733,7 +1704,12 @@ fn render_regulatory_objectives_assessment(
             let evi = tokens
                 .get(&format!("{}_Evidence", key_stem))
                 .map(|s| sanitize_markdown_cell(s))
-                .unwrap_or_else(|| format!("AttributeDef({}_Objective)", sanitize_markdown_cell(key_stem)));
+                .unwrap_or_else(|| {
+                    format!(
+                        "AttributeDef({}_Objective)",
+                        sanitize_markdown_cell(key_stem)
+                    )
+                });
 
             rows_by_idx.insert(
                 idx,
@@ -1765,7 +1741,7 @@ fn render_regulatory_objectives_assessment(
                 continue;
             }
             while rows_by_idx.contains_key(&next_free_idx) {
-                next_free_idx += 1;
+                next_free_idx = next_free_idx.saturating_add(1);
             }
             let obj_text = req
                 .doc
@@ -1773,7 +1749,9 @@ fn render_regulatory_objectives_assessment(
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .map(sanitize_markdown_cell)
-                .unwrap_or_else(|| format!("Satisfy requirement {}", sanitize_markdown_cell(&req.name)));
+                .unwrap_or_else(|| {
+                    format!("Satisfy requirement {}", sanitize_markdown_cell(&req.name))
+                });
             rows_by_idx.insert(
                 next_free_idx,
                 RegulatoryObjectiveRow {
@@ -1785,7 +1763,7 @@ fn render_regulatory_objectives_assessment(
                     evidence: citation,
                 },
             );
-            next_free_idx += 1;
+            next_free_idx = next_free_idx.saturating_add(1);
         }
     }
 
@@ -1798,7 +1776,7 @@ fn render_regulatory_objectives_assessment(
             continue;
         }
         while rows_by_idx.contains_key(&next_free_idx) {
-            next_free_idx += 1;
+            next_free_idx = next_free_idx.saturating_add(1);
         }
         let obj_text = if con.expression.trim().is_empty() {
             format!("Enforce constraint {}", sanitize_markdown_cell(&con.name))
@@ -1820,7 +1798,7 @@ fn render_regulatory_objectives_assessment(
                 evidence: citation,
             },
         );
-        next_free_idx += 1;
+        next_free_idx = next_free_idx.saturating_add(1);
     }
 
     for calc in &all_calcs {
@@ -1832,15 +1810,23 @@ fn render_regulatory_objectives_assessment(
             continue;
         }
         while rows_by_idx.contains_key(&next_free_idx) {
-            next_free_idx += 1;
+            next_free_idx = next_free_idx.saturating_add(1);
         }
-        let obj_text = match calc.expression.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        let obj_text = match calc
+            .expression
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             Some(expr) => format!(
                 "Evaluate calculation {}: {}",
                 sanitize_markdown_cell(&calc.name),
                 sanitize_markdown_cell(expr)
             ),
-            None => format!("Evaluate calculation {}", sanitize_markdown_cell(&calc.name)),
+            None => format!(
+                "Evaluate calculation {}",
+                sanitize_markdown_cell(&calc.name)
+            ),
         };
         rows_by_idx.insert(
             next_free_idx,
@@ -1853,7 +1839,7 @@ fn render_regulatory_objectives_assessment(
                 evidence: citation,
             },
         );
-        next_free_idx += 1;
+        next_free_idx = next_free_idx.saturating_add(1);
     }
 
     out.push_str("## Declared Regulatory Safety Objectives\n\n");
@@ -1863,7 +1849,9 @@ fn render_regulatory_objectives_assessment(
             sanitize_markdown_cell(base_pkg)
         ));
     } else {
-        out.push_str("| Objective ID | Objective | Robustness | Integrity | Assurance Level | Evidence |\n");
+        out.push_str(
+            "| Objective ID | Objective | Robustness | Integrity | Assurance Level | Evidence |\n",
+        );
         out.push_str("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
         for row in rows_by_idx.values() {
             out.push_str(&format!(
@@ -1979,7 +1967,7 @@ fn render_rta_architecture(pkg: &PackageDef, tokens: &BTreeMap<String, String>) 
 
     if !all_calcs.is_empty() || !all_constraints.is_empty() {
         for (idx, calc) in all_calcs.iter().enumerate() {
-            let tid = format!("T-{:02}", idx + 1);
+            let tid = format!("T-{:02}", idx.saturating_add(1));
             let raw_expr = calc
                 .expression
                 .as_deref()
@@ -2048,7 +2036,7 @@ fn render_rta_architecture(pkg: &PackageDef, tokens: &BTreeMap<String, String>) 
 
         let offset = all_calcs.len();
         for (idx, c) in all_constraints.iter().enumerate() {
-            let tid = format!("T-{:02}", offset + idx + 1);
+            let tid = format!("T-{:02}", offset.saturating_add(idx).saturating_add(1));
             let trimmed_constraint = c
                 .expression
                 .trim_matches(|ch: char| ch.is_whitespace() || ch == ';');
@@ -2170,7 +2158,9 @@ pub fn render_unified_stpa_matrix(
 
     // Pillar 1, 2, 3: System Losses, System Hazards, and Hierarchical Control Structure Topology
     let losses_hazards_top = render_losses_hazards_topology(pkg, ucas);
-    let body_123 = if let Some(stripped) = losses_hazards_top.strip_prefix("# System Losses, Hazards & Control Structure Topology\n\n") {
+    let body_123 = if let Some(stripped) =
+        losses_hazards_top.strip_prefix("# System Losses, Hazards & Control Structure Topology\n\n")
+    {
         stripped
     } else {
         &losses_hazards_top
@@ -2180,13 +2170,17 @@ pub fn render_unified_stpa_matrix(
 
     // Pillar 4: Unsafe Control Actions (UCA-1..N)
     out.push_str("## 4. Unsafe Control Actions (**UCA-1..N**)\n\n");
-    out.push_str("Systematic identification across the 4 STPA guide word / failure mode categories:\n\n");
+    out.push_str(
+        "Systematic identification across the 4 STPA guide word / failure mode categories:\n\n",
+    );
     out.push_str("1. **Not providing causes hazard**\n");
     out.push_str("2. **Providing causes hazard**\n");
     out.push_str("3. **Too early, too late, or out of order**\n");
     out.push_str("4. **Stopped too soon or applied too long**\n\n");
     let uca_doc = render_uca_matrix(ucas);
-    let uca_body = if let Some(stripped) = uca_doc.strip_prefix("# Unsafe Control Action Combinatorial Matrix\n\n") {
+    let uca_body = if let Some(stripped) =
+        uca_doc.strip_prefix("# Unsafe Control Action Combinatorial Matrix\n\n")
+    {
         stripped
     } else {
         &uca_doc
@@ -2197,11 +2191,12 @@ pub fn render_unified_stpa_matrix(
     // Pillar 5: Loss Scenarios (LS-1..N) & Causal Factors
     out.push_str("## 5. Loss Scenarios (**LS-1..N**) & Causal Factors\n\n");
     let ls_doc = render_loss_scenarios(pkg, ucas, constraints);
-    let ls_body = if let Some(stripped) = ls_doc.strip_prefix("# Loss Scenarios & Causal Factors\n\n") {
-        stripped
-    } else {
-        &ls_doc
-    };
+    let ls_body =
+        if let Some(stripped) = ls_doc.strip_prefix("# Loss Scenarios & Causal Factors\n\n") {
+            stripped
+        } else {
+            &ls_doc
+        };
     out.push_str(ls_body);
     out.push_str("\n\n---\n\n");
 
@@ -2220,18 +2215,21 @@ pub fn render_unified_stpa_matrix(
     // Pillar 7: FMECA Criticality Matrix
     out.push_str("## 7. FMECA Criticality Matrix\n\n");
     let fmeca_doc = render_fmeca_matrix_doc(fmeca_rows);
-    let fmeca_body = if let Some(stripped) = fmeca_doc.strip_prefix("# FMECA Criticality Matrix\n\n") {
-        stripped
-    } else {
-        &fmeca_doc
-    };
+    let fmeca_body =
+        if let Some(stripped) = fmeca_doc.strip_prefix("# FMECA Criticality Matrix\n\n") {
+            stripped
+        } else {
+            &fmeca_doc
+        };
     out.push_str(fmeca_body);
     out.push_str("\n\n---\n\n");
 
     // Pillar 8: Domain Regulatory Objectives & Integrity Level Mapping
     out.push_str("## 8. Domain Regulatory Objectives & Integrity Level Mapping\n\n");
     let reg_doc = render_regulatory_objectives_assessment(pkg, tokens);
-    let reg_body = if let Some(stripped) = reg_doc.strip_prefix("# Domain Regulatory Objectives Assessment & Safety Objective Roster\n\n") {
+    let reg_body = if let Some(stripped) = reg_doc
+        .strip_prefix("# Domain Regulatory Objectives Assessment & Safety Objective Roster\n\n")
+    {
         stripped
     } else {
         &reg_doc
@@ -2240,9 +2238,13 @@ pub fn render_unified_stpa_matrix(
     out.push_str("\n\n---\n\n");
 
     // ASTM F3269-17 RTA Architecture & Toolchain Proof Hooks
-    out.push_str("## 9. ASTM F3269-17 Run-Time Assurance (RTA) Architecture & Toolchain Proof Hooks\n\n");
+    out.push_str(
+        "## 9. ASTM F3269-17 Run-Time Assurance (RTA) Architecture & Toolchain Proof Hooks\n\n",
+    );
     let rta_doc = render_rta_architecture(pkg, tokens);
-    let rta_body = if let Some(stripped) = rta_doc.strip_prefix("# Run-Time Assurance Architecture & Formal Proof Suite\n\n") {
+    let rta_body = if let Some(stripped) =
+        rta_doc.strip_prefix("# Run-Time Assurance Architecture & Formal Proof Suite\n\n")
+    {
         stripped
     } else {
         &rta_doc
@@ -2292,13 +2294,7 @@ fn render_stpa_matrix(ucas: &[UnsafeControlAction]) -> String {
         };
         out.push_str(&format!(
             "| {} | {} | {} | {} | {} | {} | {} |\n",
-            u.id,
-            u.controller,
-            u.control_action,
-            u.guide_word,
-            u.hazard,
-            u.constraint,
-            status
+            u.id, u.controller, u.control_action, u.guide_word, u.hazard, u.constraint, status
         ));
     }
     out.push('\n');
@@ -2390,7 +2386,7 @@ fn render_hazard_log(
     for (i, src) in loss_sources.iter().enumerate() {
         out.push_str(&format!(
             "| L-{} | Loss | {} | Open | Loss of safe functional integrity of {} (AST Derived) |\n",
-            i + 1,
+            i.saturating_add(1),
             src,
             src
         ));
@@ -2404,14 +2400,9 @@ fn render_hazard_log(
                 sanitize_markdown_cell(&u.controller),
                 sanitize_markdown_cell(&u.control_action)
             );
-            let guard_suffix = if constraints.is_empty() {
-                String::new()
-            } else {
-                constraints
-                    .get(idx % constraints.len())
-                    .map(|c| format!("; guard {}", sanitize_markdown_cell(&c.name)))
-                    .unwrap_or_default()
-            };
+            let guard_suffix = get_cycled(constraints, idx)
+                .map(|c| format!("; guard {}", sanitize_markdown_cell(&c.name)))
+                .unwrap_or_default();
             let notes = format!(
                 "Enforced by {} ({}){}",
                 sanitize_markdown_cell(&u.constraint),
@@ -2452,16 +2443,21 @@ fn render_hazard_log(
         ));
     }
 
-    let authority = ["ResolutionAuthority", "SafetyAuthority", "ApprovalAuthority", "Authority"]
-        .iter()
-        .find_map(|key| find_token_ci(tokens, key))
-        .map(sanitize_markdown_cell)
-        .unwrap_or_else(|| {
-            format!(
-                "{} Safety Governance Authority (Derived)",
-                sanitize_markdown_cell(base_pkg)
-            )
-        });
+    let authority = [
+        "ResolutionAuthority",
+        "SafetyAuthority",
+        "ApprovalAuthority",
+        "Authority",
+    ]
+    .iter()
+    .find_map(|key| find_token_ci(tokens, key))
+    .map(sanitize_markdown_cell)
+    .unwrap_or_else(|| {
+        format!(
+            "{} Safety Governance Authority (Derived)",
+            sanitize_markdown_cell(base_pkg)
+        )
+    });
 
     out.push_str(&format!("\n| Resolution Authority | {} |\n\n", authority));
     out
@@ -2529,7 +2525,7 @@ fn render_sldv_script(pkg: &PackageDef, constraints: &[ConstraintDef]) -> String
 
     out.push_str("\n% Theorem proof bindings\n");
     for (idx, calc) in all_calcs.iter().enumerate() {
-        let thm_id = format!("THM-{:03}", idx + 1);
+        let thm_id = format!("THM-{:03}", idx.saturating_add(1));
         let expr = calc
             .expression
             .as_deref()
@@ -2814,10 +2810,10 @@ fn tokenize_sysml_expr(expr: &str) -> Vec<SysmlToken> {
         }
 
         if ch.is_alphabetic() || ch == '_' {
-            let mut end = start + ch.len_utf8();
+            let mut end = start.saturating_add(ch.len_utf8());
             while let Some(&(next_idx, next_ch)) = chars.peek() {
                 if next_ch.is_alphanumeric() || next_ch == '_' {
-                    end = next_idx + next_ch.len_utf8();
+                    end = next_idx.saturating_add(next_ch.len_utf8());
                     let _ = chars.next();
                 } else {
                     break;
@@ -4147,7 +4143,9 @@ mod expr_lowering_tests {
         let complex = "x >= 0 -> max_val(a.b_1, arr[0]) ** 2 != 0 & ~flag | mode = \"ok's_100%\"";
         let katex = lower_sysml_expr_to_katex(complex);
         assert!(katex.contains("x \\ge 0 \\implies"));
-        assert!(katex.contains("\\mathrm{max\\_val}(a.\\mathrm{b\\_1}, \\mathrm{arr}[0])^{2} \\neq 0"));
+        assert!(
+            katex.contains("\\mathrm{max\\_val}(a.\\mathrm{b\\_1}, \\mathrm{arr}[0])^{2} \\neq 0")
+        );
         assert!(katex.contains("\\land \\lnot \\mathrm{flag}"));
         assert!(katex.contains("\\text{\"ok's\\_100\\%\"}"));
 
@@ -4272,38 +4270,37 @@ pub fn compile_stpa_to_constraints_filtered(
             continue;
         }
         let cols: Vec<&str> = trimmed.split('|').map(|s| s.trim()).collect();
-        if let &[_, uca_id, _controller, action, guide_word, _, _, sc_col, ..] = cols.as_slice() {
-            if !uca_id
-                .strip_prefix("UCA-")
-                .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
-            {
-                continue;
-            }
-            let sc_id = if let Some(pos) = sc_col.find("SC-") {
-                let rest = sc_col.get(pos + 3..).unwrap_or("");
-                let digit_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
-                if digit_len > 0 {
-                    sc_col.get(pos..pos + 3 + digit_len).unwrap_or("")
-                } else {
-                    ""
-                }
-            } else {
-                ""
-            };
+        let (Some(&uca_id), Some(&action), Some(&guide_word), Some(&sc_col)) =
+            (cols.get(1), cols.get(3), cols.get(4), cols.get(7))
+        else {
+            continue;
+        };
+        if !uca_id
+            .strip_prefix("UCA-")
+            .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
+        {
+            continue;
+        }
+        let Some(sc_id) = extract_sc_id_token(sc_col) else {
+            continue;
+        };
 
-            if !sc_id.is_empty() && !action.is_empty() {
-                let constraint_name = format!("{}_{}", sc_id.replace('-', "_"), action.replace(' ', "_"));
-                let doc = format!("{}: {} shall not violate safety under {} (ref {})", sc_id, action, guide_word, uca_id);
-                let expression = format!("{}SafeState == true", action.replace(' ', ""));
+        if !action.is_empty() {
+            let constraint_name =
+                format!("{}_{}", sc_id.replace('-', "_"), action.replace(' ', "_"));
+            let doc = format!(
+                "{}: {} shall not violate safety under {} (ref {})",
+                sc_id, action, guide_word, uca_id
+            );
+            let expression = format!("{}SafeState == true", action.replace(' ', ""));
 
-                pkg.constraint_defs.push(ConstraintDef {
-                    name: constraint_name,
-                    doc: Some(doc),
-                    expression,
-                    is_assertion: true,
-                    ..Default::default()
-                });
-            }
+            pkg.constraint_defs.push(ConstraintDef {
+                name: constraint_name,
+                doc: Some(doc),
+                expression,
+                is_assertion: true,
+                ..Default::default()
+            });
         }
     }
 
@@ -4314,57 +4311,94 @@ pub fn compile_stpa_to_constraints_filtered(
             continue;
         }
         let cols: Vec<&str> = trimmed.split('|').map(|s| s.trim()).collect();
-        if let &[_, fmeca_id, component, failure_mode, _, ..] = cols.as_slice() {
-            if !fmeca_id
-                .strip_prefix("FMECA-")
-                .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
-            {
+        let (Some(&fmeca_id), Some(&component), Some(&failure_mode), Some(_)) =
+            (cols.get(1), cols.get(2), cols.get(3), cols.get(4))
+        else {
+            continue;
+        };
+        if !fmeca_id
+            .strip_prefix("FMECA-")
+            .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
+        {
+            continue;
+        }
+
+        if !component.is_empty() && !failure_mode.is_empty() {
+            let comp_clean = component.trim_matches(|c| c == '`' || c == '*').trim();
+
+            let comp_alnum: String = comp_clean
+                .chars()
+                .filter(|c| c.is_alphanumeric())
+                .collect::<String>()
+                .to_ascii_lowercase();
+
+            // If negative AST constraints negate the component, forbid synthesis
+            if negated_components.iter().any(|neg| {
+                comp_alnum.contains(neg.as_str())
+                    || deap_core::sysml_ast::component_matches(comp_clean, neg)
+            }) {
                 continue;
             }
 
-            if !component.is_empty() && !failure_mode.is_empty() {
-                let comp_clean = component.trim_matches(|c| c == '`' || c == '*').trim();
-
-                let comp_alnum: String = comp_clean
-                    .chars()
-                    .filter(|c| c.is_alphanumeric())
-                    .collect::<String>()
-                    .to_ascii_lowercase();
-
-                // If negative AST constraints negate the component, forbid synthesis
-                if negated_components.iter().any(|neg| {
-                    comp_alnum.contains(neg.as_str()) || deap_core::sysml_ast::component_matches(comp_clean, neg)
-                }) {
+            // If valid parts are provided or derived from model, verify component existence in AST
+            if let Some(parts) = valid_parts {
+                if !parts
+                    .iter()
+                    .any(|p| deap_core::sysml_ast::component_matches(comp_clean, p))
+                {
                     continue;
                 }
-
-                // If valid parts are provided or derived from model, verify component existence in AST
-                if let Some(parts) = valid_parts {
-                    if !parts.iter().any(|p| deap_core::sysml_ast::component_matches(comp_clean, p)) {
-                        continue;
-                    }
-                } else if let Some(ref parts) = model_part_set {
-                    if !parts.iter().any(|p| deap_core::sysml_ast::component_matches(comp_clean, p)) {
-                        continue;
-                    }
+            } else if let Some(ref parts) = model_part_set {
+                if !parts
+                    .iter()
+                    .any(|p| deap_core::sysml_ast::component_matches(comp_clean, p))
+                {
+                    continue;
                 }
-
-                let constraint_name = format!("{}_{}_Integrity", fmeca_id.replace('-', "_"), comp_clean.replace(' ', "_"));
-                let doc = format!("{}: {} shall mitigate {}", fmeca_id, comp_clean, failure_mode);
-                let expression = format!("{}HealthStatus >= 1", comp_clean.replace(' ', ""));
-
-                pkg.constraint_defs.push(ConstraintDef {
-                    name: constraint_name,
-                    doc: Some(doc),
-                    expression,
-                    is_assertion: false,
-                    ..Default::default()
-                });
             }
+
+            let constraint_name = format!(
+                "{}_{}_Integrity",
+                fmeca_id.replace('-', "_"),
+                comp_clean.replace(' ', "_")
+            );
+            let doc = format!(
+                "{}: {} shall mitigate {}",
+                fmeca_id, comp_clean, failure_mode
+            );
+            let expression = format!("{}HealthStatus >= 1", comp_clean.replace(' ', ""));
+
+            pkg.constraint_defs.push(ConstraintDef {
+                name: constraint_name,
+                doc: Some(doc),
+                expression,
+                is_assertion: false,
+                ..Default::default()
+            });
         }
     }
 
     pkg
+}
+
+/// Extracts the first `SC-<digits>` safety constraint identifier from a table cell using `.strip_prefix()` and `.get()`.
+/// Realises: [REQ-STPA-SAFETY-SUITE-COMPILE-STPA-TO-CONSTRAINTS-FILTERED]
+fn extract_sc_id_token(sc_col: &str) -> Option<&str> {
+    let mut remaining = sc_col;
+    while let Some(pos) = remaining.find("SC-") {
+        let candidate = remaining.get(pos..)?;
+        let after_prefix = candidate.strip_prefix("SC-")?;
+        let digit_len = after_prefix
+            .as_bytes()
+            .iter()
+            .take_while(|b| b.is_ascii_digit())
+            .count();
+        if digit_len > 0 {
+            return candidate.get(..3usize.saturating_add(digit_len));
+        }
+        remaining = after_prefix;
+    }
+    None
 }
 
 #[cfg(test)]
@@ -4402,7 +4436,8 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-STPA-SAFETY-SUITE-TEST-ALL-10-ARTIFACTS] | SysML v2: VerificationCaseDef(test_transpile_safety_suite_produces_all_10_artifacts)
     #[test]
-    fn test_transpile_safety_suite_produces_all_10_artifacts() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_transpile_safety_suite_produces_all_10_artifacts(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut pkg = PackageDef {
             name: "TestSystem".to_string(),
             ..Default::default()
@@ -4439,17 +4474,25 @@ mod tests {
         assert!(suite.contains_key("SLDV_FORMAL_PROOFS.m"));
 
         // Verify RTA architecture contains KaTeX aligned math from AST ConstraintDef
-        let rta = suite.get("07_RTA_ARCHITECTURE.md").ok_or("expected value is absent")?;
+        let rta = suite
+            .get("07_RTA_ARCHITECTURE.md")
+            .ok_or("expected value is absent")?;
         assert!(rta.contains("$$\n\\begin{aligned}"));
         assert!(rta.contains("\\end{aligned}\n$$"));
         assert!(rta.contains("ExecutionDeadlineBound"));
 
         // Verify closed-loop STPA control structure topology
-        let topo = suite.get("01_LOSSES_HAZARDS_TOPOLOGY.md").ok_or("expected value is absent")?;
+        let topo = suite
+            .get("01_LOSSES_HAZARDS_TOPOLOGY.md")
+            .ok_or("expected value is absent")?;
         assert!(topo.contains("subgraph \"Hierarchical Safety Control Structure\""));
-        assert!(topo.contains("CompilerController[\"PrimaryController<br/>(Supervisory Controller)\"]"));
+        assert!(
+            topo.contains("CompilerController[\"PrimaryController<br/>(Supervisory Controller)\"]")
+        );
         assert!(topo.contains("ActuatorEngine[\"TestSystem_Actuator<br/>(Actuator Engine)\"]"));
-        assert!(topo.contains("ControlledProcess[\"TestSystem_Process<br/>(Execution Environment)\"]"));
+        assert!(
+            topo.contains("ControlledProcess[\"TestSystem_Process<br/>(Execution Environment)\"]")
+        );
         assert!(topo.contains("DiagnosticSensors[\"TestSystem_Sensors<br/>(Diagnostic Sensors)\"]"));
         assert!(topo.contains("DiagnosticSensors -->|\"sensor feedback: diagnostic_errors - verification_metrics\"| CompilerController"));
         Ok(())
@@ -4488,8 +4531,19 @@ mod tests {
         let pkg = compile_stpa_to_constraints(md, "SafetyConstraintsPackage");
         assert_eq!(pkg.name, "SafetyConstraintsPackage");
         assert_eq!(pkg.constraint_defs.len(), 1);
-        assert_eq!(pkg.constraint_defs.first().ok_or("missing first element of pkg.constraint_defs")?.name, "SC_001_ComputeControlOutput");
-        assert!(pkg.constraint_defs.first().ok_or("missing first element of pkg.constraint_defs")?.is_assertion);
+        assert_eq!(
+            pkg.constraint_defs
+                .first()
+                .ok_or("missing first element of pkg.constraint_defs")?
+                .name,
+            "SC_001_ComputeControlOutput"
+        );
+        assert!(
+            pkg.constraint_defs
+                .first()
+                .ok_or("missing first element of pkg.constraint_defs")?
+                .is_assertion
+        );
         Ok(())
     }
 
@@ -4521,7 +4575,8 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-STPA-SAFETY-SUITE-TEST-NEGATED-COMPONENT-FILTER] | SysML v2: VerificationCaseDef(test_issue_249_compile_stpa_rejects_phantom_component_when_negated)
     #[test]
-    fn test_issue_249_compile_stpa_rejects_phantom_component_when_negated() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_249_compile_stpa_rejects_phantom_component_when_negated(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let md = r#"
 | UCA ID | Controller | Control Action | Guide Word | Context | Hazard | Safety Constraint | Severity | Integrity Level |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -4536,7 +4591,10 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
 "#;
         let pkg = compile_stpa_to_constraints(md, "SafetyConstraintsPackage");
         let con_names: Vec<String> = pkg.constraint_defs.iter().map(|c| c.name.clone()).collect();
-        assert!(con_names.iter().any(|c| c.contains("PrimaryProcessor")), "PrimaryProcessor constraint must be present");
+        assert!(
+            con_names.iter().any(|c| c.contains("PrimaryProcessor")),
+            "PrimaryProcessor constraint must be present"
+        );
         assert!(!con_names.iter().any(|c| c.contains("AuxiliaryBackupUnit")), "AuxiliaryBackupUnit constraint must NOT be synthesized when negated by negative AST constraints");
         Ok(())
     }
@@ -4569,7 +4627,8 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-STPA-SAFETY-SUITE-TEST-VALID-PARTS-FILTER] | SysML v2: VerificationCaseDef(test_issue_249_compile_stpa_filtered_by_valid_parts)
     #[test]
-    fn test_issue_249_compile_stpa_filtered_by_valid_parts() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_249_compile_stpa_filtered_by_valid_parts(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let md = r#"
 | FMECA ID | Component | Failure Mode | Potential Effect | Severity (S) | Occurrence (O) | Detection (D) | RPN (S x O x D) | Mitigation | Derivation Basis |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -4579,10 +4638,21 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
         let mut valid_parts = BTreeSet::new();
         valid_parts.insert("PrimaryProcessor".to_string());
 
-        let pkg = compile_stpa_to_constraints_filtered(md, "SafetyConstraintsPackage", Some(&valid_parts), None);
+        let pkg = compile_stpa_to_constraints_filtered(
+            md,
+            "SafetyConstraintsPackage",
+            Some(&valid_parts),
+            None,
+        );
         let con_names: Vec<String> = pkg.constraint_defs.iter().map(|c| c.name.clone()).collect();
-        assert!(con_names.iter().any(|c| c.contains("PrimaryProcessor")), "PrimaryProcessor constraint must be present");
-        assert!(!con_names.iter().any(|c| c.contains("PhantomSubsystem")), "PhantomSubsystem constraint must NOT be synthesized when missing from valid_parts");
+        assert!(
+            con_names.iter().any(|c| c.contains("PrimaryProcessor")),
+            "PrimaryProcessor constraint must be present"
+        );
+        assert!(
+            !con_names.iter().any(|c| c.contains("PhantomSubsystem")),
+            "PhantomSubsystem constraint must NOT be synthesized when missing from valid_parts"
+        );
         Ok(())
     }
 
@@ -4614,7 +4684,8 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-STPA-SAFETY-SUITE-TEST-UNIFIED-8-PILLARS] | SysML v2: VerificationCaseDef(test_defect_333_stpa_matrix_embodies_unified_8_pillars)
     #[test]
-    fn test_defect_333_stpa_matrix_embodies_unified_8_pillars() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_333_stpa_matrix_embodies_unified_8_pillars(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut pkg = PackageDef {
             name: "CoreControlSystemSafety".to_string(),
             ..Default::default()
@@ -4632,20 +4703,47 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
         pkg.part_defs.push(p);
 
         let suite = transpile_safety_suite(&pkg, None);
-        let stpa = suite.get("STPA_MATRIX.md").ok_or("expected value is absent")?;
+        let stpa = suite
+            .get("STPA_MATRIX.md")
+            .ok_or("expected value is absent")?;
 
-        assert!(stpa.contains("System Losses"), "STPA_MATRIX.md must contain Pillar 1 (System Losses)");
-        assert!(stpa.contains("System Hazards"), "STPA_MATRIX.md must contain Pillar 2 (System Hazards)");
-        assert!(stpa.contains("Control Structure Topology") || stpa.contains("Hierarchical Safety Control Structure"), "STPA_MATRIX.md must contain Pillar 3 (Topology)");
-        assert!(stpa.contains("Unsafe Control Actions") || stpa.contains("UCA ID"), "STPA_MATRIX.md must contain Pillar 4 (UCAs)");
-        assert!(stpa.contains("Loss Scenarios"), "STPA_MATRIX.md must contain Pillar 5 (Loss Scenarios)");
-        assert!(stpa.contains("Safety Constraints"), "STPA_MATRIX.md must contain Pillar 6 (Safety Constraints)");
-        assert!(stpa.contains("FMECA Criticality Matrix") || stpa.contains("FMECA"), "STPA_MATRIX.md must contain Pillar 7 (FMECA Criticality Matrix)");
+        assert!(
+            stpa.contains("System Losses"),
+            "STPA_MATRIX.md must contain Pillar 1 (System Losses)"
+        );
+        assert!(
+            stpa.contains("System Hazards"),
+            "STPA_MATRIX.md must contain Pillar 2 (System Hazards)"
+        );
+        assert!(
+            stpa.contains("Control Structure Topology")
+                || stpa.contains("Hierarchical Safety Control Structure"),
+            "STPA_MATRIX.md must contain Pillar 3 (Topology)"
+        );
+        assert!(
+            stpa.contains("Unsafe Control Actions") || stpa.contains("UCA ID"),
+            "STPA_MATRIX.md must contain Pillar 4 (UCAs)"
+        );
+        assert!(
+            stpa.contains("Loss Scenarios"),
+            "STPA_MATRIX.md must contain Pillar 5 (Loss Scenarios)"
+        );
+        assert!(
+            stpa.contains("Safety Constraints"),
+            "STPA_MATRIX.md must contain Pillar 6 (Safety Constraints)"
+        );
+        assert!(
+            stpa.contains("FMECA Criticality Matrix") || stpa.contains("FMECA"),
+            "STPA_MATRIX.md must contain Pillar 7 (FMECA Criticality Matrix)"
+        );
         assert!(
             stpa.contains("## 8. Domain Regulatory Objectives & Integrity Level Mapping"),
             "STPA_MATRIX.md must contain Pillar 8 (Domain Regulatory Objectives & Integrity Level Mapping)"
         );
-        assert!(stpa.contains("ASTM F3269-17") || stpa.contains("Stateflow"), "STPA_MATRIX.md must contain ASTM F3269-17 RTA / Stateflow hooks");
+        assert!(
+            stpa.contains("ASTM F3269-17") || stpa.contains("Stateflow"),
+            "STPA_MATRIX.md must contain ASTM F3269-17 RTA / Stateflow hooks"
+        );
         Ok(())
     }
 
@@ -4674,7 +4772,8 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-STPA-SAFETY-SUITE-TEST-EMIT-ATOMIC] | SysML v2: VerificationCaseDef(test_arch_04_emit_safety_suite_writes_atomically)
     #[test]
-    fn test_arch_04_emit_safety_suite_writes_atomically() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_arch_04_emit_safety_suite_writes_atomically() -> Result<(), Box<dyn std::error::Error>>
+    {
         let mut pkg = PackageDef {
             name: "AtomicSafetyPkg".to_string(),
             ..Default::default()
@@ -4700,9 +4799,12 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
                 "No temporary file may remain after emit_safety_suite: {}",
                 fname
             );
-            count += 1;
+            count = count.saturating_add(1);
         }
-        assert_eq!(count, 10, "emit_safety_suite must write all 10 safety suite artifacts");
+        assert_eq!(
+            count, 10,
+            "emit_safety_suite must write all 10 safety suite artifacts"
+        );
 
         let _ = fs::remove_dir_all(&out_dir);
         Ok(())
@@ -4733,7 +4835,8 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-STPA-HAZARD-LOG-ENFORCED-BY] | SysML v2: VerificationCaseDef(test_hazard_log_uses_enforced_by_without_controlled_via)
     #[test]
-    fn test_hazard_log_uses_enforced_by_without_controlled_via() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_hazard_log_uses_enforced_by_without_controlled_via(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut fallback_pkg = PackageDef {
             name: "BaselineEnvelopePkg".to_string(),
             ..Default::default()
@@ -4774,6 +4877,82 @@ Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
         assert!(
             !uca_log.contains("Controlled via "),
             "UCA HAZARD_LOG.md must not contain 'Controlled via '"
+        );
+        Ok(())
+    }
+
+    /// Verifies multi-byte UTF-8 boundary safety in `collect_parameter_tokens`, `transpile_safety_suite`,
+    /// and `compile_stpa_to_constraints_filtered`, including non-digit `SC-` prefixes and malformed rows.
+    #[test]
+    fn test_utf8_boundaries_cycled_lookups_and_checked_sc_id_slicing(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut pkg = PackageDef {
+            name: "航空安全_Sys".to_string(),
+            constraint_defs: vec![ConstraintDef {
+                name: "ThermalAndJitterEnvelope".to_string(),
+                expression: "/* Δ */ThermalMargin <= 85; ΩCycleJitter <= 12; 🛰RecoveryBound = 3"
+                    .to_string(),
+                is_assertion: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let tokens = collect_parameter_tokens(&pkg);
+        assert_eq!(
+            tokens.get("ThermalMargin").map(String::as_str),
+            Some("85"),
+            "ASCII-delimited parameter following UTF-8 comment must extract cleanly"
+        );
+        assert_eq!(
+            tokens.get("CycleJitter").map(String::as_str),
+            Some("12"),
+            "Identifier immediately preceded by 2-byte UTF-8 codepoint must not slice mid-codepoint"
+        );
+        assert_eq!(
+            tokens.get("RecoveryBound").map(String::as_str),
+            Some("3"),
+            "Identifier immediately preceded by 4-byte UTF-8 codepoint must not slice mid-codepoint"
+        );
+
+        // Exercise empty-member and populated multi-byte UTF-8 safety-suite rendering without panics.
+        let empty_member_suite = transpile_safety_suite(&pkg, None);
+        assert_eq!(empty_member_suite.len(), 10);
+
+        let mut utf8_ctrl = PartDef {
+            name: "軌道制御_Controller".to_string(),
+            ..Default::default()
+        };
+        utf8_ctrl.actions.push(ActionDef {
+            name: "ExecuteManeuver".to_string(),
+            ..Default::default()
+        });
+        pkg.part_defs.push(utf8_ctrl);
+        let populated_suite = transpile_safety_suite(&pkg, None);
+        assert_eq!(populated_suite.len(), 10);
+
+        // Exercise checked SC-### scanning across multi-byte UTF-8 prose, non-digit SC- tokens, and short pipe lines.
+        let stpa_md = concat!(
+            "|\n",
+            "|||\n",
+            "| UCA-001 | 軌道制御_Controller | ThrustGate | Providing | Δv ≤ 60 m/s | H-1 | SC-none / 🛰ΔΩ SC-042 (SIL-3) | High | SIL-3 |\n",
+            "| UCA-002 | 軌道制御_Controller | BadConstraint | Providing | Δv | H-2 | SC- | High | SIL-3 |\n",
+            "| FMECA-001 | 軌道制御_Controller | SensorDrift_Ω | Loss of Δv | 8 | 2 | 2 | 32 | Interlock | SSOT |\n",
+            "| FMECA-999 | MissingColsOnly |\n"
+        );
+        let compiled =
+            compile_stpa_to_constraints_filtered(stpa_md, "UTF8ConstraintsPkg", None, None);
+        let names: Vec<&str> = compiled
+            .constraint_defs
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                "SC_042_ThrustGate",
+                "FMECA_001_軌道制御_Controller_Integrity"
+            ]
         );
         Ok(())
     }
