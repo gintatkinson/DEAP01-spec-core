@@ -1,8 +1,16 @@
 //! Semantic validation engine for SysML v2 / KerML models.
+//!
+//! Safety & Traceability: Realises: [REQ-SEMANTIC-VALIDATOR-MODULE]
+//! Contract: Validates part hierarchies, port connection flow directions, safety annotation referential integrity, and scoped type resolution across `PackageDef` ASTs.
+//! Bounds & Faults: Caps AST and composite-type traversal depth at `MAX_AST_DEPTH` (64) using explicit iterative work-stacks with zero unbounded recursion or panics.
 
 use super::symbols::{Symbol, SymbolKind, SymbolTable};
 use deap_core::sysml_ast::*;
 use std::collections::BTreeSet;
+
+/// Maximum AST and composite-type nesting depth permitted during SysML v2 semantic validation.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-MAX-AST-DEPTH]
+const MAX_AST_DEPTH: usize = 64;
 
 /// Severity level of semantic diagnostics.
 ///
@@ -340,97 +348,70 @@ impl<'a> SemanticValidator<'a> {
     /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PART-HIERARCHY] | SysML v2: ActionDef(SemanticValidator::validate_part_hierarchy)
     fn validate_part_hierarchy(&mut self) {
         let mut seen_parts = BTreeSet::new();
-        self.validate_pkg_part_hierarchy(self.pkg, "", &mut seen_parts);
+        self.validate_pkg_part_hierarchy(self.pkg, "", &mut seen_parts, 0);
     }
 
-    /// Executes deterministic fn `SemanticValidator::validate_pkg_part_hierarchy` within `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::validate_pkg_part_hierarchy` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::validate_pkg_part_hierarchy` (declaration #11) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `pkg: &PackageDef` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_pkg_part_hierarchy`.
-    /// - `parent_scope: &str` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_pkg_part_hierarchy`.
-    /// - `seen: &mut BTreeSet<String>` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_pkg_part_hierarchy`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::validate_pkg_part_hierarchy` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(pkg)) bounded over input/member dimension of `SemanticValidator::validate_pkg_part_hierarchy`.
-    /// - Space Complexity: O(N(pkg)) bounded auxiliary memory for `SemanticValidator::validate_pkg_part_hierarchy`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::validate_pkg_part_hierarchy` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::validate_pkg_part_hierarchy` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::validate_pkg_part_hierarchy` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::validate_pkg_part_hierarchy` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PKG-PART-HIERARCHY] | SysML v2: ActionDef(SemanticValidator::validate_pkg_part_hierarchy)
+    /// Iteratively validates unique part and port declarations across nested packages up to `MAX_AST_DEPTH`.
+    /// Uses an explicit `Vec` work-stack with saturating depth increments so deep trees never overflow the call stack.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PKG-PART-HIERARCHY]
     fn validate_pkg_part_hierarchy(
         &mut self,
-        pkg: &PackageDef,
-        parent_scope: &str,
+        root_pkg: &PackageDef,
+        root_parent_scope: &str,
         seen: &mut BTreeSet<String>,
+        root_depth: usize,
     ) {
-        let pkg_scope = if parent_scope.is_empty() {
-            if std::ptr::eq(pkg, self.pkg) {
-                String::new()
-            } else {
-                pkg.name.clone()
+        let mut stack: Vec<(&PackageDef, String, usize)> =
+            vec![(root_pkg, root_parent_scope.to_string(), root_depth)];
+        while let Some((pkg, parent_scope, depth)) = stack.pop() {
+            if depth >= MAX_AST_DEPTH {
+                continue;
             }
-        } else if pkg.name.is_empty() {
-            parent_scope.to_string()
-        } else {
-            format!("{}::{}", parent_scope, pkg.name)
-        };
+            let pkg_scope = if parent_scope.is_empty() {
+                if std::ptr::eq(pkg, self.pkg) {
+                    String::new()
+                } else {
+                    pkg.name.clone()
+                }
+            } else if pkg.name.is_empty() {
+                parent_scope
+            } else {
+                format!("{}::{}", parent_scope, pkg.name)
+            };
 
-        self.check_parts_recursive(&pkg.part_defs, &pkg_scope, seen);
-
-        for subpkg in &pkg.packages {
-            self.validate_pkg_part_hierarchy(subpkg, &pkg_scope, seen);
+            let next_depth = depth.saturating_add(1);
+            if next_depth < MAX_AST_DEPTH {
+                self.check_parts_recursive(&pkg.part_defs, &pkg_scope, seen, next_depth);
+                for subpkg in pkg.packages.iter().rev() {
+                    stack.push((subpkg, pkg_scope.clone(), next_depth));
+                }
+            }
         }
     }
 
-    /// Executes deterministic fn `SemanticValidator::check_parts_recursive` within `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::check_parts_recursive` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::check_parts_recursive` (declaration #12) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `parts: &[PartDef]` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::check_parts_recursive`.
-    /// - `scope: &str` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::check_parts_recursive`.
-    /// - `seen: &mut BTreeSet<String>` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::check_parts_recursive`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::check_parts_recursive` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(parts)) bounded over input/member dimension of `SemanticValidator::check_parts_recursive`.
-    /// - Space Complexity: O(N(parts)) bounded auxiliary memory for `SemanticValidator::check_parts_recursive`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::check_parts_recursive` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::check_parts_recursive` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::check_parts_recursive` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::check_parts_recursive` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-CHECK-PARTS-RECURSIVE] | SysML v2: ActionDef(SemanticValidator::check_parts_recursive)
+    /// Iteratively validates duplicate parts and duplicate ports across a `PartDef` forest up to `MAX_AST_DEPTH`.
+    /// Preserves pre-order diagnostic emission via reversed LIFO work-stack pushes and `saturating_add(1)`.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-CHECK-PARTS-RECURSIVE]
     fn check_parts_recursive(
         &mut self,
         parts: &[PartDef],
-        scope: &str,
+        root_scope: &str,
         seen: &mut BTreeSet<String>,
+        root_depth: usize,
     ) {
-        for part in parts {
+        if root_depth >= MAX_AST_DEPTH {
+            return;
+        }
+        let mut stack: Vec<(&PartDef, String, usize)> = parts
+            .iter()
+            .rev()
+            .map(|part| (part, root_scope.to_string(), root_depth))
+            .collect();
+
+        while let Some((part, scope, depth)) = stack.pop() {
+            if depth >= MAX_AST_DEPTH {
+                continue;
+            }
             let part_key = if scope.is_empty() {
                 part.name.clone()
             } else {
@@ -440,11 +421,13 @@ impl<'a> SemanticValidator<'a> {
             if !seen.insert(part_key.clone()) {
                 self.diagnostics.push(SemanticDiagnostic::error(
                     &part.name,
-                    format!("Duplicate part declaration '{}' in scope '{}'", part.name, scope),
+                    format!(
+                        "Duplicate part declaration '{}' in scope '{}'",
+                        part.name, scope
+                    ),
                 ));
             }
 
-            // Check duplicate ports on this part
             let mut seen_ports = BTreeSet::new();
             for port in &part.ports {
                 if !seen_ports.insert(port.name.clone()) {
@@ -458,108 +441,59 @@ impl<'a> SemanticValidator<'a> {
                 }
             }
 
-            self.check_parts_recursive(&part.parts, &part_key, seen);
+            let next_depth = depth.saturating_add(1);
+            if next_depth < MAX_AST_DEPTH {
+                for subpart in part.parts.iter().rev() {
+                    stack.push((subpart, part_key.clone(), next_depth));
+                }
+            }
         }
     }
 
-    /// Executes deterministic fn `SemanticValidator::validate_connections` within `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::validate_connections` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::validate_connections` (declaration #13) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `SemanticValidator::validate_connections` in `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::validate_connections` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(validate_connections)) bounded over input/member dimension of `SemanticValidator::validate_connections`.
-    /// - Space Complexity: O(K(validate_connections)) bounded auxiliary memory for `SemanticValidator::validate_connections`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::validate_connections` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::validate_connections` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::validate_connections` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::validate_connections` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-CONNECTIONS] | SysML v2: ActionDef(SemanticValidator::validate_connections)
+    /// Validates port existence and flow compatibility across all package and part connections up to `MAX_AST_DEPTH`.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-CONNECTIONS]
     fn validate_connections(&mut self) {
-        self.validate_package_connections(self.pkg);
+        self.validate_package_connections(self.pkg, 0);
     }
 
-    /// Executes deterministic fn `SemanticValidator::validate_package_connections` within `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::validate_package_connections` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::validate_package_connections` (declaration #14) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `pkg: &PackageDef` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_package_connections`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::validate_package_connections` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(pkg)) bounded over input/member dimension of `SemanticValidator::validate_package_connections`.
-    /// - Space Complexity: O(N(pkg)) bounded auxiliary memory for `SemanticValidator::validate_package_connections`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::validate_package_connections` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::validate_package_connections` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::validate_package_connections` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::validate_package_connections` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PACKAGE-CONNECTIONS] | SysML v2: ActionDef(SemanticValidator::validate_package_connections)
-    fn validate_package_connections(&mut self, pkg: &PackageDef) {
-        self.validate_connection_list(&pkg.connection_defs, None);
+    /// Iteratively traverses nested `PackageDef` nodes up to `MAX_AST_DEPTH` to validate connection lists.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PACKAGE-CONNECTIONS]
+    fn validate_package_connections(&mut self, root_pkg: &PackageDef, root_depth: usize) {
+        let mut stack: Vec<(&PackageDef, usize)> = vec![(root_pkg, root_depth)];
+        while let Some((pkg, depth)) = stack.pop() {
+            if depth >= MAX_AST_DEPTH {
+                continue;
+            }
+            self.validate_connection_list(&pkg.connection_defs, None);
 
-        for part in &pkg.part_defs {
-            self.validate_part_connections(part);
-        }
-
-        for subpkg in &pkg.packages {
-            self.validate_package_connections(subpkg);
+            let next_depth = depth.saturating_add(1);
+            if next_depth < MAX_AST_DEPTH {
+                for part in &pkg.part_defs {
+                    self.validate_part_connections(part, next_depth);
+                }
+                for subpkg in pkg.packages.iter().rev() {
+                    stack.push((subpkg, next_depth));
+                }
+            }
         }
     }
 
-    /// Executes deterministic fn `SemanticValidator::validate_part_connections` within `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::validate_part_connections` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::validate_part_connections` (declaration #15) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `part: &PartDef` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_part_connections`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::validate_part_connections` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(part)) bounded over input/member dimension of `SemanticValidator::validate_part_connections`.
-    /// - Space Complexity: O(N(part)) bounded auxiliary memory for `SemanticValidator::validate_part_connections`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::validate_part_connections` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::validate_part_connections` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::validate_part_connections` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::validate_part_connections` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PART-CONNECTIONS] | SysML v2: ActionDef(SemanticValidator::validate_part_connections)
-    fn validate_part_connections(&mut self, part: &PartDef) {
-        self.validate_connection_list(&part.connections, Some(&part.name));
-        for subpart in &part.parts {
-            self.validate_part_connections(subpart);
+    /// Iteratively traverses nested `PartDef` nodes up to `MAX_AST_DEPTH` to validate internal connections.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PART-CONNECTIONS]
+    fn validate_part_connections(&mut self, root_part: &PartDef, root_depth: usize) {
+        let mut stack: Vec<(&PartDef, usize)> = vec![(root_part, root_depth)];
+        while let Some((part, depth)) = stack.pop() {
+            if depth >= MAX_AST_DEPTH {
+                continue;
+            }
+            self.validate_connection_list(&part.connections, Some(&part.name));
+
+            let next_depth = depth.saturating_add(1);
+            if next_depth < MAX_AST_DEPTH {
+                for subpart in part.parts.iter().rev() {
+                    stack.push((subpart, next_depth));
+                }
+            }
         }
     }
 
@@ -626,11 +560,20 @@ impl<'a> SemanticValidator<'a> {
                 let is_src_boundary = part_scope.is_some() && !conn.source_port.contains('.');
                 let is_tgt_boundary = part_scope.is_some() && !conn.target_port.contains('.');
 
-                if is_src_boundary && !is_tgt_boundary && src_eff_dir == "in" && tgt_eff_dir == "in" {
+                if is_src_boundary && !is_tgt_boundary && src_eff_dir == "in" && tgt_eff_dir == "in"
+                {
                     // Valid inward delegation: boundary in -> subpart in
-                } else if !is_src_boundary && is_tgt_boundary && src_eff_dir == "out" && tgt_eff_dir == "out" {
+                } else if !is_src_boundary
+                    && is_tgt_boundary
+                    && src_eff_dir == "out"
+                    && tgt_eff_dir == "out"
+                {
                     // Valid outward delegation: subpart out -> boundary out
-                } else if is_src_boundary && is_tgt_boundary && src_eff_dir == "in" && tgt_eff_dir == "out" {
+                } else if is_src_boundary
+                    && is_tgt_boundary
+                    && src_eff_dir == "in"
+                    && tgt_eff_dir == "out"
+                {
                     // Valid boundary pass-through delegation: boundary in -> boundary out
                 } else {
                     match (src_eff_dir.as_str(), tgt_eff_dir.as_str()) {
@@ -712,76 +655,17 @@ impl<'a> SemanticValidator<'a> {
             .map(|s| normalize_id(&s.name))
             .collect();
 
-        let extract_annotation_targets = |text: &str, tag: &str| -> Vec<Vec<String>> {
-            let mut results = Vec::new();
-            let lower_text = text.to_ascii_lowercase();
-            let lower_tag = tag.to_ascii_lowercase();
-            let mut search_idx = 0;
-            while let Some(pos) = lower_text[search_idx..].find(&lower_tag) {
-                let tag_start = search_idx + pos;
-                let idx = tag_start + tag.len();
-                let rest = &text[idx..];
-                let (ws_end, next_char) = rest
-                    .char_indices()
-                    .find(|(_, c)| !c.is_whitespace())
-                    .map_or((rest.len(), None), |(c_idx, c)| (c_idx, Some(c)));
-                match next_char {
-                    Some('(') => {
-                        let inside_start = idx + ws_end + 1;
-                        if let Some(close_pos) = text[inside_start..].find(')') {
-                            let inside = &text[inside_start..inside_start + close_pos];
-                            let targets: Vec<String> = inside
-                                .split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            results.push(targets);
-                            search_idx = inside_start + close_pos + 1;
-                            continue;
-                        }
-                    }
-                    Some(':') => {
-                        let after_colon = &rest[ws_end + 1..];
-                        let id_start = after_colon
-                            .char_indices()
-                            .find(|(_, c)| !c.is_whitespace())
-                            .map_or(after_colon.len(), |(c_idx, _)| c_idx);
-                        let id_rest = &after_colon[id_start..];
-                        let id_len = id_rest
-                            .chars()
-                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
-                            .map(|c| c.len_utf8())
-                            .sum::<usize>();
-                        if id_len > 0 {
-                            let id = id_rest[..id_len].trim().to_string();
-                            results.push(vec![id]);
-                            let global_end = idx + ws_end + 1 + id_start + id_len;
-                            search_idx = global_end.max(tag_start + 1);
-                            continue;
-                        }
-                    }
-                    _ => {}
-                }
-                search_idx = tag_start + 1;
-            }
-            results
-        };
-
         let mut req_texts = Vec::new();
-        for p in self.pkg.get_all_packages() {
-            self.collect_requirement_texts(&p.requirement_defs, &mut req_texts);
-            for part in &p.part_defs {
-                self.collect_part_requirement_texts(part, &mut req_texts);
-            }
-        }
+        self.collect_package_requirement_texts(self.pkg, &mut req_texts, 0);
 
         for (req_name, text_corpus) in req_texts {
-            // Check @SafetyRealises
             for targets in extract_annotation_targets(&text_corpus, "@SafetyRealises") {
                 for target in &targets {
                     let clean_target = normalize_id(target);
                     if !known_constraints.is_empty()
-                        && !known_constraints.iter().any(|c| c == &clean_target || c.contains(&clean_target))
+                        && !known_constraints
+                            .iter()
+                            .any(|c| c == &clean_target || c.contains(&clean_target))
                     {
                         self.diagnostics.push(SemanticDiagnostic::error(
                             &req_name,
@@ -794,12 +678,13 @@ impl<'a> SemanticValidator<'a> {
                 }
             }
 
-            // Check @TriggersHazard
             for targets in extract_annotation_targets(&text_corpus, "@TriggersHazard") {
                 for target in &targets {
                     let clean_target = normalize_id(target);
                     if !known_hazards.is_empty()
-                        && !known_hazards.iter().any(|h| h == &clean_target || h.contains(&clean_target))
+                        && !known_hazards
+                            .iter()
+                            .any(|h| h == &clean_target || h.contains(&clean_target))
                     {
                         self.diagnostics.push(SemanticDiagnostic::error(
                             &req_name,
@@ -814,33 +699,36 @@ impl<'a> SemanticValidator<'a> {
         }
     }
 
-    /// Executes deterministic fn `SemanticValidator::collect_requirement_texts` within `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::collect_requirement_texts` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::collect_requirement_texts` (declaration #18) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `reqs: &[RequirementDef]` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::collect_requirement_texts`.
-    /// - `out: &mut Vec<(String, String)>` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::collect_requirement_texts`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::collect_requirement_texts` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(reqs)) bounded over input/member dimension of `SemanticValidator::collect_requirement_texts`.
-    /// - Space Complexity: O(N(reqs)) bounded auxiliary memory for `SemanticValidator::collect_requirement_texts`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::collect_requirement_texts` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::collect_requirement_texts` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::collect_requirement_texts` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::collect_requirement_texts` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-COLLECT-REQUIREMENT-TEXTS] | SysML v2: ActionDef(SemanticValidator::collect_requirement_texts)
+    /// Iteratively collects `(requirement_name, text_corpus)` pairs across nested packages up to `MAX_AST_DEPTH`.
+    /// Replaces unbounded `PackageDef::get_all_packages` recursion with an explicit `Vec` work-stack.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-REFERENTIAL-INTEGRITY]
+    fn collect_package_requirement_texts(
+        &self,
+        root_pkg: &PackageDef,
+        out: &mut Vec<(String, String)>,
+        root_depth: usize,
+    ) {
+        let mut stack: Vec<(&PackageDef, usize)> = vec![(root_pkg, root_depth)];
+        while let Some((pkg, depth)) = stack.pop() {
+            if depth >= MAX_AST_DEPTH {
+                continue;
+            }
+            self.collect_requirement_texts(&pkg.requirement_defs, out);
+
+            let next_depth = depth.saturating_add(1);
+            if next_depth < MAX_AST_DEPTH {
+                for part in &pkg.part_defs {
+                    self.collect_part_requirement_texts(part, out, next_depth);
+                }
+                for subpkg in pkg.packages.iter().rev() {
+                    stack.push((subpkg, next_depth));
+                }
+            }
+        }
+    }
+
+    /// Appends `(requirement_name, text_corpus)` entries from a flat `RequirementDef` slice.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-COLLECT-REQUIREMENT-TEXTS]
     fn collect_requirement_texts(&self, reqs: &[RequirementDef], out: &mut Vec<(String, String)>) {
         for req in reqs {
             let corpus = format!(
@@ -853,317 +741,143 @@ impl<'a> SemanticValidator<'a> {
         }
     }
 
-    /// Executes deterministic fn `SemanticValidator::collect_part_requirement_texts` within `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::collect_part_requirement_texts` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::collect_part_requirement_texts` (declaration #19) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `part: &PartDef` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::collect_part_requirement_texts`.
-    /// - `out: &mut Vec<(String, String)>` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::collect_part_requirement_texts`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::collect_part_requirement_texts` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(part)) bounded over input/member dimension of `SemanticValidator::collect_part_requirement_texts`.
-    /// - Space Complexity: O(N(part)) bounded auxiliary memory for `SemanticValidator::collect_part_requirement_texts`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::collect_part_requirement_texts` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::collect_part_requirement_texts` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::collect_part_requirement_texts` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::collect_part_requirement_texts` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-COLLECT-PART-REQUIREMENT-TEXTS] | SysML v2: ActionDef(SemanticValidator::collect_part_requirement_texts)
-    fn collect_part_requirement_texts(&self, part: &PartDef, out: &mut Vec<(String, String)>) {
-        self.collect_requirement_texts(&part.requirements, out);
-        for subpart in &part.parts {
-            self.collect_part_requirement_texts(subpart, out);
-        }
-    }
+    /// Iteratively collects requirement prose across a `PartDef` subtree up to `MAX_AST_DEPTH`.
+    /// Uses an explicit `Vec` work-stack with saturating depth increments to prevent stack exhaustion.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-COLLECT-PART-REQUIREMENT-TEXTS]
+    fn collect_part_requirement_texts(
+        &self,
+        root_part: &PartDef,
+        out: &mut Vec<(String, String)>,
+        root_depth: usize,
+    ) {
+        let mut stack: Vec<(&PartDef, usize)> = vec![(root_part, root_depth)];
+        while let Some((part, depth)) = stack.pop() {
+            if depth >= MAX_AST_DEPTH {
+                continue;
+            }
+            self.collect_requirement_texts(&part.requirements, out);
 
-    /// Validate part definitions, ensuring all referenced types resolve within local scope, imported namespaces, or global symbols.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::validate_part_defs` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::validate_part_defs` (declaration #20) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `SemanticValidator::validate_part_defs` in `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::validate_part_defs` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(validate_part_defs)) bounded over input/member dimension of `SemanticValidator::validate_part_defs`.
-    /// - Space Complexity: O(K(validate_part_defs)) bounded auxiliary memory for `SemanticValidator::validate_part_defs`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::validate_part_defs` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::validate_part_defs` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::validate_part_defs` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::validate_part_defs` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PART-DEFS] | SysML v2: ActionDef(SemanticValidator::validate_part_defs)
-    fn validate_part_defs(&mut self) {
-        self.validate_part_defs_in_pkg(self.pkg, "");
-    }
-
-    /// Executes deterministic fn `SemanticValidator::validate_part_defs_in_pkg` within `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::validate_part_defs_in_pkg` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::validate_part_defs_in_pkg` (declaration #21) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `pkg: &PackageDef` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_part_defs_in_pkg`.
-    /// - `parent_scope: &str` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_part_defs_in_pkg`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::validate_part_defs_in_pkg` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(pkg)) bounded over input/member dimension of `SemanticValidator::validate_part_defs_in_pkg`.
-    /// - Space Complexity: O(N(pkg)) bounded auxiliary memory for `SemanticValidator::validate_part_defs_in_pkg`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::validate_part_defs_in_pkg` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::validate_part_defs_in_pkg` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::validate_part_defs_in_pkg` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::validate_part_defs_in_pkg` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PART-DEFS-IN-PKG] | SysML v2: ActionDef(SemanticValidator::validate_part_defs_in_pkg)
-    fn validate_part_defs_in_pkg(&mut self, pkg: &PackageDef, parent_scope: &str) {
-        let is_synthetic_multi_root = parent_scope.is_empty()
-            && !pkg.packages.is_empty()
-            && (pkg.name.is_empty()
-                || (pkg.name == "SysML_Model"
-                    && pkg.attribute_defs.is_empty()
-                    && pkg.port_defs.is_empty()
-                    && pkg.action_defs.is_empty()
-                    && pkg.constraint_defs.is_empty()
-                    && pkg.calc_defs.is_empty()
-                    && pkg.requirement_defs.is_empty()
-                    && pkg.state_defs.is_empty()
-                    && pkg.connection_defs.is_empty()
-                    && pkg.use_case_defs.is_empty()
-                    && pkg.item_defs.is_empty()
-                    && pkg.hazard_defs.is_empty()
-                    && pkg.risk_defs.is_empty()
-                    && pkg.test_case_defs.is_empty()
-                    && pkg.capability_defs.is_empty()
-                    && pkg.operation_defs.is_empty()
-                    && pkg.interaction_defs.is_empty()
-                    && pkg.part_defs.is_empty()));
-
-        let pkg_scope = if is_synthetic_multi_root {
-            String::new()
-        } else if parent_scope.is_empty() {
-            pkg.name.clone()
-        } else if pkg.name.is_empty() {
-            parent_scope.to_string()
-        } else {
-            format!("{}::{}", parent_scope, pkg.name)
-        };
-
-        for part in &pkg.part_defs {
-            self.validate_single_part_def(part, &pkg_scope);
-        }
-
-        for subpkg in &pkg.packages {
-            self.validate_part_defs_in_pkg(subpkg, &pkg_scope);
-        }
-    }
-
-    /// Executes deterministic fn `SemanticValidator::validate_single_part_def` within `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::validate_single_part_def` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::validate_single_part_def` (declaration #22) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `part: &PartDef` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_single_part_def`.
-    /// - `scope: &str` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_single_part_def`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::validate_single_part_def` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(part)) bounded over input/member dimension of `SemanticValidator::validate_single_part_def`.
-    /// - Space Complexity: O(N(part)) bounded auxiliary memory for `SemanticValidator::validate_single_part_def`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::validate_single_part_def` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::validate_single_part_def` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::validate_single_part_def` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::validate_single_part_def` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-SINGLE-PART-DEF] | SysML v2: ActionDef(SemanticValidator::validate_single_part_def)
-    fn validate_single_part_def(&mut self, part: &PartDef, scope: &str) {
-        if let Some(ref ty) = part.type_name {
-            if !self.is_resolvable_type(scope, ty) {
-                self.diagnostics.push(SemanticDiagnostic::error(
-                    &part.name,
-                    format!("Part '{}' references undefined type '{}'", part.name, ty),
-                ));
+            let next_depth = depth.saturating_add(1);
+            if next_depth < MAX_AST_DEPTH {
+                for subpart in part.parts.iter().rev() {
+                    stack.push((subpart, next_depth));
+                }
             }
         }
+    }
 
-        let part_scope = if scope.is_empty() {
-            part.name.clone()
-        } else {
-            format!("{}::{}", scope, part.name)
-        };
+    /// Validates all part definitions across the package hierarchy up to `MAX_AST_DEPTH`.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PART-DEFS]
+    fn validate_part_defs(&mut self) {
+        self.validate_part_defs_in_pkg(self.pkg, "", 0);
+    }
 
-        for subpart in &part.parts {
-            self.validate_single_part_def(subpart, &part_scope);
+    /// Iteratively validates `part_defs` across nested `PackageDef` nodes up to `MAX_AST_DEPTH`.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PART-DEFS-IN-PKG]
+    fn validate_part_defs_in_pkg(
+        &mut self,
+        root_pkg: &PackageDef,
+        root_parent_scope: &str,
+        root_depth: usize,
+    ) {
+        let mut stack: Vec<(&PackageDef, String, usize)> =
+            vec![(root_pkg, root_parent_scope.to_string(), root_depth)];
+        while let Some((pkg, parent_scope, depth)) = stack.pop() {
+            if depth >= MAX_AST_DEPTH {
+                continue;
+            }
+            let pkg_scope = compute_scoped_package_name(pkg, &parent_scope);
+
+            let next_depth = depth.saturating_add(1);
+            if next_depth < MAX_AST_DEPTH {
+                for part in &pkg.part_defs {
+                    self.validate_single_part_def(part, &pkg_scope, next_depth);
+                }
+                for subpkg in pkg.packages.iter().rev() {
+                    stack.push((subpkg, pkg_scope.clone(), next_depth));
+                }
+            }
         }
     }
 
-    /// Validate requirement definitions, ensuring satisfying elements and attribute types resolve in scope.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::validate_requirements` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::validate_requirements` (declaration #23) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `SemanticValidator::validate_requirements` in `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::validate_requirements` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(validate_requirements)) bounded over input/member dimension of `SemanticValidator::validate_requirements`.
-    /// - Space Complexity: O(K(validate_requirements)) bounded auxiliary memory for `SemanticValidator::validate_requirements`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::validate_requirements` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::validate_requirements` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::validate_requirements` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::validate_requirements` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-REQUIREMENTS] | SysML v2: ActionDef(SemanticValidator::validate_requirements)
+    /// Iteratively validates type references on `root_part` and nested subparts up to `MAX_AST_DEPTH`.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-SINGLE-PART-DEF]
+    fn validate_single_part_def(
+        &mut self,
+        root_part: &PartDef,
+        root_scope: &str,
+        root_depth: usize,
+    ) {
+        let mut stack: Vec<(&PartDef, String, usize)> =
+            vec![(root_part, root_scope.to_string(), root_depth)];
+        while let Some((part, scope, depth)) = stack.pop() {
+            if depth >= MAX_AST_DEPTH {
+                continue;
+            }
+            if let Some(ref ty) = part.type_name {
+                if !self.is_resolvable_type(&scope, ty) {
+                    self.diagnostics.push(SemanticDiagnostic::error(
+                        &part.name,
+                        format!("Part '{}' references undefined type '{}'", part.name, ty),
+                    ));
+                }
+            }
+
+            let part_scope = if scope.is_empty() {
+                part.name.clone()
+            } else {
+                format!("{}::{}", scope, part.name)
+            };
+
+            let next_depth = depth.saturating_add(1);
+            if next_depth < MAX_AST_DEPTH {
+                for subpart in part.parts.iter().rev() {
+                    stack.push((subpart, part_scope.clone(), next_depth));
+                }
+            }
+        }
+    }
+
+    /// Validates requirement definitions across the package and part hierarchy up to `MAX_AST_DEPTH`.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-REQUIREMENTS]
     fn validate_requirements(&mut self) {
-        self.validate_requirements_in_pkg(self.pkg, "");
+        self.validate_requirements_in_pkg(self.pkg, "", 0);
     }
 
-    /// Executes deterministic fn `SemanticValidator::validate_requirements_in_pkg` within `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::validate_requirements_in_pkg` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::validate_requirements_in_pkg` (declaration #24) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `pkg: &PackageDef` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_requirements_in_pkg`.
-    /// - `parent_scope: &str` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_requirements_in_pkg`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::validate_requirements_in_pkg` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(pkg)) bounded over input/member dimension of `SemanticValidator::validate_requirements_in_pkg`.
-    /// - Space Complexity: O(N(pkg)) bounded auxiliary memory for `SemanticValidator::validate_requirements_in_pkg`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::validate_requirements_in_pkg` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::validate_requirements_in_pkg` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::validate_requirements_in_pkg` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::validate_requirements_in_pkg` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-REQUIREMENTS-IN-PKG] | SysML v2: ActionDef(SemanticValidator::validate_requirements_in_pkg)
-    fn validate_requirements_in_pkg(&mut self, pkg: &PackageDef, parent_scope: &str) {
-        let is_synthetic_multi_root = parent_scope.is_empty()
-            && !pkg.packages.is_empty()
-            && (pkg.name.is_empty()
-                || (pkg.name == "SysML_Model"
-                    && pkg.attribute_defs.is_empty()
-                    && pkg.port_defs.is_empty()
-                    && pkg.action_defs.is_empty()
-                    && pkg.constraint_defs.is_empty()
-                    && pkg.calc_defs.is_empty()
-                    && pkg.requirement_defs.is_empty()
-                    && pkg.state_defs.is_empty()
-                    && pkg.connection_defs.is_empty()
-                    && pkg.use_case_defs.is_empty()
-                    && pkg.item_defs.is_empty()
-                    && pkg.hazard_defs.is_empty()
-                    && pkg.risk_defs.is_empty()
-                    && pkg.test_case_defs.is_empty()
-                    && pkg.capability_defs.is_empty()
-                    && pkg.operation_defs.is_empty()
-                    && pkg.interaction_defs.is_empty()
-                    && pkg.part_defs.is_empty()));
+    /// Iteratively validates requirements across nested `PackageDef` nodes up to `MAX_AST_DEPTH`.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-REQUIREMENTS-IN-PKG]
+    fn validate_requirements_in_pkg(
+        &mut self,
+        root_pkg: &PackageDef,
+        root_parent_scope: &str,
+        root_depth: usize,
+    ) {
+        let mut stack: Vec<(&PackageDef, String, usize)> =
+            vec![(root_pkg, root_parent_scope.to_string(), root_depth)];
+        while let Some((pkg, parent_scope, depth)) = stack.pop() {
+            if depth >= MAX_AST_DEPTH {
+                continue;
+            }
+            let pkg_scope = compute_scoped_package_name(pkg, &parent_scope);
 
-        let pkg_scope = if is_synthetic_multi_root {
-            String::new()
-        } else if parent_scope.is_empty() {
-            pkg.name.clone()
-        } else if pkg.name.is_empty() {
-            parent_scope.to_string()
-        } else {
-            format!("{}::{}", parent_scope, pkg.name)
-        };
+            for req in &pkg.requirement_defs {
+                self.validate_single_requirement_def(req, &pkg_scope);
+            }
 
-        for req in &pkg.requirement_defs {
-            self.validate_single_requirement_def(req, &pkg_scope);
-        }
-
-        for part in &pkg.part_defs {
-            self.validate_part_requirements(part, &pkg_scope);
-        }
-
-        for subpkg in &pkg.packages {
-            self.validate_requirements_in_pkg(subpkg, &pkg_scope);
+            let next_depth = depth.saturating_add(1);
+            if next_depth < MAX_AST_DEPTH {
+                for part in &pkg.part_defs {
+                    self.validate_part_requirements(part, &pkg_scope, next_depth);
+                }
+                for subpkg in pkg.packages.iter().rev() {
+                    stack.push((subpkg, pkg_scope.clone(), next_depth));
+                }
+            }
         }
     }
 
-    /// Executes deterministic fn `SemanticValidator::validate_single_requirement_def` within `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::validate_single_requirement_def` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::validate_single_requirement_def` (declaration #25) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `req: &RequirementDef` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_single_requirement_def`.
-    /// - `scope: &str` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_single_requirement_def`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::validate_single_requirement_def` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(req)) bounded over input/member dimension of `SemanticValidator::validate_single_requirement_def`.
-    /// - Space Complexity: O(N(req)) bounded auxiliary memory for `SemanticValidator::validate_single_requirement_def`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::validate_single_requirement_def` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::validate_single_requirement_def` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::validate_single_requirement_def` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::validate_single_requirement_def` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-SINGLE-REQUIREMENT-DEF] | SysML v2: ActionDef(SemanticValidator::validate_single_requirement_def)
+    /// Validates attribute types and satisfying element references on a single `RequirementDef`.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-SINGLE-REQUIREMENT-DEF]
     fn validate_single_requirement_def(&mut self, req: &RequirementDef, scope: &str) {
         for attr in &req.attributes {
             if !self.is_resolvable_type(scope, &attr.type_name) {
@@ -1190,46 +904,36 @@ impl<'a> SemanticValidator<'a> {
         }
     }
 
-    /// Executes deterministic fn `SemanticValidator::validate_part_requirements` within `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::validate_part_requirements` in `crates/compile-sysml/src/semantic/validator.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::validate_part_requirements` (declaration #26) within `SEMANTIC-VALIDATOR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `part: &PartDef` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_part_requirements`.
-    /// - `scope: &str` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::validate_part_requirements`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `()` from `SemanticValidator::validate_part_requirements` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(part)) bounded over input/member dimension of `SemanticValidator::validate_part_requirements`.
-    /// - Space Complexity: O(N(part)) bounded auxiliary memory for `SemanticValidator::validate_part_requirements`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SemanticValidator::validate_part_requirements` (`()`).
-    /// - State: Maintains consistent state invariants across `SemanticValidator::validate_part_requirements` without partial mutation on error.
-    /// - Action: Executes `SemanticValidator::validate_part_requirements` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SemanticValidator::validate_part_requirements` (`SEMANTIC-VALIDATOR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PART-REQUIREMENTS] | SysML v2: ActionDef(SemanticValidator::validate_part_requirements)
-    fn validate_part_requirements(&mut self, part: &PartDef, scope: &str) {
-        let part_scope = if scope.is_empty() {
-            part.name.clone()
-        } else {
-            format!("{}::{}", scope, part.name)
-        };
+    /// Iteratively validates nested part requirements across a `PartDef` subtree up to `MAX_AST_DEPTH`.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PART-REQUIREMENTS]
+    fn validate_part_requirements(
+        &mut self,
+        root_part: &PartDef,
+        root_scope: &str,
+        root_depth: usize,
+    ) {
+        let mut stack: Vec<(&PartDef, String, usize)> =
+            vec![(root_part, root_scope.to_string(), root_depth)];
+        while let Some((part, scope, depth)) = stack.pop() {
+            if depth >= MAX_AST_DEPTH {
+                continue;
+            }
+            let part_scope = if scope.is_empty() {
+                part.name.clone()
+            } else {
+                format!("{}::{}", scope, part.name)
+            };
 
-        for req in &part.requirements {
-            self.validate_single_requirement_def(req, &part_scope);
-        }
+            for req in &part.requirements {
+                self.validate_single_requirement_def(req, &part_scope);
+            }
 
-        for subpart in &part.parts {
-            self.validate_part_requirements(subpart, &part_scope);
+            let next_depth = depth.saturating_add(1);
+            if next_depth < MAX_AST_DEPTH {
+                for subpart in part.parts.iter().rev() {
+                    stack.push((subpart, part_scope.clone(), next_depth));
+                }
+            }
         }
     }
 
@@ -1239,18 +943,19 @@ impl<'a> SemanticValidator<'a> {
     /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SemanticValidator::is_resolvable_type` in `crates/compile-sysml/src/semantic/validator.rs`.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::is_resolvable_type` (declaration #27) within `SEMANTIC-VALIDATOR`.
+    /// - Preserves deterministic state conservation and referential transparency for fn `SemanticValidator::is_resolvable_type` within `SEMANTIC-VALIDATOR`.
+    /// - Evaluates nested tuples and generic containers iteratively via an explicit work-stack capped at `MAX_AST_DEPTH` (64).
     ///
     /// ## 3. Preconditions
     /// - `scope: &str` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::is_resolvable_type`.
     /// - `type_name: &str` must satisfy domain and type-safety constraints prior to invoking `SemanticValidator::is_resolvable_type`.
     ///
     /// ## 4. Postconditions
-    /// - Returns `bool` from `SemanticValidator::is_resolvable_type` with deterministic post-execution state.
+    /// - Returns `bool` from `SemanticValidator::is_resolvable_type` failing closed (`false`) when nesting reaches `MAX_AST_DEPTH` or any component is unresolvable.
     ///
     /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(scope)) bounded over input/member dimension of `SemanticValidator::is_resolvable_type`.
-    /// - Space Complexity: O(N(scope)) bounded auxiliary memory for `SemanticValidator::is_resolvable_type`.
+    /// - Time Complexity: O(N(type_name)) bounded over input length and `MAX_AST_DEPTH`.
+    /// - Space Complexity: O(MAX_AST_DEPTH) bounded auxiliary work-stack memory with O(1) call-stack frames.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
     /// - Interface: Validates boundary inputs and types for `SemanticValidator::is_resolvable_type` (`bool`).
@@ -1261,81 +966,74 @@ impl<'a> SemanticValidator<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-IS-RESOLVABLE-TYPE] | SysML v2: ActionDef(SemanticValidator::is_resolvable_type)
     pub fn is_resolvable_type(&self, scope: &str, type_name: &str) -> bool {
-        let clean = normalize_source_type(type_name);
-        if clean.is_empty() {
-            return false;
-        }
-        if clean == "()" {
-            return true;
-        }
+        let mut stack: Vec<(&str, usize)> = vec![(type_name, 0)];
 
-        // Handle tuple types FIRST: (T1, T2, ...)
-        if clean.starts_with('(') && clean.ends_with(')') {
-            let mut depth = 0usize;
-            let mut closed_early = false;
-            let last_idx = clean.len() - 1;
-            for (idx, ch) in clean.char_indices() {
-                match ch {
-                    '(' => depth += 1,
-                    ')' => {
-                        depth = depth.saturating_sub(1);
-                        if depth == 0 && idx < last_idx {
-                            closed_early = true;
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
+        while let Some((current_raw, depth)) = stack.pop() {
+            if depth >= MAX_AST_DEPTH {
+                return false;
             }
-            if depth == 0 && !closed_early {
-                let inner = clean[1..last_idx].trim();
+            let clean = normalize_source_type(current_raw);
+            if clean.is_empty() {
+                return false;
+            }
+            if clean == "()" {
+                continue;
+            }
+
+            if let Some(tuple_inner) = extract_enclosing_tuple_inner(clean) {
+                let inner = tuple_inner.trim();
                 if inner.is_empty() {
-                    return true;
+                    continue;
                 }
                 let args = split_top_level_type_args(inner);
-                return !args.is_empty() && args.into_iter().all(|arg| self.is_resolvable_type(scope, arg));
+                if args.is_empty() {
+                    return false;
+                }
+                let next_depth = depth.saturating_add(1);
+                for arg in args.into_iter().rev() {
+                    stack.push((arg, next_depth));
+                }
+                continue;
             }
-        }
 
-        // Handle generic containers: Outer<Inner1, Inner2, ...>
-        if let Some(lt_idx) = clean.find('<') {
-            if let Some(gt_idx) = clean.rfind('>') {
-                if gt_idx > lt_idx {
-                    if !clean[gt_idx + 1..].trim().is_empty() {
-                        // Trailing tokens after '>' (e.g. Option<String> UndefinedType) must fail closed
-                        return false;
+            if let Some(lt_idx) = clean.find('<') {
+                if let Some(gt_idx) = clean.rfind('>') {
+                    if gt_idx > lt_idx {
+                        let trailing = clean.get(gt_idx.saturating_add(1)..).unwrap_or("");
+                        if !trailing.trim().is_empty() {
+                            return false;
+                        }
+                        let outer = clean.get(..lt_idx).unwrap_or("").trim();
+                        let inner_str = clean.get(lt_idx.saturating_add(1)..gt_idx).unwrap_or("");
+
+                        let outer_ok = is_primitive_or_builtin_type_at_depth(outer, depth)
+                            || self.symbols.lookup_in_scope(scope, outer).is_some();
+                        if !outer_ok {
+                            return false;
+                        }
+
+                        let args = split_top_level_type_args(inner_str);
+                        if args.is_empty() {
+                            return false;
+                        }
+
+                        let next_depth = depth.saturating_add(1);
+                        for arg in args.into_iter().rev() {
+                            stack.push((arg, next_depth));
+                        }
+                        continue;
                     }
-                    let outer = clean[..lt_idx].trim();
-                    let inner_str = &clean[lt_idx + 1..gt_idx];
-
-                    // Outer container must be a recognized builtin or a defined type in scope
-                    let outer_ok = is_primitive_or_builtin_type(outer)
-                        || self.symbols.lookup_in_scope(scope, outer).is_some();
-
-                    if !outer_ok {
-                        return false;
-                    }
-
-                    // Decompose top-level type arguments
-                    let args = split_top_level_type_args(inner_str);
-                    if args.is_empty() {
-                        // Empty generic parameters (e.g. `Vec<>`) are invalid
-                        return false;
-                    }
-
-                    // Recursively verify EVERY inner type argument
-                    return args.into_iter().all(|arg| self.is_resolvable_type(scope, arg));
                 }
             }
+
+            if !is_atomic_builtin_type_name(clean)
+                && self.symbols.lookup_in_scope(scope, clean).is_none()
+            {
+                return false;
+            }
         }
 
-        // Check primitive / builtin types
-        if is_primitive_or_builtin_type(clean) {
-            return true;
-        }
-
-        // Check user-defined symbols in scope (including imports and global fallback)
-        self.symbols.lookup_in_scope(scope, clean).is_some()
+        true
     }
 }
 
@@ -1380,43 +1078,8 @@ pub fn normalize_source_type<'a>(raw: &'a str) -> &'a str {
         }
 
         // 2. Strip reference and pointer prefixes
-        if let Some(rest) = s.strip_prefix("*const") {
-            if rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[' || c == '(') {
-                s = rest.trim_start();
-            }
-        } else if let Some(rest) = s.strip_prefix("*mut") {
-            if rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[' || c == '(') {
-                s = rest.trim_start();
-            }
-        } else if let Some(rest) = s.strip_prefix("&mut") {
-            if rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[' || c == '(') {
-                s = rest.trim_start();
-            }
-        } else if let Some(rest) = s.strip_prefix("&const") {
-            if rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[' || c == '(') {
-                s = rest.trim_start();
-            }
-        } else if let Some(rest) = s.strip_prefix('&') {
-            let mut rest = rest.trim_start();
-            // Check for lifetime specifier e.g. 'a or 'static
-            if rest.starts_with('\'') {
-                let lifetime_end = rest
-                    .char_indices()
-                    .skip(1)
-                    .find(|(_, c)| !c.is_ascii_alphanumeric() && *c != '_')
-                    .map_or(rest.len(), |(idx, _)| idx);
-                rest = rest[lifetime_end..].trim_start();
-                if let Some(after_mut) = rest.strip_prefix("mut") {
-                    if after_mut.is_empty() || after_mut.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[' || c == '(') {
-                        rest = after_mut.trim_start();
-                    }
-                } else if let Some(after_const) = rest.strip_prefix("const") {
-                    if after_const.is_empty() || after_const.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[' || c == '(') {
-                        rest = after_const.trim_start();
-                    }
-                }
-            }
-            s = rest.trim_start();
+        if let Some(rest) = strip_pointer_or_ref_prefix(s) {
+            s = rest;
         }
 
         // 3. Strip trait object prefix `dyn `
@@ -1426,53 +1089,9 @@ pub fn normalize_source_type<'a>(raw: &'a str) -> &'a str {
             }
         }
 
-        // 4. Bracket handling: multiplicity suffixes and array wrappers.
-        // Multiplicity suffixes (`Type[1..*]`, `Type[]`, `Type[0..1]`) are stripped BEFORE
-        // array wrappers (`[T; N]`, `[T]`).
-        // We find the matching opening '[' for the trailing ']' by walking backwards.
-        if s.ends_with(']') {
-            let mut depth = 0usize;
-            let mut matching_open = None;
-            for (idx, ch) in s.char_indices().rev() {
-                match ch {
-                    ']' => depth += 1,
-                    '[' => {
-                        depth -= 1;
-                        if depth == 0 {
-                            matching_open = Some(idx);
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            if let Some(open_idx) = matching_open {
-                if open_idx > 0 {
-                    // Multiplicity suffix of preceding type: Type[1..*], Type[], Type[0..1], [u8][0..1]
-                    s = s[..open_idx].trim_end();
-                } else {
-                    // Enclosing array wrapper: [T; N] or [T]
-                    let inner = s[1..s.len() - 1].trim();
-                    let mut inner_depth = 0usize;
-                    let mut semi_pos = None;
-                    for (idx, ch) in inner.char_indices() {
-                        match ch {
-                            '[' | '<' | '(' => inner_depth += 1,
-                            ']' | '>' | ')' => inner_depth = inner_depth.saturating_sub(1),
-                            ';' if inner_depth == 0 => {
-                                semi_pos = Some(idx);
-                                break;
-                            }
-                            _ => {}
-                        }
-                    }
-                    s = if let Some(semi_idx) = semi_pos {
-                        inner[..semi_idx].trim()
-                    } else {
-                        inner
-                    };
-                }
-            }
+        // 4. Strip trailing multiplicity suffixes (`Type[1..*]`) or array wrappers (`[T; N]`, `[T]`)
+        if let Some(unwrapped) = strip_trailing_bracket_wrapper(s) {
+            s = unwrapped;
         }
 
         if s == prev {
@@ -1480,13 +1099,100 @@ pub fn normalize_source_type<'a>(raw: &'a str) -> &'a str {
         }
     }
 
-    // Detect when raw was non-empty but normalized to empty (e.g. bare modifiers like "&", "*const", "[]", "?").
-    // Preserves the raw trimmed token so fail-closed validation can reject it with proper diagnostics.
+    // Preserve raw trimmed token when bare modifiers (e.g. "&", "*const", "[]", "?") strip to empty
     if s.is_empty() {
         return trimmed;
     }
 
     s
+}
+
+/// Checks whether a suffix following `*const`, `*mut`, `&mut`, or `&const` is a valid type boundary.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-NORMALIZE-SOURCE-TYPE]
+fn is_modifier_boundary(rest: &str) -> bool {
+    rest.is_empty()
+        || rest.starts_with(|c: char| {
+            c.is_whitespace() || c == '*' || c == '&' || c == '[' || c == '('
+        })
+}
+
+/// Strips one leading pointer or reference modifier (`*const`, `*mut`, `&mut`, `&const`, `&'a mut`, `&`).
+/// Realises: [REQ-SEMANTIC-VALIDATOR-NORMALIZE-SOURCE-TYPE]
+fn strip_pointer_or_ref_prefix(s: &str) -> Option<&str> {
+    for prefix in ["*const", "*mut", "&mut", "&const"] {
+        if let Some(rest) = s.strip_prefix(prefix) {
+            if is_modifier_boundary(rest) {
+                return Some(rest.trim_start());
+            }
+        }
+    }
+    let rest = s.strip_prefix('&')?;
+    let mut rest = rest.trim_start();
+    if rest.starts_with('\'') {
+        let lifetime_end = rest
+            .char_indices()
+            .skip(1)
+            .find(|(_, c)| !c.is_ascii_alphanumeric() && *c != '_')
+            .map_or(rest.len(), |(idx, _)| idx);
+        rest = rest.get(lifetime_end..).unwrap_or("").trim_start();
+        if let Some(after_mut) = rest.strip_prefix("mut") {
+            if is_modifier_boundary(after_mut) {
+                rest = after_mut.trim_start();
+            }
+        } else if let Some(after_const) = rest.strip_prefix("const") {
+            if is_modifier_boundary(after_const) {
+                rest = after_const.trim_start();
+            }
+        }
+    }
+    Some(rest.trim_start())
+}
+
+/// Strips a trailing multiplicity suffix (`Type[1..*]`) or enclosing array/slice wrapper (`[T; N]`, `[T]`).
+/// Realises: [REQ-SEMANTIC-VALIDATOR-NORMALIZE-SOURCE-TYPE]
+fn strip_trailing_bracket_wrapper(s: &str) -> Option<&str> {
+    if !s.ends_with(']') {
+        return None;
+    }
+    let mut depth: usize = 0;
+    let mut matching_open = None;
+    for (idx, ch) in s.char_indices().rev() {
+        match ch {
+            ']' => depth = depth.saturating_add(1),
+            '[' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    matching_open = Some(idx);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let open_idx = matching_open?;
+    if open_idx > 0 {
+        return Some(s.get(..open_idx).unwrap_or("").trim_end());
+    }
+    let inner_end = s.len().saturating_sub(1);
+    let inner = s.get(1..inner_end).unwrap_or("").trim();
+    let mut inner_depth: usize = 0;
+    let mut semi_pos = None;
+    for (idx, ch) in inner.char_indices() {
+        match ch {
+            '[' | '<' | '(' => inner_depth = inner_depth.saturating_add(1),
+            ']' | '>' | ')' => inner_depth = inner_depth.saturating_sub(1),
+            ';' if inner_depth == 0 => {
+                semi_pos = Some(idx);
+                break;
+            }
+            _ => {}
+        }
+    }
+    if let Some(semi_idx) = semi_pos {
+        Some(inner.get(..semi_idx).unwrap_or("").trim())
+    } else {
+        Some(inner)
+    }
 }
 
 /// Deterministically splits comma-separated top-level type arguments inside generic angle brackets `<...>`.
@@ -1518,12 +1224,12 @@ pub fn normalize_source_type<'a>(raw: &'a str) -> &'a str {
 pub fn split_top_level_type_args<'a>(args: &'a str) -> Vec<&'a str> {
     let mut s = args.trim();
     if s.starts_with('<') && s.ends_with('>') {
-        let mut depth = 0usize;
+        let mut depth: usize = 0;
         let mut closed_early = false;
-        let last_idx = s.len() - 1;
+        let last_idx = s.len().saturating_sub(1);
         for (idx, ch) in s.char_indices() {
             match ch {
-                '<' => depth += 1,
+                '<' => depth = depth.saturating_add(1),
                 '>' => {
                     depth = depth.saturating_sub(1);
                     if depth == 0 && idx < last_idx {
@@ -1535,7 +1241,9 @@ pub fn split_top_level_type_args<'a>(args: &'a str) -> Vec<&'a str> {
             }
         }
         if depth == 0 && !closed_early {
-            s = s[1..last_idx].trim();
+            if let Some(unwrapped) = s.get(1..last_idx) {
+                s = unwrapped.trim();
+            }
         }
     }
     if s.is_empty() {
@@ -1543,31 +1251,31 @@ pub fn split_top_level_type_args<'a>(args: &'a str) -> Vec<&'a str> {
     }
 
     let mut result = Vec::new();
-    let mut angle_depth = 0usize;
-    let mut paren_depth = 0usize;
-    let mut bracket_depth = 0usize;
-    let mut start = 0usize;
+    let mut angle_depth: usize = 0;
+    let mut paren_depth: usize = 0;
+    let mut bracket_depth: usize = 0;
+    let mut start: usize = 0;
 
     for (idx, ch) in s.char_indices() {
         match ch {
-            '<' => angle_depth += 1,
+            '<' => angle_depth = angle_depth.saturating_add(1),
             '>' => angle_depth = angle_depth.saturating_sub(1),
-            '(' => paren_depth += 1,
+            '(' => paren_depth = paren_depth.saturating_add(1),
             ')' => paren_depth = paren_depth.saturating_sub(1),
-            '[' => bracket_depth += 1,
+            '[' => bracket_depth = bracket_depth.saturating_add(1),
             ']' => bracket_depth = bracket_depth.saturating_sub(1),
             ',' if angle_depth == 0 && paren_depth == 0 && bracket_depth == 0 => {
-                let slice = s[start..idx].trim();
+                let slice = s.get(start..idx).unwrap_or("").trim();
                 if !slice.is_empty() {
                     result.push(slice);
                 }
-                start = idx + ch.len_utf8();
+                start = idx.saturating_add(ch.len_utf8());
             }
             _ => {}
         }
     }
 
-    let tail = s[start..].trim();
+    let tail = s.get(start..).unwrap_or("").trim();
     if !tail.is_empty() {
         result.push(tail);
     }
@@ -1581,17 +1289,18 @@ pub fn split_top_level_type_args<'a>(args: &'a str) -> Vec<&'a str> {
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `is_primitive_or_builtin_type` in `crates/compile-sysml/src/semantic/validator.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `is_primitive_or_builtin_type` (declaration #30) within `SEMANTIC-VALIDATOR`.
+/// - Preserves deterministic state conservation and referential transparency for fn `is_primitive_or_builtin_type` within `SEMANTIC-VALIDATOR`.
+/// - Evaluates nested tuples and generic containers iteratively via an explicit work-stack capped at `MAX_AST_DEPTH` (64).
 ///
 /// ## 3. Preconditions
 /// - `type_name: &str` must satisfy domain and type-safety constraints prior to invoking `is_primitive_or_builtin_type`.
 ///
 /// ## 4. Postconditions
-/// - Returns `bool` from `is_primitive_or_builtin_type` with deterministic post-execution state.
+/// - Returns `bool` from `is_primitive_or_builtin_type`, failing closed (`false`) if nesting reaches `MAX_AST_DEPTH`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(type_name)) bounded over input/member dimension of `is_primitive_or_builtin_type`.
-/// - Space Complexity: O(N(type_name)) bounded auxiliary memory for `is_primitive_or_builtin_type`.
+/// - Time Complexity: O(N(type_name)) bounded over input length and `MAX_AST_DEPTH`.
+/// - Space Complexity: O(MAX_AST_DEPTH) bounded auxiliary work-stack memory with O(1) call-stack frames.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Validates boundary inputs and types for `is_primitive_or_builtin_type` (`bool`).
@@ -1602,64 +1311,106 @@ pub fn split_top_level_type_args<'a>(args: &'a str) -> Vec<&'a str> {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SEMANTIC-VALIDATOR-IS-PRIMITIVE-OR-BUILTIN-TYPE] | SysML v2: ActionDef(is_primitive_or_builtin_type)
 pub fn is_primitive_or_builtin_type(type_name: &str) -> bool {
-    let clean = normalize_source_type(type_name);
-    if clean.is_empty() {
-        return false;
-    }
-    if clean == "()" {
-        return true;
-    }
+    is_primitive_or_builtin_type_at_depth(type_name, 0)
+}
 
-    // Tuple unrolling: (T1, T2, ...)
-    if clean.starts_with('(') && clean.ends_with(')') {
-        let mut depth = 0usize;
-        let mut closed_early = false;
-        let last_idx = clean.len() - 1;
-        for (idx, ch) in clean.char_indices() {
-            match ch {
-                '(' => depth += 1,
-                ')' => {
-                    depth = depth.saturating_sub(1);
-                    if depth == 0 && idx < last_idx {
-                        closed_early = true;
-                        break;
-                    }
-                }
-                _ => {}
-            }
+/// Iteratively checks whether `type_name` decomposes exclusively into primitive or builtin types starting at `start_depth`.
+/// Fails closed (`false`) if composite nesting reaches `MAX_AST_DEPTH`.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-IS-PRIMITIVE-OR-BUILTIN-TYPE]
+fn is_primitive_or_builtin_type_at_depth(type_name: &str, start_depth: usize) -> bool {
+    let mut stack: Vec<(&str, usize)> = vec![(type_name, start_depth)];
+
+    while let Some((current_raw, depth)) = stack.pop() {
+        if depth >= MAX_AST_DEPTH {
+            return false;
         }
-        if depth == 0 && !closed_early {
-            let inner = clean[1..last_idx].trim();
+        let clean = normalize_source_type(current_raw);
+        if clean.is_empty() {
+            return false;
+        }
+        if clean == "()" {
+            continue;
+        }
+
+        if let Some(tuple_inner) = extract_enclosing_tuple_inner(clean) {
+            let inner = tuple_inner.trim();
             if inner.is_empty() {
-                return true;
+                continue;
             }
             let args = split_top_level_type_args(inner);
-            return !args.is_empty() && args.into_iter().all(is_primitive_or_builtin_type);
+            if args.is_empty() {
+                return false;
+            }
+            let next_depth = depth.saturating_add(1);
+            for arg in args.into_iter().rev() {
+                stack.push((arg, next_depth));
+            }
+            continue;
         }
-    }
 
-    // Generic decomposition
-    if let Some(lt_idx) = clean.find('<') {
-        if let Some(gt_idx) = clean.rfind('>') {
-            if gt_idx > lt_idx {
-                if !clean[gt_idx + 1..].trim().is_empty() {
-                    return false;
+        if let Some(lt_idx) = clean.find('<') {
+            if let Some(gt_idx) = clean.rfind('>') {
+                if gt_idx > lt_idx {
+                    let trailing = clean.get(gt_idx.saturating_add(1)..).unwrap_or("");
+                    if !trailing.trim().is_empty() {
+                        return false;
+                    }
+                    let outer = clean.get(..lt_idx).unwrap_or("").trim();
+                    let inner_str = clean.get(lt_idx.saturating_add(1)..gt_idx).unwrap_or("");
+                    let args = split_top_level_type_args(inner_str);
+                    if args.is_empty() {
+                        return false;
+                    }
+                    let next_depth = depth.saturating_add(1);
+                    for arg in args.into_iter().rev() {
+                        stack.push((arg, next_depth));
+                    }
+                    stack.push((outer, next_depth));
+                    continue;
                 }
-                let outer = clean[..lt_idx].trim();
-                let inner_str = &clean[lt_idx + 1..gt_idx];
-                if !is_primitive_or_builtin_type(outer) {
-                    return false;
-                }
-                let args = split_top_level_type_args(inner_str);
-                if args.is_empty() {
-                    return false;
-                }
-                return args.into_iter().all(is_primitive_or_builtin_type);
             }
         }
+
+        if !is_atomic_builtin_type_name(clean) {
+            return false;
+        }
     }
 
-    // Standard module prefixes
+    true
+}
+
+/// Extracts the interior slice of a single balanced enclosing tuple `(T1, T2, ...)`.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-IS-RESOLVABLE-TYPE]
+fn extract_enclosing_tuple_inner(clean: &str) -> Option<&str> {
+    if !clean.starts_with('(') || !clean.ends_with(')') {
+        return None;
+    }
+    let mut depth: usize = 0;
+    let mut closed_early = false;
+    let last_idx = clean.len().saturating_sub(1);
+    for (idx, ch) in clean.char_indices() {
+        match ch {
+            '(' => depth = depth.saturating_add(1),
+            ')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 && idx < last_idx {
+                    closed_early = true;
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    if depth == 0 && !closed_early {
+        clean.get(1..last_idx)
+    } else {
+        None
+    }
+}
+
+/// Checks whether a normalized non-generic, non-tuple type identifier is a recognized standard or framework builtin.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-IS-PRIMITIVE-OR-BUILTIN-TYPE]
+fn is_atomic_builtin_type_name(clean: &str) -> bool {
     if clean.starts_with("ScalarValues::")
         || clean.starts_with("ISQ::")
         || clean.starts_with("SI::")
@@ -1669,9 +1420,13 @@ pub fn is_primitive_or_builtin_type(type_name: &str) -> bool {
     {
         return true;
     }
-
     let unqualified = clean.rsplit("::").next().unwrap_or(clean).trim();
+    is_scalar_or_container_builtin(unqualified) || is_ui_framework_builtin(unqualified)
+}
 
+/// Recognizes SysML v2 scalars, Rust primitives/containers, and Dart collection/async builtin identifiers.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-IS-PRIMITIVE-OR-BUILTIN-TYPE]
+fn is_scalar_or_container_builtin(unqualified: &str) -> bool {
     matches!(
         unqualified,
         "Boolean"
@@ -1736,7 +1491,15 @@ pub fn is_primitive_or_builtin_type(type_name: &str) -> bool {
             | "Iterable"
             | "Future"
             | "Stream"
-            | "Widget"
+    )
+}
+
+/// Recognizes Flutter UI framework builtin widget, geometry, and controller type identifiers.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-IS-PRIMITIVE-OR-BUILTIN-TYPE]
+fn is_ui_framework_builtin(unqualified: &str) -> bool {
+    matches!(
+        unqualified,
+        "Widget"
             | "StatefulWidget"
             | "StatelessWidget"
             | "State"
@@ -1767,6 +1530,129 @@ pub fn is_primitive_or_builtin_type(type_name: &str) -> bool {
             | "FocusNode"
             | "AnimationController"
     )
+}
+
+/// Checks whether `pkg` is a synthetic empty `SysML_Model` container holding only nested subpackages.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PART-DEFS-IN-PKG]
+fn is_empty_sysml_model_root(pkg: &PackageDef) -> bool {
+    pkg.name == "SysML_Model"
+        && pkg.attribute_defs.is_empty()
+        && pkg.port_defs.is_empty()
+        && pkg.action_defs.is_empty()
+        && pkg.constraint_defs.is_empty()
+        && pkg.calc_defs.is_empty()
+        && pkg.requirement_defs.is_empty()
+        && pkg.state_defs.is_empty()
+        && pkg.connection_defs.is_empty()
+        && pkg.use_case_defs.is_empty()
+        && pkg.item_defs.is_empty()
+        && pkg.hazard_defs.is_empty()
+        && pkg.risk_defs.is_empty()
+        && pkg.test_case_defs.is_empty()
+        && pkg.capability_defs.is_empty()
+        && pkg.operation_defs.is_empty()
+        && pkg.interaction_defs.is_empty()
+        && pkg.part_defs.is_empty()
+}
+
+/// Computes the qualified package scope path for part and requirement resolution.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PART-DEFS-IN-PKG]
+fn compute_scoped_package_name(pkg: &PackageDef, parent_scope: &str) -> String {
+    let is_synthetic_multi_root = parent_scope.is_empty()
+        && !pkg.packages.is_empty()
+        && (pkg.name.is_empty() || is_empty_sysml_model_root(pkg));
+
+    if is_synthetic_multi_root {
+        String::new()
+    } else if parent_scope.is_empty() {
+        pkg.name.clone()
+    } else if pkg.name.is_empty() {
+        parent_scope.to_string()
+    } else {
+        format!("{}::{}", parent_scope, pkg.name)
+    }
+}
+
+/// Extracts `@SafetyRealises` or `@TriggersHazard` target identifiers from requirement prose.
+/// Uses checked `.get()` string slicing and saturating byte offsets with zero panicking operations.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-REFERENTIAL-INTEGRITY]
+fn extract_annotation_targets(text: &str, tag: &str) -> Vec<Vec<String>> {
+    let mut results = Vec::new();
+    if tag.is_empty() {
+        return results;
+    }
+    let lower_text = text.to_ascii_lowercase();
+    let lower_tag = tag.to_ascii_lowercase();
+    let mut search_idx: usize = 0;
+
+    while let Some(search_window) = lower_text.get(search_idx..) {
+        let Some(pos) = search_window.find(&lower_tag) else {
+            break;
+        };
+        let tag_start = search_idx.saturating_add(pos);
+        let idx = tag_start.saturating_add(lower_tag.len());
+        let Some(rest) = text.get(idx..) else {
+            break;
+        };
+        let (ws_end, next_char) = rest
+            .char_indices()
+            .find(|(_, c)| !c.is_whitespace())
+            .map_or((rest.len(), None), |(c_idx, c)| (c_idx, Some(c)));
+        match next_char {
+            Some('(') => {
+                let inside_start = idx.saturating_add(ws_end).saturating_add(1);
+                if let Some(after_open) = text.get(inside_start..) {
+                    if let Some(close_pos) = after_open.find(')') {
+                        if let Some(inside) = after_open.get(..close_pos) {
+                            let targets: Vec<String> = inside
+                                .split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            results.push(targets);
+                            search_idx = inside_start.saturating_add(close_pos).saturating_add(1);
+                            continue;
+                        }
+                    }
+                }
+            }
+            Some(':') => {
+                let colon_after_idx = ws_end.saturating_add(1);
+                if let Some(after_colon) = rest.get(colon_after_idx..) {
+                    let id_start = after_colon
+                        .char_indices()
+                        .find(|(_, c)| !c.is_whitespace())
+                        .map_or(after_colon.len(), |(c_idx, _)| c_idx);
+                    if let Some(id_rest) = after_colon.get(id_start..) {
+                        let id_len = id_rest
+                            .chars()
+                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+                            .map(|c| c.len_utf8())
+                            .sum::<usize>();
+                        if id_len > 0 {
+                            if let Some(raw_id) = id_rest.get(..id_len) {
+                                results.push(vec![raw_id.trim().to_string()]);
+                                let global_end = idx
+                                    .saturating_add(colon_after_idx)
+                                    .saturating_add(id_start)
+                                    .saturating_add(id_len);
+                                search_idx = global_end.max(tag_start.saturating_add(1));
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        let step = lower_text
+            .get(tag_start..)
+            .and_then(|s| s.chars().next())
+            .map_or(1, char::len_utf8);
+        search_idx = tag_start.saturating_add(step);
+    }
+
+    results
 }
 
 /// Executes deterministic fn `get_effective_direction` within `crates/compile-sysml/src/semantic/validator.rs`.
@@ -1849,43 +1735,41 @@ mod tests {
             part_defs: vec![
                 PartDef {
                     name: "Sensor".to_string(),
-                    ports: vec![
-                        PortDef {
-                            name: "out_data".to_string(),
-                            direction: "out".to_string(),
-                            type_name: "RawData".to_string(),
-                            ..Default::default()
-                        },
-                    ],
+                    ports: vec![PortDef {
+                        name: "out_data".to_string(),
+                        direction: "out".to_string(),
+                        type_name: "RawData".to_string(),
+                        ..Default::default()
+                    }],
                     ..Default::default()
                 },
                 PartDef {
                     name: "Computer".to_string(),
-                    ports: vec![
-                        PortDef {
-                            name: "in_data".to_string(),
-                            direction: "in".to_string(),
-                            type_name: "RawData".to_string(),
-                            ..Default::default()
-                        },
-                    ],
+                    ports: vec![PortDef {
+                        name: "in_data".to_string(),
+                        direction: "in".to_string(),
+                        type_name: "RawData".to_string(),
+                        ..Default::default()
+                    }],
                     ..Default::default()
                 },
             ],
-            connection_defs: vec![
-                ConnectionDef {
-                    name: "SensorToComputer".to_string(),
-                    source_port: "Sensor.out_data".to_string(),
-                    target_port: "Computer.in_data".to_string(),
-                    ..Default::default()
-                },
-            ],
+            connection_defs: vec![ConnectionDef {
+                name: "SensorToComputer".to_string(),
+                source_port: "Sensor.out_data".to_string(),
+                target_port: "Computer.in_data".to_string(),
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
         let mut validator = SemanticValidator::new(&pkg);
         validator.validate();
-        assert!(!validator.has_errors(), "Expected no errors, got: {:?}", validator.errors());
+        assert!(
+            !validator.has_errors(),
+            "Expected no errors, got: {:?}",
+            validator.errors()
+        );
         Ok(())
     }
 
@@ -1896,37 +1780,31 @@ mod tests {
             part_defs: vec![
                 PartDef {
                     name: "Sensor".to_string(),
-                    ports: vec![
-                        PortDef {
-                            name: "in_data".to_string(),
-                            direction: "in".to_string(),
-                            type_name: "RawData".to_string(),
-                            ..Default::default()
-                        },
-                    ],
+                    ports: vec![PortDef {
+                        name: "in_data".to_string(),
+                        direction: "in".to_string(),
+                        type_name: "RawData".to_string(),
+                        ..Default::default()
+                    }],
                     ..Default::default()
                 },
                 PartDef {
                     name: "Computer".to_string(),
-                    ports: vec![
-                        PortDef {
-                            name: "out_data".to_string(),
-                            direction: "out".to_string(),
-                            type_name: "RawData".to_string(),
-                            ..Default::default()
-                        },
-                    ],
+                    ports: vec![PortDef {
+                        name: "out_data".to_string(),
+                        direction: "out".to_string(),
+                        type_name: "RawData".to_string(),
+                        ..Default::default()
+                    }],
                     ..Default::default()
                 },
             ],
-            connection_defs: vec![
-                ConnectionDef {
-                    name: "InvertedFlow".to_string(),
-                    source_port: "Sensor.in_data".to_string(),
-                    target_port: "Computer.out_data".to_string(),
-                    ..Default::default()
-                },
-            ],
+            connection_defs: vec![ConnectionDef {
+                name: "InvertedFlow".to_string(),
+                source_port: "Sensor.in_data".to_string(),
+                target_port: "Computer.out_data".to_string(),
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -1935,7 +1813,11 @@ mod tests {
         assert!(validator.has_errors());
         let errors = validator.errors();
         assert_eq!(errors.len(), 1);
-        assert!(errors.first().ok_or("missing first element of errors")?.message.contains("Inverted flow direction"));
+        assert!(errors
+            .first()
+            .ok_or("missing first element of errors")?
+            .message
+            .contains("Inverted flow direction"));
         Ok(())
     }
 
@@ -1943,20 +1825,16 @@ mod tests {
     fn test_dangling_safety_realises_fails() -> Result<(), Box<dyn std::error::Error>> {
         let pkg = PackageDef {
             name: "SafetySys".to_string(),
-            requirement_defs: vec![
-                RequirementDef {
-                    name: "Req_Safety_1".to_string(),
-                    text: "Shall maintain velocity limit. @SafetyRealises(UCA-99)".to_string(),
-                    ..Default::default()
-                },
-            ],
-            constraint_defs: vec![
-                ConstraintDef {
-                    name: "UCA_01_Overspeed".to_string(),
-                    expression: "v <= 60.0".to_string(),
-                    ..Default::default()
-                },
-            ],
+            requirement_defs: vec![RequirementDef {
+                name: "Req_Safety_1".to_string(),
+                text: "Shall maintain velocity limit. @SafetyRealises(UCA-99)".to_string(),
+                ..Default::default()
+            }],
+            constraint_defs: vec![ConstraintDef {
+                name: "UCA_01_Overspeed".to_string(),
+                expression: "v <= 60.0".to_string(),
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -1964,41 +1842,40 @@ mod tests {
         validator.validate();
         assert!(validator.has_errors());
         let errors = validator.errors();
-        assert!(errors.first().ok_or("missing first element of errors")?.message.contains("references undefined constraint/UCA 'UCA-99'"));
+        assert!(errors
+            .first()
+            .ok_or("missing first element of errors")?
+            .message
+            .contains("references undefined constraint/UCA 'UCA-99'"));
         Ok(())
     }
 
     #[test]
-    fn test_validate_part_defs_with_cross_package_import() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_validate_part_defs_with_cross_package_import() -> Result<(), Box<dyn std::error::Error>>
+    {
         let pkg_a = PackageDef {
             name: "Subsystem_1".to_string(),
-            part_defs: vec![
-                PartDef {
-                    name: "SystemVisionEngine".to_string(),
-                    is_def: true,
-                    ..Default::default()
-                },
-            ],
+            part_defs: vec![PartDef {
+                name: "SystemVisionEngine".to_string(),
+                is_def: true,
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
         let pkg_b = PackageDef {
             name: "Subsystem_2".to_string(),
-            imports: vec![
-                ImportDef {
-                    path: "Subsystem_1".to_string(),
-                    is_wildcard: true,
-                    ..Default::default()
-                },
-            ],
-            part_defs: vec![
-                PartDef {
-                    name: "v".to_string(),
-                    is_def: false,
-                    type_name: Some("SystemVisionEngine".to_string()),
-                    ..Default::default()
-                },
-            ],
+            imports: vec![ImportDef {
+                path: "Subsystem_1".to_string(),
+                is_wildcard: true,
+                ..Default::default()
+            }],
+            part_defs: vec![PartDef {
+                name: "v".to_string(),
+                is_def: false,
+                type_name: Some("SystemVisionEngine".to_string()),
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -2022,14 +1899,12 @@ mod tests {
     fn test_validate_part_defs_missing_type_fails() -> Result<(), Box<dyn std::error::Error>> {
         let pkg = PackageDef {
             name: "Subsystem_2".to_string(),
-            part_defs: vec![
-                PartDef {
-                    name: "v".to_string(),
-                    is_def: false,
-                    type_name: Some("SystemVisionEngine".to_string()),
-                    ..Default::default()
-                },
-            ],
+            part_defs: vec![PartDef {
+                name: "v".to_string(),
+                is_def: false,
+                type_name: Some("SystemVisionEngine".to_string()),
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -2037,43 +1912,38 @@ mod tests {
         validator.validate();
         assert!(validator.has_errors());
         let errors = validator.errors();
-        assert!(errors
-            .iter()
-            .any(|e| e.message.contains("references undefined type 'SystemVisionEngine'")));
+        assert!(errors.iter().any(|e| e
+            .message
+            .contains("references undefined type 'SystemVisionEngine'")));
         Ok(())
     }
 
     #[test]
-    fn test_validate_requirements_with_cross_package_import() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_validate_requirements_with_cross_package_import(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let pkg_a = PackageDef {
             name: "Subsystem_1".to_string(),
-            part_defs: vec![
-                PartDef {
-                    name: "SafetyController".to_string(),
-                    is_def: true,
-                    ..Default::default()
-                },
-            ],
+            part_defs: vec![PartDef {
+                name: "SafetyController".to_string(),
+                is_def: true,
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
         let pkg_b = PackageDef {
             name: "Subsystem_2".to_string(),
-            imports: vec![
-                ImportDef {
-                    path: "Subsystem_1".to_string(),
-                    is_wildcard: true,
-                    ..Default::default()
-                },
-            ],
-            requirement_defs: vec![
-                RequirementDef {
-                    name: "Req_Ctrl".to_string(),
-                    text: "Shall engage safety controller.".to_string(),
-                    satisfied_by: vec!["SafetyController".to_string()],
-                    ..Default::default()
-                },
-            ],
+            imports: vec![ImportDef {
+                path: "Subsystem_1".to_string(),
+                is_wildcard: true,
+                ..Default::default()
+            }],
+            requirement_defs: vec![RequirementDef {
+                name: "Req_Ctrl".to_string(),
+                text: "Shall engage safety controller.".to_string(),
+                satisfied_by: vec!["SafetyController".to_string()],
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -2094,39 +1964,32 @@ mod tests {
     }
 
     #[test]
-    fn test_subpackage_connections_validated_for_dangling_ports() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_subpackage_connections_validated_for_dangling_ports(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let subpkg = PackageDef {
             name: "NestedSubsystem".to_string(),
-            part_defs: vec![
-                PartDef {
-                    name: "Worker".to_string(),
-                    ports: vec![
-                        PortDef {
-                            name: "out_stream".to_string(),
-                            direction: "out".to_string(),
-                            type_name: "StreamData".to_string(),
-                            ..Default::default()
-                        },
-                    ],
-                    connections: vec![
-                        ConnectionDef {
-                            name: "DanglingSubpartConn".to_string(),
-                            source_port: "out_stream".to_string(),
-                            target_port: "Worker.undefined_target_port".to_string(),
-                            ..Default::default()
-                        },
-                    ],
+            part_defs: vec![PartDef {
+                name: "Worker".to_string(),
+                ports: vec![PortDef {
+                    name: "out_stream".to_string(),
+                    direction: "out".to_string(),
+                    type_name: "StreamData".to_string(),
                     ..Default::default()
-                },
-            ],
-            connection_defs: vec![
-                ConnectionDef {
-                    name: "DanglingPkgConn".to_string(),
-                    source_port: "Worker.out_stream".to_string(),
-                    target_port: "UndefinedPart.in_stream".to_string(),
+                }],
+                connections: vec![ConnectionDef {
+                    name: "DanglingSubpartConn".to_string(),
+                    source_port: "out_stream".to_string(),
+                    target_port: "Worker.undefined_target_port".to_string(),
                     ..Default::default()
-                },
-            ],
+                }],
+                ..Default::default()
+            }],
+            connection_defs: vec![ConnectionDef {
+                name: "DanglingPkgConn".to_string(),
+                source_port: "Worker.out_stream".to_string(),
+                target_port: "UndefinedPart.in_stream".to_string(),
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -2144,12 +2007,16 @@ mod tests {
         );
         let errors = validator.errors();
         assert!(
-            errors.iter().any(|e| e.message.contains("references undefined target port 'Worker.undefined_target_port'")),
+            errors.iter().any(|e| e
+                .message
+                .contains("references undefined target port 'Worker.undefined_target_port'")),
             "Expected error for Worker.undefined_target_port, got: {:?}",
             errors
         );
         assert!(
-            errors.iter().any(|e| e.message.contains("references undefined target port 'UndefinedPart.in_stream'")),
+            errors.iter().any(|e| e
+                .message
+                .contains("references undefined target port 'UndefinedPart.in_stream'")),
             "Expected error for UndefinedPart.in_stream, got: {:?}",
             errors
         );
@@ -2176,14 +2043,23 @@ mod tests {
         assert_eq!(normalize_source_type("String?"), "String");
         assert_eq!(normalize_source_type("Widget?"), "Widget");
         assert_eq!(normalize_source_type("BuildContext?"), "BuildContext");
-        assert_eq!(normalize_source_type("&'a mut [Option<String>?; 10]"), "Option<String>");
+        assert_eq!(
+            normalize_source_type("&'a mut [Option<String>?; 10]"),
+            "Option<String>"
+        );
     }
 
     #[test]
     fn test_issue_461_split_top_level_type_args() {
         assert_eq!(split_top_level_type_args("u8"), vec!["u8"]);
-        assert_eq!(split_top_level_type_args("String, i32"), vec!["String", "i32"]);
-        assert_eq!(split_top_level_type_args("<String, i32>"), vec!["String", "i32"]);
+        assert_eq!(
+            split_top_level_type_args("String, i32"),
+            vec!["String", "i32"]
+        );
+        assert_eq!(
+            split_top_level_type_args("<String, i32>"),
+            vec!["String", "i32"]
+        );
         assert_eq!(
             split_top_level_type_args("HashMap<String, Vec<u8>>, Result<Option<T>, E>"),
             vec!["HashMap<String, Vec<u8>>", "Result<Option<T>, E>"]
@@ -2199,10 +2075,38 @@ mod tests {
     #[test]
     fn test_issue_461_is_primitive_or_builtin_type_scalars() {
         let scalars = vec![
-            "void", "unit", "()", "double", "num", "char", "dynamic", "Object",
-            "bool", "Boolean", "int", "Integer", "i8", "i16", "i32", "i64", "i128", "isize",
-            "u8", "u16", "u32", "u64", "u128", "usize", "float", "Float", "f32", "f64",
-            "String", "string", "str", "ScalarValues",
+            "void",
+            "unit",
+            "()",
+            "double",
+            "num",
+            "char",
+            "dynamic",
+            "Object",
+            "bool",
+            "Boolean",
+            "int",
+            "Integer",
+            "i8",
+            "i16",
+            "i32",
+            "i64",
+            "i128",
+            "isize",
+            "u8",
+            "u16",
+            "u32",
+            "u64",
+            "u128",
+            "usize",
+            "float",
+            "Float",
+            "f32",
+            "f64",
+            "String",
+            "string",
+            "str",
+            "ScalarValues",
         ];
         for ty in scalars {
             assert!(
@@ -2216,9 +2120,26 @@ mod tests {
     #[test]
     fn test_issue_461_is_primitive_or_builtin_type_rust_containers() {
         let containers = vec![
-            "Vec", "Option", "Result", "Box", "Arc", "Rc", "Cow",
-            "Mutex", "RwLock", "BTreeMap", "BTreeSet", "HashMap", "HashSet",
-            "Path", "PathBuf", "Duration", "Instant", "SystemTime", "DateTime", "Error",
+            "Vec",
+            "Option",
+            "Result",
+            "Box",
+            "Arc",
+            "Rc",
+            "Cow",
+            "Mutex",
+            "RwLock",
+            "BTreeMap",
+            "BTreeSet",
+            "HashMap",
+            "HashSet",
+            "Path",
+            "PathBuf",
+            "Duration",
+            "Instant",
+            "SystemTime",
+            "DateTime",
+            "Error",
         ];
         for ty in containers {
             assert!(
@@ -2244,12 +2165,36 @@ mod tests {
     #[test]
     fn test_issue_461_is_primitive_or_builtin_type_flutter_framework() {
         let flutter_types = vec![
-            "Widget", "StatefulWidget", "StatelessWidget", "State", "BuildContext",
-            "Key", "GlobalKey", "LocalKey", "ValueKey", "VoidCallback", "ValueChanged",
-            "ValueGetter", "ValueSetter", "WidgetBuilder", "IndexedWidgetBuilder",
-            "TransitionBuilder", "Color", "IconData", "EdgeInsets", "EdgeInsetsGeometry",
-            "BoxConstraints", "Size", "Offset", "Rect", "TextStyle", "ThemeData",
-            "TextEditingController", "ScrollController", "FocusNode", "AnimationController",
+            "Widget",
+            "StatefulWidget",
+            "StatelessWidget",
+            "State",
+            "BuildContext",
+            "Key",
+            "GlobalKey",
+            "LocalKey",
+            "ValueKey",
+            "VoidCallback",
+            "ValueChanged",
+            "ValueGetter",
+            "ValueSetter",
+            "WidgetBuilder",
+            "IndexedWidgetBuilder",
+            "TransitionBuilder",
+            "Color",
+            "IconData",
+            "EdgeInsets",
+            "EdgeInsetsGeometry",
+            "BoxConstraints",
+            "Size",
+            "Offset",
+            "Rect",
+            "TextStyle",
+            "ThemeData",
+            "TextEditingController",
+            "ScrollController",
+            "FocusNode",
+            "AnimationController",
         ];
         for ty in flutter_types {
             assert!(
@@ -2299,7 +2244,9 @@ mod tests {
     fn test_issue_461_is_primitive_or_builtin_type_negative_unknown_types() {
         assert!(!is_primitive_or_builtin_type("UnknownCustomSensor"));
         assert!(!is_primitive_or_builtin_type("Vec<UnknownCustomSensor>"));
-        assert!(!is_primitive_or_builtin_type("HashMap<String, UnknownCustomSensor>"));
+        assert!(!is_primitive_or_builtin_type(
+            "HashMap<String, UnknownCustomSensor>"
+        ));
         assert!(!is_primitive_or_builtin_type("Future<UnknownCustomSensor>"));
     }
 
@@ -2373,13 +2320,11 @@ mod tests {
     fn test_issue_461_is_resolvable_type_fail_closed_negative_mutations() {
         let pkg = PackageDef {
             name: "Subsystem".to_string(),
-            part_defs: vec![
-                PartDef {
-                    name: "SensorNode".to_string(),
-                    is_def: true,
-                    ..Default::default()
-                },
-            ],
+            part_defs: vec![PartDef {
+                name: "SensorNode".to_string(),
+                is_def: true,
+                ..Default::default()
+            }],
             ..Default::default()
         };
         let validator = SemanticValidator::new(&pkg);
@@ -2449,14 +2394,12 @@ mod tests {
     fn test_issue_461_validate_part_defs_with_undefined_generic_inner_fails() {
         let pkg = PackageDef {
             name: "Platform".to_string(),
-            part_defs: vec![
-                PartDef {
-                    name: "bad_nodes".to_string(),
-                    is_def: false,
-                    type_name: Some("Vec<GhostType>".to_string()),
-                    ..Default::default()
-                },
-            ],
+            part_defs: vec![PartDef {
+                name: "bad_nodes".to_string(),
+                is_def: false,
+                type_name: Some("Vec<GhostType>".to_string()),
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -2468,7 +2411,9 @@ mod tests {
         );
         let errors = validator.errors();
         assert!(
-            errors.iter().any(|e| e.message.contains("Part 'bad_nodes' references undefined type 'Vec<GhostType>'")),
+            errors.iter().any(|e| e
+                .message
+                .contains("Part 'bad_nodes' references undefined type 'Vec<GhostType>'")),
             "Expected error message referencing undefined type, got: {:?}",
             errors
         );
@@ -2478,33 +2423,29 @@ mod tests {
     fn test_issue_461_validate_requirements_with_composite_generic_attributes_passes() {
         let pkg = PackageDef {
             name: "Safety".to_string(),
-            part_defs: vec![
-                PartDef {
-                    name: "Guard".to_string(),
-                    is_def: true,
-                    ..Default::default()
-                },
-            ],
-            requirement_defs: vec![
-                RequirementDef {
-                    name: "Req_Safety".to_string(),
-                    text: "Shall maintain logs.".to_string(),
-                    attributes: vec![
-                        AttributeDef {
-                            name: "log_entries".to_string(),
-                            type_name: "Vec<String>".to_string(),
-                            ..Default::default()
-                        },
-                        AttributeDef {
-                            name: "guard_ref".to_string(),
-                            type_name: "Option<Guard>".to_string(),
-                            ..Default::default()
-                        },
-                    ],
-                    satisfied_by: vec!["Guard".to_string()],
-                    ..Default::default()
-                },
-            ],
+            part_defs: vec![PartDef {
+                name: "Guard".to_string(),
+                is_def: true,
+                ..Default::default()
+            }],
+            requirement_defs: vec![RequirementDef {
+                name: "Req_Safety".to_string(),
+                text: "Shall maintain logs.".to_string(),
+                attributes: vec![
+                    AttributeDef {
+                        name: "log_entries".to_string(),
+                        type_name: "Vec<String>".to_string(),
+                        ..Default::default()
+                    },
+                    AttributeDef {
+                        name: "guard_ref".to_string(),
+                        type_name: "Option<Guard>".to_string(),
+                        ..Default::default()
+                    },
+                ],
+                satisfied_by: vec!["Guard".to_string()],
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -2552,7 +2493,9 @@ mod tests {
         );
         let errors = validator.errors();
         assert!(
-            errors.iter().any(|e| e.message.contains("references undefined type 'Option<String> UndefinedType'")),
+            errors.iter().any(|e| e
+                .message
+                .contains("references undefined type 'Option<String> UndefinedType'")),
             "Expected diagnostic error message for trailing undefined token, got: {:?}",
             errors
         );
@@ -2565,9 +2508,13 @@ mod tests {
         assert!(!validator.is_resolvable_type("TestScope", "Vec<ValidPart> GhostPart"));
 
         // 3. Direct is_primitive_or_builtin_type probes MUST fail closed
-        assert!(!is_primitive_or_builtin_type("Option<String> UndefinedType"));
+        assert!(!is_primitive_or_builtin_type(
+            "Option<String> UndefinedType"
+        ));
         assert!(!is_primitive_or_builtin_type("Vec<u8> junk"));
-        assert!(!is_primitive_or_builtin_type("HashMap<String, i32> trailing"));
+        assert!(!is_primitive_or_builtin_type(
+            "HashMap<String, i32> trailing"
+        ));
     }
 
     #[test]
@@ -2608,7 +2555,10 @@ mod tests {
         let validator = SemanticValidator::new(&pkg);
         assert!(validator.is_resolvable_type("TestScope", "(ValidPart, Vec<String>)"));
         assert!(validator.is_resolvable_type("TestScope", "(i32, Option<ValidPart>)"));
-        assert!(validator.is_resolvable_type("TestScope", "(Vec<ValidPart>, HashMap<String, Option<i32>>)"));
+        assert!(validator.is_resolvable_type(
+            "TestScope",
+            "(Vec<ValidPart>, HashMap<String, Option<i32>>)"
+        ));
 
         // 3. Negative mutation: tuples containing undefined types MUST fail closed
         assert!(!validator.is_resolvable_type("TestScope", "(ValidPart, Vec<UndefinedPart>)"));
@@ -2657,14 +2607,12 @@ mod tests {
         // 4. Model validation probe with bare modifier part
         let invalid_pkg = PackageDef {
             name: "InvalidPkg".to_string(),
-            part_defs: vec![
-                PartDef {
-                    name: "bad_mod_part".to_string(),
-                    is_def: false,
-                    type_name: Some("&".to_string()),
-                    ..Default::default()
-                },
-            ],
+            part_defs: vec![PartDef {
+                name: "bad_mod_part".to_string(),
+                is_def: false,
+                type_name: Some("&".to_string()),
+                ..Default::default()
+            }],
             ..Default::default()
         };
         let mut invalid_validator = SemanticValidator::new(&invalid_pkg);
@@ -2684,13 +2632,11 @@ mod tests {
     fn test_issue_461_iter2_edge_4_pointer_array_wrappers_normalize_and_resolve() {
         let pkg = PackageDef {
             name: "TestScope".to_string(),
-            part_defs: vec![
-                PartDef {
-                    name: "ValidPart".to_string(),
-                    is_def: true,
-                    ..Default::default()
-                },
-            ],
+            part_defs: vec![PartDef {
+                name: "ValidPart".to_string(),
+                is_def: true,
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -2699,7 +2645,10 @@ mod tests {
         assert_eq!(normalize_source_type("*mut[u8; 16]"), "u8");
         assert_eq!(normalize_source_type("&mut[ValidPart; 4]"), "ValidPart");
         assert_eq!(normalize_source_type("&const[i32; 8]"), "i32");
-        assert_eq!(normalize_source_type("*const[TotallyUndefined; 10]"), "TotallyUndefined");
+        assert_eq!(
+            normalize_source_type("*const[TotallyUndefined; 10]"),
+            "TotallyUndefined"
+        );
 
         // 2. Resolution for valid pointer-wrapped arrays
         let validator = SemanticValidator::new(&pkg);
@@ -2725,13 +2674,11 @@ mod tests {
     fn test_issue_461_iter2_edge_5_slice_multiplicity_normalization_and_resolution() {
         let pkg = PackageDef {
             name: "TestScope".to_string(),
-            part_defs: vec![
-                PartDef {
-                    name: "SensorNode".to_string(),
-                    is_def: true,
-                    ..Default::default()
-                },
-            ],
+            part_defs: vec![PartDef {
+                name: "SensorNode".to_string(),
+                is_def: true,
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -2764,7 +2711,10 @@ mod tests {
     fn test_issue_461_iter2_edge_6_split_top_level_type_args_multiple_bracket_groups() {
         // 1. Multiple top-level angle bracket groups split cleanly
         assert_eq!(split_top_level_type_args("<A>, <B>"), vec!["<A>", "<B>"]);
-        assert_eq!(split_top_level_type_args("<A, B>, <C, D>"), vec!["<A, B>", "<C, D>"]);
+        assert_eq!(
+            split_top_level_type_args("<A, B>, <C, D>"),
+            vec!["<A, B>", "<C, D>"]
+        );
         assert_eq!(
             split_top_level_type_args("<A>, <B, <C, D>>, <E>"),
             vec!["<A>", "<B, <C, D>>", "<E>"]
@@ -2791,13 +2741,11 @@ mod tests {
     fn test_issue_461_iter2_edge_7_trait_objects_with_dyn_resolve() {
         let pkg = PackageDef {
             name: "TestScope".to_string(),
-            part_defs: vec![
-                PartDef {
-                    name: "ValidPart".to_string(),
-                    is_def: true,
-                    ..Default::default()
-                },
-            ],
+            part_defs: vec![PartDef {
+                name: "ValidPart".to_string(),
+                is_def: true,
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -2814,12 +2762,16 @@ mod tests {
         let validator = SemanticValidator::new(&pkg);
         assert!(validator.is_resolvable_type("", "Box<dyn Error>"));
         assert!(validator.is_resolvable_type("", "Arc<dyn Error>"));
-        assert!(validator.is_resolvable_type("", "Result<Option<HashMap<String, Vec<u8>>>, Box<dyn Error>>"));
+        assert!(validator.is_resolvable_type(
+            "",
+            "Result<Option<HashMap<String, Vec<u8>>>, Box<dyn Error>>"
+        ));
         assert!(validator.is_resolvable_type("TestScope", "Result<ValidPart, Box<dyn Error>>"));
 
         // 3. Negative mutation: trait objects with undefined trait MUST fail closed
         assert!(!validator.is_resolvable_type("", "Box<dyn UndefinedTrait>"));
-        assert!(!validator.is_resolvable_type("TestScope", "Result<ValidPart, Box<dyn UndefinedTrait>>"));
+        assert!(!validator
+            .is_resolvable_type("TestScope", "Result<ValidPart, Box<dyn UndefinedTrait>>"));
     }
 
     #[test]
@@ -2831,13 +2783,11 @@ mod tests {
     fn test_issue_461_iter2_edge_8_tuples_in_primitive_and_generic_containers() {
         let pkg = PackageDef {
             name: "TestScope".to_string(),
-            part_defs: vec![
-                PartDef {
-                    name: "ValidPart".to_string(),
-                    is_def: true,
-                    ..Default::default()
-                },
-            ],
+            part_defs: vec![PartDef {
+                name: "ValidPart".to_string(),
+                is_def: true,
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -2933,7 +2883,343 @@ mod tests {
     fn test_issue_461_all_iteration_1_edge_cases_comprehensive_matrix() {
         test_issue_461_iter2_all_iteration_1_edge_cases_comprehensive_matrix();
     }
+
+    /// Iteratively dismantles a `PackageDef` tree and all nested `PartDef` subtrees in O(1) stack frames.
+    fn drain_package_tree_iteratively(root: PackageDef) {
+        let mut extracted_parts: Vec<PartDef> = Vec::new();
+        let mut pkg_drain = vec![root];
+        while let Some(mut p) = pkg_drain.pop() {
+            extracted_parts.append(&mut p.part_defs);
+            pkg_drain.append(&mut p.packages);
+        }
+        while let Some(mut pt) = extracted_parts.pop() {
+            extracted_parts.append(&mut pt.parts);
+        }
+    }
+
+    #[test]
+    fn test_deep_nested_ast_hierarchy_bounded_without_stack_overflow() -> Result<(), String> {
+        use crate::semantic::digest::{count_structural_elements, SchemaDigest};
+        use crate::semantic::serializer::SysmlSerializable;
+
+        let bound: usize = 64;
+
+        // 1. Construct a 64-level deep nested PackageDef tree iteratively (Pkg_0 .. Pkg_63).
+        let mut pkg_64 = PackageDef {
+            name: format!("Pkg_{}", bound.saturating_sub(1)),
+            requirement_defs: vec![RequirementDef {
+                name: "Req_Leaf_63".to_string(),
+                text: "Leaf requirement at depth 63.".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        for idx in (0..bound.saturating_sub(1)).rev() {
+            pkg_64 = PackageDef {
+                name: format!("Pkg_{idx}"),
+                packages: vec![pkg_64],
+                ..Default::default()
+            };
+        }
+
+        let pkg_64_symbols = SymbolTable::build_from_package(&pkg_64);
+        assert_eq!(pkg_64_symbols.all_of_kind(SymbolKind::Package).len(), bound);
+        assert_eq!(pkg_64_symbols.all_of_kind(SymbolKind::Requirement).len(), 1);
+
+        let mut pkg_64_validator = SemanticValidator::new(&pkg_64);
+        pkg_64_validator.validate();
+        assert!(
+            !pkg_64_validator.has_errors(),
+            "64-level PackageDef tree must validate cleanly, got: {:?}",
+            pkg_64_validator.errors()
+        );
+
+        let pkg_64_sysml = pkg_64.to_sysml(0);
+        assert!(pkg_64_sysml.contains("package Pkg_0 {"));
+        assert!(pkg_64_sysml.contains("package Pkg_63 {"));
+
+        let pkg_64_digest = SchemaDigest::compute(&pkg_64, &pkg_64_sysml);
+        assert!(!pkg_64_digest.sha256.is_empty());
+        assert!(pkg_64_digest.total_lines > 0);
+        assert_eq!(
+            pkg_64_digest.node_counts.get("packages").copied(),
+            Some(bound)
+        );
+
+        // 2. Construct a 64-level deep PackageDef + nested PartDef tree iteratively
+        //    (PartRoot at depth 0 + Part_1 .. Part_63 at depths 1..63 = 64 AST levels).
+        let mut part_chain_63 = PartDef {
+            name: format!("Part_{}", bound.saturating_sub(1)),
+            type_name: Some("String".to_string()),
+            ports: vec![PortDef {
+                name: "leaf_out".to_string(),
+                direction: "out".to_string(),
+                type_name: "Real".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        for idx in (1..bound.saturating_sub(1)).rev() {
+            part_chain_63 = PartDef {
+                name: format!("Part_{idx}"),
+                type_name: Some("Integer".to_string()),
+                parts: vec![part_chain_63],
+                ..Default::default()
+            };
+        }
+        let part_root_64 = PackageDef {
+            name: "PartRoot".to_string(),
+            part_defs: vec![part_chain_63],
+            ..Default::default()
+        };
+
+        let part_64_symbols = SymbolTable::build_from_package(&part_root_64);
+        assert_eq!(part_64_symbols.all_of_kind(SymbolKind::Package).len(), 1);
+        assert_eq!(
+            part_64_symbols.all_of_kind(SymbolKind::Part).len(),
+            bound.saturating_sub(1)
+        );
+
+        let mut part_64_validator = SemanticValidator::new(&part_root_64);
+        part_64_validator.validate();
+        assert!(
+            !part_64_validator.has_errors(),
+            "64-level PartDef hierarchy must validate cleanly, got: {:?}",
+            part_64_validator.errors()
+        );
+
+        let part_64_sysml = part_root_64.to_sysml(0);
+        assert!(part_64_sysml.contains("part def Part_1 : Integer {"));
+        assert!(part_64_sysml.contains("part def Part_63 : String {"));
+
+        let part_64_digest = SchemaDigest::compute(&part_root_64, &part_64_sysml);
+        assert_eq!(
+            part_64_digest.node_counts.get("part_defs").copied(),
+            Some(bound.saturating_sub(1))
+        );
+
+        // Negative probe at depth 63 (< 64): undefined type at level 63 MUST still be caught.
+        let mut bad_part_63 = PartDef {
+            name: "BadLeaf_63".to_string(),
+            is_def: false,
+            type_name: Some("UndefinedTypeAtDepth63".to_string()),
+            ..Default::default()
+        };
+        for idx in (1..bound.saturating_sub(1)).rev() {
+            bad_part_63 = PartDef {
+                name: format!("Carrier_{idx}"),
+                parts: vec![bad_part_63],
+                ..Default::default()
+            };
+        }
+        let bad_root_64 = PackageDef {
+            name: "BadRoot64".to_string(),
+            part_defs: vec![bad_part_63],
+            ..Default::default()
+        };
+        let mut bad_64_validator = SemanticValidator::new(&bad_root_64);
+        bad_64_validator.validate();
+        assert!(
+            bad_64_validator.has_errors(),
+            "Undefined type at depth 63 (< MAX_AST_DEPTH) must still emit an error"
+        );
+
+        // 3. Construct a > 64-level (65-level, MAX_AST_DEPTH + 1) tree iteratively and verify
+        //    nodes at depth >= 64 are safely bounded across symbols, validator, serializer, and digest.
+        let over_bound = bound.saturating_add(1);
+        let mut part_chain_over = PartDef {
+            name: format!("Part_{}", over_bound.saturating_sub(1)),
+            is_def: false,
+            type_name: Some("UnindexedBeyondDepth64Type".to_string()),
+            ports: vec![
+                PortDef {
+                    name: "dup_port".to_string(),
+                    direction: "in".to_string(),
+                    type_name: "Real".to_string(),
+                    ..Default::default()
+                },
+                PortDef {
+                    name: "dup_port".to_string(),
+                    direction: "in".to_string(),
+                    type_name: "Real".to_string(),
+                    ..Default::default()
+                },
+            ],
+            connections: vec![ConnectionDef {
+                name: "BeyondBoundConn".to_string(),
+                source_port: "Missing.src".to_string(),
+                target_port: "Missing.tgt".to_string(),
+                ..Default::default()
+            }],
+            requirements: vec![RequirementDef {
+                name: "BeyondBoundReq".to_string(),
+                text: "Shall cap traversal @SafetyRealises(UCA-MISSING-99) @TriggersHazard(HZ-MISSING-99)"
+                    .to_string(),
+                satisfied_by: vec!["MissingSatisfierBeyond64".to_string()],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        for idx in (1..over_bound.saturating_sub(1)).rev() {
+            part_chain_over = PartDef {
+                name: format!("Part_{idx}"),
+                parts: vec![part_chain_over],
+                ..Default::default()
+            };
+        }
+        let over_root_65 = PackageDef {
+            name: "OverRoot65".to_string(),
+            constraint_defs: vec![ConstraintDef {
+                name: "UCA_01".to_string(),
+                expression: "x > 0".to_string(),
+                ..Default::default()
+            }],
+            hazard_defs: vec![HazardDef {
+                name: "HZ_01".to_string(),
+                ..Default::default()
+            }],
+            part_defs: vec![part_chain_over],
+            ..Default::default()
+        };
+
+        let over_symbols = SymbolTable::build_from_package(&over_root_65);
+        assert_eq!(
+            over_symbols.all_of_kind(SymbolKind::Part).len(),
+            bound.saturating_sub(1)
+        );
+        let mut over_validator = SemanticValidator::new(&over_root_65);
+        over_validator.validate();
+        assert!(
+            !over_validator.has_errors(),
+            "Nodes at depth >= 64 must be bounded out consistently with SymbolTable, got: {:?}",
+            over_validator.errors()
+        );
+        let over_sysml = over_root_65.to_sysml(0);
+        assert!(over_sysml.contains("part def Part_63"));
+        assert!(!over_sysml.contains("Part_64"));
+        let over_digest = SchemaDigest::compute(&over_root_65, &over_sysml);
+        assert_eq!(
+            over_digest.node_counts.get("part_defs").copied(),
+            Some(over_bound.saturating_sub(1))
+        );
+
+        // Generic type recursion bound at 64 levels vs 65 levels (> 64 fails closed).
+        let mut generic_64 = "u8".to_string();
+        for _ in 0..bound.saturating_sub(1) {
+            generic_64 = format!("Vec<{generic_64}>");
+        }
+        let generic_65 = format!("Vec<{generic_64}>");
+        assert!(is_primitive_or_builtin_type(&generic_64));
+        assert!(!is_primitive_or_builtin_type(&generic_65));
+        assert!(over_validator.is_resolvable_type("OverRoot65", &generic_64));
+        assert!(!over_validator.is_resolvable_type("OverRoot65", &generic_65));
+
+        // 4. Hostile 1,500-level deep PackageDef, PartDef, and generic type inside a 256 KiB stack thread.
+        let hostile_levels: usize = 1_500;
+        let mut hostile_pkg = PackageDef {
+            name: format!("HostilePkg_{}", hostile_levels.saturating_sub(1)),
+            ..Default::default()
+        };
+        for idx in (0..hostile_levels.saturating_sub(1)).rev() {
+            hostile_pkg = PackageDef {
+                name: format!("HostilePkg_{idx}"),
+                packages: vec![hostile_pkg],
+                ..Default::default()
+            };
+        }
+
+        let mut hostile_part = PartDef {
+            name: format!("HostilePart_{}", hostile_levels.saturating_sub(1)),
+            type_name: Some("Real".to_string()),
+            ..Default::default()
+        };
+        for idx in (1..hostile_levels.saturating_sub(1)).rev() {
+            hostile_part = PartDef {
+                name: format!("HostilePart_{idx}"),
+                type_name: Some("Integer".to_string()),
+                parts: vec![hostile_part],
+                ..Default::default()
+            };
+        }
+        let hostile_part_root = PackageDef {
+            name: "HostilePartRoot".to_string(),
+            part_defs: vec![hostile_part],
+            ..Default::default()
+        };
+
+        let mut hostile_generic = "u8".to_string();
+        for _ in 0..hostile_levels {
+            hostile_generic = format!("Option<{hostile_generic}>");
+        }
+
+        struct BoundedRunOutcome {
+            pkg_sym_count: usize,
+            part_sym_count: usize,
+            pkg_errors: usize,
+            part_errors: usize,
+            generic_builtin: bool,
+            generic_resolvable: bool,
+            pkg_has_63: bool,
+            pkg_has_64: bool,
+            hostile_elem_count: usize,
+        }
+
+        let outcome = std::thread::scope(|s| -> Result<BoundedRunOutcome, String> {
+            let handle = std::thread::Builder::new()
+                .name("bounded_validator_1500".to_string())
+                .stack_size(256 * 1024)
+                .spawn_scoped(s, || {
+                    let sym_pkg = SymbolTable::build_from_package(&hostile_pkg);
+                    let sym_part = SymbolTable::build_from_package(&hostile_part_root);
+
+                    let mut v_pkg = SemanticValidator::new(&hostile_pkg);
+                    v_pkg.validate();
+
+                    let mut v_part = SemanticValidator::new(&hostile_part_root);
+                    v_part.validate();
+
+                    let generic_builtin = is_primitive_or_builtin_type(&hostile_generic);
+                    let generic_resolvable =
+                        v_part.is_resolvable_type("HostilePartRoot", &hostile_generic);
+
+                    let rendered_pkg = hostile_pkg.to_sysml(0);
+                    let _rendered_part = hostile_part_root.to_sysml(0);
+                    let hostile_elem_count = count_structural_elements(&hostile_part_root);
+
+                    BoundedRunOutcome {
+                        pkg_sym_count: sym_pkg.symbols.len(),
+                        part_sym_count: sym_part.symbols.len(),
+                        pkg_errors: v_pkg.errors().len(),
+                        part_errors: v_part.errors().len(),
+                        generic_builtin,
+                        generic_resolvable,
+                        pkg_has_63: rendered_pkg.contains("package HostilePkg_63 {"),
+                        pkg_has_64: rendered_pkg.contains("HostilePkg_64"),
+                        hostile_elem_count,
+                    }
+                })
+                .map_err(|e| format!("failed to spawn bounded-stack validator thread: {e}"))?;
+            handle
+                .join()
+                .map_err(|_| "bounded-stack validator thread panicked or overflowed".to_string())
+        })?;
+
+        assert_eq!(outcome.pkg_sym_count, bound);
+        assert_eq!(outcome.part_sym_count, bound);
+        assert_eq!(outcome.pkg_errors, 0);
+        assert_eq!(outcome.part_errors, 0);
+        assert!(!outcome.generic_builtin);
+        assert!(!outcome.generic_resolvable);
+        assert!(outcome.pkg_has_63);
+        assert!(!outcome.pkg_has_64);
+        assert_eq!(outcome.hostile_elem_count, hostile_levels.saturating_sub(1));
+
+        drain_package_tree_iteratively(pkg_64);
+        drain_package_tree_iteratively(part_root_64);
+        drain_package_tree_iteratively(bad_root_64);
+        drain_package_tree_iteratively(over_root_65);
+        drain_package_tree_iteratively(hostile_pkg);
+        drain_package_tree_iteratively(hostile_part_root);
+        Ok(())
+    }
 }
-
-
-
