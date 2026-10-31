@@ -1,12 +1,22 @@
 //! Recursive descent parser translating SysML v2 / KerML tokens into typed AST.
+//!
+//! Safety & Traceability: Realises: [REQ-PARSER-GRAMMAR-MODULE]
+//! Contract: Parses lexed SysML v2 / KerML token streams and multi-file directory trees into deterministic `PackageDef` ASTs.
+//! Bounds & Faults: Caps recursive-descent and package-merge nesting depth at `MAX_PARSE_DEPTH` (64), returning typed `ParseError` diagnostics without panicking.
 
 use crate::lexer::scanner::Scanner;
 use crate::lexer::token::{Span, Token, TokenKind};
 use deap_core::sysml_ast::*;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+
+/// Maximum recursive-descent and package-merge nesting depth permitted in `SysmlParser` and `merge_package_defs`.
+/// Exceeding `MAX_PARSE_DEPTH` (64) terminates recursion cleanly without overflowing the call stack.
+/// Realises: [REQ-PARSER-GRAMMAR-MAX-PARSE-DEPTH]
+pub(crate) const MAX_PARSE_DEPTH: usize = 64;
 
 // Sentinel returned when the token stream is empty; never indexed, never mutated.
 static GRAMMAR_EOF_TOKEN: Token = Token {
@@ -95,22 +105,22 @@ impl std::error::Error for ParseError {}
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `SysmlParser` in `crates/compile-sysml/src/parser/grammar.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `SysmlParser` across member set `[tokens: &'a [Token], pos: usize]`.
+/// - Preserves structural type invariants for struct `SysmlParser` across member set `[tokens: &'a [Token], pos: usize, depth: usize]` with `depth <= MAX_PARSE_DEPTH`.
 ///
 /// ## 3. Preconditions
-/// - Caller supplies well-formed values for `SysmlParser` members (`tokens: &'a [Token], pos: usize`).
+/// - Caller supplies well-formed values for `SysmlParser` members (`tokens: &'a [Token], pos: usize, depth: usize`).
 ///
 /// ## 4. Postconditions
 /// - Defines the authoritative `SysmlParser` representation for struct `SysmlParser`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(2)) bounded over input/member dimension of `SysmlParser`.
-/// - Space Complexity: O(M(2)) bounded auxiliary memory for `SysmlParser`.
+/// - Time Complexity: O(M(3)) bounded over input/member dimension of `SysmlParser`.
+/// - Space Complexity: O(M(3)) bounded auxiliary memory for `SysmlParser`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Validates boundary inputs and types for `SysmlParser` (`SysmlParser`).
 /// - State: Maintains consistent state invariants across `SysmlParser` without partial mutation on error.
-/// - Action: Executes `SysmlParser` deterministically with zero unbounded recursion or blocking.
+/// - Action: Executes `SysmlParser` deterministically with recursion bounded by `MAX_PARSE_DEPTH` (64).
 /// - Resource: Bounds stack and heap allocations within `SysmlParser` (`PARSER-GRAMMAR`).
 ///
 /// ## 7. Realization & Traceability
@@ -118,6 +128,7 @@ impl std::error::Error for ParseError {}
 pub struct SysmlParser<'a> {
     tokens: &'a [Token],
     pos: usize,
+    pub(crate) depth: usize,
 }
 
 impl<'a> SysmlParser<'a> {
@@ -133,7 +144,7 @@ impl<'a> SysmlParser<'a> {
     /// - `tokens: &'a [Token]` must satisfy domain and type-safety constraints prior to invoking `SysmlParser::new`.
     ///
     /// ## 4. Postconditions
-    /// - Returns `Self` from `SysmlParser::new` with deterministic post-execution state.
+    /// - Returns `Self` from `SysmlParser::new` with `pos == 0` and `depth == 0`.
     ///
     /// ## 5. Algorithmic Complexity Bounds
     /// - Time Complexity: O(N(tokens)) bounded over input/member dimension of `SysmlParser::new`.
@@ -148,7 +159,21 @@ impl<'a> SysmlParser<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-NEW] | SysML v2: ActionDef(SysmlParser::new)
     pub fn new(tokens: &'a [Token]) -> Self {
-        Self { tokens, pos: 0 }
+        Self {
+            tokens,
+            pos: 0,
+            depth: 0,
+        }
+    }
+
+    /// Constructs a deterministic `ParseError` at the current cursor span when `MAX_PARSE_DEPTH` is reached.
+    /// Realises: [REQ-PARSER-GRAMMAR-MAX-PARSE-DEPTH]
+    fn max_depth_error(&self) -> ParseError {
+        let tok = self.peek();
+        ParseError {
+            message: format!("Maximum SysML parse recursion depth ({MAX_PARSE_DEPTH}) exceeded"),
+            span: tok.span,
+        }
     }
 
     /// Parse complete source text into a PackageDef.
@@ -470,7 +495,10 @@ impl<'a> SysmlParser<'a> {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PACKAGE-OR-FILE] | SysML v2: ActionDef(SysmlParser::parse_package_or_file)
-    pub fn parse_package_or_file(&mut self, default_pkg_name: &str) -> Result<PackageDef, ParseError> {
+    pub fn parse_package_or_file(
+        &mut self,
+        default_pkg_name: &str,
+    ) -> Result<PackageDef, ParseError> {
         self.skip_trivia();
 
         // Check if top-level starts with package declaration
@@ -529,33 +557,24 @@ impl<'a> SysmlParser<'a> {
         Ok(pkg)
     }
 
-    /// Executes deterministic fn `SysmlParser::parse_package_decl` within `crates/compile-sysml/src/parser/grammar.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_package_decl` in `crates/compile-sysml/src/parser/grammar.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SysmlParser::parse_package_decl` (declaration #7) within `PARSER-GRAMMAR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `doc: Option<String>` must satisfy domain and type-safety constraints prior to invoking `SysmlParser::parse_package_decl`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<PackageDef, ParseError>` from `SysmlParser::parse_package_decl` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(doc)) bounded over input/member dimension of `SysmlParser::parse_package_decl`.
-    /// - Space Complexity: O(N(doc)) bounded auxiliary memory for `SysmlParser::parse_package_decl`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SysmlParser::parse_package_decl` (`Result<PackageDef, ParseError>`).
-    /// - State: Maintains consistent state invariants across `SysmlParser::parse_package_decl` without partial mutation on error.
-    /// - Action: Executes `SysmlParser::parse_package_decl` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SysmlParser::parse_package_decl` (`PARSER-GRAMMAR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PACKAGE-DECL] | SysML v2: ActionDef(SysmlParser::parse_package_decl)
-    fn parse_package_decl(&mut self, mut doc: Option<String>) -> Result<PackageDef, ParseError> {
+    /// Parses a `package <Name> { ... }` declaration bounded by `MAX_PARSE_DEPTH`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PACKAGE-DECL]
+    fn parse_package_decl(&mut self, doc: Option<String>) -> Result<PackageDef, ParseError> {
+        if self.depth >= MAX_PARSE_DEPTH {
+            return Err(self.max_depth_error());
+        }
+        self.depth = self.depth.saturating_add(1);
+        let result = self.parse_package_decl_inner(doc);
+        self.depth = self.depth.saturating_sub(1);
+        result
+    }
+
+    /// Parses the tokens and body of a `package <Name> { ... }` declaration within an active depth frame.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PACKAGE-DECL]
+    fn parse_package_decl_inner(
+        &mut self,
+        mut doc: Option<String>,
+    ) -> Result<PackageDef, ParseError> {
         self.expect(&TokenKind::Package)?;
         let name = self.expect_ident()?;
         self.expect(&TokenKind::OpenBrace)?;
@@ -565,11 +584,11 @@ impl<'a> SysmlParser<'a> {
             doc = self.take_doc_comment();
         }
 
-        let mut pkg = PackageDef {
+        let mut pkg = Box::new(PackageDef {
             name,
             doc,
             ..Default::default()
-        };
+        });
 
         while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
             self.parse_container_item(&mut pkg, None)?;
@@ -577,7 +596,7 @@ impl<'a> SysmlParser<'a> {
         }
 
         self.expect(&TokenKind::CloseBrace)?;
-        Ok(pkg)
+        Ok(*pkg)
     }
 
     /// Parse an import declaration into an ImportDef AST node.
@@ -654,34 +673,25 @@ impl<'a> SysmlParser<'a> {
         })
     }
 
-    /// Executes deterministic fn `SysmlParser::parse_container_item` within `crates/compile-sysml/src/parser/grammar.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_container_item` in `crates/compile-sysml/src/parser/grammar.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SysmlParser::parse_container_item` (declaration #9) within `PARSER-GRAMMAR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `pkg: &mut PackageDef` must satisfy domain and type-safety constraints prior to invoking `SysmlParser::parse_container_item`.
-    /// - `parent_part: Option<&mut PartDef>` must satisfy domain and type-safety constraints prior to invoking `SysmlParser::parse_container_item`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<(), ParseError>` from `SysmlParser::parse_container_item` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(pkg)) bounded over input/member dimension of `SysmlParser::parse_container_item`.
-    /// - Space Complexity: O(N(pkg)) bounded auxiliary memory for `SysmlParser::parse_container_item`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SysmlParser::parse_container_item` (`Result<(), ParseError>`).
-    /// - State: Maintains consistent state invariants across `SysmlParser::parse_container_item` without partial mutation on error.
-    /// - Action: Executes `SysmlParser::parse_container_item` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SysmlParser::parse_container_item` (`PARSER-GRAMMAR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-CONTAINER-ITEM] | SysML v2: ActionDef(SysmlParser::parse_container_item)
+    /// Parses a single member declaration inside a package or part scope bounded by `MAX_PARSE_DEPTH`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-CONTAINER-ITEM]
     fn parse_container_item(
+        &mut self,
+        pkg: &mut PackageDef,
+        parent_part: Option<&mut PartDef>,
+    ) -> Result<(), ParseError> {
+        if self.depth >= MAX_PARSE_DEPTH {
+            return Err(self.max_depth_error());
+        }
+        self.depth = self.depth.saturating_add(1);
+        let result = self.parse_container_item_inner(pkg, parent_part);
+        self.depth = self.depth.saturating_sub(1);
+        result
+    }
+
+    /// Dispatches a single container member declaration within an active depth frame.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-CONTAINER-ITEM]
+    fn parse_container_item_inner(
         &mut self,
         pkg: &mut PackageDef,
         parent_part: Option<&mut PartDef>,
@@ -752,6 +762,32 @@ impl<'a> SysmlParser<'a> {
                     pkg.part_defs.push(part);
                 }
             }
+            TokenKind::State => {
+                let state = self.parse_state_decl(doc)?;
+                if let Some(parent) = parent_part {
+                    parent.states.push(state);
+                } else {
+                    pkg.state_defs.push(state);
+                }
+            }
+            _ => {
+                self.parse_leaf_container_item(doc, pkg, parent_part)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Parses non-container leaf member declarations inside a package or part scope, keeping
+    /// leaf AST stack slots off recursive container stack frames.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-CONTAINER-ITEM]
+    fn parse_leaf_container_item(
+        &mut self,
+        doc: Option<String>,
+        pkg: &mut PackageDef,
+        parent_part: Option<&mut PartDef>,
+    ) -> Result<(), ParseError> {
+        match self.peek_kind() {
             TokenKind::Port => {
                 let port = self.parse_port_decl(doc)?;
                 if let Some(parent) = parent_part {
@@ -810,14 +846,6 @@ impl<'a> SysmlParser<'a> {
                     } else if !pkg.satisfied_requirements.contains(&req_target) {
                         pkg.satisfied_requirements.push(req_target);
                     }
-                }
-            }
-            TokenKind::State => {
-                let state = self.parse_state_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.states.push(state);
-                } else {
-                    pkg.state_defs.push(state);
                 }
             }
             TokenKind::Import => {
@@ -1060,7 +1088,8 @@ impl<'a> SysmlParser<'a> {
                 if self.check(&TokenKind::Eq) {
                     self.advance();
                     self.skip_trivia();
-                    if let TokenKind::StringLit(v) | TokenKind::Ident(v) = self.peek_kind().clone() {
+                    if let TokenKind::StringLit(v) | TokenKind::Ident(v) = self.peek_kind().clone()
+                    {
                         values.push(v);
                         self.advance();
                     }
@@ -1108,38 +1137,28 @@ impl<'a> SysmlParser<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PEEK-NEXT-IS-PORT] | SysML v2: ActionDef(SysmlParser::peek_next_is_port)
     fn peek_next_is_port(&self) -> bool {
-        self.tokens.get(self.pos + 1).is_some_and(|t| t.kind == TokenKind::Port)
+        self.tokens
+            .get(self.pos + 1)
+            .is_some_and(|t| t.kind == TokenKind::Port)
     }
 
     // --- Specific Parsers ---
 
-    /// Executes deterministic fn `SysmlParser::parse_part_decl` within `crates/compile-sysml/src/parser/grammar.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_part_decl` in `crates/compile-sysml/src/parser/grammar.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SysmlParser::parse_part_decl` (declaration #11) within `PARSER-GRAMMAR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `doc: Option<String>` must satisfy domain and type-safety constraints prior to invoking `SysmlParser::parse_part_decl`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<PartDef, ParseError>` from `SysmlParser::parse_part_decl` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(doc)) bounded over input/member dimension of `SysmlParser::parse_part_decl`.
-    /// - Space Complexity: O(N(doc)) bounded auxiliary memory for `SysmlParser::parse_part_decl`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SysmlParser::parse_part_decl` (`Result<PartDef, ParseError>`).
-    /// - State: Maintains consistent state invariants across `SysmlParser::parse_part_decl` without partial mutation on error.
-    /// - Action: Executes `SysmlParser::parse_part_decl` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SysmlParser::parse_part_decl` (`PARSER-GRAMMAR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PART-DECL] | SysML v2: ActionDef(SysmlParser::parse_part_decl)
+    /// Parses a `part` or `part def` declaration bounded by `MAX_PARSE_DEPTH`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PART-DECL]
     fn parse_part_decl(&mut self, doc: Option<String>) -> Result<PartDef, ParseError> {
+        if self.depth >= MAX_PARSE_DEPTH {
+            return Err(self.max_depth_error());
+        }
+        self.depth = self.depth.saturating_add(1);
+        let result = self.parse_part_decl_inner(doc);
+        self.depth = self.depth.saturating_sub(1);
+        result
+    }
+
+    /// Parses the header and nested body of a `part` or `part def` declaration within an active depth frame.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PART-DECL]
+    fn parse_part_decl_inner(&mut self, doc: Option<String>) -> Result<PartDef, ParseError> {
         self.expect(&TokenKind::Part)?;
         let is_def = if self.check(&TokenKind::Def) {
             self.advance();
@@ -1156,13 +1175,13 @@ impl<'a> SysmlParser<'a> {
             type_name = Some(self.parse_type_expr()?);
         }
 
-        let mut part = PartDef {
+        let mut part = Box::new(PartDef {
             name,
             doc,
             is_def,
             type_name,
             ..Default::default()
-        };
+        });
 
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
@@ -1171,31 +1190,9 @@ impl<'a> SysmlParser<'a> {
                 part.doc = self.take_doc_comment();
             }
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
-                let mut dummy_pkg = PackageDef::default();
+                let mut dummy_pkg = Box::new(PackageDef::default());
                 self.parse_container_item(&mut dummy_pkg, Some(&mut part))?;
-                // Merge any parsed top-level items into part
-                part.parts.extend(dummy_pkg.part_defs);
-                part.ports.extend(dummy_pkg.port_defs);
-                part.attributes.extend(dummy_pkg.attribute_defs);
-                part.actions.extend(dummy_pkg.action_defs);
-                part.constraints.extend(dummy_pkg.constraint_defs);
-                part.requirements.extend(dummy_pkg.requirement_defs);
-                part.states.extend(dummy_pkg.state_defs);
-                part.connections.extend(dummy_pkg.connection_defs);
-                part.use_cases.extend(dummy_pkg.use_case_defs);
-                part.item_defs.extend(dummy_pkg.item_defs);
-                part.hazards.extend(dummy_pkg.hazard_defs);
-                part.risks.extend(dummy_pkg.risk_defs);
-                part.test_cases.extend(dummy_pkg.test_case_defs);
-                part.capabilities.extend(dummy_pkg.capability_defs);
-                part.operations.extend(dummy_pkg.operation_defs);
-                part.interactions.extend(dummy_pkg.interaction_defs);
-                part.calcs.extend(dummy_pkg.calc_defs);
-                for sat in dummy_pkg.satisfied_requirements {
-                    if !part.satisfied_requirements.contains(&sat) {
-                        part.satisfied_requirements.push(sat);
-                    }
-                }
+                Self::merge_dummy_pkg_into_part(&mut part, *dummy_pkg);
                 self.skip_trivia();
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -1203,7 +1200,34 @@ impl<'a> SysmlParser<'a> {
             self.expect_semi()?;
         }
 
-        Ok(part)
+        Ok(*part)
+    }
+
+    /// Merges any top-level declarations collected in `dummy_pkg` into `part`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PART-DECL]
+    fn merge_dummy_pkg_into_part(part: &mut PartDef, dummy_pkg: PackageDef) {
+        part.parts.extend(dummy_pkg.part_defs);
+        part.ports.extend(dummy_pkg.port_defs);
+        part.attributes.extend(dummy_pkg.attribute_defs);
+        part.actions.extend(dummy_pkg.action_defs);
+        part.constraints.extend(dummy_pkg.constraint_defs);
+        part.requirements.extend(dummy_pkg.requirement_defs);
+        part.states.extend(dummy_pkg.state_defs);
+        part.connections.extend(dummy_pkg.connection_defs);
+        part.use_cases.extend(dummy_pkg.use_case_defs);
+        part.item_defs.extend(dummy_pkg.item_defs);
+        part.hazards.extend(dummy_pkg.hazard_defs);
+        part.risks.extend(dummy_pkg.risk_defs);
+        part.test_cases.extend(dummy_pkg.test_case_defs);
+        part.capabilities.extend(dummy_pkg.capability_defs);
+        part.operations.extend(dummy_pkg.operation_defs);
+        part.interactions.extend(dummy_pkg.interaction_defs);
+        part.calcs.extend(dummy_pkg.calc_defs);
+        for sat in dummy_pkg.satisfied_requirements {
+            if !part.satisfied_requirements.contains(&sat) {
+                part.satisfied_requirements.push(sat);
+            }
+        }
     }
 
     /// Executes deterministic fn `SysmlParser::parse_port_decl` within `crates/compile-sysml/src/parser/grammar.rs`.
@@ -1234,26 +1258,54 @@ impl<'a> SysmlParser<'a> {
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PORT-DECL] | SysML v2: ActionDef(SysmlParser::parse_port_decl)
     fn parse_port_decl(&mut self, doc: Option<String>) -> Result<PortDef, ParseError> {
         let mut direction = "inout".to_string();
-        for (tok, dir) in [(TokenKind::In, "in"), (TokenKind::Out, "out"), (TokenKind::Inout, "inout")] {
-            if self.check(&tok) { self.advance(); direction = dir.to_string(); break; }
+        for (tok, dir) in [
+            (TokenKind::In, "in"),
+            (TokenKind::Out, "out"),
+            (TokenKind::Inout, "inout"),
+        ] {
+            if self.check(&tok) {
+                self.advance();
+                direction = dir.to_string();
+                break;
+            }
         }
         self.expect(&TokenKind::Port)?;
-        if self.check(&TokenKind::Def) { self.advance(); }
+        if self.check(&TokenKind::Def) {
+            self.advance();
+        }
         if direction == "inout" {
-            for (tok, dir) in [(TokenKind::In, "in"), (TokenKind::Out, "out"), (TokenKind::Inout, "inout")] {
-                if self.check(&tok) { self.advance(); direction = dir.to_string(); break; }
+            for (tok, dir) in [
+                (TokenKind::In, "in"),
+                (TokenKind::Out, "out"),
+                (TokenKind::Inout, "inout"),
+            ] {
+                if self.check(&tok) {
+                    self.advance();
+                    direction = dir.to_string();
+                    break;
+                }
             }
         }
         let name = self.expect_ident()?;
         let mut is_conjugated = false;
         let type_name = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
             self.advance();
-            if self.check(&TokenKind::Tilde) { self.advance(); is_conjugated = true; }
+            if self.check(&TokenKind::Tilde) {
+                self.advance();
+                is_conjugated = true;
+            }
             self.parse_type_expr()?
         } else {
             name.clone()
         };
-        let mut port = PortDef { name, type_name, direction, is_conjugated, doc, ..Default::default() };
+        let mut port = PortDef {
+            name,
+            type_name,
+            direction,
+            is_conjugated,
+            doc,
+            ..Default::default()
+        };
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
@@ -1261,51 +1313,98 @@ impl<'a> SysmlParser<'a> {
                 let mut f_doc = self.take_inner_doc_comment();
                 self.skip_trivia();
                 while let Some(next_doc) = self.take_inner_doc_comment() {
-                    if port.doc.is_none() { port.doc = f_doc; }
+                    if port.doc.is_none() {
+                        port.doc = f_doc;
+                    }
                     f_doc = Some(next_doc);
                     self.skip_trivia();
                 }
                 if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
-                    if port.doc.is_none() { port.doc = f_doc; }
+                    if port.doc.is_none() {
+                        port.doc = f_doc;
+                    }
                     break;
                 }
                 if self.check(&TokenKind::Attribute) {
                     let attr = self.parse_attribute_decl(f_doc)?;
-                    let clean_val = attr.default_value.unwrap_or_default().trim().trim_matches('"').to_string();
-                    if attr.name == "protocol_family" { port.protocol_family = clean_val; }
-                    else if attr.name == "port_category" { port.port_category = clean_val; }
-                    else { port.electrical_attributes.insert(attr.name, clean_val); }
-                } else if self.check(&TokenKind::Flow) || self.check(&TokenKind::Item)
-                    || self.check(&TokenKind::In) || self.check(&TokenKind::Out) || self.check(&TokenKind::Inout)
+                    let clean_val = attr
+                        .default_value
+                        .unwrap_or_default()
+                        .trim()
+                        .trim_matches('"')
+                        .to_string();
+                    if attr.name == "protocol_family" {
+                        port.protocol_family = clean_val;
+                    } else if attr.name == "port_category" {
+                        port.port_category = clean_val;
+                    } else {
+                        port.electrical_attributes.insert(attr.name, clean_val);
+                    }
+                } else if self.check(&TokenKind::Flow)
+                    || self.check(&TokenKind::Item)
+                    || self.check(&TokenKind::In)
+                    || self.check(&TokenKind::Out)
+                    || self.check(&TokenKind::Inout)
                 {
                     let mut flow_dir = "out".to_string();
                     if (self.check(&TokenKind::Flow) || self.check(&TokenKind::Item))
-                        && !matches!(self.tokens.get(self.pos + 1).map(|t| &t.kind), Some(TokenKind::Colon | TokenKind::ColonGt | TokenKind::Semi))
-                    { self.advance(); }
-                    for (tok, dir) in [(TokenKind::In, "in"), (TokenKind::Out, "out"), (TokenKind::Inout, "inout")] {
-                        if self.check(&tok) { self.advance(); flow_dir = dir.to_string(); break; }
+                        && !matches!(
+                            self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                            Some(TokenKind::Colon | TokenKind::ColonGt | TokenKind::Semi)
+                        )
+                    {
+                        self.advance();
+                    }
+                    for (tok, dir) in [
+                        (TokenKind::In, "in"),
+                        (TokenKind::Out, "out"),
+                        (TokenKind::Inout, "inout"),
+                    ] {
+                        if self.check(&tok) {
+                            self.advance();
+                            flow_dir = dir.to_string();
+                            break;
+                        }
                     }
                     while (self.check(&TokenKind::Flow) || self.check(&TokenKind::Item))
-                        && !matches!(self.tokens.get(self.pos + 1).map(|t| &t.kind), Some(TokenKind::Colon | TokenKind::ColonGt | TokenKind::Semi))
-                    { self.advance(); }
+                        && !matches!(
+                            self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                            Some(TokenKind::Colon | TokenKind::ColonGt | TokenKind::Semi)
+                        )
+                    {
+                        self.advance();
+                    }
                     let flow_name = self.expect_ident()?;
-                    let flow_type = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
-                        self.advance(); self.parse_type_expr()?
-                    } else { "Item".to_string() };
+                    let flow_type =
+                        if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
+                            self.advance();
+                            self.parse_type_expr()?
+                        } else {
+                            "Item".to_string()
+                        };
                     self.expect_semi()?;
                     port.item_flows.push(FlowDef {
-                        name: flow_name, direction: flow_dir, item_type: flow_type, doc: f_doc, ..Default::default()
+                        name: flow_name,
+                        direction: flow_dir,
+                        item_type: flow_type,
+                        doc: f_doc,
+                        ..Default::default()
                     });
                 } else {
                     let tok = self.peek();
                     return Err(ParseError {
-                        message: format!("Unexpected token '{:?}' in port declaration body", tok.kind),
+                        message: format!(
+                            "Unexpected token '{:?}' in port declaration body",
+                            tok.kind
+                        ),
                         span: tok.span,
                     });
                 }
             }
             self.expect(&TokenKind::CloseBrace)?;
-        } else { self.expect_semi()?; }
+        } else {
+            self.expect_semi()?;
+        }
         Ok(port)
     }
 
@@ -1705,13 +1804,14 @@ impl<'a> SysmlParser<'a> {
                     prefix.push_str("item ");
                 }
                 let p_name = self.expect_ident()?;
-                let param_formatted = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
-                    self.advance();
-                    let p_type = self.parse_type_expr()?;
-                    format!("{}{}: {}", prefix, p_name, p_type)
-                } else {
-                    format!("{}{}", prefix, p_name)
-                };
+                let param_formatted =
+                    if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
+                        self.advance();
+                        let p_type = self.parse_type_expr()?;
+                        format!("{}{}: {}", prefix, p_name, p_type)
+                    } else {
+                        format!("{}{}", prefix, p_name)
+                    };
                 parameters.push(param_formatted);
                 if self.check(&TokenKind::Comma) {
                     self.advance();
@@ -1787,7 +1887,10 @@ impl<'a> SysmlParser<'a> {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-REQUIREMENT-DECL] | SysML v2: ActionDef(SysmlParser::parse_requirement_decl)
-    fn parse_requirement_decl(&mut self, doc: Option<String>) -> Result<RequirementDef, ParseError> {
+    fn parse_requirement_decl(
+        &mut self,
+        doc: Option<String>,
+    ) -> Result<RequirementDef, ParseError> {
         self.expect(&TokenKind::Requirement)?;
         if self.check(&TokenKind::Def) {
             self.advance();
@@ -1983,9 +2086,7 @@ impl<'a> SysmlParser<'a> {
     fn take_state_member_doc(&mut self, state_doc: &mut Option<String>) -> Option<String> {
         self.skip_trivia();
         let mut inner_doc = None;
-        while self.check(&TokenKind::Doc)
-            || matches!(self.peek_kind(), TokenKind::DocComment(_))
-        {
+        while self.check(&TokenKind::Doc) || matches!(self.peek_kind(), TokenKind::DocComment(_)) {
             let is_prop_doc = self.check(&TokenKind::Doc)
                 && !matches!(
                     self.tokens.get(self.pos + 1).map(|t| &t.kind),
@@ -2073,8 +2174,7 @@ impl<'a> SysmlParser<'a> {
                         | TokenKind::Comma
                         | TokenKind::Semi
                 )
-            })
-        {
+            }) {
             slice.get(1..).unwrap_or_default()
         } else {
             slice
@@ -2082,33 +2182,21 @@ impl<'a> SysmlParser<'a> {
         Self::format_transition_expr(action_slice)
     }
 
-    /// Executes deterministic fn `SysmlParser::parse_state_decl` within `crates/compile-sysml/src/parser/grammar.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_state_decl` in `crates/compile-sysml/src/parser/grammar.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SysmlParser::parse_state_decl` (declaration #17) within `PARSER-GRAMMAR`.
-    ///
-    /// ## 3. Preconditions
-    /// - `doc: Option<String>` must satisfy domain and type-safety constraints prior to invoking `SysmlParser::parse_state_decl`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<StateDef, ParseError>` from `SysmlParser::parse_state_decl` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(doc)) bounded over input/member dimension of `SysmlParser::parse_state_decl`.
-    /// - Space Complexity: O(N(doc)) bounded auxiliary memory for `SysmlParser::parse_state_decl`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SysmlParser::parse_state_decl` (`Result<StateDef, ParseError>`).
-    /// - State: Maintains consistent state invariants across `SysmlParser::parse_state_decl` without partial mutation on error.
-    /// - Action: Executes `SysmlParser::parse_state_decl` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SysmlParser::parse_state_decl` (`PARSER-GRAMMAR`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-STATE-DECL] | SysML v2: ActionDef(SysmlParser::parse_state_decl)
+    /// Parses a `state` or `state def` declaration and nested sub-states bounded by `MAX_PARSE_DEPTH`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-STATE-DECL]
     fn parse_state_decl(&mut self, doc: Option<String>) -> Result<StateDef, ParseError> {
+        if self.depth >= MAX_PARSE_DEPTH {
+            return Err(self.max_depth_error());
+        }
+        self.depth = self.depth.saturating_add(1);
+        let result = self.parse_state_decl_inner(doc);
+        self.depth = self.depth.saturating_sub(1);
+        result
+    }
+
+    /// Parses the header, actions, transitions, and nested sub-states of a `state` block within an active depth frame.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-STATE-DECL]
+    fn parse_state_decl_inner(&mut self, doc: Option<String>) -> Result<StateDef, ParseError> {
         self.expect(&TokenKind::State)?;
         if self.check(&TokenKind::Def) {
             self.advance();
@@ -2205,7 +2293,10 @@ impl<'a> SysmlParser<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-IS-TRANSITION-CLAUSE-KEYWORD] | SysML v2: ActionDef(SysmlParser::is_transition_clause_keyword)
     fn is_transition_clause_keyword(tok: &str) -> bool {
-        matches!(tok, "first" | "from" | "then" | "to" | "accept" | "if" | "do")
+        matches!(
+            tok,
+            "first" | "from" | "then" | "to" | "accept" | "if" | "do"
+        )
     }
 
     /// Returns `true` when `tok` is an unquoted lexer token representing a SysML v2 transition clause keyword (`first`, `from`, `then`, `to`, `accept`, `if`, `do`).
@@ -2418,18 +2509,17 @@ impl<'a> SysmlParser<'a> {
                             | TokenKind::OpenBracket
                     )
                 );
-                let no_space_before_curr = matches!(
-                    curr_kind,
-                    TokenKind::DoubleColon
-                        | TokenKind::Dot
-                        | TokenKind::CloseParen
-                        | TokenKind::CloseBracket
-                        | TokenKind::Comma
-                        | TokenKind::Semi
-                ) || (matches!(
-                    curr_kind,
-                    TokenKind::OpenParen | TokenKind::OpenBracket
-                ) && prev_is_callable_target);
+                let no_space_before_curr =
+                    matches!(
+                        curr_kind,
+                        TokenKind::DoubleColon
+                            | TokenKind::Dot
+                            | TokenKind::CloseParen
+                            | TokenKind::CloseBracket
+                            | TokenKind::Comma
+                            | TokenKind::Semi
+                    ) || (matches!(curr_kind, TokenKind::OpenParen | TokenKind::OpenBracket)
+                        && prev_is_callable_target);
 
                 if !no_space_after_prev && !no_space_before_curr {
                     out.push(' ');
@@ -2558,8 +2648,7 @@ impl<'a> SysmlParser<'a> {
                                         | TokenKind::Comma
                                         | TokenKind::Semi
                                 )
-                            })
-                        {
+                            }) {
                             slice.get(1..).unwrap_or_default()
                         } else {
                             slice
@@ -2714,7 +2803,12 @@ impl<'a> SysmlParser<'a> {
         if let Some(s) = t.source.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
             parts.push(format!("first {s}"));
         }
-        if let Some(trig) = t.trigger.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(trig) = t
+            .trigger
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             parts.push(format!("accept {trig}"));
         }
         if let Some(grd) = t.guard.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
@@ -2804,7 +2898,9 @@ impl<'a> SysmlParser<'a> {
                 if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
                     break;
                 }
-                if self.check(&TokenKind::Connect) || (self.check(&TokenKind::Flow) && self.peek_next_is_from()) {
+                if self.check(&TokenKind::Connect)
+                    || (self.check(&TokenKind::Flow) && self.peek_next_is_from())
+                {
                     self.advance(); // connect / flow
                     if self.check(&TokenKind::From) {
                         self.advance();
@@ -2838,10 +2934,14 @@ impl<'a> SysmlParser<'a> {
         }
 
         conn.source_part = explicit_source_part.unwrap_or_else(|| {
-            conn.source_port.split_once('.').map(|(owner, _)| owner.to_string())
+            conn.source_port
+                .split_once('.')
+                .map(|(owner, _)| owner.to_string())
         });
         conn.target_part = explicit_target_part.unwrap_or_else(|| {
-            conn.target_port.split_once('.').map(|(owner, _)| owner.to_string())
+            conn.target_port
+                .split_once('.')
+                .map(|(owner, _)| owner.to_string())
         });
 
         Ok(conn)
@@ -2879,7 +2979,10 @@ impl<'a> SysmlParser<'a> {
         explicit_target_part: &mut Option<Option<String>>,
         attr: AttributeDef,
     ) {
-        let unquoted = attr.default_value.as_ref().map(|v| v.trim_matches('"').to_string());
+        let unquoted = attr
+            .default_value
+            .as_ref()
+            .map(|v| v.trim_matches('"').to_string());
         match attr.name.as_str() {
             "protocol" => conn.protocol = unquoted,
             "latency_ms" | "latency" => {
@@ -2929,7 +3032,10 @@ impl<'a> SysmlParser<'a> {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-PARSER-INLINE-CONNECTOR] | SysML v2: ActionDef(SysmlParser::parse_inline_connect_decl)
-    fn parse_inline_connect_decl(&mut self, doc: Option<String>) -> Result<ConnectionDef, ParseError> {
+    fn parse_inline_connect_decl(
+        &mut self,
+        doc: Option<String>,
+    ) -> Result<ConnectionDef, ParseError> {
         self.expect(&TokenKind::Connect)?;
         if self.check(&TokenKind::From) {
             self.advance();
@@ -2944,14 +3050,20 @@ impl<'a> SysmlParser<'a> {
             } else {
                 let tok = self.peek();
                 return Err(ParseError {
-                    message: format!("Expected 'to' keyword in connect statement, found '{:?}'", tok.kind),
+                    message: format!(
+                        "Expected 'to' keyword in connect statement, found '{:?}'",
+                        tok.kind
+                    ),
                     span: tok.span,
                 });
             }
         } else {
             let tok = self.peek();
             return Err(ParseError {
-                message: format!("Expected 'to' keyword in connect statement, found '{:?}'", tok.kind),
+                message: format!(
+                    "Expected 'to' keyword in connect statement, found '{:?}'",
+                    tok.kind
+                ),
                 span: tok.span,
             });
         }
@@ -2959,8 +3071,12 @@ impl<'a> SysmlParser<'a> {
         let target_port = self.expect_ident_or_dotted()?;
         self.expect_semi()?;
 
-        let source_part = source_port.split_once('.').map(|(owner, _)| owner.to_string());
-        let target_part = target_port.split_once('.').map(|(owner, _)| owner.to_string());
+        let source_part = source_port
+            .split_once('.')
+            .map(|(owner, _)| owner.to_string());
+        let target_part = target_port
+            .split_once('.')
+            .map(|(owner, _)| owner.to_string());
 
         let synth_name = format!(
             "c_{}_to_{}",
@@ -3010,7 +3126,9 @@ impl<'a> SysmlParser<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PEEK-NEXT-IS-FROM] | SysML v2: ActionDef(SysmlParser::peek_next_is_from)
     fn peek_next_is_from(&self) -> bool {
-        self.tokens.get(self.pos + 1).is_some_and(|t| t.kind == TokenKind::From)
+        self.tokens
+            .get(self.pos + 1)
+            .is_some_and(|t| t.kind == TokenKind::From)
     }
 
     /// Executes deterministic fn `SysmlParser::parse_use_case_decl` within `crates/compile-sysml/src/parser/grammar.rs`.
@@ -3041,11 +3159,26 @@ impl<'a> SysmlParser<'a> {
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-USE-CASE-DECL] | SysML v2: ActionDef(SysmlParser::parse_use_case_decl)
     fn parse_use_case_decl(&mut self, doc: Option<String>) -> Result<UseCaseDef, ParseError> {
         self.expect(&TokenKind::UseCase)?;
-        if self.check(&TokenKind::Def) { self.advance(); }
+        if self.check(&TokenKind::Def) {
+            self.advance();
+        }
         let name = self.expect_ident()?;
         let (mut subject, mut actor, mut objective, mut uc_doc) = (None, None, None, doc);
-        let (mut actors, mut steps, mut includes, mut extends, mut preconditions, mut postconditions) =
-            (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (
+            mut actors,
+            mut steps,
+            mut includes,
+            mut extends,
+            mut preconditions,
+            mut postconditions,
+        ) = (
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
@@ -3053,19 +3186,25 @@ impl<'a> SysmlParser<'a> {
                 while let Some(inner_text) = self.take_inner_doc_comment() {
                     if !inner_text.trim().is_empty() {
                         let slot = uc_doc.get_or_insert_with(String::new);
-                        if !slot.trim().is_empty() { slot.push_str("\n\n"); }
+                        if !slot.trim().is_empty() {
+                            slot.push_str("\n\n");
+                        }
                         slot.push_str(&inner_text);
                     }
                     self.skip_trivia();
                 }
-                if self.check(&TokenKind::CloseBrace) || self.is_at_end() { break; }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    break;
+                }
                 if self.check(&TokenKind::Subject) {
                     self.advance();
                     subject = Some(self.read_until_semi());
                 } else if self.check(&TokenKind::Actor) {
                     self.advance();
                     let act = self.read_until_semi();
-                    if actor.is_none() { actor = Some(act.clone()); }
+                    if actor.is_none() {
+                        actor = Some(act.clone());
+                    }
                     actors.push(act);
                 } else if self.check(&TokenKind::Objective) {
                     self.advance();
@@ -3075,11 +3214,15 @@ impl<'a> SysmlParser<'a> {
                     steps.push(self.read_until_semi());
                 } else if self.check(&TokenKind::Include) {
                     self.advance();
-                    if self.check(&TokenKind::UseCase) { self.advance(); }
+                    if self.check(&TokenKind::UseCase) {
+                        self.advance();
+                    }
                     includes.push(self.read_until_semi());
                 } else if self.check(&TokenKind::Extend) {
                     self.advance();
-                    if self.check(&TokenKind::UseCase) { self.advance(); }
+                    if self.check(&TokenKind::UseCase) {
+                        self.advance();
+                    }
                     extends.push(self.read_until_semi());
                 } else if self.check(&TokenKind::Precondition) {
                     self.advance();
@@ -3090,7 +3233,10 @@ impl<'a> SysmlParser<'a> {
                 } else {
                     let tok = self.peek();
                     return Err(ParseError {
-                        message: format!("Unexpected token '{:?}' in use case declaration body", tok.kind),
+                        message: format!(
+                            "Unexpected token '{:?}' in use case declaration body",
+                            tok.kind
+                        ),
                         span: tok.span,
                     });
                 }
@@ -3100,8 +3246,17 @@ impl<'a> SysmlParser<'a> {
             self.expect_semi()?;
         }
         Ok(UseCaseDef {
-            name, doc: uc_doc, subject, actor, actors, objective,
-            includes, extends, steps, preconditions, postconditions,
+            name,
+            doc: uc_doc,
+            subject,
+            actor,
+            actors,
+            objective,
+            includes,
+            extends,
+            steps,
+            preconditions,
+            postconditions,
         })
     }
 
@@ -3675,7 +3830,10 @@ impl<'a> SysmlParser<'a> {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-INTERACTION-DECL] | SysML v2: ActionDef(SysmlParser::parse_interaction_decl)
-    fn parse_interaction_decl(&mut self, doc: Option<String>) -> Result<InteractionDef, ParseError> {
+    fn parse_interaction_decl(
+        &mut self,
+        doc: Option<String>,
+    ) -> Result<InteractionDef, ParseError> {
         self.expect(&TokenKind::Interaction)?;
         if self.check(&TokenKind::Def) {
             self.advance();
@@ -3774,7 +3932,10 @@ impl<'a> SysmlParser<'a> {
         if self.check(&TokenKind::OpenParen) {
             self.advance();
             while !self.check(&TokenKind::CloseParen) && !self.is_at_end() {
-                if self.check(&TokenKind::In) || self.check(&TokenKind::Out) || self.check(&TokenKind::Inout) {
+                if self.check(&TokenKind::In)
+                    || self.check(&TokenKind::Out)
+                    || self.check(&TokenKind::Inout)
+                {
                     self.advance();
                 }
                 if self.check(&TokenKind::Attribute) || self.check(&TokenKind::Item) {
@@ -3791,7 +3952,10 @@ impl<'a> SysmlParser<'a> {
                 if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
                     self.advance();
                     let mut pieces = Vec::new();
-                    while !self.check(&TokenKind::Comma) && !self.check(&TokenKind::CloseParen) && !self.is_at_end() {
+                    while !self.check(&TokenKind::Comma)
+                        && !self.check(&TokenKind::CloseParen)
+                        && !self.is_at_end()
+                    {
                         let tok = self.advance();
                         match &tok.kind {
                             TokenKind::Ident(s) => pieces.push(s.clone()),
@@ -3851,21 +4015,23 @@ impl<'a> SysmlParser<'a> {
                         self.advance();
                     }
                     let p_name = self.expect_ident()?;
-                    let p_type = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
+                    let p_type = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt)
+                    {
                         self.advance();
                         self.parse_type_expr()?
                     } else {
                         "Real".to_string()
                     };
-                    let default_value = if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
-                        self.advance();
-                        Some(self.read_until_semi())
-                    } else {
-                        if self.check(&TokenKind::Semi) {
+                    let default_value =
+                        if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
                             self.advance();
-                        }
-                        None
-                    };
+                            Some(self.read_until_semi())
+                        } else {
+                            if self.check(&TokenKind::Semi) {
+                                self.advance();
+                            }
+                            None
+                        };
                     in_params.push(AttributeDef {
                         name: p_name,
                         type_name: p_type,
@@ -3922,7 +4088,9 @@ impl<'a> SysmlParser<'a> {
                             self.advance();
                         }
                         let has_ident = self.parse_identifier().is_ok();
-                        if has_ident && (self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt)) {
+                        if has_ident
+                            && (self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt))
+                        {
                             self.advance();
                             let rtype = self.parse_type_expr()?;
                             if return_type.is_none() {
@@ -3938,7 +4106,9 @@ impl<'a> SysmlParser<'a> {
                             } else {
                                 self.expect_semi()?;
                             }
-                        } else if has_ident && (self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq)) {
+                        } else if has_ident
+                            && (self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq))
+                        {
                             self.advance();
                             let rhs = self.read_until_semi();
                             let rhs_trimmed = rhs.trim();
@@ -4028,8 +4198,8 @@ impl<'a> SysmlParser<'a> {
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-IS-BARE-CALC-RETURN-TYPE] | SysML v2: ActionDef(SysmlParser::is_bare_calc_return_type)
     fn is_bare_calc_return_type(rtype: &str, in_params: &[AttributeDef]) -> bool {
         const PRIMITIVES: &[&str] = &[
-            "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128",
-            "isize", "f32", "f64", "bool", "str", "char",
+            "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize",
+            "f32", "f64", "bool", "str", "char",
         ];
         let trimmed = rtype.trim();
         let base = trimmed.split('[').next().unwrap_or(trimmed).trim();
@@ -4218,7 +4388,9 @@ impl<'a> SysmlParser<'a> {
         if self.is_at_end() {
             &TokenKind::Eof
         } else {
-            self.tokens.get(self.pos).map_or(&TokenKind::Eof, |t| &t.kind)
+            self.tokens
+                .get(self.pos)
+                .map_or(&TokenKind::Eof, |t| &t.kind)
         }
     }
 
@@ -4286,7 +4458,9 @@ impl<'a> SysmlParser<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-IS-AT-END] | SysML v2: ActionDef(SysmlParser::is_at_end)
     fn is_at_end(&self) -> bool {
-        self.tokens.get(self.pos).is_none_or(|t| t.kind == TokenKind::Eof)
+        self.tokens
+            .get(self.pos)
+            .is_none_or(|t| t.kind == TokenKind::Eof)
     }
 
     /// Executes deterministic fn `SysmlParser::expect` within `crates/compile-sysml/src/parser/grammar.rs`.
@@ -4459,33 +4633,21 @@ impl<'a> SysmlParser<'a> {
         self.parse_identifier()
     }
 
-    /// Parses a simple or composite type expression including pointers (`*const T`, `*mut T`), references (`&T`, `&mut T`), `dyn` trait objects, tuples (`()`, `(T1, T2)`), slices/arrays (`[T]`, `[T; N]`), path-qualified generics (`Pkg::Vec<T>`), multiplicity suffixes (`Type[]`, `Type[1..*]`), and optional `?` suffixes.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_type_expr` in `crates/compile-sysml/src/parser/grammar.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Enforces balanced delimiter consumption across `<...>`, `(...)`, and `[...]` type expressions before statement or parameter terminators in `PARSER-GRAMMAR`.
-    ///
-    /// ## 3. Preconditions
-    /// - Parser cursor is positioned at the start of a type annotation following `:` or `,` or `<` or `(` or `[`.
-    ///
-    /// ## 4. Postconditions
-    /// - Advances cursor past the complete type expression and returns `Result<String, ParseError>` containing its canonical string representation.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(T) bounded over the number of tokens T in the type expression.
-    /// - Space Complexity: O(T) bounded auxiliary memory for nested generic/tuple string formatting.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Emits `ParseError` with source span on unbalanced delimiters, empty `<>`, or invalid pointer qualifiers.
-    /// - State: Preserves deterministic cursor position on error.
-    /// - Action: Bounded recursion depth proportional to lexical nesting of the type expression.
-    /// - Resource: Bounded string and vector allocations proportional to type token count.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-TYPE-EXPR] | SysML v2: ActionDef(SysmlParser::parse_type_expr)
+    /// Parses a simple or composite type expression (`*const/*mut`, `&`, `dyn`, tuples, arrays, generics, multiplicity, `?`) bounded by `MAX_PARSE_DEPTH`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-TYPE-EXPR]
     fn parse_type_expr(&mut self) -> Result<String, ParseError> {
+        if self.depth >= MAX_PARSE_DEPTH {
+            return Err(self.max_depth_error());
+        }
+        self.depth = self.depth.saturating_add(1);
+        let result = self.parse_type_expr_inner();
+        self.depth = self.depth.saturating_sub(1);
+        result
+    }
+
+    /// Parses a composite or path-qualified type expression within an active depth frame.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-TYPE-EXPR]
+    fn parse_type_expr_inner(&mut self) -> Result<String, ParseError> {
         let mut out = String::new();
 
         // 1. Pointer prefixes: *const T, *mut T
@@ -4820,7 +4982,10 @@ impl<'a> SysmlParser<'a> {
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-READ-UNTIL-SEMI] | SysML v2: ActionDef(SysmlParser::read_until_semi)
     fn read_until_semi(&mut self) -> String {
         let mut pieces = Vec::new();
-        while !self.check(&TokenKind::Semi) && !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
+        while !self.check(&TokenKind::Semi)
+            && !self.check(&TokenKind::CloseBrace)
+            && !self.is_at_end()
+        {
             let tok = self.advance();
             match &tok.kind {
                 TokenKind::Ident(s) => pieces.push(s.clone()),
@@ -4876,7 +5041,10 @@ impl<'a> SysmlParser<'a> {
             && !self.is_at_end()
         {
             let tok = self.advance().clone();
-            if !matches!(tok.kind, TokenKind::LineComment(_) | TokenKind::DocComment(_)) {
+            if !matches!(
+                tok.kind,
+                TokenKind::LineComment(_) | TokenKind::DocComment(_)
+            ) {
                 out.push(tok);
             }
         }
@@ -4914,13 +5082,19 @@ impl<'a> SysmlParser<'a> {
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-SATISFY-STMT] | SysML v2: ActionDef(SysmlParser::parse_satisfy_stmt)
     fn parse_satisfy_stmt(&mut self) -> Result<String, ParseError> {
         self.expect(&TokenKind::Satisfy)?;
-        while matches!(self.peek_kind(), TokenKind::DocComment(_) | TokenKind::LineComment(_)) {
+        while matches!(
+            self.peek_kind(),
+            TokenKind::DocComment(_) | TokenKind::LineComment(_)
+        ) {
             self.advance();
         }
         if self.check(&TokenKind::Requirement) {
             self.advance();
         }
-        while matches!(self.peek_kind(), TokenKind::DocComment(_) | TokenKind::LineComment(_)) {
+        while matches!(
+            self.peek_kind(),
+            TokenKind::DocComment(_) | TokenKind::LineComment(_)
+        ) {
             self.advance();
         }
         let mut raw = String::new();
@@ -4962,7 +5136,12 @@ impl<'a> SysmlParser<'a> {
         } else {
             self.expect_semi()?;
         }
-        Ok(raw.trim().trim_matches('"').trim_matches('\'').trim().to_string())
+        Ok(raw
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .trim()
+            .to_string())
     }
 
     /// Extracts an inner documentation comment (`/* ... */`, `doc /* ... */`, or `doc = "..."`) inside a braced declaration body and consumes any trailing semicolon.
@@ -5103,34 +5282,17 @@ pub fn discover_sysml_files(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// Merge all AST definitions from `src` into `dest`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `merge_package_defs` in `crates/compile-sysml/src/parser/grammar.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `merge_package_defs` (declaration #47) within `PARSER-GRAMMAR`.
-///
-/// ## 3. Preconditions
-/// - `dest: &mut PackageDef` must satisfy domain and type-safety constraints prior to invoking `merge_package_defs`.
-/// - `src: PackageDef` must satisfy domain and type-safety constraints prior to invoking `merge_package_defs`.
-///
-/// ## 4. Postconditions
-/// - Returns `()` from `merge_package_defs` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(dest)) bounded over input/member dimension of `merge_package_defs`.
-/// - Space Complexity: O(N(dest)) bounded auxiliary memory for `merge_package_defs`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `merge_package_defs` (`()`).
-/// - State: Maintains consistent state invariants across `merge_package_defs` without partial mutation on error.
-/// - Action: Executes `merge_package_defs` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `merge_package_defs` (`PARSER-GRAMMAR`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-PARSER-GRAMMAR-MERGE-PACKAGE-DEFS] | SysML v2: ActionDef(merge_package_defs)
-pub fn merge_package_defs(dest: &mut PackageDef, src: PackageDef) {
+/// Work-stack frame for bounded iterative child-package merging in `merge_package_defs`.
+/// Realises: [REQ-PARSER-GRAMMAR-MERGE-PACKAGE-DEFS]
+struct PackageMergeFrame<'a> {
+    dest: &'a mut PackageDef,
+    sources: Vec<PackageDef>,
+    depth: usize,
+}
+
+/// Merges all direct non-package AST members from `src` into `dest` and returns `src.packages`.
+/// Realises: [REQ-PARSER-GRAMMAR-MERGE-PACKAGE-DEFS]
+fn merge_package_direct_members(dest: &mut PackageDef, src: PackageDef) -> Vec<PackageDef> {
     if dest.doc.is_none() && src.doc.is_some() {
         dest.doc = src.doc;
     }
@@ -5171,11 +5333,97 @@ pub fn merge_package_defs(dest: &mut PackageDef, src: PackageDef) {
         }
     }
 
-    for src_child in src.packages {
-        if let Some(existing) = dest.packages.iter_mut().find(|p| p.name == src_child.name) {
-            merge_package_defs(existing, src_child);
-        } else {
-            dest.packages.push(src_child);
+    src.packages
+}
+
+/// Iteratively dismantles nested `PackageDef` trees in O(1) call-stack space so dropping
+/// truncated subtrees beyond `MAX_PARSE_DEPTH` cannot trigger recursive `Drop` stack overflow.
+/// Realises: [REQ-PARSER-GRAMMAR-MERGE-PACKAGE-DEFS]
+fn drop_packages_iteratively(mut stack: Vec<PackageDef>) {
+    while let Some(mut pkg) = stack.pop() {
+        stack.append(&mut pkg.packages);
+    }
+}
+
+/// Merge all AST definitions from `src` into `dest` using an explicit iterative work-stack bounded by `MAX_PARSE_DEPTH`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `merge_package_defs` in `crates/compile-sysml/src/parser/grammar.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic declaration ordering across direct definitions and nested child packages up to `MAX_PARSE_DEPTH` (64) levels (`0..MAX_PARSE_DEPTH`).
+///
+/// ## 3. Preconditions
+/// - `dest: &mut PackageDef` must satisfy domain and type-safety constraints prior to invoking `merge_package_defs`.
+/// - `src: PackageDef` must satisfy domain and type-safety constraints prior to invoking `merge_package_defs`.
+///
+/// ## 4. Postconditions
+/// - Mutates `dest` in place with merged definitions from `src` using `O(1)` call-stack frames.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(dest) + N(src)) bounded over package hierarchy nodes up to `MAX_PARSE_DEPTH`.
+/// - Space Complexity: O(MAX_PARSE_DEPTH) bounded auxiliary heap work-stack memory with O(1) call-stack depth.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total function over `(&mut PackageDef, PackageDef)` with zero panics.
+/// - State: Stops descending into nested child packages once `depth >= MAX_PARSE_DEPTH` and dismantles excess source subtrees iteratively.
+/// - Action: Executes deterministically via an explicit `Vec<PackageMergeFrame>` work-stack with zero call-stack recursion.
+/// - Resource: Bounds call-stack consumption to a single frame (`PARSER-GRAMMAR`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-PARSER-GRAMMAR-MERGE-PACKAGE-DEFS] | SysML v2: ActionDef(merge_package_defs)
+pub fn merge_package_defs(dest: &mut PackageDef, src: PackageDef) {
+    let mut stack = vec![PackageMergeFrame {
+        dest,
+        sources: vec![src],
+        depth: 0,
+    }];
+
+    while let Some(frame) = stack.pop() {
+        if frame.depth >= MAX_PARSE_DEPTH {
+            for mut src_pkg in frame.sources {
+                drop_packages_iteratively(std::mem::take(&mut src_pkg.packages));
+            }
+            continue;
+        }
+        let mut child_packages = Vec::new();
+        for src_pkg in frame.sources {
+            child_packages.extend(merge_package_direct_members(frame.dest, src_pkg));
+        }
+
+        let next_depth = frame.depth.saturating_add(1);
+        if next_depth >= MAX_PARSE_DEPTH {
+            drop_packages_iteratively(child_packages);
+            continue;
+        }
+
+        let mut pending_by_index: BTreeMap<usize, Vec<PackageDef>> = BTreeMap::new();
+        for src_child in child_packages {
+            if let Some(existing_idx) = frame
+                .dest
+                .packages
+                .iter()
+                .position(|p| p.name == src_child.name)
+            {
+                pending_by_index
+                    .entry(existing_idx)
+                    .or_default()
+                    .push(src_child);
+            } else {
+                frame.dest.packages.push(src_child);
+            }
+        }
+
+        if !pending_by_index.is_empty() {
+            for (idx, dest_child) in frame.dest.packages.iter_mut().enumerate().rev() {
+                if let Some(child_sources) = pending_by_index.remove(&idx) {
+                    stack.push(PackageMergeFrame {
+                        dest: dest_child,
+                        sources: child_sources,
+                        depth: next_depth,
+                    });
+                }
+            }
         }
     }
 }
@@ -5291,9 +5539,7 @@ pub fn parse_sysml_tree(files: &[PathBuf]) -> Result<PackageDef, ParseError> {
     }
 
     if root.packages.len() == 1
-        && (is_synthetic_forest_root(&root)
-            || root.name == "SysML_Model"
-            || root.name.is_empty())
+        && (is_synthetic_forest_root(&root) || root.name == "SysML_Model" || root.name.is_empty())
     {
         let mut single = root.packages.remove(0);
         merge_package_defs(&mut single, root);
@@ -5382,7 +5628,10 @@ package SystemModel_SSOT {
         let frame = pkg.part_defs.first().ok_or("missing part 0")?;
         assert_eq!(frame.name, "StructuralFrame");
         assert_eq!(frame.attributes.len(), 1);
-        let mass = frame.attributes.first().ok_or("missing frame attribute 0")?;
+        let mass = frame
+            .attributes
+            .first()
+            .ok_or("missing frame attribute 0")?;
         assert_eq!(mass.name, "nominalMass");
         assert_eq!(mass.default_value.as_deref(), Some("25.0"));
 
@@ -5409,8 +5658,21 @@ package SystemModel_SSOT {
             Some("Ground truth limits for flight envelope verification")
         );
         assert_eq!(pkg.attribute_defs.len(), 5);
-        assert_eq!(pkg.attribute_defs.first().ok_or("missing first element of pkg.attribute_defs")?.name, "catapultPressureLimitBar");
-        assert_eq!(pkg.attribute_defs.first().ok_or("missing first element of pkg.attribute_defs")?.default_value.as_deref(), Some("15.0"));
+        assert_eq!(
+            pkg.attribute_defs
+                .first()
+                .ok_or("missing first element of pkg.attribute_defs")?
+                .name,
+            "catapultPressureLimitBar"
+        );
+        assert_eq!(
+            pkg.attribute_defs
+                .first()
+                .ok_or("missing first element of pkg.attribute_defs")?
+                .default_value
+                .as_deref(),
+            Some("15.0")
+        );
         Ok(())
     }
 
@@ -5474,31 +5736,113 @@ package FlightControl_SSOT {
         assert_eq!(pkg.attribute_defs.len(), 2);
         assert_eq!(pkg.part_defs.len(), 2);
 
-        let nav = pkg.part_defs.first().ok_or("missing first element of pkg.part_defs")?;
+        let nav = pkg
+            .part_defs
+            .first()
+            .ok_or("missing first element of pkg.part_defs")?;
         assert_eq!(nav.name, "NavigationSubsystem");
         assert_eq!(nav.doc.as_deref(), Some("GPS, IMU and Sensor Fusion Unit"));
         assert_eq!(nav.ports.len(), 2);
-        assert_eq!(nav.ports.first().ok_or("missing first element of nav.ports")?.direction, "out");
-        assert_eq!(nav.ports.first().ok_or("missing first element of nav.ports")?.name, "nav_solution");
-        assert_eq!(nav.ports.get(1).ok_or("missing element 1 of nav.ports")?.direction, "in");
-        assert!(nav.ports.get(1).ok_or("missing element 1 of nav.ports")?.is_conjugated);
-        assert_eq!(nav.ports.get(1).ok_or("missing element 1 of nav.ports")?.name, "correction_stream");
+        assert_eq!(
+            nav.ports
+                .first()
+                .ok_or("missing first element of nav.ports")?
+                .direction,
+            "out"
+        );
+        assert_eq!(
+            nav.ports
+                .first()
+                .ok_or("missing first element of nav.ports")?
+                .name,
+            "nav_solution"
+        );
+        assert_eq!(
+            nav.ports
+                .get(1)
+                .ok_or("missing element 1 of nav.ports")?
+                .direction,
+            "in"
+        );
+        assert!(
+            nav.ports
+                .get(1)
+                .ok_or("missing element 1 of nav.ports")?
+                .is_conjugated
+        );
+        assert_eq!(
+            nav.ports
+                .get(1)
+                .ok_or("missing element 1 of nav.ports")?
+                .name,
+            "correction_stream"
+        );
         assert_eq!(nav.actions.len(), 1);
-        assert_eq!(nav.actions.first().ok_or("missing first element of nav.actions")?.name, "ComputeNavigationState");
+        assert_eq!(
+            nav.actions
+                .first()
+                .ok_or("missing first element of nav.actions")?
+                .name,
+            "ComputeNavigationState"
+        );
         assert_eq!(nav.states.len(), 1);
-        assert_eq!(nav.states.first().ok_or("missing first element of nav.states")?.name, "NavFilterState");
-        assert_eq!(nav.states.first().ok_or("missing first element of nav.states")?.entry_action.as_deref(), Some("InitINS"));
-        assert_eq!(nav.states.first().ok_or("missing first element of nav.states")?.do_action.as_deref(), Some("RunEKF"));
+        assert_eq!(
+            nav.states
+                .first()
+                .ok_or("missing first element of nav.states")?
+                .name,
+            "NavFilterState"
+        );
+        assert_eq!(
+            nav.states
+                .first()
+                .ok_or("missing first element of nav.states")?
+                .entry_action
+                .as_deref(),
+            Some("InitINS")
+        );
+        assert_eq!(
+            nav.states
+                .first()
+                .ok_or("missing first element of nav.states")?
+                .do_action
+                .as_deref(),
+            Some("RunEKF")
+        );
 
-        let actuator = pkg.part_defs.get(1).ok_or("missing element 1 of pkg.part_defs")?;
+        let actuator = pkg
+            .part_defs
+            .get(1)
+            .ok_or("missing element 1 of pkg.part_defs")?;
         assert_eq!(actuator.name, "ActuatorController");
         assert_eq!(actuator.constraints.len(), 1);
-        assert_eq!(actuator.constraints.first().ok_or("missing first element of actuator.constraints")?.name, "DeflectionBounds");
-        assert!(actuator.constraints.first().ok_or("missing first element of actuator.constraints")?.is_assertion);
-        assert!(actuator.constraints.first().ok_or("missing first element of actuator.constraints")?.expression.contains("deflectionDeg"));
+        assert_eq!(
+            actuator
+                .constraints
+                .first()
+                .ok_or("missing first element of actuator.constraints")?
+                .name,
+            "DeflectionBounds"
+        );
+        assert!(
+            actuator
+                .constraints
+                .first()
+                .ok_or("missing first element of actuator.constraints")?
+                .is_assertion
+        );
+        assert!(actuator
+            .constraints
+            .first()
+            .ok_or("missing first element of actuator.constraints")?
+            .expression
+            .contains("deflectionDeg"));
 
         assert_eq!(pkg.connection_defs.len(), 1);
-        let conn = pkg.connection_defs.first().ok_or("missing first element of pkg.connection_defs")?;
+        let conn = pkg
+            .connection_defs
+            .first()
+            .ok_or("missing first element of pkg.connection_defs")?;
         assert_eq!(conn.name, "NavToActuatorBus");
         assert_eq!(conn.source_port, "NavigationSubsystem.nav_solution");
         assert_eq!(conn.target_port, "ActuatorController.servo_cmd");
@@ -5508,7 +5852,10 @@ package FlightControl_SSOT {
         assert_eq!(conn.latency_ms, Some(2.5));
 
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = pkg.requirement_defs.first().ok_or("missing first element of pkg.requirement_defs")?;
+        let req = pkg
+            .requirement_defs
+            .first()
+            .ok_or("missing first element of pkg.requirement_defs")?;
         assert_eq!(req.name, "Req_Nav_001");
         assert_eq!(req.req_id, "REQ-NAV-001");
         assert_eq!(
@@ -5536,15 +5883,54 @@ package TestPkg {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.name, "TestPkg");
-        let comp = pkg.part_defs.first().ok_or("missing first element of pkg.part_defs")?;
+        let comp = pkg
+            .part_defs
+            .first()
+            .ok_or("missing first element of pkg.part_defs")?;
         assert_eq!(comp.name, "Component");
         assert_eq!(comp.attributes.len(), 6);
-        assert_eq!(comp.attributes.first().ok_or("missing first element of comp.attributes")?.name, "text");
-        assert_eq!(comp.attributes.get(1).ok_or("missing element 1 of comp.attributes")?.name, "doc");
-        assert_eq!(comp.attributes.get(2).ok_or("missing element 2 of comp.attributes")?.name, "item");
-        assert_eq!(comp.attributes.get(3).ok_or("missing element 3 of comp.attributes")?.name, "state");
-        assert_eq!(comp.attributes.get(4).ok_or("missing element 4 of comp.attributes")?.name, "action");
-        assert_eq!(comp.attributes.get(5).ok_or("missing element 5 of comp.attributes")?.name, "port");
+        assert_eq!(
+            comp.attributes
+                .first()
+                .ok_or("missing first element of comp.attributes")?
+                .name,
+            "text"
+        );
+        assert_eq!(
+            comp.attributes
+                .get(1)
+                .ok_or("missing element 1 of comp.attributes")?
+                .name,
+            "doc"
+        );
+        assert_eq!(
+            comp.attributes
+                .get(2)
+                .ok_or("missing element 2 of comp.attributes")?
+                .name,
+            "item"
+        );
+        assert_eq!(
+            comp.attributes
+                .get(3)
+                .ok_or("missing element 3 of comp.attributes")?
+                .name,
+            "state"
+        );
+        assert_eq!(
+            comp.attributes
+                .get(4)
+                .ok_or("missing element 4 of comp.attributes")?
+                .name,
+            "action"
+        );
+        assert_eq!(
+            comp.attributes
+                .get(5)
+                .ok_or("missing element 5 of comp.attributes")?
+                .name,
+            "port"
+        );
         Ok(())
     }
 
@@ -5565,24 +5951,57 @@ package ReqPkg {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = pkg.requirement_defs.first().ok_or("missing first element of pkg.requirement_defs")?;
+        let req = pkg
+            .requirement_defs
+            .first()
+            .ok_or("missing first element of pkg.requirement_defs")?;
         assert_eq!(req.name, "REQ_0001_Demo");
         assert_eq!(req.req_id, "REQ-0001");
         assert_eq!(req.text, "The system shall process data.");
         assert_eq!(req.attributes.len(), 3);
-        assert_eq!(req.attributes.first().ok_or("missing first element of req.attributes")?.name, "uuidv5");
         assert_eq!(
-            req.attributes.first().ok_or("missing first element of req.attributes")?.default_value.as_deref(),
+            req.attributes
+                .first()
+                .ok_or("missing first element of req.attributes")?
+                .name,
+            "uuidv5"
+        );
+        assert_eq!(
+            req.attributes
+                .first()
+                .ok_or("missing first element of req.attributes")?
+                .default_value
+                .as_deref(),
             Some("\"5a4d7a99-0419-5c2b-ba0e-ccabdb05f1c9\"")
         );
-        assert_eq!(req.attributes.get(1).ok_or("missing element 1 of req.attributes")?.name, "complexity_class");
         assert_eq!(
-            req.attributes.get(1).ok_or("missing element 1 of req.attributes")?.default_value.as_deref(),
+            req.attributes
+                .get(1)
+                .ok_or("missing element 1 of req.attributes")?
+                .name,
+            "complexity_class"
+        );
+        assert_eq!(
+            req.attributes
+                .get(1)
+                .ok_or("missing element 1 of req.attributes")?
+                .default_value
+                .as_deref(),
             Some("\"Class P\"")
         );
-        assert_eq!(req.attributes.get(2).ok_or("missing element 2 of req.attributes")?.name, "ac_01_demo");
         assert_eq!(
-            req.attributes.get(2).ok_or("missing element 2 of req.attributes")?.default_value.as_deref(),
+            req.attributes
+                .get(2)
+                .ok_or("missing element 2 of req.attributes")?
+                .name,
+            "ac_01_demo"
+        );
+        assert_eq!(
+            req.attributes
+                .get(2)
+                .ok_or("missing element 2 of req.attributes")?
+                .default_value
+                .as_deref(),
             Some("\"Given: input. When: run. Then: success.\"")
         );
         assert_eq!(req.verified_by, vec!["AC_01_Demo"]);
@@ -5591,7 +6010,8 @@ package ReqPkg {
     }
 
     #[test]
-    fn test_parse_requirement_with_assumptions_constraints_derivations() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_parse_requirement_with_assumptions_constraints_derivations(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package ReqPkg {
     requirement def REQ_0032_Test {
@@ -5609,10 +6029,16 @@ package ReqPkg {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = pkg.requirement_defs.first().ok_or("missing first element of pkg.requirement_defs")?;
+        let req = pkg
+            .requirement_defs
+            .first()
+            .ok_or("missing first element of pkg.requirement_defs")?;
         assert_eq!(req.assumes, vec!["ValidSchema"]);
         assert_eq!(req.requires, vec!["Invariant_Alpha", "Invariant_Beta"]);
-        assert_eq!(req.derived_from, vec!["REQ_0031_Parent", "REQ_0019_Sanitization"]);
+        assert_eq!(
+            req.derived_from,
+            vec!["REQ_0031_Parent", "REQ_0019_Sanitization"]
+        );
         Ok(())
     }
 
@@ -5628,17 +6054,47 @@ package SubsystemPkg {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.part_defs.len(), 1);
-        let engine = pkg.part_defs.first().ok_or("missing first element of pkg.part_defs")?;
+        let engine = pkg
+            .part_defs
+            .first()
+            .ok_or("missing first element of pkg.part_defs")?;
         assert_eq!(engine.constraints.len(), 2);
-        assert_eq!(engine.constraints.first().ok_or("missing first element of engine.constraints")?.name, "Invariant_Alpha");
-        assert!(engine.constraints.first().ok_or("missing first element of engine.constraints")?.is_assertion);
-        assert_eq!(engine.constraints.get(1).ok_or("missing element 1 of engine.constraints")?.name, "Invariant_Beta");
-        assert!(engine.constraints.get(1).ok_or("missing element 1 of engine.constraints")?.is_assertion);
+        assert_eq!(
+            engine
+                .constraints
+                .first()
+                .ok_or("missing first element of engine.constraints")?
+                .name,
+            "Invariant_Alpha"
+        );
+        assert!(
+            engine
+                .constraints
+                .first()
+                .ok_or("missing first element of engine.constraints")?
+                .is_assertion
+        );
+        assert_eq!(
+            engine
+                .constraints
+                .get(1)
+                .ok_or("missing element 1 of engine.constraints")?
+                .name,
+            "Invariant_Beta"
+        );
+        assert!(
+            engine
+                .constraints
+                .get(1)
+                .ok_or("missing element 1 of engine.constraints")?
+                .is_assertion
+        );
         Ok(())
     }
 
     #[test]
-    fn test_parse_requirement_with_encapsulated_constraints() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_parse_requirement_with_encapsulated_constraints(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package ReqPkg {
     requirement def REQ_0001_Test {
@@ -5656,14 +6112,52 @@ package ReqPkg {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = pkg.requirement_defs.first().ok_or("missing first element of pkg.requirement_defs")?;
+        let req = pkg
+            .requirement_defs
+            .first()
+            .ok_or("missing first element of pkg.requirement_defs")?;
         assert_eq!(req.constraints.len(), 2);
-        assert_eq!(req.constraints.first().ok_or("missing first element of req.constraints")?.name, "Invariant_Alpha");
-        assert_eq!(req.constraints.first().ok_or("missing first element of req.constraints")?.doc.as_deref(), Some("Formula Alpha"));
-        assert!(!req.constraints.first().ok_or("missing first element of req.constraints")?.is_assertion);
-        assert_eq!(req.constraints.get(1).ok_or("missing element 1 of req.constraints")?.name, "Invariant_Beta");
-        assert!(req.constraints.get(1).ok_or("missing element 1 of req.constraints")?.is_assertion);
-        assert_eq!(req.constraints.get(1).ok_or("missing element 1 of req.constraints")?.expression, "x > 0");
+        assert_eq!(
+            req.constraints
+                .first()
+                .ok_or("missing first element of req.constraints")?
+                .name,
+            "Invariant_Alpha"
+        );
+        assert_eq!(
+            req.constraints
+                .first()
+                .ok_or("missing first element of req.constraints")?
+                .doc
+                .as_deref(),
+            Some("Formula Alpha")
+        );
+        assert!(
+            !req.constraints
+                .first()
+                .ok_or("missing first element of req.constraints")?
+                .is_assertion
+        );
+        assert_eq!(
+            req.constraints
+                .get(1)
+                .ok_or("missing element 1 of req.constraints")?
+                .name,
+            "Invariant_Beta"
+        );
+        assert!(
+            req.constraints
+                .get(1)
+                .ok_or("missing element 1 of req.constraints")?
+                .is_assertion
+        );
+        assert_eq!(
+            req.constraints
+                .get(1)
+                .ok_or("missing element 1 of req.constraints")?
+                .expression,
+            "x > 0"
+        );
         Ok(())
     }
 
@@ -5678,17 +6172,65 @@ package Subsystem_Imports {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.imports.len(), 3);
-        assert_eq!(pkg.imports.first().ok_or("missing first element of pkg.imports")?.path, "Subsystem_1");
-        assert!(pkg.imports.first().ok_or("missing first element of pkg.imports")?.is_wildcard);
-        assert!(!pkg.imports.first().ok_or("missing first element of pkg.imports")?.is_recursive);
+        assert_eq!(
+            pkg.imports
+                .first()
+                .ok_or("missing first element of pkg.imports")?
+                .path,
+            "Subsystem_1"
+        );
+        assert!(
+            pkg.imports
+                .first()
+                .ok_or("missing first element of pkg.imports")?
+                .is_wildcard
+        );
+        assert!(
+            !pkg.imports
+                .first()
+                .ok_or("missing first element of pkg.imports")?
+                .is_recursive
+        );
 
-        assert_eq!(pkg.imports.get(1).ok_or("missing element 1 of pkg.imports")?.path, "Subsystem_2::Engine");
-        assert!(!pkg.imports.get(1).ok_or("missing element 1 of pkg.imports")?.is_wildcard);
-        assert!(!pkg.imports.get(1).ok_or("missing element 1 of pkg.imports")?.is_recursive);
+        assert_eq!(
+            pkg.imports
+                .get(1)
+                .ok_or("missing element 1 of pkg.imports")?
+                .path,
+            "Subsystem_2::Engine"
+        );
+        assert!(
+            !pkg.imports
+                .get(1)
+                .ok_or("missing element 1 of pkg.imports")?
+                .is_wildcard
+        );
+        assert!(
+            !pkg.imports
+                .get(1)
+                .ok_or("missing element 1 of pkg.imports")?
+                .is_recursive
+        );
 
-        assert_eq!(pkg.imports.get(2).ok_or("missing element 2 of pkg.imports")?.path, "Subsystem_3::Core");
-        assert!(pkg.imports.get(2).ok_or("missing element 2 of pkg.imports")?.is_wildcard);
-        assert!(pkg.imports.get(2).ok_or("missing element 2 of pkg.imports")?.is_recursive);
+        assert_eq!(
+            pkg.imports
+                .get(2)
+                .ok_or("missing element 2 of pkg.imports")?
+                .path,
+            "Subsystem_3::Core"
+        );
+        assert!(
+            pkg.imports
+                .get(2)
+                .ok_or("missing element 2 of pkg.imports")?
+                .is_wildcard
+        );
+        assert!(
+            pkg.imports
+                .get(2)
+                .ok_or("missing element 2 of pkg.imports")?
+                .is_recursive
+        );
         Ok(())
     }
 
@@ -5701,10 +6243,16 @@ part def DEAPCompilerSystem {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.part_defs.len(), 1);
-        let part = pkg.part_defs.first().ok_or("missing first element of pkg.part_defs")?;
+        let part = pkg
+            .part_defs
+            .first()
+            .ok_or("missing first element of pkg.part_defs")?;
         assert_eq!(part.name, "DEAPCompilerSystem");
         assert_eq!(part.connections.len(), 1);
-        let conn = part.connections.first().ok_or("missing first element of part.connections")?;
+        let conn = part
+            .connections
+            .first()
+            .ok_or("missing first element of part.connections")?;
         assert_eq!(conn.source_port, "a.out");
         assert_eq!(conn.target_port, "b.in");
         assert_eq!(conn.source_part.as_deref(), Some("a"));
@@ -5726,12 +6274,56 @@ package Subsystem_2 {
         let pkg = SysmlParser::parse_source(source, "RootSystem")?;
         assert_eq!(pkg.name, "RootSystem");
         assert_eq!(pkg.packages.len(), 2);
-        assert_eq!(pkg.packages.first().ok_or("missing first element of pkg.packages")?.name, "Subsystem_1");
-        assert_eq!(pkg.packages.first().ok_or("missing first element of pkg.packages")?.part_defs.len(), 1);
-        assert_eq!(pkg.packages.first().ok_or("missing first element of pkg.packages")?.part_defs.first().ok_or("missing first element of part_defs")?.name, "Engine");
-        assert_eq!(pkg.packages.get(1).ok_or("missing element 1 of pkg.packages")?.name, "Subsystem_2");
-        assert_eq!(pkg.packages.get(1).ok_or("missing element 1 of pkg.packages")?.part_defs.len(), 1);
-        assert_eq!(pkg.packages.get(1).ok_or("missing element 1 of pkg.packages")?.part_defs.first().ok_or("missing first element of part_defs")?.name, "Controller");
+        assert_eq!(
+            pkg.packages
+                .first()
+                .ok_or("missing first element of pkg.packages")?
+                .name,
+            "Subsystem_1"
+        );
+        assert_eq!(
+            pkg.packages
+                .first()
+                .ok_or("missing first element of pkg.packages")?
+                .part_defs
+                .len(),
+            1
+        );
+        assert_eq!(
+            pkg.packages
+                .first()
+                .ok_or("missing first element of pkg.packages")?
+                .part_defs
+                .first()
+                .ok_or("missing first element of part_defs")?
+                .name,
+            "Engine"
+        );
+        assert_eq!(
+            pkg.packages
+                .get(1)
+                .ok_or("missing element 1 of pkg.packages")?
+                .name,
+            "Subsystem_2"
+        );
+        assert_eq!(
+            pkg.packages
+                .get(1)
+                .ok_or("missing element 1 of pkg.packages")?
+                .part_defs
+                .len(),
+            1
+        );
+        assert_eq!(
+            pkg.packages
+                .get(1)
+                .ok_or("missing element 1 of pkg.packages")?
+                .part_defs
+                .first()
+                .ok_or("missing first element of part_defs")?
+                .name,
+            "Controller"
+        );
         Ok(())
     }
 
@@ -5740,8 +6332,7 @@ package Subsystem_2 {
         let temp_dir = std::env::temp_dir().join(format!(
             "test_sysml_tree_{}",
             std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                ?
+                .duration_since(std::time::UNIX_EPOCH)?
                 .as_nanos()
         ));
         let conops_dir = temp_dir.join("conops");
@@ -5757,8 +6348,7 @@ package ConOps {
     part def Operator;
 }
 "#,
-        )
-        ?;
+        )?;
 
         // 2. subsystems/sub1/requirements.sysml
         fs::write(
@@ -5770,8 +6360,7 @@ package Subsystem_1 {
     }
 }
 "#,
-        )
-        ?;
+        )?;
 
         // 3. subsystems/sub1/architecture.sysml
         fs::write(
@@ -5781,8 +6370,7 @@ package Subsystem_1 {
     part def SubsystemController;
 }
 "#,
-        )
-        ?;
+        )?;
 
         // 4. model.sysml
         fs::write(
@@ -5793,8 +6381,7 @@ package DEAP_Compiler_System {
     part def MainSystem;
 }
 "#,
-        )
-        ?;
+        )?;
 
         // Add hidden and temporary files that should be filtered out
         fs::write(temp_dir.join(".hidden.sysml"), "package Hidden {}")?;
@@ -5803,8 +6390,12 @@ package DEAP_Compiler_System {
         // Test file discovery
         let discovered = discover_sysml_files(&temp_dir);
         assert_eq!(discovered.len(), 4);
-        assert!(!discovered.iter().any(|p| p.to_string_lossy().contains(".hidden")));
-        assert!(!discovered.iter().any(|p| p.to_string_lossy().contains("#temp")));
+        assert!(!discovered
+            .iter()
+            .any(|p| p.to_string_lossy().contains(".hidden")));
+        assert!(!discovered
+            .iter()
+            .any(|p| p.to_string_lossy().contains("#temp")));
 
         // Test parsing via parse_sysml_tree
         let root = parse_sysml_tree(&discovered)?;
@@ -5819,7 +6410,14 @@ package DEAP_Compiler_System {
             .find(|p| p.name == "ConOps")
             .ok_or("ConOps package missing")?;
         assert_eq!(conops.part_defs.len(), 1);
-        assert_eq!(conops.part_defs.first().ok_or("missing first element of conops.part_defs")?.name, "Operator");
+        assert_eq!(
+            conops
+                .part_defs
+                .first()
+                .ok_or("missing first element of conops.part_defs")?
+                .name,
+            "Operator"
+        );
 
         // 2. Subsystem_1 package: merged from requirements.sysml and architecture.sysml
         let sub1 = root
@@ -5828,9 +6426,21 @@ package DEAP_Compiler_System {
             .find(|p| p.name == "Subsystem_1")
             .ok_or("Subsystem_1 package missing")?;
         assert_eq!(sub1.requirement_defs.len(), 1);
-        assert_eq!(sub1.requirement_defs.first().ok_or("missing first element of sub1.requirement_defs")?.name, "SubsystemSafetyReq");
+        assert_eq!(
+            sub1.requirement_defs
+                .first()
+                .ok_or("missing first element of sub1.requirement_defs")?
+                .name,
+            "SubsystemSafetyReq"
+        );
         assert_eq!(sub1.part_defs.len(), 1);
-        assert_eq!(sub1.part_defs.first().ok_or("missing first element of sub1.part_defs")?.name, "SubsystemController");
+        assert_eq!(
+            sub1.part_defs
+                .first()
+                .ok_or("missing first element of sub1.part_defs")?
+                .name,
+            "SubsystemController"
+        );
 
         // 3. DEAP_Compiler_System package
         let deap = root
@@ -5839,10 +6449,27 @@ package DEAP_Compiler_System {
             .find(|p| p.name == "DEAP_Compiler_System")
             .ok_or("DEAP_Compiler_System package missing")?;
         assert_eq!(deap.imports.len(), 1);
-        assert_eq!(deap.imports.first().ok_or("missing first element of deap.imports")?.path, "Subsystem_1");
-        assert!(deap.imports.first().ok_or("missing first element of deap.imports")?.is_wildcard);
+        assert_eq!(
+            deap.imports
+                .first()
+                .ok_or("missing first element of deap.imports")?
+                .path,
+            "Subsystem_1"
+        );
+        assert!(
+            deap.imports
+                .first()
+                .ok_or("missing first element of deap.imports")?
+                .is_wildcard
+        );
         assert_eq!(deap.part_defs.len(), 1);
-        assert_eq!(deap.part_defs.first().ok_or("missing first element of deap.part_defs")?.name, "MainSystem");
+        assert_eq!(
+            deap.part_defs
+                .first()
+                .ok_or("missing first element of deap.part_defs")?
+                .name,
+            "MainSystem"
+        );
 
         // Test directory parsing via parse_sysml_directory
         let root_from_dir = parse_sysml_directory(&temp_dir)?;
@@ -5853,7 +6480,8 @@ package DEAP_Compiler_System {
     }
 
     #[test]
-    fn test_issue_444_merge_package_defs_preserves_calc_defs() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_444_merge_package_defs_preserves_calc_defs(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use deap_core::sysml_ast::CalcDef;
 
         let mut dest = PackageDef {
@@ -5884,7 +6512,8 @@ package DEAP_Compiler_System {
     }
 
     #[test]
-    fn test_parse_use_case_def_preserves_inner_doc_comments() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_parse_use_case_def_preserves_inner_doc_comments(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package TestPackage {
     use case def UC_01_Vision {
@@ -5918,7 +6547,10 @@ package TestPackage {
 "#;
         let pkg = SysmlParser::parse_source(source, "TestModel")?;
         assert_eq!(pkg.use_case_defs.len(), 1);
-        let uc = pkg.use_case_defs.first().ok_or("missing first element of pkg.use_case_defs")?;
+        let uc = pkg
+            .use_case_defs
+            .first()
+            .ok_or("missing first element of pkg.use_case_defs")?;
         assert_eq!(uc.name, "UC_01_Vision");
         assert!(uc.doc.is_some());
         let doc = uc.doc.as_ref().ok_or("use case doc missing")?;
@@ -5936,7 +6568,8 @@ package TestPackage {
     }
 
     #[test]
-    fn test_parse_use_case_def_outer_and_inner_doc_concatenation() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_parse_use_case_def_outer_and_inner_doc_concatenation(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 doc /* Package doc */
 package TestPackage {
@@ -5961,13 +6594,26 @@ package TestPackage {
 "#;
         let pkg = SysmlParser::parse_source(source, "TestModel")?;
         assert_eq!(pkg.use_case_defs.len(), 1);
-        let uc = pkg.use_case_defs.first().ok_or("missing first element of pkg.use_case_defs")?;
+        let uc = pkg
+            .use_case_defs
+            .first()
+            .ok_or("missing first element of pkg.use_case_defs")?;
         assert_eq!(uc.name, "UC_05_Physical_Metrology");
         assert_eq!(uc.subject.as_deref(), Some("MetrologyFlowEngine"));
         assert_eq!(uc.actors.len(), 1);
-        assert_eq!(uc.actors.first().ok_or("missing first element of uc.actors")?, "CIContinuousIntegrationRunner");
+        assert_eq!(
+            uc.actors
+                .first()
+                .ok_or("missing first element of uc.actors")?,
+            "CIContinuousIntegrationRunner"
+        );
         assert_eq!(uc.steps.len(), 1);
-        assert_eq!(uc.steps.first().ok_or("missing first element of uc.steps")?, "GrammarLoweringEngine");
+        assert_eq!(
+            uc.steps
+                .first()
+                .ok_or("missing first element of uc.steps")?,
+            "GrammarLoweringEngine"
+        );
         assert!(uc.doc.is_some());
         let doc = uc.doc.as_ref().ok_or("use case doc missing")?;
         assert!(doc.contains("Outer summary for UC_05"));
@@ -5978,7 +6624,8 @@ package TestPackage {
     }
 
     #[test]
-    fn test_parse_test_case_def_with_assert_constraint_ids() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_parse_test_case_def_with_assert_constraint_ids(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package AutonomousSystem {
     assert constraint Assert_UCA_33 {
@@ -5999,11 +6646,24 @@ package AutonomousSystem {
 "#;
         let pkg = SysmlParser::parse_source(source, "TestModel")?;
         assert_eq!(pkg.test_case_defs.len(), 1);
-        let tc = pkg.test_case_defs.first().ok_or("missing first element of pkg.test_case_defs")?;
+        let tc = pkg
+            .test_case_defs
+            .first()
+            .ok_or("missing first element of pkg.test_case_defs")?;
         assert_eq!(tc.name, "TC_UCA_33_Verification");
         assert_eq!(tc.verified_requirements.len(), 2);
-        assert_eq!(tc.verified_requirements.first().ok_or("missing first element of tc.verified_requirements")?, "Assert_UCA_33");
-        assert_eq!(tc.verified_requirements.get(1).ok_or("missing element 1 of tc.verified_requirements")?, "Assert_UCA_34");
+        assert_eq!(
+            tc.verified_requirements
+                .first()
+                .ok_or("missing first element of tc.verified_requirements")?,
+            "Assert_UCA_33"
+        );
+        assert_eq!(
+            tc.verified_requirements
+                .get(1)
+                .ok_or("missing element 1 of tc.verified_requirements")?,
+            "Assert_UCA_34"
+        );
         Ok(())
     }
 
@@ -6020,7 +6680,11 @@ package ArrayModel {
 }
 "#;
         let parsed = SysmlParser::parse_source(source, "ArrayModel");
-        assert!(parsed.is_ok(), "Type[] attribute failed to parse: {:?}", parsed.err());
+        assert!(
+            parsed.is_ok(),
+            "Type[] attribute failed to parse: {:?}",
+            parsed.err()
+        );
         let pkg = parsed.unwrap_or_default();
         let label_set = pkg.attribute_defs.iter().find(|a| a.name == "labelSet");
         assert_eq!(label_set.map(|a| a.type_name.as_str()), Some("String[]"));
@@ -6038,11 +6702,16 @@ package ArrayModel {
     fn test_parse_attribute_decl_rejects_unclosed_array_bracket() {
         let source = "package BadArray {\n    attribute labelSet : String[;\n}\n";
         let parsed = SysmlParser::parse_source(source, "BadArray");
-        assert!(parsed.is_err(), "unclosed '[' must be a parse error, got {:?}", parsed.ok());
+        assert!(
+            parsed.is_err(),
+            "unclosed '[' must be a parse error, got {:?}",
+            parsed.ok()
+        );
     }
 
     #[test]
-    fn test_issue_460_parse_and_roundtrip_satisfy_requirements() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_460_parse_and_roundtrip_satisfy_requirements(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use crate::semantic::serializer::SysmlSerializable;
 
         let source = r#"
@@ -6153,7 +6822,8 @@ package UserInterfaceSystem {
     }
 
     #[test]
-    fn test_issue_460_parse_satisfy_syntax_variants_and_deduplication() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_460_parse_satisfy_syntax_variants_and_deduplication(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package SyntaxVariantsModel {
     part def DisplaySubsystem {
@@ -6188,7 +6858,8 @@ package SyntaxVariantsModel {
     }
 
     #[test]
-    fn test_issue_460_parse_satisfy_with_interspersed_block_comments() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_460_parse_satisfy_with_interspersed_block_comments(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package CommentVariantsModel {
     part def CommentSubsystem {
@@ -6233,17 +6904,42 @@ package CommentVariantsModel {
     }
 
     #[test]
-    fn test_issue_460_comments_between_satisfy_and_requirement() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_460_comments_between_satisfy_and_requirement(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let test_cases = [
-            ("satisfy // single-line comment\n requirement REQ-01;", "REQ-01"),
-            ("satisfy /* single-line block comment */ requirement REQ-02;", "REQ-02"),
-            ("satisfy /* multi\n   line\n   block comment */ requirement REQ-03;", "REQ-03"),
-            ("satisfy /* nested /* block */ comment */ requirement REQ-04;", "REQ-04"),
-            ("satisfy doc /* doc comment style */ requirement REQ-05;", "REQ-05"),
-            ("satisfy /* doc: comment style */ requirement REQ-06;", "REQ-06"),
+            (
+                "satisfy // single-line comment\n requirement REQ-01;",
+                "REQ-01",
+            ),
+            (
+                "satisfy /* single-line block comment */ requirement REQ-02;",
+                "REQ-02",
+            ),
+            (
+                "satisfy /* multi\n   line\n   block comment */ requirement REQ-03;",
+                "REQ-03",
+            ),
+            (
+                "satisfy /* nested /* block */ comment */ requirement REQ-04;",
+                "REQ-04",
+            ),
+            (
+                "satisfy doc /* doc comment style */ requirement REQ-05;",
+                "REQ-05",
+            ),
+            (
+                "satisfy /* doc: comment style */ requirement REQ-06;",
+                "REQ-06",
+            ),
             ("satisfy /* c1 */ /* c2 */ requirement REQ-07;", "REQ-07"),
-            ("satisfy /* c1 */ // line\n /* c2 */ requirement REQ-08;", "REQ-08"),
-            ("satisfy /* satisfy requirement by */ requirement REQ-09;", "REQ-09"),
+            (
+                "satisfy /* c1 */ // line\n /* c2 */ requirement REQ-08;",
+                "REQ-08",
+            ),
+            (
+                "satisfy /* satisfy requirement by */ requirement REQ-09;",
+                "REQ-09",
+            ),
             ("satisfy /**/ requirement REQ-10;", "REQ-10"),
         ];
 
@@ -6261,17 +6957,30 @@ package CommentVariantsModel {
     }
 
     #[test]
-    fn test_issue_460_comments_between_requirement_and_identifier() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_460_comments_between_requirement_and_identifier(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let test_cases = [
             ("satisfy requirement // line comment\n REQ-01;", "REQ-01"),
             ("satisfy requirement /* single block */ REQ-02;", "REQ-02"),
-            ("satisfy requirement /* multi\nline\nblock */ REQ-03;", "REQ-03"),
-            ("satisfy requirement doc /* doc comment */ REQ-04;", "REQ-04"),
+            (
+                "satisfy requirement /* multi\nline\nblock */ REQ-03;",
+                "REQ-03",
+            ),
+            (
+                "satisfy requirement doc /* doc comment */ REQ-04;",
+                "REQ-04",
+            ),
             ("satisfy requirement /* doc: docstring */ REQ-05;", "REQ-05"),
             ("satisfy requirement /* c1 */ /* c2 */ REQ-06;", "REQ-06"),
-            ("satisfy requirement /* c1 */ // line\n /* c2 */ REQ-07;", "REQ-07"),
+            (
+                "satisfy requirement /* c1 */ // line\n /* c2 */ REQ-07;",
+                "REQ-07",
+            ),
             // Direct satisfy without 'requirement' keyword
-            ("satisfy /* comment without req keyword */ REQ-08;", "REQ-08"),
+            (
+                "satisfy /* comment without req keyword */ REQ-08;",
+                "REQ-08",
+            ),
             ("satisfy // line without req keyword\n REQ-09;", "REQ-09"),
             ("satisfy /* multi\nline without req */ REQ-10;", "REQ-10"),
             // Quoted and unrestricted identifiers with comments
@@ -6284,7 +6993,10 @@ package CommentVariantsModel {
             let src = format!("package P {{ part def C {{ {} }} }}", stmt);
             let pkg = SysmlParser::parse_source(&src, "P")?;
             assert_eq!(
-                pkg.part_defs.first().ok_or("missing part")?.satisfied_requirements,
+                pkg.part_defs
+                    .first()
+                    .ok_or("missing part")?
+                    .satisfied_requirements,
                 vec![expected_id.to_string()],
                 "Failed to parse satisfy statement with comment between requirement and ID: {}",
                 stmt
@@ -6294,7 +7006,8 @@ package CommentVariantsModel {
     }
 
     #[test]
-    fn test_issue_460_comments_within_identifier_tokens_and_hyphens() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_460_comments_within_identifier_tokens_and_hyphens(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let test_cases = [
             ("satisfy requirement REQ /* c */ -01;", "REQ-01"),
             ("satisfy requirement REQ- /* c */ 01;", "REQ-01"),
@@ -6314,7 +7027,10 @@ package CommentVariantsModel {
             let src = format!("package P {{ part def C {{ {} }} }}", stmt);
             let pkg = SysmlParser::parse_source(&src, "P")?;
             assert_eq!(
-                pkg.part_defs.first().ok_or("missing part")?.satisfied_requirements,
+                pkg.part_defs
+                    .first()
+                    .ok_or("missing part")?
+                    .satisfied_requirements,
                 vec![expected_id.to_string()],
                 "Failed to parse satisfy statement with comments within identifier tokens: {}",
                 stmt
@@ -6324,25 +7040,44 @@ package CommentVariantsModel {
     }
 
     #[test]
-    fn test_issue_460_comments_before_terminating_semicolon() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_460_comments_before_terminating_semicolon(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let test_cases = [
             ("satisfy requirement REQ-01 // line comment\n ;", "REQ-01"),
             ("satisfy requirement REQ-02 /* block comment */;", "REQ-02"),
-            ("satisfy requirement REQ-03 /* multi\nline\ncomment */;", "REQ-03"),
-            ("satisfy requirement REQ-04 /* nested /* comment */ */;", "REQ-04"),
+            (
+                "satisfy requirement REQ-03 /* multi\nline\ncomment */;",
+                "REQ-03",
+            ),
+            (
+                "satisfy requirement REQ-04 /* nested /* comment */ */;",
+                "REQ-04",
+            ),
             ("satisfy requirement REQ-05 /* c1 */ /* c2 */;", "REQ-05"),
-            ("satisfy requirement REQ-06 /* c1 */ // line\n /* c2 */;", "REQ-06"),
+            (
+                "satisfy requirement REQ-06 /* c1 */ // line\n /* c2 */;",
+                "REQ-06",
+            ),
             ("satisfy requirement REQ-07 /* ;;; */;", "REQ-07"),
             ("satisfy requirement REQ-08 /* { } */;", "REQ-08"),
-            ("satisfy requirement \"REQ-09\" /* block comment */;", "REQ-09"),
-            ("satisfy requirement 'REQ-10' /* block comment */;", "REQ-10"),
+            (
+                "satisfy requirement \"REQ-09\" /* block comment */;",
+                "REQ-09",
+            ),
+            (
+                "satisfy requirement 'REQ-10' /* block comment */;",
+                "REQ-10",
+            ),
         ];
 
         for (stmt, expected_id) in test_cases {
             let src = format!("package P {{ part def C {{ {} }} }}", stmt);
             let pkg = SysmlParser::parse_source(&src, "P")?;
             assert_eq!(
-                pkg.part_defs.first().ok_or("missing part")?.satisfied_requirements,
+                pkg.part_defs
+                    .first()
+                    .ok_or("missing part")?
+                    .satisfied_requirements,
                 vec![expected_id.to_string()],
                 "Failed to parse satisfy statement with comments before terminating semicolon: {}",
                 stmt
@@ -6354,19 +7089,58 @@ package CommentVariantsModel {
     #[test]
     fn test_issue_460_comments_surrounding_by_clause() -> Result<(), Box<dyn std::error::Error>> {
         let test_cases = [
-            ("satisfy requirement REQ-01 /* comment before by */ by NavCtrl;", "REQ-01"),
-            ("satisfy requirement REQ-02 // line before by\n by NavCtrl;", "REQ-02"),
-            ("satisfy requirement REQ-03 /* multi\nline */ by NavCtrl;", "REQ-03"),
-            ("satisfy requirement REQ-04 by /* comment between by and part */ NavCtrl;", "REQ-04"),
-            ("satisfy requirement REQ-05 by // line between by and part\n NavCtrl;", "REQ-05"),
-            ("satisfy requirement REQ-06 by /* multi\nline */ NavCtrl;", "REQ-06"),
-            ("satisfy requirement REQ-07 by NavCtrl /* comment after part before semi */;", "REQ-07"),
-            ("satisfy requirement REQ-08 by NavCtrl // line after part before semi\n ;", "REQ-08"),
-            ("satisfy requirement REQ-09 by NavCtrl /* multi\nline */;", "REQ-09"),
-            ("satisfy requirement REQ-10 /* c1 */ by /* c2 */ NavCtrl /* c3 */;", "REQ-10"),
-            ("satisfy requirement REQ-11 // l1\n by // l2\n NavCtrl // l3\n ;", "REQ-11"),
-            ("satisfy requirement REQ-12 /* by */ by /* satisfy */ NavCtrl /* ; */;", "REQ-12"),
-            ("satisfy requirement \"REQ-UI-01\" /* c1 */ by /* c2 */ NavCtrl /* c3 */;", "REQ-UI-01"),
+            (
+                "satisfy requirement REQ-01 /* comment before by */ by NavCtrl;",
+                "REQ-01",
+            ),
+            (
+                "satisfy requirement REQ-02 // line before by\n by NavCtrl;",
+                "REQ-02",
+            ),
+            (
+                "satisfy requirement REQ-03 /* multi\nline */ by NavCtrl;",
+                "REQ-03",
+            ),
+            (
+                "satisfy requirement REQ-04 by /* comment between by and part */ NavCtrl;",
+                "REQ-04",
+            ),
+            (
+                "satisfy requirement REQ-05 by // line between by and part\n NavCtrl;",
+                "REQ-05",
+            ),
+            (
+                "satisfy requirement REQ-06 by /* multi\nline */ NavCtrl;",
+                "REQ-06",
+            ),
+            (
+                "satisfy requirement REQ-07 by NavCtrl /* comment after part before semi */;",
+                "REQ-07",
+            ),
+            (
+                "satisfy requirement REQ-08 by NavCtrl // line after part before semi\n ;",
+                "REQ-08",
+            ),
+            (
+                "satisfy requirement REQ-09 by NavCtrl /* multi\nline */;",
+                "REQ-09",
+            ),
+            (
+                "satisfy requirement REQ-10 /* c1 */ by /* c2 */ NavCtrl /* c3 */;",
+                "REQ-10",
+            ),
+            (
+                "satisfy requirement REQ-11 // l1\n by // l2\n NavCtrl // l3\n ;",
+                "REQ-11",
+            ),
+            (
+                "satisfy requirement REQ-12 /* by */ by /* satisfy */ NavCtrl /* ; */;",
+                "REQ-12",
+            ),
+            (
+                "satisfy requirement \"REQ-UI-01\" /* c1 */ by /* c2 */ NavCtrl /* c3 */;",
+                "REQ-UI-01",
+            ),
         ];
 
         for (stmt, expected_id) in test_cases {
@@ -6383,7 +7157,8 @@ package CommentVariantsModel {
     }
 
     #[test]
-    fn test_issue_460_comments_package_and_part_def_roundtrip_stress() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_460_comments_package_and_part_def_roundtrip_stress(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use crate::semantic::serializer::SysmlSerializable;
 
         let source = r#"
@@ -6471,7 +7246,10 @@ package AdversarialCommentsPackage {
             .iter()
             .find(|p| p.name == "CockpitSubsystem")
             .ok_or("missing reparsed CockpitSubsystem")?;
-        assert_eq!(reparsed_cockpit.satisfied_requirements, cockpit.satisfied_requirements);
+        assert_eq!(
+            reparsed_cockpit.satisfied_requirements,
+            cockpit.satisfied_requirements
+        );
 
         Ok(())
     }
@@ -6503,7 +7281,8 @@ package AdversarialCommentsPackage {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-TEST-DEFECT-05-COMPOSITE-TYPES] | SysML v2: TestCaseDef(test_defect_05_parse_composite_and_generic_types_across_declarations)
     #[test]
-    fn test_defect_05_parse_composite_and_generic_types_across_declarations() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_05_parse_composite_and_generic_types_across_declarations(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package CompositeTypesPkg {
     attribute items : Vec<T>;
@@ -6549,7 +7328,10 @@ package CompositeTypesPkg {
         assert_eq!(pkg.name, "CompositeTypesPkg");
         assert_eq!(pkg.attribute_defs.len(), 10);
         assert_eq!(
-            pkg.attribute_defs.first().ok_or("missing attr 0")?.type_name,
+            pkg.attribute_defs
+                .first()
+                .ok_or("missing attr 0")?
+                .type_name,
             "Vec<T>"
         );
         assert_eq!(
@@ -6592,11 +7374,19 @@ package CompositeTypesPkg {
         let node = pkg.part_defs.first().ok_or("missing SubsystemNode")?;
         assert_eq!(node.parts.len(), 2);
         assert_eq!(
-            node.parts.first().ok_or("missing child_vec")?.type_name.as_deref(),
+            node.parts
+                .first()
+                .ok_or("missing child_vec")?
+                .type_name
+                .as_deref(),
             Some("Vec<ChildPart>")
         );
         assert_eq!(
-            node.parts.get(1).ok_or("missing ptr_array")?.type_name.as_deref(),
+            node.parts
+                .get(1)
+                .ok_or("missing ptr_array")?
+                .type_name
+                .as_deref(),
             Some("*const [SensorNode; 10]")
         );
 
@@ -6607,34 +7397,64 @@ package CompositeTypesPkg {
         let data_port = node.ports.get(1).ok_or("missing DataPort")?;
         assert_eq!(data_port.item_flows.len(), 4);
         assert_eq!(
-            data_port.item_flows.first().ok_or("missing flow 0")?.item_type,
+            data_port
+                .item_flows
+                .first()
+                .ok_or("missing flow 0")?
+                .item_type,
             "&[u8]"
         );
         assert_eq!(
-            data_port.item_flows.get(1).ok_or("missing flow 1")?.item_type,
+            data_port
+                .item_flows
+                .get(1)
+                .ok_or("missing flow 1")?
+                .item_type,
             "Result<T, E>"
         );
         assert_eq!(
-            data_port.item_flows.get(2).ok_or("missing flow 2")?.direction,
+            data_port
+                .item_flows
+                .get(2)
+                .ok_or("missing flow 2")?
+                .direction,
             "inout"
         );
         assert_eq!(
-            data_port.item_flows.get(2).ok_or("missing flow 2")?.item_type,
+            data_port
+                .item_flows
+                .get(2)
+                .ok_or("missing flow 2")?
+                .item_type,
             "(u32, Option<String>)"
         );
         assert_eq!(
-            data_port.item_flows.get(3).ok_or("missing flow 3")?.direction,
+            data_port
+                .item_flows
+                .get(3)
+                .ok_or("missing flow 3")?
+                .direction,
             "inout"
         );
         assert_eq!(
-            data_port.item_flows.get(3).ok_or("missing flow 3")?.item_type,
+            data_port
+                .item_flows
+                .get(3)
+                .ok_or("missing flow 3")?
+                .item_type,
             "*mut [u8; 4]"
         );
 
         let act = node.actions.first().ok_or("missing ProcessBuffer")?;
         assert_eq!(act.in_params.len(), 2);
-        assert_eq!(act.in_params.first().ok_or("missing in 0")?.type_name, "&[u8]");
-        assert_eq!(act.in_params.get(1).ok_or("missing in 1")?.type_name, "*const [T; 10]");
+        assert_eq!(
+            act.in_params.first().ok_or("missing in 0")?.type_name,
+            "&[u8]"
+        );
+        assert_eq!(
+            act.in_params.get(1).ok_or("missing in 1")?.type_name,
+            "*const [T; 10]"
+        );
         assert_eq!(act.out_params.len(), 4);
         assert_eq!(
             act.out_params.first().ok_or("missing out 0")?.type_name,
@@ -6670,27 +7490,45 @@ package CompositeTypesPkg {
         );
         assert_eq!(calc.in_params.len(), 6);
         assert_eq!(
-            calc.in_params.get(1).ok_or("missing calc param 1")?.type_name,
+            calc.in_params
+                .get(1)
+                .ok_or("missing calc param 1")?
+                .type_name,
             "[f64; 16]"
         );
         assert_eq!(
-            calc.in_params.get(2).ok_or("missing calc param 2")?.type_name,
+            calc.in_params
+                .get(2)
+                .ok_or("missing calc param 2")?
+                .type_name,
             "(f64, f64)"
         );
         assert_eq!(
-            calc.in_params.get(4).ok_or("missing calc param 4")?.type_name,
+            calc.in_params
+                .get(4)
+                .ok_or("missing calc param 4")?
+                .type_name,
             "Result<f64, E>"
         );
         assert_eq!(
-            calc.in_params.get(5).ok_or("missing calc param 5")?.type_name,
+            calc.in_params
+                .get(5)
+                .ok_or("missing calc param 5")?
+                .type_name,
             "&[u8; 64]"
         );
-        assert_eq!(calc.expression.as_deref(), Some("integrate ( vec_in , tol )"));
+        assert_eq!(
+            calc.expression.as_deref(),
+            Some("integrate ( vec_in , tol )")
+        );
 
         let op = node.operations.first().ok_or("missing ExecuteOp")?;
         assert_eq!(op.return_type.as_deref(), Some("Option<String>"));
         assert_eq!(op.parameters.len(), 2);
-        assert_eq!(op.parameters.first().ok_or("missing op param 0")?.type_name, "&[u8]");
+        assert_eq!(
+            op.parameters.first().ok_or("missing op param 0")?.type_name,
+            "&[u8]"
+        );
         assert_eq!(
             op.parameters.get(1).ok_or("missing op param 1")?.type_name,
             "Result<T, E>"
@@ -6731,26 +7569,48 @@ package CompositeTypesPkg {
         let err1 = SysmlParser::parse_source(unknown_pkg_stmt, "BadPkg")
             .err()
             .ok_or("unknown package-level keyword 'atribute' must return Err(ParseError)")?;
-        assert_eq!(err1.span.line, 2, "expected error on line 2, got {:?}", err1);
-        assert!(err1.span.col > 0, "expected positive column span, got {:?}", err1);
+        assert_eq!(
+            err1.span.line, 2,
+            "expected error on line 2, got {:?}",
+            err1
+        );
+        assert!(
+            err1.span.col > 0,
+            "expected positive column span, got {:?}",
+            err1
+        );
 
         let unknown_pkg_block = "package BadPkg {\n    enum def UnhandledEnum {\n        attribute a : Integer;\n    }\n}\n";
         let err2 = SysmlParser::parse_source(unknown_pkg_block, "BadPkg")
             .err()
             .ok_or("unknown braced block in package scope must return Err(ParseError)")?;
-        assert_eq!(err2.span.line, 2, "expected error on line 2, got {:?}", err2);
+        assert_eq!(
+            err2.span.line, 2,
+            "expected error on line 2, got {:?}",
+            err2
+        );
 
-        let unknown_part_stmt = "package BadPartPkg {\n    part def Node {\n        requirment typo_req;\n    }\n}\n";
+        let unknown_part_stmt =
+            "package BadPartPkg {\n    part def Node {\n        requirment typo_req;\n    }\n}\n";
         let err3 = SysmlParser::parse_source(unknown_part_stmt, "BadPartPkg")
             .err()
             .ok_or("unknown part-level keyword 'requirment' must return Err(ParseError)")?;
-        assert_eq!(err3.span.line, 3, "expected error on line 3, got {:?}", err3);
+        assert_eq!(
+            err3.span.line, 3,
+            "expected error on line 3, got {:?}",
+            err3
+        );
 
-        let unknown_inner_stmt = "package BadInnerPkg {\n    port def P {\n        atribute bad : Integer;\n    }\n}\n";
+        let unknown_inner_stmt =
+            "package BadInnerPkg {\n    port def P {\n        atribute bad : Integer;\n    }\n}\n";
         let err4 = SysmlParser::parse_source(unknown_inner_stmt, "BadInnerPkg")
             .err()
             .ok_or("unknown inner statement in port def must return Err(ParseError)")?;
-        assert_eq!(err4.span.line, 3, "expected error on line 3, got {:?}", err4);
+        assert_eq!(
+            err4.span.line, 3,
+            "expected error on line 3, got {:?}",
+            err4
+        );
         Ok(())
     }
 
@@ -6781,7 +7641,8 @@ package CompositeTypesPkg {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-TEST-DEFECT-06-STATE-TRANSITIONS] | SysML v2: TestCaseDef(test_defect_06_parse_state_transitions_first_then_and_from_to)
     #[test]
-    fn test_defect_06_parse_state_transitions_first_then_and_from_to() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_defect_06_parse_state_transitions_first_then_and_from_to(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package StateMachinePkg {
     part def FlightController {
@@ -6805,8 +7666,15 @@ package StateMachinePkg {
         let state_def = part.states.first().ok_or("missing FlightMode")?;
         assert_eq!(state_def.transitions.len(), 4);
 
-        let tr0 = state_def.transitions.first().ok_or("missing transition 0")?;
-        assert!(tr0.name.is_none(), "unnamed transition must have name == None, got {:?}", tr0.name);
+        let tr0 = state_def
+            .transitions
+            .first()
+            .ok_or("missing transition 0")?;
+        assert!(
+            tr0.name.is_none(),
+            "unnamed transition must have name == None, got {:?}",
+            tr0.name
+        );
         assert_eq!(tr0.source.as_deref(), Some("Init"));
         assert_eq!(tr0.target.as_deref(), Some("Standby"));
         assert_eq!(tr0.trigger, None);
@@ -6822,7 +7690,11 @@ package StateMachinePkg {
         assert_eq!(tr1.effect.as_deref(), Some("EnableServos"));
 
         let tr2 = state_def.transitions.get(2).ok_or("missing transition 2")?;
-        assert!(tr2.name.is_none(), "unnamed transition must have name == None, got {:?}", tr2.name);
+        assert!(
+            tr2.name.is_none(),
+            "unnamed transition must have name == None, got {:?}",
+            tr2.name
+        );
         assert_eq!(tr2.source.as_deref(), Some("Armed"));
         assert_eq!(tr2.target.as_deref(), Some("Active"));
         assert_eq!(tr2.trigger, None);
@@ -6867,8 +7739,10 @@ package StateMachinePkg {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-DISCOVER-SYSML-FILES] | SysML v2: TestCaseDef(test_discover_sysml_files_allows_dot_root_and_excludes_target)
     #[test]
-    fn test_discover_sysml_files_allows_dot_root_and_excludes_target() -> Result<(), Box<dyn std::error::Error>> {
-        let temp_dir = std::env::temp_dir().join(format!(".deap_test_discover_sysml_{}", std::process::id()));
+    fn test_discover_sysml_files_allows_dot_root_and_excludes_target(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir =
+            std::env::temp_dir().join(format!(".deap_test_discover_sysml_{}", std::process::id()));
         let _ = fs::remove_dir_all(&temp_dir);
         let schema_dir = temp_dir.join("schema");
         let target_dir = temp_dir.join("target").join("debug");
@@ -6916,7 +7790,8 @@ package StateMachinePkg {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-PORT-PROTOCOL-ROUNDTRIP] | SysML v2: TestCaseDef(test_port_def_protocol_family_bijective_roundtrip)
     #[test]
-    fn test_port_def_protocol_family_bijective_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_port_def_protocol_family_bijective_roundtrip() -> Result<(), Box<dyn std::error::Error>>
+    {
         use crate::semantic::serializer::SysmlSerializable;
         let src = r#"package PortRoundtripPkg {
     part def Controller {
@@ -6966,7 +7841,8 @@ package StateMachinePkg {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-ISSUE-495-SIGIL-SPANS] | SysML v2: TestCaseDef(test_issue_495_type_sigil_tokenization_preserves_spans_and_unrestricted_idents)
     #[test]
-    fn test_issue_495_type_sigil_tokenization_preserves_spans_and_unrestricted_idents() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_495_type_sigil_tokenization_preserves_spans_and_unrestricted_idents(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // 1. Exact 1-byte token spans and zero drift on same-line and cross-line tokens
         let src = "package P {\n    attribute r : &T?;\n    attribute x : Integer;\n}\n";
         let tokens = SysmlParser::tokenize_source(src)?;
@@ -7066,11 +7942,15 @@ package StateMachinePkg {
         );
 
         // 4. Unrestricted identifiers '&' and '?' vs raw unquoted sigils in identifier/type positions
-        let quoted_ident_src = "package P {\n    part def '&' {\n        attribute '?' : '&';\n    }\n}\n";
+        let quoted_ident_src =
+            "package P {\n    part def '&' {\n        attribute '?' : '&';\n    }\n}\n";
         let quoted_pkg = SysmlParser::parse_source(quoted_ident_src, "P")?;
         let quoted_part = quoted_pkg.part_defs.first().ok_or("missing part def '&'")?;
         assert_eq!(quoted_part.name, "&");
-        let quoted_attr = quoted_part.attributes.first().ok_or("missing attribute '?'")?;
+        let quoted_attr = quoted_part
+            .attributes
+            .first()
+            .ok_or("missing attribute '?'")?;
         assert_eq!(quoted_attr.name, "?");
         assert_eq!(quoted_attr.type_name, "&");
 
@@ -7093,15 +7973,24 @@ package StateMachinePkg {
         let escaped_part = expr_pkg.part_defs.first().ok_or("missing escaped part")?;
         assert_eq!(escaped_part.name, "a'&b");
         assert_eq!(
-            escaped_part.attributes.first().and_then(|a| a.default_value.as_deref()),
+            escaped_part
+                .attributes
+                .first()
+                .and_then(|a| a.default_value.as_deref()),
             Some("a & b")
         );
         assert_eq!(
-            escaped_part.constraints.first().map(|c| c.expression.as_str()),
+            escaped_part
+                .constraints
+                .first()
+                .map(|c| c.expression.as_str()),
             Some("( x > 0 ) ? a : b")
         );
 
-        let expr_err_src = format!("{}\npackage Bad {{\n    atribute z : Integer;\n}}\n", expr_and_escape_src);
+        let expr_err_src = format!(
+            "{}\npackage Bad {{\n    atribute z : Integer;\n}}\n",
+            expr_and_escape_src
+        );
         let z_typo_start = expr_err_src.find("atribute").ok_or("missing atribute")?;
         let expr_err = SysmlParser::parse_source(&expr_err_src, "P")
             .err()
@@ -7139,11 +8028,13 @@ package StateMachinePkg {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-ISSUE-521-LIFETIME-AND-TRANSITION-ROUNDTRIP] | SysML v2: TestCaseDef(test_issue_521_lifetime_sigils_and_transition_clause_roundtrip)
     #[test]
-    fn test_issue_521_lifetime_sigils_and_transition_clause_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_521_lifetime_sigils_and_transition_clause_roundtrip(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use crate::semantic::serializer::SysmlSerializable;
 
         // 1. Lifetime reference type followed by optional '?' sigil and second reference on same line
-        let lifetime_src = "package P {\n    attribute r : &'a T?;\n    attribute buf : &'static mut [u8];\n}\n";
+        let lifetime_src =
+            "package P {\n    attribute r : &'a T?;\n    attribute buf : &'static mut [u8];\n}\n";
         let tokens = SysmlParser::tokenize_source(lifetime_src)?;
         let q_tok = tokens
             .iter()
@@ -7161,14 +8052,23 @@ package StateMachinePkg {
         );
 
         let pkg = SysmlParser::parse_source(lifetime_src, "P")?;
-        assert_eq!(pkg.attribute_defs.first().map(|a| a.type_name.as_str()), Some("&'a T?"));
-        assert_eq!(pkg.attribute_defs.get(1).map(|a| a.type_name.as_str()), Some("&'static mut [u8]"));
+        assert_eq!(
+            pkg.attribute_defs.first().map(|a| a.type_name.as_str()),
+            Some("&'a T?")
+        );
+        assert_eq!(
+            pkg.attribute_defs.get(1).map(|a| a.type_name.as_str()),
+            Some("&'static mut [u8]")
+        );
 
         // Multiple lifetimes on the same line (ensuring 'a ... 'b does not form a synthetic single-quoted ident)
         let multi_lifetime_src = "package P {\n    attribute pair : (&'a T, &'b mut U?);\n}\n";
         let multi_pkg = SysmlParser::parse_source(multi_lifetime_src, "P")?;
         assert_eq!(
-            multi_pkg.attribute_defs.first().map(|a| a.type_name.as_str()),
+            multi_pkg
+                .attribute_defs
+                .first()
+                .map(|a| a.type_name.as_str()),
             Some("(&'a T, &'b mut U?)")
         );
 
@@ -7247,7 +8147,8 @@ package StateMachinePkg {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-ISSUE-496-TRANSITION-TOKENS] | SysML v2: TestCaseDef(test_issue_496_transition_tokens_qualified_endpoints_and_roundtrip)
     #[test]
-    fn test_issue_496_transition_tokens_qualified_endpoints_and_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_496_transition_tokens_qualified_endpoints_and_roundtrip(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use crate::semantic::serializer::SysmlSerializable;
 
         let source = r#"
@@ -7345,7 +8246,8 @@ package Issue496Pkg {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-ISSUE-509-STATE-ACTIONS-AND-DOCS] | SysML v2: TestCaseDef(test_issue_509_state_action_clauses_and_doc_comments_roundtrip)
     #[test]
-    fn test_issue_509_state_action_clauses_and_doc_comments_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_509_state_action_clauses_and_doc_comments_roundtrip(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use crate::semantic::serializer::SysmlSerializable;
 
         let source = r#"
@@ -7392,7 +8294,10 @@ package Issue509Pkg {
         assert_eq!(sub1.do_action.as_deref(), Some("action::step(1)"));
 
         assert_eq!(st.transitions.len(), 1);
-        let tr = st.transitions.first().ok_or("missing transition t_engage")?;
+        let tr = st
+            .transitions
+            .first()
+            .ok_or("missing transition t_engage")?;
         assert_eq!(tr.name.as_deref(), Some("t_engage"));
         assert_eq!(tr.doc.as_deref(), Some("Transition from Standby to Active"));
         assert_eq!(tr.source.as_deref(), Some("Standby"));
@@ -7456,25 +8361,65 @@ package Issue509Pkg {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-ISSUE-504-INNER-BLOCKS-FAIL-CLOSED] | SysML v2: TestCaseDef(test_issue_504_inner_blocks_fail_closed_and_preserve_consecutive_docs)
     #[test]
-    fn test_issue_504_inner_blocks_fail_closed_and_preserve_consecutive_docs() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_504_inner_blocks_fail_closed_and_preserve_consecutive_docs(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let bad_cases = [
-            ("port", "package P {\n    port def X {\n        bogus_stmt x;\n    }\n}\n"),
-            ("action", "package P {\n    action def X {\n        bogus_stmt x;\n    }\n}\n"),
-            ("requirement", "package P {\n    requirement def X {\n        bogus_stmt x;\n    }\n}\n"),
-            ("state", "package P {\n    state def X {\n        bogus_stmt x;\n    }\n}\n"),
-            ("connection", "package P {\n    connection def X {\n        bogus_stmt x;\n    }\n}\n"),
-            ("use case", "package P {\n    use case def X {\n        bogus_stmt x;\n    }\n}\n"),
-            ("item", "package P {\n    item def X {\n        bogus_stmt x;\n    }\n}\n"),
-            ("hazard", "package P {\n    hazard def X {\n        bogus_stmt x;\n    }\n}\n"),
-            ("risk", "package P {\n    risk def X {\n        bogus_stmt x;\n    }\n}\n"),
-            ("test case", "package P {\n    test case def X {\n        bogus_stmt x;\n    }\n}\n"),
-            ("capability", "package P {\n    capability def X {\n        bogus_stmt x;\n    }\n}\n"),
-            ("interaction", "package P {\n    interaction def X {\n        bogus_stmt x;\n    }\n}\n"),
+            (
+                "port",
+                "package P {\n    port def X {\n        bogus_stmt x;\n    }\n}\n",
+            ),
+            (
+                "action",
+                "package P {\n    action def X {\n        bogus_stmt x;\n    }\n}\n",
+            ),
+            (
+                "requirement",
+                "package P {\n    requirement def X {\n        bogus_stmt x;\n    }\n}\n",
+            ),
+            (
+                "state",
+                "package P {\n    state def X {\n        bogus_stmt x;\n    }\n}\n",
+            ),
+            (
+                "connection",
+                "package P {\n    connection def X {\n        bogus_stmt x;\n    }\n}\n",
+            ),
+            (
+                "use case",
+                "package P {\n    use case def X {\n        bogus_stmt x;\n    }\n}\n",
+            ),
+            (
+                "item",
+                "package P {\n    item def X {\n        bogus_stmt x;\n    }\n}\n",
+            ),
+            (
+                "hazard",
+                "package P {\n    hazard def X {\n        bogus_stmt x;\n    }\n}\n",
+            ),
+            (
+                "risk",
+                "package P {\n    risk def X {\n        bogus_stmt x;\n    }\n}\n",
+            ),
+            (
+                "test case",
+                "package P {\n    test case def X {\n        bogus_stmt x;\n    }\n}\n",
+            ),
+            (
+                "capability",
+                "package P {\n    capability def X {\n        bogus_stmt x;\n    }\n}\n",
+            ),
+            (
+                "interaction",
+                "package P {\n    interaction def X {\n        bogus_stmt x;\n    }\n}\n",
+            ),
         ];
 
         for (label, src) in bad_cases {
             let err = SysmlParser::parse_source(src, "P").err().ok_or_else(|| {
-                format!("expected Err(ParseError) for unknown inner statement in {}", label)
+                format!(
+                    "expected Err(ParseError) for unknown inner statement in {}",
+                    label
+                )
             })?;
             assert_eq!(
                 err.span.line, 3,
@@ -7484,7 +8429,8 @@ package Issue509Pkg {
             assert!(
                 err.span.col > 0,
                 "expected positive column for {}, got {:?}",
-                label, err
+                label,
+                err
             );
         }
 
@@ -7635,7 +8581,8 @@ package ConsecutiveInnerDocsPkg {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-PARSER-GRAMMAR-ISSUE-504-COMPOSITE-TYPES-PARITY] | SysML v2: TestCaseDef(test_issue_504_composite_types_in_constraint_calc_action_and_port)
     #[test]
-    fn test_issue_504_composite_types_in_constraint_calc_action_and_port() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_504_composite_types_in_constraint_calc_action_and_port(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let src = r#"
 package Issue504CompositePkg {
     constraint def MultiParamConstraint(
@@ -7669,7 +8616,10 @@ package Issue504CompositePkg {
 }
 "#;
         let pkg = SysmlParser::parse_source(src, "Issue504CompositePkg")?;
-        let con = pkg.constraint_defs.first().ok_or("missing MultiParamConstraint")?;
+        let con = pkg
+            .constraint_defs
+            .first()
+            .ok_or("missing MultiParamConstraint")?;
         assert_eq!(
             con.parameters,
             vec![
@@ -7697,7 +8647,10 @@ package Issue504CompositePkg {
         assert_eq!(c3.return_type, None);
         assert_eq!(c3.expression.as_deref(), Some("compute_norm ( a , b )"));
 
-        let c4 = pkg.calc_defs.get(4).ok_or("missing CalcAssignNoTypeReturn")?;
+        let c4 = pkg
+            .calc_defs
+            .get(4)
+            .ok_or("missing CalcAssignNoTypeReturn")?;
         assert_eq!(c4.return_type, None);
         assert_eq!(c4.expression.as_deref(), Some("x + y"));
 
@@ -7769,7 +8722,10 @@ package Issue527BijectivePkg {
         assert_eq!(c0.target_part.as_deref(), Some("ActuatorUnit"));
         assert_eq!(c0.item_flow_ref.as_deref(), Some("NavigationTelemetry"));
         assert_eq!(c0.severity, 4);
-        assert_eq!(pkg.requirement_defs.first().ok_or("missing r0")?.derives, vec!["REQ_ChildA", "SubPkg::REQ_ChildB"]);
+        assert_eq!(
+            pkg.requirement_defs.first().ok_or("missing r0")?.derives,
+            vec!["REQ_ChildA", "SubPkg::REQ_ChildB"]
+        );
         let calc0 = pkg.calc_defs.first().ok_or("missing calc0")?;
         assert_eq!(calc0.return_type, None);
         assert_eq!(calc0.expression.as_deref(), Some("input_val"));
@@ -7781,6 +8737,214 @@ package Issue527BijectivePkg {
         assert_eq!(reparsed, pkg);
         Ok(())
     }
+
+    /// Verifies that `SysmlParser` and `merge_package_defs` enforce `MAX_PARSE_DEPTH` (64),
+    /// return `Err(ParseError)` cleanly without call-stack overflow when exceeded, and restore
+    /// `SysmlParser::depth == 0` across all `Ok` and `Err` paths.
+    #[test]
+    fn test_max_parse_depth_bounds_recursion_and_merge() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(MAX_PARSE_DEPTH, 64);
+
+        // 1. Exact boundary for nested `state` declarations (flat file enters `parse_container_item` at depth 0 -> 1,
+        // so 63 nested `state` blocks reach depth 64 == MAX_PARSE_DEPTH (`Ok`), while 64 nested `state` blocks fail (`Err`)).
+        let build_nested_states = |count: usize| -> String {
+            let mut src = String::new();
+            for idx in 0..count {
+                src.push_str(&format!("state S_{idx} {{ "));
+            }
+            for _ in 0..count {
+                src.push_str("} ");
+            }
+            src
+        };
+
+        let exact_states_src = build_nested_states(MAX_PARSE_DEPTH.saturating_sub(1));
+        let exact_state_tokens = SysmlParser::tokenize_source(&exact_states_src)?;
+        let mut exact_state_parser = SysmlParser::new(&exact_state_tokens);
+        assert_eq!(exact_state_parser.depth, 0);
+        assert!(
+            exact_state_parser
+                .parse_package_or_file("ExactStates")
+                .is_ok(),
+            "63 nested states (total parse depth 64 == MAX_PARSE_DEPTH) must succeed"
+        );
+        assert_eq!(exact_state_parser.depth, 0);
+
+        let over_states_src = build_nested_states(MAX_PARSE_DEPTH);
+        let over_state_tokens = SysmlParser::tokenize_source(&over_states_src)?;
+        let mut over_state_parser = SysmlParser::new(&over_state_tokens);
+        let over_state_err = over_state_parser
+            .parse_package_or_file("OverStates")
+            .err()
+            .ok_or("64 nested states (total parse depth 65 > MAX_PARSE_DEPTH) must fail")?;
+        assert!(over_state_err.message.contains("recursion depth"));
+        assert_eq!(over_state_parser.depth, 0);
+
+        // 2. Exact boundary for nested composite type expressions (`parse_type_expr`):
+        // flat `attribute` enters `parse_container_item` (depth 0 -> 1); 62 `Vec<` wrappers + inner `u32`
+        // performs 63 `parse_type_expr` calls (max depth 64 == MAX_PARSE_DEPTH -> `Ok`), while 63 wrappers fail (`Err`).
+        let build_nested_vec_attr = |wrappers: usize| -> String {
+            let mut src = String::from("attribute nested : ");
+            for _ in 0..wrappers {
+                src.push_str("Vec<");
+            }
+            src.push_str("u32");
+            for _ in 0..wrappers {
+                src.push('>');
+            }
+            src.push(';');
+            src
+        };
+
+        let exact_type_src = build_nested_vec_attr(MAX_PARSE_DEPTH.saturating_sub(2));
+        let exact_type_tokens = SysmlParser::tokenize_source(&exact_type_src)?;
+        let mut exact_type_parser = SysmlParser::new(&exact_type_tokens);
+        assert!(
+            exact_type_parser.parse_package_or_file("ExactType").is_ok(),
+            "62 nested Vec<...> wrappers (total parse depth 64) must succeed"
+        );
+        assert_eq!(exact_type_parser.depth, 0);
+
+        let over_type_src = build_nested_vec_attr(MAX_PARSE_DEPTH.saturating_sub(1));
+        let over_type_tokens = SysmlParser::tokenize_source(&over_type_src)?;
+        let mut over_type_parser = SysmlParser::new(&over_type_tokens);
+        let over_type_err = over_type_parser
+            .parse_package_or_file("OverType")
+            .err()
+            .ok_or("63 nested Vec<...> wrappers (total parse depth 65) must fail")?;
+        assert!(over_type_err.message.contains("recursion depth"));
+        assert_eq!(over_type_parser.depth, 0);
+
+        // 3. Depth restoration invariant on syntax errors & speculative `calc def` `parse_type_expr` recovery.
+        let malformed_tokens = SysmlParser::tokenize_source(
+            "package P0 { package P1 { part def Bad { port broken : ; } } }",
+        )?;
+        let mut malformed_parser = SysmlParser::new(&malformed_tokens);
+        assert!(malformed_parser.parse_package_or_file("Bad").is_err());
+        assert_eq!(
+            malformed_parser.depth, 0,
+            "Early Err(?) unwinding must restore SysmlParser::depth to 0"
+        );
+
+        let mut many_calcs_src = String::from("package CalcDepthLeakProbe {\n");
+        for idx in 0..80usize {
+            many_calcs_src.push_str(&format!("    calc def C_{idx} {{ return (a + b); }}\n"));
+        }
+        many_calcs_src.push('}');
+        let calc_tokens = SysmlParser::tokenize_source(&many_calcs_src)?;
+        let mut calc_parser = SysmlParser::new(&calc_tokens);
+        let calc_pkg = calc_parser.parse_package_or_file("CalcDepthLeakProbe")?;
+        assert_eq!(calc_pkg.calc_defs.len(), 80);
+        assert_eq!(calc_parser.depth, 0);
+
+        // 4. Deeply nested packages, parts, states, and composite types (2,000 levels) inside a fixed 256 KiB stack thread,
+        // plus 2,000-level `merge_package_defs` inside a fixed 256 KiB stack thread.
+        let deep_levels = 2_000usize;
+        let mut deep_pkgs = String::new();
+        let mut deep_parts = String::new();
+        let mut deep_tuple_type = String::from("attribute tup : ");
+        for idx in 0..deep_levels {
+            deep_pkgs.push_str(&format!("package P_{idx} {{ "));
+            deep_parts.push_str(&format!("part def Part_{idx} {{ "));
+            deep_tuple_type.push('(');
+        }
+        deep_tuple_type.push_str("u32");
+        for _ in 0..deep_levels {
+            deep_pkgs.push_str("} ");
+            deep_parts.push_str("} ");
+            deep_tuple_type.push(')');
+        }
+        deep_tuple_type.push(';');
+        let deep_states = build_nested_states(deep_levels);
+
+        std::thread::scope(|s| -> Result<(), String> {
+            let parser_handle = std::thread::Builder::new()
+                .name("bounded_grammar_parser_probe".to_string())
+                .stack_size(2 * 1024 * 1024)
+                .spawn_scoped(s, || -> Result<(), String> {
+                    for (label, src) in [
+                        ("packages", deep_pkgs.as_str()),
+                        ("parts", deep_parts.as_str()),
+                        ("states", deep_states.as_str()),
+                        ("tuple_types", deep_tuple_type.as_str()),
+                    ] {
+                        let toks = SysmlParser::tokenize_source(src)
+                            .map_err(|e| format!("tokenize {label} failed: {e}"))?;
+                        let mut p = SysmlParser::new(&toks);
+                        let err = p.parse_package_or_file("Bounded").err().ok_or_else(|| {
+                            format!("2000-level {label} must return Err(ParseError)")
+                        })?;
+                        if !err.message.contains("recursion depth") {
+                            return Err(format!(
+                                "unexpected error message for {label}: {}",
+                                err.message
+                            ));
+                        }
+                        if p.depth != 0 {
+                            return Err(format!("depth leaked for {label}: {}", p.depth));
+                        }
+                    }
+                    Ok(())
+                })
+                .map_err(|e| format!("failed to spawn parser thread: {e}"))?;
+            parser_handle
+                .join()
+                .map_err(|_| "bounded parser stack thread panicked".to_string())??;
+
+            let merge_handle = std::thread::Builder::new()
+                .name("bounded_grammar_merge_probe".to_string())
+                .stack_size(256 * 1024)
+                .spawn_scoped(s, || -> Result<(), String> {
+                    let chain_len = 2_000usize;
+                    let build_pkg_chain = |attr_prefix: &str| -> PackageDef {
+                        let mut curr = PackageDef {
+                            name: format!("Pkg_{}", chain_len.saturating_sub(1)),
+                            ..Default::default()
+                        };
+                        for idx in (0..chain_len.saturating_sub(1)).rev() {
+                            let attr = AttributeDef {
+                                name: format!("{attr_prefix}_{idx}"),
+                                type_name: "Integer".to_string(),
+                                default_value: Some("1".to_string()),
+                                doc: None,
+                            };
+                            curr = PackageDef {
+                                name: format!("Pkg_{idx}"),
+                                attribute_defs: vec![attr],
+                                packages: vec![curr],
+                                ..Default::default()
+                            };
+                        }
+                        curr
+                    };
+
+                    let mut dest_chain = build_pkg_chain("dest_attr");
+                    let src_chain = build_pkg_chain("src_attr");
+                    merge_package_defs(&mut dest_chain, src_chain);
+
+                    let mut cursor = &dest_chain;
+                    for depth in 0..=MAX_PARSE_DEPTH {
+                        let expected_attrs = if depth < MAX_PARSE_DEPTH { 2 } else { 1 };
+                        if cursor.attribute_defs.len() != expected_attrs {
+                            return Err(format!(
+                                "at depth {depth}, expected {expected_attrs} attributes, got {}",
+                                cursor.attribute_defs.len()
+                            ));
+                        }
+                        cursor = cursor
+                            .packages
+                            .first()
+                            .ok_or_else(|| format!("missing child package at depth {depth}"))?;
+                    }
+                    drop_packages_iteratively(std::mem::take(&mut dest_chain.packages));
+                    Ok(())
+                })
+                .map_err(|e| format!("failed to spawn merge thread: {e}"))?;
+            merge_handle
+                .join()
+                .map_err(|_| "256 KiB merge stack thread panicked".to_string())?
+        })?;
+
+        Ok(())
+    }
 }
-
-
