@@ -502,6 +502,118 @@ struct ItemSynthesisContext<'a> {
     schema_model: Option<&'a PackageDef>,
 }
 
+/// Classification of an enclosing Rust block on `impl_owner_stack` for Tier A versus Tier B/C resolution.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and DEAP Rust Coding Standard v2.0 Section 4.1 (`RustOwnerKind`).
+/// Distinguishes inherent `impl Type` blocks (where `pub fn` methods are Tier A) from `impl Trait for Type`
+/// and `trait` definition blocks (where member methods are Tier B/C).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Closed three-variant partition `{InherentImpl, TraitImpl, TraitDef}` over enclosing Rust owner scopes.
+///
+/// ## 3. Preconditions
+/// - Pushed onto `impl_owner_stack` when `inject_rust_file_docstrings` opens an `impl` or `trait` brace block.
+///
+/// ## 4. Postconditions
+/// - Governs `is_tier_a` evaluation in `classify_rust_item_with_tier_ast`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) discriminant comparison.
+/// - Space Complexity: O(1) single-byte copy discriminant.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Exhaustive `match` prevents ambiguous owner classification.
+/// - State: Immutable `Copy` value on the owner stack.
+/// - Action: Cannot panic.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-RUST-OWNER-KIND]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RustOwnerKind {
+    /// Inherent implementation block (`impl Type { ... }`).
+    InherentImpl,
+    /// Trait implementation block (`impl Trait for Type { ... }`).
+    TraitImpl,
+    /// Trait definition block (`trait MyTrait { ... }`).
+    TraitDef,
+}
+
+/// Intermediate state for a multi-line Rust `impl` header prior to its opening `{` brace.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and DEAP Rust Coding Standard v2.0 Section 4.1 (`PendingRustImpl`).
+/// Tracks target type identity, inherent-versus-trait classification, and `where`-clause progression across
+/// multi-line `impl` headers without confusing Higher-Ranked Trait Bounds (`for<'a>`) with `impl Trait for Type`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Once `in_where_clause` transitions to `true`, subsequent `for<'a>` tokens in `where` predicates never
+///   promote `kind` from `InherentImpl` to `TraitImpl`.
+///
+/// ## 3. Preconditions
+/// - Initialized when an unbraced `impl` header line is detected at top-level parenthesis depth.
+///
+/// ## 4. Postconditions
+/// - Consumed into `impl_owner_stack` upon reaching `{` or cleared upon `;` / `}`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) field updates per continuation line.
+/// - Space Complexity: O(I) where I is the byte length of `target`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Strongly typed struct avoiding disconnected boolean state flags.
+/// - State: Cleared deterministically on block open or statement termination.
+/// - Action: Never panics.
+/// - Resource: Single `String` allocation for `target`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-PENDING-RUST-IMPL]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PendingRustImpl {
+    target: String,
+    kind: RustOwnerKind,
+    in_where_clause: bool,
+}
+
+/// Canonical block header discriminant for the Tier A Concise 4-Block Contract.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and DEAP Rust Coding Standard v2.0 Section 4.1 (`FourBlockHeader`).
+/// Identifies the three structured contract sections required alongside a summary line on Tier A items
+/// using Option A2 (`Safety & Traceability`, `Contract`, `Bounds & Faults`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Maps bijectively to bitmask positions `0b0010`, `0b0100`, and `0b1000` in `has_valid_four_block_contract`.
+///
+/// ## 3. Preconditions
+/// - Produced by `classify_four_block_header` from a stripped doc-comment line.
+///
+/// ## 4. Postconditions
+/// - Enables deterministic content-completeness verification for each of the three contract headers.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) discriminant projection.
+/// - Space Complexity: O(1) stack value.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Closed enum over the three normative Option A2 headers.
+/// - State: Pure immutable `Copy` value.
+/// - Action: Exhaustive `match` bit projection.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-FOUR-BLOCK-HEADER]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FourBlockHeader {
+    /// `Safety & Traceability` block carrying `Realises: [REQ-ID]`.
+    SafetyAndTraceability,
+    /// `Contract` block specifying preconditions, postconditions, and invariants.
+    Contract,
+    /// `Bounds & Faults` block specifying complexity/resource bounds and fault behavior.
+    BoundsAndFaults,
+}
+
 /// Executes `--extract-source <DIR>` reverse synchronization probe into canonical SysML v2 and digest.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -548,14 +660,22 @@ pub fn run_extract_source(
         write_atomic(out_path, &sysml_text).map_err(|e| {
             (
                 DocstringExitCode::Error,
-                format!("Failed to write extracted SysML to '{}': {}", out_path.display(), e),
+                format!(
+                    "Failed to write extracted SysML to '{}': {}",
+                    out_path.display(),
+                    e
+                ),
             )
         })?;
         let digest = generate_digest(&pkg, &sysml_text);
         write_digest_atomic(digest_path, &digest).map_err(|e| {
             (
                 DocstringExitCode::Error,
-                format!("Failed to write schema digest to '{}': {}", digest_path.display(), e),
+                format!(
+                    "Failed to write schema digest to '{}': {}",
+                    digest_path.display(),
+                    e
+                ),
             )
         })?;
     }
@@ -597,9 +717,8 @@ pub fn run_extract_source(
 pub fn run_docstring_injection(
     opts: &DocstringInjectionOptions,
 ) -> Result<DocstringInjectionReport, (DocstringExitCode, String)> {
-    let map_inject_err = |e: DocstringError| -> (DocstringExitCode, String) {
-        (e.exit_code(), e.into_message())
-    };
+    let map_inject_err =
+        |e: DocstringError| -> (DocstringExitCode, String) { (e.exit_code(), e.into_message()) };
 
     if !opts.target_path.exists() {
         return Err(map_inject_err(DocstringError::Io(format!(
@@ -624,8 +743,8 @@ pub fn run_docstring_injection(
             })
             .map_err(map_inject_err)?;
         let file_rel = file_path.display().to_string();
-        let lang = SourceLanguage::detect_from_extension(&file_path)
-            .unwrap_or(SourceLanguage::Rust);
+        let lang =
+            SourceLanguage::detect_from_extension(&file_path).unwrap_or(SourceLanguage::Rust);
 
         let (enriched, count) = match lang {
             SourceLanguage::Rust | SourceLanguage::Auto => inject_rust_file_docstrings(
@@ -646,20 +765,14 @@ pub fn run_docstring_injection(
 
         // Verify idempotency invariant in memory (second pass with force=false must produce 0 changes)
         let (second_pass, second_count) = match lang {
-            SourceLanguage::Rust | SourceLanguage::Auto => inject_rust_file_docstrings(
-                &enriched,
-                &file_rel,
-                opts.schema_model.as_ref(),
-                false,
-            )
-            .map_err(map_inject_err)?,
-            SourceLanguage::Dart => inject_dart_file_docstrings(
-                &enriched,
-                &file_rel,
-                opts.schema_model.as_ref(),
-                false,
-            )
-            .map_err(map_inject_err)?,
+            SourceLanguage::Rust | SourceLanguage::Auto => {
+                inject_rust_file_docstrings(&enriched, &file_rel, opts.schema_model.as_ref(), false)
+                    .map_err(map_inject_err)?
+            }
+            SourceLanguage::Dart => {
+                inject_dart_file_docstrings(&enriched, &file_rel, opts.schema_model.as_ref(), false)
+                    .map_err(map_inject_err)?
+            }
         };
 
         if second_pass != enriched || second_count != 0 {
@@ -840,8 +953,8 @@ pub fn inject_rust_file_docstrings(
     let mut attr_bracket_depth: usize = 0;
     let mut brace_depth: usize = 0;
     let mut paren_depth: usize = 0;
-    let mut impl_owner_stack: Vec<(usize, String)> = Vec::new();
-    let mut pending_impl_target: Option<String> = None;
+    let mut impl_owner_stack: Vec<(usize, String, RustOwnerKind)> = Vec::new();
+    let mut pending_impl: Option<PendingRustImpl> = None;
     let mut enriched_count: usize = 0;
     let mut item_ordinal: usize = 0;
 
@@ -902,7 +1015,7 @@ pub fn inject_rust_file_docstrings(
                 continue;
             }
             update_ast_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
-            while let Some(&(open_depth, _)) = impl_owner_stack.last() {
+            while let Some(&(open_depth, _, _)) = impl_owner_stack.last() {
                 if brace_depth <= open_depth {
                     impl_owner_stack.pop();
                 } else {
@@ -953,10 +1066,11 @@ pub fn inject_rust_file_docstrings(
         }
 
         if paren_depth == 0 {
-            if let Some(impl_target) = extract_rust_impl_target_name(code) {
-                pending_impl_target = None;
+            let enclosing_owner_kind = impl_owner_stack.last().map(|&(_, _, kind)| kind);
+            if let Some((impl_target, impl_kind)) = extract_rust_impl_target_and_kind(code) {
+                pending_impl = None;
                 if code.contains('{') && !code.contains('}') {
-                    impl_owner_stack.push((brace_depth, impl_target));
+                    impl_owner_stack.push((brace_depth, impl_target, impl_kind));
                 }
                 if any_placeholder_in_doc(&current_doc) {
                     for &doc_idx in &pending_doc_indices {
@@ -973,7 +1087,17 @@ pub fn inject_rust_file_docstrings(
             } else if brace_depth == 0 && parse_rust_impl_header(&format!("{code} {{")).is_some() {
                 if let Some(impl_target) = parse_rust_impl_header(&format!("{code} {{")) {
                     if !code.ends_with(';') && !code.contains('}') {
-                        pending_impl_target = Some(impl_target);
+                        let (trait_for_tail, saw_where) = scan_rust_impl_segment(code);
+                        let impl_kind = if trait_for_tail.is_some() {
+                            RustOwnerKind::TraitImpl
+                        } else {
+                            RustOwnerKind::InherentImpl
+                        };
+                        pending_impl = Some(PendingRustImpl {
+                            target: impl_target,
+                            kind: impl_kind,
+                            in_where_clause: saw_where,
+                        });
                     }
                 }
                 if any_placeholder_in_doc(&current_doc) {
@@ -988,43 +1112,16 @@ pub fn inject_rust_file_docstrings(
                 current_doc.clear();
                 pending_doc_indices.clear();
                 first_attr_idx = None;
-            } else if brace_depth == 0 && pending_impl_target.is_some() {
-                let code_before_where = if code == "where" || code.starts_with("where ") {
-                    ""
-                } else {
-                    code.split_once(" where ")
-                        .map(|(b, _)| b.trim())
-                        .unwrap_or(code)
-                        .trim_end_matches(" where")
-                        .trim()
-                };
-                if let Some((_, after_for)) = code_before_where
-                    .split_once(" for ")
-                    .or_else(|| code_before_where.strip_prefix("for ").map(|r| ("", r)))
-                {
-                    let after_for_trimmed = after_for.trim_start();
-                    if !after_for_trimmed.starts_with('<') {
-                        let before_brace = after_for_trimmed
-                            .split_once('{')
-                            .map(|(b, _)| b.trim())
-                            .unwrap_or(after_for_trimmed);
-                        let target_clean = before_brace
-                            .trim_start_matches('&')
-                            .trim_start_matches("mut ")
-                            .trim();
-                        if let Some(updated_target) = extract_leading_ast_ident(target_clean) {
-                            pending_impl_target = Some(updated_target);
-                        }
-                    }
-                }
-                if code.contains('{') && !code.contains('}') {
-                    if let Some(target) = pending_impl_target.take() {
-                        impl_owner_stack.push((brace_depth, target));
-                    }
-                } else if code.contains(';') || code.contains('}') {
-                    pending_impl_target = None;
-                }
-            } else if let Some((kind, item_name)) = classify_rust_item_line_ast(code) {
+            } else if brace_depth == 0 && pending_impl.is_some() {
+                advance_pending_rust_impl(
+                    code,
+                    brace_depth,
+                    &mut pending_impl,
+                    &mut impl_owner_stack,
+                );
+            } else if let Some((kind, item_name, is_tier_a)) =
+                classify_rust_item_with_tier_ast(code, enclosing_owner_kind)
+            {
                 if cfg_test_pending {
                     cfg_test_pending = false;
                     current_doc.clear();
@@ -1032,17 +1129,27 @@ pub fn inject_rust_file_docstrings(
                     first_attr_idx = None;
                 } else {
                     item_ordinal = item_ordinal.saturating_add(1);
-                    let owner_name = impl_owner_stack.last().map(|(_, name)| name.as_str());
-                    let check_uniqueness = kind == SourceItemKind::Function;
+                    let owner_name = impl_owner_stack.last().and_then(|(_, name, _)| {
+                        if name.is_empty() {
+                            None
+                        } else {
+                            Some(name.as_str())
+                        }
+                    });
+                    let check_uniqueness = is_tier_a && kind == SourceItemKind::Function;
                     let is_valid = !force
-                        && is_compliant_docblock(&current_doc, check_uniqueness, &mut seen_docblocks);
+                        && is_compliant_docblock_in_file(
+                            &current_doc,
+                            is_tier_a,
+                            check_uniqueness,
+                            &mut seen_docblocks,
+                        );
 
                     if is_valid {
                         let (schema_req_opt, _) =
                             resolve_schema_context(schema_model, owner_name, &item_name);
                         if let Some(schema_req) = schema_req_opt {
-                            let existing_reqs =
-                                extract_realises_ids_from_doc_lines(&current_doc);
+                            let existing_reqs = extract_all_realises_ids(&current_doc);
                             if !existing_reqs.is_empty()
                                 && !schema_req
                                     .split(',')
@@ -1067,16 +1174,14 @@ pub fn inject_rust_file_docstrings(
                             }
                         }
 
-                        let inline_comment_split = if !started_in_normal
-                            && ended_in_normal
-                            && first_attr_idx.is_none()
-                        {
-                            raw_line
-                                .split_once("*/")
-                                .map(|(prefix, rest)| (format!("{}*/", prefix), rest.trim_start()))
-                        } else {
-                            None
-                        };
+                        let inline_comment_split =
+                            if !started_in_normal && ended_in_normal && first_attr_idx.is_none() {
+                                raw_line.split_once("*/").map(|(prefix, rest)| {
+                                    (format!("{}*/", prefix), rest.trim_start())
+                                })
+                            } else {
+                                None
+                            };
                         let indent = if inline_comment_split.is_some() {
                             ""
                         } else {
@@ -1119,7 +1224,7 @@ pub fn inject_rust_file_docstrings(
                     }
 
                     if kind == SourceItemKind::Trait && code.contains('{') && !code.contains('}') {
-                        impl_owner_stack.push((brace_depth, item_name));
+                        impl_owner_stack.push((brace_depth, item_name, RustOwnerKind::TraitDef));
                     }
 
                     cfg_test_pending = false;
@@ -1144,7 +1249,7 @@ pub fn inject_rust_file_docstrings(
         }
 
         update_ast_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
-        while let Some(&(open_depth, _)) = impl_owner_stack.last() {
+        while let Some(&(open_depth, _, _)) = impl_owner_stack.last() {
             if brace_depth <= open_depth {
                 impl_owner_stack.pop();
             } else {
@@ -1157,7 +1262,8 @@ pub fn inject_rust_file_docstrings(
         return Ok((source.to_string(), 0));
     }
 
-    let mut out_lines: Vec<String> = Vec::with_capacity(total_lines.saturating_add(enriched_count * 28));
+    let mut out_lines: Vec<String> =
+        Vec::with_capacity(total_lines.saturating_add(enriched_count * 28));
     for idx in 0..total_lines {
         if let Some(ins) = insertions_before.get(idx) {
             for line in ins {
@@ -1292,13 +1398,18 @@ pub fn inject_dart_file_docstrings(
                     item_ordinal = item_ordinal.saturating_add(1);
                     let check_uniqueness = kind == SourceItemKind::Function;
                     let is_valid = !force
-                        && is_compliant_docblock(&current_doc, check_uniqueness, &mut seen_docblocks);
+                        && is_compliant_docblock_in_file(
+                            &current_doc,
+                            true,
+                            check_uniqueness,
+                            &mut seen_docblocks,
+                        );
 
                     if is_valid {
                         let (schema_req_opt, _) =
                             resolve_schema_context(schema_model, None, &item_name);
                         if let Some(schema_req) = schema_req_opt {
-                            let existing_reqs = extract_realises_ids_from_doc_lines(&current_doc);
+                            let existing_reqs = extract_all_realises_ids(&current_doc);
                             if !existing_reqs.is_empty()
                                 && !schema_req
                                     .split(',')
@@ -1372,10 +1483,17 @@ pub fn inject_dart_file_docstrings(
                 }
             } else if brace_depth == 1 {
                 if let Some(ref cls_name) = active_class_name.clone() {
-                    if let Some((member_kind, member_name)) = classify_dart_member_ast(code, cls_name) {
+                    if let Some((member_kind, member_name)) =
+                        classify_dart_member_ast(code, cls_name)
+                    {
                         item_ordinal = item_ordinal.saturating_add(1);
                         let is_valid = !force
-                            && is_compliant_docblock(&current_doc, true, &mut seen_docblocks);
+                            && is_compliant_docblock_in_file(
+                                &current_doc,
+                                true,
+                                true,
+                                &mut seen_docblocks,
+                            );
 
                         if is_valid {
                             let (schema_req_opt, _) = resolve_schema_context(
@@ -1384,8 +1502,7 @@ pub fn inject_dart_file_docstrings(
                                 &member_name,
                             );
                             if let Some(schema_req) = schema_req_opt {
-                                let existing_reqs =
-                                    extract_realises_ids_from_doc_lines(&current_doc);
+                                let existing_reqs = extract_all_realises_ids(&current_doc);
                                 if !existing_reqs.is_empty()
                                     && !schema_req
                                         .split(',')
@@ -1496,7 +1613,8 @@ pub fn inject_dart_file_docstrings(
         return Ok((source.to_string(), 0));
     }
 
-    let mut out_lines: Vec<String> = Vec::with_capacity(total_lines.saturating_add(enriched_count * 28));
+    let mut out_lines: Vec<String> =
+        Vec::with_capacity(total_lines.saturating_add(enriched_count * 28));
     for idx in 0..total_lines {
         if let Some(ins) = insertions_before.get(idx) {
             for line in ins {
@@ -1518,74 +1636,426 @@ pub fn inject_dart_file_docstrings(
     Ok((rendered, enriched_count))
 }
 
-/// Checks whether `current_doc` already satisfies all 7 sections, non-empty `Realises:`, zero placeholders, and uniqueness.
+/// Checks whether `doc_lines` satisfies tiered Rust/Dart documentation compliance (`is_tier_a`) without per-file deduplication state.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 34/36 verification equivalence (`is_compliant_docblock`).
-/// Guarantees that `compile-sysml --inject-safety-docstrings` preserves any existing docblock that
-/// already passes Check 34 and Check 36 while replacing any incomplete, placeholder, or duplicate docblock.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and DEAP Rust Coding Standard v2.0 Section 4.1 (`is_compliant_docblock`).
+/// Enforces Tier A requirements (Full 7-Section Rustdoc or Concise 4-Block Contract plus summary and `Realises:`)
+/// on public API and module surfaces, and Tier B/C requirements (concise non-placeholder summary plus `Realises:`)
+/// on private helpers, restricted-visibility items, and trait implementations.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Verifies presence of all 7 canonical H2 section headers (`## 1.` through `## 7.`).
-/// - Verifies `docblock_has_non_empty_realises` and `!any_placeholder_in_doc(current_doc)`.
-/// - When `check_uniqueness` is `true`, inserts the normalized body into `seen_docblocks` and returns
-///   `false` if it was already present.
+/// - Always rejects empty `doc_lines`, placeholder markers, malformed prefixes, hybrid H1 headers, and missing/vacuous `Realises: [...]` tags.
+/// - Treats inner `//!` module docblocks as Tier A regardless of caller `is_tier_a` flag.
+/// - When `effective_tier_a` holds, requires either all 7 numbered H2 sections or all 3 4-Block Contract headers alongside a non-empty summary line.
+/// - When `!effective_tier_a` holds (Tier B/C), accepts any docblock carrying at least one non-empty descriptive summary line and a non-empty `Realises: [...]` tag.
 ///
 /// ## 3. Preconditions
-/// - `current_doc: &[String]` holds the contiguous `///` lines preceding an item.
-/// - `seen_docblocks: &mut BTreeSet<String>` tracks normalized callable docblock bodies in the current file.
+/// - `doc_lines: &[String]` contains the contiguous `///` or `//!` lines of a candidate docblock.
+/// - `is_tier_a: bool` indicates whether the target AST declaration is a Tier A public surface.
 ///
 /// ## 4. Postconditions
-/// - Returns `true` iff `current_doc` is 100% compliant with Check 34 and Check 36.
+/// - Returns `true` iff `doc_lines` satisfies all structural and traceability rules for its tier.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(D log S) where D is `current_doc` byte length and S is `seen_docblocks.len()`.
-/// - Space Complexity: O(D) for the joined and normalized strings.
+/// - Time Complexity: O(D) where D is the total byte length of `doc_lines`.
+/// - Space Complexity: O(D) for the joined traceability inspection buffer.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Returns `false` immediately on empty `current_doc`.
-/// - State: Inserts into `seen_docblocks` only when all 7 sections and `Realises:` are valid.
-/// - Action: Pure string inspection without panicking indexing.
-/// - Resource: Bounded by single-item docstring size.
+/// - Interface: Returns `false` immediately on empty or placeholder-tainted slices.
+/// - State: Pure read-only predicate with zero side effects.
+/// - Action: Non-panicking slice and iterator operations throughout.
+/// - Resource: Single joined `String` buffer bounded by single-item docblock length.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-IS-COMPLIANT-DOCBLOCK]
-fn is_compliant_docblock(
-    current_doc: &[String],
-    check_uniqueness: bool,
-    seen_docblocks: &mut BTreeSet<String>,
-) -> bool {
-    if current_doc.is_empty()
-        || any_placeholder_in_doc(current_doc)
-        || has_malformed_prefix_or_hybrid_headers(current_doc)
+fn is_compliant_docblock(doc_lines: &[String], is_tier_a: bool) -> bool {
+    if doc_lines.is_empty()
+        || any_placeholder_in_doc(doc_lines)
+        || has_malformed_prefix_or_hybrid_headers(doc_lines)
     {
         return false;
     }
 
-    let joined = current_doc.join("\n");
-    if !joined.contains("## 1. Safety Intent & Regulatory Scope")
-        || !joined.contains("## 2. Invariants & Mathematical Properties")
-        || !joined.contains("## 3. Preconditions")
-        || !joined.contains("## 4. Postconditions")
-        || !joined.contains("## 5. Algorithmic Complexity Bounds")
-        || !joined.contains("## 6. Failure Modes & Fault Tolerance")
-        || !joined.contains("## 7. Realization & Traceability")
-    {
-        return false;
-    }
-
+    let joined = doc_lines.join("\n");
     if !docblock_has_non_empty_realises(&joined) {
         return false;
     }
 
+    let is_module_doc = doc_lines
+        .iter()
+        .any(|line| line.trim_start().starts_with("//!"));
+    let effective_tier_a = is_tier_a || is_module_doc;
+
+    if effective_tier_a {
+        (has_all_seven_sections(&joined) && has_non_empty_tier_bc_summary(doc_lines))
+            || has_valid_four_block_contract(doc_lines)
+    } else {
+        has_non_empty_tier_bc_summary(doc_lines)
+    }
+}
+
+/// Evaluates `is_compliant_docblock` and enforces per-file normalized body uniqueness on 7-section callable docblocks.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34/36 deduplication equivalence (`is_compliant_docblock_in_file`).
+/// Combines structural tier validation (`is_compliant_docblock`) with per-file `seen_docblocks` uniqueness
+/// verification for 7-section callable docstrings.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Delegates tier structural checks to `is_compliant_docblock(current_doc, is_tier_a)`.
+/// - When `check_uniqueness` is `true` and `current_doc` uses the 7-section format, inserts `normalize_docblock_body(current_doc)`
+///   into `seen_docblocks` and rejects duplicate bodies.
+///
+/// ## 3. Preconditions
+/// - `current_doc: &[String]` holds the contiguous `///` lines preceding an item.
+/// - `seen_docblocks: &mut BTreeSet<String>` tracks normalized 7-section callable bodies in the active file.
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff `current_doc` is tier-compliant and passes applicable callable uniqueness checks.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(D log S) where D is `current_doc` byte length and S is `seen_docblocks.len()`.
+/// - Space Complexity: O(D) for the joined and normalized buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Short-circuits cleanly on non-compliant docblocks without mutating `seen_docblocks`.
+/// - State: Updates `seen_docblocks` only for structurally valid 7-section callable docblocks.
+/// - Action: Zero panicking indexing.
+/// - Resource: Bounded by single-item docstring size.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-IS-COMPLIANT-DOCBLOCK-IN-FILE]
+fn is_compliant_docblock_in_file(
+    current_doc: &[String],
+    is_tier_a: bool,
+    check_uniqueness: bool,
+    seen_docblocks: &mut BTreeSet<String>,
+) -> bool {
+    if !is_compliant_docblock(current_doc, is_tier_a) {
+        return false;
+    }
+
     if check_uniqueness {
-        let normalized = normalize_docblock_body(current_doc);
-        if normalized.is_empty() || !seen_docblocks.insert(normalized) {
-            return false;
+        let joined = current_doc.join("\n");
+        if has_all_seven_sections(&joined) {
+            let normalized = normalize_docblock_body(current_doc);
+            if normalized.is_empty() || !seen_docblocks.insert(normalized) {
+                return false;
+            }
         }
     }
 
     true
+}
+
+/// Checks whether a joined docblock contains all 7 canonical DO-178C numbered H2 section headers.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 Option A1 (`has_all_seven_sections`).
+/// Verifies presence of `## 1. Safety Intent & Regulatory Scope` through `## 7. Realization & Traceability`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Conjunction over the 7 normative H2 section header literals.
+///
+/// ## 3. Preconditions
+/// - `joined: &str` is the newline-joined text of a candidate docblock.
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff every numbered section header `## 1.` through `## 7.` appears in `joined`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(D) where D is `joined.len()`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts empty or arbitrary UTF-8 slices safely.
+/// - State: Pure stateless predicate.
+/// - Action: Short-circuits on first missing section header.
+/// - Resource: Zero memory allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-HAS-ALL-SEVEN-SECTIONS]
+fn has_all_seven_sections(joined: &str) -> bool {
+    joined.contains("## 1. Safety Intent & Regulatory Scope")
+        && joined.contains("## 2. Invariants & Mathematical Properties")
+        && joined.contains("## 3. Preconditions")
+        && joined.contains("## 4. Postconditions")
+        && joined.contains("## 5. Algorithmic Complexity Bounds")
+        && joined.contains("## 6. Failure Modes & Fault Tolerance")
+        && joined.contains("## 7. Realization & Traceability")
+}
+
+/// Strips the leading `///` or `//!` doc-comment marker and surrounding whitespace from a single line.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A doc-comment lexical normalization (`strip_outer_doc_marker`).
+/// Provides uniform borrowed payload extraction across outer (`///`) and inner (`//!`) Rustdoc lines.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strips at most one outer `///` or `//!` prefix and trims leading/trailing ASCII and Unicode whitespace.
+///
+/// ## 3. Preconditions
+/// - `line: &str` is a raw or trimmed doc-comment line.
+///
+/// ## 4. Postconditions
+/// - Returns a borrowed `&str` slice containing the trimmed interior comment text.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `line.len()`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Safely returns `line.trim()` if neither `///` nor `//!` is present.
+/// - State: Pure zero-copy slice projection.
+/// - Action: Uses non-panicking `strip_prefix`.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-STRIP-OUTER-DOC-MARKER]
+fn strip_outer_doc_marker(line: &str) -> &str {
+    let trimmed = line.trim();
+    trimmed
+        .strip_prefix("///")
+        .or_else(|| trimmed.strip_prefix("//!"))
+        .unwrap_or(trimmed)
+        .trim()
+}
+
+/// Classifies a stripped doc-comment line against the three Tier A 4-Block Contract headers.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 Option A2 (`classify_four_block_header`).
+/// Recognizes `Safety & Traceability`, `Contract`, and `Bounds & Faults` headers across plain, bulleted,
+/// bolded, or H2/H3 markdown forms while rejecting ordinary prose prefixes such as `"Contractors..."`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Matches a header label only when followed immediately (after optional closing `**`) by end-of-line or `':'`.
+/// - Returns `(FourBlockHeader, inline_tail)` where `inline_tail` is the trimmed text following `':'` (or `""`).
+///
+/// ## 3. Preconditions
+/// - `line_text: &str` is a doc-comment line already stripped of its leading `///` or `//!` marker.
+///
+/// ## 4. Postconditions
+/// - Returns `Some((header, inline_tail))` on a valid 4-Block header line, or `None` for summary/body prose.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `line_text.len()`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking `strip_prefix` chains over borrowed `&str` slices.
+/// - State: Pure stateless classifier.
+/// - Action: Rejects partial word prefix collisions cleanly.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-CLASSIFY-FOUR-BLOCK-HEADER]
+fn classify_four_block_header(line_text: &str) -> Option<(FourBlockHeader, &str)> {
+    let clean = line_text
+        .strip_prefix("- ")
+        .or_else(|| line_text.strip_prefix("* "))
+        .or_else(|| line_text.strip_prefix("### "))
+        .or_else(|| line_text.strip_prefix("## "))
+        .unwrap_or(line_text)
+        .trim_start();
+    let unbolded = clean.strip_prefix("**").unwrap_or(clean).trim_start();
+    let candidates = [
+        (
+            "Safety & Traceability",
+            FourBlockHeader::SafetyAndTraceability,
+        ),
+        ("Bounds & Faults", FourBlockHeader::BoundsAndFaults),
+        ("Contract", FourBlockHeader::Contract),
+    ];
+    for (label, header) in candidates {
+        if let Some(after_label) = unbolded.strip_prefix(label) {
+            let after_bold = after_label.trim_start();
+            let after_bold = after_bold
+                .strip_prefix("**")
+                .unwrap_or(after_bold)
+                .trim_start();
+            if after_bold.is_empty() {
+                return Some((header, ""));
+            }
+            if let Some(after_colon) = after_bold.strip_prefix(':') {
+                let tail = after_colon.trim_start();
+                let tail = tail.strip_prefix("**").unwrap_or(tail).trim();
+                return Some((header, tail));
+            }
+        }
+    }
+    None
+}
+
+/// Verifies that `doc_lines` satisfies the Tier A Concise 4-Block Contract (summary + 3 populated contract blocks).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 Option A2 (`has_valid_four_block_contract`).
+/// Ensures Tier A 4-Block docblocks contain a non-empty summary line prior to the contract headers and
+/// non-empty content for all three contract blocks (`Safety & Traceability`, `Contract`, `Bounds & Faults`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Accumulates a 4-bit completion mask (`0b0001` summary, `0b0010` safety/traceability, `0b0100` contract, `0b1000` bounds/faults).
+/// - Accepts both single-line (`Contract: ...`) and multi-line (`Contract:\n- ...`) block bodies while rejecting empty header stubs.
+///
+/// ## 3. Preconditions
+/// - `doc_lines: &[String]` contains the contiguous `///` or `//!` lines of a candidate Tier A docblock.
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff `mask == 0b1111`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(D) where D is total byte length of `doc_lines`.
+/// - Space Complexity: O(1) three single-byte bitmasks on stack.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles empty lines and arbitrary markdown formatting safely.
+/// - State: Bitmask state avoids compound boolean flag proliferation.
+/// - Action: Never panics.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-HAS-VALID-FOUR-BLOCK-CONTRACT]
+fn has_valid_four_block_contract(doc_lines: &[String]) -> bool {
+    let mut mask: u8 = 0;
+    let mut seen_headers: u8 = 0;
+    let mut active_header_bit: u8 = 0;
+
+    for line in doc_lines {
+        let text = strip_outer_doc_marker(line);
+        if text.is_empty() {
+            continue;
+        }
+        if let Some((header, inline_tail)) = classify_four_block_header(text) {
+            let bit: u8 = match header {
+                FourBlockHeader::SafetyAndTraceability => 0b0010,
+                FourBlockHeader::Contract => 0b0100,
+                FourBlockHeader::BoundsAndFaults => 0b1000,
+            };
+            seen_headers |= bit;
+            if inline_tail.chars().any(char::is_alphanumeric) {
+                mask |= bit;
+                active_header_bit = 0;
+            } else {
+                active_header_bit = bit;
+            }
+        } else {
+            if seen_headers == 0
+                && !text.starts_with("Realises:")
+                && !text.starts_with('#')
+                && text.chars().any(char::is_alphanumeric)
+            {
+                mask |= 0b0001;
+            }
+            if active_header_bit != 0 && text.chars().any(char::is_alphanumeric) {
+                mask |= active_header_bit;
+            }
+        }
+    }
+
+    mask == 0b1111
+}
+
+/// Checks whether `doc_lines` contains at least one non-empty descriptive summary line distinct from `Realises:`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 (`has_non_empty_tier_bc_summary`).
+/// Prevents `Realises:`-only or punctuation-only comment stubs from passing Tier B/C or Tier A validation.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` when at least one non-heading line outside `Realises:` contains alphanumeric prose, or when
+///   descriptive alphanumeric prose precedes `Realises:` on the same line (excluding bare `Safety & Traceability:`).
+///
+/// ## 3. Preconditions
+/// - `doc_lines: &[String]` contains the contiguous `///` or `//!` lines of a candidate docblock.
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff non-empty descriptive prose exists in `doc_lines`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(D) where D is total byte length of `doc_lines`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Accepts empty or single-line docblocks safely.
+/// - State: Pure stateless scan.
+/// - Action: Uses non-panicking `split_once` and character iterators.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-HAS-NON-EMPTY-TIER-BC-SUMMARY]
+fn has_non_empty_tier_bc_summary(doc_lines: &[String]) -> bool {
+    for line in doc_lines {
+        let text = strip_outer_doc_marker(line);
+        if text.is_empty() || text.starts_with("## ") || text.starts_with("# ") {
+            continue;
+        }
+        if let Some((before_realises, _)) = text.split_once("Realises:") {
+            let prefix = before_realises.trim();
+            if classify_four_block_header(prefix).is_none()
+                && prefix.chars().any(char::is_alphanumeric)
+            {
+                return true;
+            }
+        } else if text.chars().any(char::is_alphanumeric) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Extracts all requirement IDs from `Realises: [...]` tags across `doc_lines`, including inline 4-Block `Safety & Traceability: Realises: [...]` lines.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A bidirectional requirement traceability (`extract_all_realises_ids`).
+/// Ensures unforced conflict checks and `--force` requirement preservation extract requirement IDs regardless
+/// of whether `Realises:` starts the line or follows `Safety & Traceability:`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves all IDs extracted by `extract_realises_ids_from_doc_lines` and appends any bracketed IDs
+///   following `"Realises:"` on inline contract lines in declaration order without duplicates.
+///
+/// ## 3. Preconditions
+/// - `doc_lines: &[String]` holds the `///` or `//!` lines of an existing docblock.
+///
+/// ## 4. Postconditions
+/// - Returns `Vec<String>` of unique trimmed requirement identifiers bound in `doc_lines`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(D * R) where D is `doc_lines` byte length and R is extracted requirement count.
+/// - Space Complexity: O(R) for the returned requirement ID vector.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Gracefully ignores unclosed brackets without panicking.
+/// - State: Pure extraction into a local `Vec<String>`.
+/// - Action: Uses `.get(..)` and `saturating_add` exclusively.
+/// - Resource: Bounded by requirement tag count on a single item.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-EXTRACT-ALL-REALISES-IDS]
+fn extract_all_realises_ids(doc_lines: &[String]) -> Vec<String> {
+    let mut ids = extract_realises_ids_from_doc_lines(doc_lines);
+    for line in doc_lines {
+        if let Some((_, after_realises)) = line.split_once("Realises:") {
+            let mut rest = after_realises;
+            while let Some(open_idx) = rest.find('[') {
+                let after_open = rest.get(open_idx.saturating_add(1)..).unwrap_or("");
+                let Some(close_idx) = after_open.find(']') else {
+                    break;
+                };
+                let inside = after_open.get(..close_idx).unwrap_or("");
+                for tok in inside.split(',') {
+                    let clean = tok.trim();
+                    if !clean.is_empty() && !ids.iter().any(|existing| existing == clean) {
+                        ids.push(clean.to_string());
+                    }
+                }
+                rest = after_open.get(close_idx.saturating_add(1)..).unwrap_or("");
+            }
+        }
+    }
+    ids
 }
 
 /// Detects doubled doc-comment prefixes, legacy H1 section headers, or duplicate `Realises:` lines in `current_doc`.
@@ -1777,12 +2247,14 @@ fn synthesize_7_section_docstring(
     let kind_kw = ctx.item_kind.keyword();
 
     // Summary line (Line 1)
-    let summary = summary_from_doc_lines(ctx.existing_doc).unwrap_or_else(|| {
-        format!(
-            "Executes deterministic {} `{}` within `{}`.",
-            kind_kw, qualified_name, ctx.file_rel
-        )
-    });
+    let summary = summary_from_doc_lines(ctx.existing_doc)
+        .filter(|s| !has_placeholder_doc_line(s))
+        .unwrap_or_else(|| {
+            format!(
+                "Executes deterministic {} `{}` within `{}`.",
+                kind_kw, qualified_name, ctx.file_rel
+            )
+        });
 
     // Lookup optional SysML requirement / constraint context from schema_model
     let (schema_req_id, schema_constraint_expr) =
@@ -1928,7 +2400,7 @@ fn synthesize_7_section_docstring(
     );
 
     // Build Section 7 (Realization & Traceability)
-    let existing_reqs = extract_realises_ids_from_doc_lines(ctx.existing_doc);
+    let existing_reqs = extract_all_realises_ids(ctx.existing_doc);
     let req_tag = if let Some(s_req) = schema_req_id {
         let schema_reqs: Vec<&str> = s_req
             .split(',')
@@ -1984,7 +2456,10 @@ fn synthesize_7_section_docstring(
     ];
     lines.extend(sec3_lines);
     lines.push(empty_line.clone());
-    lines.push(format_normalized_doc_line(ctx.indent, "## 4. Postconditions"));
+    lines.push(format_normalized_doc_line(
+        ctx.indent,
+        "## 4. Postconditions",
+    ));
     lines.push(format_normalized_doc_line(ctx.indent, &sec4_body));
     lines.push(empty_line.clone());
     lines.push(format_normalized_doc_line(
@@ -2369,9 +2844,7 @@ fn inspect_dart_item_details(
                         .split_once('=')
                         .map(|(b, _)| b.trim())
                         .unwrap_or(without_semi);
-                    if !decl_head.is_empty()
-                        && !decl_head.contains('(')
-                        && !decl_head.contains('{')
+                    if !decl_head.is_empty() && !decl_head.contains('(') && !decl_head.contains('{')
                     {
                         let mut clean_decl = decl_head;
                         loop {
@@ -2816,7 +3289,11 @@ fn resolve_schema_context(
         if let Some((_, after_prefix)) = doc.split_once("Realises: [") {
             if let Some((inside, _)) = after_prefix.split_once(']') {
                 for tok in inside.split(',') {
-                    let clean_tok = tok.trim().trim_start_matches('[').trim_end_matches(']').trim();
+                    let clean_tok = tok
+                        .trim()
+                        .trim_start_matches('[')
+                        .trim_end_matches(']')
+                        .trim();
                     if !clean_tok.is_empty() {
                         if let Some(resolved) = resolve_req_token(clean_tok) {
                             push_unique_req(&mut collected, resolved);
@@ -2964,7 +3441,9 @@ fn resolve_schema_context(
         })
     };
 
-    let req_matches_member = |r: &deap_core::sysml_ast::RequirementDef, member_ident: &str| -> bool {
+    let req_matches_member = |r: &deap_core::sysml_ast::RequirementDef,
+                              member_ident: &str|
+     -> bool {
         if req_belongs_to_other_part(r) {
             return false;
         }
@@ -3354,36 +3833,403 @@ fn schema_identifiers_match(schema_ident: &str, source_ident: &str) -> bool {
     }
 }
 
-/// Extracts the target type identifier from a Rust `impl` header line that opens a block with `{`.
+/// Extracts the target type identifier and owner kind (`InherentImpl` vs `TraitImpl`) from a single-line Rust `impl` header with `{`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A method-to-classifier attribution (`extract_rust_impl_target_name`).
-/// Tracks the enclosing type name for methods inside `impl` blocks during docstring synthesis.
+/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 (`extract_rust_impl_target_and_kind`).
+/// Distinguishes inherent `impl Type {` headers from `impl Trait for Type {` headers while preserving target type attribution.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Handles `impl Foo {`, `impl<T> Foo<T> {`, `impl<F: Fn(u32) -> bool> Foo<F> {`, and `impl Trait for Foo {`.
+/// - Requires `extract_rust_impl_header_prefix(code)` to confirm an opening `impl` block header.
+/// - Classifies `TraitImpl` whenever `scan_rust_impl_segment(code)` locates a top-level trait-separating `for` token, even for non-nominal tuple or slice targets.
 ///
 /// ## 3. Preconditions
-/// - `code: &str` is a comment-stripped Rust line.
+/// - `code: &str` is a comment-stripped Rust source line at parenthesis depth zero.
 ///
 /// ## 4. Postconditions
-/// - Returns `Some(type_name)` when `code` starts an `impl` block with `{`, or `None`.
+/// - Returns `Some((target_ident, owner_kind))` when `code` opens a Rust `impl` block, or `None` otherwise.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N) where N is `code.len()`.
-/// - Space Complexity: O(I) where I is the target identifier length.
+/// - Space Complexity: O(I) where I is the target identifier byte length.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Non-panicking delegation to `extract_rust_impl_header_prefix` and `parse_rust_impl_header`.
-/// - State: Pure helper.
-/// - Action: Returns `None` if `code` is not an `impl` block with `{`.
-/// - Resource: Single `String` allocation on match.
+/// - Interface: Non-panicking delegation to `extract_rust_impl_header_prefix`, `parse_rust_impl_header`, and `scan_rust_impl_segment`.
+/// - State: Pure stateless classifier.
+/// - Action: Returns `None` cleanly for non-`impl` lines.
+/// - Resource: At most one `String` allocation on match.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0605], [REQ-FEAT-42-EXTRACT-IMPL-TARGET]
-fn extract_rust_impl_target_name(code: &str) -> Option<String> {
+fn extract_rust_impl_target_and_kind(code: &str) -> Option<(String, RustOwnerKind)> {
     extract_rust_impl_header_prefix(code)?;
-    parse_rust_impl_header(code)
+    let (trait_for_tail, _) = scan_rust_impl_segment(code);
+    let kind = if trait_for_tail.is_some() {
+        RustOwnerKind::TraitImpl
+    } else {
+        RustOwnerKind::InherentImpl
+    };
+    if let Some(target) = parse_rust_impl_header(code) {
+        Some((target, kind))
+    } else if kind == RustOwnerKind::TraitImpl {
+        let fallback_target = trait_for_tail
+            .and_then(extract_target_from_trait_for_tail)
+            .unwrap_or_default();
+        Some((fallback_target, kind))
+    } else {
+        None
+    }
+}
+
+/// Scans a Rust `impl` header line segment for a top-level trait-separating `for` keyword and top-level `where` clause.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 (`scan_rust_impl_segment`).
+/// Prevents `for<'a>` Higher-Ranked Trait Bounds and generic `Fn(...) -> R` bounds from misclassifying inherent `impl` blocks as trait implementations.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Tracks balanced `<...>`, `(...)`, and `[...]` delimiter depths while skipping `->` return-type arrows and `r#` raw identifiers.
+/// - Stops scanning immediately upon encountering a top-level `where` keyword or `{` block opener.
+/// - Ignores HRTB `for<'a>` tokens whose trailing `<` opens a lifetime parameter list.
+///
+/// ## 3. Preconditions
+/// - `segment: &str` is a comment-stripped Rust `impl` header line or continuation line.
+///
+/// ## 4. Postconditions
+/// - Returns `(Some(after_for_slice), saw_where)` if a trait-separating `for` keyword appears before `where`/`{`, or `(None, saw_where)`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) single-pass character scan where N is `segment.len()`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Uses `.get(..)` and saturating depth arithmetic exclusively.
+/// - State: Pure stack-local depth counters.
+/// - Action: Never panics on malformed or partial generic bounds.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-SCAN-RUST-IMPL-SEGMENT]
+fn scan_rust_impl_segment(segment: &str) -> (Option<&str>, bool) {
+    let mut angle_depth: usize = 0;
+    let mut paren_depth: usize = 0;
+    let mut bracket_depth: usize = 0;
+    let mut trait_for_tail: Option<&str> = None;
+    let mut saw_where = false;
+    let mut chars = segment.char_indices().peekable();
+
+    while let Some((idx, ch)) = chars.next() {
+        if ch.is_ascii_alphanumeric() || ch == '_' {
+            let mut end_idx = idx.saturating_add(ch.len_utf8());
+            while let Some(&(next_idx, next_ch)) = chars.peek() {
+                if next_ch.is_ascii_alphanumeric() || next_ch == '_' {
+                    end_idx = next_idx.saturating_add(next_ch.len_utf8());
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            let is_raw_ident =
+                idx > 0 && segment.as_bytes().get(idx.saturating_sub(1)) == Some(&b'#');
+            if !is_raw_ident && angle_depth == 0 && paren_depth == 0 && bracket_depth == 0 {
+                let word = segment.get(idx..end_idx).unwrap_or("");
+                if word == "where" {
+                    saw_where = true;
+                    break;
+                }
+                if word == "for" {
+                    let after_for = segment.get(end_idx..).unwrap_or("").trim_start();
+                    let is_hrtb = after_for.strip_prefix('<').is_some_and(|after_lt| {
+                        let t = after_lt.trim_start();
+                        t.starts_with('\'') || t.starts_with('>')
+                    });
+                    if !is_hrtb && trait_for_tail.is_none() {
+                        trait_for_tail = Some(after_for);
+                    }
+                }
+            }
+        } else {
+            match ch {
+                '-' if chars.peek().is_some_and(|&(_, next_ch)| next_ch == '>') => {
+                    chars.next();
+                }
+                '<' => angle_depth = angle_depth.saturating_add(1),
+                '>' => angle_depth = angle_depth.saturating_sub(1),
+                '(' => paren_depth = paren_depth.saturating_add(1),
+                ')' => paren_depth = paren_depth.saturating_sub(1),
+                '[' => bracket_depth = bracket_depth.saturating_add(1),
+                ']' => bracket_depth = bracket_depth.saturating_sub(1),
+                '{' if angle_depth == 0 && paren_depth == 0 && bracket_depth == 0 => break,
+                _ => {}
+            }
+        }
+    }
+
+    (trait_for_tail, saw_where)
+}
+
+/// Extracts the leading nominal target type identifier from the slice following `for` in `impl Trait for Type`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A method-to-classifier attribution (`extract_target_from_trait_for_tail`).
+/// Strips leading reference (`&`), lifetime (`'a`), and mutability (`mut`) modifiers before extracting the target identifier.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Truncates at `{` or ` where ` prior to stripping reference and lifetime prefixes.
+///
+/// ## 3. Preconditions
+/// - `after_for: &str` is the trimmed slice immediately following a trait-separating `for` keyword.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(type_ident)` for nominal target types, or `None` for tuple/slice/unit targets.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `after_for.len()`.
+/// - Space Complexity: O(I) where I is the extracted identifier byte length.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking `split_once`, `strip_prefix`, and `.get(..)` operations.
+/// - State: Pure stateless extractor.
+/// - Action: Returns `None` cleanly for non-nominal target types.
+/// - Resource: Single `String` allocation on nominal match.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-EXTRACT-TARGET-FROM-TRAIT-FOR-TAIL]
+fn extract_target_from_trait_for_tail(after_for: &str) -> Option<String> {
+    let before_brace = after_for
+        .split_once('{')
+        .map(|(b, _)| b.trim())
+        .unwrap_or(after_for);
+    let before_where = before_brace
+        .split_once(" where ")
+        .map(|(b, _)| b.trim())
+        .unwrap_or(before_brace)
+        .trim_end_matches(" where")
+        .trim();
+    let mut clean = before_where.trim_start_matches('&').trim_start();
+    if let Some(after_tick) = clean.strip_prefix('\'') {
+        let lt_len = after_tick
+            .bytes()
+            .take_while(|b| b.is_ascii_alphanumeric() || *b == b'_')
+            .count();
+        clean = after_tick.get(lt_len..).unwrap_or("").trim_start();
+    }
+    let clean = clean.strip_prefix("mut ").unwrap_or(clean).trim();
+    extract_leading_ast_ident(clean)
+}
+
+/// Advances a multi-line `PendingRustImpl` state across a continuation line and pushes onto `impl_owner_stack` on `{`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 (`advance_pending_rust_impl`).
+/// Updates multi-line `impl` headers deterministically across `for Type`, `where`, and `{` lines.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Inspects `scan_rust_impl_segment(code)` only while `!pending.in_where_clause`, preventing HRTB `for<'a>` predicates
+///   after `where` from mutating `pending.kind` or `pending.target`.
+///
+/// ## 3. Preconditions
+/// - `code: &str` is a non-empty comment-stripped continuation line at `brace_depth == 0 && paren_depth == 0`.
+/// - `pending_impl: &mut Option<PendingRustImpl>` holds the active pending multi-line `impl` state.
+///
+/// ## 4. Postconditions
+/// - Transitions `pending_impl` into `impl_owner_stack` when `code` opens `{`, clears `pending_impl` on `;`/`}`, or updates `pending_impl` in place.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `code.len()`.
+/// - Space Complexity: O(1) auxiliary memory beyond target identifier updates.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Operates safely if `pending_impl` is `None`.
+/// - State: Atomic ownership transfer via `.take()` upon `{`.
+/// - Action: Never panics.
+/// - Resource: Zero extra allocations unless `target` is updated after `for`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-ADVANCE-PENDING-RUST-IMPL]
+fn advance_pending_rust_impl(
+    code: &str,
+    brace_depth: usize,
+    pending_impl: &mut Option<PendingRustImpl>,
+    impl_owner_stack: &mut Vec<(usize, String, RustOwnerKind)>,
+) {
+    if let Some(ref mut pending) = pending_impl {
+        if !pending.in_where_clause {
+            let (trait_for_tail, saw_where) = scan_rust_impl_segment(code);
+            if let Some(after_for) = trait_for_tail {
+                pending.kind = RustOwnerKind::TraitImpl;
+                if let Some(updated_target) = extract_target_from_trait_for_tail(after_for) {
+                    pending.target = updated_target;
+                } else {
+                    pending.target.clear();
+                }
+            }
+            if saw_where {
+                pending.in_where_clause = true;
+            }
+        }
+    }
+
+    if code.contains('{') && !code.contains('}') {
+        if let Some(pending) = pending_impl.take() {
+            impl_owner_stack.push((brace_depth, pending.target, pending.kind));
+        }
+    } else if code.contains(';') || code.contains('}') {
+        *pending_impl = None;
+    }
+}
+
+/// Strips any leading inline `#[...]` attributes on the same line as a Rust item declaration.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A Rust visibility inspection (`strip_leading_inline_rust_attrs`).
+/// Ensures inline attributes such as `#[inline] pub fn ...` do not obscure the leading `pub ` visibility token.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Advances past balanced `[` and `]` brackets for each leading `#[...]` attribute prefix.
+///
+/// ## 3. Preconditions
+/// - `code: &str` is a comment-stripped Rust source line.
+///
+/// ## 4. Postconditions
+/// - Returns the borrowed trailing `&str` slice following any balanced inline `#[...]` prefixes.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `code.len()`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Halts safely and returns the unconsumed slice if an inline attribute bracket is unclosed on the line.
+/// - State: Pure borrowed slice projection.
+/// - Action: Uses `.get(..)` and saturating depth counters.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-STRIP-LEADING-INLINE-RUST-ATTRS]
+fn strip_leading_inline_rust_attrs(code: &str) -> &str {
+    let mut rest = code.trim_start();
+    while let Some(after_hash) = rest.strip_prefix("#[") {
+        let mut depth: usize = 1;
+        let mut end_offset: Option<usize> = None;
+        for (idx, b) in after_hash.bytes().enumerate() {
+            if b == b'[' {
+                depth = depth.saturating_add(1);
+            } else if b == b']' {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    end_offset = Some(idx.saturating_add(1));
+                    break;
+                }
+            }
+        }
+        if let Some(off) = end_offset {
+            rest = after_hash.get(off..).unwrap_or("").trim_start();
+        } else {
+            break;
+        }
+    }
+    rest
+}
+
+/// Strips restricted Rust visibility qualifiers (`pub(crate)`, `pub(super)`, `pub(self)`, `pub(in ...)`) from `code`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 (`strip_restricted_pub_visibility`).
+/// Allows restricted-visibility items such as `pub(in crate::...) fn` or `pub (crate) fn` to be classified as Tier B/C items.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Matches `pub` followed by optional whitespace and a balanced `(...)` visibility scope specifier.
+///
+/// ## 3. Preconditions
+/// - `code: &str` is a comment-stripped, attribute-stripped Rust declaration line.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(trailing_decl)` after the closing `)` of `pub(...)`, or `None` if `code` has no restricted `pub(...)` prefix.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `code.len()`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Returns `None` if parentheses are unbalanced on the line.
+/// - State: Pure borrowed slice projection.
+/// - Action: Uses `.strip_prefix` and `.get(..)` exclusively.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-STRIP-RESTRICTED-PUB-VISIBILITY]
+fn strip_restricted_pub_visibility(code: &str) -> Option<&str> {
+    let after_pub = code.strip_prefix("pub")?.trim_start();
+    let after_open = after_pub.strip_prefix('(')?;
+    let mut depth: usize = 1;
+    for (idx, b) in after_open.bytes().enumerate() {
+        if b == b'(' {
+            depth = depth.saturating_add(1);
+        } else if b == b')' {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                let tail = after_open
+                    .get(idx.saturating_add(1)..)
+                    .unwrap_or("")
+                    .trim_start();
+                return if tail.is_empty() { None } else { Some(tail) };
+            }
+        }
+    }
+    None
+}
+
+/// Classifies a Rust declaration line and computes its Tier A (`true`) versus Tier B/C (`false`) documentation tier.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and DEAP Rust Coding Standard v2.0 Section 4.1 (`classify_rust_item_with_tier_ast`).
+/// Assigns `is_tier_a = true` strictly to exact-`pub ` items at module scope or inside inherent `impl Type` blocks,
+/// and assigns `is_tier_a = false` to private items, `pub(crate)`/`pub(super)`/`pub(in ...)` items, and `impl Trait for Type` methods.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `has_exact_pub` holds iff the attribute-stripped declaration begins with `pub` + whitespace and the next non-whitespace byte is not `'('`.
+/// - `is_tier_a == (has_exact_pub && matches!(enclosing_owner_kind, None | Some(RustOwnerKind::InherentImpl)))`.
+///
+/// ## 3. Preconditions
+/// - `code: &str` is a comment-stripped Rust source line at parenthesis depth zero.
+/// - `enclosing_owner_kind: Option<RustOwnerKind>` reflects the top of `impl_owner_stack`.
+///
+/// ## 4. Postconditions
+/// - Returns `Some((kind, item_name, is_tier_a))` for recognized Rust AST items, or `None` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `code.len()`.
+/// - Space Complexity: O(I) where I is `item_name.len()`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Delegates item kind/name extraction to `classify_rust_item_line_ast` with fallback over `strip_restricted_pub_visibility`.
+/// - State: Pure stateless classifier.
+/// - Action: Zero panics or direct slice indexing.
+/// - Resource: Single `String` allocation for `item_name` on match.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-CLASSIFY-RUST-ITEM-WITH-TIER]
+fn classify_rust_item_with_tier_ast(
+    code: &str,
+    enclosing_owner_kind: Option<RustOwnerKind>,
+) -> Option<(SourceItemKind, String, bool)> {
+    let clean = strip_leading_inline_rust_attrs(code);
+    let has_exact_pub = match clean.strip_prefix("pub") {
+        Some(after_pub) if after_pub.starts_with(' ') || after_pub.starts_with('\t') => {
+            !after_pub.trim_start().starts_with('(')
+        }
+        _ => false,
+    };
+
+    let (kind, item_name) = classify_rust_item_line_ast(clean)
+        .or_else(|| strip_restricted_pub_visibility(clean).and_then(classify_rust_item_line_ast))?;
+
+    let is_tier_a = has_exact_pub
+        && matches!(
+            enclosing_owner_kind,
+            None | Some(RustOwnerKind::InherentImpl)
+        );
+    Some((kind, item_name, is_tier_a))
 }
 
 /// Checks whether a joined docblock contains `Realises: [<non-empty>]`.
@@ -3393,7 +4239,7 @@ fn extract_rust_impl_target_name(code: &str) -> Option<String> {
 /// Ensures vacuous `Realises: []` tags are recognized as incomplete and re-synthesized.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Returns `true` iff `"Realises: ["` is followed by `']'` with non-empty trimmed interior text.
+/// - Returns `true` iff `"Realises: ["` is followed on the same line by `']'` with non-empty trimmed interior text.
 ///
 /// ## 3. Preconditions
 /// - `doc_block: &str` is a newline-joined docstring block.
@@ -3416,7 +4262,7 @@ fn extract_rust_impl_target_name(code: &str) -> Option<String> {
 fn docblock_has_non_empty_realises(doc_block: &str) -> bool {
     if let Some((_, after_prefix)) = doc_block.split_once("Realises: [") {
         if let Some((inside, _)) = after_prefix.split_once(']') {
-            return !inside.trim().is_empty();
+            return !inside.contains('\n') && !inside.trim().is_empty();
         }
     }
     false
@@ -3426,7 +4272,7 @@ fn docblock_has_non_empty_realises(doc_block: &str) -> bool {
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and Check 36 anti-placeholder governance (`any_placeholder_in_doc`).
-/// Ensures `/// Member documentation.` stubs are detected and replaced during docstring injection.
+/// Ensures `/// Member documentation.` stubs and unfinished marker tokens are detected and replaced during docstring injection.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Evaluates `has_placeholder_doc_line(line)` over every element of `doc_lines`.
@@ -3453,47 +4299,110 @@ fn any_placeholder_in_doc(doc_lines: &[String]) -> bool {
     doc_lines.iter().any(|l| has_placeholder_doc_line(l))
 }
 
-/// Checks whether a single docstring line contains forbidden placeholder text.
+/// Replaces balanced inline backtick code spans and double-quoted literals on a single line with spaces.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 36 placeholder detection parity (`has_placeholder_doc_line`).
-/// Matches the exact stub patterns rejected by `contains_placeholder_docstring` in `docstring_gate.rs`.
+/// Conforms to DO-178C Level A lexical placeholder precision (`strip_balanced_code_and_quote_spans`).
+/// Prevents documented Rust macro references in backticks or quoted diagnostic examples from false-positiving as unfinished doc placeholders.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Evaluates lowercased whitespace tokens directly without runtime needle concatenation.
+/// - Elides a `` `...` `` or `"..."` span only when a matching closing delimiter exists on the same line; unclosed delimiters remain visible to placeholder scanning.
 ///
 /// ## 3. Preconditions
-/// - `doc_line: &str` is a trimmed `///` or `//!` comment line.
+/// - `raw: &str` is a single doc-comment line stripped of its leading `///` or `//!` prefix.
 ///
 /// ## 4. Postconditions
-/// - Returns `true` iff `doc_line` matches a banned placeholder phrase.
+/// - Returns a `String` containing all unquoted/unbackticked prose tokens separated by whitespace.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `raw.len()`.
+/// - Space Complexity: O(N) for the filtered single-line buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Uses `char_indices`, `.get(..)`, and `saturating_add` without direct byte indexing.
+/// - State: Pure local scan over `raw`.
+/// - Action: Never panics on multi-byte UTF-8 or unclosed delimiters.
+/// - Resource: Single `String` allocation bounded by `raw.len()`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-STRIP-BALANCED-CODE-AND-QUOTE-SPANS]
+fn strip_balanced_code_and_quote_spans(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut skip_until: usize = 0;
+
+    for (idx, ch) in raw.char_indices() {
+        if idx < skip_until {
+            continue;
+        }
+        if ch == '`' || ch == '"' {
+            let after_open = raw.get(idx.saturating_add(1)..).unwrap_or("");
+            if let Some(rel_close) = after_open.find(ch) {
+                skip_until = idx
+                    .saturating_add(1)
+                    .saturating_add(rel_close)
+                    .saturating_add(1);
+                out.push(' ');
+                continue;
+            }
+        }
+        out.push(ch);
+    }
+
+    out
+}
+
+/// Checks whether a single docstring line contains forbidden placeholder phrases or unfinished marker tokens.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DEAP Rust Coding Standard v2.0 Section 4.1 (`has_placeholder_doc_line`).
+/// Rejects both legacy stub phrases and unfinished four-letter/three-letter placeholder markers across Tier A and Tier B/C docblocks.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Evaluates lowercased leading phrase tokens without runtime needle concatenation.
+/// - Scans standalone alphanumeric/underscore/`!` tokens outside balanced code/quote spans case-insensitively so macro tokens ending in `!` are never misclassified.
+///
+/// ## 3. Preconditions
+/// - `doc_line: &str` is a `///` or `//!` comment line (or stripped summary string).
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff `doc_line` contains a banned placeholder phrase or unfinished marker token.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N) where N is `doc_line.len()`.
-/// - Space Complexity: O(N) for ASCII-lowercased string comparison.
+/// - Space Complexity: O(N) for single-line comparison buffers.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Safe prefix stripping and lowercase conversion.
+/// - Interface: Safe prefix stripping and case-insensitive token comparison.
 /// - State: Pure function.
 /// - Action: Never panics.
-/// - Resource: Single lowercased string buffer with zero-allocation token iterator.
+/// - Resource: Bounded by single-line byte length.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-HAS-PLACEHOLDER-DOC-LINE]
 fn has_placeholder_doc_line(doc_line: &str) -> bool {
-    let body = doc_line
-        .trim_start_matches("///")
-        .trim_start_matches("//!")
-        .trim()
-        .to_ascii_lowercase();
+    let raw = strip_outer_doc_marker(doc_line);
+    let body = raw.to_ascii_lowercase();
     let mut tokens = body.split_whitespace();
-    match (tokens.next(), tokens.next(), tokens.next()) {
+    let matches_stub_phrase = match (tokens.next(), tokens.next(), tokens.next()) {
         (Some("member"), Some("documentation"), None) => true,
         (Some("member"), Some(second), _) => second.starts_with("documentation."),
         (Some("todo:"), Some(second), _) => second.starts_with("document"),
         (Some("placeholder"), Some(second), _) => second.starts_with("documentation"),
         _ => false,
+    };
+    if matches_stub_phrase {
+        return true;
     }
+
+    let unquoted = strip_balanced_code_and_quote_spans(raw);
+    unquoted
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '!')
+        .any(|tok| {
+            tok.eq_ignore_ascii_case("todo")
+                || tok.eq_ignore_ascii_case("tbd")
+                || tok.eq_ignore_ascii_case("fixme")
+                || tok.eq_ignore_ascii_case("xxx")
+        })
 }
 
 /// Extracts the leading whitespace slice from `raw_line`.
@@ -3582,7 +4491,9 @@ fn derive_module_req_tag(file_rel: &str) -> String {
         })
         .unwrap_or(0);
 
-    let scoped_slice = raw_components.get(anchor_start..).unwrap_or(&raw_components);
+    let scoped_slice = raw_components
+        .get(anchor_start..)
+        .unwrap_or(&raw_components);
     let mut parts = Vec::new();
     for comp in scoped_slice {
         let stem = comp
@@ -3697,7 +4608,8 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-DEFECT-09-UNMATCHED-SCHEMA-FALLBACK-TEST]
     #[test]
-    fn test_defect_09_unmatched_items_do_not_inherit_first_package_req_or_constraint() -> Result<(), String> {
+    fn test_defect_09_unmatched_items_do_not_inherit_first_package_req_or_constraint(
+    ) -> Result<(), String> {
         let limit_constraint = ConstraintDef {
             name: "ValueLimit".to_string(),
             doc: None,
@@ -4016,7 +4928,8 @@ mod tests {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-DEFECT-09-MULTILINE-STRING-SCANNER-TEST]
     #[test]
-    fn test_defect_09_multihash_raw_and_multiline_standard_strings_do_not_confuse_scanner() -> Result<(), String> {
+    fn test_defect_09_multihash_raw_and_multiline_standard_strings_do_not_confuse_scanner(
+    ) -> Result<(), String> {
         let mut src = String::new();
         src.push_str("pub fn first_real_fn() -> &'static str {\n");
         src.push_str("    let raw_multi = r##\"\n");
@@ -4050,7 +4963,9 @@ mod tests {
             enriched
         );
         assert!(
-            enriched.contains("let std_multi = \"line one\nfn fake_item() {}\nstruct Fake {}\nend line\";"),
+            enriched.contains(
+                "let std_multi = \"line one\nfn fake_item() {}\nstruct Fake {}\nend line\";"
+            ),
             "Multiline standard string literal was corrupted by docstring injector:\n{}",
             enriched
         );
@@ -4445,7 +5360,10 @@ mod tests {
         let (enriched, count) =
             inject_dart_file_docstrings(dart_src, "lib/dispatch_coordinator.dart", None, false)
                 .map_err(|e| e.into_message())?;
-        assert!(count >= 3, "Expected at least 3 enriched Dart items, got {count}");
+        assert!(
+            count >= 3,
+            "Expected at least 3 enriched Dart items, got {count}"
+        );
         let doc_only: String = enriched
             .lines()
             .filter(|l| l.trim_start().starts_with("///"))
@@ -4493,12 +5411,21 @@ mod tests {
     #[test]
     fn test_issue_511_derive_module_req_tag_structural_anchor() -> Result<(), String> {
         let cases = [
-            ("workstation_prefix/outer_dir/app_flutter/lib/main.dart", "MAIN"),
+            (
+                "workstation_prefix/outer_dir/app_flutter/lib/main.dart",
+                "MAIN",
+            ),
             ("outer_mount/workspace_dir/src/engine.rs", "ENGINE"),
             ("outer_mount/workspace_dir/src/lib.rs", "MODULE"),
-            ("outer_mount/workspace_dir/tests/smoke_test.rs", "SMOKE-TEST"),
+            (
+                "outer_mount/workspace_dir/tests/smoke_test.rs",
+                "SMOKE-TEST",
+            ),
             ("outer_mount/workspace_dir/bin/runner.rs", "RUNNER"),
-            ("outer_mount/workspace_dir/crates/compile-sysml/src/docstring.rs", "COMPILE-SYSML-DOCSTRING"),
+            (
+                "outer_mount/workspace_dir/crates/compile-sysml/src/docstring.rs",
+                "COMPILE-SYSML-DOCSTRING",
+            ),
         ];
         for (input, expected) in cases {
             let actual = derive_module_req_tag(input);
@@ -4667,7 +5594,9 @@ mod tests {
             .split_once("fn test_issue_513_zero_concat_evasion_and_manifest_anchored_self_reads")
             .ok_or_else(|| "missing test_issue_513 boundary".to_string())?;
         if before_self.contains(".concat()") {
-            return Err("src/docstring.rs must not use runtime .concat() scanner-evasion".to_string());
+            return Err(
+                "src/docstring.rs must not use runtime .concat() scanner-evasion".to_string(),
+            );
         }
         if before_self.contains("Path::new(\"src/docstring.rs\")") {
             return Err(
@@ -4686,7 +5615,9 @@ mod tests {
         ];
         for line in positive_cases {
             if !has_placeholder_doc_line(line) {
-                return Err(format!("Expected has_placeholder_doc_line({line:?}) to be true"));
+                return Err(format!(
+                    "Expected has_placeholder_doc_line({line:?}) to be true"
+                ));
             }
         }
 
@@ -4696,7 +5627,9 @@ mod tests {
         ];
         for line in negative_cases {
             if has_placeholder_doc_line(line) {
-                return Err(format!("Expected has_placeholder_doc_line({line:?}) to be false"));
+                return Err(format!(
+                    "Expected has_placeholder_doc_line({line:?}) to be false"
+                ));
             }
         }
         Ok(())
@@ -4764,14 +5697,10 @@ mod tests {
         assert!(matches!(rust_parse_err, DocstringError::Parse(_)));
         assert_eq!(rust_parse_err.exit_code(), DocstringExitCode::Error);
 
-        let dart_parse_err = inject_dart_file_docstrings(
-            "class Broken {\n",
-            "lib/broken.dart",
-            None,
-            false,
-        )
-        .err()
-        .ok_or("Expected unbalanced Dart syntax to return Err(DocstringError::Parse)")?;
+        let dart_parse_err =
+            inject_dart_file_docstrings("class Broken {\n", "lib/broken.dart", None, false)
+                .err()
+                .ok_or("Expected unbalanced Dart syntax to return Err(DocstringError::Parse)")?;
         assert!(matches!(dart_parse_err, DocstringError::Parse(_)));
         assert_eq!(dart_parse_err.exit_code(), DocstringExitCode::Error);
 
@@ -4815,7 +5744,9 @@ mod tests {
             false,
         )
         .err()
-        .ok_or("Expected unforced Realises conflict to return Err(DocstringError::UnforcedConflict)")?;
+        .ok_or(
+            "Expected unforced Realises conflict to return Err(DocstringError::UnforcedConflict)",
+        )?;
         assert!(matches!(
             rust_conflict_err,
             DocstringError::UnforcedConflict(_)
@@ -4885,7 +5816,9 @@ mod tests {
         fn_lines.push("    late_bound_limit: usize,".to_string());
         fn_lines.push(") -> Result<usize, String> {".to_string());
         for idx in 1..=40 {
-            fn_lines.push(format!("    let step_{idx} = param_1.saturating_add({idx});"));
+            fn_lines.push(format!(
+                "    let step_{idx} = param_1.saturating_add({idx});"
+            ));
         }
         fn_lines.push("    assert!(late_bound_limit > 0, \"limit must be positive\");".to_string());
         fn_lines.push("    Ok(step_40 + late_bound_limit)".to_string());
@@ -5087,6 +6020,320 @@ mod tests {
         assert!(
             !self_src.contains(legacy_h1_summary),
             "crates/compile-sysml/src/docstring.rs must not contain legacy H1 Summary headers"
+        );
+
+        Ok(())
+    }
+
+    /// Verifies Tier A (7-section and 4-Block Contract) versus Tier B/C (`fn`, `pub(crate) fn`, and `impl Trait for Type`) compliance in `inject_rust_file_docstrings`.
+    /// Realises: [REQ-FEAT-42-TIERED-DOCSTRING-COMPLIANCE-TEST]
+    #[test]
+    fn test_tier_a_and_tier_bc_docstring_compliance() -> Result<(), String> {
+        let compliant_src = concat!(
+            "//! Module header using concise 4-Block Contract.\n",
+            "//!\n",
+            "//! Safety & Traceability: Realises: [REQ-TIER-MOD-01]\n",
+            "//! Contract: Preserves deterministic buffer invariants across all public entrypoints.\n",
+            "//! Bounds & Faults: O(N) time and space; returns typed errors without panicking.\n\n",
+            "/// Public buffer record documented with a 4-Block Contract.\n",
+            "///\n",
+            "/// Safety & Traceability: Realises: [REQ-TIER-A-STRUCT]\n",
+            "/// Contract: Holds bounded slot count `slots` initialized deterministically.\n",
+            "/// Bounds & Faults: O(1) stack footprint; zero fallible operations.\n",
+            "pub struct RecordBuffer {\n",
+            "    pub slots: usize,\n",
+            "}\n\n",
+            "/// Public status enumeration documented with full 7-section Rustdoc.\n",
+            "/// ## 1. Safety Intent & Regulatory Scope\n",
+            "/// Conforms to deterministic status classification for `BufferStatus`.\n",
+            "/// ## 2. Invariants & Mathematical Properties\n",
+            "/// Closed two-variant discriminant set.\n",
+            "/// ## 3. Preconditions\n",
+            "/// Constructed by buffer operations.\n",
+            "/// ## 4. Postconditions\n",
+            "/// Encodes `Ready` or `Empty`.\n",
+            "/// ## 5. Algorithmic Complexity Bounds\n",
+            "/// Time: O(1), Space: O(1).\n",
+            "/// ## 6. Failure Modes & Fault Tolerance\n",
+            "/// Exhaustive match semantics.\n",
+            "/// ## 7. Realization & Traceability\n",
+            "/// Realises: [REQ-TIER-A-ENUM]\n",
+            "pub enum BufferStatus {\n",
+            "    Ready,\n",
+            "    Empty,\n",
+            "}\n\n",
+            "/// Public trait documented with a 4-Block Contract.\n",
+            "///\n",
+            "/// Safety & Traceability: Realises: [REQ-TIER-A-TRAIT]\n",
+            "/// Contract: Implementors return deterministic step counts.\n",
+            "/// Bounds & Faults: O(1) dispatch overhead; total interface.\n",
+            "pub trait StepProcessor {\n",
+            "    /// Computes the next deterministic step count.\n",
+            "    /// Realises: [REQ-TIER-BC-TRAIT-DECL]\n",
+            "    fn next_step(&self) -> usize;\n",
+            "}\n\n",
+            "impl RecordBuffer {\n",
+            "    /// Returns the configured slot count of this buffer.\n",
+            "    ///\n",
+            "    /// Safety & Traceability: Realises: [REQ-TIER-A-INHERENT-PUB]\n",
+            "    /// Contract: Pure projection of `self.slots`.\n",
+            "    /// Bounds & Faults: O(1) time and space; infallible.\n",
+            "    pub fn capacity(&self) -> usize {\n",
+            "        self.slots\n",
+            "    }\n\n",
+            "    /// Returns the internal crate-scoped slot index.\n",
+            "    /// Realises: [REQ-TIER-BC-INHERENT-CRATE]\n",
+            "    pub(crate) fn crate_slot(&self) -> usize {\n",
+            "        self.slots\n",
+            "    }\n\n",
+            "    /// Returns the private internal slot offset.\n",
+            "    /// Realises: [REQ-TIER-BC-INHERENT-PRIV]\n",
+            "    fn private_slot(&self) -> usize {\n",
+            "        self.slots\n",
+            "    }\n",
+            "}\n\n",
+            "impl std::fmt::Display for RecordBuffer {\n",
+            "    /// Formats the buffer slot count into the target formatter stream.\n",
+            "    /// Realises: [REQ-TIER-BC-DISPLAY]\n",
+            "    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {\n",
+            "        write!(f, \"{}\", self.slots)\n",
+            "    }\n",
+            "}\n\n",
+            "impl Default\n",
+            "    for RecordBuffer\n",
+            "{\n",
+            "    /// Constructs an empty zero-slot `RecordBuffer`.\n",
+            "    /// Realises: [REQ-TIER-BC-DEFAULT]\n",
+            "    fn default() -> Self {\n",
+            "        Self { slots: 0 }\n",
+            "    }\n",
+            "}\n\n",
+            "/// Evaluates a bounded limit using a concise 4-Block Contract.\n",
+            "///\n",
+            "/// Safety & Traceability: Realises: [REQ-TIER-A-PUB-FN]\n",
+            "/// Contract: Increments `limit` with saturating arithmetic.\n",
+            "/// Bounds & Faults: O(1) time and space; never overflows.\n",
+            "pub fn evaluate_public_bound(limit: usize) -> usize {\n",
+            "    limit.saturating_add(1)\n",
+            "}\n\n",
+            "/// Computes crate-internal step increment.\n",
+            "/// Realises: [REQ-TIER-BC-PUB-CRATE]\n",
+            "pub(crate) fn crate_helper(v: usize) -> usize {\n",
+            "    v.saturating_add(1)\n",
+            "}\n\n",
+            "/// Computes parent-module step increment.\n",
+            "/// Realises: [REQ-TIER-BC-PUB-SUPER]\n",
+            "pub(super) fn super_helper(v: usize) -> usize {\n",
+            "    v.saturating_add(2)\n",
+            "}\n\n",
+            "/// Computes path-restricted internal step increment.\n",
+            "/// Realises: [REQ-TIER-BC-PUB-IN]\n",
+            "pub(in crate) fn scoped_helper(v: usize) -> usize {\n",
+            "    v.saturating_add(3)\n",
+            "}\n\n",
+            "/// Computes private helper increment.\n",
+            "/// Realises: [REQ-TIER-BC-PRIV-FN]\n",
+            "fn local_helper(v: usize) -> usize {\n",
+            "    v.saturating_add(4)\n",
+            "}\n\n",
+            "/// Internal private cursor state.\n",
+            "/// Realises: [REQ-TIER-BC-PRIV-STRUCT]\n",
+            "struct InternalCursor {\n",
+            "    offset: usize,\n",
+            "}\n",
+        );
+
+        let (enriched, count) = inject_rust_file_docstrings(
+            compliant_src,
+            "crates/core_module/src/tiered_sample.rs",
+            None,
+            false,
+        )
+        .map_err(|e| e.into_message())?;
+        assert_eq!(
+            count, 0,
+            "Expected compliant Tier A (4-Block & 7-Section) and Tier B/C (2-line) items to remain untouched when force=false, got count={count} in:\n{enriched}"
+        );
+        assert_eq!(enriched, compliant_src);
+
+        // Negative probes:
+        // 1. Tier A `pub fn` with only a 2-line Tier B/C docstring must be rejected and enriched
+        let tier_a_short_src = concat!(
+            "/// Summary without 4-Block Contract or 7-Section headers.\n",
+            "/// Realises: [REQ-TIER-A-SHORT]\n",
+            "pub fn public_fn_missing_tier_a_blocks(v: usize) -> usize {\n",
+            "    v\n",
+            "}\n",
+        );
+        let (_, short_count) = inject_rust_file_docstrings(
+            tier_a_short_src,
+            "crates/core_module/src/short_tier_a.rs",
+            None,
+            false,
+        )
+        .map_err(|e| e.into_message())?;
+        assert_eq!(
+            short_count, 1,
+            "Tier A `pub fn` with only a 2-line Tier B/C docblock must be rejected and enriched"
+        );
+
+        // 2. Inherent `impl` with HRTB `for<'a>` in `where` clause must still treat `pub fn` as Tier A
+        let hrtb_inherent_src = concat!(
+            "/// Generic holder.\n",
+            "/// Safety & Traceability: Realises: [REQ-GENERIC-HOLDER]\n",
+            "/// Contract: Wraps value `v`.\n",
+            "/// Bounds & Faults: O(1) footprint.\n",
+            "pub struct GenericHolder<T> {\n",
+            "    pub v: T,\n",
+            "}\n\n",
+            "impl<T> GenericHolder<T>\n",
+            "where\n",
+            "    for<'a> &'a T: Copy,\n",
+            "{\n",
+            "    /// Two-line docblock is insufficient for inherent `pub fn`.\n",
+            "    /// Realises: [REQ-GENERIC-GET]\n",
+            "    pub fn borrow_ref(&self) -> &T {\n",
+            "        &self.v\n",
+            "    }\n",
+            "}\n",
+        );
+        let (_, hrtb_count) = inject_rust_file_docstrings(
+            hrtb_inherent_src,
+            "crates/core_module/src/hrtb_inherent.rs",
+            None,
+            false,
+        )
+        .map_err(|e| e.into_message())?;
+        assert_eq!(
+            hrtb_count, 1,
+            "Inherent `impl` with HRTB `for<'a>` in `where` clause must classify `pub fn` as Tier A (hrtb_count == 1)"
+        );
+
+        // 3. Tier B/C items missing summary, missing Realises, or containing TODO/TBD/FIXME/XXX placeholders must be rejected
+        let invalid_tier_bc_src = concat!(
+            "/// Realises: [REQ-NO-SUMMARY]\n",
+            "fn missing_summary_line(x: u32) -> u32 {\n",
+            "    x\n",
+            "}\n\n",
+            "/// Summary without a requirement tag.\n",
+            "fn missing_realises_tag(x: u32) -> u32 {\n",
+            "    x\n",
+            "}\n\n",
+            "/// Summary containing TODO marker.\n",
+            "/// Realises: [REQ-PLACEHOLDER-1]\n",
+            "fn has_todo_marker(x: u32) -> u32 {\n",
+            "    x\n",
+            "}\n\n",
+            "/// Summary containing TBD marker.\n",
+            "/// Realises: [REQ-PLACEHOLDER-2]\n",
+            "pub(crate) fn has_tbd_marker(x: u32) -> u32 {\n",
+            "    x\n",
+            "}\n\n",
+            "/// Summary containing FIXME marker.\n",
+            "/// Realises: [REQ-PLACEHOLDER-3]\n",
+            "fn has_fixme_marker(x: u32) -> u32 {\n",
+            "    x\n",
+            "}\n\n",
+            "/// Summary containing XXX marker.\n",
+            "/// Realises: [REQ-PLACEHOLDER-4]\n",
+            "fn has_xxx_marker(x: u32) -> u32 {\n",
+            "    x\n",
+            "}\n",
+        );
+        let (repaired_bc, bc_count) = inject_rust_file_docstrings(
+            invalid_tier_bc_src,
+            "crates/core_module/src/invalid_bc.rs",
+            None,
+            false,
+        )
+        .map_err(|e| e.into_message())?;
+        assert_eq!(
+            bc_count, 6,
+            "Expected all 6 invalid/placeholder Tier B/C functions to be rejected and enriched, got {bc_count}"
+        );
+        let (_, bc_second_count) = inject_rust_file_docstrings(
+            &repaired_bc,
+            "crates/core_module/src/invalid_bc.rs",
+            None,
+            false,
+        )
+        .map_err(|e| e.into_message())?;
+        assert_eq!(
+            bc_second_count, 0,
+            "Enriched output after replacing placeholder summaries must be idempotent on second pass"
+        );
+
+        // 4. Direct classifier & module-docblock (`//!`) Tier A assertions
+        assert_eq!(
+            classify_rust_item_with_tier_ast("pub fn exported_op()", None),
+            Some((SourceItemKind::Function, "exported_op".to_string(), true))
+        );
+        assert_eq!(
+            classify_rust_item_with_tier_ast(
+                "pub fn inherent_op(&self)",
+                Some(RustOwnerKind::InherentImpl)
+            ),
+            Some((SourceItemKind::Function, "inherent_op".to_string(), true))
+        );
+        assert_eq!(
+            classify_rust_item_with_tier_ast(
+                "pub fn trait_impl_op(&self)",
+                Some(RustOwnerKind::TraitImpl)
+            ),
+            Some((SourceItemKind::Function, "trait_impl_op".to_string(), false))
+        );
+        assert_eq!(
+            classify_rust_item_with_tier_ast("pub(crate) fn internal_op()", None),
+            Some((SourceItemKind::Function, "internal_op".to_string(), false))
+        );
+        assert_eq!(
+            classify_rust_item_with_tier_ast("pub (super) fn super_op()", None),
+            Some((SourceItemKind::Function, "super_op".to_string(), false))
+        );
+        assert_eq!(
+            classify_rust_item_with_tier_ast("pub(in crate::semantic) fn path_op()", None),
+            Some((SourceItemKind::Function, "path_op".to_string(), false))
+        );
+        assert_eq!(
+            classify_rust_item_with_tier_ast("fn private_op()", Some(RustOwnerKind::InherentImpl)),
+            Some((SourceItemKind::Function, "private_op".to_string(), false))
+        );
+
+        let valid_mod_doc = vec![
+            "//! Deterministic module contract.".to_string(),
+            "//! Safety & Traceability: Realises: [REQ-MOD-4BLOCK]".to_string(),
+            "//! Contract: Total deterministic projections.".to_string(),
+            "//! Bounds & Faults: O(N) time and space; zero panics.".to_string(),
+        ];
+        assert!(
+            is_compliant_docblock(&valid_mod_doc, false),
+            "Module-level `//!` docblock must always evaluate as Tier A and pass with a valid 4-Block Contract"
+        );
+        let short_mod_doc = vec![
+            "//! Module summary without 4-Block or 7-Section headers.".to_string(),
+            "//! Realises: [REQ-MOD-SHORT]".to_string(),
+        ];
+        assert!(
+            !is_compliant_docblock(&short_mod_doc, false),
+            "Module-level `//!` docblock with only 2-line Tier B/C headers must fail Tier A validation"
+        );
+        let missing_summary_4block = vec![
+            "/// Safety & Traceability: Realises: [REQ-NO-SUM]".to_string(),
+            "/// Contract: Preconditions hold.".to_string(),
+            "/// Bounds & Faults: O(1) time.".to_string(),
+        ];
+        assert!(
+            !is_compliant_docblock(&missing_summary_4block, true),
+            "Tier A 4-Block Contract missing its summary line must fail"
+        );
+        let missing_bounds_4block = vec![
+            "/// Summary present.".to_string(),
+            "/// Safety & Traceability: Realises: [REQ-NO-BOUNDS]".to_string(),
+            "/// Contract: Preconditions hold.".to_string(),
+        ];
+        assert!(
+            !is_compliant_docblock(&missing_bounds_4block, true),
+            "Tier A 4-Block Contract missing `Bounds & Faults` must fail"
         );
 
         Ok(())
