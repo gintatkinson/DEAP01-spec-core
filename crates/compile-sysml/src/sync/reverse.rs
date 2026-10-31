@@ -110,21 +110,21 @@ fn parse_frontmatter(content: &str) -> (BTreeMap<String, String>, &str) {
     let mut fm = BTreeMap::new();
     let trimmed = content.trim_start();
     if let Some(rest) = trimmed.strip_prefix("---") {
-        if let Some(end_idx) = rest.find("\n---") {
-            let fm_block = &rest[..end_idx];
-            let body = &rest[end_idx + 4..];
-
+        if let Some((fm_block, body)) = rest.split_once("\n---") {
             for line in fm_block.lines() {
                 let line = line.trim();
-                if let Some(colon_pos) = line.find(':') {
-                    let key = line[..colon_pos].trim().to_string();
-                    let mut val = line[colon_pos + 1..].trim();
-                    if (val.starts_with('"') && val.ends_with('"'))
-                        || (val.starts_with('\'') && val.ends_with('\''))
-                    {
-                        val = &val[1..val.len() - 1];
-                    }
-                    fm.insert(key, val.to_string());
+                if let Some((raw_key, raw_val)) = line.split_once(':') {
+                    let key = raw_key.trim().to_string();
+                    let val = raw_val.trim();
+                    let unquoted = val
+                        .strip_prefix('"')
+                        .and_then(|inner| inner.strip_suffix('"'))
+                        .or_else(|| {
+                            val.strip_prefix('\'')
+                                .and_then(|inner| inner.strip_suffix('\''))
+                        })
+                        .unwrap_or(val);
+                    fm.insert(key, unquoted.to_string());
                 }
             }
             return (fm, body);
@@ -197,7 +197,12 @@ fn parse_frontmatter(content: &str) -> (BTreeMap<String, String>, &str) {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-SYNC-REVERSE/PASCAL-CASE-IDENTIFIER]
 fn to_pascal_case(text: &str) -> String {
-    let has_leading_digit = text.trim_start_matches(|c: char| !c.is_alphanumeric()).chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false);
+    let has_leading_digit = text
+        .trim_start_matches(|c: char| !c.is_alphanumeric())
+        .chars()
+        .next()
+        .map(|c| c.is_ascii_digit())
+        .unwrap_or(false);
     let words: Vec<&str> = text
         .split(|c: char| !c.is_alphanumeric())
         .filter(|w| !w.is_empty())
@@ -212,7 +217,13 @@ fn to_pascal_case(text: &str) -> String {
             }
         })
         .collect();
-    if has_leading_digit || pascal.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+    if has_leading_digit
+        || pascal
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_digit())
+            .unwrap_or(false)
+    {
         format!("_{}", pascal)
     } else {
         pascal
@@ -289,24 +300,23 @@ pub fn reverse_sync_specs_to_sysml_with_dry_run(
     dry_run: bool,
 ) -> Result<(PackageDef, SchemaDigest), String> {
     if !opts.docs_dir.exists() {
-        return Err(format!("Docs directory does not exist: {}", opts.docs_dir.display()));
+        return Err(format!(
+            "Docs directory does not exist: {}",
+            opts.docs_dir.display()
+        ));
     }
 
-    if !opts.allow_overwrite
-        && opts.schema_path.as_ref() == Some(&opts.output_path)
-    {
+    if !opts.allow_overwrite && opts.schema_path.as_ref() == Some(&opts.output_path) {
         return Err(format!(
             "In-place overwrite of base input schema '{}' is prohibited when allow_overwrite=false.",
             opts.output_path.display()
         ));
     }
 
-    let mut pkg = base_pkg.cloned().unwrap_or_else(|| {
-        PackageDef {
-            name: "System_SSOT".to_string(),
-            doc: Some("Single Source of Truth for System Architecture and Safety Model".to_string()),
-            ..Default::default()
-        }
+    let mut pkg = base_pkg.cloned().unwrap_or_else(|| PackageDef {
+        name: "System_SSOT".to_string(),
+        doc: Some("Single Source of Truth for System Architecture and Safety Model".to_string()),
+        ..Default::default()
     });
 
     let mut extracted_capabilities = Vec::new();
@@ -346,12 +356,19 @@ pub fn reverse_sync_specs_to_sysml_with_dry_run(
             match doc_type {
                 "epic" if rel_subdir == "epics" => {
                     let title = fm.get("title").cloned().unwrap_or_else(|| {
-                        path.file_stem().unwrap_or_default().to_string_lossy().to_string()
+                        path.file_stem()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string()
                     });
                     let subsys = fm.get("subsystem").cloned().unwrap_or_default();
                     let name = to_pascal_case(&title);
                     extracted_capabilities.push(CapabilityDef {
-                        name: if name.is_empty() { "OperationalCapability".to_string() } else { name },
+                        name: if name.is_empty() {
+                            "OperationalCapability".to_string()
+                        } else {
+                            name
+                        },
                         doc: Some(format!("Capability extracted from {}", path.display())),
                         subsystem: Some(subsys),
                         description: Some(title),
@@ -365,7 +382,8 @@ pub fn reverse_sync_specs_to_sysml_with_dry_run(
                         .map(|s| {
                             // If already a valid KerML identifier, preserve it directly
                             if !s.is_empty()
-                                && (s.starts_with('_') || s.chars().next().is_some_and(|c| c.is_alphabetic()))
+                                && (s.starts_with('_')
+                                    || s.chars().next().is_some_and(|c| c.is_alphabetic()))
                                 && s.chars().all(|c| c.is_alphanumeric() || c == '_')
                             {
                                 s.clone()
@@ -378,12 +396,13 @@ pub fn reverse_sync_specs_to_sysml_with_dry_run(
                         });
 
                     if !part_name.is_empty() {
-                        let entry = extracted_parts.entry(part_name.clone()).or_insert_with(|| {
-                            PartDef {
-                                name: part_name.clone(),
-                                ..Default::default()
-                            }
-                        });
+                        let entry =
+                            extracted_parts
+                                .entry(part_name.clone())
+                                .or_insert_with(|| PartDef {
+                                    name: part_name.clone(),
+                                    ..Default::default()
+                                });
 
                         // Extract operations/actions from markdown lists: - `+ActionName() : void`
                         let default_act = format!("execute_{}", part_name.to_lowercase());
@@ -392,22 +411,43 @@ pub fn reverse_sync_specs_to_sysml_with_dry_run(
                             if let Some(after_dash) = trimmed.strip_prefix('-') {
                                 let after_dash = after_dash.trim_start();
                                 if let Some(rest) = after_dash.strip_prefix("`+") {
-                                    if let Some(paren_open) = rest.find('(') {
-                                        let act_name = rest[..paren_open].trim();
-                                        if !act_name.is_empty() && act_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-                                            if let Some(paren_close) = rest[paren_open..].find(')') {
-                                                let after_paren = rest[paren_open + paren_close + 1..].trim_start();
-                                                if let Some(after_colon) = after_paren.strip_prefix(':') {
+                                    if let Some((raw_act_name, after_open)) = rest.split_once('(') {
+                                        let act_name = raw_act_name.trim();
+                                        if !act_name.is_empty()
+                                            && act_name
+                                                .chars()
+                                                .all(|c| c.is_ascii_alphanumeric() || c == '_')
+                                        {
+                                            if let Some((_params, raw_after_paren)) =
+                                                after_open.split_once(')')
+                                            {
+                                                let after_paren = raw_after_paren.trim_start();
+                                                if let Some(after_colon) =
+                                                    after_paren.strip_prefix(':')
+                                                {
                                                     let after_colon = after_colon.trim();
                                                     if after_colon.ends_with('`') {
-                                                        let ret_type = after_colon.trim_end_matches('`').trim();
-                                                        if !ret_type.is_empty() && ret_type.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                                                        let ret_type = after_colon
+                                                            .trim_end_matches('`')
+                                                            .trim();
+                                                        if !ret_type.is_empty()
+                                                            && ret_type.chars().all(|c| {
+                                                                c.is_ascii_alphanumeric()
+                                                                    || c == '_'
+                                                            })
+                                                        {
                                                             let act_name_str = act_name.to_string();
                                                             // Skip forward-sync synthetic placeholder actions (execute_<part_name>) to preserve SSOT parity
-                                                            if act_name_str.to_lowercase() == default_act.to_lowercase() {
+                                                            if act_name_str.to_lowercase()
+                                                                == default_act.to_lowercase()
+                                                            {
                                                                 continue;
                                                             }
-                                                            if !entry.actions.iter().any(|a| a.name == act_name_str) {
+                                                            if !entry
+                                                                .actions
+                                                                .iter()
+                                                                .any(|a| a.name == act_name_str)
+                                                            {
                                                                 entry.actions.push(ActionDef {
                                                                     name: act_name_str,
                                                                     ..Default::default()
@@ -436,7 +476,11 @@ pub fn reverse_sync_specs_to_sysml_with_dry_run(
                         .get("actors")
                         .or_else(|| fm.get("primary_actor"))
                         .map(|s| to_pascal_case(s))
-                        .or_else(|| pkg.use_case_defs.first().and_then(|u| u.actors.first().cloned()))
+                        .or_else(|| {
+                            pkg.use_case_defs
+                                .first()
+                                .and_then(|u| u.actors.first().cloned())
+                        })
                         .unwrap_or_else(|| "SystemActor".to_string());
                     let default_subject = fm
                         .get("subject")
@@ -467,7 +511,11 @@ pub fn reverse_sync_specs_to_sysml_with_dry_run(
                         .get("actors")
                         .or_else(|| fm.get("primary_actor"))
                         .map(|s| to_pascal_case(s))
-                        .or_else(|| pkg.use_case_defs.first().and_then(|u| u.actors.first().cloned()))
+                        .or_else(|| {
+                            pkg.use_case_defs
+                                .first()
+                                .and_then(|u| u.actors.first().cloned())
+                        })
                         .unwrap_or_else(|| "SystemActor".to_string());
                     let subject = fm
                         .get("subject")
@@ -510,10 +558,9 @@ pub fn reverse_sync_specs_to_sysml_with_dry_run(
                                 let raw_sc = sc_cell.trim_matches(|c: char| {
                                     c == '*' || c == '`' || c.is_whitespace()
                                 });
-                                if raw_sc
-                                    .strip_prefix("SC-")
-                                    .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
-                                {
+                                if raw_sc.strip_prefix("SC-").is_some_and(|digits| {
+                                    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+                                }) {
                                     let stmt = stmt_cell.trim();
                                     if !stmt.is_empty() {
                                         let sc_id = raw_sc.replace('-', "_");
@@ -585,9 +632,8 @@ pub fn reverse_sync_specs_to_sysml_with_dry_run(
     // schema_path reflects updated content.
     if !dry_run {
         if let Some(parent) = opts.output_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                format!("Failed to create directory '{}': {}", parent.display(), e)
-            })?;
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create directory '{}': {}", parent.display(), e))?;
         }
         write_atomic(&opts.output_path, &sysml_code).map_err(|e| e.to_string())?;
     }
@@ -675,7 +721,10 @@ part: CoreSubsystem
 # Content
 "#;
         let (fm, body) = parse_frontmatter(md);
-        assert_eq!(fm.get("title").map(|s| s.as_str()), Some("Feature 01: CoreSubsystem"));
+        assert_eq!(
+            fm.get("title").map(|s| s.as_str()),
+            Some("Feature 01: CoreSubsystem")
+        );
         assert_eq!(fm.get("type").map(|s| s.as_str()), Some("feature"));
         assert_eq!(fm.get("part").map(|s| s.as_str()), Some("CoreSubsystem"));
         assert!(body.contains("# Content"));
@@ -713,10 +762,8 @@ part: CoreSubsystem
     /// Realises: [REQ-SYSML-SYNC-REVERSE/SUBDIR-SCOPING] | SysML v2: VerificationCase(test_reverse_sync_ignores_docs_designs_type_tables)
     #[test]
     fn test_reverse_sync_ignores_docs_designs_type_tables() -> Result<(), String> {
-        let tmp_dir = std::env::temp_dir().join(format!(
-            "deap_issue_534_rev_sync_{}",
-            std::process::id()
-        ));
+        let tmp_dir =
+            std::env::temp_dir().join(format!("deap_issue_534_rev_sync_{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp_dir);
 
         let pipeline_dir = tmp_dir.join(".pipeline");
@@ -843,10 +890,8 @@ part: CoreSubsystem
     /// Realises: [REQ-SYSML-SYNC-REVERSE/BLUEPRINT-SC-EXTRACTION] | SysML v2: VerificationCase(test_reverse_sync_extracts_blueprint_sc_constraints)
     #[test]
     fn test_reverse_sync_extracts_blueprint_sc_constraints() -> Result<(), String> {
-        let tmp_dir = std::env::temp_dir().join(format!(
-            "deap_issue_535_rev_sync_{}",
-            std::process::id()
-        ));
+        let tmp_dir =
+            std::env::temp_dir().join(format!("deap_issue_535_rev_sync_{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp_dir);
 
         let pipeline_dir = tmp_dir.join(".pipeline");
@@ -919,7 +964,10 @@ part: CoreSubsystem
             emitted_sysml
         );
         assert_eq!(
-            pkg.constraint_defs.iter().filter(|c| c.name == "SC_01_SafetyConstraint").count(),
+            pkg.constraint_defs
+                .iter()
+                .filter(|c| c.name == "SC_01_SafetyConstraint")
+                .count(),
             1,
             "Expected exactly 1 SC_01_SafetyConstraint in PackageDef.constraint_defs"
         );
@@ -951,7 +999,8 @@ part: CoreSubsystem
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYNC-REVERSE-REVERSE-SYNC-SPECS-TO-SYSML] | SysML v2: VerificationCaseDef(test_arch_04_reverse_sync_with_dry_run_skips_writes)
     #[test]
-    fn test_arch_04_reverse_sync_with_dry_run_skips_writes() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_arch_04_reverse_sync_with_dry_run_skips_writes(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp_dir = std::env::temp_dir().join(format!(
             "deap_test_reverse_sync_dry_run_{}",
             std::process::id()
@@ -989,9 +1038,16 @@ part: CoreSubsystem
         assert!(!schema_path.exists(), "Dry-run must not write output_path");
         assert!(!digest_path.exists(), "Dry-run must not write digest_path");
 
-        let (_pkg_live, _) = reverse_sync_specs_to_sysml_with_dry_run(Some(&base_pkg), &opts, false)?;
-        assert!(schema_path.exists(), "Non-dry-run must atomically write output_path");
-        assert!(digest_path.exists(), "Non-dry-run must atomically write digest_path");
+        let (_pkg_live, _) =
+            reverse_sync_specs_to_sysml_with_dry_run(Some(&base_pkg), &opts, false)?;
+        assert!(
+            schema_path.exists(),
+            "Non-dry-run must atomically write output_path"
+        );
+        assert!(
+            digest_path.exists(),
+            "Non-dry-run must atomically write digest_path"
+        );
 
         let _ = fs::remove_dir_all(&tmp_dir);
         Ok(())
@@ -1077,8 +1133,11 @@ part: CoreSubsystem
         .map_err(|e| e.to_string())?;
 
         let schema_path = pipeline_dir.join("schema.sysml");
-        fs::write(&schema_path, "package TestSys {\n    part def CoreController {}\n}\n")
-            .map_err(|e| e.to_string())?;
+        fs::write(
+            &schema_path,
+            "package TestSys {\n    part def CoreController {}\n}\n",
+        )
+        .map_err(|e| e.to_string())?;
         let digest_path = pipeline_dir.join("schema_digest.json");
 
         let base_pkg = PackageDef {
@@ -1126,6 +1185,73 @@ part: CoreSubsystem
             sidecar_digest.file_manifest
         );
 
+        Ok(())
+    }
+
+    /// Verifies `parse_frontmatter` and `reverse_sync_specs_to_sysml_with_dry_run` handle malformed
+    /// single-character quote delimiters, multi-byte UTF-8 strings, and malformed operation bullets without panicking.
+    #[test]
+    fn test_parse_frontmatter_and_action_extraction_utf8_and_malformed_inputs() -> Result<(), String>
+    {
+        let malformed_md = "---\ntitle: \"\nsubtitle: '\nempty_dq: \"\"\nempty_sq: ''\nutf8_key: \"軌道制御: Δv ≤ 60 m/s\"\nno_colon_line\n---\nBody ΔΩ🛰\n";
+        let (fm, body) = parse_frontmatter(malformed_md);
+        assert_eq!(fm.get("title").map(String::as_str), Some("\""));
+        assert_eq!(fm.get("subtitle").map(String::as_str), Some("'"));
+        assert_eq!(fm.get("empty_dq").map(String::as_str), Some(""));
+        assert_eq!(fm.get("empty_sq").map(String::as_str), Some(""));
+        assert_eq!(
+            fm.get("utf8_key").map(String::as_str),
+            Some("軌道制御: Δv ≤ 60 m/s")
+        );
+        assert!(body.contains("Body ΔΩ🛰"));
+
+        let unclosed_md = "---\ntitle: \"unclosed\nBody without closing fence";
+        let (fm_unclosed, body_unclosed) = parse_frontmatter(unclosed_md);
+        assert!(fm_unclosed.is_empty());
+        assert_eq!(body_unclosed, unclosed_md);
+
+        let tmp_dir = std::env::temp_dir().join(format!(
+            "deap_test_rev_sync_utf8_checked_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&tmp_dir);
+        let features_dir = tmp_dir.join("docs").join("features");
+        fs::create_dir_all(&features_dir).map_err(|e| e.to_string())?;
+        fs::write(
+            features_dir.join("FEAT-01-Core.md"),
+            concat!(
+                "---\n",
+                "title: \"\n",
+                "type: feature\n",
+                "part: CoreEngine\n",
+                "---\n\n",
+                "- `+computeTrajectory(in Δv: Real, in 軌道: String) : ControlStatus`\n",
+                "- `+execute_coreengine() : void`\n",
+                "- `+)reversedParens( : void`\n",
+                "- `+unclosedParen(in x: Real : void`\n",
+                "- `+() : void`\n",
+                "- `+missingReturnType() : `\n"
+            ),
+        )
+        .map_err(|e| e.to_string())?;
+
+        let opts = ReverseSyncOptions {
+            docs_dir: tmp_dir.join("docs"),
+            schema_path: None,
+            output_path: tmp_dir.join("schema.sysml"),
+            digest_path: tmp_dir.join("schema-digest.json"),
+            allow_overwrite: true,
+        };
+        let (pkg, _) = reverse_sync_specs_to_sysml_with_dry_run(None, &opts, true)?;
+        let _ = fs::remove_dir_all(&tmp_dir);
+
+        let core_part = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "CoreEngine")
+            .ok_or_else(|| "Expected CoreEngine PartDef".to_string())?;
+        let action_names: Vec<&str> = core_part.actions.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(action_names, vec!["computeTrajectory"]);
         Ok(())
     }
 }
