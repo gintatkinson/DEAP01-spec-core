@@ -60,9 +60,7 @@ use walkdir::WalkDir;
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-38-PRESENTATION-ANTI-HARDCODING]
-pub fn check_38_presentation_anti_hardcoding_ast_gate(
-    repo_root: &Path,
-) -> Result<(), Vec<String>> {
+pub fn check_38_presentation_anti_hardcoding_ast_gate(repo_root: &Path) -> Result<(), Vec<String>> {
     let features_dir = repo_root.join("app_flutter").join("lib").join("features");
     if !features_dir.is_dir() {
         return Ok(());
@@ -109,7 +107,10 @@ pub fn check_38_presentation_anti_hardcoding_ast_gate(
 fn extract_entity_identifiers_from_topology_and_schema(repo_root: &Path) -> BTreeSet<String> {
     let mut entity_ids = BTreeSet::new();
 
-    let topology_path = repo_root.join("app_flutter").join("assets").join("topology_data.json");
+    let topology_path = repo_root
+        .join("app_flutter")
+        .join("assets")
+        .join("topology_data.json");
     if let Ok(content) = fs::read_to_string(&topology_path) {
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
             extract_strings_from_json_value(&val, &mut entity_ids);
@@ -126,9 +127,16 @@ fn extract_entity_identifiers_from_topology_and_schema(repo_root: &Path) -> BTre
             for line in content.lines() {
                 let trimmed = line.trim();
                 let decl_prefixes = [
-                    "part def ", "item def ", "port def ", "action def ",
-                    "calc def ", "attribute def ", "state def ", "part ",
-                    "item ", "port ",
+                    "part def ",
+                    "item def ",
+                    "port def ",
+                    "action def ",
+                    "calc def ",
+                    "attribute def ",
+                    "state def ",
+                    "part ",
+                    "item ",
+                    "port ",
                 ];
                 for prefix in &decl_prefixes {
                     if let Some(rest) = trimmed.strip_prefix(prefix) {
@@ -149,69 +157,56 @@ fn extract_entity_identifiers_from_topology_and_schema(repo_root: &Path) -> BTre
     entity_ids
 }
 
-/// Recursively harvests identifier string values from a JSON AST without regex.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A data traversal requirements for configuration and topology parsing.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Traverses objects and arrays recursively up to bounded recursion depth.
-///
-/// ## 3. Preconditions
-/// - `val` is a valid parsed JSON value reference; `entities` is an accumulator set.
-///
-/// ## 4. Postconditions
-/// - Appends all non-keyword string values associated with entity keys to `entities`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(J) where J is total JSON node count.
-/// - Space Complexity: O(D) where D is max object nesting depth.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-object/non-array JSON variants terminate recursion safely.
-///
-/// ## 7. Realization & Traceability
+/// Iteratively harvests identifier string values from a JSON AST using an explicit work-stack
+/// without regex or unbounded call-stack recursion.
 /// Realises: [REQ-CHECK-38-EXTRACT-JSON-VALUES]
 fn extract_strings_from_json_value(val: &serde_json::Value, entities: &mut BTreeSet<String>) {
-    match val {
-        serde_json::Value::Object(map) => {
-            for (k, v) in map {
-                let lower_k = k.to_lowercase();
-                if lower_k == "id"
-                    || lower_k == "name"
-                    || lower_k == "label"
-                    || lower_k == "callsign"
-                    || lower_k == "title"
-                    || lower_k == "parentid"
-                    || lower_k == "parent_id"
-                    || lower_k == "source"
-                    || lower_k == "target"
-                    || lower_k == "sourceid"
-                    || lower_k == "targetid"
-                {
-                    if let Some(s) = v.as_str() {
-                        insert_entity_and_stems(s, entities);
-                    }
-                } else if lower_k == "properties" {
-                    if let serde_json::Value::Object(prop_map) = v {
-                        for prop_val in prop_map.values() {
-                            if let Some(ps) = prop_val.as_str() {
-                                if ps.contains('-') || ps.contains('_') {
-                                    insert_entity_and_stems(ps, entities);
+    let mut stack: Vec<&serde_json::Value> = vec![val];
+    while let Some(current) = stack.pop() {
+        match current {
+            serde_json::Value::Object(map) => {
+                for (k, v) in map {
+                    let lower_k = k.to_lowercase();
+                    let is_entity_key = matches!(
+                        lower_k.as_str(),
+                        "id" | "name"
+                            | "label"
+                            | "callsign"
+                            | "title"
+                            | "parentid"
+                            | "parent_id"
+                            | "source"
+                            | "target"
+                            | "sourceid"
+                            | "targetid"
+                    );
+                    if is_entity_key {
+                        if let Some(s) = v.as_str() {
+                            insert_entity_and_stems(s, entities);
+                        }
+                    } else if lower_k == "properties" {
+                        if let serde_json::Value::Object(prop_map) = v {
+                            for prop_val in prop_map.values() {
+                                if let Some(ps) = prop_val.as_str() {
+                                    if ps.contains('-') || ps.contains('_') {
+                                        insert_entity_and_stems(ps, entities);
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                extract_strings_from_json_value(v, entities);
+                for child in map.values().rev() {
+                    stack.push(child);
+                }
             }
-        }
-        serde_json::Value::Array(arr) => {
-            for elem in arr {
-                extract_strings_from_json_value(elem, entities);
+            serde_json::Value::Array(arr) => {
+                for elem in arr.iter().rev() {
+                    stack.push(elem);
+                }
             }
+            _ => {}
         }
-        _ => {}
     }
 }
 
@@ -257,9 +252,7 @@ fn insert_entity_and_stems(raw: &str, entities: &mut BTreeSet<String>) {
     };
     if let Some((_, sub_stem)) = base.split_once('-') {
         let sub_clean = sub_stem.trim();
-        if sub_clean.contains('-')
-            && sub_clean.len() >= 4
-            && !is_generic_schema_keyword(sub_clean)
+        if sub_clean.contains('-') && sub_clean.len() >= 4 && !is_generic_schema_keyword(sub_clean)
         {
             entities.insert(sub_clean.to_string());
         }
@@ -582,8 +575,13 @@ fn is_hardcoded_telemetry_or_designator_literal(inner: &str) -> bool {
 
     // 2. Bracketed uppercase badge: [<UPPER/HYPHEN>]
     if trimmed.len() >= 4 && trimmed.starts_with('[') && trimmed.ends_with(']') {
-        let badge_body = trimmed.get(1..trimmed.len().saturating_sub(1)).unwrap_or("");
-        let upper_count = badge_body.chars().filter(|c| c.is_ascii_uppercase()).count();
+        let badge_body = trimmed
+            .get(1..trimmed.len().saturating_sub(1))
+            .unwrap_or("");
+        let upper_count = badge_body
+            .chars()
+            .filter(|c| c.is_ascii_uppercase())
+            .count();
         let all_badge_chars = badge_body
             .chars()
             .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '-' || c == '_');
@@ -597,7 +595,10 @@ fn is_hardcoded_telemetry_or_designator_literal(inner: &str) -> bool {
         let left_clean = left.trim_start_matches('(').trim();
         let right_clean = right.trim_end_matches(')').trim();
         if !left_clean.is_empty() && !right_clean.is_empty() {
-            let upper_count = left_clean.chars().filter(|c| c.is_ascii_uppercase()).count();
+            let upper_count = left_clean
+                .chars()
+                .filter(|c| c.is_ascii_uppercase())
+                .count();
             let has_lower = left_clean.chars().any(|c| c.is_ascii_lowercase());
             if upper_count >= 2 && !has_lower {
                 return true;
@@ -652,10 +653,7 @@ fn is_hardcoded_telemetry_or_designator_literal(inner: &str) -> bool {
         }
 
         // Numeric multiplier or unit token (e.g. "12x", "15km")
-        let digit_prefix_len = clean_tok
-            .chars()
-            .take_while(|c| c.is_ascii_digit())
-            .count();
+        let digit_prefix_len = clean_tok.chars().take_while(|c| c.is_ascii_digit()).count();
         if digit_prefix_len >= 1 && digit_prefix_len < clean_tok.len() {
             let unit_suffix = clean_tok.get(digit_prefix_len..).unwrap_or("");
             if matches!(unit_suffix, "x" | "km" | "m" | "s" | "ms" | "Hz" | "dB") {
@@ -719,9 +717,7 @@ fn is_hardcoded_telemetry_or_designator_literal(inner: &str) -> bool {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-39-ZERO-MOCKING-TEST-AST-GATE]
-pub fn check_39_zero_mocking_test_ast_gate(
-    repo_root: &Path,
-) -> Result<(), Vec<String>> {
+pub fn check_39_zero_mocking_test_ast_gate(repo_root: &Path) -> Result<(), Vec<String>> {
     let test_dirs = [
         repo_root.join("app_flutter").join("test"),
         repo_root.join("app_flutter").join("integration_test"),
@@ -907,7 +903,11 @@ fn extract_dart_class_name(trimmed_line: &str) -> Option<&str> {
 fn extract_receiver_method_call(line: &str, receiver_prefix: &str) -> Option<String> {
     let idx = line.find(receiver_prefix)?;
     if idx > 0 {
-        let prev = line.as_bytes().get(idx.saturating_sub(1)).copied().unwrap_or(b' ');
+        let prev = line
+            .as_bytes()
+            .get(idx.saturating_sub(1))
+            .copied()
+            .unwrap_or(b' ');
         if prev.is_ascii_alphanumeric() || prev == b'_' {
             return None;
         }
@@ -924,11 +924,22 @@ fn extract_receiver_method_call(line: &str, receiver_prefix: &str) -> Option<Str
     if !rest.starts_with('(') {
         return None;
     }
-    let benign = ["dispose", "close", "addListener", "removeListener", "toString"];
+    let benign = [
+        "dispose",
+        "close",
+        "addListener",
+        "removeListener",
+        "toString",
+    ];
     if benign.contains(&method_name.as_str()) {
         return None;
     }
-    Some(format!("{}{}((", receiver_prefix, method_name).trim_end_matches('(').to_string() + "(")
+    Some(
+        format!("{}{}((", receiver_prefix, method_name)
+            .trim_end_matches('(')
+            .to_string()
+            + "(",
+    )
 }
 
 /// Scans comment-stripped `testWidgets` blocks for direct receiver mutations without `tester.` gestures.
@@ -1067,7 +1078,14 @@ fn check_line_for_mocking_violations(
         }
     }
     if let Some((_, after_imp)) = trimmed.split_once("implements ") {
-        let suffixes = ["Repository", "DataSource", "Transport", "Service", "Store", "Client"];
+        let suffixes = [
+            "Repository",
+            "DataSource",
+            "Transport",
+            "Service",
+            "Store",
+            "Client",
+        ];
         for raw_tok in after_imp.split(|c: char| c == ',' || c == '{' || c.is_whitespace()) {
             let tok = raw_tok.trim();
             if suffixes.iter().any(|s| tok.ends_with(s)) {
@@ -1140,10 +1158,9 @@ fn scan_test_file_for_mocking(file_path: &Path, file_rel: &str, violations: &mut
         }
     }
 
-    for (line_no, call) in find_ungestured_test_widgets_mutations(
-        &content,
-        &["bridge.", "controller.", "notifier."],
-    ) {
+    for (line_no, call) in
+        find_ungestured_test_widgets_mutations(&content, &["bridge.", "controller.", "notifier."])
+    {
         violations.push(format!(
             "Check 39 violation: Direct state mutation '{}' without tester gesture in {}:{}.",
             call, file_rel, line_no
@@ -1204,7 +1221,9 @@ pub fn check_40_interactive_gesture_and_hud_non_overlap_gate(
 
     let mut violations = Vec::new();
 
-    let contract_path = test_dir.join("generated").join("schema_ui_contract_test.g.dart");
+    let contract_path = test_dir
+        .join("generated")
+        .join("schema_ui_contract_test.g.dart");
     if contract_path.is_file() {
         let rel = contract_path
             .strip_prefix(repo_root)
@@ -1280,7 +1299,11 @@ pub fn check_40_interactive_gesture_and_hud_non_overlap_gate(
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-40-VERIFY-VIEWPORTS]
-fn verify_ui_contract_test_viewports(contract_path: &Path, file_rel: &str, violations: &mut Vec<String>) {
+fn verify_ui_contract_test_viewports(
+    contract_path: &Path,
+    file_rel: &str,
+    violations: &mut Vec<String>,
+) {
     let raw_content = match fs::read_to_string(contract_path) {
         Ok(c) => c,
         Err(_) => return,
@@ -1303,7 +1326,12 @@ fn verify_ui_contract_test_viewports(contract_path: &Path, file_rel: &str, viola
         }
     }
 
-    for (w, h) in [("1920", "1080"), ("2560", "1440"), ("3840", "2160"), ("6016", "3384")] {
+    for (w, h) in [
+        ("1920", "1080"),
+        ("2560", "1440"),
+        ("3840", "2160"),
+        ("6016", "3384"),
+    ] {
         if !content.contains(w) || !content.contains(h) {
             violations.push(format!(
                 "Check 40 violation: Generated UI contract test {} is missing physical resolution {}x{}.",
@@ -1648,7 +1676,10 @@ fn check_solver_bridge_ssot_delegation(repo_root: &Path, violations: &mut Vec<St
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-41-BIJECTIVE-SEED-PARITY]
 fn check_bijective_sqlite_seed_parity(repo_root: &Path, violations: &mut Vec<String>) {
-    let topology_path = repo_root.join("app_flutter").join("assets").join("topology_data.json");
+    let topology_path = repo_root
+        .join("app_flutter")
+        .join("assets")
+        .join("topology_data.json");
     if !topology_path.is_file() {
         return;
     }
@@ -1722,7 +1753,11 @@ fn check_bijective_sqlite_seed_parity(repo_root: &Path, violations: &mut Vec<Str
         }
     }
 
-    let seeds_dir = repo_root.join("app_flutter").join("lib").join("data").join("seeds");
+    let seeds_dir = repo_root
+        .join("app_flutter")
+        .join("lib")
+        .join("data")
+        .join("seeds");
     if !seeds_dir.is_dir() {
         violations.push(
             "Check 41 violation: SQLite seed directory app_flutter/lib/data/seeds is missing while topology_data.json is present."
@@ -1775,8 +1810,8 @@ fn check_bijective_sqlite_seed_parity(repo_root: &Path, violations: &mut Vec<Str
             }
         }
         if has_generated_seed {
-            let delegates_to_generated = strat.contains("seedGeneratedDomainDatabase")
-                || strat.contains("seedDatabase");
+            let delegates_to_generated =
+                strat.contains("seedGeneratedDomainDatabase") || strat.contains("seedDatabase");
             let contains_all_entities = !topology_entity_ids.is_empty()
                 && topology_entity_ids.iter().all(|id| strat.contains(id));
             if !delegates_to_generated && !contains_all_entities {
@@ -1851,7 +1886,8 @@ mod tests {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_nanos())
                 .unwrap_or(0);
-            let dir = std::env::temp_dir().join(format!("test_codebase_{}_{}_{}", prefix, nanos, count));
+            let dir =
+                std::env::temp_dir().join(format!("test_codebase_{}_{}_{}", prefix, nanos, count));
             fs::create_dir_all(&dir)?;
             Ok(Self { path: dir })
         }
@@ -1892,7 +1928,11 @@ class TacticalWorkspaceView extends StatelessWidget {
         fs::write(feature_dir.join("workspace_view.dart"), clean_dart)?;
 
         let res = check_38_presentation_anti_hardcoding_ast_gate(&tmp.path);
-        assert!(res.is_ok(), "Positive clean presentation must pass: {:?}", res.err());
+        assert!(
+            res.is_ok(),
+            "Positive clean presentation must pass: {:?}",
+            res.err()
+        );
         Ok(())
     }
 
@@ -1928,7 +1968,10 @@ class DefectiveView extends StatelessWidget {
         fs::write(feature_dir.join("defective_view.dart"), defective_dart)?;
 
         let res = check_38_presentation_anti_hardcoding_ast_gate(&tmp.path);
-        assert!(res.is_err(), "Defective hardcoded presentation must fail Check 38");
+        assert!(
+            res.is_err(),
+            "Defective hardcoded presentation must fail Check 38"
+        );
         let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("NODE_ALPHA_01")));
         assert!(errs.iter().any(|e| e.contains("RULES: 0 VIOLATIONS")));
@@ -1963,7 +2006,11 @@ void main() {
         fs::write(test_dir.join("live_db_test.dart"), clean_test)?;
 
         let res = check_39_zero_mocking_test_ast_gate(&tmp.path);
-        assert!(res.is_ok(), "Clean persistence test must pass Check 39: {:?}", res.err());
+        assert!(
+            res.is_ok(),
+            "Clean persistence test must pass Check 39: {:?}",
+            res.err()
+        );
         Ok(())
     }
 
@@ -1992,9 +2039,14 @@ void main() {
         fs::write(test_dir.join("mock_test.dart"), defective_test)?;
 
         let res = check_39_zero_mocking_test_ast_gate(&tmp.path);
-        assert!(res.is_err(), "Mocking and leaking SQLite must fail Check 39");
+        assert!(
+            res.is_err(),
+            "Mocking and leaking SQLite must fail Check 39"
+        );
         let errs = res.err().ok_or("expected Err")?;
-        assert!(errs.iter().any(|e| e.contains("Mock") || e.contains("mocking")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("Mock") || e.contains("mocking")));
         assert!(errs.iter().any(|e| e.contains("Result.success")));
         assert!(errs.iter().any(|e| e.contains("tearDownAll")));
         Ok(())
@@ -2031,7 +2083,10 @@ void main() {
   });
 }
 "#;
-        fs::write(test_gen_dir.join("schema_ui_contract_test.g.dart"), generated_contract)?;
+        fs::write(
+            test_gen_dir.join("schema_ui_contract_test.g.dart"),
+            generated_contract,
+        )?;
 
         let interactive_test = r#"
 void main() {
@@ -2045,12 +2100,17 @@ void main() {
         fs::write(test_dir.join("interactive_test.dart"), interactive_test)?;
 
         let res = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
-        assert!(res.is_ok(), "Positive contract test must pass Check 40: {:?}", res.err());
+        assert!(
+            res.is_ok(),
+            "Positive contract test must pass Check 40: {:?}",
+            res.err()
+        );
         Ok(())
     }
 
     #[test]
-    fn test_check_40_negative_shallow_probing_and_direct_bridge_mutation() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_40_negative_shallow_probing_and_direct_bridge_mutation(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = ScopedTempDir::new("check_40_neg")?;
         let test_gen_dir = tmp.path.join("app_flutter/test/generated");
         let test_dir = tmp.path.join("app_flutter/test/widgets");
@@ -2067,7 +2127,10 @@ const kViewports = [
   'XDR_6K_1X',
 ];
 "#;
-        fs::write(test_gen_dir.join("schema_ui_contract_test.g.dart"), incomplete_contract)?;
+        fs::write(
+            test_gen_dir.join("schema_ui_contract_test.g.dart"),
+            incomplete_contract,
+        )?;
 
         let defective_test = r#"
 void probeWidgetKey(Key key) {
@@ -2084,12 +2147,17 @@ void main() {
         fs::write(test_dir.join("defective_widget_test.dart"), defective_test)?;
 
         let res = check_40_interactive_gesture_and_hud_non_overlap_gate(&tmp.path);
-        assert!(res.is_err(), "Incomplete viewports and shallow probing must fail Check 40");
+        assert!(
+            res.is_err(),
+            "Incomplete viewports and shallow probing must fail Check 40"
+        );
         let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("XDR_6K_2X")));
         assert!(errs.iter().any(|e| e.contains("probeWidgetKey")));
         assert!(errs.iter().any(|e| e.contains("bridge.relockInterlock")));
-        assert!(errs.iter().any(|e| e.contains("assertPairwiseHudNonOverlap")));
+        assert!(errs
+            .iter()
+            .any(|e| e.contains("assertPairwiseHudNonOverlap")));
         Ok(())
     }
 
@@ -2139,12 +2207,17 @@ class SolverBridge {
         fs::write(data_dir.join("solver_bridge.dart"), bridge_dart)?;
 
         let res = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp.path);
-        assert!(res.is_ok(), "Positive C-ABI and seed parity must pass Check 41: {:?}", res.err());
+        assert!(
+            res.is_ok(),
+            "Positive C-ABI and seed parity must pass Check 41: {:?}",
+            res.err()
+        );
         Ok(())
     }
 
     #[test]
-    fn test_check_41_negative_duplicate_math_and_missing_seeds() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_check_41_negative_duplicate_math_and_missing_seeds(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let tmp = ScopedTempDir::new("check_41_neg")?;
         let solver_crate_dir = tmp.path.join("crates/domain-solver/src");
         let assets_dir = tmp.path.join("app_flutter/assets");
@@ -2175,7 +2248,10 @@ Future<void> seedDatabase(Database db) async {
   await db.execute("INSERT INTO properties VALUES (...)");
 }
 "#;
-        fs::write(seeds_dir.join("generated_domain_seed.g.dart"), defective_seed_dart)?;
+        fs::write(
+            seeds_dir.join("generated_domain_seed.g.dart"),
+            defective_seed_dart,
+        )?;
 
         // Bridge file has duplicate candidate generator and Pareto scoring
         let defective_bridge_dart = r#"
@@ -2186,14 +2262,89 @@ class SolverBridge {
   }
 }
 "#;
-        fs::write(data_dir.join("domain_solver_bridge.dart"), defective_bridge_dart)?;
+        fs::write(
+            data_dir.join("domain_solver_bridge.dart"),
+            defective_bridge_dart,
+        )?;
 
         let res = check_41_solver_bridge_and_sqlite_seed_parity_gate(&tmp.path);
-        assert!(res.is_err(), "Duplicate math and missing seed entities must fail Check 41");
+        assert!(
+            res.is_err(),
+            "Duplicate math and missing seed entities must fail Check 41"
+        );
         let errs = res.err().ok_or("expected Err")?;
         assert!(errs.iter().any(|e| e.contains("SENSOR_02_MISSING")));
         assert!(errs.iter().any(|e| e.contains("type_relations")));
         assert!(errs.iter().any(|e| e.contains("_buildCandidates")));
+        Ok(())
+    }
+
+    #[test]
+    fn test_extract_strings_from_json_value_iterative_deep_and_order_parity(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let sample = serde_json::from_str::<serde_json::Value>(
+            r#"{
+                "nodes": [
+                    {
+                        "id": "ZONE-NORTH-01",
+                        "label": "Unit-Alpha (P1)",
+                        "parentId": "SECTOR_MAIN",
+                        "properties": {
+                            "bus_tag": "LINK-BUS-07",
+                            "plain": "ignoredplain"
+                        }
+                    },
+                    {
+                        "sourceId": "SRC_NODE_A",
+                        "targetId": "TGT_NODE_B"
+                    }
+                ]
+            }"#,
+        )?;
+        let mut extracted = BTreeSet::new();
+        extract_strings_from_json_value(&sample, &mut extracted);
+        assert!(extracted.contains("ZONE-NORTH-01"));
+        assert!(extracted.contains("NORTH-01"));
+        assert!(extracted.contains("Unit-Alpha (P1)"));
+        assert!(extracted.contains("Unit-Alpha"));
+        assert!(extracted.contains("SECTOR_MAIN"));
+        assert!(extracted.contains("LINK-BUS-07"));
+        assert!(extracted.contains("BUS-07"));
+        assert!(extracted.contains("SRC_NODE_A"));
+        assert!(extracted.contains("TGT_NODE_B"));
+        assert!(!extracted.contains("ignoredplain"));
+
+        let mut leaf_map = serde_json::Map::new();
+        leaf_map.insert(
+            "id".to_string(),
+            serde_json::Value::String("DEEP-ENTITY-42".to_string()),
+        );
+        let mut deep_val = serde_json::Value::Object(leaf_map);
+        for _ in 0..3000 {
+            deep_val = serde_json::Value::Array(vec![deep_val]);
+        }
+
+        let deep_extracted = std::thread::scope(|scope| -> Result<BTreeSet<String>, String> {
+            let handle = std::thread::Builder::new()
+                .name("bounded_json_walk".to_string())
+                .stack_size(128 * 1024)
+                .spawn_scoped(scope, || {
+                    let mut set = BTreeSet::new();
+                    extract_strings_from_json_value(&deep_val, &mut set);
+                    set
+                })
+                .map_err(|e| format!("spawn failed: {e}"))?;
+            handle
+                .join()
+                .map_err(|_| "thread panicked during JSON traversal".to_string())
+        })?;
+
+        while let serde_json::Value::Array(mut arr) = deep_val {
+            deep_val = arr.pop().unwrap_or(serde_json::Value::Null);
+        }
+
+        assert!(deep_extracted.contains("DEEP-ENTITY-42"));
+        assert!(deep_extracted.contains("ENTITY-42"));
         Ok(())
     }
 }

@@ -964,7 +964,7 @@ impl ClosedLoopDefectPublisherGate {
     ) -> Result<DefectSchemaValidation, Vec<String>> {
         if self.schema_gate_count != 12 || !self.require_byte_parity {
             return Err(vec![
-                "ClosedLoopDefectPublisherGate invariant breach".to_string(),
+                "ClosedLoopDefectPublisherGate invariant breach".to_string()
             ]);
         }
         validate_defect_dossier_scoped(content, target_repo, workspace_root)
@@ -1028,27 +1028,8 @@ impl Default for ClosedLoopDefectPublisherGate {
     }
 }
 
-/// Walks `target_path` deterministically in sorted lexicographical order collecting `.rs` and `.dart` files.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Guarantees reproducible traversal ordering across host filesystems under DO-330 TQL-4.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Skips hidden child directories (`.` prefix) and build caches (`target`, `build`, `node_modules`).
-///
-/// ## 3. Preconditions
-/// - `target_path` exists on disk.
-///
-/// ## 4. Postconditions
-/// - Appends discovered `.rs` and `.dart` paths to `out` in deterministic order.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(F \log F)$ over directory entries $F$. Space Complexity: $O(F)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Propagates directory read failures explicitly as `Err(1)` without silent error masking.
-///
-/// ## 7. Realization & Traceability
+/// Iteratively walks `target_path` using a `Vec<PathBuf>` work-stack in sorted pre-order,
+/// collecting `.rs` and `.dart` files while skipping hidden directories and build caches.
 /// Realises: [REQ-0606-COLLECT-TARGET-FILES]
 fn collect_target_source_files(target_path: &Path, out: &mut Vec<PathBuf>) -> Result<(), i32> {
     if target_path.is_file() {
@@ -1064,46 +1045,51 @@ fn collect_target_source_files(target_path: &Path, out: &mut Vec<PathBuf>) -> Re
     if !target_path.is_dir() {
         return Ok(());
     }
-    let entries = match fs::read_dir(target_path) {
-        Ok(rd) => rd,
-        Err(err) => {
-            eprintln!(
-                "[AUDIT-CODE IO ERROR] Unable to read directory {}: {err}",
-                target_path.display()
-            );
-            return Err(1);
+    let mut stack: Vec<PathBuf> = vec![target_path.to_path_buf()];
+    while let Some(current_path) = stack.pop() {
+        if !current_path.is_dir() {
+            out.push(current_path);
+            continue;
         }
-    };
-    let mut children = Vec::new();
-    for entry_res in entries {
-        match entry_res {
-            Ok(entry) => children.push(entry.path()),
+        let entries = match fs::read_dir(&current_path) {
+            Ok(rd) => rd,
             Err(err) => {
                 eprintln!(
-                    "[AUDIT-CODE IO ERROR] Directory entry error in {}: {err}",
-                    target_path.display()
+                    "[AUDIT-CODE IO ERROR] Unable to read directory {}: {err}",
+                    current_path.display()
                 );
                 return Err(1);
             }
+        };
+        let mut children = Vec::new();
+        for entry_res in entries {
+            match entry_res {
+                Ok(entry) => children.push(entry.path()),
+                Err(err) => {
+                    eprintln!(
+                        "[AUDIT-CODE IO ERROR] Directory entry error in {}: {err}",
+                        current_path.display()
+                    );
+                    return Err(1);
+                }
+            }
         }
-    }
-    children.sort();
-    for child in children {
-        let name = child
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        if name.starts_with('.')
-            || name == "target"
-            || name == "build"
-            || name == "node_modules"
-        {
-            continue;
-        }
-        if child.is_dir() {
-            collect_target_source_files(&child, out)?;
-        } else if name.ends_with(".rs") || name.ends_with(".dart") {
-            out.push(child);
+        children.sort();
+        for child in children.into_iter().rev() {
+            let name = child
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let is_excluded = name.starts_with('.')
+                || name == "target"
+                || name == "build"
+                || name == "node_modules";
+            if is_excluded {
+                continue;
+            }
+            if child.is_dir() || name.ends_with(".rs") || name.ends_with(".dart") {
+                stack.push(child);
+            }
         }
     }
     Ok(())
@@ -1633,7 +1619,10 @@ fn audit_pillar_memory_safety(
                     "LosslessCheckedNumericConversion",
                     "PrimitiveAsCast",
                 ))
-            } else if line.contains("*const ") || line.contains("*mut ") || line.contains("from_ptr(") {
+            } else if line.contains("*const ")
+                || line.contains("*mut ")
+                || line.contains("from_ptr(")
+            {
                 Some((
                     "ptr",
                     format!("Raw pointer dereference or foreign pointer alias in {caller} lacks lifetime bound"),
@@ -1646,7 +1635,9 @@ fn audit_pillar_memory_safety(
         } else if line.contains("Pointer<") || line.contains("fromAddress(") {
             Some((
                 "ffi",
-                format!("Foreign pointer handle in {caller} lacks deterministic finalizer attachment"),
+                format!(
+                    "Foreign pointer handle in {caller} lacks deterministic finalizer attachment"
+                ),
                 "FinalizerBackedForeignHandle",
                 "ForeignPointer",
             ))
@@ -1655,7 +1646,11 @@ fn audit_pillar_memory_safety(
         };
 
         if let Some((tag, symptom, inv, callee)) = violation_opt {
-            let lang_tag = if lang == SourceLanguage::Dart { "dart" } else { "rust" };
+            let lang_tag = if lang == SourceLanguage::Dart {
+                "dart"
+            } else {
+                "rust"
+            };
             let fix_code = if lang == SourceLanguage::Dart {
                 "int readBoundedElement(List<int> buffer, int index) {\n  if (index < 0 || index >= buffer.length) {\n    return 0;\n  }\n  return buffer.elementAt(index);\n}"
             } else {
@@ -1913,7 +1908,11 @@ fn audit_pillar_resource_lifecycle(
         {
             let line_no = idx.saturating_add(1);
             let caller = find_enclosing_symbol(ast_items, line_no);
-            let lang_tag = if lang == SourceLanguage::Dart { "dart" } else { "rust" };
+            let lang_tag = if lang == SourceLanguage::Dart {
+                "dart"
+            } else {
+                "rust"
+            };
             let fix_code = if lang == SourceLanguage::Dart {
                 "Future<Directory> createScopedScratchDir() async {\n  return Directory.systemTemp.createTemp('scoped_audit_');\n}"
             } else {
@@ -2079,7 +2078,11 @@ fn audit_pillar_concurrency(
                         let start_line = idx.saturating_add(1);
                         let end_line = look.saturating_add(1);
                         let caller = find_enclosing_symbol(ast_items, start_line);
-                        let lang_tag = if lang == SourceLanguage::Dart { "dart" } else { "rust" };
+                        let lang_tag = if lang == SourceLanguage::Dart {
+                            "dart"
+                        } else {
+                            "rust"
+                        };
                         let fix_code = if lang == SourceLanguage::Dart {
                             "Future<String?> readAtomicIfPresent(File target) async {\n  try {\n    return await target.readAsString();\n  } on FileSystemException {\n    return null;\n  }\n}"
                         } else {
@@ -2673,7 +2676,10 @@ pub fn synthesize_defect_dossier_markdown(finding: &AuditFinding) -> String {
     let mut out = String::with_capacity(4096);
     out.push_str(DossierSection::ContextAndReferences.header());
     out.push_str("\n\n");
-    out.push_str(&format!("<!-- test-target: {} -->\n\n", finding.test_target));
+    out.push_str(&format!(
+        "<!-- test-target: {} -->\n\n",
+        finding.test_target
+    ));
     out.push_str(&format!("- **File**: `{file_loc}`\n"));
     out.push_str(&format!(
         "- **Pillar**: {}\n",
@@ -3062,5 +3068,77 @@ mod tests {
             Ok(Some(AuditPillar::SemanticTraceability))
         );
         assert!(AuditPillar::from_cli_token("unknown-pillar").is_err());
+    }
+
+    struct ScopedTempDir {
+        path: PathBuf,
+    }
+
+    impl ScopedTempDir {
+        fn new(prefix: &str) -> Result<Self, std::io::Error> {
+            static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let seq = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            let dir = std::env::temp_dir().join(format!(
+                "audit_code_walk_{}_{}_{}_{}",
+                prefix,
+                std::process::id(),
+                nanos,
+                seq
+            ));
+            fs::create_dir_all(&dir)?;
+            Ok(Self { path: dir })
+        }
+    }
+
+    impl Drop for ScopedTempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    /// Verifies iterative pre-order lexicographical directory traversal and cache/hidden exclusions.
+    #[test]
+    fn test_collect_target_source_files_iterative_preorder_and_exclusions(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let scratch = ScopedTempDir::new("preorder")?;
+        let root = &scratch.path;
+
+        fs::create_dir_all(root.join("b_dir").join("sub_dir"))?;
+        fs::create_dir_all(root.join("d_dir"))?;
+        fs::create_dir_all(root.join(".hidden"))?;
+        fs::create_dir_all(root.join("target"))?;
+        fs::create_dir_all(root.join("build"))?;
+        fs::create_dir_all(root.join("node_modules"))?;
+
+        let f_a = root.join("a_first.rs");
+        let f_b1 = root.join("b_dir").join("nested_1.rs");
+        let f_b_deep = root.join("b_dir").join("sub_dir").join("deep.dart");
+        let f_bz = root.join("b_dir").join("z_after_sub.rs");
+        let f_c = root.join("c_middle.dart");
+        let f_d = root.join("d_dir").join("leaf.rs");
+
+        for file in [&f_a, &f_b1, &f_b_deep, &f_bz, &f_c, &f_d] {
+            fs::write(file, "// fixture")?;
+        }
+        fs::write(root.join("notes.md"), "ignored")?;
+        fs::write(root.join(".hidden").join("ignored.rs"), "// hidden")?;
+        fs::write(root.join("target").join("ignored.rs"), "// target")?;
+        fs::write(root.join("build").join("ignored.dart"), "// build")?;
+        fs::write(root.join("node_modules").join("ignored.rs"), "// nm")?;
+
+        let mut collected = Vec::new();
+        let res = collect_target_source_files(root, &mut collected);
+        assert_eq!(res, Ok(()));
+        assert_eq!(collected, vec![f_a.clone(), f_b1, f_b_deep, f_bz, f_c, f_d]);
+
+        let mut single_out = Vec::new();
+        let single_res = collect_target_source_files(&f_a, &mut single_out);
+        assert_eq!(single_res, Ok(()));
+        assert_eq!(single_out, vec![f_a]);
+        Ok(())
     }
 }

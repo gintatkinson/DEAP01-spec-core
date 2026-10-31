@@ -1109,7 +1109,8 @@ pub fn check_1_zero_ephemeral_path(
         && workspace_root.is_dir();
 
     let bp_in_ephemeral = has_ephemeral_prefix(&bp_str) || blueprint_path.starts_with(&temp_dir);
-    if bp_in_ephemeral && !(ws_is_isolated_test_subdir && blueprint_path.starts_with(workspace_root))
+    if bp_in_ephemeral
+        && !(ws_is_isolated_test_subdir && blueprint_path.starts_with(workspace_root))
     {
         return Err(format!(
             "Check 1 failed: ephemeral path '{}' (/tmp/, /var/folders/, or std::env::temp_dir()) is forbidden; blueprint must reside under docs/designs/blueprint-*.md",
@@ -1174,10 +1175,7 @@ pub fn check_1_zero_ephemeral_path(
         ));
     }
 
-    Ok(workspace_root
-        .join("docs")
-        .join("designs")
-        .join(file_name))
+    Ok(workspace_root.join("docs").join("designs").join(file_name))
 }
 
 /// Check 2 (CommonMark Metadata Table Gate): Inspects lines 1-12 for a valid two-column CommonMark
@@ -1260,8 +1258,8 @@ pub fn check_2_metadata_table(content: &str) -> Result<BlueprintMetadata, Vec<St
     };
 
     let sep_line = top_lines.get(h_idx + 1).copied().unwrap_or("");
-    let sep_valid = split_markdown_table_row(sep_line)
-        .is_some_and(|cols| is_table_separator_row(&cols, 2));
+    let sep_valid =
+        split_markdown_table_row(sep_line).is_some_and(|cols| is_table_separator_row(&cols, 2));
     if !sep_valid {
         errors.push(
             "Check 2 failed: metadata table header must be immediately followed by a 2-column CommonMark separator row ('| :--- | :--- |')"
@@ -1532,7 +1530,9 @@ pub fn check_3_sections(content: &str) -> Result<Vec<(usize, usize, &'static str
 ///
 /// ## 7. Realization & Traceability
 /// Traceability: Realises: [REQ-BLUEPRINT-CHECK-4-DERIVATION]
-pub fn check_4_derivation_table(section_1_lines: &[&str]) -> Result<Vec<DerivationRow>, Vec<String>> {
+pub fn check_4_derivation_table(
+    section_1_lines: &[&str],
+) -> Result<Vec<DerivationRow>, Vec<String>> {
     let mut errors = Vec::new();
     let mut in_fence = false;
     let mut header_idx: Option<usize> = None;
@@ -1586,8 +1586,8 @@ pub fn check_4_derivation_table(section_1_lines: &[&str]) -> Result<Vec<Derivati
     };
 
     let sep_line = section_1_lines.get(h_idx + 1).copied().unwrap_or("");
-    let sep_valid = split_markdown_table_row(sep_line)
-        .is_some_and(|cols| is_table_separator_row(&cols, 5));
+    let sep_valid =
+        split_markdown_table_row(sep_line).is_some_and(|cols| is_table_separator_row(&cols, 5));
     if !sep_valid {
         errors.push(
             "Check 4 failed: Derivation-Annotation Contract table header must be followed by a 5-column separator row"
@@ -2001,7 +2001,9 @@ pub fn check_5_components(section_2_lines: &[&str]) -> Result<Vec<ComponentSpec>
         let end_idx = component_starts
             .get(i + 1)
             .map_or(total_lines, |(next_start, _)| *next_start);
-        let sub_lines = section_2_lines.get((*start_idx + 1)..end_idx).unwrap_or(&[]);
+        let sub_lines = section_2_lines
+            .get((*start_idx + 1)..end_idx)
+            .unwrap_or(&[]);
         let spec = parse_single_component(comp_name, sub_lines, &mut errors);
         specs.push(spec);
     }
@@ -2219,9 +2221,7 @@ fn check_class_diagram_member_line(trimmed: &str, line_no: usize, errors: &mut V
         && !masked.contains('}');
     let is_structural_close = masked.trim() == "}";
 
-    if (masked.contains('{') || masked.contains('}'))
-        && !is_structural_open
-        && !is_structural_close
+    if (masked.contains('{') || masked.contains('}')) && !is_structural_open && !is_structural_close
     {
         errors.push(format!(
             "Check 6 violation (Section 3 line {line_no}): Curly braces '{{}}' are prohibited in classDiagram members: '{trimmed}'"
@@ -2997,9 +2997,8 @@ fn extract_ac_header_id(trimmed: &str) -> Option<String> {
 /// Traceability: Realises: [REQ-BLUEPRINT-CHECK-8-AC-CLAUSES]
 fn validate_single_ac_block(ac_id: &str, ac_lines: &[&str], errors: &mut Vec<String>) -> bool {
     let joined = ac_lines.join("\n");
-    let has_given = joined.contains("**Given**")
-        || joined.contains("Given:")
-        || joined.contains("Given ");
+    let has_given =
+        joined.contains("**Given**") || joined.contains("Given:") || joined.contains("Given ");
     let has_when =
         joined.contains("**When**") || joined.contains("When:") || joined.contains("When ");
     let has_then =
@@ -3077,7 +3076,9 @@ fn validate_single_ac_block(ac_id: &str, ac_lines: &[&str], errors: &mut Vec<Str
 ///
 /// ## 7. Realization & Traceability
 /// Traceability: Realises: [REQ-BLUEPRINT-CHECK-8-BDD-TEST-TARGET]
-pub fn check_8_bdd_and_test_target(section_5_lines: &[&str]) -> Result<(usize, String), Vec<String>> {
+pub fn check_8_bdd_and_test_target(
+    section_5_lines: &[&str],
+) -> Result<(usize, String), Vec<String>> {
     let mut errors = Vec::new();
     let mut comment_target: Option<String> = None;
     let mut bullet_target: Option<String> = None;
@@ -3248,8 +3249,7 @@ fn scan_rust_contract_line(
     lex_state: &mut deap_core::source_ast::RustStringScannerState,
     errors: &mut Vec<String>,
 ) {
-    let code_only =
-        deap_core::source_ast::scan_rust_line_preserving_lex_state(raw_line, lex_state);
+    let code_only = deap_core::source_ast::scan_rust_line_preserving_lex_state(raw_line, lex_state);
 
     let regex_ns = ["re", "gex::"].concat();
     let regex_new = ["Re", "gex::new"].concat();
@@ -3624,8 +3624,8 @@ fn normalize_repo_reference(raw_candidate: &str) -> Option<String> {
     ];
     let repo_root_files = ["Cargo.toml", "AGENTS.md", "README.md"];
 
-    let is_repo_path = repo_prefixes.iter().any(|p| clean.starts_with(p))
-        || repo_root_files.contains(&clean);
+    let is_repo_path =
+        repo_prefixes.iter().any(|p| clean.starts_with(p)) || repo_root_files.contains(&clean);
     if is_repo_path {
         Some(clean.to_string())
     } else {
@@ -3732,56 +3732,84 @@ pub fn check_11_source_references(
     }
 }
 
-/// Normalizes a single `PartDef` (and its nested child parts) so that its header `doc` comment and
-/// port `protocol_family` / `electrical_attributes` roundtrip identically through `to_sysml` and `parse_sysml`.
-///
-/// # Summary
-/// Promotes the first attribute's or port's `doc` comment onto `part.doc` (so the SysML parser does
-/// not consume a body-leading `doc` comment as `part.doc` on re-parse) and folds port `protocol_family`
-/// and `electrical_attributes` into `port.doc`.
-///
-/// # Parameters
-/// - `part`: Mutable reference to a `PartDef` AST node.
-///
-/// # Returns
-/// Unit `()`; mutates `part` in place.
-///
-/// # Errors
-/// Infallible AST normalization helper.
-///
-/// # Panics
-/// Never panics.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// normalize_part_for_bijective_roundtrip(&mut part);
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 canonical AST normalization for `PartDef` nodes.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves all attributes, ports, and nested parts while ensuring idempotent `to_sysml` -> `parse_sysml` serialization.
-///
-/// ## 3. Preconditions
-/// Preconditions: `part` is a valid `PartDef` node from `ingest_sysml::translate_markdown`.
-///
-/// ## 4. Postconditions
-/// Postconditions: `part` and all nested `part.parts` have normalized `doc` and port fields.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(A + R + P_{sub})$ over attributes $A$, ports $R$, and child parts $P_{sub}$.
-/// - Space Complexity: $O(D)$ where $D$ is maximum part nesting depth.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total function over any `PartDef` subtree.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-10-PART-NORMALIZE]
-fn normalize_part_for_bijective_roundtrip(part: &mut deap_core::sysml_ast::PartDef) {
+/// Maximum permitted SysML AST package and part nesting depth during bijective roundtrip normalization.
+/// Realises: [REQ-BLUEPRINT-CHECK-10-AST-NORMALIZE]
+const MAX_NORMALIZE_DEPTH: usize = 64;
+
+/// Typed error returned when SysML AST nesting exceeds `MAX_NORMALIZE_DEPTH` during normalization.
+/// Realises: [REQ-BLUEPRINT-CHECK-10-AST-NORMALIZE]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NormalizeDepthError {
+    MaxDepthExceeded { depth: usize, max_depth: usize },
+}
+
+impl std::fmt::Display for NormalizeDepthError {
+    /// Formats the normalization depth bound violation diagnostic for fail-closed reporting.
+    /// Realises: [REQ-BLUEPRINT-CHECK-10-AST-NORMALIZE]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MaxDepthExceeded { depth, max_depth } => write!(
+                f,
+                "SysML AST normalization depth {depth} exceeds maximum bound {max_depth}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for NormalizeDepthError {}
+
+/// Validates iteratively that a `PartDef` subtree does not exceed `MAX_NORMALIZE_DEPTH` prior to mutation.
+/// Realises: [REQ-BLUEPRINT-CHECK-10-PART-NORMALIZE]
+fn validate_part_normalize_depth(
+    part: &deap_core::sysml_ast::PartDef,
+    depth: usize,
+) -> Result<(), NormalizeDepthError> {
+    let mut stack: Vec<(&deap_core::sysml_ast::PartDef, usize)> = vec![(part, depth)];
+    while let Some((current, cur_depth)) = stack.pop() {
+        if cur_depth > MAX_NORMALIZE_DEPTH {
+            return Err(NormalizeDepthError::MaxDepthExceeded {
+                depth: cur_depth,
+                max_depth: MAX_NORMALIZE_DEPTH,
+            });
+        }
+        let next_depth = cur_depth.saturating_add(1);
+        for child in current.parts.iter().rev() {
+            stack.push((child, next_depth));
+        }
+    }
+    Ok(())
+}
+
+/// Validates iteratively that a `PackageDef` hierarchy and its `PartDef` subtrees do not exceed
+/// `MAX_NORMALIZE_DEPTH` prior to mutation.
+/// Realises: [REQ-BLUEPRINT-CHECK-10-AST-NORMALIZE]
+fn validate_package_normalize_depth(
+    pkg: &deap_core::sysml_ast::PackageDef,
+    depth: usize,
+) -> Result<(), NormalizeDepthError> {
+    let mut stack: Vec<(&deap_core::sysml_ast::PackageDef, usize)> = vec![(pkg, depth)];
+    while let Some((current_pkg, cur_depth)) = stack.pop() {
+        if cur_depth > MAX_NORMALIZE_DEPTH {
+            return Err(NormalizeDepthError::MaxDepthExceeded {
+                depth: cur_depth,
+                max_depth: MAX_NORMALIZE_DEPTH,
+            });
+        }
+        let next_depth = cur_depth.saturating_add(1);
+        for part in &current_pkg.part_defs {
+            validate_part_normalize_depth(part, next_depth)?;
+        }
+        for sub_pkg in current_pkg.packages.iter().rev() {
+            stack.push((sub_pkg, next_depth));
+        }
+    }
+    Ok(())
+}
+
+/// Promotes the first attribute or first port `doc` comment onto `part.doc` so `parse_sysml`
+/// does not reassign a body-leading `doc` comment on re-parse.
+/// Realises: [REQ-BLUEPRINT-CHECK-10-PART-NORMALIZE]
+fn promote_leading_member_doc_to_part(part: &mut deap_core::sysml_ast::PartDef) {
     if let Some(first_attr) = part.attributes.first_mut() {
         if let Some(attr_doc) = first_attr.doc.take() {
             match part.doc {
@@ -3803,7 +3831,13 @@ fn normalize_part_for_bijective_roundtrip(part: &mut deap_core::sysml_ast::PartD
             }
         }
     }
-    for port in &mut part.ports {
+}
+
+/// Folds `protocol_family` and `electrical_attributes` into each port's `doc` comment and clears
+/// leading item-flow `doc` comments for deterministic SysML roundtrip serialization.
+/// Realises: [REQ-BLUEPRINT-CHECK-10-PART-NORMALIZE]
+fn fold_part_port_metadata_into_docs(ports: &mut [deap_core::sysml_ast::PortDef]) {
+    for port in ports {
         let proto = std::mem::take(&mut port.protocol_family);
         let clean_proto = proto.trim_matches(|c: char| c == '"' || c == '`');
         if !clean_proto.is_empty() {
@@ -3833,74 +3867,65 @@ fn normalize_part_for_bijective_roundtrip(part: &mut deap_core::sysml_ast::PartD
             first_flow.doc = None;
         }
     }
-    for child in &mut part.parts {
-        normalize_part_for_bijective_roundtrip(child);
-    }
 }
 
-/// Normalizes a translated `PackageDef` AST prior to serialization so that `to_sysml` and
-/// `parse_sysml` form a strict byte-for-byte bijective roundtrip.
-///
-/// # Summary
-/// Ensures every `PartDef` carries an explicit header `doc` comment (preventing the parser from
-/// reassigning the first attribute's `doc` comment to the enclosing `PartDef`) and folds port
-/// `electrical_attributes` into `PortDef::doc` so string literals are not double-quoted on re-parse.
-///
-/// # Parameters
-/// - `pkg`: Mutable reference to the `PackageDef` produced by `ingest_sysml::translate_markdown`.
-///
-/// # Returns
-/// Unit `()`; mutates `pkg` in place.
-///
-/// # Errors
-/// Infallible AST normalization.
-///
-/// # Panics
-/// Never panics.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// normalize_package_for_bijective_roundtrip(&mut pkg);
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 canonical AST normalization prior to serialization.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves all `PartDef`, `AttributeDef`, `PortDef`, `RequirementDef`, and `ConstraintDef` nodes.
-/// - Guarantees `to_sysml(&parse_sysml(&to_sysml(pkg))) == to_sysml(pkg)`.
-///
-/// ## 3. Preconditions
-/// Preconditions: `pkg` is a valid `PackageDef` returned by `ingest_sysml::translate_markdown`.
-///
-/// ## 4. Postconditions
-/// Postconditions: Every `PartDef` has `doc.is_some()` and zero ports retain raw `electrical_attributes`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(P + A + R)$ over parts $P$, attributes $A$, and ports $R$.
-/// - Space Complexity: $O(D)$ where $D$ is maximum package/part nesting depth.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total function over any `PackageDef` hierarchy.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-10-AST-NORMALIZE]
-fn normalize_package_for_bijective_roundtrip(pkg: &mut deap_core::sysml_ast::PackageDef) {
-    for part in &mut pkg.part_defs {
-        normalize_part_for_bijective_roundtrip(part);
-    }
-    for port in &mut pkg.port_defs {
-        port.protocol_family.clear();
-        if !port.electrical_attributes.is_empty() {
-            port.electrical_attributes.clear();
+/// Iteratively normalizes a `PartDef` subtree up to `MAX_NORMALIZE_DEPTH` so header `doc` comments
+/// and port metadata roundtrip bijectively through `to_sysml` and `parse_sysml`.
+/// Realises: [REQ-BLUEPRINT-CHECK-10-PART-NORMALIZE]
+fn normalize_part_for_bijective_roundtrip(
+    part: &mut deap_core::sysml_ast::PartDef,
+    depth: usize,
+) -> Result<(), NormalizeDepthError> {
+    validate_part_normalize_depth(part, depth)?;
+    let mut stack: Vec<(&mut deap_core::sysml_ast::PartDef, usize)> = vec![(part, depth)];
+    while let Some((current, cur_depth)) = stack.pop() {
+        if cur_depth > MAX_NORMALIZE_DEPTH {
+            return Err(NormalizeDepthError::MaxDepthExceeded {
+                depth: cur_depth,
+                max_depth: MAX_NORMALIZE_DEPTH,
+            });
+        }
+        promote_leading_member_doc_to_part(current);
+        fold_part_port_metadata_into_docs(&mut current.ports);
+        let next_depth = cur_depth.saturating_add(1);
+        for child in current.parts.iter_mut().rev() {
+            stack.push((child, next_depth));
         }
     }
-    for sub_pkg in &mut pkg.packages {
-        normalize_package_for_bijective_roundtrip(sub_pkg);
+    Ok(())
+}
+
+/// Iteratively normalizes a `PackageDef` hierarchy up to `MAX_NORMALIZE_DEPTH` so `to_sysml` and
+/// `parse_sysml` form a strict byte-for-byte bijective roundtrip without unbounded recursion.
+/// Realises: [REQ-BLUEPRINT-CHECK-10-AST-NORMALIZE]
+fn normalize_package_for_bijective_roundtrip(
+    pkg: &mut deap_core::sysml_ast::PackageDef,
+    depth: usize,
+) -> Result<(), NormalizeDepthError> {
+    validate_package_normalize_depth(pkg, depth)?;
+    let mut stack: Vec<(&mut deap_core::sysml_ast::PackageDef, usize)> = vec![(pkg, depth)];
+    while let Some((current_pkg, cur_depth)) = stack.pop() {
+        if cur_depth > MAX_NORMALIZE_DEPTH {
+            return Err(NormalizeDepthError::MaxDepthExceeded {
+                depth: cur_depth,
+                max_depth: MAX_NORMALIZE_DEPTH,
+            });
+        }
+        let next_depth = cur_depth.saturating_add(1);
+        for part in &mut current_pkg.part_defs {
+            normalize_part_for_bijective_roundtrip(part, next_depth)?;
+        }
+        for port in &mut current_pkg.port_defs {
+            port.protocol_family.clear();
+            if !port.electrical_attributes.is_empty() {
+                port.electrical_attributes.clear();
+            }
+        }
+        for sub_pkg in current_pkg.packages.iter_mut().rev() {
+            stack.push((sub_pkg, next_depth));
+        }
     }
+    Ok(())
 }
 
 /// Check 10 (Deterministic In-Repo SysML v2 Compilation & Bijective Roundtrip Gate):
@@ -3968,14 +3993,18 @@ pub fn check_10_compile_and_persist_sysml(
     content: &str,
 ) -> Result<(PathBuf, PathBuf), Vec<String>> {
     let bp_display = blueprint_path.to_string_lossy();
-    let mut pkg = ingest_sysml::translate_markdown(content, &bp_display)
-        .map_err(|e| vec![format!("Check 10 failed: Markdown-to-SysML translation error: {e}")])?;
-    normalize_package_for_bijective_roundtrip(&mut pkg);
+    let mut pkg = ingest_sysml::translate_markdown(content, &bp_display).map_err(|e| {
+        vec![format!(
+            "Check 10 failed: Markdown-to-SysML translation error: {e}"
+        )]
+    })?;
+    normalize_package_for_bijective_roundtrip(&mut pkg, 0)
+        .map_err(|e| vec![format!("Check 10 failed: {e}")])?;
 
     let sysml_text = compile_sysml::to_sysml(&pkg);
     if sysml_text.trim().is_empty() {
         return Err(vec![
-            "Check 10 failed: serialized SysML v2 output is empty".to_string(),
+            "Check 10 failed: serialized SysML v2 output is empty".to_string()
         ]);
     }
 
@@ -4132,9 +4161,8 @@ pub fn verify_closed_loop_github_payload(
     expected_title: &str,
     expected_req_id: &str,
 ) -> Result<String, String> {
-    let val: serde_json::Value = serde_json::from_str(view_json_stdout).map_err(|e| {
-        format!("Check 12 failed: invalid JSON from 'gh issue view': {e}")
-    })?;
+    let val: serde_json::Value = serde_json::from_str(view_json_stdout)
+        .map_err(|e| format!("Check 12 failed: invalid JSON from 'gh issue view': {e}"))?;
 
     let number = val
         .get("number")
@@ -4369,9 +4397,8 @@ pub fn check_12_publish_github_ssot(
     }
 
     let view_stdout = String::from_utf8_lossy(&view_out.stdout);
-    let summary =
-        verify_closed_loop_github_payload(&view_stdout, title, &metadata.requirement_id)
-            .map_err(|e| vec![e])?;
+    let summary = verify_closed_loop_github_payload(&view_stdout, title, &metadata.requirement_id)
+        .map_err(|e| vec![e])?;
 
     if !metadata.blueprint_id.trim().is_empty()
         && !view_stdout.contains(metadata.blueprint_id.trim())
@@ -4665,4 +4692,121 @@ pub fn run_blueprint_cli(workspace_root: &Path, options: &BlueprintCliOptions) -
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    fn build_nested_part_chain(
+        nesting_depth: usize,
+    ) -> Result<deap_core::sysml_ast::PartDef, String> {
+        let parsed = compile_sysml::parse_sysml(
+            "package P { part def Node { attribute count : Integer; port link : TelemetryPort; } }",
+        )
+        .map_err(|e| format!("parse error: {e}"))?;
+        let template = parsed
+            .part_defs
+            .first()
+            .cloned()
+            .ok_or_else(|| "missing template PartDef".to_string())?;
+        let mut current = template.clone();
+        if let Some(first_attr) = current.attributes.first_mut() {
+            first_attr.doc = Some("leaf attribute doc".to_string());
+        }
+        if let Some(first_port) = current.ports.first_mut() {
+            first_port.protocol_family = "ARINC429".to_string();
+        }
+        for _ in 0..nesting_depth {
+            let mut parent = template.clone();
+            if let Some(first_attr) = parent.attributes.first_mut() {
+                first_attr.doc = Some("parent attribute doc".to_string());
+            }
+            parent.parts.push(current);
+            current = parent;
+        }
+        Ok(current)
+    }
+
+    fn build_nested_package_chain(
+        nesting_depth: usize,
+    ) -> Result<deap_core::sysml_ast::PackageDef, String> {
+        let template = compile_sysml::parse_sysml("package SubPkg { port def BusPort; }")
+            .map_err(|e| format!("parse error: {e}"))?;
+        let mut current = template.clone();
+        if let Some(first_port) = current.port_defs.first_mut() {
+            first_port.protocol_family = "SPACEWIRE".to_string();
+        }
+        for _ in 0..nesting_depth {
+            let mut parent = template.clone();
+            parent.packages.push(current);
+            current = parent;
+        }
+        Ok(current)
+    }
+
+    #[test]
+    fn test_normalize_part_depth_at_max_and_plus_one() -> Result<(), String> {
+        let mut part_at_max = build_nested_part_chain(MAX_NORMALIZE_DEPTH)?;
+        let res_max = normalize_part_for_bijective_roundtrip(&mut part_at_max, 0);
+        assert_eq!(res_max, Ok(()));
+
+        let mut leaf_cursor = &part_at_max;
+        for _ in 0..MAX_NORMALIZE_DEPTH {
+            leaf_cursor = leaf_cursor
+                .parts
+                .first()
+                .ok_or_else(|| "expected nested child part".to_string())?;
+        }
+        assert_eq!(leaf_cursor.doc.as_deref(), Some("leaf attribute doc"));
+        let leaf_port = leaf_cursor
+            .ports
+            .first()
+            .ok_or_else(|| "expected leaf port".to_string())?;
+        assert!(leaf_port.protocol_family.is_empty());
+        assert_eq!(leaf_port.doc.as_deref(), Some("[protocol: ARINC429]"));
+
+        let over_depth = MAX_NORMALIZE_DEPTH.saturating_add(1);
+        let mut part_over_max = build_nested_part_chain(over_depth)?;
+        let res_over = normalize_part_for_bijective_roundtrip(&mut part_over_max, 0);
+        assert_eq!(
+            res_over,
+            Err(NormalizeDepthError::MaxDepthExceeded {
+                depth: over_depth,
+                max_depth: MAX_NORMALIZE_DEPTH,
+            })
+        );
+        assert_eq!(part_over_max.doc, None);
+        Ok(())
+    }
+
+    #[test]
+    fn test_normalize_package_depth_at_max_and_plus_one() -> Result<(), String> {
+        let mut pkg_at_max = build_nested_package_chain(MAX_NORMALIZE_DEPTH)?;
+        let res_max = normalize_package_for_bijective_roundtrip(&mut pkg_at_max, 0);
+        assert_eq!(res_max, Ok(()));
+
+        let mut leaf_pkg = &pkg_at_max;
+        for _ in 0..MAX_NORMALIZE_DEPTH {
+            leaf_pkg = leaf_pkg
+                .packages
+                .first()
+                .ok_or_else(|| "expected nested sub-package".to_string())?;
+        }
+        let leaf_port = leaf_pkg
+            .port_defs
+            .first()
+            .ok_or_else(|| "expected leaf port_def".to_string())?;
+        assert!(leaf_port.protocol_family.is_empty());
+
+        let over_depth = MAX_NORMALIZE_DEPTH.saturating_add(1);
+        let mut pkg_over_max = build_nested_package_chain(over_depth)?;
+        let res_over = normalize_package_for_bijective_roundtrip(&mut pkg_over_max, 0);
+        assert_eq!(
+            res_over,
+            Err(NormalizeDepthError::MaxDepthExceeded {
+                depth: over_depth,
+                max_depth: MAX_NORMALIZE_DEPTH,
+            })
+        );
+        Ok(())
+    }
+}
