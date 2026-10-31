@@ -405,11 +405,8 @@ impl SymbolTable {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-LOOKUP-PORT] | SysML v2: ActionDef(SymbolTable::lookup_port)
     pub fn lookup_port(&self, port_ref: &str, current_part: Option<&str>) -> Option<&Symbol> {
-        if port_ref.contains('.') {
-            let parts: Vec<&str> = port_ref.split('.').collect();
-            if let [part_name, port_name] = parts.as_slice() {
-                let (part_name, port_name) = (*part_name, *port_name);
-
+        if let Some((part_name, port_name)) = port_ref.split_once('.') {
+            if !port_name.contains('.') {
                 // Find candidate part
                 if let Some(part_qnames) = self.by_name.get(part_name) {
                     for part_q in part_qnames {
@@ -1199,6 +1196,42 @@ mod tests {
         while let Some(mut node) = part_drain.pop() {
             part_drain.append(&mut node.parts);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_lookup_port_split_once_and_utf8_identifiers() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let pkg = PackageDef {
+            name: "システム_SSOT".to_string(),
+            part_defs: vec![PartDef {
+                name: "センサー".to_string(),
+                ports: vec![PortDef {
+                    name: "出力ポート".to_string(),
+                    type_name: "CANBus".to_string(),
+                    direction: "out".to_string(),
+                    is_conjugated: false,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let table = SymbolTable::build_from_package(&pkg);
+        let resolved = table
+            .lookup_port("センサー.出力ポート", None)
+            .ok_or("expected UTF-8 port symbol to resolve")?;
+        assert_eq!(resolved.name, "出力ポート");
+        assert_eq!(resolved.kind, SymbolKind::Port);
+
+        // Multi-dot, empty, and malformed dot references must not panic or mis-resolve.
+        assert!(table
+            .lookup_port("システム_SSOT.センサー.出力ポート", Some("センサー"))
+            .is_none());
+        assert!(table.lookup_port(".出力ポート", Some("センサー")).is_none());
+        assert!(table.lookup_port("センサー.", Some("センサー")).is_none());
+        assert!(table.lookup_port("", Some("センサー")).is_none());
         Ok(())
     }
 }

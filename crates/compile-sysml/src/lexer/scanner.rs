@@ -1,4 +1,8 @@
 //! Zero-copy slice-based tokenizer for SysML v2 / KerML syntax.
+//!
+//! Safety & Traceability: Realises: [REQ-LEXER-SCANNER-MODULE]
+//! Contract: Tokenizes UTF-8 SysML v2 and KerML source buffers into span-annotated `Token` streams using checked `.get()` slicing and saturating cursor arithmetic.
+//! Bounds & Faults: Rejects unclosed comments, unterminated string escapes, and malformed spans deterministically with zero panicking slice indexing.
 
 use super::token::{Span, Token, TokenKind};
 
@@ -271,7 +275,10 @@ impl<'a> Scanner<'a> {
                 }
             }
             unexpected => {
-                return Err(format!("Unexpected character '{}' at {}:{}", unexpected, line, col));
+                return Err(format!(
+                    "Unexpected character '{}' at {}:{}",
+                    unexpected, line, col
+                ));
             }
         };
 
@@ -307,7 +314,12 @@ impl<'a> Scanner<'a> {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-LEXER-SCANNER-SCANNER-SCAN-BLOCK-COMMENT] | SysML v2: ActionDef(Scanner::scan_block_comment)
-    fn scan_block_comment(&mut self, start: usize, line: usize, col: usize) -> Result<Token, String> {
+    fn scan_block_comment(
+        &mut self,
+        start: usize,
+        line: usize,
+        col: usize,
+    ) -> Result<Token, String> {
         self.advance(); // /
         self.advance(); // *
         let content_start = self.cursor;
@@ -316,11 +328,11 @@ impl<'a> Scanner<'a> {
 
         while !self.is_at_end() {
             if self.starts_with("/*") {
-                depth += 1;
+                depth = depth.saturating_add(1);
                 self.advance();
                 self.advance();
             } else if self.starts_with("*/") {
-                depth -= 1;
+                depth = depth.saturating_sub(1);
                 if depth == 0 {
                     content_end = self.cursor;
                     self.advance();
@@ -332,7 +344,7 @@ impl<'a> Scanner<'a> {
                 }
             } else {
                 if self.peek() == '\n' {
-                    self.line += 1;
+                    self.line = self.line.saturating_add(1);
                     self.col = 0;
                 }
                 self.advance();
@@ -340,15 +352,33 @@ impl<'a> Scanner<'a> {
         }
 
         if depth > 0 {
-            return Err(format!("Unclosed block comment starting at {}:{}", line, col));
+            return Err(format!(
+                "Unclosed block comment starting at {}:{}",
+                line, col
+            ));
         }
 
-        let raw = &self.source[content_start..content_end];
+        let raw = self.source.get(content_start..content_end).ok_or_else(|| {
+            format!(
+                "Invalid UTF-8 block comment span {}..{} at {}:{}",
+                content_start, content_end, line, col
+            )
+        })?;
         let cleaned = raw.trim();
-        let comment_text = if cleaned.starts_with("doc") && (cleaned.len() == 3 || cleaned[3..].chars().next().is_some_and(|c| c.is_whitespace() || c == ':')) {
-            cleaned[3..].trim_start_matches(|c: char| c.is_whitespace() || c == ':').trim().to_string()
-        } else {
-            cleaned.to_string()
+        let comment_text = match cleaned.strip_prefix("doc") {
+            Some(after_doc)
+                if after_doc.is_empty()
+                    || after_doc
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_whitespace() || c == ':') =>
+            {
+                after_doc
+                    .trim_start_matches(|c: char| c.is_whitespace() || c == ':')
+                    .trim()
+                    .to_string()
+            }
+            _ => cleaned.to_string(),
         };
 
         Ok(Token::new(
@@ -386,7 +416,13 @@ impl<'a> Scanner<'a> {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-LEXER-SCANNER-SCANNER-SCAN-STRING] | SysML v2: ActionDef(Scanner::scan_string)
-    fn scan_string(&mut self, quote: char, start: usize, line: usize, col: usize) -> Result<Token, String> {
+    fn scan_string(
+        &mut self,
+        quote: char,
+        start: usize,
+        line: usize,
+        col: usize,
+    ) -> Result<Token, String> {
         self.advance(); // opening quote
         let mut value = String::new();
 
@@ -395,8 +431,15 @@ impl<'a> Scanner<'a> {
             if ch == '\\' {
                 self.advance();
                 if self.is_at_end() {
-                    let desc = if quote == '\'' { "unrestricted identifier" } else { "string literal" };
-                    return Err(format!("Unterminated escape in {} at {}:{}", desc, line, col));
+                    let desc = if quote == '\'' {
+                        "unrestricted identifier"
+                    } else {
+                        "string literal"
+                    };
+                    return Err(format!(
+                        "Unterminated escape in {} at {}:{}",
+                        desc, line, col
+                    ));
                 }
                 match self.advance() {
                     'n' => value.push('\n'),
@@ -409,7 +452,7 @@ impl<'a> Scanner<'a> {
                 }
             } else {
                 if ch == '\n' {
-                    self.line += 1;
+                    self.line = self.line.saturating_add(1);
                     self.col = 0;
                 }
                 value.push(ch);
@@ -418,7 +461,11 @@ impl<'a> Scanner<'a> {
         }
 
         if self.is_at_end() {
-            let desc = if quote == '\'' { "unrestricted identifier" } else { "string literal" };
+            let desc = if quote == '\'' {
+                "unrestricted identifier"
+            } else {
+                "string literal"
+            };
             return Err(format!("Unclosed {} starting at {}:{}", desc, line, col));
         }
 
@@ -430,10 +477,7 @@ impl<'a> Scanner<'a> {
             TokenKind::StringLit(value)
         };
 
-        Ok(Token::new(
-            kind,
-            Span::new(start, self.cursor, line, col),
-        ))
+        Ok(Token::new(kind, Span::new(start, self.cursor, line, col)))
     }
 
     /// Executes deterministic fn `Scanner::scan_number` within `crates/compile-sysml/src/lexer/scanner.rs`.
@@ -478,14 +522,17 @@ impl<'a> Scanner<'a> {
 
         if !self.is_at_end() && self.peek() == '.' {
             // Check if next character after '.' is a digit (distinguish from dot operator)
-            if self.cursor + 1 < self.source.len() {
-                let next_ch = self.source[self.cursor + 1..].chars().next().unwrap_or('\0');
-                if next_ch.is_ascii_digit() {
-                    is_real = true;
-                    self.advance(); // consume '.'
-                    while !self.is_at_end() && self.peek().is_ascii_digit() {
-                        self.advance();
-                    }
+            let next_is_digit = self
+                .source
+                .get(self.cursor..)
+                .and_then(|rest| rest.strip_prefix('.'))
+                .and_then(|after_dot| after_dot.chars().next())
+                .is_some_and(|ch| ch.is_ascii_digit());
+            if next_is_digit {
+                is_real = true;
+                self.advance(); // consume '.'
+                while !self.is_at_end() && self.peek().is_ascii_digit() {
+                    self.advance();
                 }
             }
         }
@@ -501,13 +548,28 @@ impl<'a> Scanner<'a> {
             }
         }
 
-        let num_str = &self.source[num_start..self.cursor];
+        let num_str = self.source.get(num_start..self.cursor).ok_or_else(|| {
+            format!(
+                "Invalid numeric literal span {}..{} at {}:{}",
+                num_start, self.cursor, line, col
+            )
+        })?;
         if is_real {
-            let val = num_str.parse::<f64>().map_err(|e| format!("Invalid float '{}' at {}:{}: {}", num_str, line, col, e))?;
-            Ok(Token::new(TokenKind::RealLit(val), Span::new(start, self.cursor, line, col)))
+            let val = num_str
+                .parse::<f64>()
+                .map_err(|e| format!("Invalid float '{}' at {}:{}: {}", num_str, line, col, e))?;
+            Ok(Token::new(
+                TokenKind::RealLit(val),
+                Span::new(start, self.cursor, line, col),
+            ))
         } else {
-            let val = num_str.parse::<i64>().map_err(|e| format!("Invalid integer '{}' at {}:{}: {}", num_str, line, col, e))?;
-            Ok(Token::new(TokenKind::IntLit(val), Span::new(start, self.cursor, line, col)))
+            let val = num_str
+                .parse::<i64>()
+                .map_err(|e| format!("Invalid integer '{}' at {}:{}: {}", num_str, line, col, e))?;
+            Ok(Token::new(
+                TokenKind::IntLit(val),
+                Span::new(start, self.cursor, line, col),
+            ))
         }
     }
 
@@ -539,13 +601,23 @@ impl<'a> Scanner<'a> {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-LEXER-SCANNER-SCANNER-SCAN-IDENT-OR-KEYWORD] | SysML v2: ActionDef(Scanner::scan_ident_or_keyword)
-    fn scan_ident_or_keyword(&mut self, start: usize, line: usize, col: usize) -> Result<Token, String> {
+    fn scan_ident_or_keyword(
+        &mut self,
+        start: usize,
+        line: usize,
+        col: usize,
+    ) -> Result<Token, String> {
         self.advance();
         while !self.is_at_end() && is_ident_continue(self.peek()) {
             self.advance();
         }
 
-        let text = &self.source[start..self.cursor];
+        let text = self.source.get(start..self.cursor).ok_or_else(|| {
+            format!(
+                "Invalid identifier span {}..{} at {}:{}",
+                start, self.cursor, line, col
+            )
+        })?;
 
         // Check if `doc` followed immediately by `/*`
         if text == "doc" {
@@ -572,7 +644,7 @@ impl<'a> Scanner<'a> {
             while !self.is_at_end() && is_ident_continue(self.peek()) {
                 self.advance();
             }
-            if &self.source[word_start..self.cursor] == "case" {
+            if self.source.get(word_start..self.cursor) == Some("case") {
                 return Ok(Token::new(
                     TokenKind::UseCase,
                     Span::new(start, self.cursor, line, col),
@@ -682,10 +754,10 @@ impl<'a> Scanner<'a> {
                 }
                 '\n' => {
                     self.advance();
-                    self.line += 1;
+                    self.line = self.line.saturating_add(1);
                     self.col = 1;
                 }
-                '/' if self.cursor + 1 < self.source.len() && self.source[self.cursor + 1..].starts_with('/') => {
+                '/' if self.starts_with("//") => {
                     // Single line comment
                     while !self.is_at_end() && self.peek() != '\n' {
                         self.advance();
@@ -731,7 +803,7 @@ impl<'a> Scanner<'a> {
                 }
                 '\n' => {
                     self.advance();
-                    self.line += 1;
+                    self.line = self.line.saturating_add(1);
                     self.col = 1;
                 }
                 _ => break,
@@ -796,7 +868,9 @@ impl<'a> Scanner<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-LEXER-SCANNER-SCANNER-STARTS-WITH] | SysML v2: ActionDef(Scanner::starts_with)
     fn starts_with(&self, prefix: &str) -> bool {
-        self.source[self.cursor..].starts_with(prefix)
+        self.source
+            .get(self.cursor..)
+            .is_some_and(|rest| rest.starts_with(prefix))
     }
 
     /// Executes deterministic fn `Scanner::peek` within `crates/compile-sysml/src/lexer/scanner.rs`.
@@ -826,7 +900,10 @@ impl<'a> Scanner<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-LEXER-SCANNER-SCANNER-PEEK] | SysML v2: ActionDef(Scanner::peek)
     fn peek(&self) -> char {
-        self.source[self.cursor..].chars().next().unwrap_or('\0')
+        self.source
+            .get(self.cursor..)
+            .and_then(|rest| rest.chars().next())
+            .unwrap_or('\0')
     }
 
     /// Executes deterministic fn `Scanner::advance` within `crates/compile-sysml/src/lexer/scanner.rs`.
@@ -856,9 +933,15 @@ impl<'a> Scanner<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-LEXER-SCANNER-SCANNER-ADVANCE] | SysML v2: ActionDef(Scanner::advance)
     fn advance(&mut self) -> char {
-        let ch = self.peek();
-        self.cursor += ch.len_utf8();
-        self.col += 1;
+        let Some(ch) = self
+            .source
+            .get(self.cursor..)
+            .and_then(|rest| rest.chars().next())
+        else {
+            return '\0';
+        };
+        self.cursor = self.cursor.saturating_add(ch.len_utf8());
+        self.col = self.col.saturating_add(1);
         ch
     }
 }
@@ -984,7 +1067,10 @@ mod tests {
         assert_eq!(kind_at(&tokens, 6)?, TokenKind::IntLit(42));
         assert_eq!(kind_at(&tokens, 7)?, TokenKind::Semi);
 
-        assert_eq!(kind_at(&tokens, 8)?, TokenKind::Ident("is_valid".to_string()));
+        assert_eq!(
+            kind_at(&tokens, 8)?,
+            TokenKind::Ident("is_valid".to_string())
+        );
         assert_eq!(kind_at(&tokens, 9)?, TokenKind::EqEq);
         assert_eq!(kind_at(&tokens, 10)?, TokenKind::BoolLit(true));
         assert_eq!(kind_at(&tokens, 11)?, TokenKind::Semi);
@@ -1036,7 +1122,8 @@ mod tests {
     }
 
     #[test]
-    fn test_lexer_unrestricted_single_quoted_identifier() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_lexer_unrestricted_single_quoted_identifier() -> Result<(), Box<dyn std::error::Error>>
+    {
         let src = "part def 'Flight Control Computer' :> 'Avionics System';";
         let mut scanner = Scanner::new(src);
         let tokens = scanner.scan_all()?;
@@ -1055,5 +1142,47 @@ mod tests {
         assert_eq!(kind_at(&tokens, 5)?, TokenKind::Semi);
         Ok(())
     }
-}
 
+    #[test]
+    fn test_scanner_utf8_boundaries_and_eof_advance_safety(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let src = concat!(
+            "/* doc: Δv <= 60.0 m/s 🛰 */\n",
+            "// 航空安全コメント Ω\n",
+            "part def 'センサー_01' {\n",
+            "    doc /* Ω温度 >= -40.0 */\n",
+            "    use case '軌道制御_UC' { attribute msg = \"ΔΩ🛰\"; }\n",
+            "}"
+        );
+        let mut scanner = Scanner::new(src);
+        let tokens = scanner.scan_all()?;
+        assert_eq!(
+            kind_at(&tokens, 0)?,
+            TokenKind::DocComment("Δv <= 60.0 m/s 🛰".to_string())
+        );
+        assert_eq!(kind_at(&tokens, 1)?, TokenKind::Part);
+        assert_eq!(kind_at(&tokens, 2)?, TokenKind::Def);
+        assert_eq!(
+            kind_at(&tokens, 3)?,
+            TokenKind::Ident("センサー_01".to_string())
+        );
+
+        // At EOF, advancing must remain total and must never push cursor out of bounds.
+        assert_eq!(scanner.advance(), '\0');
+        assert_eq!(scanner.peek(), '\0');
+        assert!(!scanner.starts_with("/*"));
+        assert_eq!(scanner.next_token()?.kind, TokenKind::Eof);
+
+        // Mid-codepoint cursor state must never panic in peek, starts_with, or advance.
+        let mut mid_utf8 = Scanner {
+            source: "/* Δ */",
+            cursor: 4,
+            line: 1,
+            col: 1,
+        };
+        assert_eq!(mid_utf8.peek(), '\0');
+        assert!(!mid_utf8.starts_with("*/"));
+        assert_eq!(mid_utf8.advance(), '\0');
+        Ok(())
+    }
+}

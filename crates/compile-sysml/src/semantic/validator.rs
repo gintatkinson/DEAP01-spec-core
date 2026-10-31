@@ -659,41 +659,88 @@ impl<'a> SemanticValidator<'a> {
         self.collect_package_requirement_texts(self.pkg, &mut req_texts, 0);
 
         for (req_name, text_corpus) in req_texts {
-            for targets in extract_annotation_targets(&text_corpus, "@SafetyRealises") {
-                for target in &targets {
-                    let clean_target = normalize_id(target);
-                    if !known_constraints.is_empty()
-                        && !known_constraints
-                            .iter()
-                            .any(|c| c == &clean_target || c.contains(&clean_target))
-                    {
-                        self.diagnostics.push(SemanticDiagnostic::error(
-                            &req_name,
-                            format!(
-                                "Requirement '{}' references undefined constraint/UCA '{}' in @SafetyRealises",
-                                req_name, target
-                            ),
-                        ));
+            self.validate_safety_realises_spans(&req_name, &text_corpus, &known_constraints);
+            self.validate_triggers_hazard_spans(&req_name, &text_corpus, &known_hazards);
+        }
+    }
+
+    /// Validates `@SafetyRealises` target identifiers and delimiter balance for a single requirement corpus.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-REFERENTIAL-INTEGRITY]
+    fn validate_safety_realises_spans(
+        &mut self,
+        req_name: &str,
+        text_corpus: &str,
+        known_constraints: &BTreeSet<String>,
+    ) {
+        for span in extract_annotation_targets(text_corpus, "@SafetyRealises") {
+            match span {
+                AnnotationSpan::Targets(targets) => {
+                    for target in &targets {
+                        let clean_target = normalize_id(target);
+                        if !known_constraints.is_empty()
+                            && !known_constraints
+                                .iter()
+                                .any(|c| c == &clean_target || c.contains(&clean_target))
+                        {
+                            self.diagnostics.push(SemanticDiagnostic::error(
+                                req_name,
+                                format!(
+                                    "Requirement '{}' references undefined constraint/UCA '{}' in @SafetyRealises",
+                                    req_name, target
+                                ),
+                            ));
+                        }
                     }
                 }
+                AnnotationSpan::UnclosedDelimiter => {
+                    self.diagnostics.push(SemanticDiagnostic::error(
+                        req_name,
+                        format!(
+                            "Requirement '{}' contains unclosed '(' delimiter in @SafetyRealises",
+                            req_name
+                        ),
+                    ));
+                }
             }
+        }
+    }
 
-            for targets in extract_annotation_targets(&text_corpus, "@TriggersHazard") {
-                for target in &targets {
-                    let clean_target = normalize_id(target);
-                    if !known_hazards.is_empty()
-                        && !known_hazards
-                            .iter()
-                            .any(|h| h == &clean_target || h.contains(&clean_target))
-                    {
-                        self.diagnostics.push(SemanticDiagnostic::error(
-                            &req_name,
-                            format!(
-                                "Requirement '{}' references undefined hazard '{}' in @TriggersHazard",
-                                req_name, target
-                            ),
-                        ));
+    /// Validates `@TriggersHazard` target identifiers and delimiter balance for a single requirement corpus.
+    /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-REFERENTIAL-INTEGRITY]
+    fn validate_triggers_hazard_spans(
+        &mut self,
+        req_name: &str,
+        text_corpus: &str,
+        known_hazards: &BTreeSet<String>,
+    ) {
+        for span in extract_annotation_targets(text_corpus, "@TriggersHazard") {
+            match span {
+                AnnotationSpan::Targets(targets) => {
+                    for target in &targets {
+                        let clean_target = normalize_id(target);
+                        if !known_hazards.is_empty()
+                            && !known_hazards
+                                .iter()
+                                .any(|h| h == &clean_target || h.contains(&clean_target))
+                        {
+                            self.diagnostics.push(SemanticDiagnostic::error(
+                                req_name,
+                                format!(
+                                    "Requirement '{}' references undefined hazard '{}' in @TriggersHazard",
+                                    req_name, target
+                                ),
+                            ));
+                        }
                     }
+                }
+                AnnotationSpan::UnclosedDelimiter => {
+                    self.diagnostics.push(SemanticDiagnostic::error(
+                        req_name,
+                        format!(
+                            "Requirement '{}' contains unclosed '(' delimiter in @TriggersHazard",
+                            req_name
+                        ),
+                    ));
                 }
             }
         }
@@ -996,34 +1043,27 @@ impl<'a> SemanticValidator<'a> {
                 continue;
             }
 
-            if let Some(lt_idx) = clean.find('<') {
-                if let Some(gt_idx) = clean.rfind('>') {
-                    if gt_idx > lt_idx {
-                        let trailing = clean.get(gt_idx.saturating_add(1)..).unwrap_or("");
-                        if !trailing.trim().is_empty() {
-                            return false;
-                        }
-                        let outer = clean.get(..lt_idx).unwrap_or("").trim();
-                        let inner_str = clean.get(lt_idx.saturating_add(1)..gt_idx).unwrap_or("");
-
-                        let outer_ok = is_primitive_or_builtin_type_at_depth(outer, depth)
-                            || self.symbols.lookup_in_scope(scope, outer).is_some();
-                        if !outer_ok {
-                            return false;
-                        }
-
-                        let args = split_top_level_type_args(inner_str);
-                        if args.is_empty() {
-                            return false;
-                        }
-
-                        let next_depth = depth.saturating_add(1);
-                        for arg in args.into_iter().rev() {
-                            stack.push((arg, next_depth));
-                        }
-                        continue;
+            match decompose_generic_type(clean) {
+                GenericDecomposition::Malformed => return false,
+                GenericDecomposition::Split { outer, inner } => {
+                    let outer_ok = is_primitive_or_builtin_type_at_depth(outer, depth)
+                        || self.symbols.lookup_in_scope(scope, outer).is_some();
+                    if !outer_ok {
+                        return false;
                     }
+
+                    let args = split_top_level_type_args(inner);
+                    if args.is_empty() {
+                        return false;
+                    }
+
+                    let next_depth = depth.saturating_add(1);
+                    for arg in args.into_iter().rev() {
+                        stack.push((arg, next_depth));
+                    }
+                    continue;
                 }
+                GenericDecomposition::Atomic => {}
             }
 
             if !is_atomic_builtin_type_name(clean)
@@ -1134,7 +1174,7 @@ fn strip_pointer_or_ref_prefix(s: &str) -> Option<&str> {
             .skip(1)
             .find(|(_, c)| !c.is_ascii_alphanumeric() && *c != '_')
             .map_or(rest.len(), |(idx, _)| idx);
-        rest = rest.get(lifetime_end..).unwrap_or("").trim_start();
+        rest = rest.get(lifetime_end..)?.trim_start();
         if let Some(after_mut) = rest.strip_prefix("mut") {
             if is_modifier_boundary(after_mut) {
                 rest = after_mut.trim_start();
@@ -1171,10 +1211,9 @@ fn strip_trailing_bracket_wrapper(s: &str) -> Option<&str> {
     }
     let open_idx = matching_open?;
     if open_idx > 0 {
-        return Some(s.get(..open_idx).unwrap_or("").trim_end());
+        return Some(s.get(..open_idx)?.trim_end());
     }
-    let inner_end = s.len().saturating_sub(1);
-    let inner = s.get(1..inner_end).unwrap_or("").trim();
+    let inner = s.strip_prefix('[')?.strip_suffix(']')?.trim();
     let mut inner_depth: usize = 0;
     let mut semi_pos = None;
     for (idx, ch) in inner.char_indices() {
@@ -1189,7 +1228,7 @@ fn strip_trailing_bracket_wrapper(s: &str) -> Option<&str> {
         }
     }
     if let Some(semi_idx) = semi_pos {
-        Some(inner.get(..semi_idx).unwrap_or("").trim())
+        Some(inner.get(..semi_idx)?.trim())
     } else {
         Some(inner)
     }
@@ -1241,7 +1280,7 @@ pub fn split_top_level_type_args<'a>(args: &'a str) -> Vec<&'a str> {
             }
         }
         if depth == 0 && !closed_early {
-            if let Some(unwrapped) = s.get(1..last_idx) {
+            if let Some(unwrapped) = s.strip_prefix('<').and_then(|rest| rest.strip_suffix('>')) {
                 s = unwrapped.trim();
             }
         }
@@ -1265,9 +1304,12 @@ pub fn split_top_level_type_args<'a>(args: &'a str) -> Vec<&'a str> {
             '[' => bracket_depth = bracket_depth.saturating_add(1),
             ']' => bracket_depth = bracket_depth.saturating_sub(1),
             ',' if angle_depth == 0 && paren_depth == 0 && bracket_depth == 0 => {
-                let slice = s.get(start..idx).unwrap_or("").trim();
-                if !slice.is_empty() {
-                    result.push(slice);
+                let Some(slice) = s.get(start..idx) else {
+                    return Vec::new();
+                };
+                let trimmed = slice.trim();
+                if !trimmed.is_empty() {
+                    result.push(trimmed);
                 }
                 start = idx.saturating_add(ch.len_utf8());
             }
@@ -1275,9 +1317,12 @@ pub fn split_top_level_type_args<'a>(args: &'a str) -> Vec<&'a str> {
         }
     }
 
-    let tail = s.get(start..).unwrap_or("").trim();
-    if !tail.is_empty() {
-        result.push(tail);
+    let Some(tail) = s.get(start..) else {
+        return Vec::new();
+    };
+    let trimmed_tail = tail.trim();
+    if !trimmed_tail.is_empty() {
+        result.push(trimmed_tail);
     }
 
     result
@@ -1348,27 +1393,21 @@ fn is_primitive_or_builtin_type_at_depth(type_name: &str, start_depth: usize) ->
             continue;
         }
 
-        if let Some(lt_idx) = clean.find('<') {
-            if let Some(gt_idx) = clean.rfind('>') {
-                if gt_idx > lt_idx {
-                    let trailing = clean.get(gt_idx.saturating_add(1)..).unwrap_or("");
-                    if !trailing.trim().is_empty() {
-                        return false;
-                    }
-                    let outer = clean.get(..lt_idx).unwrap_or("").trim();
-                    let inner_str = clean.get(lt_idx.saturating_add(1)..gt_idx).unwrap_or("");
-                    let args = split_top_level_type_args(inner_str);
-                    if args.is_empty() {
-                        return false;
-                    }
-                    let next_depth = depth.saturating_add(1);
-                    for arg in args.into_iter().rev() {
-                        stack.push((arg, next_depth));
-                    }
-                    stack.push((outer, next_depth));
-                    continue;
+        match decompose_generic_type(clean) {
+            GenericDecomposition::Malformed => return false,
+            GenericDecomposition::Split { outer, inner } => {
+                let args = split_top_level_type_args(inner);
+                if args.is_empty() {
+                    return false;
                 }
+                let next_depth = depth.saturating_add(1);
+                for arg in args.into_iter().rev() {
+                    stack.push((arg, next_depth));
+                }
+                stack.push((outer, next_depth));
+                continue;
             }
+            GenericDecomposition::Atomic => {}
         }
 
         if !is_atomic_builtin_type_name(clean) {
@@ -1377,6 +1416,45 @@ fn is_primitive_or_builtin_type_at_depth(type_name: &str, start_depth: usize) ->
     }
 
     true
+}
+
+/// Classification of a normalized type expression during generic `<...>` boundary inspection.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-IS-RESOLVABLE-TYPE]
+enum GenericDecomposition<'a> {
+    Atomic,
+    Split { outer: &'a str, inner: &'a str },
+    Malformed,
+}
+
+/// Decomposes an outer generic container and inner type-argument list using checked `.get()` slices.
+/// Rejects trailing tokens or invalid slice boundaries explicitly with `GenericDecomposition::Malformed`.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-IS-RESOLVABLE-TYPE]
+fn decompose_generic_type(clean: &str) -> GenericDecomposition<'_> {
+    let Some(lt_idx) = clean.find('<') else {
+        return GenericDecomposition::Atomic;
+    };
+    let Some(gt_idx) = clean.rfind('>') else {
+        return GenericDecomposition::Malformed;
+    };
+    if gt_idx <= lt_idx {
+        return GenericDecomposition::Malformed;
+    }
+    let Some(trailing) = clean.get(gt_idx.saturating_add(1)..) else {
+        return GenericDecomposition::Malformed;
+    };
+    if !trailing.trim().is_empty() {
+        return GenericDecomposition::Malformed;
+    }
+    let Some(outer_raw) = clean.get(..lt_idx) else {
+        return GenericDecomposition::Malformed;
+    };
+    let Some(inner) = clean.get(lt_idx.saturating_add(1)..gt_idx) else {
+        return GenericDecomposition::Malformed;
+    };
+    GenericDecomposition::Split {
+        outer: outer_raw.trim(),
+        inner,
+    }
 }
 
 /// Extracts the interior slice of a single balanced enclosing tuple `(T1, T2, ...)`.
@@ -1402,7 +1480,7 @@ fn extract_enclosing_tuple_inner(clean: &str) -> Option<&str> {
         }
     }
     if depth == 0 && !closed_early {
-        clean.get(1..last_idx)
+        clean.strip_prefix('(')?.strip_suffix(')')
     } else {
         None
     }
@@ -1573,10 +1651,18 @@ fn compute_scoped_package_name(pkg: &PackageDef, parent_scope: &str) -> String {
     }
 }
 
-/// Extracts `@SafetyRealises` or `@TriggersHazard` target identifiers from requirement prose.
-/// Uses checked `.get()` string slicing and saturating byte offsets with zero panicking operations.
+/// Parsed outcome for a single `@SafetyRealises` or `@TriggersHazard` annotation span.
 /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-REFERENTIAL-INTEGRITY]
-fn extract_annotation_targets(text: &str, tag: &str) -> Vec<Vec<String>> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum AnnotationSpan {
+    Targets(Vec<String>),
+    UnclosedDelimiter,
+}
+
+/// Extracts `@SafetyRealises` or `@TriggersHazard` target identifiers from requirement prose.
+/// Uses UTF-8 boundary-checked `.get()` slicing and explicit delimiter validation without masking malformed spans.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-REFERENTIAL-INTEGRITY]
+fn extract_annotation_targets(text: &str, tag: &str) -> Vec<AnnotationSpan> {
     let mut results = Vec::new();
     if tag.is_empty() {
         return results;
@@ -1600,59 +1686,82 @@ fn extract_annotation_targets(text: &str, tag: &str) -> Vec<Vec<String>> {
             .map_or((rest.len(), None), |(c_idx, c)| (c_idx, Some(c)));
         match next_char {
             Some('(') => {
-                let inside_start = idx.saturating_add(ws_end).saturating_add(1);
-                if let Some(after_open) = text.get(inside_start..) {
-                    if let Some(close_pos) = after_open.find(')') {
-                        if let Some(inside) = after_open.get(..close_pos) {
-                            let targets: Vec<String> = inside
-                                .split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            results.push(targets);
-                            search_idx = inside_start.saturating_add(close_pos).saturating_add(1);
-                            continue;
-                        }
-                    }
-                }
+                let Some(after_ws) = rest.get(ws_end..) else {
+                    results.push(AnnotationSpan::UnclosedDelimiter);
+                    break;
+                };
+                let Some((targets, consumed)) = parse_parenthesized_targets(after_ws) else {
+                    results.push(AnnotationSpan::UnclosedDelimiter);
+                    break;
+                };
+                results.push(AnnotationSpan::Targets(targets));
+                search_idx = idx.saturating_add(ws_end).saturating_add(consumed);
+                continue;
             }
             Some(':') => {
-                let colon_after_idx = ws_end.saturating_add(1);
-                if let Some(after_colon) = rest.get(colon_after_idx..) {
-                    let id_start = after_colon
-                        .char_indices()
-                        .find(|(_, c)| !c.is_whitespace())
-                        .map_or(after_colon.len(), |(c_idx, _)| c_idx);
-                    if let Some(id_rest) = after_colon.get(id_start..) {
-                        let id_len = id_rest
-                            .chars()
-                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
-                            .map(|c| c.len_utf8())
-                            .sum::<usize>();
-                        if id_len > 0 {
-                            if let Some(raw_id) = id_rest.get(..id_len) {
-                                results.push(vec![raw_id.trim().to_string()]);
-                                let global_end = idx
-                                    .saturating_add(colon_after_idx)
-                                    .saturating_add(id_start)
-                                    .saturating_add(id_len);
-                                search_idx = global_end.max(tag_start.saturating_add(1));
-                                continue;
-                            }
+                if let Some(after_ws) = rest.get(ws_end..) {
+                    if let Some((target_id, consumed)) = parse_colon_target(after_ws) {
+                        if !target_id.is_empty() {
+                            results.push(AnnotationSpan::Targets(vec![target_id]));
                         }
+                        let step = text
+                            .get(tag_start..)
+                            .and_then(|s| s.chars().next())
+                            .map_or(1, char::len_utf8);
+                        let global_end = idx.saturating_add(ws_end).saturating_add(consumed);
+                        search_idx = global_end.max(tag_start.saturating_add(step));
+                        continue;
                     }
                 }
             }
             _ => {}
         }
-        let step = lower_text
-            .get(tag_start..)
-            .and_then(|s| s.chars().next())
-            .map_or(1, char::len_utf8);
-        search_idx = tag_start.saturating_add(step);
+        let Some(tag_tail) = text.get(tag_start..) else {
+            break;
+        };
+        let Some(first_ch) = tag_tail.chars().next() else {
+            break;
+        };
+        search_idx = tag_start.saturating_add(first_ch.len_utf8());
     }
 
     results
+}
+
+/// Parses a balanced `(ID1, ID2, ...)` target list, returning `None` if `)` is missing.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-REFERENTIAL-INTEGRITY]
+fn parse_parenthesized_targets(after_ws: &str) -> Option<(Vec<String>, usize)> {
+    let after_open = after_ws.strip_prefix('(')?;
+    let (inside, _) = after_open.split_once(')')?;
+    let targets: Vec<String> = inside
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let consumed = 1usize.saturating_add(inside.len()).saturating_add(1);
+    Some((targets, consumed))
+}
+
+/// Parses a single `: TARGET_ID` annotation target following a colon delimiter.
+/// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-REFERENTIAL-INTEGRITY]
+fn parse_colon_target(after_ws: &str) -> Option<(String, usize)> {
+    let after_colon = after_ws.strip_prefix(':')?;
+    let id_start = after_colon
+        .char_indices()
+        .find(|(_, c)| !c.is_whitespace())
+        .map_or(after_colon.len(), |(c_idx, _)| c_idx);
+    let id_rest = after_colon.get(id_start..)?;
+    let id_len = id_rest
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+        .map(char::len_utf8)
+        .sum::<usize>();
+    if id_len == 0 {
+        return None;
+    }
+    let raw_id = id_rest.get(..id_len)?;
+    let consumed = 1usize.saturating_add(id_start).saturating_add(id_len);
+    Some((raw_id.trim().to_string(), consumed))
 }
 
 /// Executes deterministic fn `get_effective_direction` within `crates/compile-sysml/src/semantic/validator.rs`.
@@ -3220,6 +3329,112 @@ mod tests {
         drain_package_tree_iteratively(over_root_65);
         drain_package_tree_iteratively(hostile_pkg);
         drain_package_tree_iteratively(hostile_part_root);
+        Ok(())
+    }
+
+    #[test]
+    fn test_utf8_multibyte_annotations_and_unclosed_delimiters(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // 1. Valid multi-byte UTF-8 prose (2-byte, 3-byte, 4-byte codepoints) alongside tags
+        let valid_pkg = PackageDef {
+            name: "航空安全_Sys".to_string(),
+            constraint_defs: vec![
+                ConstraintDef {
+                    name: "UCA_01_Overspeed".to_string(),
+                    expression: "v <= 60.0".to_string(),
+                    ..Default::default()
+                },
+                ConstraintDef {
+                    name: "UCA_02_Thermal".to_string(),
+                    expression: "t <= 85.0".to_string(),
+                    ..Default::default()
+                },
+            ],
+            hazard_defs: vec![HazardDef {
+                name: "HZ_01_LossOfControl".to_string(),
+                ..Default::default()
+            }],
+            requirement_defs: vec![RequirementDef {
+                name: "Req_UTF8_Valid".to_string(),
+                doc: Some("Δv ≤ 60.0 m/s 🛰 許容範囲 äöüß".to_string()),
+                text:
+                    "飛行制御 Ω @SafetyRealises(UCA-01, UCA-02) および @triggershazard: hz-01 完了"
+                        .to_string(),
+                assumes: vec!["温度 ≥ -40°C @SAFETYREALISES: UCA-02".to_string()],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let mut valid_validator = SemanticValidator::new(&valid_pkg);
+        valid_validator.validate();
+        assert!(
+            !valid_validator.has_errors(),
+            "Expected zero errors on valid multi-byte UTF-8 requirement tags, got: {:?}",
+            valid_validator.errors()
+        );
+
+        // 2. Dangling constraint and hazard references surrounded by multi-byte UTF-8 codepoints
+        let dangling_pkg = PackageDef {
+            name: "航空安全_Dangling".to_string(),
+            constraint_defs: valid_pkg.constraint_defs.clone(),
+            hazard_defs: valid_pkg.hazard_defs.clone(),
+            requirement_defs: vec![RequirementDef {
+                name: "Req_UTF8_Dangling".to_string(),
+                text: "🛰ΔΩ@SafetyRealises(UCA-99)航空@TriggersHazard:HZ-99≤≥".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let mut dangling_validator = SemanticValidator::new(&dangling_pkg);
+        dangling_validator.validate();
+        assert!(dangling_validator.has_errors());
+        let dangling_errors = dangling_validator.errors();
+        assert!(dangling_errors.iter().any(|e| e.message.contains("UCA-99")));
+        assert!(dangling_errors.iter().any(|e| e.message.contains("HZ-99")));
+
+        // 3. Unclosed annotation delimiter with multi-byte UTF-8 prose must fail closed, never silently masked
+        let unclosed_pkg = PackageDef {
+            name: "航空安全_Unclosed".to_string(),
+            constraint_defs: valid_pkg.constraint_defs,
+            hazard_defs: valid_pkg.hazard_defs,
+            requirement_defs: vec![RequirementDef {
+                name: "Req_UTF8_Unclosed".to_string(),
+                text: "Δv ≤ 60.0 m/s 🛰 @SafetyRealises(UCA-01".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let mut unclosed_validator = SemanticValidator::new(&unclosed_pkg);
+        unclosed_validator.validate();
+        assert!(
+            unclosed_validator.has_errors(),
+            "Unclosed @SafetyRealises( delimiter must be rejected rather than silently masked"
+        );
+        assert!(unclosed_validator.errors().iter().any(|e| e
+            .message
+            .contains("unclosed '(' delimiter in @SafetyRealises")));
+
+        // 4. Direct extraction probe with multi-byte UTF-8 tag prefix and unclosed @TriggersHazard(
+        let spans = extract_annotation_targets(
+            "ΔΩ §Safety: UCA-01 および §Safety invalid §Safety(UCA-02, UCA-03)",
+            "§Safety",
+        );
+        assert_eq!(
+            spans,
+            vec![
+                AnnotationSpan::Targets(vec!["UCA-01".to_string()]),
+                AnnotationSpan::Targets(vec!["UCA-02".to_string(), "UCA-03".to_string()]),
+            ]
+        );
+        let unclosed_hazard_spans =
+            extract_annotation_targets("航空安全 @TriggersHazard(HZ-01", "@TriggersHazard");
+        assert_eq!(
+            unclosed_hazard_spans,
+            vec![AnnotationSpan::UnclosedDelimiter]
+        );
         Ok(())
     }
 }
