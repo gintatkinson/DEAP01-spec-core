@@ -1,0 +1,214 @@
+{
+  "sha256": "1aabe4e9f5134bc11c7d1462edb77fb2047a029d82607e34e1f10a57dadfc58f",
+  "total_lines": 1,
+  "node_counts": {
+    "action_defs": 5,
+    "attribute_defs": 29,
+    "calc_defs": 0,
+    "capability_defs": 0,
+    "connection_defs": 0,
+    "constraint_defs": 6,
+    "containers": 4,
+    "groupings": 0,
+    "hazard_defs": 0,
+    "identities": 0,
+    "interaction_defs": 1,
+    "item_defs": 0,
+    "leaves": 29,
+    "lists": 5,
+    "operation_defs": 0,
+    "packages": 1,
+    "part_defs": 4,
+    "port_defs": 12,
+    "requirement_defs": 1,
+    "risk_defs": 0,
+    "state_defs": 1,
+    "test_case_defs": 0,
+    "typedefs": 0,
+    "use_case_defs": 7
+  },
+  "schema_nodes": [
+    "BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture",
+    "BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture_LifecycleState",
+    "BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture_SequenceInteraction",
+    "Blueprint_ID",
+    "C_CERT_01",
+    "C_CERT_02",
+    "C_CERT_03",
+    "C_CERT_04",
+    "C_CERT_05",
+    "C_CERT_06",
+    "CertifiedCoreSubsetAndCoverageGate",
+    "DualModeFerroceneToolchainGate",
+    "FlsParagraphTraceabilitySynthesizer",
+    "Generation_Mode",
+    "REQ_0611_BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C",
+    "Requirement_ID",
+    "Specification_Source",
+    "Status",
+    "Target_Crates",
+    "ThreeRingAssurancePartitionCompiler",
+    "Title",
+    "Tracked_Issues",
+    "UC_AC_01_Dual_Mode_criticalup_toml_and_rust_toolchain_toml_Parity_and_DO_330_Stage_2_Fixed_Point_Qualification",
+    "UC_AC_02_End_to_End_FLS_Normative_Paragraph_Traceability_Emission_and_Fail_Closed_Orphan_Detection",
+    "UC_AC_03_Certified_core_Library_Subset_Symbol_Report_Gate_Rejecting_std_alloc_and_Dynamic_Formatting_Symbols",
+    "UC_AC_04_Zero_Overcount_Structural_and_MC_DC_Coverage_Verification_Mapped_to_SysML_Verification_Cases",
+    "UC_AC_05_Schema_Driven_3_Ring_Workspace_Partitioning_and_Ring_2_Miri_Guarded_FFI_Precondition_Enforcement",
+    "UC_AC_06_Ring_1_Challenge_Response_Command_Interlock_and_TelemetryFrame_Digest_Readback_SafetyMonitor_Against_Ring_3_Faults",
+    "UC_AC_07_Twelve_Gate_Blueprint_Verification_and_Upstream_Baseline_Cleanliness_Conformance",
+    "assurance_ring_count",
+    "attachAndAuditFlsTraceability",
+    "auditCoreSubsetAndMcdcCoverage",
+    "coverage_diag_out",
+    "dal_a_mcdc_coverage_min_pct",
+    "deterministic_uuid",
+    "elf_and_profdata_in",
+    "enable_ring1_safety_monitor",
+    "enforce_safety_comment_fls",
+    "fls_annotated_units_out",
+    "fls_diag_out",
+    "lowered_module_graph_in",
+    "max_ring1_heap_allocations",
+    "max_toolchain_version_drift",
+    "max_unguarded_ffi_entrypoints",
+    "overcounted_span_count",
+    "partition_diag_out",
+    "partitioned_workspace_out",
+    "qualification_dossier_out",
+    "reproducible_ferrocene_lock",
+    "require_sysml_test_case_link",
+    "stage_fixed_point_mismatch_files",
+    "synthesizeThreeRingWorkspace",
+    "sysml_assurance_ast_in",
+    "table_a7_evidence_out",
+    "toolchain_diag_out",
+    "toolchain_manifests_in",
+    "trace_chain_depth",
+    "uncertified_core_symbol_count",
+    "unmapped_fls_item_count",
+    "verifyRingBoundariesAndMonitor",
+    "verifyToolchainAndStageParity"
+  ],
+  "operational_activities": [
+    {
+      "id": "OA-01",
+      "name": "verifyToolchainAndStageParity",
+      "doc": "verifyToolchainAndStageParity(workspacePath)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-02",
+      "name": "synthesizeThreeRingWorkspace",
+      "doc": "synthesizeThreeRingWorkspace(sysmlPackageId)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-03",
+      "name": "attachAndAuditFlsTraceability",
+      "doc": "attachAndAuditFlsTraceability(ringWorkspacePlan)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-04",
+      "name": "auditCoreSubsetAndMcdcCoverage",
+      "doc": "auditCoreSubsetAndMcdcCoverage(flsTraceBundle)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-05",
+      "name": "verifyRingBoundariesAndMonitor",
+      "doc": "verifyRingBoundariesAndMonitor(workspacePath)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "operational_exchanges": [],
+  "operational_scenarios": [
+    {
+      "id": "SCN-01",
+      "name": "UC_AC_01_Dual_Mode_criticalup_toml_and_rust_toolchain_toml_Parity_and_DO_330_Stage_2_Fixed_Point_Qualification",
+      "actor": "",
+      "objective": "\"Dual Mode criticalup toml and rust toolchain toml Parity and DO 330 Stage 2 Fixed Point Qualification\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-02",
+      "name": "UC_AC_02_End_to_End_FLS_Normative_Paragraph_Traceability_Emission_and_Fail_Closed_Orphan_Detection",
+      "actor": "",
+      "objective": "\"End to End FLS Normative Paragraph Traceability Emission and Fail Closed Orphan Detection\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-03",
+      "name": "UC_AC_03_Certified_core_Library_Subset_Symbol_Report_Gate_Rejecting_std_alloc_and_Dynamic_Formatting_Symbols",
+      "actor": "",
+      "objective": "\"Certified core Library Subset Symbol Report Gate Rejecting std alloc and Dynamic Formatting Symbols\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-04",
+      "name": "UC_AC_04_Zero_Overcount_Structural_and_MC_DC_Coverage_Verification_Mapped_to_SysML_Verification_Cases",
+      "actor": "",
+      "objective": "\"Zero Overcount Structural and MC DC Coverage Verification Mapped to SysML Verification Cases\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-05",
+      "name": "UC_AC_05_Schema_Driven_3_Ring_Workspace_Partitioning_and_Ring_2_Miri_Guarded_FFI_Precondition_Enforcement",
+      "actor": "",
+      "objective": "\"Schema Driven 3 Ring Workspace Partitioning and Ring 2 Miri Guarded FFI Precondition Enforcement\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-06",
+      "name": "UC_AC_06_Ring_1_Challenge_Response_Command_Interlock_and_TelemetryFrame_Digest_Readback_SafetyMonitor_Against_Ring_3_Faults",
+      "actor": "",
+      "objective": "\"Ring 1 Challenge Response Command Interlock and TelemetryFrame Digest Readback SafetyMonitor Against Ring 3 Faults\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-07",
+      "name": "UC_AC_07_Twelve_Gate_Blueprint_Verification_and_Upstream_Baseline_Cleanliness_Conformance",
+      "actor": "",
+      "objective": "\"Twelve Gate Blueprint Verification and Upstream Baseline Cleanliness Conformance\"",
+      "steps": []
+    }
+  ],
+  "operational_nodes": [
+    {
+      "name": "CertifiedCoreSubsetAndCoverageGate",
+      "node_type": "Part",
+      "doc": "Permitted count of linked Ring-1 ELF or MIR symbols resolving outside the Ferrocene certified `core` subset. [unit: symbols]",
+      "allocated_activities": []
+    },
+    {
+      "name": "DualModeFerroceneToolchainGate",
+      "node_type": "Part",
+      "doc": "Permitted semantic `rustc` version or target-triple delta between `criticalup.toml` and `rust-toolchain.toml`. [unit: versions]",
+      "allocated_activities": []
+    },
+    {
+      "name": "FlsParagraphTraceabilitySynthesizer",
+      "node_type": "Part",
+      "doc": "Permitted count of Ring-1 AST items or Ring-2 `unsafe` blocks lacking a verified `[FLS: fls_*]` normative paragraph tag. [unit: items]",
+      "allocated_activities": []
+    },
+    {
+      "name": "ThreeRingAssurancePartitionCompiler",
+      "node_type": "Part",
+      "doc": "Mandatory count of isolated downstream assurance rings (`Ring 1 safety_kernel`, `Ring 2 ffi_guard_bridge`, `Ring 3 hmi_presentation_shell`). [unit: rings]",
+      "allocated_activities": []
+    }
+  ],
+  "file_manifest": []
+}
