@@ -32,15 +32,18 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
 
+mod actions;
 mod connections_and_flows;
 mod identifiers;
 mod interfaces_and_items;
 mod package_model;
 mod parts_and_ports;
+mod states;
 
+pub use actions::{parse_action_defs, ActionDef};
 pub use connections_and_flows::{parse_connection_defs, parse_port_defs, ConnectionDef};
 use identifiers::{
-    default_one, default_true, extract_doc_comment_before, extract_ident, extract_quoted_string,
+    default_one, extract_doc_comment_before, extract_ident, extract_quoted_string,
     extract_type_ident, is_ident_char, is_word_boundary_after, is_word_boundary_before, skip_ws,
 };
 pub use identifiers::{
@@ -52,72 +55,13 @@ pub use parts_and_ports::{
     CapabilityDef, FieldDescriptor, ItemDef, OperationDef, PartDef, PortDef,
     SupportedExtensionsCatalog, SupportedSchemaExtension, TypeDescriptor,
 };
+pub use states::{parse_state_defs, StateDef, TransitionDef};
 
 use crate::error::CoreError;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-
-/// Represents an action definition in SysML v2.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ActionDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `ActionDef` across member set `[name: String, doc: Option<String>, in_params: Vec<AttributeDef>, out_params: Vec<AttributeDef>, parameters: Vec<AttributeDef>]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `ActionDef` members (`name: String, doc: Option<String>, in_params: Vec<AttributeDef>, out_params: Vec<AttributeDef>, parameters: Vec<AttributeDef>`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `ActionDef` representation for struct `ActionDef`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(5)) bounded over input/member dimension of `ActionDef`.
-/// - Space Complexity: O(M(5)) bounded auxiliary memory for `ActionDef`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `ActionDef` (`ActionDef`).
-/// - State: Maintains consistent state invariants across `ActionDef` without partial mutation on error.
-/// - Action: Executes `ActionDef` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `ActionDef` (`DEAP-CORE-SYSML-AST`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEAP-CORE-SYSML-AST-ACTIONDEF] | SysML v2: PartDef(ActionDef)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ActionDef {
-    pub name: String,
-    pub doc: Option<String>,
-    #[serde(default)]
-    pub in_params: Vec<AttributeDef>,
-    #[serde(default)]
-    pub out_params: Vec<AttributeDef>,
-    #[serde(default)]
-    pub parameters: Vec<AttributeDef>,
-    pub performer: Option<String>,
-    #[serde(default)]
-    pub steps: Vec<String>,
-    #[serde(default = "default_true")]
-    pub is_def: bool,
-}
-
-impl Default for ActionDef {
-    /// Constructs a default `ActionDef` with `is_def` initialized to `true`.
-    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/ACTION-DEF-DEFAULT]
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            doc: None,
-            in_params: Vec::new(),
-            out_params: Vec::new(),
-            parameters: Vec::new(),
-            performer: None,
-            steps: Vec::new(),
-            is_def: true,
-        }
-    }
-}
 
 /// Represents an interaction sequence in SysML v2.
 ///
@@ -292,82 +236,6 @@ pub struct RequirementDef {
     pub layer: Option<String>,
 }
 
-/// Represents a state transition in a SysML v2 state machine.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `TransitionDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `TransitionDef` across member set `[name: Option<String>, source: Option<String>, target: Option<String>, trigger: Option<String>, guard: Option<String>]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `TransitionDef` members (`name: Option<String>, source: Option<String>, target: Option<String>, trigger: Option<String>, guard: Option<String>`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `TransitionDef` representation for struct `TransitionDef`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(5)) bounded over input/member dimension of `TransitionDef`.
-/// - Space Complexity: O(M(5)) bounded auxiliary memory for `TransitionDef`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `TransitionDef` (`TransitionDef`).
-/// - State: Maintains consistent state invariants across `TransitionDef` without partial mutation on error.
-/// - Action: Executes `TransitionDef` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `TransitionDef` (`DEAP-CORE-SYSML-AST`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEAP-CORE-SYSML-AST-TRANSITIONDEF] | SysML v2: PartDef(TransitionDef)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct TransitionDef {
-    pub name: Option<String>,
-    pub source: Option<String>,
-    pub target: Option<String>,
-    pub trigger: Option<String>,
-    pub guard: Option<String>,
-    pub effect: Option<String>,
-    pub doc: Option<String>,
-}
-
-/// Represents a state machine state definition in SysML v2.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `StateDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `StateDef` across member set `[name: String, doc: Option<String>, entry_action: Option<String>, do_action: Option<String>, exit_action: Option<String>]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `StateDef` members (`name: String, doc: Option<String>, entry_action: Option<String>, do_action: Option<String>, exit_action: Option<String>`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `StateDef` representation for struct `StateDef`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(5)) bounded over input/member dimension of `StateDef`.
-/// - Space Complexity: O(M(5)) bounded auxiliary memory for `StateDef`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `StateDef` (`StateDef`).
-/// - State: Maintains consistent state invariants across `StateDef` without partial mutation on error.
-/// - Action: Executes `StateDef` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `StateDef` (`DEAP-CORE-SYSML-AST`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEAP-CORE-SYSML-AST-STATEDEF] | SysML v2: PartDef(StateDef)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct StateDef {
-    pub name: String,
-    pub doc: Option<String>,
-    pub entry_action: Option<String>,
-    pub do_action: Option<String>,
-    pub exit_action: Option<String>,
-    #[serde(default)]
-    pub transitions: Vec<TransitionDef>,
-    #[serde(default)]
-    pub sub_states: Vec<StateDef>,
-}
-
 /// Represents a use case definition in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -525,193 +393,6 @@ pub struct CalcDef {
     pub return_type: Option<String>,
     #[serde(default)]
     pub expression: Option<String>,
-}
-
-/// Parses a single `in` or `out` action parameter declaration into `(is_in, AttributeDef)`.
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-ACTION-PARAM]
-fn parse_action_param(s: &str) -> Option<(bool, AttributeDef)> {
-    let trimmed = s.trim();
-    let (is_in, after_dir) = if trimmed.starts_with("in") && is_word_boundary_after(trimmed, 2) {
-        (true, trimmed.get(2..).unwrap_or("").trim_start())
-    } else if trimmed.starts_with("out") && is_word_boundary_after(trimmed, 3) {
-        (false, trimmed.get(3..).unwrap_or("").trim_start())
-    } else {
-        return None;
-    };
-    let after_kw = if after_dir.starts_with("attribute") && is_word_boundary_after(after_dir, 9) {
-        after_dir.get(9..).unwrap_or("").trim_start()
-    } else if after_dir.starts_with("item") && is_word_boundary_after(after_dir, 4) {
-        after_dir.get(4..).unwrap_or("").trim_start()
-    } else {
-        after_dir
-    };
-    let (name, name_len) = extract_ident(after_kw);
-    if name.is_empty() {
-        return None;
-    }
-    let after_name = after_kw.get(name_len..).unwrap_or("").trim_start();
-    let after_colon = after_name.strip_prefix(':')?.trim_start();
-    let (type_name, type_len) = extract_type_ident(after_colon);
-    if type_len == 0 {
-        return None;
-    }
-    Some((
-        is_in,
-        AttributeDef {
-            name: name.to_string(),
-            type_name: type_name.to_string(),
-            default_value: None,
-            doc: None,
-        },
-    ))
-}
-
-/// Parse action definitions from SysML v2 source text.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C deterministic behavioral action AST extraction.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Uses bounds-checked `.get(..)` slicing on comment-stripped and string-masked source buffers.
-///
-/// ## 3. Preconditions
-/// - `content` is a valid UTF-8 SysML v2 source fragment.
-///
-/// ## 4. Postconditions
-/// - Returns a vector of all parsed `ActionDef` structures in appearance order.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ in `content.len()`. Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Malformed action declarations are skipped safely without panicking.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-ACTION-DEFS]
-pub fn parse_action_defs(content: &str) -> Vec<ActionDef> {
-    let clean = strip_sysml_comments(content);
-    let masked = mask_string_literals(&clean);
-    let mut actions = Vec::new();
-    let mut idx = 0;
-    while let Some(pos) = masked.get(idx..).and_then(|s| s.find("action")) {
-        let act_pos = idx + pos;
-        if !is_word_boundary_before(&masked, act_pos)
-            || !is_word_boundary_after(&masked, act_pos + 6)
-        {
-            idx = act_pos + 6;
-            continue;
-        }
-        let doc = extract_doc_comment_before(&clean, act_pos);
-        let mut curr = act_pos + 6;
-        curr += skip_ws(masked.get(curr..).unwrap_or(""));
-        let mut is_def = false;
-        if masked
-            .get(curr..)
-            .is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3))
-        {
-            is_def = true;
-            curr += 3;
-            curr += skip_ws(masked.get(curr..).unwrap_or(""));
-        }
-        let (name, name_len) = extract_ident(masked.get(curr..).unwrap_or(""));
-        if name.is_empty() {
-            idx = act_pos + 6;
-            continue;
-        }
-        curr += name_len;
-        curr += skip_ws(masked.get(curr..).unwrap_or(""));
-
-        let mut params_str = None;
-        if masked.get(curr..).is_some_and(|s| s.starts_with('(')) {
-            if let Some(close_paren) = masked.get(curr + 1..).and_then(|s| s.find(')')) {
-                params_str = clean.get(curr + 1..curr + 1 + close_paren);
-                curr = curr + 1 + close_paren + 1;
-                curr += skip_ws(masked.get(curr..).unwrap_or(""));
-            } else {
-                idx = act_pos + 6;
-                continue;
-            }
-        }
-
-        let mut body_str = None;
-        let rem_body = masked.get(curr..).unwrap_or("");
-        if rem_body.starts_with('{') {
-            if let Some(close_pos) = find_matching_brace(&clean, curr) {
-                body_str = clean.get(curr + 1..close_pos);
-                idx = close_pos + 1;
-            } else {
-                idx = act_pos + 6;
-                continue;
-            }
-        } else if rem_body.starts_with(';') {
-            idx = curr + 1;
-        } else {
-            idx = act_pos + 6;
-            continue;
-        }
-
-        let mut in_params = Vec::new();
-        let mut out_params = Vec::new();
-        let mut steps = Vec::new();
-        let mut performer = None;
-
-        if let Some(params) = params_str {
-            for part in params.split(',') {
-                if let Some((is_in, attr)) = parse_action_param(part) {
-                    if is_in {
-                        in_params.push(attr);
-                    } else {
-                        out_params.push(attr);
-                    }
-                }
-            }
-        }
-
-        if let Some(body) = body_str {
-            for line in body.lines() {
-                let trimmed = line.trim();
-                if let Some((is_in, attr)) = parse_action_param(trimmed) {
-                    if is_in {
-                        in_params.push(attr);
-                    } else {
-                        out_params.push(attr);
-                    }
-                } else if trimmed.starts_with("perform") && is_word_boundary_after(trimmed, 7) {
-                    let perf = trimmed
-                        .get(7..)
-                        .unwrap_or("")
-                        .trim()
-                        .trim_end_matches(';')
-                        .trim();
-                    if !perf.is_empty() {
-                        performer = Some(perf.to_string());
-                    }
-                } else if trimmed.starts_with("step") && is_word_boundary_after(trimmed, 4) {
-                    let step_name = trimmed
-                        .get(4..)
-                        .unwrap_or("")
-                        .trim()
-                        .trim_end_matches(';')
-                        .trim();
-                    if !step_name.is_empty() {
-                        steps.push(step_name.to_string());
-                    }
-                }
-            }
-        }
-
-        actions.push(ActionDef {
-            name: name.to_string(),
-            doc,
-            in_params,
-            out_params,
-            performer,
-            steps,
-            is_def,
-            ..Default::default()
-        });
-    }
-    actions
 }
 
 /// Parse constraint definitions or assertions from SysML v2 source text.
@@ -1634,244 +1315,6 @@ pub fn parse_test_case_defs(content: &str) -> Vec<TestCaseDef> {
         });
     }
     test_cases
-}
-
-/// Parse state definitions from SysML v2 source text.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and IEC 61508 deterministic state machine AST extraction.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Uses bounds-checked `.get(..)` slicing and recursively extracts nested sub-states.
-///
-/// ## 3. Preconditions
-/// - `content` is a valid UTF-8 SysML v2 source fragment.
-///
-/// ## 4. Postconditions
-/// - Returns a vector of all parsed `StateDef` structures in appearance order.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N \cdot D_{state})$ in `content.len()` and nesting depth. Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Malformed state blocks are skipped safely without panicking.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-STATE-DEFS]
-pub fn parse_state_defs(content: &str) -> Vec<StateDef> {
-    let clean = strip_sysml_comments(content);
-    let masked = mask_string_literals(&clean);
-    let mut states = Vec::new();
-    let mut idx = 0;
-    while let Some(pos) = masked.get(idx..).and_then(|s| s.find("state")) {
-        let st_pos = idx + pos;
-        if !is_word_boundary_before(&masked, st_pos) || !is_word_boundary_after(&masked, st_pos + 5)
-        {
-            idx = st_pos + 5;
-            continue;
-        }
-        let doc = extract_doc_comment_before(&clean, st_pos);
-        let mut curr = st_pos + 5;
-        curr += skip_ws(masked.get(curr..).unwrap_or(""));
-        if masked
-            .get(curr..)
-            .is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3))
-        {
-            curr += 3;
-            curr += skip_ws(masked.get(curr..).unwrap_or(""));
-        }
-        let (name, name_len) = extract_ident(masked.get(curr..).unwrap_or(""));
-        if name.is_empty() {
-            idx = st_pos + 5;
-            continue;
-        }
-        curr += name_len;
-        curr += skip_ws(masked.get(curr..).unwrap_or(""));
-
-        let mut body_str = None;
-        let rem_body = masked.get(curr..).unwrap_or("");
-        if rem_body.starts_with('{') {
-            if let Some(close_pos) = find_matching_brace(&clean, curr) {
-                body_str = clean.get(curr + 1..close_pos);
-                idx = close_pos + 1;
-            } else {
-                idx = st_pos + 5;
-                continue;
-            }
-        } else if rem_body.starts_with(';') {
-            idx = curr + 1;
-        } else {
-            idx = st_pos + 5;
-            continue;
-        }
-
-        let mut entry_action = None;
-        let mut do_action = None;
-        let mut exit_action = None;
-        let mut transitions = Vec::new();
-        let sub_states = if let Some(body) = body_str {
-            for line in body.lines() {
-                let trimmed = line.trim();
-                if trimmed.starts_with("entry") && is_word_boundary_after(trimmed, 5) {
-                    let act = trimmed
-                        .get(5..)
-                        .unwrap_or("")
-                        .trim()
-                        .trim_end_matches(';')
-                        .trim();
-                    entry_action = Some(act.to_string());
-                } else if trimmed.starts_with("do") && is_word_boundary_after(trimmed, 2) {
-                    let act = trimmed
-                        .get(2..)
-                        .unwrap_or("")
-                        .trim()
-                        .trim_end_matches(';')
-                        .trim();
-                    do_action = Some(act.to_string());
-                } else if trimmed.starts_with("exit") && is_word_boundary_after(trimmed, 4) {
-                    let act = trimmed
-                        .get(4..)
-                        .unwrap_or("")
-                        .trim()
-                        .trim_end_matches(';')
-                        .trim();
-                    exit_action = Some(act.to_string());
-                } else if trimmed.starts_with("transition") && is_word_boundary_after(trimmed, 10) {
-                    let raw_trans = trimmed
-                        .get(10..)
-                        .unwrap_or("")
-                        .trim()
-                        .trim_end_matches(';')
-                        .trim();
-                    if !raw_trans.is_empty() {
-                        if raw_trans.starts_with("first ") || raw_trans.contains(" first ") {
-                            let (t_name, after_first) = if raw_trans.starts_with("first ") {
-                                (None, raw_trans.get(6..).unwrap_or("").trim())
-                            } else if let Some((before_first, rest_first)) =
-                                raw_trans.split_once(" first ")
-                            {
-                                let n = before_first.trim();
-                                (
-                                    if n.is_empty() {
-                                        None
-                                    } else {
-                                        Some(n.to_string())
-                                    },
-                                    rest_first.trim(),
-                                )
-                            } else {
-                                (None, "")
-                            };
-                            let (before_then, tgt_str) =
-                                if let Some((b_then, a_then)) = after_first.split_once(" then ") {
-                                    (b_then.trim(), a_then.trim())
-                                } else {
-                                    (after_first, "")
-                                };
-                            let (src_str, trig_str) =
-                                if let Some((b_acc, a_acc)) = before_then.split_once(" accept ") {
-                                    (b_acc.trim(), a_acc.trim())
-                                } else {
-                                    (before_then, "")
-                                };
-                            let source = if src_str.is_empty() {
-                                None
-                            } else {
-                                Some(src_str.to_string())
-                            };
-                            let target = if tgt_str.is_empty() {
-                                None
-                            } else {
-                                Some(tgt_str.to_string())
-                            };
-                            let trigger = if trig_str.is_empty() {
-                                None
-                            } else {
-                                Some(trig_str.to_string())
-                            };
-                            transitions.push(TransitionDef {
-                                name: t_name,
-                                source,
-                                target,
-                                trigger,
-                                guard: None,
-                                effect: None,
-                                doc: None,
-                            });
-                        } else {
-                            let t_name = raw_trans.to_string();
-                            let (source, target, trigger) = if let Some(to_idx) =
-                                raw_trans.find("_to_")
-                            {
-                                let src_part = raw_trans.get(..to_idx).unwrap_or("").trim();
-                                let after_to = raw_trans.get(to_idx + 4..).unwrap_or("").trim();
-                                if let Some(on_idx) = after_to.find("_on_") {
-                                    let tgt_part = after_to.get(..on_idx).unwrap_or("").trim();
-                                    let trig_part = after_to.get(on_idx + 4..).unwrap_or("").trim();
-                                    (
-                                        if src_part.is_empty() {
-                                            None
-                                        } else {
-                                            Some(src_part.to_string())
-                                        },
-                                        if tgt_part.is_empty() {
-                                            None
-                                        } else {
-                                            Some(tgt_part.to_string())
-                                        },
-                                        if trig_part.is_empty() {
-                                            None
-                                        } else {
-                                            Some(trig_part.to_string())
-                                        },
-                                    )
-                                } else {
-                                    (
-                                        if src_part.is_empty() {
-                                            None
-                                        } else {
-                                            Some(src_part.to_string())
-                                        },
-                                        if after_to.is_empty() {
-                                            None
-                                        } else {
-                                            Some(after_to.to_string())
-                                        },
-                                        None,
-                                    )
-                                }
-                            } else {
-                                (None, None, None)
-                            };
-                            transitions.push(TransitionDef {
-                                name: Some(t_name),
-                                source,
-                                target,
-                                trigger,
-                                guard: None,
-                                effect: None,
-                                doc: None,
-                            });
-                        }
-                    }
-                }
-            }
-            parse_state_defs(body)
-        } else {
-            Vec::new()
-        };
-
-        states.push(StateDef {
-            name: name.to_string(),
-            doc,
-            entry_action,
-            do_action,
-            exit_action,
-            transitions,
-            sub_states,
-        });
-    }
-    states
 }
 
 /// Parses safety `hazard def <Name>` declarations from a SysML v2 source text fragment.
@@ -5513,6 +4956,32 @@ state def BP_01_LifecycleState {
             !discovered_names.contains(&"nested.sysml".to_string()),
             "Did not expect depth-2 nested.sysml inside .hidden_dir in discovered: {:?}",
             discovered_names
+        );
+        Ok(())
+    }
+
+    /// Verifies `parse_state_defs` parses up to `MAX_AST_DEPTH` (64) and truncates `MAX_AST_DEPTH + 1` (65) cleanly.
+    #[test]
+    fn test_parse_state_defs_enforces_max_ast_depth_and_plus_one_bounds() -> Result<(), String> {
+        const EXPECTED_MAX_DEPTH: usize = 64;
+        let mut nested_sysml = format!("state Leaf_{};", EXPECTED_MAX_DEPTH.saturating_add(1));
+        for level in (0..=EXPECTED_MAX_DEPTH).rev() {
+            nested_sysml = format!("state def StateNode_{level} {{ {nested_sysml} }}");
+        }
+        let parsed = parse_state_defs(&nested_sysml);
+        let mut cursor = parsed.first().ok_or("missing root StateNode_0")?;
+        for expected_level in 0..=EXPECTED_MAX_DEPTH {
+            assert_eq!(cursor.name, format!("StateNode_{expected_level}"));
+            if expected_level < EXPECTED_MAX_DEPTH {
+                cursor = cursor
+                    .sub_states
+                    .first()
+                    .ok_or_else(|| format!("missing sub_state below StateNode_{expected_level}"))?;
+            }
+        }
+        assert!(
+            cursor.sub_states.is_empty(),
+            "Sub-state at depth MAX_AST_DEPTH + 1 must be truncated cleanly without panicking"
         );
         Ok(())
     }
