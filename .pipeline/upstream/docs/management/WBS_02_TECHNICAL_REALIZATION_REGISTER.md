@@ -1,62 +1,138 @@
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | TBD |
+| **Title** | WBS_02: Technical Realization Register |
+| **Type** | management |
+| **Management Level** | Level 4 Enterprise Realization & DO-178C / DO-330 Traceability |
+| **Standard Baseline** | MIL-STD-881E / DO-178C Sec. 5.5 / CMMI Level 3 REQM |
+| **Generation Mode** | subagent |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
+
 # WBS_02: Technical Realization Register
 
-| WBS Code | Work Package | Feature ID | Requirement IDs | UCA IDs | Test Case IDs |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `01.01.01` | `CompilerLintEnforcementGate` | `FEAT-01` | `REQ-0601` | `UCA-001, UCA-002, UCA-003, UCA-004, UCA-005, UCA-006, UCA-007, UCA-008, UCA-009, UCA-010, UCA-011, UCA-012, UCA-013, UCA-014, UCA-015, UCA-016, UCA-017, UCA-018, UCA-019, UCA-020, UCA-021, UCA-022, UCA-023, UCA-024, UCA-025, UCA-026, UCA-027, UCA-028, UCA-029, UCA-030, UCA-031, UCA-032, UCA-033, UCA-034, UCA-035, UCA-036, UCA-037, UCA-038, UCA-039, UCA-040, UCA-041, UCA-042, UCA-043, UCA-044, UCA-045, UCA-046, UCA-047, UCA-048, UCA-049, UCA-050, UCA-051, UCA-052, UCA-053, UCA-054, UCA-055, UCA-056, UCA-057, UCA-058, UCA-059, UCA-060, UCA-061, UCA-062, UCA-063, UCA-064, UCA-065, UCA-066, UCA-067, UCA-068, UCA-069, UCA-070, UCA-071, UCA-072, UCA-073, UCA-074, UCA-075, UCA-076, UCA-077, UCA-078, UCA-079, UCA-080, UCA-081, UCA-082, UCA-083, UCA-084, UCA-085, UCA-086, UCA-087, UCA-088, UCA-089, UCA-090, UCA-091, UCA-092, UCA-093, UCA-094, UCA-095, UCA-096, UCA-097, UCA-098, UCA-099, UCA-100, UCA-101, UCA-102, UCA-103, UCA-104, UCA-105, UCA-106, UCA-107, UCA-108, UCA-109, UCA-110, UCA-111, UCA-112, UCA-113, UCA-114, UCA-115, UCA-116, UCA-117, UCA-118, UCA-119, UCA-120, UCA-121, UCA-122, UCA-123, UCA-124, UCA-125, UCA-126, UCA-127, UCA-128, UCA-129, UCA-130, UCA-131, UCA-132, UCA-133, UCA-134, UCA-135, UCA-136, UCA-137, UCA-138, UCA-139, UCA-140, UCA-141, UCA-142, UCA-143, UCA-144, UCA-145, UCA-146, UCA-147, UCA-148, UCA-149, UCA-150, UCA-151, UCA-152, UCA-153, UCA-154, UCA-155, UCA-156, UCA-157, UCA-158, UCA-159, UCA-160, UCA-161, UCA-162, UCA-163, UCA-164, UCA-165, UCA-166, UCA-167, UCA-168, UCA-169, UCA-170, UCA-171, UCA-172, UCA-173, UCA-174, UCA-175, UCA-176, UCA-177, UCA-178, UCA-179, UCA-180, UCA-181, UCA-182, UCA-183, UCA-184, UCA-185, UCA-186, UCA-187, UCA-188, UCA-189, UCA-190, UCA-191, UCA-192, UCA-193, UCA-194, UCA-195, UCA-196, UCA-197, UCA-198, UCA-199, UCA-200, UCA-201, UCA-202, UCA-203, UCA-204, UCA-205, UCA-206, UCA-207, UCA-208, UCA-209, UCA-210, UCA-211, UCA-212, UCA-213, UCA-214, UCA-215, UCA-216, UCA-217, UCA-218, UCA-219, UCA-220, UCA-221, UCA-222, UCA-223, UCA-224, UCA-225, UCA-226, UCA-227, UCA-228, UCA-229, UCA-230, UCA-231, UCA-232, UCA-233, UCA-234, UCA-235, UCA-236, UCA-237, UCA-238, UCA-239, UCA-240, UCA-241, UCA-242, UCA-243, UCA-244, UCA-245, UCA-246, UCA-247, UCA-248, UCA-249, UCA-250, UCA-251, UCA-252, UCA-253, UCA-254, UCA-255, UCA-256, UCA-257, UCA-258, UCA-259, UCA-260, UCA-261, UCA-262, UCA-263, UCA-264, UCA-265, UCA-266, UCA-267, UCA-268, UCA-269, UCA-270, UCA-271, UCA-272, UCA-273, UCA-274, UCA-275, UCA-276, UCA-277, UCA-278, UCA-279, UCA-280, UCA-281, UCA-282, UCA-283, UCA-284, UCA-285, UCA-286, UCA-287, UCA-288` | `TC-01` |
-| `01.01.02` | `WorkspaceManifestForbidGate` | `FEAT-02` | `REQ-0601` | `UCA-001` | `TC-02` |
-| `01.01.03` | `ClippyAttributeAstScanner` | `FEAT-03` | `REQ-0601` | `UCA-001` | `TC-03` |
-| `01.01.04` | `CrateRootAttributeSanitizer` | `FEAT-04` | `REQ-0601` | `UCA-001` | `TC-04` |
-| `01.01.05` | `TestTargetLintEnforcer` | `FEAT-05` | `REQ-0601` | `UCA-001` | `TC-05` |
-| `01.02.01` | `AntiGamingTestBodyAuditor` | `FEAT-06` | `REQ-0602` | `UCA-001` | `TC-06` |
-| `01.02.02` | `Check34AstPurityAndAntiGamingGate` | `FEAT-07` | `REQ-0602` | `UCA-001` | `TC-07` |
-| `01.02.03` | `FailClosedIoAstVerifier` | `FEAT-08` | `REQ-0602` | `UCA-001` | `TC-08` |
-| `01.02.04` | `RangeSliceAstDetector` | `FEAT-09` | `REQ-0602` | `UCA-001` | `TC-09` |
-| `01.02.05` | `SsotSymbolDeduplicationGate` | `FEAT-10` | `REQ-0602` | `UCA-001` | `TC-10` |
-| `01.03.01` | `BijectiveSysmlSerializer` | `FEAT-11` | `REQ-0603` | `UCA-001` | `TC-11` |
-| `01.03.02` | `CompilerRoundtripVerificationGate` | `FEAT-12` | `REQ-0603` | `UCA-001` | `TC-12` |
-| `01.03.03` | `FailClosedRecursiveDescentParser` | `FEAT-13` | `REQ-0603` | `UCA-001` | `TC-13` |
-| `01.03.04` | `NativeSigilAndLifetimeLexer` | `FEAT-14` | `REQ-0603` | `UCA-001` | `TC-14` |
-| `01.03.05` | `SysmlBijectiveRoundtripCompilerGate` | `FEAT-15` | `REQ-0603` | `UCA-001` | `TC-15` |
-| `01.04.01` | `AgileSpecForwardProjector` | `FEAT-16` | `REQ-0604` | `UCA-001` | `TC-16` |
-| `01.04.02` | `BidirectionalBacklogReconciler` | `FEAT-17` | `REQ-0604` | `UCA-001` | `TC-17` |
-| `01.04.03` | `DeterministicSpecIcdWbsForwardCompiler` | `FEAT-18` | `REQ-0604` | `UCA-001` | `TC-18` |
-| `01.04.04` | `LogicalIcdMatrixCompiler` | `FEAT-19` | `REQ-0604` | `UCA-001` | `TC-19` |
-| `01.04.05` | `MilStd881eWbsExporter` | `FEAT-20` | `REQ-0604` | `UCA-001` | `TC-20` |
-| `01.05.01` | `Check36AstCompletenessVerifier` | `FEAT-21` | `REQ-0605` | `UCA-001` | `TC-21` |
-| `01.05.02` | `ScopedSchemaContextResolver` | `FEAT-22` | `REQ-0605` | `UCA-001` | `TC-22` |
-| `01.05.03` | `SevenSectionDocstringGenerator` | `FEAT-23` | `REQ-0605` | `UCA-001` | `TC-23` |
-| `01.05.04` | `UnifiedRustDartLexicalScanner` | `FEAT-24` | `REQ-0605` | `UCA-001` | `TC-24` |
-| `01.05.05` | `UnifiedSafetyDocstringSynthesizer` | `FEAT-25` | `REQ-0605` | `UCA-001` | `TC-25` |
-| `01.06.01` | `ClosedLoopDefectPublisherGate` | `FEAT-26` | `REQ-0606` | `UCA-001` | `TC-26` |
-| `01.06.02` | `DeterministicDossierSynthesizer` | `FEAT-27` | `REQ-0606` | `UCA-001` | `TC-27` |
-| `01.06.03` | `DeterministicStaticDefectAuditor` | `FEAT-28` | `REQ-0606` | `UCA-001` | `TC-28` |
-| `01.06.04` | `FivePillarStaticAstAnalyzer` | `FEAT-29` | `REQ-0606` | `UCA-001` | `TC-29` |
-| `01.06.05` | `MermaidUmlDiagramGenerator` | `FEAT-30` | `REQ-0606` | `UCA-001` | `TC-30` |
-| `01.07.01` | `ModularityBoundsSpec` | `FEAT-31` | `REQ-0607` | `UCA-001` | `TC-31` |
-| `01.07.02` | `LayerHierarchySpec` | `FEAT-32` | `REQ-0607` | `UCA-001` | `TC-32` |
-| `01.07.03` | `CompilationUnitSpec` | `FEAT-33` | `REQ-0607` | `UCA-001` | `TC-33` |
-| `01.07.04` | `FourLevelLoweringEngineSpec` | `FEAT-34` | `REQ-0607` | `UCA-001` | `TC-34` |
-| `01.07.05` | `ModularEmitterSuiteSpec` | `FEAT-35` | `REQ-0607` | `UCA-001` | `TC-35` |
-| `01.07.06` | `FourLevelAstPartitionerAndHoister` | `FEAT-36` | `REQ-0607` | `UCA-001` | `TC-36` |
-| `01.07.07` | `ModularFlutterMultiFileEmitter` | `FEAT-37` | `REQ-0607` | `UCA-001` | `TC-37` |
-| `01.07.08` | `ModularRustMultiFileEmitter` | `FEAT-38` | `REQ-0607` | `UCA-001` | `TC-38` |
-| `01.07.09` | `SelfHostingModularCodegenCompiler` | `FEAT-39` | `REQ-0607` | `UCA-001` | `TC-39` |
-| `01.07.10` | `TopologicalLayerDagVerifier` | `FEAT-40` | `REQ-0607` | `UCA-001` | `TC-40` |
-| `01.08.01` | `AirGappedCargoLockGovernor` | `FEAT-41` | `REQ-0608` | `UCA-001` | `TC-41` |
-| `01.08.02` | `LosslessRustCstAnalyzer` | `FEAT-42` | `REQ-0608` | `UCA-001` | `TC-42` |
-| `01.08.03` | `StructuredModularCodegenSynthesizer` | `FEAT-43` | `REQ-0608` | `UCA-001` | `TC-43` |
-| `01.08.04` | `UnifiedRustcJsonDiagnosticEmitter` | `FEAT-44` | `REQ-0608` | `UCA-001` | `TC-44` |
-| `01.08.05` | `ZeroTokenRustSpanCodemodEngine` | `FEAT-45` | `REQ-0608` | `UCA-001` | `TC-45` |
-| `01.09.01` | `FrbIcdBridgeAndMiriUbGate` | `FEAT-46` | `REQ-0609` | `UCA-001` | `TC-46` |
-| `01.09.02` | `IsolatedDylintMirAllocationGate` | `FEAT-47` | `REQ-0609` | `UCA-001` | `TC-47` |
-| `01.09.03` | `KaniCbmcProofSynthesizer` | `FEAT-48` | `REQ-0609` | `UCA-001` | `TC-48` |
-| `01.09.04` | `MultiStageVerificationOrchestrator` | `FEAT-49` | `REQ-0609` | `UCA-001` | `TC-49` |
-| `01.09.05` | `StableClippyTotalFunctionGate` | `FEAT-50` | `REQ-0609` | `UCA-001` | `TC-50` |
-| `01.10.01` | `FormattingPreservingSyncSplicer` | `FEAT-51` | `REQ-0610` | `UCA-001` | `TC-51` |
-| `01.10.02` | `LogosRowanSysmlCstEngine` | `FEAT-52` | `REQ-0610` | `UCA-001` | `TC-52` |
-| `01.10.03` | `SalsaIncrementalCompilerDatabase` | `FEAT-53` | `REQ-0610` | `UCA-001` | `TC-53` |
-| `01.10.04` | `TypedPolyglotIngestionFrontend` | `FEAT-54` | `REQ-0610` | `UCA-001` | `TC-54` |
-| `01.11.01` | `CertifiedCoreSubsetAndCoverageGate` | `FEAT-55` | `REQ-0611` | `UCA-001` | `TC-55` |
-| `01.11.02` | `DualModeFerroceneToolchainGate` | `FEAT-56` | `REQ-0611` | `UCA-001` | `TC-56` |
-| `01.11.03` | `FlsParagraphTraceabilitySynthesizer` | `FEAT-57` | `REQ-0611` | `UCA-001` | `TC-57` |
-| `01.11.04` | `ThreeRingAssurancePartitionCompiler` | `FEAT-58` | `REQ-0611` | `UCA-001` | `TC-58` |
+## 1. End-to-End Technical Realization Architecture
+
+This Technical Realization Register establishes deterministic, bijective traceability from every SysML v2 `part def` work package in `schema/model.sysml` (`01.01.01` through `01.11.04`) to its realizing Agile Feature (`FEAT-01..58`), User Stories (`US-01..72`), Use Cases (`UC-01..64`), normative requirements (`REQ-0601..REQ-0611`), STPA Unsafe Control Actions and Safety Constraints (`UCA-001..UCA-288`, `SC-BP08-01..20`, `SC-BP09-17..20`), concrete workspace Rust modules across `crates/{deap-core,compile-sysml,verify-baseline,ingest-sysml,assemble-conops,reconcile-backlog}`, and headless `cargo test` verification suites.
+
+```mermaid
+flowchart LR
+    AST["SysML v2 SSOT (schema/model.sysml)"]
+    SPEC["Level 2 Backlog (EPIC-01..11, FEAT-01..58, US-01..72, UC-01..64)"]
+    SAF["Safety & Requirements (REQ-0601..0611, UCA-001..288)"]
+    RS["Workspace Rust Crates (deap-core, compile-sysml, verify-baseline, ingest-sysml, assemble-conops, reconcile-backlog)"]
+    TST["Cargo Test & Baseline Gates (TC-01..58, TD-01..24)"]
+
+    AST --> SPEC
+    AST --> SAF
+    SPEC --> RS
+    SAF --> RS
+    RS --> TST
+```
+
+### Bijective Realization & Coverage Completeness Formulation
+
+$$
+\begin{aligned}
+C_{\mathrm{feat}} &= \frac{\left|\left\{w \in \mathcal{W}_{L3} : \rho_{\mathrm{spec}}(w) \neq \emptyset \land \rho_{\mathrm{code}}(w) \neq \emptyset \land \rho_{\mathrm{test}}(w) \neq \emptyset\right\}\right|}{\left|\mathcal{W}_{L3}\right|} = 1 \\
+\mathcal{W}_{L3} &= \mathcal{W}_{\mathrm{W0}} \sqcup \mathcal{W}_{\mathrm{T1}} \sqcup \mathcal{W}_{\mathrm{W2}}, \quad \mathcal{W}_{\mathrm{W0}} \cap \mathcal{W}_{\mathrm{T1}} = \emptyset, \quad \mathcal{W}_{\mathrm{T1}} \cap \mathcal{W}_{\mathrm{W2}} = \emptyset
+\end{aligned}
+$$
+
+- Parameter Definitions & Engineering Units:
+  - $C_{\mathrm{feat}}$: Normalized Level 3 feature-to-realization coverage ratio (`1.0`, `dimensionless`, corresponding to `100%` of `58` features).
+  - $\mathcal{W}_{L3}$: Complete set of `58` Level 3 WBS work packages (`01.01.01` through `01.11.04`, `work packages`).
+  - $\rho_{\mathrm{spec}}(w), \rho_{\mathrm{code}}(w), \rho_{\mathrm{test}}(w)$: Total mapping functions binding work package $w$ to its Level 2 backlog specification, target workspace Rust module (or quarantined Wave-2 allocation), and formal SysML test case / `cargo test` target (`mappings`).
+  - $\mathcal{W}_{\mathrm{W0}}, \mathcal{W}_{\mathrm{T1}}, \mathcal{W}_{\mathrm{W2}}$: Disjoint wave partitions comprising `40` Wave-0 Baseline features (`FEAT-01..40`), `6` Track-1 Active features (`FEAT-41..45`, `FEAT-50`), and `12` Wave-2 Deferred features (`FEAT-46..49`, `FEAT-51..58`).
+
+---
+
+## 2. Master Technical Realization Register (`FEAT-01..58` across `EPIC-01..11`)
+
+| WBS Code | Work Package | Feature ID | User Stories & Use Cases | Requirement & UCA IDs | Test Case IDs | Execution Wave | Target Rust Module Path | Verification Suite |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `01.01.01` | `CompilerLintEnforcementGate` | [FEAT-01](../features/FEAT-01-CompilerLintEnforcementGate.md) | `US-01`, `UC-01` | `REQ-0601`, `UCA-001..UCA-005` | `TC-01` | Wave-0 Baseline | `crates/verify-baseline/src/checks/codebase.rs` | `crates/verify-baseline/tests/codebase_checks_tests.rs` |
+| `01.01.02` | `WorkspaceManifestForbidGate` | [FEAT-02](../features/FEAT-02-WorkspaceManifestForbidGate.md) | `US-02`, `UC-01`, `UC-04` | `REQ-0601`, `UCA-006..UCA-010` | `TC-02` | Wave-0 Baseline | `Cargo.toml`, `crates/verify-baseline/src/checks/codebase.rs` | `crates/verify-baseline/tests/codebase_checks_tests.rs` |
+| `01.01.03` | `ClippyAttributeAstScanner` | [FEAT-03](../features/FEAT-03-ClippyAttributeAstScanner.md) | `US-04`, `UC-02` | `REQ-0601`, `UCA-011..UCA-015` | `TC-03` | Wave-0 Baseline | `crates/verify-baseline/src/checks/codebase.rs` | `crates/verify-baseline/tests/codebase_checks_tests.rs` |
+| `01.01.04` | `CrateRootAttributeSanitizer` | [FEAT-04](../features/FEAT-04-CrateRootAttributeSanitizer.md) | `US-03`, `UC-01` | `REQ-0601`, `UCA-016..UCA-020` | `TC-04` | Wave-0 Baseline | `crates/deap-core/src/lib.rs`, `crates/verify-baseline/src/lib.rs` | `crates/verify-baseline/tests/codebase_checks_tests.rs` |
+| `01.01.05` | `TestTargetLintEnforcer` | [FEAT-05](../features/FEAT-05-TestTargetLintEnforcer.md) | `US-05`, `UC-03`, `UC-05` | `REQ-0601`, `UCA-021..UCA-024` | `TC-05` | Wave-0 Baseline | `crates/verify-baseline/src/checks/codebase.rs` | `crates/verify-baseline/tests/integration.rs` |
+| `01.02.01` | `AntiGamingTestBodyAuditor` | [FEAT-06](../features/FEAT-06-AntiGamingTestBodyAuditor.md) | `US-10`, `UC-08` | `REQ-0602`, `UCA-025..UCA-029` | `TC-06` | Wave-0 Baseline | `crates/verify-baseline/src/checks/codebase.rs` | `crates/verify-baseline/tests/codebase_checks_tests.rs` |
+| `01.02.02` | `Check34AstPurityAndAntiGamingGate` | [FEAT-07](../features/FEAT-07-Check34AstPurityAndAntiGamingGate.md) | `US-06`, `US-07`, `UC-10` | `REQ-0602`, `UCA-030..UCA-034` | `TC-07` | Wave-0 Baseline | `crates/verify-baseline/src/checks/codebase.rs` | `crates/verify-baseline/tests/codebase_checks_tests.rs` |
+| `01.02.03` | `FailClosedIoAstVerifier` | [FEAT-08](../features/FEAT-08-FailClosedIoAstVerifier.md) | `US-09`, `UC-07` | `REQ-0602`, `UCA-035..UCA-039` | `TC-08` | Wave-0 Baseline | `crates/verify-baseline/src/checks/codebase.rs` | `crates/verify-baseline/tests/codebase_checks_tests.rs` |
+| `01.02.04` | `RangeSliceAstDetector` | [FEAT-09](../features/FEAT-09-RangeSliceAstDetector.md) | `US-08`, `UC-06` | `REQ-0602`, `UCA-040..UCA-044` | `TC-09` | Wave-0 Baseline | `crates/verify-baseline/src/checks/codebase.rs` | `crates/verify-baseline/tests/codebase_checks_tests.rs` |
+| `01.02.05` | `SsotSymbolDeduplicationGate` | [FEAT-10](../features/FEAT-10-SsotSymbolDeduplicationGate.md) | `US-11`, `UC-09` | `REQ-0602`, `UCA-045..UCA-048` | `TC-10` | Wave-0 Baseline | `crates/verify-baseline/src/checks/codebase.rs` | `crates/verify-baseline/tests/codebase_checks_tests.rs` |
+| `01.03.01` | `BijectiveSysmlSerializer` | [FEAT-11](../features/FEAT-11-BijectiveSysmlSerializer.md) | `US-16`, `UC-14` | `REQ-0603`, `UCA-049..UCA-053` | `TC-11` | Wave-0 Baseline | `crates/compile-sysml/src/semantic/serializer.rs` | `crates/compile-sysml/tests/integration.rs` |
+| `01.03.02` | `CompilerRoundtripVerificationGate` | [FEAT-12](../features/FEAT-12-CompilerRoundtripVerificationGate.md) | `US-15`, `US-17`, `UC-14` | `REQ-0603`, `UCA-054..UCA-058` | `TC-12` | Wave-0 Baseline | `crates/compile-sysml/src/driver.rs` | `crates/compile-sysml/tests/reproducer_tests.rs` |
+| `01.03.03` | `FailClosedRecursiveDescentParser` | [FEAT-13](../features/FEAT-13-FailClosedRecursiveDescentParser.md) | `US-13`, `US-14`, `UC-12`, `UC-13` | `REQ-0603`, `UCA-059..UCA-063` | `TC-13` | Wave-0 Baseline | `crates/compile-sysml/src/parser/mod.rs`, `crates/compile-sysml/src/parser/expressions.rs` | `crates/compile-sysml/tests/multi_file_compilation_tests.rs` |
+| `01.03.04` | `NativeSigilAndLifetimeLexer` | [FEAT-14](../features/FEAT-14-NativeSigilAndLifetimeLexer.md) | `US-12`, `UC-11` | `REQ-0603`, `UCA-064..UCA-068` | `TC-14` | Wave-0 Baseline | `crates/compile-sysml/src/lexer/scanner.rs`, `crates/compile-sysml/src/lexer/token.rs` | `crates/compile-sysml/tests/integration.rs` |
+| `01.03.05` | `SysmlBijectiveRoundtripCompilerGate` | [FEAT-15](../features/FEAT-15-SysmlBijectiveRoundtripCompilerGate.md) | `US-15`, `UC-15` | `REQ-0603`, `UCA-069..UCA-072` | `TC-15` | Wave-0 Baseline | `crates/deap-core/src/sysml_ast/mod.rs`, `crates/ingest-sysml/src/lib.rs` | `crates/ingest-sysml/tests/integration.rs` |
+| `01.04.01` | `AgileSpecForwardProjector` | [FEAT-16](../features/FEAT-16-AgileSpecForwardProjector.md) | `US-18`..`US-21`, `UC-16` | `REQ-0604`, `UCA-073..UCA-077` | `TC-16` | Wave-0 Baseline | `crates/compile-sysml/src/sync/mod.rs` | `crates/compile-sysml/tests/upstream_projection_acceptance_test.rs` |
+| `01.04.02` | `BidirectionalBacklogReconciler` | [FEAT-17](../features/FEAT-17-BidirectionalBacklogReconciler.md) | `US-26`..`US-28`, `UC-19` | `REQ-0604`, `UCA-078..UCA-082` | `TC-17` | Wave-0 Baseline | `crates/reconcile-backlog/src/checklist.rs`, `crates/reconcile-backlog/src/frontmatter.rs` | `crates/reconcile-backlog/tests/reproducer_tests.rs` |
+| `01.04.03` | `DeterministicSpecIcdWbsForwardCompiler` | [FEAT-18](../features/FEAT-18-DeterministicSpecIcdWbsForwardCompiler.md) | `US-29`, `US-30`, `UC-20` | `REQ-0604`, `UCA-083..UCA-087` | `TC-18` | Wave-0 Baseline | `crates/compile-sysml/src/sync/reverse.rs` | `crates/compile-sysml/tests/upstream_projection_acceptance_test.rs` |
+| `01.04.04` | `LogicalIcdMatrixCompiler` | [FEAT-19](../features/FEAT-19-LogicalIcdMatrixCompiler.md) | `US-22`, `US-23`, `UC-17` | `REQ-0604`, `UCA-088..UCA-092` | `TC-19` | Wave-0 Baseline | `crates/compile-sysml/src/driver.rs` | `crates/compile-sysml/tests/upstream_projection_acceptance_test.rs` |
+| `01.04.05` | `MilStd881eWbsExporter` | [FEAT-20](../features/FEAT-20-MilStd881eWbsExporter.md) | `US-24`, `US-25`, `UC-18` | `REQ-0604`, `UCA-093..UCA-096` | `TC-20` | Wave-0 Baseline | `crates/compile-sysml/src/driver.rs`, `crates/verify-baseline/src/checks/wbs_integrity.rs` | `crates/compile-sysml/tests/upstream_projection_acceptance_test.rs` |
+| `01.05.01` | `Check36AstCompletenessVerifier` | [FEAT-21](../features/FEAT-21-Check36AstCompletenessVerifier.md) | `US-34`, `UC-24` | `REQ-0605`, `UCA-097..UCA-101` | `TC-21` | Wave-0 Baseline | `crates/verify-baseline/src/checks/docstring_gate.rs` | `crates/verify-baseline/tests/check_36_docstring_gate_tests.rs` |
+| `01.05.02` | `ScopedSchemaContextResolver` | [FEAT-22](../features/FEAT-22-ScopedSchemaContextResolver.md) | `US-33`, `UC-22` | `REQ-0605`, `UCA-102..UCA-106` | `TC-22` | Wave-0 Baseline | `crates/compile-sysml/src/docstring.rs` | `crates/compile-sysml/tests/docstring_injector_tests.rs` |
+| `01.05.03` | `SevenSectionDocstringGenerator` | [FEAT-23](../features/FEAT-23-SevenSectionDocstringGenerator.md) | `US-31`, `UC-24` | `REQ-0605`, `UCA-107..UCA-111` | `TC-23` | Wave-0 Baseline | `crates/compile-sysml/src/docstring.rs` | `crates/compile-sysml/tests/docstring_injector_tests.rs` |
+| `01.05.04` | `UnifiedRustDartLexicalScanner` | [FEAT-24](../features/FEAT-24-UnifiedRustDartLexicalScanner.md) | `US-32`, `US-35`, `UC-21`, `UC-23` | `REQ-0605`, `UCA-112..UCA-116` | `TC-24` | Wave-0 Baseline | `crates/deap-core/src/source_ast.rs` | `crates/verify-baseline/tests/check_36_docstring_gate_tests.rs` |
+| `01.05.05` | `UnifiedSafetyDocstringSynthesizer` | [FEAT-25](../features/FEAT-25-UnifiedSafetyDocstringSynthesizer.md) | `US-36`, `UC-25` | `REQ-0605`, `UCA-117..UCA-120` | `TC-25` | Wave-0 Baseline | `crates/compile-sysml/src/docstring.rs` | `crates/compile-sysml/tests/docstring_injector_tests.rs` |
+| `01.06.01` | `ClosedLoopDefectPublisherGate` | [FEAT-26](../features/FEAT-26-ClosedLoopDefectPublisherGate.md) | `US-43`, `US-44`, `UC-28`, `UC-29` | `REQ-0606`, `UCA-121..UCA-125` | `TC-26` | Wave-0 Baseline | `crates/verify-baseline/src/defect_dossier.rs` | `crates/verify-baseline/tests/defect_dossier_tests.rs` |
+| `01.06.02` | `DeterministicDossierSynthesizer` | [FEAT-27](../features/FEAT-27-DeterministicDossierSynthesizer.md) | `US-40`..`US-42`, `UC-27`, `UC-30` | `REQ-0606`, `UCA-126..UCA-130` | `TC-27` | Wave-0 Baseline | `crates/verify-baseline/src/defect_dossier.rs` | `crates/verify-baseline/tests/defect_dossier_tests.rs` |
+| `01.06.03` | `DeterministicStaticDefectAuditor` | [FEAT-28](../features/FEAT-28-DeterministicStaticDefectAuditor.md) | `US-37`, `UC-31` | `REQ-0606`, `UCA-131..UCA-135` | `TC-28` | Wave-0 Baseline | `crates/verify-baseline/src/audit_code.rs` | `crates/verify-baseline/tests/blueprint_gate_tests.rs` |
+| `01.06.04` | `FivePillarStaticAstAnalyzer` | [FEAT-29](../features/FEAT-29-FivePillarStaticAstAnalyzer.md) | `US-38`, `US-39`, `UC-26` | `REQ-0606`, `UCA-136..UCA-140` | `TC-29` | Wave-0 Baseline | `crates/verify-baseline/src/audit_code.rs` | `crates/verify-baseline/tests/codebase_checks_tests.rs` |
+| `01.06.05` | `MermaidUmlDiagramGenerator` | [FEAT-30](../features/FEAT-30-MermaidUmlDiagramGenerator.md) | `US-40`, `UC-27` | `REQ-0606`, `UCA-141..UCA-144` | `TC-30` | Wave-0 Baseline | `crates/verify-baseline/src/checks/mermaid.rs` | `crates/verify-baseline/tests/defect_dossier_tests.rs` |
+| `01.07.01` | `ModularityBoundsSpec` | [FEAT-31](../features/FEAT-31-ModularityBoundsSpec.md) | `US-45`, `UC-33` | `REQ-0607`, `UCA-145..UCA-147` | `TC-31` | Wave-0 Baseline | `crates/compile-sysml/src/modular_codegen/domain/bounds.rs` | `crates/compile-sysml/tests/self_hosting_bootstrap.rs` |
+| `01.07.02` | `LayerHierarchySpec` | [FEAT-32](../features/FEAT-32-LayerHierarchySpec.md) | `US-45`, `UC-32` | `REQ-0607`, `UCA-148..UCA-150` | `TC-32` | Wave-0 Baseline | `crates/compile-sysml/src/modular_codegen/domain/layer_role.rs` | `crates/compile-sysml/tests/self_hosting_bootstrap.rs` |
+| `01.07.03` | `CompilationUnitSpec` | [FEAT-33](../features/FEAT-33-CompilationUnitSpec.md) | `US-46`, `UC-33` | `REQ-0607`, `UCA-151..UCA-153` | `TC-33` | Wave-0 Baseline | `crates/compile-sysml/src/modular_codegen/domain/module_graph.rs` | `crates/compile-sysml/tests/self_hosting_bootstrap.rs` |
+| `01.07.04` | `FourLevelLoweringEngineSpec` | [FEAT-34](../features/FEAT-34-FourLevelLoweringEngineSpec.md) | `US-50`, `UC-33` | `REQ-0607`, `UCA-154..UCA-156` | `TC-34` | Wave-0 Baseline | `crates/compile-sysml/src/modular_codegen/lowering/mod.rs` | `crates/compile-sysml/tests/self_hosting_bootstrap.rs` |
+| `01.07.05` | `ModularEmitterSuiteSpec` | [FEAT-35](../features/FEAT-35-ModularEmitterSuiteSpec.md) | `US-47`, `US-48`, `UC-35` | `REQ-0607`, `UCA-157..UCA-159` | `TC-35` | Wave-0 Baseline | `crates/compile-sysml/src/modular_codegen/emitters/mod.rs` | `crates/compile-sysml/tests/self_hosting_bootstrap.rs` |
+| `01.07.06` | `FourLevelAstPartitionerAndHoister` | [FEAT-36](../features/FEAT-36-FourLevelAstPartitionerAndHoister.md) | `US-46`, `UC-33` | `REQ-0607`, `UCA-160..UCA-162` | `TC-36` | Wave-0 Baseline | `crates/compile-sysml/src/modular_codegen/lowering/partitioner.rs` | `crates/compile-sysml/tests/self_hosting_bootstrap.rs` |
+| `01.07.07` | `ModularFlutterMultiFileEmitter` | [FEAT-37](../features/FEAT-37-ModularFlutterMultiFileEmitter.md) | `US-48`, `UC-35` | `REQ-0607`, `UCA-163..UCA-165` | `TC-37` | Wave-0 Baseline | `crates/compile-sysml/src/modular_codegen/emitters/flutter/mod.rs` | `crates/compile-sysml/tests/flutter_codegen_tests.rs` |
+| `01.07.08` | `ModularRustMultiFileEmitter` | [FEAT-38](../features/FEAT-38-ModularRustMultiFileEmitter.md) | `US-47`, `UC-36` | `REQ-0607`, `UCA-166..UCA-168` | `TC-38` | Wave-0 Baseline | `crates/compile-sysml/src/modular_codegen/emitters/rust_emitter.rs` | `crates/compile-sysml/tests/self_hosting_bootstrap.rs` |
+| `01.07.09` | `SelfHostingModularCodegenCompiler` | [FEAT-39](../features/FEAT-39-SelfHostingModularCodegenCompiler.md) | `US-49`, `US-50`, `UC-34`, `UC-37` | `REQ-0607`, `UCA-169..UCA-171` | `TC-39` | Wave-0 Baseline | `crates/compile-sysml/src/modular_codegen/generated/mod.rs` | `crates/compile-sysml/tests/self_hosting_bootstrap.rs` |
+| `01.07.10` | `TopologicalLayerDagVerifier` | [FEAT-40](../features/FEAT-40-TopologicalLayerDagVerifier.md) | `US-45`, `UC-32` | `REQ-0607`, `UCA-172..UCA-176` | `TC-40` | Wave-0 Baseline | `crates/compile-sysml/src/modular_codegen/lowering/dag_verifier.rs` | `crates/compile-sysml/tests/self_hosting_bootstrap.rs` |
+| `01.08.01` | `AirGappedCargoLockGovernor` | [FEAT-41](../features/FEAT-41-AirGappedCargoLockGovernor.md) | [US-51](../user-stories/US-51-verifyOfflineLockedBuild.md), `UC-44` | `REQ-0608`, `SC-BP08-01..04`, `UCA-177..UCA-181` | `TC-41` (`Test_verifyOfflineLockedBuild`) | **Track-1 Active** (`TD-01..03`, `TD-13`) | `Cargo.toml`, `Cargo.lock`, `crates/deap-core/src/workspace.rs`, `crates/verify-baseline/src/blueprint_gate.rs` | `crates/deap-core/src/workspace.rs` (`#[cfg(test)]`), `crates/verify-baseline/tests/blueprint_gate_tests.rs` |
+| `01.08.02` | `LosslessRustCstAnalyzer` | [FEAT-42](../features/FEAT-42-LosslessRustCstAnalyzer.md) | [US-56](../user-stories/US-56-analyzeMetrics.md), `UC-38` | `REQ-0608`, `SC-BP08-05..08`, `UCA-182..UCA-187` | `TC-42` (`Test_analyzeMetrics`) | **Track-1 Active** (`TD-04..07`, `TD-12`) | `crates/deap-core/src/source_ast.rs`, `crates/deap-core/src/error.rs` | `crates/deap-core/src/source_ast.rs` (`#[cfg(test)]`) |
+| `01.08.03` | `StructuredModularCodegenSynthesizer` | [FEAT-43](../features/FEAT-43-StructuredModularCodegenSynthesizer.md) | [US-54](../user-stories/US-54-verifyStageFixedPoint.md), `UC-42` | `REQ-0608`, `REQ-0607`, `SC-BP08-09..12`, `UCA-188..UCA-193` | `TC-43` (`Test_verifyStageFixedPoint`) | **Track-1 Active** (`TD-20..22`) | `crates/compile-sysml/src/modular_codegen/emitters/rust_emitter.rs`, `crates/compile-sysml/src/modular_codegen/mod.rs` | `crates/compile-sysml/tests/self_hosting_bootstrap.rs` |
+| `01.08.04` | `UnifiedRustcJsonDiagnosticEmitter` | [FEAT-44](../features/FEAT-44-UnifiedRustcJsonDiagnosticEmitter.md) | [US-55](../user-stories/US-55-formatNdjsonLine.md), `UC-43` | `REQ-0608`, `SC-BP08-13..16`, `UCA-194..UCA-199` | `TC-44` (`Test_formatNdjsonLine`) | **Track-1 Active** (`TD-08..11`) | `crates/deap-core/src/diagnostics.rs`, `crates/{verify-baseline,compile-sysml,ingest-sysml,assemble-conops,reconcile-backlog}/src/main.rs` | `crates/deap-core/src/diagnostics.rs` (`#[cfg(test)]`), `crates/verify-baseline/tests/integration.rs` |
+| `01.08.05` | `ZeroTokenRustSpanCodemodEngine` | [FEAT-45](../features/FEAT-45-ZeroTokenRustSpanCodemodEngine.md) | [US-52](../user-stories/US-52-listRustItems.md), [US-53](../user-stories/US-53-extractRustModule.md), `UC-39..41` | `REQ-0608`, `SC-BP08-17..20`, `UCA-200..UCA-208` | `TC-45` (`Test_listRustItems`, `Test_extractRustModule`) | **Track-1 Active** (`TD-14..19`) | `crates/deap-core/src/{source_ast.rs,workspace.rs}`, `crates/compile-sysml/src/{cli.rs,driver.rs,docstring.rs}` | `crates/compile-sysml/tests/{integration.rs,docstring_injector_tests.rs}` |
+| `01.09.01` | `FrbIcdBridgeAndMiriUbGate` | [FEAT-46](../features/FEAT-46-FrbIcdBridgeAndMiriUbGate.md) | `US-59`, `US-60`, `UC-48`, `UC-49` | `REQ-0609`, `UCA-209..UCA-214` | `TC-46` | Wave-2 Deferred (Stage 3) | Deferred Wave-2 (`crates/compile-sysml/src/flutter_codegen.rs` & Miri gate) | Deferred Wave-2 (`cargo +nightly miri test`) |
+| `01.09.02` | `IsolatedDylintMirAllocationGate` | [FEAT-47](../features/FEAT-47-IsolatedDylintMirAllocationGate.md) | `US-58`, `UC-46`, `UC-47` | `REQ-0609`, `UCA-215..UCA-220` | `TC-47` | Wave-2 Deferred (Stage 2) | Deferred Wave-2 (isolated nightly `rustc_private` Dylint sub-workspace) | Deferred Wave-2 (Dylint MIR allocation & `[REQ-*]` UI tests) |
+| `01.09.03` | `KaniCbmcProofSynthesizer` | [FEAT-48](../features/FEAT-48-KaniCbmcProofSynthesizer.md) | `US-61`, `US-62`, `UC-50` | `REQ-0609`, `UCA-221..UCA-226` | `TC-48` | Wave-2 Deferred (Stage 4) | Deferred Wave-2 (conditional `#[cfg(kani)]` proof synthesis module) | Deferred Wave-2 (`cargo kani` CBMC verification harnesses) |
+| `01.09.04` | `MultiStageVerificationOrchestrator` | [FEAT-49](../features/FEAT-49-MultiStageVerificationOrchestrator.md) | `US-57`..`US-62`, `UC-51` | `REQ-0609`, `UCA-227..UCA-232` | `TC-49` | Wave-2 Deferred (Stages 2-4) | `crates/verify-baseline/src/runner.rs` (Stage-1 active; Stages 2-4 Wave-2) | `crates/verify-baseline/tests/integration.rs` |
+| `01.09.05` | `StableClippyTotalFunctionGate` | [FEAT-50](../features/FEAT-50-StableClippyTotalFunctionGate.md) | [US-57](../user-stories/US-57-runStableClippyGate.md), `UC-45` | `REQ-0609`, `SC-BP09-17..20`, `UCA-233..UCA-240` | `TC-50` (`Test_runStableClippyGate`) | **Track-1 Active** (`TD-23..24`) | `Cargo.toml`, `clippy.toml`, `crates/verify-baseline/src/{clippy_gate.rs,runner.rs,lib.rs}` | `crates/verify-baseline/tests/{codebase_checks_tests.rs,integration.rs}` |
+| `01.10.01` | `FormattingPreservingSyncSplicer` | [FEAT-51](../features/FEAT-51-FormattingPreservingSyncSplicer.md) | `US-66`, `US-67`, `UC-54` | `REQ-0610`, `UCA-241..UCA-246` | `TC-51` | Wave-2 Deferred | Deferred Wave-2 (`crates/compile-sysml/src/sync/mod.rs` lossless CST splicer) | Deferred Wave-2 (`crates/compile-sysml/tests/integration.rs`) |
+| `01.10.02` | `LogosRowanSysmlCstEngine` | [FEAT-52](../features/FEAT-52-LogosRowanSysmlCstEngine.md) | `US-64`, `UC-52`, `UC-53` | `REQ-0610`, `UCA-247..UCA-252` | `TC-52` | Wave-2 Deferred | Deferred Wave-2 (`crates/deap-core/src/sysml_ast/mod.rs`, `crates/compile-sysml/src/parser/mod.rs`) | Deferred Wave-2 (`crates/compile-sysml/tests/multi_file_compilation_tests.rs`) |
+| `01.10.03` | `SalsaIncrementalCompilerDatabase` | [FEAT-53](../features/FEAT-53-SalsaIncrementalCompilerDatabase.md) | `US-65`, `UC-55`, `UC-56` | `REQ-0610`, `UCA-253..UCA-258` | `TC-53` | Wave-2 Deferred | Deferred Wave-2 (`crates/compile-sysml/src/semantic/mod.rs` `salsa` database) | Deferred Wave-2 (`crates/compile-sysml/tests/integration.rs`) |
+| `01.10.04` | `TypedPolyglotIngestionFrontend` | [FEAT-54](../features/FEAT-54-TypedPolyglotIngestionFrontend.md) | `US-63`, `UC-57`, `UC-58` | `REQ-0610`, `UCA-259..UCA-264` | `TC-54` | Wave-2 Deferred | Deferred Wave-2 (`crates/ingest-sysml/src/translators/mod.rs` typed HIR lowering) | Deferred Wave-2 (`crates/ingest-sysml/tests/code_ingestion_tests.rs`) |
+| `01.11.01` | `CertifiedCoreSubsetAndCoverageGate` | [FEAT-55](../features/FEAT-55-CertifiedCoreSubsetAndCoverageGate.md) | `US-71`, `UC-61` | `REQ-0611`, `UCA-265..UCA-270` | `TC-55` | Wave-2 Deferred | Deferred Wave-2 (Ring-1 `#![no_std]` subset & MC/DC coverage verifier) | Deferred Wave-2 (`crates/verify-baseline/tests/blueprint_gate_tests.rs`) |
+| `01.11.02` | `DualModeFerroceneToolchainGate` | [FEAT-56](../features/FEAT-56-DualModeFerroceneToolchainGate.md) | `US-68`, `UC-59` | `REQ-0611`, `UCA-271..UCA-276` | `TC-56` | Wave-2 Deferred | Deferred Wave-2 (`criticalup.toml` / `rust-toolchain.toml` parity verifier) | Deferred Wave-2 (`crates/verify-baseline/tests/blueprint_gate_tests.rs`) |
+| `01.11.03` | `FlsParagraphTraceabilitySynthesizer` | [FEAT-57](../features/FEAT-57-FlsParagraphTraceabilitySynthesizer.md) | `US-70`, `UC-60` | `REQ-0611`, `UCA-277..UCA-282` | `TC-57` | Wave-2 Deferred | Deferred Wave-2 (`crates/compile-sysml/src/docstring.rs` `[FLS: fls_*]` auditor) | Deferred Wave-2 (`crates/verify-baseline/tests/check_36_docstring_gate_tests.rs`) |
+| `01.11.04` | `ThreeRingAssurancePartitionCompiler` | [FEAT-58](../features/FEAT-58-ThreeRingAssurancePartitionCompiler.md) | `US-69`, `US-72`, `UC-62..64` | `REQ-0611`, `UCA-283..UCA-288` | `TC-58` | Wave-2 Deferred | Deferred Wave-2 (3-Ring DO-178C / DO-330 partition & boundary monitor) | Deferred Wave-2 (`crates/compile-sysml/tests/self_hosting_bootstrap.rs`) |
+
+---
+
+## 3. Detailed Track-1 Realization & Diagnostics Allocation (`EPIC-08` & `EPIC-09` Stage 1)
+
+| WBS Code | Feature & SysML Component | Realizing User Stories | SysML Ports (`in` / `out` / `inout`) | Typed Rust Error Enum & Diagnostic Codes | FLS Paragraphs | Atomic TDD Dispatches |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `01.08.01` | `FEAT-41` (`AirGappedCargoLockGovernor`) | [US-51](../user-stories/US-51-verifyOfflineLockedBuild.md) | `manifest_lock_in`, `lock_receipt_out` | `OfflineLockGovernanceError` -> `DEAP-E0803`, `DEAP-E0804` | `fls_8tsynkj2cufj`, `fls_qcb1n9c0e5hz`, `fls_izdv9i4spokw`, `fls_pocsh1neugpc` | `TD-01`, `TD-02`, `TD-03`, `TD-13` |
+| `01.08.02` | `FEAT-42` (`LosslessRustCstAnalyzer`) | [US-56](../user-stories/US-56-analyzeMetrics.md) | `rust_source_in`, `item_inventory_out`, `metrics_report_out` | `#[non_exhaustive]` `CstMetricsError` -> `DEAP-E0801..DEAP-E0804` | `fls_66m4rnbssgig`, `fls_9ucqbbd0s2yo`, `fls_exe4zodlwfez`, `fls_142vncdktbin`, `fls_ikfvbeewame7`, `fls_nsvzzbldhq53` | `TD-04`, `TD-05`, `TD-06`, `TD-07`, `TD-12` |
+| `01.08.04` | `FEAT-44` (`UnifiedRustcJsonDiagnosticEmitter`) | [US-55](../user-stories/US-55-formatNdjsonLine.md) | `finding_in`, `ndjson_out`, `machine_fix_inout` | `DiagnosticEmitError` -> `DEAP-E0801..DEAP-E0804` (`"compiler-message"` single-line zero-ANSI NDJSON across `5` CLIs) | `fls_szibmtfv117b`, `fls_77sc35ddv9e4`, `fls_qcb1n9c0e5hz`, `fls_utuu8mdbuyxm`, `fls_exe4zodlwfez` | `TD-08`, `TD-09`, `TD-10`, `TD-11` |
+| `01.08.05` | `FEAT-45` (`ZeroTokenRustSpanCodemodEngine`) | [US-52](../user-stories/US-52-listRustItems.md), [US-53](../user-stories/US-53-extractRustModule.md) | `codemod_command_in`, `atomic_patch_out`, `codemod_error_out` | `RustCstInventoryError`, `CodemodError` -> `DEAP-E0801..DEAP-E0804`, `DEAP-E0705` | `fls_8tsynkj2cufj`, `fls_qcb1n9c0e5hz`, `fls_lv7w7aalpwm5`, `fls_66m4rnbssgig`, `fls_9ucqbbd0s2yo`, `fls_exe4zodlwfez` | `TD-14`, `TD-15`, `TD-16`, `TD-17`, `TD-18`, `TD-19` |
+| `01.08.03` | `FEAT-43` (`StructuredModularCodegenSynthesizer`) | [US-54](../user-stories/US-54-verifyStageFixedPoint.md) | `lowered_ir_in`, `formatted_rust_out` | `#[non_exhaustive]` `FixedPointSynthesisError` -> `DEAP-E0705`, `DEAP-E0801`, `DEAP-E0803`, `DEAP-E0804` | `fls_9ucqbbd0s2yo`, `fls_utuu8mdbuyxm`, `fls_qcb1n9c0e5hz`, `fls_exe4zodlwfez`, `fls_7bxv8lybxm18` | `TD-20`, `TD-21`, `TD-22` |
+| `01.09.05` | `FEAT-50` (`StableClippyTotalFunctionGate`) | [US-57](../user-stories/US-57-runStableClippyGate.md) | `workspace_manifest_in`, `clippy_ndjson_out` | `ClippyGateError` -> `DEAP-E0900` (`14` denied Clippy lints, `clippy.toml` `80`/`5`/`disallowed-types`) | `fls_8tsynkj2cufj`, `fls_9ucqbbd0s2yo`, `fls_qcb1n9c0e5hz`, `fls_77sc6hl0v57p`, `fls_exe4zodlwfez` | `TD-23`, `TD-24` |
+
+---
+
+## 4. Wave-2 Deferral & Toolchain Quarantine Governance (`FEAT-46..49` & `EPIC-10..11`)
+
+- **Stable Workspace Firewall (`FEAT-46..49`)**: During Track-1 execution (`TD-01..TD-24`), root `Cargo.toml` and `Cargo.lock` remain strictly stable-toolchain compatible (`--offline --locked`). Nightly `rustc_private` Dylint crates (`FEAT-47`), `flutter_rust_bridge` / Miri `-Zmiri-tree-borrows` harnesses (`FEAT-46`), and CBMC Kani harnesses (`FEAT-48`) are deferred to Wave-2 and gated on `StageGateReceipt` (`wave2_stages_deferred == true`) emitted by `TD-24`.
+- **Incremental SysML v2 CST & Salsa Firewall (`EPIC-10` / `FEAT-51..54`)**: Deferred until Track-1 proves `rowan` lossless Red/Green span splicing (`TD-05`, `TD-17`) and unified 5-CLI NDJSON diagnostics (`TD-08..TD-11`) in production across Rust CST codemods.
+- **Ferrocene DO-178C / DO-330 Certification Firewall (`EPIC-11` / `FEAT-55..58`)**: Deferred until Track-1 enforces `<= 80` executable SLOC and `<= 5` formal parameters across all 6 workspace crates under `TD-24`, establishing a clean total-function baseline for Ferrocene MC/DC structural coverage and 3-Ring certification partitioning.
+
+## 5. Source References
+
+- Structural Schema SSOT: [schema/model.sysml](../../schema/model.sysml)
+- MIL-STD-881E WBS Hierarchy: [WBS_01_WORK_BREAKDOWN_STRUCTURE.md](WBS_01_WORK_BREAKDOWN_STRUCTURE.md)
+- Enterprise Export Schema: [WBS_03_ENTERPRISE_EXPORT_SCHEMA.md](WBS_03_ENTERPRISE_EXPORT_SCHEMA.md)
+- Track-1 Atomic Dispatch Schedule: [TRACK1_ATOMIC_DISPATCH_QUEUE.md](TRACK1_ATOMIC_DISPATCH_QUEUE.md)
