@@ -1,17 +1,16 @@
-//! 7-Section DO-178C safety docstring synthesizer and atomic source-code injector (FEAT-42).
+//! Tiered v2.0 DO-178C safety docstring synthesizer, Tier B/C compactor, and atomic source injector (FEAT-42).
 //!
 //! ## 1. Safety Intent & Regulatory Scope
-//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C software
-//! documentation and traceability standards (FEAT-42 Section 2.2 and Section 3.2). Synthesizes
-//! complete, per-item unique 7-section safety docstrings (`## 1. Safety Intent & Regulatory Scope`
-//! through `## 7. Realization & Traceability`) and injects them atomically into Rust (`.rs`) and
-//! Dart (`.dart`) source files without altering executable AST semantics.
+//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, ECSS-E-ST-40C, and DEAP Rust Coding
+//! Standard v2.0 Section 4. Synthesizes per-item unique 7-section safety docstrings on Rust Tier A
+//! and Dart declarations, synthesizes and compacts concise 2-line docstrings on Rust Tier B/C items,
+//! and injects updates atomically without altering executable AST semantics.
 //!
 //! ## 2. Invariants & Mathematical Properties
 //! - Bit-for-Bit Idempotency (AC-04): Running `--inject-safety-docstrings <DIR>` a second time on
 //!   an already-enriched directory produces zero file mutations and identical SHA-256 hashes.
-//! - Per-Function Body Uniqueness (Check 34 / Check 36): Every synthesized function/method docstring
-//!   interpolates classifier, signature parameters, return type, and complexity/failure bounds
+//! - Per-Function Body Uniqueness (Check 34 / Check 36): Every synthesized Tier A and Dart callable
+//!   docstring interpolates classifier, signature parameters, return type, and complexity/failure bounds
 //!   across Sections 1 through 6 so normalized docblock bodies never collide in `seen_docblocks`.
 //! - Attribute-Aware Placement: Synthesized `///` docblocks are positioned immediately before any
 //!   `#[...]` attributes (Rust) or `@...` annotations (Dart) attached to the target declaration.
@@ -21,9 +20,9 @@
 //!   contain valid UTF-8 `.rs` or `.dart` source files.
 //!
 //! ## 4. Postconditions
-//! - Every production `struct`, `enum`, `trait`, and `fn` in Rust and every `class`, `enum`,
-//!   `mixin`, `extension`, `typedef`, `constructor`, `method`, and `fn` in Dart carries a valid,
-//!   non-placeholder, unique 7-section docstring with a non-empty `Realises: [...]` binding.
+//! - Every Rust Tier A item carries a compliant 7-section or 4-Block Contract docstring, every Rust
+//!   Tier B/C item outside `modular_codegen/generated` carries a concise summary plus `Realises: [...]`,
+//!   and every Dart item carries a unique 7-section docstring.
 //!
 //! ## 5. Algorithmic Complexity Bounds
 //! - Time Complexity: $O(N)$ linear in total source lines and AST declarations $N$.
@@ -383,13 +382,18 @@ pub struct DocstringInjectionReport {
     pub modified_files: Vec<PathBuf>,
 }
 
-/// Internal descriptor for a single AST item being enriched with a 7-section docstring.
+/// Maximum AST nesting depth traversed when collecting SysML v2 packages and nested parts.
+/// Realises: [REQ-FEAT-42-MAX-AST-DEPTH]
+const MAX_AST_DEPTH: usize = 64;
+
+/// Internal descriptor for a single AST item being enriched or compacted with a safety docstring.
 /// Realises: [REQ-FEAT-42-ITEM-SYNTHESIS-CONTEXT]
 struct ItemSynthesisContext<'a> {
     file_rel: &'a str,
     module_tag: &'a str,
     owner_name: Option<&'a str>,
     item_kind: SourceItemKind,
+    item_kw_override: Option<&'a str>,
     item_name: &'a str,
     ordinal_index: usize,
     indent: &'a str,
@@ -399,6 +403,21 @@ struct ItemSynthesisContext<'a> {
     fields_or_variants: Vec<String>,
     invariants: Vec<String>,
     schema_model: Option<&'a PackageDef>,
+}
+
+impl ItemSynthesisContext<'_> {
+    /// Returns the explicit keyword override (`const` or `type`) or the underlying `SourceItemKind` keyword.
+    /// Realises: [REQ-FEAT-42-ITEM-SYNTHESIS-KEYWORD]
+    fn item_keyword(&self) -> &str {
+        self.item_kw_override
+            .unwrap_or_else(|| self.item_kind.keyword())
+    }
+
+    /// Returns whether this declaration represents a callable function, method, or constructor.
+    /// Realises: [REQ-FEAT-42-ITEM-SYNTHESIS-IS-CALLABLE]
+    fn is_callable(&self) -> bool {
+        self.item_kw_override.is_none() && self.item_kind.is_callable()
+    }
 }
 
 /// Classification of an enclosing Rust block on `impl_owner_stack` for Tier A versus Tier B/C resolution.
@@ -411,6 +430,113 @@ enum RustOwnerKind {
     TraitImpl,
     /// Trait definition block (`trait MyTrait { ... }`).
     TraitDef,
+}
+
+/// Pending test-related attribute classification attached to the next Rust declaration.
+/// Realises: [REQ-FEAT-42-RUST-PENDING-ATTR]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RustPendingAttr {
+    /// No `#[cfg(test)]` or `#[test]` attribute is pending.
+    None,
+    /// A `#[cfg(test)]` conditional compilation attribute is pending.
+    CfgTest,
+    /// A `#[test]` (or `#[...::test]`) test entrypoint attribute is pending.
+    TestFn,
+}
+
+/// Classified Rust item declaration with its documentation tier (`is_tier_a`).
+/// Realises: [REQ-FEAT-42-CLASSIFIED-RUST-ITEM]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ClassifiedRustItem {
+    kind: SourceItemKind,
+    keyword_override: Option<&'static str>,
+    name: String,
+    is_tier_a: bool,
+}
+
+/// Line-indexed deletion and insertion buffers for non-destructive source docstring rewriting.
+/// Realises: [REQ-FEAT-42-SOURCE-LINE-EDITS]
+struct SourceLineEdits {
+    removed_line_flags: Vec<bool>,
+    insertions_before: Vec<Vec<String>>,
+    enriched_count: usize,
+}
+
+impl SourceLineEdits {
+    /// Allocates empty deletion and insertion tables sized to `total_lines`.
+    /// Realises: [REQ-FEAT-42-SOURCE-LINE-EDITS-NEW]
+    fn new(total_lines: usize) -> Self {
+        Self {
+            removed_line_flags: vec![false; total_lines],
+            insertions_before: vec![Vec::new(); total_lines],
+            enriched_count: 0,
+        }
+    }
+
+    /// Marks every line index in `indices` for removal from the rendered output buffer.
+    /// Realises: [REQ-FEAT-42-SOURCE-LINE-EDITS-MARK-REMOVED]
+    fn mark_removed(&mut self, indices: &[usize]) {
+        for &doc_idx in indices {
+            if let Some(slot) = self.removed_line_flags.get_mut(doc_idx) {
+                *slot = true;
+            }
+        }
+    }
+
+    /// Removes `pending_indices` and increments `enriched_count` if `current_doc` contains a placeholder line.
+    /// Realises: [REQ-FEAT-42-SOURCE-LINE-EDITS-STRIP-PLACEHOLDER]
+    fn strip_placeholder_doc(&mut self, current_doc: &[String], pending_indices: &[usize]) {
+        if any_placeholder_in_doc(current_doc) {
+            self.mark_removed(pending_indices);
+            self.enriched_count = self.enriched_count.saturating_add(1);
+        }
+    }
+
+    /// Appends `new_doc` lines into the insertion bucket preceding `target_idx`.
+    /// Realises: [REQ-FEAT-42-SOURCE-LINE-EDITS-INSERT]
+    fn insert_before(&mut self, target_idx: usize, new_doc: Vec<String>) {
+        if let Some(bucket) = self.insertions_before.get_mut(target_idx) {
+            bucket.extend(new_doc);
+        }
+    }
+
+    /// Renders `raw_lines` with all scheduled removals and insertions using checked saturating line capacity.
+    /// Realises: [REQ-FEAT-42-SOURCE-LINE-EDITS-RENDER]
+    fn render(&self, source: &str, raw_lines: &[&str]) -> String {
+        let total_lines = raw_lines.len();
+        let inserted_lines = self
+            .insertions_before
+            .iter()
+            .fold(0usize, |acc, bucket| acc.saturating_add(bucket.len()));
+        let removed_lines = self
+            .removed_line_flags
+            .iter()
+            .filter(|&&removed| removed)
+            .count();
+        let capacity = total_lines
+            .saturating_sub(removed_lines)
+            .saturating_add(inserted_lines);
+
+        let mut out_lines: Vec<String> = Vec::with_capacity(capacity);
+        for idx in 0..total_lines {
+            if let Some(ins) = self.insertions_before.get(idx) {
+                for line in ins {
+                    out_lines.push(line.clone());
+                }
+            }
+            if !self.removed_line_flags.get(idx).copied().unwrap_or(false) {
+                if let Some(&orig) = raw_lines.get(idx) {
+                    out_lines.push(orig.to_string());
+                }
+            }
+        }
+
+        let mut rendered = out_lines.join("\n");
+        if source.ends_with('\n') {
+            rendered.push('\n');
+        }
+        rendered
+    }
 }
 
 /// Intermediate state for a multi-line Rust `impl` header prior to its opening `{` brace.
@@ -626,9 +752,63 @@ pub fn run_docstring_injection(
     Ok(report)
 }
 
+/// Checks whether `file_rel` lies inside a `modular_codegen/generated` directory tree.
+/// Realises: [REQ-FEAT-42-IS-MODULAR-CODEGEN-GENERATED-REL]
+fn is_modular_codegen_generated_rel(file_rel: &str) -> bool {
+    let mut prev_was_modular_codegen = false;
+    for seg in file_rel.split(['/', '\\']) {
+        if seg.is_empty() || seg == "." {
+            continue;
+        }
+        if prev_was_modular_codegen && seg == "generated" {
+            return true;
+        }
+        prev_was_modular_codegen = seg == "modular_codegen";
+    }
+    false
+}
+
+/// Checks whether `path` lies inside a `modular_codegen/generated` directory tree.
+/// Realises: [REQ-FEAT-42-IS-MODULAR-CODEGEN-GENERATED-PATH]
+fn is_modular_codegen_generated_path(path: &Path) -> bool {
+    is_modular_codegen_generated_rel(&path.to_string_lossy())
+}
+
+/// Checks whether a directory basename is excluded from recursive docstring injection traversal.
+/// Realises: [REQ-FEAT-42-IS-EXCLUDED-WALK-DIR]
+fn is_excluded_walk_dir_name(dname: &str) -> bool {
+    matches!(
+        dname,
+        "target"
+            | ".git"
+            | "build"
+            | "Pods"
+            | "ephemeral"
+            | ".dart_tool"
+            | "tests"
+            | "benches"
+            | "examples"
+            | "generated"
+    )
+}
+
+/// Checks whether a Dart filename matches a generated artifact naming convention.
+/// Realises: [REQ-FEAT-42-IS-GENERATED-DART-FILENAME]
+fn is_generated_dart_filename(fname: &str) -> bool {
+    if fname == "generated_plugin_registrant.dart" {
+        return true;
+    }
+    [".g.dart", ".freezed.dart", ".gr.dart", ".mocks.dart"]
+        .iter()
+        .any(|ext| fname.ends_with(ext))
+}
+
 /// Collects all non-test `.rs` and non-generated `.dart` files under `root` in sorted order.
 /// Realises: [REQ-FEAT-42-COLLECT-INJECTABLE-FILES]
 fn collect_injectable_source_files(root: &Path) -> Result<Vec<PathBuf>, String> {
+    if is_modular_codegen_generated_path(root) {
+        return Ok(Vec::new());
+    }
     if root.is_file() {
         return Ok(vec![root.to_path_buf()]);
     }
@@ -640,19 +820,7 @@ fn collect_injectable_source_files(root: &Path) -> Result<Vec<PathBuf>, String> 
         .filter_entry(|e| {
             if e.depth() > 0 && e.file_type().is_dir() {
                 let dname = e.file_name().to_string_lossy();
-                !matches!(
-                    dname.as_ref(),
-                    "target"
-                        | ".git"
-                        | "build"
-                        | "Pods"
-                        | "ephemeral"
-                        | ".dart_tool"
-                        | "tests"
-                        | "benches"
-                        | "examples"
-                        | "generated"
-                )
+                !is_excluded_walk_dir_name(&dname)
             } else {
                 true
             }
@@ -664,13 +832,11 @@ fn collect_injectable_source_files(root: &Path) -> Result<Vec<PathBuf>, String> 
             continue;
         }
         let path = entry.path();
+        if is_modular_codegen_generated_path(path) {
+            continue;
+        }
         let fname = entry.file_name().to_string_lossy();
-        if fname == "generated_plugin_registrant.dart"
-            || fname.ends_with(".g.dart")
-            || fname.ends_with(".freezed.dart")
-            || fname.ends_with(".gr.dart")
-            || fname.ends_with(".mocks.dart")
-        {
+        if is_generated_dart_filename(&fname) {
             continue;
         }
         if SourceLanguage::detect_from_extension(path).is_some() {
@@ -682,20 +848,571 @@ fn collect_injectable_source_files(root: &Path) -> Result<Vec<PathBuf>, String> 
     Ok(files)
 }
 
-/// Synthesizes and injects 7-section safety docstrings into a single Rust source buffer.
+/// Validates that an existing unforced `Realises:` binding does not conflict with `schema_model`.
+/// Realises: [REQ-FEAT-42-VALIDATE-UNFORCED-SCHEMA-REALISES]
+fn validate_unforced_schema_realises(
+    file_rel: &str,
+    item_name: &str,
+    current_doc: &[String],
+    schema_model: Option<&PackageDef>,
+    owner_name: Option<&str>,
+) -> Result<(), DocstringError> {
+    let (schema_req_opt, _) = resolve_schema_context(schema_model, owner_name, item_name);
+    let Some(schema_req) = schema_req_opt else {
+        return Ok(());
+    };
+    let existing_reqs = extract_all_realises_ids(current_doc);
+    if existing_reqs.is_empty() {
+        return Ok(());
+    }
+    let all_matched = schema_req
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .all(|sr| {
+            existing_reqs
+                .iter()
+                .any(|r| schema_identifiers_match(r, sr))
+        });
+    if !all_matched {
+        return Err(DocstringError::UnforcedConflict(format!(
+            "Conflicting unforced docstring in '{file_rel}' for '{item_name}': existing Realises {existing_reqs:?} conflicts with schema requirement '{schema_req}' (use --force to overwrite)"
+        )));
+    }
+    Ok(())
+}
+
+/// Checks whether `lex_state` is outside block comments, raw strings, active strings, and interpolations.
+/// Realises: [REQ-FEAT-42-IS-LEX-STATE-NORMAL]
+fn is_lex_state_normal(lex_state: &RustDartLexState) -> bool {
+    let outside_strings = lex_state.raw_hash_count.is_none() && lex_state.active_string.is_none();
+    lex_state.block_comment_depth == 0 && outside_strings && lex_state.interp_stack.is_empty()
+}
+
+/// Checks whether `code` opens an inline `mod tests` or `#[cfg(test)] mod ...` block.
+/// Realises: [REQ-FEAT-42-IS-MOD-TESTS-ENTRY]
+fn is_mod_tests_entry(code: &str, pending_attr: RustPendingAttr) -> bool {
+    let is_named_tests =
+        code == "mod tests {" || code.starts_with("mod tests ") || code.starts_with("mod tests{");
+    let is_cfg_test_mod = pending_attr == RustPendingAttr::CfgTest
+        && code.starts_with("mod ")
+        && !code.ends_with(';');
+    is_named_tests || is_cfg_test_mod
+}
+
+/// Checks whether a leading `#[...]` attribute line marks a `#[test]` entrypoint function.
+/// Realises: [REQ-FEAT-42-IS-RUST-TEST-FN-ATTR]
+fn is_rust_test_fn_attr(code: &str) -> bool {
+    let Some(after_open) = code.trim_start().strip_prefix("#[") else {
+        return false;
+    };
+    let Some((attr_body, _)) = after_open.split_once(']') else {
+        return false;
+    };
+    let attr = attr_body.trim();
+    let base = attr.split_once('(').map_or(attr, |(head, _)| head.trim());
+    base == "test" || base.ends_with("::test")
+}
+
+/// Updates the pending test attribute state when scanning a Rust `#[...]` attribute line.
+/// Realises: [REQ-FEAT-42-CLASSIFY-PENDING-RUST-ATTR]
+fn classify_pending_rust_attr(code: &str, current: RustPendingAttr) -> RustPendingAttr {
+    let is_cfg_test = code.starts_with("#[cfg(test)") || code.contains("cfg(test)");
+    if is_cfg_test || current == RustPendingAttr::CfgTest {
+        RustPendingAttr::CfgTest
+    } else if is_rust_test_fn_attr(code) {
+        RustPendingAttr::TestFn
+    } else {
+        current
+    }
+}
+
+/// Updates `attr_bracket_depth` across `[` and `]` bytes in a multi-line Rust attribute continuation.
+/// Realises: [REQ-FEAT-42-UPDATE-ATTR-BRACKET-DEPTH]
+fn update_attr_bracket_depth(code: &str, attr_bracket_depth: &mut usize) {
+    for b in code.bytes() {
+        if b == b'[' {
+            *attr_bracket_depth = attr_bracket_depth.saturating_add(1);
+        } else if b == b']' {
+            *attr_bracket_depth = attr_bracket_depth.saturating_sub(1);
+        }
+    }
+}
+
+/// Consumes leading `#[...]` attributes on `code`, updating `attr_bracket_depth` if an attribute spans lines.
+/// Realises: [REQ-FEAT-42-CONSUME-LEADING-RUST-ATTRS]
+fn consume_leading_rust_attrs<'b>(code: &'b str, attr_bracket_depth: &mut usize) -> &'b str {
+    let mut rest = code.trim_start();
+    while let Some(after_hash) = rest.strip_prefix("#[") {
+        let mut depth: usize = 1;
+        let mut close_off: Option<usize> = None;
+        for (i, b) in after_hash.bytes().enumerate() {
+            if b == b'[' {
+                depth = depth.saturating_add(1);
+            } else if b == b']' {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    close_off = Some(i.saturating_add(1));
+                    break;
+                }
+            }
+        }
+        if let Some(off) = close_off {
+            rest = after_hash.get(off..).unwrap_or("").trim_start();
+        } else {
+            *attr_bracket_depth = depth;
+            return "";
+        }
+    }
+    rest
+}
+
+/// Scanned single-line context passed between Rust docstring injection helpers.
+/// Realises: [REQ-FEAT-42-RUST-LINE-SCAN-CONTEXT]
+struct RustLineScanContext<'b> {
+    raw_line: &'b str,
+    idx: usize,
+    code: &'b str,
+    inline_comment_closed: bool,
+}
+
+/// Per-file state machine for tiered Rust safety docstring synthesis and Tier B/C compaction.
+/// Realises: [REQ-FEAT-42-RUST-INJECTOR-STATE]
+struct RustInjectorState<'a> {
+    file_rel: &'a str,
+    module_tag: String,
+    schema_model: Option<&'a PackageDef>,
+    force: bool,
+    skip_tier_bc_compaction: bool,
+    current_doc: Vec<String>,
+    pending_doc_indices: Vec<usize>,
+    first_attr_idx: Option<usize>,
+    seen_docblocks: BTreeSet<String>,
+    lex_state: RustDartLexState,
+    in_mod_tests: bool,
+    pending_attr: RustPendingAttr,
+    attr_bracket_depth: usize,
+    brace_depth: usize,
+    paren_depth: usize,
+    active_fn_body_depth: Option<usize>,
+    pending_fn_body_depth: Option<usize>,
+    impl_owner_stack: Vec<(usize, String, RustOwnerKind)>,
+    pending_impl: Option<PendingRustImpl>,
+    edits: SourceLineEdits,
+    item_ordinal: usize,
+}
+
+impl<'a> RustInjectorState<'a> {
+    /// Initializes a `RustInjectorState` for `file_rel` across `total_lines`.
+    /// Realises: [REQ-FEAT-42-RUST-INJECTOR-STATE-NEW]
+    fn new(
+        total_lines: usize,
+        file_rel: &'a str,
+        schema_model: Option<&'a PackageDef>,
+        force: bool,
+    ) -> Self {
+        Self {
+            file_rel,
+            module_tag: derive_module_req_tag(file_rel),
+            schema_model,
+            force,
+            skip_tier_bc_compaction: is_modular_codegen_generated_rel(file_rel),
+            current_doc: Vec::new(),
+            pending_doc_indices: Vec::new(),
+            first_attr_idx: None,
+            seen_docblocks: BTreeSet::new(),
+            lex_state: RustDartLexState {
+                language: SourceLanguage::Rust,
+                ..Default::default()
+            },
+            in_mod_tests: false,
+            pending_attr: RustPendingAttr::None,
+            attr_bracket_depth: 0,
+            brace_depth: 0,
+            paren_depth: 0,
+            active_fn_body_depth: None,
+            pending_fn_body_depth: None,
+            impl_owner_stack: Vec::new(),
+            pending_impl: None,
+            edits: SourceLineEdits::new(total_lines),
+            item_ordinal: 0,
+        }
+    }
+
+    /// Clears pending docblock lines, attribute anchor index, and pending test attribute state.
+    /// Realises: [REQ-FEAT-42-RUST-INJECTOR-RESET-PENDING]
+    fn reset_pending_item_context(&mut self) {
+        self.pending_attr = RustPendingAttr::None;
+        self.current_doc.clear();
+        self.pending_doc_indices.clear();
+        self.first_attr_idx = None;
+    }
+
+    /// Returns the non-empty nominal type identifier of the innermost enclosing `impl` or `trait` block.
+    /// Realises: [REQ-FEAT-42-RUST-INJECTOR-OWNER-NAME]
+    fn current_owner_name(&self) -> Option<&str> {
+        self.impl_owner_stack.last().and_then(|(_, name, _)| {
+            if name.is_empty() {
+                None
+            } else {
+                Some(name.as_str())
+            }
+        })
+    }
+
+    /// Returns whether the scanner is currently inside an open function or method body block.
+    /// Realises: [REQ-FEAT-42-RUST-INJECTOR-IN-FN-BODY]
+    fn in_function_body(&self) -> bool {
+        self.active_fn_body_depth
+            .is_some_and(|open_depth| self.brace_depth > open_depth)
+    }
+
+    /// Scans and processes a single line at `idx` in `raw_lines`.
+    /// Realises: [REQ-FEAT-42-RUST-INJECTOR-PROCESS-LINE]
+    fn process_line(&mut self, raw_lines: &[&str], idx: usize) -> Result<(), DocstringError> {
+        let raw_line = raw_lines.get(idx).copied().unwrap_or("");
+        let trimmed = raw_line.trim();
+        let started_in_normal = is_lex_state_normal(&self.lex_state);
+        let started_in_string =
+            self.lex_state.raw_hash_count.is_some() || self.lex_state.active_string.is_some();
+
+        if started_in_normal {
+            if trimmed.starts_with("//!") {
+                if has_placeholder_doc_line(trimmed) {
+                    self.edits.mark_removed(&[idx]);
+                    self.edits.enriched_count = self.edits.enriched_count.saturating_add(1);
+                }
+                return Ok(());
+            }
+            if trimmed.starts_with("///") {
+                if !self.in_mod_tests {
+                    self.current_doc.push(trimmed.to_string());
+                    self.pending_doc_indices.push(idx);
+                }
+                return Ok(());
+            }
+        }
+
+        let scanned_code = scan_line_with_unified_lex_state(trimmed, &mut self.lex_state);
+        let ended_in_normal = is_lex_state_normal(&self.lex_state);
+        let raw_code = scanned_code.trim();
+        let mut code = if started_in_string {
+            raw_code.strip_prefix('"').unwrap_or(raw_code).trim()
+        } else {
+            raw_code
+        };
+        if code.is_empty() {
+            return Ok(());
+        }
+
+        let still_in_non_code = !ended_in_normal || started_in_string;
+        if !started_in_normal && still_in_non_code {
+            if self.attr_bracket_depth > 0 {
+                update_attr_bracket_depth(code, &mut self.attr_bracket_depth);
+            } else {
+                self.update_depths_after_code(code);
+            }
+            return Ok(());
+        }
+
+        if is_mod_tests_entry(code, self.pending_attr) {
+            self.in_mod_tests = true;
+        }
+        if self.in_mod_tests {
+            return Ok(());
+        }
+
+        if self.attr_bracket_depth > 0 {
+            update_attr_bracket_depth(code, &mut self.attr_bracket_depth);
+            return Ok(());
+        }
+
+        if code.starts_with("#[") {
+            if self.first_attr_idx.is_none() {
+                self.first_attr_idx = Some(idx);
+            }
+            self.pending_attr = classify_pending_rust_attr(code, self.pending_attr);
+            code = consume_leading_rust_attrs(code, &mut self.attr_bracket_depth);
+            if code.is_empty() {
+                return Ok(());
+            }
+        }
+
+        if self.paren_depth == 0 {
+            let scan = RustLineScanContext {
+                raw_line,
+                idx,
+                code,
+                inline_comment_closed: !started_in_normal && ended_in_normal,
+            };
+            self.handle_top_level_code(raw_lines, &scan)?;
+        }
+
+        self.update_depths_after_code(code);
+        Ok(())
+    }
+
+    /// Dispatches `impl` headers and item declarations encountered at `paren_depth == 0`.
+    /// Realises: [REQ-FEAT-42-RUST-INJECTOR-HANDLE-TOP-LEVEL]
+    fn handle_top_level_code(
+        &mut self,
+        raw_lines: &[&str],
+        scan: &RustLineScanContext<'_>,
+    ) -> Result<(), DocstringError> {
+        let code = scan.code;
+        let enclosing_owner_kind = self.impl_owner_stack.last().map(|&(_, _, kind)| kind);
+        let in_fn_body = self.in_function_body();
+
+        if let Some((impl_target, impl_kind)) = extract_rust_impl_target_and_kind(code) {
+            self.pending_impl = None;
+            if code.contains('{') && !code.contains('}') {
+                self.impl_owner_stack
+                    .push((self.brace_depth, impl_target, impl_kind));
+            }
+            self.edits
+                .strip_placeholder_doc(&self.current_doc, &self.pending_doc_indices);
+            self.reset_pending_item_context();
+        } else if self.brace_depth == 0 && parse_rust_impl_header(&format!("{code} {{")).is_some() {
+            if let Some(impl_target) = parse_rust_impl_header(&format!("{code} {{")) {
+                if !code.ends_with(';') && !code.contains('}') {
+                    let (trait_for_tail, saw_where) = scan_rust_impl_segment(code);
+                    let impl_kind = if trait_for_tail.is_some() {
+                        RustOwnerKind::TraitImpl
+                    } else {
+                        RustOwnerKind::InherentImpl
+                    };
+                    self.pending_impl = Some(PendingRustImpl {
+                        target: impl_target,
+                        kind: impl_kind,
+                        in_where_clause: saw_where,
+                    });
+                }
+            }
+            self.edits
+                .strip_placeholder_doc(&self.current_doc, &self.pending_doc_indices);
+            self.reset_pending_item_context();
+        } else if self.brace_depth == 0 && self.pending_impl.is_some() {
+            advance_pending_rust_impl(
+                code,
+                self.brace_depth,
+                &mut self.pending_impl,
+                &mut self.impl_owner_stack,
+            );
+        } else if let Some(item) =
+            classify_rust_item_for_injection(code, enclosing_owner_kind, in_fn_body)
+        {
+            self.handle_classified_item(raw_lines, scan, item)?;
+        } else {
+            self.edits
+                .strip_placeholder_doc(&self.current_doc, &self.pending_doc_indices);
+            self.reset_pending_item_context();
+        }
+        Ok(())
+    }
+
+    /// Evaluates compliance, compaction, or synthesis for a classified Rust declaration.
+    /// Realises: [REQ-FEAT-42-RUST-INJECTOR-HANDLE-ITEM]
+    fn handle_classified_item(
+        &mut self,
+        raw_lines: &[&str],
+        scan: &RustLineScanContext<'_>,
+        item: ClassifiedRustItem,
+    ) -> Result<(), DocstringError> {
+        if self.pending_attr != RustPendingAttr::None {
+            self.handle_test_annotated_item(raw_lines, scan, &item);
+            self.register_item_scope(scan.code, &item);
+            self.reset_pending_item_context();
+            return Ok(());
+        }
+
+        self.item_ordinal = self.item_ordinal.saturating_add(1);
+        let owner_exists = self.current_owner_name().map(str::to_string);
+        let owner_ref = owner_exists.as_deref();
+        let check_uniqueness = item.is_tier_a && item.kind == SourceItemKind::Function;
+        let policy = DocCompliancePolicy {
+            is_tier_a: item.is_tier_a,
+            check_uniqueness,
+            allow_legacy_tier_bc_sections: self.skip_tier_bc_compaction,
+        };
+        let is_valid = !self.force
+            && is_compliant_docblock_in_file_with_mode(
+                &self.current_doc,
+                policy,
+                &mut self.seen_docblocks,
+            );
+
+        let should_check_conflict =
+            !self.force && (is_valid || has_legacy_seven_section_headers(&self.current_doc));
+        if should_check_conflict {
+            validate_unforced_schema_realises(
+                self.file_rel,
+                &item.name,
+                &self.current_doc,
+                self.schema_model,
+                owner_ref,
+            )?;
+        }
+
+        if !is_valid {
+            self.emit_synthesized_rust_doc(raw_lines, scan, &item, owner_ref);
+        }
+
+        self.register_item_scope(scan.code, &item);
+        self.reset_pending_item_context();
+        Ok(())
+    }
+
+    /// Handles `#[cfg(test)]` and `#[test]` items without adding 7-section boilerplate, compacting legacy 7-section blocks if present.
+    /// Realises: [REQ-FEAT-42-RUST-INJECTOR-HANDLE-TEST-ITEM]
+    fn handle_test_annotated_item(
+        &mut self,
+        raw_lines: &[&str],
+        scan: &RustLineScanContext<'_>,
+        item: &ClassifiedRustItem,
+    ) {
+        if !self.skip_tier_bc_compaction && has_legacy_seven_section_headers(&self.current_doc) {
+            let owner_exists = self.current_owner_name().map(str::to_string);
+            let mut tier_bc_item = item.clone();
+            tier_bc_item.is_tier_a = false;
+            self.item_ordinal = self.item_ordinal.saturating_add(1);
+            self.emit_synthesized_rust_doc(raw_lines, scan, &tier_bc_item, owner_exists.as_deref());
+        } else {
+            self.edits
+                .strip_placeholder_doc(&self.current_doc, &self.pending_doc_indices);
+        }
+    }
+
+    /// Synthesizes either a Tier A 7-section docblock or a concise Tier B/C 2-line docblock and records the line edits.
+    /// Realises: [REQ-FEAT-42-RUST-INJECTOR-EMIT-DOC]
+    fn emit_synthesized_rust_doc(
+        &mut self,
+        raw_lines: &[&str],
+        scan: &RustLineScanContext<'_>,
+        item: &ClassifiedRustItem,
+        owner_name: Option<&str>,
+    ) {
+        self.edits.mark_removed(&self.pending_doc_indices);
+
+        let inline_comment_split = if scan.inline_comment_closed && self.first_attr_idx.is_none() {
+            scan.raw_line
+                .split_once("*/")
+                .map(|(prefix, rest)| (format!("{prefix}*/"), rest.trim_start()))
+        } else {
+            None
+        };
+        let indent = if inline_comment_split.is_some() {
+            ""
+        } else {
+            leading_whitespace(scan.raw_line)
+        };
+        let (params, return_type, fields_or_variants, invariants) =
+            if item.keyword_override.is_some() {
+                (Vec::new(), None, Vec::new(), Vec::new())
+            } else {
+                inspect_rust_item_details(raw_lines, scan.idx, item.kind)
+            };
+
+        let ctx = ItemSynthesisContext {
+            file_rel: self.file_rel,
+            module_tag: &self.module_tag,
+            owner_name,
+            item_kind: item.kind,
+            item_kw_override: item.keyword_override,
+            item_name: &item.name,
+            ordinal_index: self.item_ordinal,
+            indent,
+            existing_doc: &self.current_doc,
+            params,
+            return_type,
+            fields_or_variants,
+            invariants,
+            schema_model: self.schema_model,
+        };
+
+        let new_doc = if item.is_tier_a {
+            synthesize_7_section_docstring(&ctx, &mut self.seen_docblocks)
+        } else {
+            synthesize_tier_bc_docstring(&ctx)
+        };
+
+        let target_insert_idx = self.first_attr_idx.unwrap_or(scan.idx);
+        if let Some((comment_prefix, decl_tail)) = inline_comment_split {
+            let mut combined = Vec::with_capacity(new_doc.len().saturating_add(2));
+            combined.push(comment_prefix);
+            combined.extend(new_doc);
+            combined.push(format!("{indent}{decl_tail}"));
+            self.edits.insert_before(target_insert_idx, combined);
+            self.edits.mark_removed(&[scan.idx]);
+        } else {
+            self.edits.insert_before(target_insert_idx, new_doc);
+        }
+        self.edits.enriched_count = self.edits.enriched_count.saturating_add(1);
+    }
+
+    /// Registers `TraitDef` owner scope or pending function body tracking before delimiter updates.
+    /// Realises: [REQ-FEAT-42-RUST-INJECTOR-REGISTER-SCOPE]
+    fn register_item_scope(&mut self, code: &str, item: &ClassifiedRustItem) {
+        let is_open_trait = item.keyword_override.is_none()
+            && item.kind == SourceItemKind::Trait
+            && code.contains('{');
+        if is_open_trait && !code.contains('}') {
+            self.impl_owner_stack.push((
+                self.brace_depth,
+                item.name.clone(),
+                RustOwnerKind::TraitDef,
+            ));
+        }
+        if item.keyword_override.is_none()
+            && item.kind == SourceItemKind::Function
+            && self.active_fn_body_depth.is_none()
+        {
+            self.pending_fn_body_depth = Some(self.brace_depth);
+        }
+    }
+
+    /// Updates `(brace_depth, paren_depth)`, function-body scope tracking, and `impl_owner_stack` closures.
+    /// Realises: [REQ-FEAT-42-RUST-INJECTOR-UPDATE-DEPTHS]
+    fn update_depths_after_code(&mut self, code: &str) {
+        update_ast_delimiter_depths(code, &mut self.brace_depth, &mut self.paren_depth);
+
+        if let Some(open_d) = self.pending_fn_body_depth {
+            let ended_without_body = code.ends_with(';') || code.ends_with('}');
+            if self.brace_depth > open_d {
+                self.active_fn_body_depth = Some(open_d);
+                self.pending_fn_body_depth = None;
+            } else if self.paren_depth == 0 && ended_without_body {
+                self.pending_fn_body_depth = None;
+            }
+        }
+        if let Some(open_d) = self.active_fn_body_depth {
+            if self.brace_depth <= open_d {
+                self.active_fn_body_depth = None;
+            }
+        }
+
+        while let Some(&(open_depth, _, _)) = self.impl_owner_stack.last() {
+            if self.brace_depth <= open_depth {
+                self.impl_owner_stack.pop();
+            } else {
+                break;
+            }
+        }
+    }
+}
+
+/// Synthesizes and compacts tiered v2.0 safety docstrings into a single Rust source buffer.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, Check 34 (`audit_source_purity`), and Check 36 (`audit_rust_source_docstrings`).
-/// Inspects every production `struct`, `enum`, `trait`, and `fn` outside `#[cfg(test)]` and `mod tests`,
-/// preserving already-compliant 7-section docstrings when `!force` and synthesizing unique 7-section
-/// docstrings above any `#[...]` attributes for undocumented, incomplete, placeholder, or duplicate items.
+/// Conforms to DO-178C Level A, Check 34 (`audit_source_purity`), Check 36 (`audit_rust_source_docstrings`),
+/// and DEAP Rust Coding Standard v2.0 Section 4. Preserves or synthesizes 7-section / 4-Block Contract
+/// docstrings on Tier A items while synthesizing and compacting concise 2-line docstrings on Tier B/C items.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Zero Module-Level Exemptions: `//!` inner docstrings are preserved verbatim and never satisfy
 ///   outer `///` item docstring requirements.
-/// - Per-Function Body Uniqueness: Tracks `seen_docblocks` across all `fn` items in `source` so
-///   every function has a unique normalized 7-section body.
-/// - Preserves trailing newline parity with `source`.
+/// - Per-Function Body Uniqueness: Tracks `seen_docblocks` across Tier A `pub fn` items in `source` so
+///   every public function has a unique normalized 7-section body.
+/// - Metacircular Parity Isolation: Skips Tier B/C 7-section compaction on `modular_codegen/generated` paths.
 ///
 /// ## 3. Preconditions
 /// - `source: &str` contains valid UTF-8 Rust source code.
@@ -706,12 +1423,12 @@ fn collect_injectable_source_files(root: &Path) -> Result<Vec<PathBuf>, String> 
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(L) where L is the line count of `source`.
-/// - Space Complexity: O(L + I) where I is the number of unique function docblocks.
+/// - Space Complexity: O(L + I) where I is the number of unique Tier A function docblocks.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Validates balanced delimiters via `validate_source_syntax_for_language` before modifying lines.
-/// - State: Isolated per-file state machine tracking attributes, raw strings, comments, and `impl` blocks.
-/// - Action: Non-panicking `.get(..)` slice operations throughout.
+/// - State: Isolated per-file `RustInjectorState` tracking attributes, raw strings, comments, and `impl` blocks.
+/// - Action: Non-panicking `.get(..)` slice operations and saturating arithmetic throughout.
 /// - Resource: Linear memory proportional to `source.len()`.
 ///
 /// ## 7. Realization & Traceability
@@ -726,355 +1443,277 @@ pub fn inject_rust_file_docstrings(
         .map_err(DocstringError::Parse)?;
 
     let raw_lines: Vec<&str> = source.lines().collect();
-    let total_lines = raw_lines.len();
-    let mut removed_line_flags: Vec<bool> = vec![false; total_lines];
-    let mut insertions_before: Vec<Vec<String>> = vec![Vec::new(); total_lines];
+    let mut state = RustInjectorState::new(raw_lines.len(), file_rel, schema_model, force);
 
-    let module_tag = derive_module_req_tag(file_rel);
-    let mut current_doc: Vec<String> = Vec::new();
-    let mut pending_doc_indices: Vec<usize> = Vec::new();
-    let mut first_attr_idx: Option<usize> = None;
-    let mut seen_docblocks: BTreeSet<String> = BTreeSet::new();
-
-    let mut lex_state = RustDartLexState {
-        language: SourceLanguage::Rust,
-        ..Default::default()
-    };
-    let mut in_mod_tests = false;
-    let mut cfg_test_pending = false;
-    let mut attr_bracket_depth: usize = 0;
-    let mut brace_depth: usize = 0;
-    let mut paren_depth: usize = 0;
-    let mut impl_owner_stack: Vec<(usize, String, RustOwnerKind)> = Vec::new();
-    let mut pending_impl: Option<PendingRustImpl> = None;
-    let mut enriched_count: usize = 0;
-    let mut item_ordinal: usize = 0;
-
-    for (idx, &raw_line) in raw_lines.iter().enumerate() {
-        let trimmed = raw_line.trim();
-        let started_in_normal = lex_state.block_comment_depth == 0
-            && lex_state.raw_hash_count.is_none()
-            && lex_state.active_string.is_none()
-            && lex_state.interp_stack.is_empty();
-        let started_in_string =
-            lex_state.raw_hash_count.is_some() || lex_state.active_string.is_some();
-
-        if started_in_normal {
-            if trimmed.starts_with("//!") {
-                if has_placeholder_doc_line(trimmed) {
-                    if let Some(slot) = removed_line_flags.get_mut(idx) {
-                        *slot = true;
-                    }
-                    enriched_count = enriched_count.saturating_add(1);
-                }
-                continue;
-            }
-
-            if trimmed.starts_with("///") {
-                if !in_mod_tests {
-                    current_doc.push(trimmed.to_string());
-                    pending_doc_indices.push(idx);
-                }
-                continue;
-            }
-        }
-
-        let scanned_code = scan_line_with_unified_lex_state(trimmed, &mut lex_state);
-        let ended_in_normal = lex_state.block_comment_depth == 0
-            && lex_state.raw_hash_count.is_none()
-            && lex_state.active_string.is_none()
-            && lex_state.interp_stack.is_empty();
-        let raw_code = scanned_code.trim();
-        let code = if started_in_string {
-            raw_code.strip_prefix('"').unwrap_or(raw_code).trim()
-        } else {
-            raw_code
-        };
-
-        if code.is_empty() {
-            continue;
-        }
-
-        if !started_in_normal && (!ended_in_normal || started_in_string) {
-            if attr_bracket_depth > 0 {
-                for b in code.bytes() {
-                    if b == b'[' {
-                        attr_bracket_depth = attr_bracket_depth.saturating_add(1);
-                    } else if b == b']' {
-                        attr_bracket_depth = attr_bracket_depth.saturating_sub(1);
-                    }
-                }
-                continue;
-            }
-            update_ast_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
-            while let Some(&(open_depth, _, _)) = impl_owner_stack.last() {
-                if brace_depth <= open_depth {
-                    impl_owner_stack.pop();
-                } else {
-                    break;
-                }
-            }
-            continue;
-        }
-
-        if code == "mod tests {"
-            || code.starts_with("mod tests ")
-            || code.starts_with("mod tests{")
-            || (cfg_test_pending && code.starts_with("mod "))
-        {
-            in_mod_tests = true;
-        }
-
-        if in_mod_tests {
-            continue;
-        }
-
-        if attr_bracket_depth > 0 {
-            for b in code.bytes() {
-                if b == b'[' {
-                    attr_bracket_depth = attr_bracket_depth.saturating_add(1);
-                } else if b == b']' {
-                    attr_bracket_depth = attr_bracket_depth.saturating_sub(1);
-                }
-            }
-            continue;
-        }
-
-        if code.starts_with("#[") {
-            if first_attr_idx.is_none() {
-                first_attr_idx = Some(idx);
-            }
-            if code.starts_with("#[cfg(test)") || code.contains("cfg(test)") {
-                cfg_test_pending = true;
-            }
-            for b in code.bytes() {
-                if b == b'[' {
-                    attr_bracket_depth = attr_bracket_depth.saturating_add(1);
-                } else if b == b']' {
-                    attr_bracket_depth = attr_bracket_depth.saturating_sub(1);
-                }
-            }
-            continue;
-        }
-
-        if paren_depth == 0 {
-            let enclosing_owner_kind = impl_owner_stack.last().map(|&(_, _, kind)| kind);
-            if let Some((impl_target, impl_kind)) = extract_rust_impl_target_and_kind(code) {
-                pending_impl = None;
-                if code.contains('{') && !code.contains('}') {
-                    impl_owner_stack.push((brace_depth, impl_target, impl_kind));
-                }
-                if any_placeholder_in_doc(&current_doc) {
-                    for &doc_idx in &pending_doc_indices {
-                        if let Some(slot) = removed_line_flags.get_mut(doc_idx) {
-                            *slot = true;
-                        }
-                    }
-                    enriched_count = enriched_count.saturating_add(1);
-                }
-                cfg_test_pending = false;
-                current_doc.clear();
-                pending_doc_indices.clear();
-                first_attr_idx = None;
-            } else if brace_depth == 0 && parse_rust_impl_header(&format!("{code} {{")).is_some() {
-                if let Some(impl_target) = parse_rust_impl_header(&format!("{code} {{")) {
-                    if !code.ends_with(';') && !code.contains('}') {
-                        let (trait_for_tail, saw_where) = scan_rust_impl_segment(code);
-                        let impl_kind = if trait_for_tail.is_some() {
-                            RustOwnerKind::TraitImpl
-                        } else {
-                            RustOwnerKind::InherentImpl
-                        };
-                        pending_impl = Some(PendingRustImpl {
-                            target: impl_target,
-                            kind: impl_kind,
-                            in_where_clause: saw_where,
-                        });
-                    }
-                }
-                if any_placeholder_in_doc(&current_doc) {
-                    for &doc_idx in &pending_doc_indices {
-                        if let Some(slot) = removed_line_flags.get_mut(doc_idx) {
-                            *slot = true;
-                        }
-                    }
-                    enriched_count = enriched_count.saturating_add(1);
-                }
-                cfg_test_pending = false;
-                current_doc.clear();
-                pending_doc_indices.clear();
-                first_attr_idx = None;
-            } else if brace_depth == 0 && pending_impl.is_some() {
-                advance_pending_rust_impl(
-                    code,
-                    brace_depth,
-                    &mut pending_impl,
-                    &mut impl_owner_stack,
-                );
-            } else if let Some((kind, item_name, is_tier_a)) =
-                classify_rust_item_with_tier_ast(code, enclosing_owner_kind)
-            {
-                if cfg_test_pending {
-                    cfg_test_pending = false;
-                    current_doc.clear();
-                    pending_doc_indices.clear();
-                    first_attr_idx = None;
-                } else {
-                    item_ordinal = item_ordinal.saturating_add(1);
-                    let owner_name = impl_owner_stack.last().and_then(|(_, name, _)| {
-                        if name.is_empty() {
-                            None
-                        } else {
-                            Some(name.as_str())
-                        }
-                    });
-                    let check_uniqueness = is_tier_a && kind == SourceItemKind::Function;
-                    let is_valid = !force
-                        && is_compliant_docblock_in_file(
-                            &current_doc,
-                            is_tier_a,
-                            check_uniqueness,
-                            &mut seen_docblocks,
-                        );
-
-                    if is_valid {
-                        let (schema_req_opt, _) =
-                            resolve_schema_context(schema_model, owner_name, &item_name);
-                        if let Some(schema_req) = schema_req_opt {
-                            let existing_reqs = extract_all_realises_ids(&current_doc);
-                            if !existing_reqs.is_empty()
-                                && !schema_req
-                                    .split(',')
-                                    .map(str::trim)
-                                    .filter(|s| !s.is_empty())
-                                    .all(|sr| {
-                                        existing_reqs
-                                            .iter()
-                                            .any(|r| schema_identifiers_match(r, sr))
-                                    })
-                            {
-                                return Err(DocstringError::UnforcedConflict(format!(
-                                    "Conflicting unforced docstring in '{}' for '{}': existing Realises {:?} conflicts with schema requirement '{}' (use --force to overwrite)",
-                                    file_rel, item_name, existing_reqs, schema_req
-                                )));
-                            }
-                        }
-                    } else {
-                        for &doc_idx in &pending_doc_indices {
-                            if let Some(slot) = removed_line_flags.get_mut(doc_idx) {
-                                *slot = true;
-                            }
-                        }
-
-                        let inline_comment_split =
-                            if !started_in_normal && ended_in_normal && first_attr_idx.is_none() {
-                                raw_line.split_once("*/").map(|(prefix, rest)| {
-                                    (format!("{}*/", prefix), rest.trim_start())
-                                })
-                            } else {
-                                None
-                            };
-                        let indent = if inline_comment_split.is_some() {
-                            ""
-                        } else {
-                            leading_whitespace(raw_line)
-                        };
-                        let (params, return_type, fields_or_variants, invariants) =
-                            inspect_rust_item_details(&raw_lines, idx, kind);
-
-                        let ctx = ItemSynthesisContext {
-                            file_rel,
-                            module_tag: &module_tag,
-                            owner_name,
-                            item_kind: kind,
-                            item_name: &item_name,
-                            ordinal_index: item_ordinal,
-                            indent,
-                            existing_doc: &current_doc,
-                            params,
-                            return_type,
-                            fields_or_variants,
-                            invariants,
-                            schema_model,
-                        };
-
-                        let new_doc = synthesize_7_section_docstring(&ctx, &mut seen_docblocks);
-                        let target_insert_idx = first_attr_idx.unwrap_or(idx);
-                        if let Some((comment_prefix, decl_tail)) = inline_comment_split {
-                            if let Some(bucket) = insertions_before.get_mut(target_insert_idx) {
-                                bucket.push(comment_prefix);
-                                bucket.extend(new_doc);
-                                bucket.push(format!("{indent}{decl_tail}"));
-                            }
-                            if let Some(slot) = removed_line_flags.get_mut(idx) {
-                                *slot = true;
-                            }
-                        } else if let Some(bucket) = insertions_before.get_mut(target_insert_idx) {
-                            bucket.extend(new_doc);
-                        }
-                        enriched_count = enriched_count.saturating_add(1);
-                    }
-
-                    if kind == SourceItemKind::Trait && code.contains('{') && !code.contains('}') {
-                        impl_owner_stack.push((brace_depth, item_name, RustOwnerKind::TraitDef));
-                    }
-
-                    cfg_test_pending = false;
-                    current_doc.clear();
-                    pending_doc_indices.clear();
-                    first_attr_idx = None;
-                }
-            } else {
-                if any_placeholder_in_doc(&current_doc) {
-                    for &doc_idx in &pending_doc_indices {
-                        if let Some(slot) = removed_line_flags.get_mut(doc_idx) {
-                            *slot = true;
-                        }
-                    }
-                    enriched_count = enriched_count.saturating_add(1);
-                }
-                cfg_test_pending = false;
-                current_doc.clear();
-                pending_doc_indices.clear();
-                first_attr_idx = None;
-            }
-        }
-
-        update_ast_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
-        while let Some(&(open_depth, _, _)) = impl_owner_stack.last() {
-            if brace_depth <= open_depth {
-                impl_owner_stack.pop();
-            } else {
-                break;
-            }
-        }
+    for idx in 0..raw_lines.len() {
+        state.process_line(&raw_lines, idx)?;
     }
 
-    if enriched_count == 0 {
+    if state.edits.enriched_count == 0 {
         return Ok((source.to_string(), 0));
     }
 
-    let mut out_lines: Vec<String> =
-        Vec::with_capacity(total_lines.saturating_add(enriched_count * 28));
-    for idx in 0..total_lines {
-        if let Some(ins) = insertions_before.get(idx) {
-            for line in ins {
-                out_lines.push(line.clone());
-            }
-        }
-        if !removed_line_flags.get(idx).copied().unwrap_or(false) {
-            if let Some(&orig) = raw_lines.get(idx) {
-                out_lines.push(orig.to_string());
-            }
+    let rendered = state.edits.render(source, &raw_lines);
+    Ok((rendered, state.edits.enriched_count))
+}
+
+/// Per-file state machine for Dart 7-section safety docstring synthesis.
+/// Realises: [REQ-FEAT-42-DART-INJECTOR-STATE]
+struct DartInjectorState<'a> {
+    file_rel: &'a str,
+    module_tag: String,
+    schema_model: Option<&'a PackageDef>,
+    force: bool,
+    current_doc: Vec<String>,
+    pending_doc_indices: Vec<usize>,
+    first_annot_idx: Option<usize>,
+    seen_docblocks: BTreeSet<String>,
+    dart_lex_state: RustDartLexState,
+    scoped_state: ScopedItemScannerState,
+    brace_depth: usize,
+    paren_depth: usize,
+    active_class_name: Option<String>,
+    edits: SourceLineEdits,
+    item_ordinal: usize,
+}
+
+impl<'a> DartInjectorState<'a> {
+    /// Initializes a `DartInjectorState` for `file_rel` across `total_lines`.
+    /// Realises: [REQ-FEAT-42-DART-INJECTOR-STATE-NEW]
+    fn new(
+        total_lines: usize,
+        file_rel: &'a str,
+        schema_model: Option<&'a PackageDef>,
+        force: bool,
+    ) -> Self {
+        Self {
+            file_rel,
+            module_tag: derive_module_req_tag(file_rel),
+            schema_model,
+            force,
+            current_doc: Vec::new(),
+            pending_doc_indices: Vec::new(),
+            first_annot_idx: None,
+            seen_docblocks: BTreeSet::new(),
+            dart_lex_state: RustDartLexState {
+                language: SourceLanguage::Dart,
+                ..Default::default()
+            },
+            scoped_state: ScopedItemScannerState::default(),
+            brace_depth: 0,
+            paren_depth: 0,
+            active_class_name: None,
+            edits: SourceLineEdits::new(total_lines),
+            item_ordinal: 0,
         }
     }
 
-    let mut rendered = out_lines.join("\n");
-    if source.ends_with('\n') {
-        rendered.push('\n');
+    /// Clears pending Dart docblock lines and leading `@annotation` index.
+    /// Realises: [REQ-FEAT-42-DART-INJECTOR-RESET-PENDING]
+    fn reset_pending_item_context(&mut self) {
+        self.current_doc.clear();
+        self.pending_doc_indices.clear();
+        self.first_annot_idx = None;
     }
 
-    Ok((rendered, enriched_count))
+    /// Strips any placeholder lines from `current_doc` and resets pending item context.
+    /// Realises: [REQ-FEAT-42-DART-INJECTOR-DISCARD-NON-ITEM]
+    fn discard_non_item_doc(&mut self) {
+        self.edits
+            .strip_placeholder_doc(&self.current_doc, &self.pending_doc_indices);
+        self.reset_pending_item_context();
+    }
+
+    /// Scans and processes a single Dart line at `idx` in `raw_lines`.
+    /// Realises: [REQ-FEAT-42-DART-INJECTOR-PROCESS-LINE]
+    fn process_line(&mut self, raw_lines: &[&str], idx: usize) -> Result<(), DocstringError> {
+        let raw_line = raw_lines.get(idx).copied().unwrap_or("");
+        let trimmed = raw_line.trim();
+        let started_in_comment_or_string = self.dart_lex_state.block_comment_depth > 0
+            || self.dart_lex_state.active_string.is_some()
+            || !self.dart_lex_state.interp_stack.is_empty();
+
+        if !started_in_comment_or_string
+            && self.scoped_state.dart_annotation_paren_depth == 0
+            && trimmed.starts_with("///")
+        {
+            self.current_doc.push(trimmed.to_string());
+            self.pending_doc_indices.push(idx);
+            return Ok(());
+        }
+
+        let scanned = scan_line_with_unified_lex_state(trimmed, &mut self.dart_lex_state);
+        if scanned.trim().is_empty() {
+            return Ok(());
+        }
+
+        let code_raw = if !started_in_comment_or_string && !trimmed.contains("/*") {
+            strip_line_comment_preserving_strings(trimmed)
+        } else {
+            strip_line_comment_preserving_strings(scanned.trim())
+        };
+        if code_raw.is_empty() {
+            return Ok(());
+        }
+
+        if self.scoped_state.dart_annotation_paren_depth == 0
+            && code_raw.starts_with('@')
+            && self.first_annot_idx.is_none()
+        {
+            self.first_annot_idx = Some(idx);
+        }
+        let stripped_code = strip_dart_annotations_tracking_state(
+            code_raw,
+            &mut self.scoped_state.dart_annotation_paren_depth,
+        );
+        let code = stripped_code.trim();
+        if code.is_empty() {
+            return Ok(());
+        }
+
+        if self.paren_depth == 0 {
+            self.dispatch_dart_declaration(raw_lines, idx, code)?;
+        }
+
+        let prev_brace_depth = self.brace_depth;
+        update_ast_delimiter_depths(code, &mut self.brace_depth, &mut self.paren_depth);
+        let closed_to_zero = prev_brace_depth > 0 && self.brace_depth == 0;
+        let ended_at_zero = self.brace_depth == 0 && (code.ends_with(';') || code.ends_with('}'));
+        if closed_to_zero || ended_at_zero {
+            self.active_class_name = None;
+        }
+        Ok(())
+    }
+
+    /// Dispatches top-level (`brace_depth == 0`) or class-member (`brace_depth == 1`) Dart declarations.
+    /// Realises: [REQ-FEAT-42-DART-INJECTOR-DISPATCH]
+    fn dispatch_dart_declaration(
+        &mut self,
+        raw_lines: &[&str],
+        idx: usize,
+        code: &str,
+    ) -> Result<(), DocstringError> {
+        if self.brace_depth == 0 {
+            if let Some((kind, item_name, _parent)) = classify_dart_top_level_ast(code) {
+                let target = DartItemTarget {
+                    idx,
+                    kind,
+                    owner_name: None,
+                    item_name: &item_name,
+                    check_uniqueness: kind == SourceItemKind::Function,
+                };
+                self.validate_or_enrich_dart_item(raw_lines, target)?;
+                if matches!(
+                    kind,
+                    SourceItemKind::Class | SourceItemKind::Mixin | SourceItemKind::Extension
+                ) {
+                    self.active_class_name = Some(item_name);
+                }
+                self.reset_pending_item_context();
+            } else {
+                self.discard_non_item_doc();
+            }
+        } else if self.brace_depth == 1 {
+            if let Some(cls_name) = self.active_class_name.clone() {
+                if let Some((member_kind, member_name)) = classify_dart_member_ast(code, &cls_name)
+                {
+                    let target = DartItemTarget {
+                        idx,
+                        kind: member_kind,
+                        owner_name: Some(cls_name.as_str()),
+                        item_name: &member_name,
+                        check_uniqueness: true,
+                    };
+                    self.validate_or_enrich_dart_item(raw_lines, target)?;
+                    self.reset_pending_item_context();
+                } else {
+                    self.discard_non_item_doc();
+                }
+            } else {
+                self.discard_non_item_doc();
+            }
+        } else {
+            self.discard_non_item_doc();
+        }
+        Ok(())
+    }
+
+    /// Validates an existing Dart 7-section docblock or synthesizes a replacement 7-section docblock.
+    /// Realises: [REQ-FEAT-42-DART-INJECTOR-VALIDATE-OR-ENRICH]
+    fn validate_or_enrich_dart_item(
+        &mut self,
+        raw_lines: &[&str],
+        target: DartItemTarget<'_>,
+    ) -> Result<(), DocstringError> {
+        self.item_ordinal = self.item_ordinal.saturating_add(1);
+        let policy = DocCompliancePolicy {
+            is_tier_a: true,
+            check_uniqueness: target.check_uniqueness,
+            allow_legacy_tier_bc_sections: false,
+        };
+        let is_valid = !self.force
+            && is_compliant_docblock_in_file_with_mode(
+                &self.current_doc,
+                policy,
+                &mut self.seen_docblocks,
+            );
+
+        if is_valid {
+            validate_unforced_schema_realises(
+                self.file_rel,
+                target.item_name,
+                &self.current_doc,
+                self.schema_model,
+                target.owner_name,
+            )?;
+        } else {
+            self.edits.mark_removed(&self.pending_doc_indices);
+            let raw_line = raw_lines.get(target.idx).copied().unwrap_or("");
+            let indent = leading_whitespace(raw_line);
+            let (params, return_type, fields_or_variants, invariants) =
+                inspect_dart_item_details(raw_lines, target.idx, target.kind, target.item_name);
+            let ctx = ItemSynthesisContext {
+                file_rel: self.file_rel,
+                module_tag: &self.module_tag,
+                owner_name: target.owner_name,
+                item_kind: target.kind,
+                item_kw_override: None,
+                item_name: target.item_name,
+                ordinal_index: self.item_ordinal,
+                indent,
+                existing_doc: &self.current_doc,
+                params,
+                return_type,
+                fields_or_variants,
+                invariants,
+                schema_model: self.schema_model,
+            };
+            let new_doc = synthesize_7_section_docstring(&ctx, &mut self.seen_docblocks);
+            let target_insert_idx = self.first_annot_idx.unwrap_or(target.idx);
+            self.edits.insert_before(target_insert_idx, new_doc);
+            self.edits.enriched_count = self.edits.enriched_count.saturating_add(1);
+        }
+        Ok(())
+    }
+}
+
+/// Target Dart item metadata passed to `DartInjectorState::validate_or_enrich_dart_item`.
+/// Realises: [REQ-FEAT-42-DART-ITEM-TARGET]
+struct DartItemTarget<'b> {
+    idx: usize,
+    kind: SourceItemKind,
+    owner_name: Option<&'b str>,
+    item_name: &'b str,
+    check_uniqueness: bool,
+}
+
+/// Policy flags governing tiered docblock validation and per-file callable uniqueness checks.
+/// Realises: [REQ-FEAT-42-DOC-COMPLIANCE-POLICY]
+#[derive(Debug, Clone, Copy)]
+struct DocCompliancePolicy {
+    is_tier_a: bool,
+    check_uniqueness: bool,
+    allow_legacy_tier_bc_sections: bool,
 }
 
 /// Synthesizes and injects 7-section safety docstrings into a single Dart source buffer.
@@ -1102,8 +1741,8 @@ pub fn inject_rust_file_docstrings(
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Validates delimiter balance via `validate_source_syntax_for_language` prior to injection.
-/// - State: Isolated per-file scanner state.
-/// - Action: Non-panicking `.get(..)` slice accessors.
+/// - State: Isolated per-file `DartInjectorState` scanner state.
+/// - Action: Non-panicking `.get(..)` slice accessors and saturating arithmetic.
 /// - Resource: Linear memory bounded by file size.
 ///
 /// ## 7. Realization & Traceability
@@ -1118,319 +1757,39 @@ pub fn inject_dart_file_docstrings(
         .map_err(DocstringError::Parse)?;
 
     let raw_lines: Vec<&str> = source.lines().collect();
-    let total_lines = raw_lines.len();
-    let mut removed_line_flags: Vec<bool> = vec![false; total_lines];
-    let mut insertions_before: Vec<Vec<String>> = vec![Vec::new(); total_lines];
+    let mut state = DartInjectorState::new(raw_lines.len(), file_rel, schema_model, force);
 
-    let module_tag = derive_module_req_tag(file_rel);
-    let mut current_doc: Vec<String> = Vec::new();
-    let mut pending_doc_indices: Vec<usize> = Vec::new();
-    let mut first_annot_idx: Option<usize> = None;
-    let mut seen_docblocks: BTreeSet<String> = BTreeSet::new();
-
-    let mut dart_lex_state = RustDartLexState {
-        language: SourceLanguage::Dart,
-        ..Default::default()
-    };
-    let mut scoped_state = ScopedItemScannerState::default();
-    let mut brace_depth: usize = 0;
-    let mut paren_depth: usize = 0;
-    let mut active_class_name: Option<String> = None;
-    let mut enriched_count: usize = 0;
-    let mut item_ordinal: usize = 0;
-
-    for (idx, &raw_line) in raw_lines.iter().enumerate() {
-        let trimmed = raw_line.trim();
-        let started_in_comment_or_string = dart_lex_state.block_comment_depth > 0
-            || dart_lex_state.active_string.is_some()
-            || !dart_lex_state.interp_stack.is_empty();
-
-        if !started_in_comment_or_string
-            && scoped_state.dart_annotation_paren_depth == 0
-            && trimmed.starts_with("///")
-        {
-            current_doc.push(trimmed.to_string());
-            pending_doc_indices.push(idx);
-            continue;
-        }
-
-        let scanned = scan_line_with_unified_lex_state(trimmed, &mut dart_lex_state);
-        if scanned.trim().is_empty() {
-            continue;
-        }
-
-        let code_raw = if !started_in_comment_or_string && !trimmed.contains("/*") {
-            strip_line_comment_preserving_strings(trimmed)
-        } else {
-            strip_line_comment_preserving_strings(scanned.trim())
-        };
-
-        if code_raw.is_empty() {
-            continue;
-        }
-
-        if scoped_state.dart_annotation_paren_depth == 0
-            && code_raw.starts_with('@')
-            && first_annot_idx.is_none()
-        {
-            first_annot_idx = Some(idx);
-        }
-        let stripped_code = strip_dart_annotations_tracking_state(
-            code_raw,
-            &mut scoped_state.dart_annotation_paren_depth,
-        );
-        if stripped_code.trim().is_empty() {
-            continue;
-        }
-        let code = stripped_code.trim();
-
-        if paren_depth == 0 {
-            if brace_depth == 0 {
-                if let Some((kind, item_name, _parent)) = classify_dart_top_level_ast(code) {
-                    item_ordinal = item_ordinal.saturating_add(1);
-                    let check_uniqueness = kind == SourceItemKind::Function;
-                    let is_valid = !force
-                        && is_compliant_docblock_in_file(
-                            &current_doc,
-                            true,
-                            check_uniqueness,
-                            &mut seen_docblocks,
-                        );
-
-                    if is_valid {
-                        let (schema_req_opt, _) =
-                            resolve_schema_context(schema_model, None, &item_name);
-                        if let Some(schema_req) = schema_req_opt {
-                            let existing_reqs = extract_all_realises_ids(&current_doc);
-                            if !existing_reqs.is_empty()
-                                && !schema_req
-                                    .split(',')
-                                    .map(str::trim)
-                                    .filter(|s| !s.is_empty())
-                                    .all(|sr| {
-                                        existing_reqs
-                                            .iter()
-                                            .any(|r| schema_identifiers_match(r, sr))
-                                    })
-                            {
-                                return Err(DocstringError::UnforcedConflict(format!(
-                                    "Conflicting unforced docstring in '{}' for '{}': existing Realises {:?} conflicts with schema requirement '{}' (use --force to overwrite)",
-                                    file_rel, item_name, existing_reqs, schema_req
-                                )));
-                            }
-                        }
-                    } else {
-                        for &doc_idx in &pending_doc_indices {
-                            if let Some(slot) = removed_line_flags.get_mut(doc_idx) {
-                                *slot = true;
-                            }
-                        }
-                        let indent = leading_whitespace(raw_line);
-                        let (params, return_type, fields_or_variants, invariants) =
-                            inspect_dart_item_details(&raw_lines, idx, kind, &item_name);
-                        let ctx = ItemSynthesisContext {
-                            file_rel,
-                            module_tag: &module_tag,
-                            owner_name: None,
-                            item_kind: kind,
-                            item_name: &item_name,
-                            ordinal_index: item_ordinal,
-                            indent,
-                            existing_doc: &current_doc,
-                            params,
-                            return_type,
-                            fields_or_variants,
-                            invariants,
-                            schema_model,
-                        };
-                        let new_doc = synthesize_7_section_docstring(&ctx, &mut seen_docblocks);
-                        let target_insert_idx = first_annot_idx.unwrap_or(idx);
-                        if let Some(bucket) = insertions_before.get_mut(target_insert_idx) {
-                            bucket.extend(new_doc);
-                        }
-                        enriched_count = enriched_count.saturating_add(1);
-                    }
-
-                    if kind == SourceItemKind::Class
-                        || kind == SourceItemKind::Mixin
-                        || kind == SourceItemKind::Extension
-                    {
-                        active_class_name = Some(item_name);
-                    }
-                    current_doc.clear();
-                    pending_doc_indices.clear();
-                    first_annot_idx = None;
-                } else {
-                    if any_placeholder_in_doc(&current_doc) {
-                        for &doc_idx in &pending_doc_indices {
-                            if let Some(slot) = removed_line_flags.get_mut(doc_idx) {
-                                *slot = true;
-                            }
-                        }
-                        enriched_count = enriched_count.saturating_add(1);
-                    }
-                    current_doc.clear();
-                    pending_doc_indices.clear();
-                    first_annot_idx = None;
-                }
-            } else if brace_depth == 1 {
-                if let Some(ref cls_name) = active_class_name.clone() {
-                    if let Some((member_kind, member_name)) =
-                        classify_dart_member_ast(code, cls_name)
-                    {
-                        item_ordinal = item_ordinal.saturating_add(1);
-                        let is_valid = !force
-                            && is_compliant_docblock_in_file(
-                                &current_doc,
-                                true,
-                                true,
-                                &mut seen_docblocks,
-                            );
-
-                        if is_valid {
-                            let (schema_req_opt, _) = resolve_schema_context(
-                                schema_model,
-                                Some(cls_name.as_str()),
-                                &member_name,
-                            );
-                            if let Some(schema_req) = schema_req_opt {
-                                let existing_reqs = extract_all_realises_ids(&current_doc);
-                                if !existing_reqs.is_empty()
-                                    && !schema_req
-                                        .split(',')
-                                        .map(str::trim)
-                                        .filter(|s| !s.is_empty())
-                                        .all(|sr| {
-                                            existing_reqs
-                                                .iter()
-                                                .any(|r| schema_identifiers_match(r, sr))
-                                        })
-                                {
-                                    return Err(DocstringError::UnforcedConflict(format!(
-                                        "Conflicting unforced docstring in '{}' for '{}': existing Realises {:?} conflicts with schema requirement '{}' (use --force to overwrite)",
-                                        file_rel, member_name, existing_reqs, schema_req
-                                    )));
-                                }
-                            }
-                        } else {
-                            for &doc_idx in &pending_doc_indices {
-                                if let Some(slot) = removed_line_flags.get_mut(doc_idx) {
-                                    *slot = true;
-                                }
-                            }
-                            let indent = leading_whitespace(raw_line);
-                            let (params, return_type, fields_or_variants, invariants) =
-                                inspect_dart_item_details(
-                                    &raw_lines,
-                                    idx,
-                                    member_kind,
-                                    &member_name,
-                                );
-                            let ctx = ItemSynthesisContext {
-                                file_rel,
-                                module_tag: &module_tag,
-                                owner_name: Some(cls_name.as_str()),
-                                item_kind: member_kind,
-                                item_name: &member_name,
-                                ordinal_index: item_ordinal,
-                                indent,
-                                existing_doc: &current_doc,
-                                params,
-                                return_type,
-                                fields_or_variants,
-                                invariants,
-                                schema_model,
-                            };
-                            let new_doc = synthesize_7_section_docstring(&ctx, &mut seen_docblocks);
-                            let target_insert_idx = first_annot_idx.unwrap_or(idx);
-                            if let Some(bucket) = insertions_before.get_mut(target_insert_idx) {
-                                bucket.extend(new_doc);
-                            }
-                            enriched_count = enriched_count.saturating_add(1);
-                        }
-                        current_doc.clear();
-                        pending_doc_indices.clear();
-                        first_annot_idx = None;
-                    } else {
-                        if any_placeholder_in_doc(&current_doc) {
-                            for &doc_idx in &pending_doc_indices {
-                                if let Some(slot) = removed_line_flags.get_mut(doc_idx) {
-                                    *slot = true;
-                                }
-                            }
-                            enriched_count = enriched_count.saturating_add(1);
-                        }
-                        current_doc.clear();
-                        pending_doc_indices.clear();
-                        first_annot_idx = None;
-                    }
-                } else {
-                    if any_placeholder_in_doc(&current_doc) {
-                        for &doc_idx in &pending_doc_indices {
-                            if let Some(slot) = removed_line_flags.get_mut(doc_idx) {
-                                *slot = true;
-                            }
-                        }
-                        enriched_count = enriched_count.saturating_add(1);
-                    }
-                    current_doc.clear();
-                    pending_doc_indices.clear();
-                    first_annot_idx = None;
-                }
-            } else {
-                if any_placeholder_in_doc(&current_doc) {
-                    for &doc_idx in &pending_doc_indices {
-                        if let Some(slot) = removed_line_flags.get_mut(doc_idx) {
-                            *slot = true;
-                        }
-                    }
-                    enriched_count = enriched_count.saturating_add(1);
-                }
-                current_doc.clear();
-                pending_doc_indices.clear();
-                first_annot_idx = None;
-            }
-        }
-
-        let prev_brace_depth = brace_depth;
-        update_ast_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
-        if (prev_brace_depth > 0 && brace_depth == 0)
-            || (brace_depth == 0 && (code.ends_with(';') || code.ends_with('}')))
-        {
-            active_class_name = None;
-        }
+    for idx in 0..raw_lines.len() {
+        state.process_line(&raw_lines, idx)?;
     }
 
-    if enriched_count == 0 {
+    if state.edits.enriched_count == 0 {
         return Ok((source.to_string(), 0));
     }
 
-    let mut out_lines: Vec<String> =
-        Vec::with_capacity(total_lines.saturating_add(enriched_count * 28));
-    for idx in 0..total_lines {
-        if let Some(ins) = insertions_before.get(idx) {
-            for line in ins {
-                out_lines.push(line.clone());
-            }
-        }
-        if !removed_line_flags.get(idx).copied().unwrap_or(false) {
-            if let Some(&orig) = raw_lines.get(idx) {
-                out_lines.push(orig.to_string());
-            }
-        }
-    }
-
-    let mut rendered = out_lines.join("\n");
-    if source.ends_with('\n') {
-        rendered.push('\n');
-    }
-
-    Ok((rendered, enriched_count))
+    let rendered = state.edits.render(source, &raw_lines);
+    Ok((rendered, state.edits.enriched_count))
 }
 
-/// Checks whether `doc_lines` satisfies tiered Rust/Dart documentation compliance (`is_tier_a`) without per-file deduplication state.
-/// Realises: [REQ-FEAT-42-IS-COMPLIANT-DOCBLOCK]
-fn is_compliant_docblock(doc_lines: &[String], is_tier_a: bool) -> bool {
+/// Detects legacy 7-section numbered H2 headers (`## 1.` through `## 7.`) on a docblock.
+/// Realises: [REQ-FEAT-42-HAS-LEGACY-SEVEN-SECTION-HEADERS]
+fn has_legacy_seven_section_headers(doc_lines: &[String]) -> bool {
+    doc_lines.iter().any(|line| {
+        let text = strip_outer_doc_marker(line);
+        matches!(
+            text.get(..5),
+            Some("## 1." | "## 2." | "## 3." | "## 4." | "## 5." | "## 6." | "## 7.")
+        )
+    })
+}
+
+/// Checks whether `doc_lines` satisfies tiered Rust/Dart documentation compliance (`is_tier_a`) with optional generated-file exemption.
+/// Realises: [REQ-FEAT-42-IS-COMPLIANT-DOCBLOCK-MODE]
+fn is_compliant_docblock_with_mode(
+    doc_lines: &[String],
+    is_tier_a: bool,
+    allow_legacy_tier_bc_sections: bool,
+) -> bool {
     if doc_lines.is_empty()
         || any_placeholder_in_doc(doc_lines)
         || has_malformed_prefix_or_hybrid_headers(doc_lines)
@@ -1449,26 +1808,39 @@ fn is_compliant_docblock(doc_lines: &[String], is_tier_a: bool) -> bool {
     let effective_tier_a = is_tier_a || is_module_doc;
 
     if effective_tier_a {
-        (has_all_seven_sections(&joined) && has_non_empty_tier_bc_summary(doc_lines))
-            || has_valid_four_block_contract(doc_lines)
-    } else {
+        let valid_seven =
+            has_all_seven_sections(&joined) && has_non_empty_tier_bc_summary(doc_lines);
+        valid_seven || has_valid_four_block_contract(doc_lines)
+    } else if allow_legacy_tier_bc_sections {
         has_non_empty_tier_bc_summary(doc_lines)
+    } else {
+        !has_legacy_seven_section_headers(doc_lines) && has_non_empty_tier_bc_summary(doc_lines)
     }
 }
 
-/// Evaluates `is_compliant_docblock` and enforces per-file normalized body uniqueness on 7-section callable docblocks.
+/// Checks whether `doc_lines` satisfies tiered Rust/Dart documentation compliance (`is_tier_a`) without per-file deduplication state.
+/// Realises: [REQ-FEAT-42-IS-COMPLIANT-DOCBLOCK]
+#[cfg(test)]
+fn is_compliant_docblock(doc_lines: &[String], is_tier_a: bool) -> bool {
+    is_compliant_docblock_with_mode(doc_lines, is_tier_a, false)
+}
+
+/// Evaluates `is_compliant_docblock_with_mode` and enforces per-file normalized body uniqueness on 7-section callable docblocks.
 /// Realises: [REQ-FEAT-42-IS-COMPLIANT-DOCBLOCK-IN-FILE]
-fn is_compliant_docblock_in_file(
+fn is_compliant_docblock_in_file_with_mode(
     current_doc: &[String],
-    is_tier_a: bool,
-    check_uniqueness: bool,
+    policy: DocCompliancePolicy,
     seen_docblocks: &mut BTreeSet<String>,
 ) -> bool {
-    if !is_compliant_docblock(current_doc, is_tier_a) {
+    if !is_compliant_docblock_with_mode(
+        current_doc,
+        policy.is_tier_a,
+        policy.allow_legacy_tier_bc_sections,
+    ) {
         return false;
     }
 
-    if check_uniqueness {
+    if policy.check_uniqueness {
         let joined = current_doc.join("\n");
         if has_all_seven_sections(&joined) {
             let normalized = normalize_docblock_body(current_doc);
@@ -1484,13 +1856,13 @@ fn is_compliant_docblock_in_file(
 /// Checks whether a joined docblock contains all 7 canonical DO-178C numbered H2 section headers.
 /// Realises: [REQ-FEAT-42-HAS-ALL-SEVEN-SECTIONS]
 fn has_all_seven_sections(joined: &str) -> bool {
-    joined.contains("## 1. Safety Intent & Regulatory Scope")
+    let first_half = joined.contains("## 1. Safety Intent & Regulatory Scope")
         && joined.contains("## 2. Invariants & Mathematical Properties")
-        && joined.contains("## 3. Preconditions")
-        && joined.contains("## 4. Postconditions")
+        && joined.contains("## 3. Preconditions");
+    let second_half = joined.contains("## 4. Postconditions")
         && joined.contains("## 5. Algorithmic Complexity Bounds")
-        && joined.contains("## 6. Failure Modes & Fault Tolerance")
-        && joined.contains("## 7. Realization & Traceability")
+        && joined.contains("## 6. Failure Modes & Fault Tolerance");
+    first_half && second_half && joined.contains("## 7. Realization & Traceability")
 }
 
 /// Strips the leading `///` or `//!` doc-comment marker and surrounding whitespace from a single line.
@@ -1692,75 +2064,178 @@ fn normalize_docblock_body(doc_lines: &[String]) -> String {
         .join("\n")
 }
 
-/// Synthesizes a complete, Check-34/36-unique 7-section `///` docblock for `ctx`.
-/// Realises: [REQ-FEAT-42-SYNTHESIZE-7-SECTION-DOC]
-fn synthesize_7_section_docstring(
+/// Strips repeated leading `///` or `//!` markers and surrounding whitespace from a docstring line.
+/// Realises: [REQ-FEAT-42-CLEAN-DOC-LINE-PAYLOAD]
+fn clean_doc_line_payload(line: &str) -> &str {
+    let mut text = line.trim();
+    while let Some(rest) = text
+        .strip_prefix("///")
+        .or_else(|| text.strip_prefix("//!"))
+    {
+        text = rest.trim_start();
+    }
+    text.trim()
+}
+
+/// Extracts a clean 1-sentence domain summary from `existing_doc` (leading line or non-boilerplate Section 1 line).
+/// Realises: [REQ-FEAT-42-EXTRACT-TIER-BC-SUMMARY]
+fn extract_tier_bc_summary(existing_doc: &[String]) -> Option<String> {
+    for line in existing_doc {
+        let text = clean_doc_line_payload(line);
+        if text.is_empty() {
+            continue;
+        }
+        if text.starts_with('#') {
+            break;
+        }
+        let is_meta = text.starts_with("Realises:") || classify_four_block_header(text).is_some();
+        if !is_meta && !has_placeholder_doc_line(line) && text.chars().any(char::is_alphanumeric) {
+            return Some(text.to_string());
+        }
+    }
+
+    let mut in_section_1 = false;
+    for line in existing_doc {
+        let text = clean_doc_line_payload(line);
+        if text.is_empty() {
+            continue;
+        }
+        if text.starts_with("## 1.") {
+            in_section_1 = true;
+            continue;
+        }
+        if text.starts_with('#') {
+            if in_section_1 {
+                break;
+            }
+            continue;
+        }
+        if in_section_1 {
+            let is_boilerplate =
+                text.starts_with("Conforms to DO-178C") || text.starts_with("Realises:");
+            if !is_boilerplate
+                && !has_placeholder_doc_line(line)
+                && text.chars().any(char::is_alphanumeric)
+            {
+                return Some(text.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+/// Synthesizes a concise 1-sentence Tier B/C summary when no reusable domain summary exists.
+/// Realises: [REQ-FEAT-42-SYNTHESIZE-DEFAULT-TIER-BC-SUMMARY]
+fn synthesize_default_tier_bc_summary(
     ctx: &ItemSynthesisContext<'_>,
-    seen_docblocks: &mut BTreeSet<String>,
-) -> Vec<String> {
+    qualified_name: &str,
+) -> String {
+    if ctx.item_kw_override == Some("const") {
+        format!(
+            "Defines module constant `{qualified_name}` in `{}`.",
+            ctx.module_tag
+        )
+    } else if ctx.item_kw_override == Some("type") {
+        format!(
+            "Defines type alias `{qualified_name}` in `{}`.",
+            ctx.module_tag
+        )
+    } else if ctx.is_callable() {
+        match ctx.return_type.as_deref() {
+            Some(ret) => format!(
+                "Executes `{qualified_name}` returning `{ret}` in `{}`.",
+                ctx.module_tag
+            ),
+            None => format!("Executes `{qualified_name}` within `{}`.", ctx.module_tag),
+        }
+    } else {
+        format!(
+            "Defines internal {} `{qualified_name}` within `{}`.",
+            ctx.item_keyword(),
+            ctx.module_tag
+        )
+    }
+}
+
+/// Resolves the bracketed `Realises:` requirement tag string from schema bindings, existing doc tags, or module fallback.
+/// Realises: [REQ-FEAT-42-RESOLVE-REALISES-REQ-TAG]
+fn resolve_realises_req_tag(
+    ctx: &ItemSynthesisContext<'_>,
+    qualified_name: &str,
+    schema_req_id: Option<&str>,
+) -> String {
+    let existing_reqs = extract_all_realises_ids(ctx.existing_doc);
+    if let Some(s_req) = schema_req_id {
+        let schema_reqs: Vec<&str> = s_req
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
+        let existing_covers_schema = !schema_reqs.is_empty()
+            && schema_reqs.iter().all(|sr| {
+                existing_reqs
+                    .iter()
+                    .any(|r| schema_identifiers_match(r, sr))
+            });
+        if existing_covers_schema {
+            existing_reqs
+                .iter()
+                .map(|r| format!("[{r}]"))
+                .collect::<Vec<String>>()
+                .join(", ")
+        } else {
+            schema_reqs
+                .iter()
+                .map(|sr| format!("[{sr}]"))
+                .collect::<Vec<String>>()
+                .join(", ")
+        }
+    } else if !existing_reqs.is_empty() {
+        existing_reqs
+            .iter()
+            .map(|r| format!("[{r}]"))
+            .collect::<Vec<String>>()
+            .join(", ")
+    } else {
+        let item_tag = sanitize_req_segment(qualified_name);
+        format!("[REQ-{}-{item_tag}]", ctx.module_tag)
+    }
+}
+
+/// Synthesizes or compacts a concise 2-line Tier B/C Rust docstring (`/// <summary>` + `/// Realises: [<REQ-ID>]`).
+/// Realises: [REQ-FEAT-42-SYNTHESIZE-TIER-BC-DOC]
+fn synthesize_tier_bc_docstring(ctx: &ItemSynthesisContext<'_>) -> Vec<String> {
     let qualified_name = match ctx.owner_name {
-        Some(owner) => format!("{}::{}", owner, ctx.item_name),
+        Some(owner) => format!("{owner}::{}", ctx.item_name),
         None => ctx.item_name.to_string(),
     };
-    let kind_kw = ctx.item_kind.keyword();
-
-    // Summary line (Line 1)
-    let summary = summary_from_doc_lines(ctx.existing_doc)
-        .filter(|s| !has_placeholder_doc_line(s))
-        .unwrap_or_else(|| {
-            format!(
-                "Executes deterministic {} `{}` within `{}`.",
-                kind_kw, qualified_name, ctx.file_rel
-            )
-        });
-
-    // Lookup optional SysML requirement / constraint context from schema_model
-    let (schema_req_id, schema_constraint_expr) =
+    let summary = extract_tier_bc_summary(ctx.existing_doc)
+        .unwrap_or_else(|| synthesize_default_tier_bc_summary(ctx, &qualified_name));
+    let (schema_req_id, _) =
         resolve_schema_context(ctx.schema_model, ctx.owner_name, ctx.item_name);
+    let req_tag = resolve_realises_req_tag(ctx, &qualified_name, schema_req_id.as_deref());
 
-    // Build Section 1
-    let sec1_body = if let Some(ref c_expr) = schema_constraint_expr {
-        format!(
-            "Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for {} `{}` in module `{}` (enforcing schema constraint `{}`).",
-            kind_kw, qualified_name, ctx.module_tag, c_expr
-        )
-    } else {
-        format!(
-            "Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for {} `{}` in `{}`.",
-            kind_kw, qualified_name, ctx.file_rel
-        )
-    };
+    vec![
+        format_normalized_doc_line(ctx.indent, &summary),
+        format_normalized_doc_line(ctx.indent, &format!("Realises: {req_tag}")),
+    ]
+}
 
-    // Build Section 2
-    let sec2_body = if !ctx.invariants.is_empty() {
-        format!(
-            "- Enforces deterministic state and execution invariants for `{}`: `{}`.",
-            qualified_name,
-            ctx.invariants.join(" && ")
-        )
-    } else if !ctx.fields_or_variants.is_empty() {
-        format!(
-            "- Preserves structural type invariants for {} `{}` across member set `[{}]`.",
-            kind_kw,
-            qualified_name,
-            ctx.fields_or_variants.join(", ")
-        )
-    } else {
-        format!(
-            "- Preserves deterministic state conservation and referential transparency for {} `{}` (declaration #{}) within `{}`.",
-            kind_kw, qualified_name, ctx.ordinal_index, ctx.module_tag
-        )
-    };
-
-    // Build Section 3 (Preconditions)
+/// Builds Section 3 (Preconditions) lines and Section 4 (Postconditions) text for `synthesize_7_section_docstring`.
+/// Realises: [REQ-FEAT-42-BUILD-7-SECTION-PRE-POST]
+fn build_7_section_pre_and_post<'a>(
+    ctx: &'a ItemSynthesisContext<'a>,
+    qualified_name: &'a str,
+) -> (Vec<String>, &'a str, String) {
     let mut sec3_lines = Vec::new();
     if !ctx.params.is_empty() {
         for param in &ctx.params {
             sec3_lines.push(format_normalized_doc_line(
                 ctx.indent,
                 &format!(
-                    "- `{}: {}` must satisfy domain and type-safety constraints prior to invoking `{}`.",
-                    param.name, param.type_name, qualified_name
+                    "- `{}: {}` must satisfy domain and type-safety constraints prior to invoking `{qualified_name}`.",
+                    param.name, param.type_name
                 ),
             ));
         }
@@ -1768,8 +2243,7 @@ fn synthesize_7_section_docstring(
         sec3_lines.push(format_normalized_doc_line(
             ctx.indent,
             &format!(
-                "- Caller supplies well-formed values for `{}` members (`{}`).",
-                qualified_name,
+                "- Caller supplies well-formed values for `{qualified_name}` members (`{}`).",
                 ctx.fields_or_variants.join(", ")
             ),
         ));
@@ -1777,34 +2251,38 @@ fn synthesize_7_section_docstring(
         sec3_lines.push(format_normalized_doc_line(
             ctx.indent,
             &format!(
-                "- Invoked within a valid execution context for `{}` in `{}`.",
-                qualified_name, ctx.module_tag
+                "- Invoked within a valid execution context for `{qualified_name}` in `{}`.",
+                ctx.module_tag
             ),
         ));
     }
 
-    // Build Section 4 (Postconditions)
-    let ret_desc = ctx
-        .return_type
-        .as_deref()
-        .unwrap_or(if ctx.item_kind.is_callable() {
-            "()"
-        } else {
-            qualified_name.as_str()
-        });
-    let sec4_body = if ctx.item_kind.is_callable() {
-        format!(
-            "- Returns `{}` from `{}` with deterministic post-execution state.",
-            ret_desc, qualified_name
-        )
+    let default_ret = if ctx.is_callable() {
+        "()"
+    } else {
+        qualified_name
+    };
+    let ret_desc = ctx.return_type.as_deref().unwrap_or(default_ret);
+    let sec4_body = if ctx.is_callable() {
+        format!("- Returns `{ret_desc}` from `{qualified_name}` with deterministic post-execution state.")
     } else {
         format!(
-            "- Defines the authoritative `{}` representation for {} `{}`.",
-            ret_desc, kind_kw, qualified_name
+            "- Defines the authoritative `{ret_desc}` representation for {} `{qualified_name}`.",
+            ctx.item_keyword()
         )
     };
 
-    // Build Section 5 (Algorithmic Complexity Bounds)
+    (sec3_lines, ret_desc, sec4_body)
+}
+
+/// Appends Sections 5 (Algorithmic Complexity Bounds) and 6 (Failure Modes & Fault Tolerance) onto `lines`.
+/// Realises: [REQ-FEAT-42-APPEND-7-SECTION-BOUNDS-FAILURES]
+fn append_7_section_bounds_and_failures(
+    ctx: &ItemSynthesisContext<'_>,
+    qualified_name: &str,
+    ret_desc: &str,
+    lines: &mut Vec<String>,
+) {
     let dim_var = if let Some(first_param) = ctx.params.first() {
         format!("N({})", first_param.name)
     } else if !ctx.fields_or_variants.is_empty() {
@@ -1812,92 +2290,116 @@ fn synthesize_7_section_docstring(
     } else {
         format!("K({})", ctx.item_name)
     };
-    let time_line = format_normalized_doc_line(
-        ctx.indent,
-        &format!(
-            "- Time Complexity: O({}) bounded over input/member dimension of `{}`.",
-            dim_var, qualified_name
-        ),
-    );
-    let space_line = format_normalized_doc_line(
-        ctx.indent,
-        &format!(
-            "- Space Complexity: O({}) bounded auxiliary memory for `{}`.",
-            dim_var, qualified_name
-        ),
-    );
+    let empty_line = format_normalized_doc_line(ctx.indent, "");
 
-    // Build Section 6 (Failure Modes & Fault Tolerance across 4 Universal Failure Dimensions)
-    let fail_interface = format_normalized_doc_line(
+    lines.push(format_normalized_doc_line(
+        ctx.indent,
+        "## 5. Algorithmic Complexity Bounds",
+    ));
+    lines.push(format_normalized_doc_line(
         ctx.indent,
         &format!(
-            "- Interface: Validates boundary inputs and types for `{}` (`{}`).",
-            qualified_name, ret_desc
+            "- Time Complexity: O({dim_var}) bounded over input/member dimension of `{qualified_name}`."
         ),
-    );
-    let fail_state = format_normalized_doc_line(
+    ));
+    lines.push(format_normalized_doc_line(
         ctx.indent,
         &format!(
-            "- State: Maintains consistent state invariants across `{}` without partial mutation on error.",
-            qualified_name
+            "- Space Complexity: O({dim_var}) bounded auxiliary memory for `{qualified_name}`."
         ),
-    );
-    let fail_action = format_normalized_doc_line(
+    ));
+    lines.push(empty_line.clone());
+    lines.push(format_normalized_doc_line(
+        ctx.indent,
+        "## 6. Failure Modes & Fault Tolerance",
+    ));
+    lines.push(format_normalized_doc_line(
         ctx.indent,
         &format!(
-            "- Action: Executes `{}` deterministically with zero unbounded recursion or blocking.",
-            qualified_name
+            "- Interface: Validates boundary inputs and types for `{qualified_name}` (`{ret_desc}`)."
         ),
-    );
-    let fail_resource = format_normalized_doc_line(
+    ));
+    lines.push(format_normalized_doc_line(
         ctx.indent,
         &format!(
-            "- Resource: Bounds stack and heap allocations within `{}` (`{}`).",
-            qualified_name, ctx.module_tag
+            "- State: Maintains consistent state invariants across `{qualified_name}` without partial mutation on error."
         ),
-    );
+    ));
+    lines.push(format_normalized_doc_line(
+        ctx.indent,
+        &format!(
+            "- Action: Executes `{qualified_name}` deterministically with zero unbounded recursion or blocking."
+        ),
+    ));
+    lines.push(format_normalized_doc_line(
+        ctx.indent,
+        &format!(
+            "- Resource: Bounds stack and heap allocations within `{qualified_name}` (`{}`).",
+            ctx.module_tag
+        ),
+    ));
+    lines.push(empty_line);
+}
 
-    // Build Section 7 (Realization & Traceability)
-    let existing_reqs = extract_all_realises_ids(ctx.existing_doc);
-    let req_tag = if let Some(s_req) = schema_req_id {
-        let schema_reqs: Vec<&str> = s_req
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect();
-        if !schema_reqs.is_empty()
-            && schema_reqs.iter().all(|sr| {
-                existing_reqs
-                    .iter()
-                    .any(|r| schema_identifiers_match(r, sr))
-            })
-        {
-            existing_reqs
-                .iter()
-                .map(|r| format!("[{}]", r))
-                .collect::<Vec<String>>()
-                .join(", ")
-        } else {
-            schema_reqs
-                .iter()
-                .map(|sr| format!("[{}]", sr))
-                .collect::<Vec<String>>()
-                .join(", ")
-        }
-    } else if !existing_reqs.is_empty() {
-        existing_reqs
-            .iter()
-            .map(|r| format!("[{}]", r))
-            .collect::<Vec<String>>()
-            .join(", ")
-    } else {
-        let item_tag = sanitize_req_segment(&qualified_name);
-        format!("[REQ-{}-{}]", ctx.module_tag, item_tag)
+/// Synthesizes a complete, Check-34/36-unique 7-section `///` docblock for Tier A Rust and Dart items.
+/// Realises: [REQ-FEAT-42-SYNTHESIZE-7-SECTION-DOC]
+fn synthesize_7_section_docstring(
+    ctx: &ItemSynthesisContext<'_>,
+    seen_docblocks: &mut BTreeSet<String>,
+) -> Vec<String> {
+    let qualified_name = match ctx.owner_name {
+        Some(owner) => format!("{owner}::{}", ctx.item_name),
+        None => ctx.item_name.to_string(),
     };
-    let sysml_elem = if ctx.item_kind.is_callable() {
-        format!("ActionDef({})", qualified_name)
+    let kind_kw = ctx.item_keyword();
+
+    let summary = summary_from_doc_lines(ctx.existing_doc)
+        .filter(|s| !has_placeholder_doc_line(s))
+        .unwrap_or_else(|| {
+            format!(
+                "Executes deterministic {kind_kw} `{qualified_name}` within `{}`.",
+                ctx.file_rel
+            )
+        });
+
+    let (schema_req_id, schema_constraint_expr) =
+        resolve_schema_context(ctx.schema_model, ctx.owner_name, ctx.item_name);
+
+    let sec1_body = if let Some(ref c_expr) = schema_constraint_expr {
+        format!(
+            "Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for {kind_kw} `{qualified_name}` in module `{}` (enforcing schema constraint `{c_expr}`).",
+            ctx.module_tag
+        )
     } else {
-        format!("PartDef({})", qualified_name)
+        format!(
+            "Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for {kind_kw} `{qualified_name}` in `{}`.",
+            ctx.file_rel
+        )
+    };
+
+    let sec2_body = if !ctx.invariants.is_empty() {
+        format!(
+            "- Enforces deterministic state and execution invariants for `{qualified_name}`: `{}`.",
+            ctx.invariants.join(" && ")
+        )
+    } else if !ctx.fields_or_variants.is_empty() {
+        format!(
+            "- Preserves structural type invariants for {kind_kw} `{qualified_name}` across member set `[{}]`.",
+            ctx.fields_or_variants.join(", ")
+        )
+    } else {
+        format!(
+            "- Preserves deterministic state conservation and referential transparency for {kind_kw} `{qualified_name}` (declaration #{}) within `{}`.",
+            ctx.ordinal_index, ctx.module_tag
+        )
+    };
+
+    let (sec3_lines, ret_desc, sec4_body) = build_7_section_pre_and_post(ctx, &qualified_name);
+    let req_tag = resolve_realises_req_tag(ctx, &qualified_name, schema_req_id.as_deref());
+    let sysml_elem = if ctx.is_callable() {
+        format!("ActionDef({qualified_name})")
+    } else {
+        format!("PartDef({qualified_name})")
     };
 
     let empty_line = format_normalized_doc_line(ctx.indent, "");
@@ -1919,40 +2421,23 @@ fn synthesize_7_section_docstring(
         "## 4. Postconditions",
     ));
     lines.push(format_normalized_doc_line(ctx.indent, &sec4_body));
-    lines.push(empty_line.clone());
-    lines.push(format_normalized_doc_line(
-        ctx.indent,
-        "## 5. Algorithmic Complexity Bounds",
-    ));
-    lines.push(time_line);
-    lines.push(space_line);
-    lines.push(empty_line.clone());
-    lines.push(format_normalized_doc_line(
-        ctx.indent,
-        "## 6. Failure Modes & Fault Tolerance",
-    ));
-    lines.push(fail_interface);
-    lines.push(fail_state);
-    lines.push(fail_action);
-    lines.push(fail_resource);
     lines.push(empty_line);
+    append_7_section_bounds_and_failures(ctx, &qualified_name, ret_desc, &mut lines);
     lines.push(format_normalized_doc_line(
         ctx.indent,
         "## 7. Realization & Traceability",
     ));
     lines.push(format_normalized_doc_line(
         ctx.indent,
-        &format!("Realises: {} | SysML v2: {}", req_tag, sysml_elem),
+        &format!("Realises: {req_tag} | SysML v2: {sysml_elem}"),
     ));
 
-    // Ensure normalized body is registered and unique in seen_docblocks
     let normalized = normalize_docblock_body(&lines);
     if !seen_docblocks.insert(normalized) {
-        // Disambiguate Section 1 with ordinal index if two items had identical qualified names and signatures
         if let Some(sec1_slot) = lines.get_mut(3) {
             *sec1_slot = format_normalized_doc_line(
                 ctx.indent,
-                &format!("{} (Item ordinal #{}).", sec1_body, ctx.ordinal_index),
+                &format!("{sec1_body} (Item ordinal #{}).", ctx.ordinal_index),
             );
         }
         let renormalized = normalize_docblock_body(&lines);
@@ -2302,30 +2787,30 @@ fn inspect_dart_item_details(
     (params, return_type, fields_or_variants, invariants)
 }
 
-/// Collects all top-level and nested `PartDef` nodes within `pkg` into `out` in pre-order traversal.
+/// Collects all top-level and nested `PartDef` nodes within `pkg` into `out` in pre-order traversal up to `MAX_AST_DEPTH`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and FEAT-42 Section 3.2 hierarchical part resolution (`collect_all_parts`).
-/// Ensures nested subsystem `PartDef` declarations (`part.parts`) are discoverable during docstring synthesis.
+/// Ensures nested subsystem `PartDef` declarations (`part.parts`) are discoverable during docstring synthesis while bounding AST depth to `MAX_AST_DEPTH` (`64`).
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Visits every `PartDef` node in `pkg` exactly once in pre-order without recursion.
+/// - Visits every `PartDef` node in `pkg` at `depth <= MAX_AST_DEPTH` in pre-order without recursion and stops cleanly when `depth > MAX_AST_DEPTH`.
 ///
 /// ## 3. Preconditions
 /// - `pkg: &'a PackageDef` is a parsed SysML v2 package; `out: &mut Vec<&'a deap_core::sysml_ast::PartDef>` is the accumulator.
 ///
 /// ## 4. Postconditions
-/// - Appends all top-level and nested `&'a PartDef` references from `pkg` into `out`.
+/// - Appends all top-level and nested `&'a PartDef` references within `0..=MAX_AST_DEPTH` from `pkg` into `out`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(P) where P is the total number of top-level and nested `PartDef` nodes in `pkg`.
-/// - Space Complexity: O(P) for the traversal stack and output references.
+/// - Time Complexity: O(P) where P is the number of visited `PartDef` nodes at `depth <= MAX_AST_DEPTH`.
+/// - Space Complexity: O(P) for the iterative traversal stack and output references.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Accepts packages with arbitrary part nesting depth.
+/// - Interface: Accepts packages with arbitrary part nesting depth without stack overflow.
 /// - State: Mutates only `out`.
-/// - Action: Non-recursive iterative stack traversal.
-/// - Resource: Bounded by total `PartDef` count in `pkg`.
+/// - Action: Non-recursive depth-bounded iterative stack traversal.
+/// - Resource: Strictly bounded by `MAX_AST_DEPTH` (`64`).
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-0605], [REQ-FEAT-42-COLLECT-ALL-PARTS]
@@ -2333,11 +2818,35 @@ pub fn collect_all_parts<'a>(
     pkg: &'a PackageDef,
     out: &mut Vec<&'a deap_core::sysml_ast::PartDef>,
 ) {
-    let mut stack: Vec<&'a deap_core::sysml_ast::PartDef> = pkg.part_defs.iter().rev().collect();
-    while let Some(part) = stack.pop() {
+    collect_all_parts_from_depth(pkg, 0, out);
+}
+
+/// Appends `PartDef` nodes from `pkg` starting at `initial_depth` into `out`, stopping cleanly when `depth > MAX_AST_DEPTH`.
+/// Realises: [REQ-FEAT-42-COLLECT-ALL-PARTS-BOUNDED]
+fn collect_all_parts_from_depth<'a>(
+    pkg: &'a PackageDef,
+    initial_depth: usize,
+    out: &mut Vec<&'a deap_core::sysml_ast::PartDef>,
+) {
+    if initial_depth > MAX_AST_DEPTH {
+        return;
+    }
+    let mut stack: Vec<(&'a deap_core::sysml_ast::PartDef, usize)> = pkg
+        .part_defs
+        .iter()
+        .rev()
+        .map(|part| (part, initial_depth))
+        .collect();
+    while let Some((part, depth)) = stack.pop() {
+        if depth > MAX_AST_DEPTH {
+            continue;
+        }
         out.push(part);
-        for child in part.parts.iter().rev() {
-            stack.push(child);
+        let next_depth = depth.saturating_add(1);
+        if next_depth <= MAX_AST_DEPTH {
+            for child in part.parts.iter().rev() {
+                stack.push((child, next_depth));
+            }
         }
     }
 }
@@ -2485,96 +2994,165 @@ fn constraint_matches_action(c_name: &str, act_name: &str) -> bool {
     false
 }
 
-/// Resolves optional requirement ID and constraint expression from `schema_model` for `(owner_name, item_name)`.
-/// Realises: [REQ-FEAT-42-RESOLVE-SCHEMA-CONTEXT]
-fn resolve_schema_context(
-    schema_model: Option<&PackageDef>,
-    owner_name: Option<&str>,
-    item_name: &str,
-) -> (Option<String>, Option<String>) {
-    let Some(root_pkg) = schema_model else {
-        return (None, None);
-    };
+/// Formats a SysML constraint `(name, expr)` pair into a human-readable docstring annotation.
+/// Realises: [REQ-FEAT-42-FORMAT-SCHEMA-CONSTRAINT]
+fn format_schema_constraint(name: &str, expr: &str) -> Option<String> {
+    let n = name.trim();
+    let e = expr.trim();
+    if !n.is_empty() && !e.is_empty() {
+        Some(format!("{n} ({e})"))
+    } else if !e.is_empty() {
+        Some(e.to_string())
+    } else if !n.is_empty() {
+        Some(n.to_string())
+    } else {
+        None
+    }
+}
 
-    let mut all_pkgs: Vec<&PackageDef> = Vec::new();
-    let mut stack: Vec<&PackageDef> = vec![root_pkg];
-    while let Some(curr) = stack.pop() {
-        all_pkgs.push(curr);
-        for sub in curr.packages.iter().rev() {
-            stack.push(sub);
+/// Normalizes an identifier to lowercase ASCII alphanumeric characters for fuzzy schema matching.
+/// Realises: [REQ-FEAT-42-NORMALIZE-ASCII-ALNUM]
+fn normalize_ascii_alnum_lower(s: &str) -> String {
+    s.chars()
+        .filter(char::is_ascii_alphanumeric)
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
+}
+
+/// Appends `token` to `reqs` if non-empty and not already matched via `schema_identifiers_match`.
+/// Realises: [REQ-FEAT-42-PUSH-UNIQUE-SCHEMA-REQ]
+fn push_unique_schema_req(reqs: &mut Vec<String>, token: String) {
+    let trimmed = token.trim();
+    if !trimmed.is_empty()
+        && !reqs
+            .iter()
+            .any(|existing| schema_identifiers_match(existing, trimmed))
+    {
+        reqs.push(trimmed.to_string());
+    }
+}
+
+/// Appends `expr` to `constraints` if non-empty and not already present verbatim.
+/// Realises: [REQ-FEAT-42-PUSH-UNIQUE-SCHEMA-CONSTRAINT]
+fn push_unique_schema_constraint(constraints: &mut Vec<String>, expr: String) {
+    let trimmed = expr.trim();
+    if !trimmed.is_empty() && !constraints.iter().any(|existing| existing == trimmed) {
+        constraints.push(trimmed.to_string());
+    }
+}
+
+/// Returns the authoritative requirement identifier (`req_id` when non-empty, otherwise `name`) of `req_def`.
+/// Realises: [REQ-FEAT-42-REQ-DEF-PRIMARY-ID]
+fn req_def_primary_id(req_def: &deap_core::sysml_ast::RequirementDef) -> &str {
+    if !req_def.req_id.is_empty() {
+        req_def.req_id.as_str()
+    } else {
+        req_def.name.as_str()
+    }
+}
+
+/// Checks whether `part` explicitly satisfies or owns `r` across `satisfied_requirements`, `safety_realises`, inline `requirements`, or `satisfied_by`.
+/// Realises: [REQ-FEAT-42-PART-SATISFIES-REQ-DEF]
+fn part_satisfies_requirement_def(
+    part: &deap_core::sysml_ast::PartDef,
+    r: &deap_core::sysml_ast::RequirementDef,
+) -> bool {
+    let in_satisfied = part.satisfied_requirements.iter().any(|sr| {
+        schema_identifiers_match(sr, &r.name)
+            || (!r.req_id.is_empty() && schema_identifiers_match(sr, &r.req_id))
+    });
+    let in_safety = part.safety_realises.iter().any(|sr| {
+        schema_identifiers_match(sr, &r.name)
+            || (!r.req_id.is_empty() && schema_identifiers_match(sr, &r.req_id))
+    });
+    let in_inline_reqs = part.requirements.iter().any(|pr| {
+        let matches_req_id = !r.req_id.is_empty()
+            && (schema_identifiers_match(&pr.req_id, &r.req_id)
+                || schema_identifiers_match(&pr.name, &r.req_id));
+        schema_identifiers_match(&pr.name, &r.name) || matches_req_id
+    });
+    let in_satisfied_by = r
+        .satisfied_by
+        .iter()
+        .any(|sb| schema_identifiers_match(sb, &part.name));
+    let direct_match = in_satisfied || in_safety;
+    let reverse_match = in_inline_reqs || in_satisfied_by;
+    direct_match || reverse_match
+}
+
+/// Depth-bounded pre-order index of SysML v2 packages and parts up to `MAX_AST_DEPTH`.
+/// Realises: [REQ-FEAT-42-SCHEMA-LOOKUP-INDEX]
+struct SchemaLookupIndex<'a> {
+    all_pkgs: Vec<&'a PackageDef>,
+    all_parts: Vec<&'a deap_core::sysml_ast::PartDef>,
+    active_part_ident: &'a str,
+    item_is_other_part: bool,
+}
+
+impl<'a> SchemaLookupIndex<'a> {
+    /// Builds a `SchemaLookupIndex` over `root_pkg`, stopping package and part traversal cleanly when `depth > MAX_AST_DEPTH`.
+    /// Realises: [REQ-FEAT-42-SCHEMA-LOOKUP-INDEX-NEW]
+    fn new(root_pkg: &'a PackageDef, owner_name: Option<&'a str>, item_name: &'a str) -> Self {
+        let mut all_pkgs: Vec<&'a PackageDef> = Vec::new();
+        let mut all_parts: Vec<&'a deap_core::sysml_ast::PartDef> = Vec::new();
+        let mut stack: Vec<(&'a PackageDef, usize)> = vec![(root_pkg, 0)];
+
+        while let Some((curr, depth)) = stack.pop() {
+            if depth > MAX_AST_DEPTH {
+                continue;
+            }
+            all_pkgs.push(curr);
+            collect_all_parts_from_depth(curr, depth, &mut all_parts);
+            let next_depth = depth.saturating_add(1);
+            if next_depth <= MAX_AST_DEPTH {
+                for sub in curr.packages.iter().rev() {
+                    stack.push((sub, next_depth));
+                }
+            }
+        }
+
+        let active_part_ident = owner_name.unwrap_or(item_name);
+        let item_is_other_part = all_parts
+            .iter()
+            .any(|p| schema_identifiers_match(&p.name, item_name));
+
+        Self {
+            all_pkgs,
+            all_parts,
+            active_part_ident,
+            item_is_other_part,
         }
     }
 
-    let mut all_parts: Vec<&deap_core::sysml_ast::PartDef> = Vec::new();
-    for pkg in &all_pkgs {
-        collect_all_parts(pkg, &mut all_parts);
-    }
-
-    let format_constraint = |name: &str, expr: &str| -> Option<String> {
-        let n = name.trim();
-        let e = expr.trim();
-        if !n.is_empty() && !e.is_empty() {
-            Some(format!("{} ({})", n, e))
-        } else if !e.is_empty() {
-            Some(e.to_string())
-        } else if !n.is_empty() {
-            Some(n.to_string())
-        } else {
-            None
-        }
-    };
-
-    let resolve_req_token = |token: &str| -> Option<String> {
+    /// Resolves a requirement name or ID token against all `requirement_defs` in `self.all_pkgs`.
+    /// Realises: [REQ-FEAT-42-SCHEMA-RESOLVE-REQ-TOKEN]
+    fn resolve_req_token(&self, token: &str) -> Option<String> {
         let trimmed = token.trim();
         if trimmed.is_empty() {
             return None;
         }
-        for pkg in &all_pkgs {
+        for pkg in &self.all_pkgs {
             if let Some(req_def) = pkg.requirement_defs.iter().find(|r| {
                 schema_identifiers_match(&r.name, trimmed)
                     || (!r.req_id.is_empty() && schema_identifiers_match(&r.req_id, trimmed))
             }) {
-                if !req_def.req_id.is_empty() {
-                    return Some(req_def.req_id.clone());
-                } else if !req_def.name.is_empty() {
-                    return Some(req_def.name.clone());
+                let primary = req_def_primary_id(req_def);
+                if !primary.is_empty() {
+                    return Some(primary.to_string());
                 }
             }
         }
         Some(trimmed.to_string())
-    };
+    }
 
-    let normalize_alnum = |s: &str| -> String {
-        s.chars()
-            .filter(|c| c.is_ascii_alphanumeric())
-            .map(|c| c.to_ascii_lowercase())
-            .collect()
-    };
-
-    let push_unique_req = |reqs: &mut Vec<String>, token: String| {
-        let trimmed = token.trim();
-        if !trimmed.is_empty()
-            && !reqs
-                .iter()
-                .any(|existing| schema_identifiers_match(existing, trimmed))
-        {
-            reqs.push(trimmed.to_string());
-        }
-    };
-
-    let push_unique_constraint = |constraints: &mut Vec<String>, expr: String| {
-        let trimmed = expr.trim();
-        if !trimmed.is_empty() && !constraints.iter().any(|existing| existing == trimmed) {
-            constraints.push(trimmed.to_string());
-        }
-    };
-
-    let extract_doc_req = |doc: &str| -> Option<String> {
+    /// Extracts requirement identifiers from an action or element `doc` comment block.
+    /// Realises: [REQ-FEAT-42-SCHEMA-EXTRACT-DOC-REQ]
+    fn extract_doc_req(&self, doc: &str) -> Option<String> {
         let mut collected = Vec::new();
-        let doc_lines: Vec<String> = doc.lines().map(|l| l.to_string()).collect();
+        let doc_lines: Vec<String> = doc.lines().map(str::to_string).collect();
         for req in extract_realises_ids_from_doc_lines(&doc_lines) {
-            if let Some(resolved) = resolve_req_token(&req) {
-                push_unique_req(&mut collected, resolved);
+            if let Some(resolved) = self.resolve_req_token(&req) {
+                push_unique_schema_req(&mut collected, resolved);
             }
         }
         if !collected.is_empty() {
@@ -2588,10 +3166,8 @@ fn resolve_schema_context(
                         .trim_start_matches('[')
                         .trim_end_matches(']')
                         .trim();
-                    if !clean_tok.is_empty() {
-                        if let Some(resolved) = resolve_req_token(clean_tok) {
-                            push_unique_req(&mut collected, resolved);
-                        }
+                    if let Some(resolved) = self.resolve_req_token(clean_tok) {
+                        push_unique_schema_req(&mut collected, resolved);
                     }
                 }
             }
@@ -2599,440 +3175,383 @@ fn resolve_schema_context(
         let mut rest = doc;
         while let Some(open_idx) = rest.find('[') {
             let after_open = rest.get(open_idx.saturating_add(1)..).unwrap_or("");
-            if let Some(close_idx) = after_open.find(']') {
-                let inside = after_open.get(..close_idx).unwrap_or("").trim();
-                for token in inside.split(',') {
-                    let tok = token.trim();
-                    let upper = tok.to_ascii_uppercase();
-                    if upper.starts_with("REQ-") || upper.starts_with("REQ_") {
-                        if let Some(resolved) = resolve_req_token(tok) {
-                            push_unique_req(&mut collected, resolved);
-                        }
-                    }
-                }
-                rest = after_open.get(close_idx.saturating_add(1)..).unwrap_or("");
-            } else {
+            let Some(close_idx) = after_open.find(']') else {
                 break;
-            }
-        }
-        if collected.is_empty() {
-            None
-        } else {
-            Some(collected.join(", "))
-        }
-    };
-
-    let extract_part_req_and_constraint =
-        |part: &deap_core::sysml_ast::PartDef| -> (Option<String>, Option<String>) {
-            let mut part_reqs = Vec::new();
-            for r in &part.satisfied_requirements {
-                if let Some(resolved) = resolve_req_token(r) {
-                    push_unique_req(&mut part_reqs, resolved);
-                }
-            }
-            for r in &part.requirements {
-                let id = if !r.req_id.is_empty() {
-                    r.req_id.as_str()
-                } else {
-                    r.name.as_str()
-                };
-                if let Some(resolved) = resolve_req_token(id) {
-                    push_unique_req(&mut part_reqs, resolved);
-                }
-            }
-            for r in &part.safety_realises {
-                if let Some(resolved) = resolve_req_token(r) {
-                    push_unique_req(&mut part_reqs, resolved);
-                }
-            }
-            for pkg in &all_pkgs {
-                for req in &pkg.requirement_defs {
-                    if req
-                        .satisfied_by
-                        .iter()
-                        .any(|s| schema_identifiers_match(s, &part.name))
-                    {
-                        let id = if !req.req_id.is_empty() {
-                            req.req_id.clone()
-                        } else {
-                            req.name.clone()
-                        };
-                        if !id.is_empty() {
-                            push_unique_req(&mut part_reqs, id);
-                        }
+            };
+            let inside = after_open.get(..close_idx).unwrap_or("").trim();
+            for token in inside.split(',') {
+                let tok = token.trim();
+                let upper = tok.to_ascii_uppercase();
+                if upper.starts_with("REQ-") || upper.starts_with("REQ_") {
+                    if let Some(resolved) = self.resolve_req_token(tok) {
+                        push_unique_schema_req(&mut collected, resolved);
                     }
                 }
             }
-            let req = if part_reqs.is_empty() {
-                None
-            } else {
-                Some(part_reqs.join(", "))
-            };
+            rest = after_open.get(close_idx.saturating_add(1)..).unwrap_or("");
+        }
+        (!collected.is_empty()).then(|| collected.join(", "))
+    }
 
-            let mut part_constraints = Vec::new();
-            for c in &part.constraints {
-                if let Some(formatted) = format_constraint(&c.name, &c.expression) {
-                    push_unique_constraint(&mut part_constraints, formatted);
+    /// Aggregates all satisfied requirements and inline constraints declared on `part`.
+    /// Realises: [REQ-FEAT-42-SCHEMA-EXTRACT-PART-CONTEXT]
+    fn extract_part_req_and_constraint(
+        &self,
+        part: &deap_core::sysml_ast::PartDef,
+    ) -> (Option<String>, Option<String>) {
+        let mut part_reqs = Vec::new();
+        for r in &part.satisfied_requirements {
+            if let Some(resolved) = self.resolve_req_token(r) {
+                push_unique_schema_req(&mut part_reqs, resolved);
+            }
+        }
+        for r in &part.requirements {
+            if let Some(resolved) = self.resolve_req_token(req_def_primary_id(r)) {
+                push_unique_schema_req(&mut part_reqs, resolved);
+            }
+        }
+        for r in &part.safety_realises {
+            if let Some(resolved) = self.resolve_req_token(r) {
+                push_unique_schema_req(&mut part_reqs, resolved);
+            }
+        }
+        for pkg in &self.all_pkgs {
+            for req in &pkg.requirement_defs {
+                if req
+                    .satisfied_by
+                    .iter()
+                    .any(|s| schema_identifiers_match(s, &part.name))
+                {
+                    let id = req_def_primary_id(req);
+                    if !id.is_empty() {
+                        push_unique_schema_req(&mut part_reqs, id.to_string());
+                    }
                 }
             }
-            let constraint = if part_constraints.is_empty() {
-                None
-            } else {
-                Some(part_constraints.join("; "))
-            };
+        }
+        let req = (!part_reqs.is_empty()).then(|| part_reqs.join(", "));
 
-            (req, constraint)
-        };
+        let mut part_constraints = Vec::new();
+        for c in &part.constraints {
+            if let Some(formatted) = format_schema_constraint(&c.name, &c.expression) {
+                push_unique_schema_constraint(&mut part_constraints, formatted);
+            }
+        }
+        let constraint = (!part_constraints.is_empty()).then(|| part_constraints.join("; "));
 
-    let mut matched_req: Option<String> = None;
-    let mut matched_constraint: Option<String> = None;
-    let active_part_ident = owner_name.unwrap_or(item_name);
-    let item_is_other_part = all_parts
-        .iter()
-        .any(|p| schema_identifiers_match(&p.name, item_name));
+        (req, constraint)
+    }
 
-    let req_belongs_to_other_part = |r: &deap_core::sysml_ast::RequirementDef| -> bool {
-        let nr = normalize_alnum(&r.name);
-        let nreq = normalize_alnum(&r.req_id);
-        all_parts.iter().any(|p| {
-            if schema_identifiers_match(&p.name, active_part_ident) {
+    /// Checks whether `r` is owned by or named after a `PartDef` distinct from `self.active_part_ident`.
+    /// Realises: [REQ-FEAT-42-SCHEMA-REQ-OTHER-PART]
+    fn req_belongs_to_other_part(&self, r: &deap_core::sysml_ast::RequirementDef) -> bool {
+        let nr = normalize_ascii_alnum_lower(&r.name);
+        let nreq = normalize_ascii_alnum_lower(&r.req_id);
+        self.all_parts.iter().any(|p| {
+            if schema_identifiers_match(&p.name, self.active_part_ident) {
                 return false;
             }
-            let satisfied_by_other = p.satisfied_requirements.iter().any(|sr| {
-                schema_identifiers_match(sr, &r.name)
-                    || (!r.req_id.is_empty() && schema_identifiers_match(sr, &r.req_id))
-            }) || p.safety_realises.iter().any(|sr| {
-                schema_identifiers_match(sr, &r.name)
-                    || (!r.req_id.is_empty() && schema_identifiers_match(sr, &r.req_id))
-            }) || p.requirements.iter().any(|pr| {
-                schema_identifiers_match(&pr.name, &r.name)
-                    || (!r.req_id.is_empty()
-                        && (schema_identifiers_match(&pr.req_id, &r.req_id)
-                            || schema_identifiers_match(&pr.name, &r.req_id)))
-            }) || r
-                .satisfied_by
-                .iter()
-                .any(|sb| schema_identifiers_match(sb, &p.name));
-            let np = normalize_alnum(&p.name);
+            let satisfied_by_other = part_satisfies_requirement_def(p, r);
+            let np = normalize_ascii_alnum_lower(&p.name);
             let named_after_other = np.len() >= 2 && (nr.contains(&np) || nreq.contains(&np));
             satisfied_by_other || named_after_other
         })
-    };
+    }
 
-    let constraint_belongs_to_other_part = |c: &deap_core::sysml_ast::ConstraintDef| -> bool {
-        let nc = normalize_alnum(&c.name);
-        all_parts.iter().any(|p| {
-            if schema_identifiers_match(&p.name, active_part_ident) {
+    /// Checks whether `c` is owned by or named after a `PartDef` distinct from `self.active_part_ident`.
+    /// Realises: [REQ-FEAT-42-SCHEMA-CONSTRAINT-OTHER-PART]
+    fn constraint_belongs_to_other_part(&self, c: &deap_core::sysml_ast::ConstraintDef) -> bool {
+        let nc = normalize_ascii_alnum_lower(&c.name);
+        self.all_parts.iter().any(|p| {
+            if schema_identifiers_match(&p.name, self.active_part_ident) {
                 return false;
             }
             let owned_by_other = p
                 .constraints
                 .iter()
                 .any(|pc| schema_identifiers_match(&pc.name, &c.name));
-            let np = normalize_alnum(&p.name);
+            let np = normalize_ascii_alnum_lower(&p.name);
             let named_after_other = np.len() >= 2 && nc.contains(&np);
             owned_by_other || named_after_other
         })
-    };
+    }
 
-    let req_matches_member = |r: &deap_core::sysml_ast::RequirementDef,
-                              member_ident: &str|
-     -> bool {
-        if req_belongs_to_other_part(r) {
+    /// Checks whether `r` binds specifically to `member_ident` without bleeding across sibling parts.
+    /// Realises: [REQ-FEAT-42-SCHEMA-REQ-MATCHES-MEMBER]
+    fn req_matches_member(
+        &self,
+        r: &deap_core::sysml_ast::RequirementDef,
+        member_ident: &str,
+    ) -> bool {
+        if self.req_belongs_to_other_part(r) {
             return false;
         }
-        if schema_identifiers_match(&r.name, member_ident)
-            || schema_identifiers_match(&r.req_id, member_ident)
-            || r.satisfied_by
-                .iter()
-                .any(|s| schema_identifiers_match(s, member_ident))
-        {
+        let exact_id_match = schema_identifiers_match(&r.name, member_ident)
+            || schema_identifiers_match(&r.req_id, member_ident);
+        let satisfied_by_member = r
+            .satisfied_by
+            .iter()
+            .any(|s| schema_identifiers_match(s, member_ident));
+        if exact_id_match || satisfied_by_member {
             return true;
         }
-        let norm_member = normalize_alnum(member_ident);
-        if !item_is_other_part && norm_member.len() >= 4 {
-            let nr = normalize_alnum(&r.name);
-            let nreq = normalize_alnum(&r.req_id);
-            let r_upper = r.name.to_ascii_uppercase();
-            let id_upper = r.req_id.to_ascii_uppercase();
-            let looks_like_action_req = r_upper.starts_with("REQ")
-                || id_upper.starts_with("REQ")
-                || nr.contains(&norm_member);
-            if looks_like_action_req && (nr.contains(&norm_member) || nreq.contains(&norm_member)) {
+
+        let norm_member = normalize_ascii_alnum_lower(member_ident);
+        if !self.item_is_other_part && norm_member.len() >= 4 {
+            let nr = normalize_ascii_alnum_lower(&r.name);
+            let nreq = normalize_ascii_alnum_lower(&r.req_id);
+            let contains_member = nr.contains(&norm_member) || nreq.contains(&norm_member);
+            let has_req_prefix = r.name.to_ascii_uppercase().starts_with("REQ")
+                || r.req_id.to_ascii_uppercase().starts_with("REQ");
+            let looks_like_action_req = has_req_prefix || nr.contains(&norm_member);
+            if looks_like_action_req && contains_member {
                 return true;
             }
         }
         false
-    };
+    }
 
-    if let Some(owner) = owner_name {
-        if let Some(owner_part) = all_parts
-            .iter()
-            .copied()
-            .find(|p| schema_identifiers_match(&p.name, owner))
-        {
-            let (p_req, p_const) = extract_part_req_and_constraint(owner_part);
-            matched_constraint = p_const;
+    /// Aggregates action-matched constraints from `constraints` (or `act.steps` fallback) for `act`.
+    /// Realises: [REQ-FEAT-42-SCHEMA-RESOLVE-ACTION-CONSTRAINTS]
+    fn resolve_action_constraints(
+        &self,
+        act: &deap_core::sysml_ast::ActionDef,
+        constraints: &[deap_core::sysml_ast::ConstraintDef],
+        filter_other_parts: bool,
+    ) -> Option<String> {
+        let mut act_constraints = Vec::new();
+        for act_c in constraints {
+            let allowed = !filter_other_parts || !self.constraint_belongs_to_other_part(act_c);
+            if allowed && constraint_matches_action(&act_c.name, &act.name) {
+                if let Some(formatted) = format_schema_constraint(&act_c.name, &act_c.expression) {
+                    push_unique_schema_constraint(&mut act_constraints, formatted);
+                }
+            }
+        }
+        if !act_constraints.is_empty() {
+            return Some(act_constraints.join("; "));
+        }
+        let mut step_constraints = Vec::new();
+        for step_expr in &act.steps {
+            if let Some(formatted) = format_schema_constraint(&act.name, step_expr) {
+                push_unique_schema_constraint(&mut step_constraints, formatted);
+            }
+        }
+        (!step_constraints.is_empty()).then(|| step_constraints.join("; "))
+    }
 
-            if let Some(act) = owner_part
-                .actions
+    /// Searches `PackageDef::action_defs` across `self.all_pkgs` for an action matching `item_name`.
+    /// Realises: [REQ-FEAT-42-SCHEMA-RESOLVE-PKG-ACTION]
+    fn resolve_pkg_action(
+        &self,
+        item_name: &str,
+        need_constraint: bool,
+    ) -> Option<(Option<String>, Option<String>)> {
+        for pkg in &self.all_pkgs {
+            let Some(act) = pkg
+                .action_defs
                 .iter()
                 .find(|a| schema_identifiers_match(&a.name, item_name))
-            {
-                if let Some(ref doc) = act.doc {
-                    if let Some(a_req) = extract_doc_req(doc) {
-                        matched_req = Some(a_req);
-                    }
-                }
-                let mut act_constraints = Vec::new();
-                for act_c in owner_part
-                    .constraints
-                    .iter()
-                    .filter(|c| constraint_matches_action(&c.name, &act.name))
-                {
-                    if let Some(formatted) = format_constraint(&act_c.name, &act_c.expression) {
-                        push_unique_constraint(&mut act_constraints, formatted);
-                    }
-                }
-                if !act_constraints.is_empty() {
-                    matched_constraint = Some(act_constraints.join("; "));
-                } else if !act.steps.is_empty() {
-                    let mut step_constraints = Vec::new();
-                    for step_expr in &act.steps {
-                        if let Some(formatted) = format_constraint(&act.name, step_expr) {
-                            push_unique_constraint(&mut step_constraints, formatted);
-                        }
-                    }
-                    if !step_constraints.is_empty() {
-                        matched_constraint = Some(step_constraints.join("; "));
-                    }
-                }
-            }
-
+            else {
+                continue;
+            };
+            let mut matched_req = act.doc.as_deref().and_then(|doc| self.extract_doc_req(doc));
             if matched_req.is_none() {
-                let mut member_reqs = Vec::new();
-                for req_def in owner_part
-                    .requirements
+                let mut act_reqs = Vec::new();
+                for req_def in pkg
+                    .requirement_defs
                     .iter()
-                    .filter(|r| req_matches_member(r, item_name))
+                    .filter(|r| self.req_matches_member(r, &act.name))
                 {
-                    let id = if !req_def.req_id.is_empty() {
-                        req_def.req_id.clone()
-                    } else {
-                        req_def.name.clone()
-                    };
+                    let id = req_def_primary_id(req_def);
                     if !id.is_empty() {
-                        push_unique_req(&mut member_reqs, id);
+                        push_unique_schema_req(&mut act_reqs, id.to_string());
                     }
                 }
-                if !member_reqs.is_empty() {
-                    matched_req = Some(member_reqs.join(", "));
+                if !act_reqs.is_empty() {
+                    matched_req = Some(act_reqs.join(", "));
                 }
             }
-
-            if matched_req.is_none() {
-                let mut pkg_member_reqs = Vec::new();
-                for pkg in &all_pkgs {
-                    for req_def in pkg
-                        .requirement_defs
-                        .iter()
-                        .filter(|r| req_matches_member(r, item_name))
-                    {
-                        let id = if !req_def.req_id.is_empty() {
-                            req_def.req_id.clone()
-                        } else {
-                            req_def.name.clone()
-                        };
-                        if !id.is_empty() {
-                            push_unique_req(&mut pkg_member_reqs, id);
-                        }
-                    }
-                }
-                if !pkg_member_reqs.is_empty() {
-                    matched_req = Some(pkg_member_reqs.join(", "));
-                }
-            }
-
-            if matched_req.is_none() {
-                for pkg in &all_pkgs {
-                    if let Some(act) = pkg
-                        .action_defs
-                        .iter()
-                        .find(|a| schema_identifiers_match(&a.name, item_name))
-                    {
-                        if let Some(ref doc) = act.doc {
-                            matched_req = extract_doc_req(doc);
-                        }
-                        if matched_req.is_none() {
-                            let mut act_reqs = Vec::new();
-                            for req_def in pkg
-                                .requirement_defs
-                                .iter()
-                                .filter(|r| req_matches_member(r, &act.name))
-                            {
-                                let id = if !req_def.req_id.is_empty() {
-                                    req_def.req_id.clone()
-                                } else {
-                                    req_def.name.clone()
-                                };
-                                if !id.is_empty() {
-                                    push_unique_req(&mut act_reqs, id);
-                                }
-                            }
-                            if !act_reqs.is_empty() {
-                                matched_req = Some(act_reqs.join(", "));
-                            }
-                        }
-                        if matched_constraint.is_none() {
-                            let mut act_constraints = Vec::new();
-                            for act_c in pkg.constraint_defs.iter().filter(|c| {
-                                !constraint_belongs_to_other_part(c)
-                                    && constraint_matches_action(&c.name, &act.name)
-                            }) {
-                                if let Some(formatted) =
-                                    format_constraint(&act_c.name, &act_c.expression)
-                                {
-                                    push_unique_constraint(&mut act_constraints, formatted);
-                                }
-                            }
-                            if !act_constraints.is_empty() {
-                                matched_constraint = Some(act_constraints.join("; "));
-                            } else if !act.steps.is_empty() {
-                                let mut step_constraints = Vec::new();
-                                for step_expr in &act.steps {
-                                    if let Some(formatted) = format_constraint(&act.name, step_expr)
-                                    {
-                                        push_unique_constraint(&mut step_constraints, formatted);
-                                    }
-                                }
-                                if !step_constraints.is_empty() {
-                                    matched_constraint = Some(step_constraints.join("; "));
-                                }
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-
-            if matched_req.is_none() {
-                matched_req = p_req;
-            }
-        } else {
-            return (None, None);
+            let matched_constraint = if need_constraint {
+                self.resolve_action_constraints(act, &pkg.constraint_defs, true)
+            } else {
+                None
+            };
+            return Some((matched_req, matched_constraint));
         }
-    } else if let Some(part) = all_parts
+        None
+    }
+
+    /// Resolves `(req, constraint)` for a member `item_name` owned by `owner`, returning `None` if `owner` is unmapped.
+    /// Realises: [REQ-FEAT-42-SCHEMA-RESOLVE-OWNED-ITEM]
+    fn resolve_owned_item(
+        &self,
+        owner: &str,
+        item_name: &str,
+    ) -> Option<(Option<String>, Option<String>)> {
+        let owner_part = self
+            .all_parts
+            .iter()
+            .copied()
+            .find(|p| schema_identifiers_match(&p.name, owner))?;
+        let (p_req, mut matched_constraint) = self.extract_part_req_and_constraint(owner_part);
+        let mut matched_req: Option<String> = None;
+
+        if let Some(act) = owner_part
+            .actions
+            .iter()
+            .find(|a| schema_identifiers_match(&a.name, item_name))
+        {
+            matched_req = act.doc.as_deref().and_then(|doc| self.extract_doc_req(doc));
+            if let Some(act_const) =
+                self.resolve_action_constraints(act, &owner_part.constraints, false)
+            {
+                matched_constraint = Some(act_const);
+            }
+        }
+
+        if matched_req.is_none() {
+            let mut member_reqs = Vec::new();
+            for req_def in owner_part
+                .requirements
+                .iter()
+                .filter(|r| self.req_matches_member(r, item_name))
+            {
+                let id = req_def_primary_id(req_def);
+                if !id.is_empty() {
+                    push_unique_schema_req(&mut member_reqs, id.to_string());
+                }
+            }
+            if !member_reqs.is_empty() {
+                matched_req = Some(member_reqs.join(", "));
+            }
+        }
+
+        if matched_req.is_none() {
+            let mut pkg_member_reqs = Vec::new();
+            for pkg in &self.all_pkgs {
+                for req_def in pkg
+                    .requirement_defs
+                    .iter()
+                    .filter(|r| self.req_matches_member(r, item_name))
+                {
+                    let id = req_def_primary_id(req_def);
+                    if !id.is_empty() {
+                        push_unique_schema_req(&mut pkg_member_reqs, id.to_string());
+                    }
+                }
+            }
+            if !pkg_member_reqs.is_empty() {
+                matched_req = Some(pkg_member_reqs.join(", "));
+            }
+        }
+
+        if matched_req.is_none() {
+            if let Some((act_req, act_const)) =
+                self.resolve_pkg_action(item_name, matched_constraint.is_none())
+            {
+                matched_req = act_req;
+                if matched_constraint.is_none() {
+                    matched_constraint = act_const;
+                }
+            }
+        }
+
+        if matched_req.is_none() {
+            matched_req = p_req;
+        }
+        Some((matched_req, matched_constraint))
+    }
+
+    /// Resolves package-level fallback requirements matching `target_ident` or `item_name`.
+    /// Realises: [REQ-FEAT-42-SCHEMA-FALLBACK-REQS]
+    fn resolve_fallback_reqs(&self, target_ident: &str, item_name: &str) -> Option<String> {
+        let mut fallback_reqs = Vec::new();
+        for pkg in &self.all_pkgs {
+            for req_def in &pkg.requirement_defs {
+                if self.req_belongs_to_other_part(req_def) {
+                    continue;
+                }
+                let matches_target = schema_identifiers_match(&req_def.name, target_ident)
+                    || schema_identifiers_match(&req_def.req_id, target_ident)
+                    || req_def
+                        .satisfied_by
+                        .iter()
+                        .any(|s| schema_identifiers_match(s, target_ident));
+                let matches_item = schema_identifiers_match(&req_def.name, item_name)
+                    || schema_identifiers_match(&req_def.req_id, item_name);
+                if matches_target || matches_item {
+                    let id = req_def_primary_id(req_def);
+                    if !id.is_empty() {
+                        push_unique_schema_req(&mut fallback_reqs, id.to_string());
+                    }
+                }
+            }
+        }
+        (!fallback_reqs.is_empty()).then(|| fallback_reqs.join(", "))
+    }
+
+    /// Resolves package-level fallback constraints matching `target_ident` or `item_name`.
+    /// Realises: [REQ-FEAT-42-SCHEMA-FALLBACK-CONSTRAINTS]
+    fn resolve_fallback_constraints(&self, target_ident: &str, item_name: &str) -> Option<String> {
+        let mut fallback_constraints = Vec::new();
+        for pkg in &self.all_pkgs {
+            for c_def in &pkg.constraint_defs {
+                if self.constraint_belongs_to_other_part(c_def) {
+                    continue;
+                }
+                let matches_ident = schema_identifiers_match(&c_def.name, target_ident)
+                    || schema_identifiers_match(&c_def.name, item_name)
+                    || constraint_matches_action(&c_def.name, item_name);
+                if matches_ident {
+                    if let Some(formatted) =
+                        format_schema_constraint(&c_def.name, &c_def.expression)
+                    {
+                        push_unique_schema_constraint(&mut fallback_constraints, formatted);
+                    }
+                }
+            }
+        }
+        (!fallback_constraints.is_empty()).then(|| fallback_constraints.join("; "))
+    }
+}
+
+/// Resolves optional requirement ID and constraint expression from `schema_model` for `(owner_name, item_name)`.
+/// Realises: [REQ-FEAT-42-RESOLVE-SCHEMA-CONTEXT]
+fn resolve_schema_context(
+    schema_model: Option<&PackageDef>,
+    owner_name: Option<&str>,
+    item_name: &str,
+) -> (Option<String>, Option<String>) {
+    let Some(root_pkg) = schema_model else {
+        return (None, None);
+    };
+
+    let index = SchemaLookupIndex::new(root_pkg, owner_name, item_name);
+    let (mut matched_req, mut matched_constraint) = if let Some(owner) = owner_name {
+        let Some(owned_res) = index.resolve_owned_item(owner, item_name) else {
+            return (None, None);
+        };
+        owned_res
+    } else if let Some(part) = index
+        .all_parts
         .iter()
         .copied()
         .find(|p| schema_identifiers_match(&p.name, item_name))
     {
-        let (p_req, p_const) = extract_part_req_and_constraint(part);
-        matched_req = p_req;
-        matched_constraint = p_const;
+        index.extract_part_req_and_constraint(part)
     } else {
-        for pkg in &all_pkgs {
-            if let Some(act) = pkg
-                .action_defs
-                .iter()
-                .find(|a| schema_identifiers_match(&a.name, item_name))
-            {
-                if let Some(ref doc) = act.doc {
-                    matched_req = extract_doc_req(doc);
-                }
-                if matched_req.is_none() {
-                    let mut act_reqs = Vec::new();
-                    for req_def in pkg
-                        .requirement_defs
-                        .iter()
-                        .filter(|r| req_matches_member(r, &act.name))
-                    {
-                        let id = if !req_def.req_id.is_empty() {
-                            req_def.req_id.clone()
-                        } else {
-                            req_def.name.clone()
-                        };
-                        if !id.is_empty() {
-                            push_unique_req(&mut act_reqs, id);
-                        }
-                    }
-                    if !act_reqs.is_empty() {
-                        matched_req = Some(act_reqs.join(", "));
-                    }
-                }
-                let mut act_constraints = Vec::new();
-                for act_c in pkg.constraint_defs.iter().filter(|c| {
-                    !constraint_belongs_to_other_part(c)
-                        && constraint_matches_action(&c.name, &act.name)
-                }) {
-                    if let Some(formatted) = format_constraint(&act_c.name, &act_c.expression) {
-                        push_unique_constraint(&mut act_constraints, formatted);
-                    }
-                }
-                if !act_constraints.is_empty() {
-                    matched_constraint = Some(act_constraints.join("; "));
-                } else if !act.steps.is_empty() {
-                    let mut step_constraints = Vec::new();
-                    for step_expr in &act.steps {
-                        if let Some(formatted) = format_constraint(&act.name, step_expr) {
-                            push_unique_constraint(&mut step_constraints, formatted);
-                        }
-                    }
-                    if !step_constraints.is_empty() {
-                        matched_constraint = Some(step_constraints.join("; "));
-                    }
-                }
-                break;
-            }
-        }
-    }
+        index
+            .resolve_pkg_action(item_name, true)
+            .unwrap_or((None, None))
+    };
 
     let target_ident = owner_name.unwrap_or(item_name);
-
     if matched_req.is_none() {
-        let mut fallback_reqs = Vec::new();
-        for pkg in &all_pkgs {
-            for req_def in pkg.requirement_defs.iter().filter(|r| {
-                !req_belongs_to_other_part(r)
-                    && (schema_identifiers_match(&r.name, target_ident)
-                        || schema_identifiers_match(&r.req_id, target_ident)
-                        || r.satisfied_by
-                            .iter()
-                            .any(|s| schema_identifiers_match(s, target_ident))
-                        || schema_identifiers_match(&r.name, item_name)
-                        || schema_identifiers_match(&r.req_id, item_name))
-            }) {
-                let id = if !req_def.req_id.is_empty() {
-                    req_def.req_id.clone()
-                } else {
-                    req_def.name.clone()
-                };
-                if !id.is_empty() {
-                    push_unique_req(&mut fallback_reqs, id);
-                }
-            }
-        }
-        if !fallback_reqs.is_empty() {
-            matched_req = Some(fallback_reqs.join(", "));
-        }
+        matched_req = index.resolve_fallback_reqs(target_ident, item_name);
     }
-
     if matched_constraint.is_none() {
-        let mut fallback_constraints = Vec::new();
-        for pkg in &all_pkgs {
-            for c_def in pkg.constraint_defs.iter().filter(|c| {
-                !constraint_belongs_to_other_part(c)
-                    && (schema_identifiers_match(&c.name, target_ident)
-                        || schema_identifiers_match(&c.name, item_name)
-                        || constraint_matches_action(&c.name, item_name))
-            }) {
-                if let Some(formatted) = format_constraint(&c_def.name, &c_def.expression) {
-                    push_unique_constraint(&mut fallback_constraints, formatted);
-                }
-            }
-        }
-        if !fallback_constraints.is_empty() {
-            matched_constraint = Some(fallback_constraints.join("; "));
-        }
+        matched_constraint = index.resolve_fallback_constraints(target_ident, item_name);
     }
 
     (matched_req, matched_constraint)
@@ -3316,6 +3835,89 @@ fn classify_rust_item_with_tier_ast(
     Some((kind, item_name, is_tier_a))
 }
 
+/// Classifies module-level or inherent-impl Rust `const` and `type` declarations as Tier B/C items.
+/// Realises: [REQ-FEAT-42-CLASSIFY-RUST-CONST-OR-TYPE]
+fn classify_rust_const_or_type_ast(
+    code: &str,
+    enclosing_owner_kind: Option<RustOwnerKind>,
+) -> Option<(&'static str, String)> {
+    if matches!(
+        enclosing_owner_kind,
+        Some(RustOwnerKind::TraitImpl | RustOwnerKind::TraitDef)
+    ) {
+        return None;
+    }
+
+    let clean = strip_leading_inline_rust_attrs(code);
+    let after_vis = strip_restricted_pub_visibility(clean)
+        .or_else(|| {
+            clean
+                .strip_prefix("pub ")
+                .or_else(|| clean.strip_prefix("pub\t"))
+                .map(str::trim_start)
+        })
+        .unwrap_or(clean);
+
+    if let Some(after_const) = after_vis
+        .strip_prefix("const ")
+        .or_else(|| after_vis.strip_prefix("const\t"))
+    {
+        let body = after_const.trim_start();
+        let name = extract_leading_ast_ident(body)?;
+        if name == "_" || matches!(name.as_str(), "fn" | "unsafe" | "extern") {
+            return None;
+        }
+        let tail = body.get(name.len()..).unwrap_or("").trim_start();
+        return tail.starts_with(':').then_some(("const", name));
+    }
+
+    if let Some(after_type) = after_vis
+        .strip_prefix("type ")
+        .or_else(|| after_vis.strip_prefix("type\t"))
+    {
+        let body = after_type.trim_start();
+        let name = extract_leading_ast_ident(body)?;
+        if name == "_" {
+            return None;
+        }
+        let tail = body.get(name.len()..).unwrap_or("").trim_start();
+        let valid_type_tail =
+            tail.starts_with('=') || tail.starts_with('<') || tail.starts_with(':');
+        return (valid_type_tail || tail.starts_with("where")).then_some(("type", name));
+    }
+
+    None
+}
+
+/// Classifies a Rust declaration outside function bodies into a tiered `ClassifiedRustItem`.
+/// Realises: [REQ-FEAT-42-CLASSIFY-RUST-ITEM-FOR-INJECTION]
+fn classify_rust_item_for_injection(
+    code: &str,
+    enclosing_owner_kind: Option<RustOwnerKind>,
+    in_fn_body: bool,
+) -> Option<ClassifiedRustItem> {
+    if in_fn_body {
+        return None;
+    }
+    if let Some((kind, name, is_tier_a)) =
+        classify_rust_item_with_tier_ast(code, enclosing_owner_kind)
+    {
+        return Some(ClassifiedRustItem {
+            kind,
+            keyword_override: None,
+            name,
+            is_tier_a,
+        });
+    }
+    let (kw, name) = classify_rust_const_or_type_ast(code, enclosing_owner_kind)?;
+    Some(ClassifiedRustItem {
+        kind: SourceItemKind::Struct,
+        keyword_override: Some(kw),
+        name,
+        is_tier_a: false,
+    })
+}
+
 /// Checks whether a joined docblock contains `Realises: [<non-empty>]`.
 /// Realises: [REQ-FEAT-42-DOCBLOCK-NON-EMPTY-REALISES]
 fn docblock_has_non_empty_realises(doc_block: &str) -> bool {
@@ -3483,37 +4085,17 @@ mod tests {
     use super::*;
     use deap_core::sysml_ast::{ActionDef, ConstraintDef, PartDef, RequirementDef};
 
+    /// Checks whether `haystack` contains `left` immediately followed by `right`.
+    /// Realises: [REQ-ISSUE-515-ADJACENT-TOKEN-PROBE]
+    fn contains_adjacent_pair(haystack: &str, left: &str, right: &str) -> bool {
+        haystack.match_indices(left).any(|(idx, _)| {
+            haystack
+                .get(idx.saturating_add(left.len())..)
+                .is_some_and(|rest| rest.starts_with(right))
+        })
+    }
+
     /// Verifies that unmatched AST items do not inherit unrelated `pkg.requirement_defs.first()` or `pkg.constraint_defs.first()` bindings (DEFECT-09, refs #498).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D bidirectional traceability
-    /// verification (`test_defect_09_unmatched_items_do_not_inherit_first_package_req_or_constraint`).
-    /// Prevents false-positive requirement and constraint attribution on unmapped helper symbols.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - A schema-mapped `PartDef` (`PrimaryController`) receives its satisfied requirement `REQ-PC-001`
-    ///   and constraint `ValueLimit (metric <= 85.0)`.
-    /// - Unmapped classifiers, methods whose name happens to match another part (`SecondaryMonitor::primary_controller`),
-    ///   and unmapped functions (`calibrate_element`, `unmapped_checksum_helper`) receive `(None, None)`.
-    ///
-    /// ## 3. Preconditions
-    /// - A populated `PackageDef` containing `PrimaryController`, `SecondaryMonitor`, `REQ-PC-001`, and `ValueLimit` is supplied.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Ok(())` when matched items bind schema metadata and unmatched items synthesize deterministic module tags.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N) where N is the test fixture source byte length.
-    /// - Space Complexity: O(N) for the enriched output buffer.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Propagates unexpected synthesis failures via `Result<(), String>`.
-    /// - State: Pure in-memory test fixture evaluation.
-    /// - Action: Asserts absence of `REQ-PC-001` and `ValueLimit` on unmapped items.
-    /// - Resource: Zero filesystem writes.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-DEFECT-09-UNMATCHED-SCHEMA-FALLBACK-TEST]
     #[test]
     fn test_defect_09_unmatched_items_do_not_inherit_first_package_req_or_constraint(
     ) -> Result<(), String> {
@@ -3689,25 +4271,28 @@ mod tests {
             "Unmatched item must not inherit pkg.requirement_defs.first() or pkg.constraint_defs.first()"
         );
 
-        let src = concat!(
-            "pub struct PrimaryController<T> {\n",
-            "    pub metric: T,\n",
-            "}\n\n",
-            "/* multiline comment start\n",
-            "   closing inline before fn */ pub fn post_comment_op(x: u32) -> u32 { x }\n\n",
-            "impl<F: Fn(u32) -> bool> PrimaryController<F> {\n",
-            "    pub fn check_fn_bound(&self, v: u32) -> bool { (self.metric)(v) }\n",
-            "}\n\n",
-            "impl<T> PrimaryController<T>\n",
-            "where\n",
-            "    for <'a> &'a T: Copy,\n",
-            "{\n",
-            "    pub fn read_metric(&self) -> T { self.metric }\n",
-            "}\n\n",
-            "pub fn unmapped_checksum_helper(seed: u32) -> u32 {\n",
-            "    seed.wrapping_add(1)\n",
-            "}\n"
-        );
+        let src = r#"pub struct PrimaryController<T> {
+    pub metric: T,
+}
+
+/* multiline comment start
+   closing inline before fn */ pub fn post_comment_op(x: u32) -> u32 { x }
+
+impl<F: Fn(u32) -> bool> PrimaryController<F> {
+    pub fn check_fn_bound(&self, v: u32) -> bool { (self.metric)(v) }
+}
+
+impl<T> PrimaryController<T>
+where
+    for <'a> &'a T: Copy,
+{
+    pub fn read_metric(&self) -> T { self.metric }
+}
+
+pub fn unmapped_checksum_helper(seed: u32) -> u32 {
+    seed.wrapping_add(1)
+}
+"#;
         let (enriched, count) =
             inject_rust_file_docstrings(src, "crates/core_module/src/codec.rs", Some(&pkg), false)?;
         assert_eq!(
@@ -3797,43 +4382,13 @@ mod tests {
         let test_src = fs::read_to_string(&test_path)
             .map_err(|e| format!("Failed to read {}: {}", test_path.display(), e))?;
         assert!(
-            !test_src.contains(concat!("#![allow(", "clippy::")),
+            !contains_adjacent_pair(&test_src, "#![allow(", "clippy::"),
             "tests/docstring_injector_tests.rs must not contain clippy suppression attributes"
         );
         Ok(())
     }
 
     /// Verifies that multi-hash raw strings (`r##"..."##`) and multiline standard strings containing fake items do not confuse the scanner (DEFECT-09, refs #498).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and DO-330 TQL-4 lexical state machine soundness
-    /// (`test_defect_09_multihash_raw_and_multiline_standard_strings_do_not_confuse_scanner`).
-    /// Ensures string literals spanning multiple lines cannot trigger spurious docstring injection inside literals.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Interior `"#` tokens inside `r##"..."##` do not prematurely terminate the raw string state.
-    /// - Lines inside `r##"..."##` and multiline `"..."` beginning with `fn fake_item() {}` or
-    ///   `struct Fake {}` are ignored by the item classifier and never mutated.
-    ///
-    /// ## 3. Preconditions
-    /// - Rust source buffer contains `r##"..."##` and multiline `"..."` literals with embedded fake declarations.
-    ///
-    /// ## 4. Postconditions
-    /// - Only the two real top-level functions (`first_real_fn` and `second_real_fn`) are enriched (`count == 2`),
-    ///   and both string literal bodies remain bit-for-bit intact.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N) where N is the fixture source byte length.
-    /// - Space Complexity: O(N) for the enriched output string.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Returns `Result<(), String>` without panicking unwraps.
-    /// - State: Isolated in-memory test buffer.
-    /// - Action: Verifies exact enriched item count and unmodified literal interiors.
-    /// - Resource: Zero disk I/O.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-DEFECT-09-MULTILINE-STRING-SCANNER-TEST]
     #[test]
     fn test_defect_09_multihash_raw_and_multiline_standard_strings_do_not_confuse_scanner(
     ) -> Result<(), String> {
@@ -3890,44 +4445,12 @@ mod tests {
         )?;
         assert_eq!(
             self_count, 0,
-            "src/docstring.rs must be 100% self-compliant with Check 36 7-section docstrings"
+            "src/docstring.rs must be 100% self-compliant with tiered v2.0 Check 36 docstrings"
         );
         Ok(())
     }
 
     /// Verifies balanced `assert!(...)` condition extraction across inner `{ ... }` blocks and `pkg.action_defs` lookup (refs #559).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and DO-330 TQL-4 docstring invariant extraction and SysML v2 action traceability
-    /// (`test_issue_559_balanced_assert_extraction_and_pkg_action_defs_lookup`).
-    /// Ensures `inspect_rust_item_details` does not truncate `assert!(...)` conditions containing nested calls/commas
-    /// or halt at inner `}` blocks, and ensures `resolve_schema_context` binds `pkg.action_defs` and `invariant_<act>_*` constraints.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - `inspect_rust_item_details` balances parentheses/brackets/braces and string/char literals inside `assert!(...)`
-    ///   and tracks function body `brace_depth` across inner blocks.
-    /// - `resolve_schema_context` resolves top-level `PackageDef::action_defs` requirements and `invariant_<act_name>_*` constraints.
-    ///
-    /// ## 3. Preconditions
-    /// - A Rust function snippet with an inner `if ready { ... }` block followed by `assert!(x.is_finite() && in_range(x, 0.0, 100.0), "out of range");`.
-    /// - A `PackageDef` containing `ActionDef("evaluate_transition")` with `Realises: [REQ-SYS-EVAL-01]` and `ConstraintDef("invariant_evaluate_transition_0")`.
-    ///
-    /// ## 4. Postconditions
-    /// - Extracted `invariants` contains `"x.is_finite() && in_range(x, 0.0, 100.0)"`.
-    /// - `resolve_schema_context(Some(&pkg), None, "evaluate_transition")` returns `(Some("REQ-SYS-EVAL-01"), Some("invariant_evaluate_transition_0 (dt > 0.0)"))`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N) over the fixture lines and schema elements.
-    /// - Space Complexity: O(1) auxiliary state beyond the fixture vectors.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Asserts exact invariant and schema context strings.
-    /// - State: Pure in-memory fixture evaluation.
-    /// - Action: Fails deterministically if parentheses/commas truncate the condition or inner `}` aborts body scanning.
-    /// - Resource: Zero filesystem I/O.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-ISSUE-559-BALANCED-ASSERT-AND-ACTION-DEFS-TEST]
     #[test]
     fn test_issue_559_balanced_assert_extraction_and_pkg_action_defs_lookup() {
         let fn_src = [
@@ -3985,43 +4508,6 @@ mod tests {
     }
 
     /// Verifies method-level `Realises:` conflict detection in Rust/Dart and action-specific requirement precedence over parent `PartDef` requirements (refs #560).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and DO-330 TQL-4 bidirectional traceability verification
-    /// (`test_issue_560_method_realises_conflict_and_action_req_precedence`).
-    /// Ensures method-level docstrings with stale `Realises:` tags are flagged as conflicts when `force == false`
-    /// and ensures action-specific requirements are not shadowed by parent `PartDef` requirements.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - `resolve_schema_context(Some(&model), Some("SystemController"), "process_signal")` resolves the action-specific
-    ///   requirement `REQ-ACTION` rather than the parent `PartDef` requirement `REQ-PARENT`.
-    /// - `resolve_schema_context(Some(&model), Some("SystemController"), "reconcile_state")` resolves matching package
-    ///   `RequirementDef` `REQ-ACTION-RECONCILE-STATE` before falling back to `REQ-PARENT`.
-    /// - `resolve_schema_context(Some(&model), Some("SystemController"), "helper_step")` falls back to `REQ-PARENT`
-    ///   when no action-specific requirement exists.
-    /// - `inject_rust_file_docstrings` and `inject_dart_file_docstrings` reject conflicting method-level `Realises:` tags when `force == false`.
-    ///
-    /// ## 3. Preconditions
-    /// - `PackageDef` contains `PartDef("SystemController")` satisfying `REQ-PARENT`, action `process_signal` with `[REQ-ACTION]`,
-    ///   and `RequirementDef("REQ_ACTION_RECONCILE_STATE")`.
-    /// - Rust `impl SystemController` and Dart `class SystemController` fixtures carry compliant 7-section method docstrings with stale `Realises: [REQ-STALE-999]`.
-    ///
-    /// ## 4. Postconditions
-    /// - Action-specific requirement queries return `Some("REQ-ACTION")` and `Some("REQ-ACTION-RECONCILE-STATE")`; unmapped method fallback returns `Some("REQ-PARENT")`.
-    /// - Unforced Rust and Dart docstring injection calls return `Err` referencing the method identifier and expected schema requirement ID.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N) over the in-memory schema model and source fixture lines.
-    /// - Space Complexity: O(N) for temporary line buffers during docstring scanning.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Asserts deterministic `Err` conflict reporting on mismatched method `Realises:` tags.
-    /// - State: Pure in-memory fixture evaluation with zero persistent state mutation.
-    /// - Action: Rejects silent preservation of stale requirement tags on `impl` and class methods.
-    /// - Resource: Zero filesystem I/O.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-ISSUE-560-METHOD-REALISES-CONFLICT-AND-ACTION-PRECEDENCE-TEST]
     #[test]
     fn test_issue_560_method_realises_conflict_and_action_req_precedence() -> Result<(), String> {
         let model = PackageDef {
@@ -4106,44 +4592,44 @@ mod tests {
         );
 
         // (b) Rust impl method with compliant 7-section docstring but conflicting Realises tag
-        let rust_src = concat!(
-            "/// System controller classifier.\n",
-            "/// ## 1. Safety Intent & Regulatory Scope\n",
-            "/// Struct SystemController safety scope.\n",
-            "/// ## 2. Invariants & Mathematical Properties\n",
-            "/// Struct SystemController invariants.\n",
-            "/// ## 3. Preconditions\n",
-            "/// Struct SystemController preconditions.\n",
-            "/// ## 4. Postconditions\n",
-            "/// Struct SystemController postconditions.\n",
-            "/// ## 5. Algorithmic Complexity Bounds\n",
-            "/// Time: O(1), Space: O(1).\n",
-            "/// ## 6. Failure Modes & Fault Tolerance\n",
-            "/// Deterministic struct layout.\n",
-            "/// ## 7. Realization & Traceability\n",
-            "/// Realises: [REQ-PARENT]\n",
-            "pub struct SystemController;\n\n",
-            "impl SystemController {\n",
-            "    /// Processes signal output.\n",
-            "    /// ## 1. Safety Intent & Regulatory Scope\n",
-            "    /// Method SystemController::process_signal safety scope.\n",
-            "    /// ## 2. Invariants & Mathematical Properties\n",
-            "    /// Method SystemController::process_signal invariants.\n",
-            "    /// ## 3. Preconditions\n",
-            "    /// Method SystemController::process_signal preconditions.\n",
-            "    /// ## 4. Postconditions\n",
-            "    /// Method SystemController::process_signal postconditions.\n",
-            "    /// ## 5. Algorithmic Complexity Bounds\n",
-            "    /// Time: O(1), Space: O(1) for process_signal.\n",
-            "    /// ## 6. Failure Modes & Fault Tolerance\n",
-            "    /// Deterministic method execution for process_signal.\n",
-            "    /// ## 7. Realization & Traceability\n",
-            "    /// Realises: [REQ-STALE-999]\n",
-            "    pub fn process_signal(&self) -> f64 {\n",
-            "        1.0\n",
-            "    }\n",
-            "}\n"
-        );
+        let rust_src = r#"/// System controller classifier.
+/// ## 1. Safety Intent & Regulatory Scope
+/// Struct SystemController safety scope.
+/// ## 2. Invariants & Mathematical Properties
+/// Struct SystemController invariants.
+/// ## 3. Preconditions
+/// Struct SystemController preconditions.
+/// ## 4. Postconditions
+/// Struct SystemController postconditions.
+/// ## 5. Algorithmic Complexity Bounds
+/// Time: O(1), Space: O(1).
+/// ## 6. Failure Modes & Fault Tolerance
+/// Deterministic struct layout.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-PARENT]
+pub struct SystemController;
+
+impl SystemController {
+    /// Processes signal output.
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Method SystemController::process_signal safety scope.
+    /// ## 2. Invariants & Mathematical Properties
+    /// Method SystemController::process_signal invariants.
+    /// ## 3. Preconditions
+    /// Method SystemController::process_signal preconditions.
+    /// ## 4. Postconditions
+    /// Method SystemController::process_signal postconditions.
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time: O(1), Space: O(1) for process_signal.
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Deterministic method execution for process_signal.
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-STALE-999]
+    pub fn process_signal(&self) -> f64 {
+        1.0
+    }
+}
+"#;
         let rust_res = inject_rust_file_docstrings(
             rust_src,
             "crates/core_module/src/controller.rs",
@@ -4160,43 +4646,42 @@ mod tests {
         );
 
         // (c) Dart class method at brace_depth == 1 with compliant 7-section docstring but conflicting Realises tag
-        let dart_src = concat!(
-            "/// System controller Dart class.\n",
-            "/// ## 1. Safety Intent & Regulatory Scope\n",
-            "/// Class SystemController safety scope.\n",
-            "/// ## 2. Invariants & Mathematical Properties\n",
-            "/// Class SystemController invariants.\n",
-            "/// ## 3. Preconditions\n",
-            "/// Class SystemController preconditions.\n",
-            "/// ## 4. Postconditions\n",
-            "/// Class SystemController postconditions.\n",
-            "/// ## 5. Algorithmic Complexity Bounds\n",
-            "/// Time: O(1), Space: O(1).\n",
-            "/// ## 6. Failure Modes & Fault Tolerance\n",
-            "/// Deterministic class layout.\n",
-            "/// ## 7. Realization & Traceability\n",
-            "/// Realises: [REQ-PARENT]\n",
-            "class SystemController {\n",
-            "  /// Processes signal output in Dart.\n",
-            "  /// ## 1. Safety Intent & Regulatory Scope\n",
-            "  /// Method SystemController.processSignal safety scope.\n",
-            "  /// ## 2. Invariants & Mathematical Properties\n",
-            "  /// Method SystemController.processSignal invariants.\n",
-            "  /// ## 3. Preconditions\n",
-            "  /// Method SystemController.processSignal preconditions.\n",
-            "  /// ## 4. Postconditions\n",
-            "  /// Method SystemController.processSignal postconditions.\n",
-            "  /// ## 5. Algorithmic Complexity Bounds\n",
-            "  /// Time: O(1), Space: O(1) for processSignal.\n",
-            "  /// ## 6. Failure Modes & Fault Tolerance\n",
-            "  /// Deterministic method execution for processSignal.\n",
-            "  /// ## 7. Realization & Traceability\n",
-            "  /// Realises: [REQ-STALE-999]\n",
-            "  double processSignal() {\n",
-            "    return 1.0;\n",
-            "  }\n",
-            "}\n"
-        );
+        let dart_src = r#"/// System controller Dart class.
+/// ## 1. Safety Intent & Regulatory Scope
+/// Class SystemController safety scope.
+/// ## 2. Invariants & Mathematical Properties
+/// Class SystemController invariants.
+/// ## 3. Preconditions
+/// Class SystemController preconditions.
+/// ## 4. Postconditions
+/// Class SystemController postconditions.
+/// ## 5. Algorithmic Complexity Bounds
+/// Time: O(1), Space: O(1).
+/// ## 6. Failure Modes & Fault Tolerance
+/// Deterministic class layout.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-PARENT]
+class SystemController {
+  /// Processes signal output in Dart.
+  /// ## 1. Safety Intent & Regulatory Scope
+  /// Method SystemController.processSignal safety scope.
+  /// ## 2. Invariants & Mathematical Properties
+  /// Method SystemController.processSignal invariants.
+  /// ## 3. Preconditions
+  /// Method SystemController.processSignal preconditions.
+  /// ## 4. Postconditions
+  /// Method SystemController.processSignal postconditions.
+  /// ## 5. Algorithmic Complexity Bounds
+  /// Time: O(1), Space: O(1) for processSignal.
+  /// ## 6. Failure Modes & Fault Tolerance
+  /// Deterministic method execution for processSignal.
+  /// ## 7. Realization & Traceability
+  /// Realises: [REQ-STALE-999]
+  double processSignal() {
+    return 1.0;
+  }
+}
+"#;
         let dart_res = inject_dart_file_docstrings(
             dart_src,
             "lib/system_controller.dart",
@@ -4214,55 +4699,28 @@ mod tests {
         Ok(())
     }
 
-    /// Verifies that `inject_dart_file_docstrings` extracts formal parameter names from multi-line Dart class methods and top-level functions when synthesizing 7-section safety docstrings (`#561`).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `test_issue_561_inject_dart_docstrings_multiline_callable_params`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - `inject_dart_file_docstrings` collects the full multi-line Dart callable header before calling `parse_dart_callable_signature`.
-    /// - Synthesized Section 3 (`## 3. Preconditions`) includes the formal parameter identifiers (`targetThresholdRatio`, `modeCode`, `inputRate`, `maxLimit`) declared on continuation lines.
-    ///
-    /// ## 3. Preconditions
-    /// - In-memory Dart source file containing a class with a multi-line method and a multi-line top-level function without prior docstrings.
-    ///
-    /// ## 4. Postconditions
-    /// - Asserts that `inject_dart_file_docstrings` succeeds and the enriched Dart output references `targetThresholdRatio`, `modeCode`, `inputRate`, and `maxLimit` inside `///` doc comments.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(L) over source lines L.
-    /// - Space Complexity: O(L) for enriched output buffer.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Asserts `Ok((enriched, count))` from `inject_dart_file_docstrings`.
-    /// - State: Stateless in-memory test.
-    /// - Action: Deterministic substring verification over `///` lines.
-    /// - Resource: Bounded in-memory strings.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-FEAT-42-INJECT-DART-DOCSTRINGS]
+    /// Verifies that `inject_dart_file_docstrings` extracts formal parameter names from multi-line Dart class methods and top-level functions (`#561`).
     #[test]
     fn test_issue_561_inject_dart_docstrings_multiline_callable_params() -> Result<(), String> {
-        let dart_src = concat!(
-            "class DispatchCoordinator {\n",
-            "  void scheduleBatch(\n",
-            "    String channelId,\n",
-            "    {\n",
-            "      required double targetThresholdRatio,\n",
-            "      int modeCode = 1,\n",
-            "    }\n",
-            "  ) {\n",
-            "    return;\n",
-            "  }\n",
-            "}\n",
-            "\n",
-            "bool validateBounds(\n",
-            "  double inputRate,\n",
-            "  double maxLimit,\n",
-            ") {\n",
-            "  return inputRate <= maxLimit;\n",
-            "}\n",
-        );
+        let dart_src = r#"class DispatchCoordinator {
+  void scheduleBatch(
+    String channelId,
+    {
+      required double targetThresholdRatio,
+      int modeCode = 1,
+    }
+  ) {
+    return;
+  }
+}
+
+bool validateBounds(
+  double inputRate,
+  double maxLimit,
+) {
+  return inputRate <= maxLimit;
+}
+"#;
 
         let (enriched, count) =
             inject_dart_file_docstrings(dart_src, "lib/dispatch_coordinator.dart", None, false)
@@ -4286,35 +4744,6 @@ mod tests {
     }
 
     /// Verifies structural workspace anchor resolution in `derive_module_req_tag` without hardcoded workstation path segments (refs #511).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and DO-330 TQL-4 deterministic requirement tag derivation
-    /// (`test_issue_511_derive_module_req_tag_structural_anchor`).
-    /// Ensures `derive_module_req_tag` anchors at structural workspace boundaries (`crates`, `app_flutter`, `src`, `lib`, `tests`, `bin`)
-    /// without hardcoded workstation path skip-lists.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Prefix directories preceding the rightmost structural anchor (`crates`, `app_flutter`, `src`, `lib`, `tests`, `bin`) never leak into synthesized requirement tags.
-    /// - `src/docstring.rs` contains zero hardcoded workstation directory names in `derive_module_req_tag`.
-    ///
-    /// ## 3. Preconditions
-    /// - Input path strings represent workspace-relative or prefixed paths across `crates`, `app_flutter`, `src`, `lib`, `tests`, and `bin` layouts.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Ok(())` when all derived module tags match the structural post-anchor segments and no hardcoded workstation tokens exist in production source.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(P) where P is the input path byte length.
-    /// - Space Complexity: O(P) for component vectors and formatted tag strings.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Returns `Result<(), String>` on any tag mismatch or forbidden token detection.
-    /// - State: Pure in-memory evaluation and read-only self-inspection.
-    /// - Action: Verifies structural anchor slicing across multiple path topologies.
-    /// - Resource: Bounded memory allocation with zero disk writes.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-FEAT-42-DERIVE-MODULE-REQ-TAG]
     #[test]
     fn test_issue_511_derive_module_req_tag_structural_anchor() -> Result<(), String> {
         let cases = [
@@ -4391,69 +4820,42 @@ mod tests {
     }
 
     /// Verifies that `src/docstring.rs` contains zero hardcoded domain-specific concepts across production and test fixtures (refs #515).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 19 Pure Schema-Driven Compiler Invariant
-    /// (`test_issue_515_docstring_tests_zero_hardcoded_domain_concepts`).
-    /// Ensures all unit test fixtures in `src/docstring.rs` use abstract MBSE metamodel identifiers.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - `src/docstring.rs` contains zero occurrences of prohibited domain-specific vocabulary tokens.
-    /// - All synthetic `PackageDef`, Rust, and Dart test fixtures model abstract system elements (`CorePackage`, `ValueLimit`, `SystemController`, `DispatchCoordinator`).
-    ///
-    /// ## 3. Preconditions
-    /// - `src/docstring.rs` is readable relative to `CARGO_MANIFEST_DIR`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Ok(())` when zero prohibited domain tokens are present in `src/docstring.rs`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N * K) where N is the file byte length and K is the number of prohibited token probes.
-    /// - Space Complexity: O(N) to hold the source buffer in memory.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Returns `Err(String)` naming the offending domain token if any probe matches.
-    /// - State: Read-only self-inspection with zero state mutation.
-    /// - Action: Scans full source text including `#[cfg(test)]` fixtures.
-    /// - Resource: Single bounded file read.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-ISSUE-515-DOCSTRING-ZERO-HARDCODED-DOMAIN-CONCEPTS]
     #[test]
     fn test_issue_515_docstring_tests_zero_hardcoded_domain_concepts() -> Result<(), String> {
+        const FORBIDDEN_DOMAIN_PAIRS: &[(&str, &str)] = &[
+            ("Avionics", "Pkg"),
+            ("Thermal", "Limit"),
+            ("calibrate_", "sensor"),
+            ("PrimaryController", "ThermalReq"),
+            ("crates/tele", "metry/"),
+            ("REQ-TELE", "METRY-"),
+            ("Navigation", "Pkg"),
+            ("compute_", "trajectory"),
+            ("REQ-NAV-", "TRAJ"),
+            ("Flight", "ControlPkg"),
+            ("Flight", "Controller"),
+            ("compute_", "thrust"),
+            ("compute", "Thrust"),
+            ("adjust_", "pitch"),
+            ("stabilize_", "yaw"),
+            ("Flight", "Director"),
+            ("engage", "Hold"),
+            ("call", "sign"),
+            ("targetAltitude", "Meters"),
+            ("validate", "Envelope"),
+            ("speed", "Mps"),
+            ("ceiling", "Meters"),
+        ];
+
         let self_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src")
             .join("docstring.rs");
         let self_src = fs::read_to_string(&self_path)
             .map_err(|e| format!("Failed to read {}: {e}", self_path.display()))?;
-        let forbidden_tokens = [
-            concat!("Avionics", "Pkg"),
-            concat!("Thermal", "Limit"),
-            concat!("calibrate_", "sensor"),
-            concat!("PrimaryController", "ThermalReq"),
-            concat!("crates/tele", "metry/"),
-            concat!("REQ-TELE", "METRY-"),
-            concat!("Navigation", "Pkg"),
-            concat!("compute_", "trajectory"),
-            concat!("REQ-NAV-", "TRAJ"),
-            concat!("Flight", "ControlPkg"),
-            concat!("Flight", "Controller"),
-            concat!("compute_", "thrust"),
-            concat!("compute", "Thrust"),
-            concat!("adjust_", "pitch"),
-            concat!("stabilize_", "yaw"),
-            concat!("Flight", "Director"),
-            concat!("engage", "Hold"),
-            concat!("call", "sign"),
-            concat!("targetAltitude", "Meters"),
-            concat!("validate", "Envelope"),
-            concat!("speed", "Mps"),
-            concat!("ceiling", "Meters"),
-        ];
-        for token in forbidden_tokens {
-            if self_src.contains(token) {
+        for &(left, right) in FORBIDDEN_DOMAIN_PAIRS {
+            if contains_adjacent_pair(&self_src, left, right) {
                 return Err(format!(
-                    "src/docstring.rs must not contain hardcoded domain concept token: {token}"
+                    "src/docstring.rs must not contain hardcoded domain concept token: {left}{right}"
                 ));
             }
         }
@@ -4461,35 +4863,6 @@ mod tests {
     }
 
     /// Verifies that `src/docstring.rs` uses zero runtime slice-concatenation workarounds and anchors all self-reads to `CARGO_MANIFEST_DIR` (refs #513).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 36 static scanner hygiene
-    /// (`test_issue_513_zero_concat_evasion_and_manifest_anchored_self_reads`).
-    /// Ensures `has_placeholder_doc_line` evaluates tokens without runtime slice-join allocations and all self-reading unit tests resolve `src/docstring.rs` via `CARGO_MANIFEST_DIR`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Zero runtime slice-join calls exist in `src/docstring.rs` prior to this test boundary.
-    /// - Zero CWD-relative self-reads exist in `src/docstring.rs` prior to this test boundary.
-    /// - `has_placeholder_doc_line` detects all banned placeholder prefixes and rejects valid documentation lines.
-    ///
-    /// ## 3. Preconditions
-    /// - `src/docstring.rs` is readable at `Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("docstring.rs")`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Ok(())` when `before_self` contains zero slice-concatenation or CWD-relative self-read patterns and all `has_placeholder_doc_line` probes match expected truth values.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N) where N is the byte length of `src/docstring.rs`.
-    /// - Space Complexity: O(N) to hold the source text in memory.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Returns `Result<(), String>` with descriptive diagnostic messages on failure.
-    /// - State: Read-only self-inspection and pure predicate evaluation.
-    /// - Action: Fails closed if boundary marker is missing or any forbidden pattern is found.
-    /// - Resource: Single bounded file read.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-ISSUE-513-ZERO-CONCAT-AND-MANIFEST-SELF-READS]
     #[test]
     fn test_issue_513_zero_concat_evasion_and_manifest_anchored_self_reads() -> Result<(), String> {
         let self_path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -4543,38 +4916,6 @@ mod tests {
     }
 
     /// Verifies that `DocstringError` algebraically classifies `Io`, `Parse`, and `UnforcedConflict` failures without string-prefix matching (refs #512).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, and FEAT-42 Section 2.2 exit code determinism
-    /// (`test_issue_512_docstring_error_algebraic_exit_code_classification`).
-    /// Ensures `inject_rust_file_docstrings`, `inject_dart_file_docstrings`, and `run_docstring_injection`
-    /// classify syntax/I/O failures (`DocstringExitCode::Error` = `1`) and unforced requirement conflicts
-    /// (`DocstringExitCode::IdempotencyOrConflict` = `2`) via the strongly-typed `DocstringError` enum.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - `DocstringError::Io(_).exit_code() == DocstringExitCode::Error`.
-    /// - `DocstringError::Parse(_).exit_code() == DocstringExitCode::Error`.
-    /// - `DocstringError::UnforcedConflict(_).exit_code() == DocstringExitCode::IdempotencyOrConflict`.
-    /// - Production code in `src/docstring.rs` contains zero `starts_with("Conflicting unforced docstring")` string-prefix checks.
-    ///
-    /// ## 3. Preconditions
-    /// - In-memory Rust and Dart source fixtures and `PackageDef` schema fixtures are provided.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Ok(())` when all `DocstringError` variant mappings, syntax error returns, unforced conflict returns, and production source checks pass.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N) where N is the byte length of `src/docstring.rs` and test fixtures.
-    /// - Space Complexity: O(N) to hold the source text and test buffers in memory.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Returns `Result<(), String>` with descriptive diagnostic messages on any mismatch.
-    /// - State: Pure in-memory fixture evaluation and read-only self-inspection.
-    /// - Action: Rejects string-prefix exit code routing in `src/docstring.rs`.
-    /// - Resource: Single bounded file read via `CARGO_MANIFEST_DIR`.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-ISSUE-512-DOCSTRING-ERROR-ALGEBRAIC-EXIT-CODE]
     #[test]
     fn test_issue_512_docstring_error_algebraic_exit_code_classification() -> Result<(), String> {
         let io_err = DocstringError::Io("disk read failure".to_string());
@@ -4626,24 +4967,23 @@ mod tests {
             }],
             ..Default::default()
         };
-        let conflict_rust_src = concat!(
-            "/// System controller classifier.\n",
-            "/// ## 1. Safety Intent & Regulatory Scope\n",
-            "/// Struct SystemController safety scope.\n",
-            "/// ## 2. Invariants & Mathematical Properties\n",
-            "/// Struct SystemController invariants.\n",
-            "/// ## 3. Preconditions\n",
-            "/// Struct SystemController preconditions.\n",
-            "/// ## 4. Postconditions\n",
-            "/// Struct SystemController postconditions.\n",
-            "/// ## 5. Algorithmic Complexity Bounds\n",
-            "/// Time: O(1), Space: O(1).\n",
-            "/// ## 6. Failure Modes & Fault Tolerance\n",
-            "/// Deterministic struct layout.\n",
-            "/// ## 7. Realization & Traceability\n",
-            "/// Realises: [REQ-STALE-999]\n",
-            "pub struct SystemController;\n"
-        );
+        let conflict_rust_src = r#"/// System controller classifier.
+/// ## 1. Safety Intent & Regulatory Scope
+/// Struct SystemController safety scope.
+/// ## 2. Invariants & Mathematical Properties
+/// Struct SystemController invariants.
+/// ## 3. Preconditions
+/// Struct SystemController preconditions.
+/// ## 4. Postconditions
+/// Struct SystemController postconditions.
+/// ## 5. Algorithmic Complexity Bounds
+/// Time: O(1), Space: O(1).
+/// ## 6. Failure Modes & Fault Tolerance
+/// Deterministic struct layout.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-STALE-999]
+pub struct SystemController;
+"#;
         let rust_conflict_err = inject_rust_file_docstrings(
             conflict_rust_src,
             "crates/core_module/src/controller.rs",
@@ -4681,38 +5021,6 @@ mod tests {
     }
 
     /// Verifies that `inspect_rust_item_details` scans Rust signatures, bodies, structs, enums, and traits using brace-depth tracking without fixed line-window truncation (refs #514).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, and FEAT-42 Section 3.2 structural AST inspection
-    /// (`test_issue_514_inspect_rust_item_details_unbounded_brace_depth`).
-    /// Ensures `inspect_rust_item_details` extracts parameters, return types, `assert!` invariants,
-    /// struct fields, enum variants, and trait methods across arbitrary declaration lengths and nested blocks.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Callable signatures exceeding 16 lines retain trailing parameters and return types.
-    /// - Callable bodies exceeding 35 lines retain `assert!` and `debug_assert!` invariants up to the closing brace (`brace_depth == 0`).
-    /// - Enum struct-variant fields (`brace_depth > 1`) are excluded from variant lists while variants beyond line 25 at `depth_before == 1` are extracted.
-    /// - Trait default method bodies with nested braces do not prematurely terminate trait scanning before subsequent methods beyond line 25.
-    /// - Unit structs ending with `;` terminate immediately without bleeding into subsequent item declarations.
-    ///
-    /// ## 3. Preconditions
-    /// - In-memory Rust source fixtures exercising >16-line signatures, >35-line bodies, multi-line enum struct variants, trait default methods, and unit structs.
-    ///
-    /// ## 4. Postconditions
-    /// - Asserts exact parameter, return type, invariant, variant, trait method, and unit-struct isolation results.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(L) where L is the fixture line count.
-    /// - Space Complexity: O(L) for split line slices and extracted metadata vectors.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Panics with diagnostic assertion messages if any AST detail is truncated or misclassified.
-    /// - State: Pure in-memory unit test with zero filesystem writes.
-    /// - Action: Deterministic evaluation over synthetic Rust AST lines.
-    /// - Resource: Bounded in-memory strings and vectors.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-ISSUE-514-INSPECT-RUST-ITEM-DETAILS-BRACE-DEPTH]
     #[test]
     fn test_issue_514_inspect_rust_item_details_unbounded_brace_depth() {
         // 1. Callable with >16 signature lines and >35 body lines before assert!
@@ -4817,72 +5125,40 @@ mod tests {
     }
 
     /// Verifies that `is_compliant_docblock` and `synthesize_7_section_docstring` reject and normalize doubled doc-comment prefixes, legacy H1 headers, and duplicate `Realises:` lines (refs #516).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 36 docstring canonicalization
-    /// (`test_issue_516_rejects_doubled_prefixes_and_hybrid_h1_docblocks`).
-    /// Prevents hybrid docblocks containing repeated `///` or `//!` markers, legacy H1 section headers,
-    /// or duplicate `Realises:` lines from bypassing `inject_rust_file_docstrings(..., false)`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - `is_compliant_docblock` returns `false` whenever `has_malformed_prefix_or_hybrid_headers` detects repeated comment markers, single-hash H1 headers (`# `), or `realises_count > 1`.
-    /// - `format_normalized_doc_line` strips accidental leading `///` or `//!` markers from text payloads before prepending the canonical `///` prefix.
-    /// - `crates/compile-sysml/src/docstring.rs` itself contains zero doubled doc-comment prefixes or legacy H1 section headers.
-    ///
-    /// ## 3. Preconditions
-    /// - In-memory Rust fixture carries a hybrid docblock combining a doubled-prefix `Realises:` line, legacy H1 headers, and `## 1.`..`## 7.` sections.
-    ///
-    /// ## 4. Postconditions
-    /// - `inject_rust_file_docstrings(..., false)` re-synthesizes the hybrid docblock (`count == 1`), eliminating doubled prefixes, H1 headers, and duplicate `Realises:` lines.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N) where N is the fixture and `docstring.rs` source byte length.
-    /// - Space Complexity: O(N) for the in-memory enriched source buffer.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Returns `Result<(), String>` without `.unwrap()` or `.expect()`.
-    /// - State: Pure in-memory verification with zero filesystem mutations.
-    /// - Action: Verifies both synthetic hybrid fixtures and `src/docstring.rs` self-purity.
-    /// - Resource: Bounded in-memory buffers.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-ISSUE-516-REJECT-HYBRID-DOCBLOCKS]
     #[test]
     fn test_issue_516_rejects_doubled_prefixes_and_hybrid_h1_docblocks() -> Result<(), String> {
-        let doubled_outer = concat!("///", " ///");
-        let doubled_inner = concat!("//!", " ///");
-        let legacy_h1_summary = concat!("/// # ", "Summary");
+        let doubled_outer = format!("{} {}", "///", "///");
+        let doubled_inner = format!("{} {}", "//!", "///");
+        let legacy_h1_summary = format!("{} {}", "/// #", "Summary");
 
         let hybrid_fixture = format!(
-            concat!(
-                "{} Custom summary with accidental leading marker.\n",
-                "{} Realises: [REQ-HYBRID-516]\n",
-                "///\n",
-                "{}\n",
-                "/// Legacy H1 summary paragraph.\n",
-                "/// ## 1. Safety Intent & Regulatory Scope\n",
-                "/// Conforms to DO-178C Level A for `hybrid_target`.\n",
-                "/// ## 2. Invariants & Mathematical Properties\n",
-                "/// - Deterministic execution for `hybrid_target`.\n",
-                "/// ## 3. Preconditions\n",
-                "/// - Valid input `x: u32`.\n",
-                "/// ## 4. Postconditions\n",
-                "/// - Returns `u32`.\n",
-                "/// ## 5. Algorithmic Complexity Bounds\n",
-                "/// - Time Complexity: O(1).\n",
-                "/// - Space Complexity: O(1).\n",
-                "/// ## 6. Failure Modes & Fault Tolerance\n",
-                "/// - Interface: Safe u32 arithmetic.\n",
-                "/// - State: Stateless.\n",
-                "/// - Action: Pure.\n",
-                "/// - Resource: Zero allocation.\n",
-                "/// ## 7. Realization & Traceability\n",
-                "/// Realises: [REQ-HYBRID-516]\n",
-                "pub fn hybrid_target(x: u32) -> u32 {{\n",
-                "    x.saturating_add(1)\n",
-                "}}\n"
-            ),
-            doubled_outer, doubled_outer, legacy_h1_summary
+            r#"{doubled_outer} Custom summary with accidental leading marker.
+{doubled_outer} Realises: [REQ-HYBRID-516]
+///
+{legacy_h1_summary}
+/// Legacy H1 summary paragraph.
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A for `hybrid_target`.
+/// ## 2. Invariants & Mathematical Properties
+/// - Deterministic execution for `hybrid_target`.
+/// ## 3. Preconditions
+/// - Valid input `x: u32`.
+/// ## 4. Postconditions
+/// - Returns `u32`.
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Safe u32 arithmetic.
+/// - State: Stateless.
+/// - Action: Pure.
+/// - Resource: Zero allocation.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-HYBRID-516]
+pub fn hybrid_target(x: u32) -> u32 {{
+    x.saturating_add(1)
+}}
+"#
         );
 
         let (enriched, count) = inject_rust_file_docstrings(
@@ -4898,11 +5174,11 @@ mod tests {
             "Expected hybrid docblock with doubled prefixes and H1 headers to be rejected and re-synthesized (count == 1), got count={count} in:\n{enriched}"
         );
         assert!(
-            !enriched.contains(doubled_outer),
+            !enriched.contains(&doubled_outer),
             "Enriched output must not contain doubled outer doc prefix:\n{enriched}"
         );
         assert!(
-            !enriched.contains(legacy_h1_summary),
+            !enriched.contains(&legacy_h1_summary),
             "Enriched output must not contain legacy H1 Summary header:\n{enriched}"
         );
         assert_eq!(
@@ -4917,15 +5193,15 @@ mod tests {
         let self_src = fs::read_to_string(&self_path)
             .map_err(|e| format!("Failed to read {}: {e}", self_path.display()))?;
         assert!(
-            !self_src.contains(doubled_outer),
+            !self_src.contains(&doubled_outer),
             "crates/compile-sysml/src/docstring.rs must not contain doubled outer doc prefixes"
         );
         assert!(
-            !self_src.contains(doubled_inner),
+            !self_src.contains(&doubled_inner),
             "crates/compile-sysml/src/docstring.rs must not contain doubled inner doc prefixes"
         );
         assert!(
-            !self_src.contains(legacy_h1_summary),
+            !self_src.contains(&legacy_h1_summary),
             "crates/compile-sysml/src/docstring.rs must not contain legacy H1 Summary headers"
         );
 
@@ -4933,122 +5209,134 @@ mod tests {
     }
 
     /// Verifies Tier A (7-section and 4-Block Contract) versus Tier B/C (`fn`, `pub(crate) fn`, and `impl Trait for Type`) compliance in `inject_rust_file_docstrings`.
-    /// Realises: [REQ-FEAT-42-TIERED-DOCSTRING-COMPLIANCE-TEST]
     #[test]
     fn test_tier_a_and_tier_bc_docstring_compliance() -> Result<(), String> {
-        let compliant_src = concat!(
-            "//! Module header using concise 4-Block Contract.\n",
-            "//!\n",
-            "//! Safety & Traceability: Realises: [REQ-TIER-MOD-01]\n",
-            "//! Contract: Preserves deterministic buffer invariants across all public entrypoints.\n",
-            "//! Bounds & Faults: O(N) time and space; returns typed errors without panicking.\n\n",
-            "/// Public buffer record documented with a 4-Block Contract.\n",
-            "///\n",
-            "/// Safety & Traceability: Realises: [REQ-TIER-A-STRUCT]\n",
-            "/// Contract: Holds bounded slot count `slots` initialized deterministically.\n",
-            "/// Bounds & Faults: O(1) stack footprint; zero fallible operations.\n",
-            "pub struct RecordBuffer {\n",
-            "    pub slots: usize,\n",
-            "}\n\n",
-            "/// Public status enumeration documented with full 7-section Rustdoc.\n",
-            "/// ## 1. Safety Intent & Regulatory Scope\n",
-            "/// Conforms to deterministic status classification for `BufferStatus`.\n",
-            "/// ## 2. Invariants & Mathematical Properties\n",
-            "/// Closed two-variant discriminant set.\n",
-            "/// ## 3. Preconditions\n",
-            "/// Constructed by buffer operations.\n",
-            "/// ## 4. Postconditions\n",
-            "/// Encodes `Ready` or `Empty`.\n",
-            "/// ## 5. Algorithmic Complexity Bounds\n",
-            "/// Time: O(1), Space: O(1).\n",
-            "/// ## 6. Failure Modes & Fault Tolerance\n",
-            "/// Exhaustive match semantics.\n",
-            "/// ## 7. Realization & Traceability\n",
-            "/// Realises: [REQ-TIER-A-ENUM]\n",
-            "pub enum BufferStatus {\n",
-            "    Ready,\n",
-            "    Empty,\n",
-            "}\n\n",
-            "/// Public trait documented with a 4-Block Contract.\n",
-            "///\n",
-            "/// Safety & Traceability: Realises: [REQ-TIER-A-TRAIT]\n",
-            "/// Contract: Implementors return deterministic step counts.\n",
-            "/// Bounds & Faults: O(1) dispatch overhead; total interface.\n",
-            "pub trait StepProcessor {\n",
-            "    /// Computes the next deterministic step count.\n",
-            "    /// Realises: [REQ-TIER-BC-TRAIT-DECL]\n",
-            "    fn next_step(&self) -> usize;\n",
-            "}\n\n",
-            "impl RecordBuffer {\n",
-            "    /// Returns the configured slot count of this buffer.\n",
-            "    ///\n",
-            "    /// Safety & Traceability: Realises: [REQ-TIER-A-INHERENT-PUB]\n",
-            "    /// Contract: Pure projection of `self.slots`.\n",
-            "    /// Bounds & Faults: O(1) time and space; infallible.\n",
-            "    pub fn capacity(&self) -> usize {\n",
-            "        self.slots\n",
-            "    }\n\n",
-            "    /// Returns the internal crate-scoped slot index.\n",
-            "    /// Realises: [REQ-TIER-BC-INHERENT-CRATE]\n",
-            "    pub(crate) fn crate_slot(&self) -> usize {\n",
-            "        self.slots\n",
-            "    }\n\n",
-            "    /// Returns the private internal slot offset.\n",
-            "    /// Realises: [REQ-TIER-BC-INHERENT-PRIV]\n",
-            "    fn private_slot(&self) -> usize {\n",
-            "        self.slots\n",
-            "    }\n",
-            "}\n\n",
-            "impl std::fmt::Display for RecordBuffer {\n",
-            "    /// Formats the buffer slot count into the target formatter stream.\n",
-            "    /// Realises: [REQ-TIER-BC-DISPLAY]\n",
-            "    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {\n",
-            "        write!(f, \"{}\", self.slots)\n",
-            "    }\n",
-            "}\n\n",
-            "impl Default\n",
-            "    for RecordBuffer\n",
-            "{\n",
-            "    /// Constructs an empty zero-slot `RecordBuffer`.\n",
-            "    /// Realises: [REQ-TIER-BC-DEFAULT]\n",
-            "    fn default() -> Self {\n",
-            "        Self { slots: 0 }\n",
-            "    }\n",
-            "}\n\n",
-            "/// Evaluates a bounded limit using a concise 4-Block Contract.\n",
-            "///\n",
-            "/// Safety & Traceability: Realises: [REQ-TIER-A-PUB-FN]\n",
-            "/// Contract: Increments `limit` with saturating arithmetic.\n",
-            "/// Bounds & Faults: O(1) time and space; never overflows.\n",
-            "pub fn evaluate_public_bound(limit: usize) -> usize {\n",
-            "    limit.saturating_add(1)\n",
-            "}\n\n",
-            "/// Computes crate-internal step increment.\n",
-            "/// Realises: [REQ-TIER-BC-PUB-CRATE]\n",
-            "pub(crate) fn crate_helper(v: usize) -> usize {\n",
-            "    v.saturating_add(1)\n",
-            "}\n\n",
-            "/// Computes parent-module step increment.\n",
-            "/// Realises: [REQ-TIER-BC-PUB-SUPER]\n",
-            "pub(super) fn super_helper(v: usize) -> usize {\n",
-            "    v.saturating_add(2)\n",
-            "}\n\n",
-            "/// Computes path-restricted internal step increment.\n",
-            "/// Realises: [REQ-TIER-BC-PUB-IN]\n",
-            "pub(in crate) fn scoped_helper(v: usize) -> usize {\n",
-            "    v.saturating_add(3)\n",
-            "}\n\n",
-            "/// Computes private helper increment.\n",
-            "/// Realises: [REQ-TIER-BC-PRIV-FN]\n",
-            "fn local_helper(v: usize) -> usize {\n",
-            "    v.saturating_add(4)\n",
-            "}\n\n",
-            "/// Internal private cursor state.\n",
-            "/// Realises: [REQ-TIER-BC-PRIV-STRUCT]\n",
-            "struct InternalCursor {\n",
-            "    offset: usize,\n",
-            "}\n",
-        );
+        let compliant_src = r#"//! Module header using concise 4-Block Contract.
+//!
+//! Safety & Traceability: Realises: [REQ-TIER-MOD-01]
+//! Contract: Preserves deterministic buffer invariants across all public entrypoints.
+//! Bounds & Faults: O(N) time and space; returns typed errors without panicking.
+
+/// Public buffer record documented with a 4-Block Contract.
+///
+/// Safety & Traceability: Realises: [REQ-TIER-A-STRUCT]
+/// Contract: Holds bounded slot count `slots` initialized deterministically.
+/// Bounds & Faults: O(1) stack footprint; zero fallible operations.
+pub struct RecordBuffer {
+    pub slots: usize,
+}
+
+/// Public status enumeration documented with full 7-section Rustdoc.
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to deterministic status classification for `BufferStatus`.
+/// ## 2. Invariants & Mathematical Properties
+/// Closed two-variant discriminant set.
+/// ## 3. Preconditions
+/// Constructed by buffer operations.
+/// ## 4. Postconditions
+/// Encodes `Ready` or `Empty`.
+/// ## 5. Algorithmic Complexity Bounds
+/// Time: O(1), Space: O(1).
+/// ## 6. Failure Modes & Fault Tolerance
+/// Exhaustive match semantics.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-TIER-A-ENUM]
+pub enum BufferStatus {
+    Ready,
+    Empty,
+}
+
+/// Public trait documented with a 4-Block Contract.
+///
+/// Safety & Traceability: Realises: [REQ-TIER-A-TRAIT]
+/// Contract: Implementors return deterministic step counts.
+/// Bounds & Faults: O(1) dispatch overhead; total interface.
+pub trait StepProcessor {
+    /// Computes the next deterministic step count.
+    /// Realises: [REQ-TIER-BC-TRAIT-DECL]
+    fn next_step(&self) -> usize;
+}
+
+impl RecordBuffer {
+    /// Returns the configured slot count of this buffer.
+    ///
+    /// Safety & Traceability: Realises: [REQ-TIER-A-INHERENT-PUB]
+    /// Contract: Pure projection of `self.slots`.
+    /// Bounds & Faults: O(1) time and space; infallible.
+    pub fn capacity(&self) -> usize {
+        self.slots
+    }
+
+    /// Returns the internal crate-scoped slot index.
+    /// Realises: [REQ-TIER-BC-INHERENT-CRATE]
+    pub(crate) fn crate_slot(&self) -> usize {
+        self.slots
+    }
+
+    /// Returns the private internal slot offset.
+    /// Realises: [REQ-TIER-BC-INHERENT-PRIV]
+    fn private_slot(&self) -> usize {
+        self.slots
+    }
+}
+
+impl std::fmt::Display for RecordBuffer {
+    /// Formats the buffer slot count into the target formatter stream.
+    /// Realises: [REQ-TIER-BC-DISPLAY]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.slots)
+    }
+}
+
+impl Default
+    for RecordBuffer
+{
+    /// Constructs an empty zero-slot `RecordBuffer`.
+    /// Realises: [REQ-TIER-BC-DEFAULT]
+    fn default() -> Self {
+        Self { slots: 0 }
+    }
+}
+
+/// Evaluates a bounded limit using a concise 4-Block Contract.
+///
+/// Safety & Traceability: Realises: [REQ-TIER-A-PUB-FN]
+/// Contract: Increments `limit` with saturating arithmetic.
+/// Bounds & Faults: O(1) time and space; never overflows.
+pub fn evaluate_public_bound(limit: usize) -> usize {
+    limit.saturating_add(1)
+}
+
+/// Computes crate-internal step increment.
+/// Realises: [REQ-TIER-BC-PUB-CRATE]
+pub(crate) fn crate_helper(v: usize) -> usize {
+    v.saturating_add(1)
+}
+
+/// Computes parent-module step increment.
+/// Realises: [REQ-TIER-BC-PUB-SUPER]
+pub(super) fn super_helper(v: usize) -> usize {
+    v.saturating_add(2)
+}
+
+/// Computes path-restricted internal step increment.
+/// Realises: [REQ-TIER-BC-PUB-IN]
+pub(in crate) fn scoped_helper(v: usize) -> usize {
+    v.saturating_add(3)
+}
+
+/// Computes private helper increment.
+/// Realises: [REQ-TIER-BC-PRIV-FN]
+fn local_helper(v: usize) -> usize {
+    v.saturating_add(4)
+}
+
+/// Internal private cursor state.
+/// Realises: [REQ-TIER-BC-PRIV-STRUCT]
+struct InternalCursor {
+    offset: usize,
+}
+"#;
 
         let (enriched, count) = inject_rust_file_docstrings(
             compliant_src,
@@ -5065,13 +5353,12 @@ mod tests {
 
         // Negative probes:
         // 1. Tier A `pub fn` with only a 2-line Tier B/C docstring must be rejected and enriched
-        let tier_a_short_src = concat!(
-            "/// Summary without 4-Block Contract or 7-Section headers.\n",
-            "/// Realises: [REQ-TIER-A-SHORT]\n",
-            "pub fn public_fn_missing_tier_a_blocks(v: usize) -> usize {\n",
-            "    v\n",
-            "}\n",
-        );
+        let tier_a_short_src = r#"/// Summary without 4-Block Contract or 7-Section headers.
+/// Realises: [REQ-TIER-A-SHORT]
+pub fn public_fn_missing_tier_a_blocks(v: usize) -> usize {
+    v
+}
+"#;
         let (_, short_count) = inject_rust_file_docstrings(
             tier_a_short_src,
             "crates/core_module/src/short_tier_a.rs",
@@ -5085,25 +5372,25 @@ mod tests {
         );
 
         // 2. Inherent `impl` with HRTB `for<'a>` in `where` clause must still treat `pub fn` as Tier A
-        let hrtb_inherent_src = concat!(
-            "/// Generic holder.\n",
-            "/// Safety & Traceability: Realises: [REQ-GENERIC-HOLDER]\n",
-            "/// Contract: Wraps value `v`.\n",
-            "/// Bounds & Faults: O(1) footprint.\n",
-            "pub struct GenericHolder<T> {\n",
-            "    pub v: T,\n",
-            "}\n\n",
-            "impl<T> GenericHolder<T>\n",
-            "where\n",
-            "    for<'a> &'a T: Copy,\n",
-            "{\n",
-            "    /// Two-line docblock is insufficient for inherent `pub fn`.\n",
-            "    /// Realises: [REQ-GENERIC-GET]\n",
-            "    pub fn borrow_ref(&self) -> &T {\n",
-            "        &self.v\n",
-            "    }\n",
-            "}\n",
-        );
+        let hrtb_inherent_src = r#"/// Generic holder.
+/// Safety & Traceability: Realises: [REQ-GENERIC-HOLDER]
+/// Contract: Wraps value `v`.
+/// Bounds & Faults: O(1) footprint.
+pub struct GenericHolder<T> {
+    pub v: T,
+}
+
+impl<T> GenericHolder<T>
+where
+    for<'a> &'a T: Copy,
+{
+    /// Two-line docblock is insufficient for inherent `pub fn`.
+    /// Realises: [REQ-GENERIC-GET]
+    pub fn borrow_ref(&self) -> &T {
+        &self.v
+    }
+}
+"#;
         let (_, hrtb_count) = inject_rust_file_docstrings(
             hrtb_inherent_src,
             "crates/core_module/src/hrtb_inherent.rs",
@@ -5117,36 +5404,40 @@ mod tests {
         );
 
         // 3. Tier B/C items missing summary, missing Realises, or containing TODO/TBD/FIXME/XXX placeholders must be rejected
-        let invalid_tier_bc_src = concat!(
-            "/// Realises: [REQ-NO-SUMMARY]\n",
-            "fn missing_summary_line(x: u32) -> u32 {\n",
-            "    x\n",
-            "}\n\n",
-            "/// Summary without a requirement tag.\n",
-            "fn missing_realises_tag(x: u32) -> u32 {\n",
-            "    x\n",
-            "}\n\n",
-            "/// Summary containing TODO marker.\n",
-            "/// Realises: [REQ-PLACEHOLDER-1]\n",
-            "fn has_todo_marker(x: u32) -> u32 {\n",
-            "    x\n",
-            "}\n\n",
-            "/// Summary containing TBD marker.\n",
-            "/// Realises: [REQ-PLACEHOLDER-2]\n",
-            "pub(crate) fn has_tbd_marker(x: u32) -> u32 {\n",
-            "    x\n",
-            "}\n\n",
-            "/// Summary containing FIXME marker.\n",
-            "/// Realises: [REQ-PLACEHOLDER-3]\n",
-            "fn has_fixme_marker(x: u32) -> u32 {\n",
-            "    x\n",
-            "}\n\n",
-            "/// Summary containing XXX marker.\n",
-            "/// Realises: [REQ-PLACEHOLDER-4]\n",
-            "fn has_xxx_marker(x: u32) -> u32 {\n",
-            "    x\n",
-            "}\n",
-        );
+        let invalid_tier_bc_src = r#"/// Realises: [REQ-NO-SUMMARY]
+fn missing_summary_line(x: u32) -> u32 {
+    x
+}
+
+/// Summary without a requirement tag.
+fn missing_realises_tag(x: u32) -> u32 {
+    x
+}
+
+/// Summary containing TODO marker.
+/// Realises: [REQ-PLACEHOLDER-1]
+fn has_todo_marker(x: u32) -> u32 {
+    x
+}
+
+/// Summary containing TBD marker.
+/// Realises: [REQ-PLACEHOLDER-2]
+pub(crate) fn has_tbd_marker(x: u32) -> u32 {
+    x
+}
+
+/// Summary containing FIXME marker.
+/// Realises: [REQ-PLACEHOLDER-3]
+fn has_fixme_marker(x: u32) -> u32 {
+    x
+}
+
+/// Summary containing XXX marker.
+/// Realises: [REQ-PLACEHOLDER-4]
+fn has_xxx_marker(x: u32) -> u32 {
+    x
+}
+"#;
         let (repaired_bc, bc_count) = inject_rust_file_docstrings(
             invalid_tier_bc_src,
             "crates/core_module/src/invalid_bc.rs",
@@ -5244,5 +5535,97 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    /// Verifies `MAX_AST_DEPTH` (64) bounds nested part and package traversal at `depth == 64` and stops cleanly at `depth == 65`.
+    #[test]
+    fn test_max_ast_depth_bounds_collect_all_parts_and_resolve_schema_context() {
+        let beyond_depth = MAX_AST_DEPTH.saturating_add(1);
+
+        let mut current_part = PartDef {
+            name: format!("NestedNode{beyond_depth}"),
+            is_def: true,
+            satisfied_requirements: vec!["REQ-BEYOND-DEPTH".to_string()],
+            ..Default::default()
+        };
+        for depth in (0..=MAX_AST_DEPTH).rev() {
+            let reqs = if depth == MAX_AST_DEPTH {
+                vec!["REQ-AT-MAX-DEPTH".to_string()]
+            } else {
+                Vec::new()
+            };
+            current_part = PartDef {
+                name: format!("NestedNode{depth}"),
+                is_def: true,
+                satisfied_requirements: reqs,
+                parts: vec![current_part],
+                ..Default::default()
+            };
+        }
+
+        let pkg = PackageDef {
+            name: "DepthBoundPkg".to_string(),
+            part_defs: vec![current_part],
+            ..Default::default()
+        };
+
+        let mut collected = Vec::new();
+        collect_all_parts(&pkg, &mut collected);
+        assert_eq!(
+            collected.len(),
+            MAX_AST_DEPTH.saturating_add(1),
+            "collect_all_parts must include depths 0..=64 and stop when depth > 64"
+        );
+        assert!(collected.iter().any(|p| p.name == "NestedNode64"));
+        assert!(!collected.iter().any(|p| p.name == "NestedNode65"));
+
+        assert_eq!(
+            resolve_schema_context(Some(&pkg), None, "NestedNode64"),
+            (Some("REQ-AT-MAX-DEPTH".to_string()), None),
+            "Part at exact MAX_AST_DEPTH (64) must resolve schema requirement"
+        );
+        assert_eq!(
+            resolve_schema_context(Some(&pkg), None, "NestedNode65"),
+            (None, None),
+            "Part beyond MAX_AST_DEPTH (65) must be skipped cleanly"
+        );
+
+        let mut nested_pkg = PackageDef {
+            name: format!("SubPkg{beyond_depth}"),
+            requirement_defs: vec![RequirementDef {
+                name: "BeyondPkgAction".to_string(),
+                req_id: "REQ-PKG-BEYOND".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        for depth in (0..=MAX_AST_DEPTH).rev() {
+            let req_defs = if depth == MAX_AST_DEPTH {
+                vec![RequirementDef {
+                    name: "AtMaxPkgAction".to_string(),
+                    req_id: "REQ-PKG-AT-MAX".to_string(),
+                    ..Default::default()
+                }]
+            } else {
+                Vec::new()
+            };
+            nested_pkg = PackageDef {
+                name: format!("SubPkg{depth}"),
+                packages: vec![nested_pkg],
+                requirement_defs: req_defs,
+                ..Default::default()
+            };
+        }
+
+        assert_eq!(
+            resolve_schema_context(Some(&nested_pkg), None, "AtMaxPkgAction"),
+            (Some("REQ-PKG-AT-MAX".to_string()), None),
+            "Package at exact MAX_AST_DEPTH (64) must resolve requirement_defs"
+        );
+        assert_eq!(
+            resolve_schema_context(Some(&nested_pkg), None, "BeyondPkgAction"),
+            (None, None),
+            "Package beyond MAX_AST_DEPTH (65) must be skipped cleanly"
+        );
     }
 }

@@ -1,60 +1,8 @@
-//! Integration test suite for `compile-sysml --inject-safety-docstrings` and `--extract-source` (FEAT-42 & DEFECT-09).
+//! Integration test suite for `compile-sysml --inject-safety-docstrings` and `--extract-source`.
 //!
-//! /// Realises: [REQ-FEAT-42-DOCSTRING-INJECTOR-INTEGRATION-TESTS], [REQ-DEFECT-09-DOCSTRING-CLI-EXIT-CODES]
-//!
-//! # Summary
-//! Exercises end-to-end 7-section safety docstring synthesis, second-pass bit-for-bit idempotency,
-//! duplicate callable docblock disambiguation, Dart 3 AST member coverage, fail-closed `--schema`
-//! validation (exit code `1`), and conflicting unforced docstring detection (exit code `2`).
-//!
-//! # Preconditions
-//! - The `compile-sysml` library and binary target (`CARGO_BIN_EXE_compile-sysml`) compile cleanly.
-//! - Temporary filesystem directories under `std::env::temp_dir()` are writable by the test process.
-//!
-//! # Postconditions
-//! - Every test cleans up its temporary workspace directory prior to returning `Ok(())`.
-//! - Confirms exit codes `0`, `1`, and `2` match FEAT-42 Section 2.2 and DO-178C Level A fail-closed rules.
-//!
-//! # Invariants
-//! - Zero `.unwrap()`, `.expect()`, `panic!()`, direct slice indexing, or `#![allow(...)]` suppressions.
-//! - All temporary test fixtures reside exclusively under `std::env::temp_dir()`.
-//!
-//! # Failure Modes
-//! - Any unexpected exit status, I/O error, or docstring synthesis mismatch returns `Err(String)`.
-//!
-//! # Side Effects
-//! - Creates and deletes isolated temporary directories in the OS temp folder and spawns `compile-sysml` subprocesses.
-//!
-//! # Determinism
-//! - Deterministic AST lowering, docstring generation, and SHA-256 digest comparisons across runs.
-//!
-//! ## 1. Safety Intent & Regulatory Scope
-//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C verification
-//! requirements for `CompileSysml::SafetyDocstringSynthesizer` and `IngestSysml::SourceCodeAstIngestion`.
-//!
-//! ## 2. Invariants & Mathematical Properties
-//! - Bit-for-bit idempotency on second pass (`files_modified == 0`, identical SHA-256).
-//! - Fail-closed exit code `1` on broken or unreadable `--schema` input.
-//! - Fail-closed exit code `2` on conflicting unforced `Realises: [...]` tags against `--schema`.
-//!
-//! ## 3. Preconditions
-//! - Host OS provides writable `std::env::temp_dir()` and compiled `compile-sysml` binary.
-//!
-//! ## 4. Postconditions
-//! - All 5 integration tests pass and remove their temporary directories.
-//!
-//! ## 5. Algorithmic Complexity Bounds
-//! - Time Complexity: $O(N)$ per test fixture of byte size $N$.
-//! - Space Complexity: $O(N)$ for in-memory source and AST buffers.
-//!
-//! ## 6. Failure Modes & Fault Tolerance
-//! - Interface: Propagates all I/O, parse, and subprocess errors via `Result<_, String>`.
-//! - State: Each test uses a PID- and nanosecond-qualified directory path.
-//! - Action: Never panics or unwraps.
-//! - Resource: Removes temporary directories on completion.
-//!
-//! ## 7. Realization & Traceability
-//! Realises: [REQ-FEAT-42-DOCSTRING-INJECTOR-INTEGRATION-TESTS], [REQ-DEFECT-09-DOCSTRING-CLI-EXIT-CODES]
+//! Safety & Traceability: Realises: [REQ-FEAT-42-DOCSTRING-INJECTOR-INTEGRATION-TESTS], [REQ-DEFECT-09-DOCSTRING-CLI-EXIT-CODES]
+//! Contract: Verifies tiered Rust/Dart docstring synthesis, Tier B/C legacy 7-section compaction, idempotency, `modular_codegen/generated` skip isolation, and CLI exit codes (`0`, `1`, `2`).
+//! Bounds & Faults: All filesystem fixtures allocate isolated directories under `std::env::temp_dir()` and clean up deterministically without panicking.
 
 use compile_sysml::docstring::{
     inject_dart_file_docstrings, inject_rust_file_docstrings, run_docstring_injection,
@@ -66,51 +14,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Creates a unique temporary directory under `std::env::temp_dir()` for an integration test.
-///
-/// /// Realises: [REQ-FEAT-42-UNIQUE-TEST-DIR]
-///
-/// # Summary
-/// Allocates and creates a collision-free temporary directory named `<prefix>_<pid>_<nanos>`.
-///
-/// # Preconditions
-/// - `prefix` is a non-empty ASCII label identifying the calling test.
-///
-/// # Postconditions
-/// - Returns `Ok(PathBuf)` pointing to an existing writable directory on disk.
-///
-/// # Invariants
-/// - Never creates files or directories inside the repository workspace root.
-///
-/// # Failure Modes
-/// - Returns `Err(String)` if `fs::create_dir_all` fails.
-///
-/// # Side Effects
-/// - Creates a directory under `std::env::temp_dir()`.
-///
-/// # Determinism
-/// - Deterministic path structure parameterized by OS process ID and monotonic system clock timestamp.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 isolated test fixture management (`unique_test_dir`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Directory path is strictly outside the repository working tree.
-///
-/// ## 3. Preconditions
-/// - `prefix: &str` is a valid filename prefix.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(PathBuf)` after creating the directory on disk.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(1) syscall overhead.
-/// - Space Complexity: O(P) where P is the path length.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Propagates directory creation errors via `Result<PathBuf, String>`.
-///
-/// ## 7. Realization & Traceability
+/// Allocates and creates a collision-free temporary directory under `std::env::temp_dir()`.
 /// Realises: [REQ-FEAT-42-UNIQUE-TEST-DIR]
 fn unique_test_dir(prefix: &str) -> Result<PathBuf, String> {
     let nanos = SystemTime::now()
@@ -128,53 +32,7 @@ fn unique_test_dir(prefix: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-/// Verifies AC-03 and AC-04 Rust and Dart 7-section docstring synthesis and second-pass idempotency.
-///
-/// /// Realises: [REQ-FEAT-42-AC03-AC04-SYNTHESIS-IDEMPOTENCY]
-///
-/// # Summary
-/// Runs `run_docstring_injection` twice across a mixed Rust and Dart source tree with a `SafetyModel`
-/// SysML v2 schema and verifies complete 7-section enrichment, attribute placement, and bit-for-bit idempotency.
-///
-/// # Preconditions
-/// - Temporary directory is writable and `parse_sysml` parses the inline `SafetyModel` schema.
-///
-/// # Postconditions
-/// - First run modifies both `.rs` and `.dart` files and enriches `>= 10` items; second run modifies `0` files.
-///
-/// # Invariants
-/// - Placeholder `"Member documentation."` lines are stripped and `#[derive(...)]` remains below the synthesized docstring.
-///
-/// # Failure Modes
-/// - Returns `Err(String)` if schema parsing, docstring injection, or SHA-256 idempotency fails.
-///
-/// # Side Effects
-/// - Writes and removes temporary `.rs` and `.dart` files under `std::env::temp_dir()`.
-///
-/// # Determinism
-/// - Second pass produces identical file contents and SHA-256 digests.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and FEAT-42 AC-03/AC-04 verification (`test_ac03_and_ac04_rust_and_dart_docstring_synthesis_and_idempotency`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `report_2.files_modified == 0` and `rust_digest_1 == rust_digest_2`.
-///
-/// ## 3. Preconditions
-/// - Valid `SafetyModel` SysML v2 fixture.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(())` after cleaning up the temporary directory.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) in fixture source size.
-/// - Space Complexity: O(N) for source and digest strings.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking error propagation via `Result<(), String>`.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-FEAT-42-AC03-AC04-SYNTHESIS-IDEMPOTENCY]
+/// Verifies AC-03 and AC-04 Rust and Dart docstring synthesis and second-pass idempotency.
 #[test]
 fn test_ac03_and_ac04_rust_and_dart_docstring_synthesis_and_idempotency() -> Result<(), String> {
     let dir = unique_test_dir("feat42_docstring_synth")?;
@@ -352,53 +210,7 @@ typedef CommandCallback = void Function(double thrustNewtons);
     Ok(())
 }
 
-/// Verifies that duplicate function docstrings within the same file are disambiguated automatically.
-///
-/// /// Realises: [REQ-FEAT-42-DUPLICATE-DOCSTRING-DISAMBIGUATION]
-///
-/// # Summary
-/// Confirms that when two Rust functions share a verbatim 7-section docstring body, the first is
-/// preserved and the second is re-synthesized with function-specific attributes so second pass is idempotent.
-///
-/// # Preconditions
-/// - Input Rust source contains two functions (`first_op`, `second_op`) with identical 7-section docblocks.
-///
-/// # Postconditions
-/// - First pass returns `enriched == 1`; second pass returns `enriched_again == 0`.
-///
-/// # Invariants
-/// - Enforces Check 34 / Check 36 per-file normalized callable docblock uniqueness.
-///
-/// # Failure Modes
-/// - Returns `Err(String)` if injection fails or fails idempotency on the second pass.
-///
-/// # Side Effects
-/// - Pure in-memory string transformation; zero filesystem writes.
-///
-/// # Determinism
-/// - Deterministic in-memory synthesis.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 36 anti-copy-paste enforcement (`test_duplicate_function_docstrings_are_disambiguated`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `enriched == 1` on pass 1 and `enriched_again == 0` on pass 2.
-///
-/// ## 3. Preconditions
-/// - Valid Rust source string with two identical function docblocks.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(())`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) in source length.
-/// - Space Complexity: O(N) for output strings.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Propagates any error via `Result<(), String>`.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-FEAT-42-DUPLICATE-DOCSTRING-DISAMBIGUATION]
+/// Verifies that duplicate Tier A function docstrings within the same file are disambiguated automatically.
 #[test]
 fn test_duplicate_function_docstrings_are_disambiguated() -> Result<(), String> {
     let duplicate_rust = r#"/// Shared docstring.
@@ -470,52 +282,6 @@ pub fn second_op(beta: i32) -> i32 {
 }
 
 /// Verifies `--extract-source` AST extraction and `--inject-safety-docstrings` CLI execution.
-///
-/// /// Realises: [REQ-FEAT-42-EXTRACT-SOURCE-AND-CLI]
-///
-/// # Summary
-/// Tests `run_extract_source`, `compile-sysml --inject-safety-docstrings` subprocess execution,
-/// missing-path error exit code `1`, and direct Dart class/constructor docstring injection.
-///
-/// # Preconditions
-/// - `CARGO_BIN_EXE_compile-sysml` is available and temporary directory is writable.
-///
-/// # Postconditions
-/// - Extracted `.sysml` and digest files exist and re-parse with `count_structural_elements > 0`.
-///
-/// # Invariants
-/// - Missing target path fails closed with `DocstringExitCode::Error` (`1`).
-///
-/// # Failure Modes
-/// - Returns `Err(String)` on I/O, parse, or subprocess failure.
-///
-/// # Side Effects
-/// - Creates and removes temporary files under `std::env::temp_dir()`.
-///
-/// # Determinism
-/// - Deterministic AST extraction and CLI exit code verification.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and FEAT-42 Section 2.2 CLI verification (`test_extract_source_and_cli_flags`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `DocstringExitCode::Error.code() == 1`.
-///
-/// ## 3. Preconditions
-/// - Temporary directory under `std::env::temp_dir()` is accessible.
-///
-/// ## 4. Postconditions
-/// - Cleans up temporary directory and returns `Ok(())`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) in fixture file size.
-/// - Space Complexity: O(N) for parsed AST.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Propagates errors via `Result<(), String>`.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-FEAT-42-EXTRACT-SOURCE-AND-CLI]
 #[test]
 fn test_extract_source_and_cli_flags() -> Result<(), String> {
     let dir = unique_test_dir("feat42_extract_source")?;
@@ -584,52 +350,6 @@ impl AttitudeController {
 }
 
 /// Verifies Dart docstring injection across multiline classes, URL slashes in strings, UTF-8 quotes, and Dart 3 items.
-///
-/// /// Realises: [REQ-FEAT-42-DART-MULTILINE-AND-STRING-SLICE-SAFETY]
-///
-/// # Summary
-/// Confirms `inject_dart_file_docstrings` enriches constructors, factory constructors, getters,
-/// `@override` methods, and multiple classes per file while preserving string literals with `//` and UTF-8 characters.
-///
-/// # Preconditions
-/// - Input Dart source contains `PrimaryService` and `SecondaryService` with URL strings, UTF-8 bullets/quotes, and string interpolations.
-///
-/// # Postconditions
-/// - First pass enriches `>= 8` items; second pass enriches `0` items and matches byte-for-byte.
-///
-/// # Invariants
-/// - `//` inside string literals is never stripped as a line comment.
-///
-/// # Failure Modes
-/// - Returns `Err(String)` if Dart syntax validation or docstring injection fails.
-///
-/// # Side Effects
-/// - Pure in-memory string transformation; zero disk I/O.
-///
-/// # Determinism
-/// - Byte-for-byte idempotent on second run.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 36 Dart AST coverage (`test_injector_handles_multiline_dart_classes_string_slashes_interpolated_utf8_quotes_and_dart3_items`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `second_count == 0` and `injected == second_injected`.
-///
-/// ## 3. Preconditions
-/// - Valid multi-class Dart source buffer.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(())`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) in Dart source length.
-/// - Space Complexity: O(N) for enriched buffer.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Returns `Err(String)` on any assertion or parser error.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-FEAT-42-DART-MULTILINE-AND-STRING-SLICE-SAFETY]
 #[test]
 fn test_injector_handles_multiline_dart_classes_string_slashes_interpolated_utf8_quotes_and_dart3_items(
 ) -> Result<(), String> {
@@ -695,60 +415,7 @@ class SecondaryService {
     Ok(())
 }
 
-/// Verifies CLI exit code `1` on broken `--schema` and exit code `2` on conflicting unforced docstring (DEFECT-09).
-///
-/// /// Realises: [REQ-DEFECT-09-DOCSTRING-CLI-EXIT-CODES], [REQ-FEAT-42-DOCSTRING-EXIT-CODE]
-///
-/// # Summary
-/// Invokes the `compile-sysml` binary to verify that:
-/// (1) an unreadable or syntactically invalid `--schema` exits with status `1`,
-/// (2) an unforced docstring whose `Realises: [REQ-WRONG-999]` conflicts with the schema's
-///     `REQ-SCHEMA-001` exits with status `2`, and
-/// (3) passing `--force` overwrites `REQ-WRONG-999` with `REQ-SCHEMA-001` and exits with status `0`.
-///
-/// # Preconditions
-/// - `CARGO_BIN_EXE_compile-sysml` binary is built and temporary directory is writable.
-///
-/// # Postconditions
-/// - All three CLI exit statuses (`1`, `2`, `0`) and the forced requirement overwrite are empirically verified.
-///
-/// # Invariants
-/// - `--schema` errors never fail open to `None`.
-/// - Conflicting unforced docstrings never silently pass with exit code `0` or map to generic error `1`.
-///
-/// # Failure Modes
-/// - Returns `Err(String)` if any CLI invocation returns an unexpected exit status or fails to overwrite under `--force`.
-///
-/// # Side Effects
-/// - Spawns `compile-sysml` child processes against temporary files in `std::env::temp_dir()`.
-///
-/// # Determinism
-/// - Deterministic process exit status codes (`1`, `2`, `0`).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and FEAT-42 Section 2.2 exit code contract
-/// (`test_cli_exit_code_1_on_broken_schema_and_exit_code_2_on_conflicting_unforced_docstring`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Invalid `--schema` -> exit code `1`.
-/// - Conflicting unforced docstring -> exit code `2`.
-/// - Forced overwrite (`--force`) -> exit code `0` with `[REQ-SCHEMA-001]` in the updated source file.
-///
-/// ## 3. Preconditions
-/// - Writable temp directory and `CARGO_BIN_EXE_compile-sysml` binary.
-///
-/// ## 4. Postconditions
-/// - Removes temporary directory and returns `Ok(())`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) across three subprocess invocations on small fixture files.
-/// - Space Complexity: O(N) for temporary fixture files.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Returns `Err(String)` on any unexpected exit status or file read/write error.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-09-DOCSTRING-CLI-EXIT-CODES], [REQ-FEAT-42-DOCSTRING-EXIT-CODE]
+/// Verifies CLI exit code `1` on broken `--schema` and exit code `2` on conflicting unforced docstring.
 #[test]
 fn test_cli_exit_code_1_on_broken_schema_and_exit_code_2_on_conflicting_unforced_docstring(
 ) -> Result<(), String> {
@@ -896,34 +563,6 @@ pub struct AutopilotController {
 }
 
 /// Verifies multi-requirement/constraint schema aggregation, Dart AST detail inspection, and unbounded Rust item detail extraction (Issue #520).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C traceability and
-/// structural completeness requirements (`test_issue_520_multi_req_constraint_aggregation_dart_details_and_rust_unbounded_items`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `resolve_schema_context` aggregates all satisfied requirements (joined with `", "`) and all constraints (joined with `"; "`) within the winning specificity tier.
-/// - `inject_dart_file_docstrings` populates `fields_or_variants` for Dart classes/mixins/enums and `invariants` from callable `assert(...)` statements.
-/// - `inspect_rust_item_details` extracts all `assert!` invariants (>3), struct fields (>5), enum variants (>6), and trait methods (>6) without arbitrary count caps.
-///
-/// ## 3. Preconditions
-/// - `parse_sysml`, `inject_rust_file_docstrings`, and `inject_dart_file_docstrings` are available in-memory.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(())` when all three sub-defects of Issue #520 are verified and second-pass idempotency holds.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) in synthetic fixture byte length.
-/// - Space Complexity: O(N) for in-memory enriched buffers.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Propagates all parse and synthesis errors via `Result<(), String>`.
-/// - State: Pure in-memory evaluation with zero filesystem side effects.
-/// - Action: Zero `.unwrap()`, `.expect()`, or panicking operations.
-/// - Resource: Bounded in-memory strings.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ISSUE-520-MULTI-REQ-DART-DETAILS-RUST-UNBOUNDED-TEST]
 #[test]
 fn test_issue_520_multi_req_constraint_aggregation_dart_details_and_rust_unbounded_items(
 ) -> Result<(), String> {
@@ -1135,5 +774,521 @@ pub fn check_five_invariants(val: i32) -> i32 {
         "Expected check_five_invariants docstring to include assert! invariants beyond 3, got:\n{wide_enriched}"
     );
 
+    Ok(())
+}
+
+/// Extracts the contiguous `///` docblock lines immediately preceding `decl_needle` (skipping intervening `#[...]` attributes).
+/// Realises: [REQ-FEAT-42-TEST-DOCBLOCK-EXTRACTOR]
+fn extract_docblock_before_decl<'a>(
+    source: &'a str,
+    decl_needle: &str,
+) -> Result<Vec<&'a str>, String> {
+    let lines: Vec<&'a str> = source.lines().collect();
+    let decl_idx = lines
+        .iter()
+        .position(|line| line.trim().starts_with(decl_needle))
+        .ok_or_else(|| format!("Declaration needle '{decl_needle}' not found in:\n{source}"))?;
+
+    let mut cursor = decl_idx;
+    while cursor > 0 {
+        let prev = lines
+            .get(cursor.saturating_sub(1))
+            .copied()
+            .unwrap_or("")
+            .trim();
+        if prev.starts_with("#[") {
+            cursor = cursor.saturating_sub(1);
+        } else {
+            break;
+        }
+    }
+
+    let mut doc_lines = Vec::new();
+    while cursor > 0 {
+        let prev = lines
+            .get(cursor.saturating_sub(1))
+            .copied()
+            .unwrap_or("")
+            .trim();
+        if prev.starts_with("///") {
+            doc_lines.push(prev);
+            cursor = cursor.saturating_sub(1);
+        } else {
+            break;
+        }
+    }
+    doc_lines.reverse();
+    Ok(doc_lines)
+}
+
+/// Verifies Tier A 7-section synthesis, Tier B/C concise 2-line synthesis, legacy Tier B/C 7-section compaction, idempotence, and `modular_codegen/generated` skip isolation.
+#[test]
+fn test_tiered_v2_rust_synthesis_compaction_and_generated_skip() -> Result<(), String> {
+    // 1. Undocumented Tier A vs Tier B/C synthesis + #[test] immunity
+    let undocumented_tiered_src = r#"pub struct RecordFrame {
+    pub slot_id: u32,
+}
+
+pub enum StageMode {
+    Idle,
+    Active,
+}
+
+pub trait FrameCodec {
+    fn encode_slot(&self) -> u32;
+}
+
+impl RecordFrame {
+    pub fn new(slot_id: u32) -> Self {
+        Self { slot_id }
+    }
+
+    pub(crate) fn internal_slot(&self) -> u32 {
+        self.slot_id
+    }
+
+    fn private_slot(&self) -> u32 {
+        self.slot_id
+    }
+}
+
+impl FrameCodec for RecordFrame {
+    fn encode_slot(&self) -> u32 {
+        self.slot_id
+    }
+}
+
+impl Default for RecordFrame {
+    fn default() -> Self {
+        Self { slot_id: 0 }
+    }
+}
+
+struct PrivateScratch {
+    offset: usize,
+}
+
+enum PrivateCursor {
+    Head,
+    Tail,
+}
+
+const MAX_SLOT_WINDOW: usize = 32;
+
+type SlotWindowIndex = usize;
+
+pub fn exported_transform(val: u32) -> u32 {
+    val.saturating_add(1)
+}
+
+pub(crate) fn crate_transform(val: u32) -> u32 {
+    val.saturating_add(2)
+}
+
+pub(super) fn super_transform(val: u32) -> u32 {
+    val.saturating_add(3)
+}
+
+pub(in crate) fn path_transform(val: u32) -> u32 {
+    val.saturating_add(4)
+}
+
+fn private_transform(val: u32) -> u32 {
+    val.saturating_add(5)
+}
+
+#[test]
+fn standalone_unit_probe() {
+    assert_eq!(1 + 1, 2);
+}
+"#;
+
+    let (synthesized, synth_count) = inject_rust_file_docstrings(
+        undocumented_tiered_src,
+        "crates/core_module/src/frame_codec.rs",
+        None,
+        false,
+    )
+    .map_err(|e| e.into_message())?;
+
+    assert!(
+        synth_count >= 16,
+        "Expected all undocumented Tier A and Tier B/C items (excluding #[test]) to be enriched, got {synth_count}"
+    );
+
+    // Tier A items must still receive full 7-section docstrings
+    for tier_a_decl in [
+        "pub struct RecordFrame",
+        "pub enum StageMode",
+        "pub trait FrameCodec",
+        "pub fn new(slot_id: u32)",
+        "pub fn exported_transform(val: u32)",
+    ] {
+        let doc = extract_docblock_before_decl(&synthesized, tier_a_decl)?;
+        let joined = doc.join("\n");
+        assert!(
+            joined.contains("## 1. Safety Intent & Regulatory Scope")
+                && joined.contains("## 7. Realization & Traceability")
+                && joined.contains("Realises: [REQ-"),
+            "Expected Tier A item `{tier_a_decl}` to carry full 7-section docstring, got:\n{joined}"
+        );
+    }
+
+    // Tier B/C items must receive concise 2-line docstrings with zero 7-section headers
+    for tier_bc_decl in [
+        "fn encode_slot(&self) -> u32;",
+        "pub(crate) fn internal_slot(&self)",
+        "fn private_slot(&self)",
+        "fn encode_slot(&self) -> u32 {",
+        "fn default() -> Self",
+        "struct PrivateScratch",
+        "enum PrivateCursor",
+        "const MAX_SLOT_WINDOW: usize = 32;",
+        "type SlotWindowIndex = usize;",
+        "pub(crate) fn crate_transform(val: u32)",
+        "pub(super) fn super_transform(val: u32)",
+        "pub(in crate) fn path_transform(val: u32)",
+        "fn private_transform(val: u32)",
+    ] {
+        let doc = extract_docblock_before_decl(&synthesized, tier_bc_decl)?;
+        assert_eq!(
+            doc.len(),
+            2,
+            "Expected Tier B/C item `{tier_bc_decl}` to receive concise 2-line docstring, got {} lines:\n{}",
+            doc.len(),
+            doc.join("\n")
+        );
+        let joined = doc.join("\n");
+        assert!(
+            !joined.contains("## 1."),
+            "Tier B/C item `{tier_bc_decl}` must not carry 7-section headers:\n{joined}"
+        );
+        assert!(
+            doc.get(1).is_some_and(|line| line.starts_with("/// Realises: [REQ-")),
+            "Tier B/C item `{tier_bc_decl}` line 2 must be `/// Realises: [REQ-...]`, got:\n{joined}"
+        );
+    }
+
+    // #[test] function must NOT receive 28-line 7-section boilerplate
+    let test_fn_doc = extract_docblock_before_decl(&synthesized, "fn standalone_unit_probe()")?;
+    assert!(
+        test_fn_doc.is_empty(),
+        "Expected undocumented #[test] function to remain free of 7-section boilerplate, got:\n{}",
+        test_fn_doc.join("\n")
+    );
+
+    // Second pass on synthesized output must be 100% idempotent
+    let (synth_second, synth_second_count) = inject_rust_file_docstrings(
+        &synthesized,
+        "crates/core_module/src/frame_codec.rs",
+        None,
+        false,
+    )
+    .map_err(|e| e.into_message())?;
+    assert_eq!(synth_second_count, 0);
+    assert_eq!(synthesized, synth_second);
+
+    // 2. Legacy 28-line 7-section boilerplate on Tier B/C items is compacted while Tier A is preserved
+    let legacy_mixed_src = r#"/// Public signal router state.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to deterministic routing rules for `SignalRouter`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Maintains bounded channel index.
+///
+/// ## 3. Preconditions
+/// - Initialized channel count.
+///
+/// ## 4. Postconditions
+/// - Holds active routing table state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Typed fields.
+/// - State: Immutable projection.
+/// - Action: Non-blocking.
+/// - Resource: Stack-allocated.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ROUTER-PUBLIC-00]
+pub struct SignalRouter {
+    pub channel_count: usize,
+}
+
+/// Clamps raw ratio within normalized unit interval.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A safety objectives for fn `clamp_ratio`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Output remains in `[0.0, 1.0]`.
+///
+/// ## 3. Preconditions
+/// - `raw: f64` is finite.
+///
+/// ## 4. Postconditions
+/// - Returns clamped `f64`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Pure scalar input.
+/// - State: Stateless.
+/// - Action: Total clamp.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ROUTER-CLAMP-01] | SysML v2: ActionDef(clamp_ratio)
+fn clamp_ratio(raw: f64) -> f64 {
+    raw.clamp(0.0, 1.0)
+}
+
+/// ## 1. Safety Intent & Regulatory Scope
+/// Advances discrete step counter with saturating increment.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Monotonic non-overflowing step progression.
+///
+/// ## 3. Preconditions
+/// - `tick: u64` is a valid counter.
+///
+/// ## 4. Postconditions
+/// - Returns incremented tick.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Scalar `u64`.
+/// - State: Pure function.
+/// - Action: Saturates at `u64::MAX`.
+/// - Resource: Zero allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ROUTER-STEP-02]
+pub(crate) fn step_counter(tick: u64) -> u64 {
+    tick.saturating_add(1)
+}
+
+impl Default for SignalRouter {
+    /// Constructs a zero-channel default `SignalRouter`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A safety objectives for `SignalRouter::default`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Initializes `channel_count` to `0`.
+    ///
+    /// ## 3. Preconditions
+    /// - None.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns default `SignalRouter`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1).
+    /// - Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Infallible.
+    ///
+    /// ## 7. Realization & Traceability
+    fn default() -> Self {
+        Self { channel_count: 0 }
+    }
+}
+
+/// Internal cursor tracking active router offset.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A safety objectives for struct `RouterCursor`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Tracks bounded `index`.
+///
+/// ## 3. Preconditions
+/// - Valid index.
+///
+/// ## 4. Postconditions
+/// - Stores cursor state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Stack value.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ROUTER-CURSOR-03]
+struct RouterCursor {
+    index: usize,
+}
+"#;
+
+    let (compacted, compact_count) = inject_rust_file_docstrings(
+        legacy_mixed_src,
+        "crates/core_module/src/signal_router.rs",
+        None,
+        false,
+    )
+    .map_err(|e| e.into_message())?;
+
+    assert_eq!(
+        compact_count, 4,
+        "Expected all 4 legacy Tier B/C items to be compacted while Tier A struct is preserved, got {compact_count} in:\n{compacted}"
+    );
+    assert_eq!(
+        compacted
+            .matches("## 1. Safety Intent & Regulatory Scope")
+            .count(),
+        1,
+        "Only Tier A `pub struct SignalRouter` should retain 7-section headers:\n{compacted}"
+    );
+
+    let clamp_doc = extract_docblock_before_decl(&compacted, "fn clamp_ratio(raw: f64)")?;
+    assert_eq!(
+        clamp_doc,
+        vec![
+            "/// Clamps raw ratio within normalized unit interval.",
+            "/// Realises: [REQ-ROUTER-CLAMP-01]",
+        ]
+    );
+
+    let step_doc =
+        extract_docblock_before_decl(&compacted, "pub(crate) fn step_counter(tick: u64)")?;
+    assert_eq!(
+        step_doc,
+        vec![
+            "/// Advances discrete step counter with saturating increment.",
+            "/// Realises: [REQ-ROUTER-STEP-02]",
+        ]
+    );
+
+    let default_doc = extract_docblock_before_decl(&compacted, "fn default() -> Self")?;
+    assert_eq!(default_doc.len(), 2);
+    assert_eq!(
+        default_doc.first().copied(),
+        Some("/// Constructs a zero-channel default `SignalRouter`.")
+    );
+    assert!(
+        default_doc
+            .get(1)
+            .is_some_and(|line| line.starts_with("/// Realises: [REQ-")),
+        "Missing fallback Realises tag on compacted Default::default:\n{}",
+        default_doc.join("\n")
+    );
+
+    let cursor_doc = extract_docblock_before_decl(&compacted, "struct RouterCursor")?;
+    assert_eq!(
+        cursor_doc,
+        vec![
+            "/// Internal cursor tracking active router offset.",
+            "/// Realises: [REQ-ROUTER-CURSOR-03]",
+        ]
+    );
+
+    let (compacted_again, compact_again_count) = inject_rust_file_docstrings(
+        &compacted,
+        "crates/core_module/src/signal_router.rs",
+        None,
+        false,
+    )
+    .map_err(|e| e.into_message())?;
+    assert_eq!(
+        compact_again_count, 0,
+        "Second pass after Tier B/C compaction must make 0 modifications"
+    );
+    assert_eq!(compacted, compacted_again);
+
+    // 3. Files under `modular_codegen/generated/` must be skipped during compaction (both in-memory and directory scan)
+    let generated_legacy_src = r#"/// Generated stage helper.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Preserves Stage-1 == Stage-2 metacircular SHA-256 parity.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Bit-for-bit stable generated docblock.
+///
+/// ## 3. Preconditions
+/// - Valid input token.
+///
+/// ## 4. Postconditions
+/// - Returns token index.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total projection.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-METACIRCULAR-STAGE-01]
+fn generated_stage_helper(tok: u32) -> u32 {
+    tok
+}
+"#;
+
+    let (gen_out, gen_count) = inject_rust_file_docstrings(
+        generated_legacy_src,
+        "crates/compile-sysml/src/modular_codegen/generated/stage_emit.rs",
+        None,
+        false,
+    )
+    .map_err(|e| e.into_message())?;
+    assert_eq!(
+        gen_count, 0,
+        "Files under modular_codegen/generated/ must be skipped from Tier B/C compaction"
+    );
+    assert_eq!(gen_out, generated_legacy_src);
+
+    let dir = unique_test_dir("feat42_tiered_compaction_gen_skip")?;
+    let src_dir = dir.join("src");
+    let gen_dir = src_dir.join("modular_codegen").join("generated");
+    fs::create_dir_all(&gen_dir).map_err(|e| format!("Failed to create gen_dir: {e}"))?;
+
+    let regular_file = src_dir.join("signal_router.rs");
+    let generated_file = gen_dir.join("stage_emit.rs");
+    fs::write(&regular_file, legacy_mixed_src)
+        .map_err(|e| format!("Failed to write signal_router.rs: {e}"))?;
+    fs::write(&generated_file, generated_legacy_src)
+        .map_err(|e| format!("Failed to write stage_emit.rs: {e}"))?;
+
+    let report = run_docstring_injection(&DocstringInjectionOptions {
+        target_path: src_dir,
+        dry_run: false,
+        force: false,
+        schema_model: None,
+    })
+    .map_err(|(code, msg)| format!("Directory compaction failed ({code:?}): {msg}"))?;
+    assert_eq!(report.files_scanned, 1);
+    assert_eq!(report.files_modified, 1);
+
+    let generated_after = fs::read_to_string(&generated_file)
+        .map_err(|e| format!("Failed to read stage_emit.rs: {e}"))?;
+    assert_eq!(
+        generated_after, generated_legacy_src,
+        "File inside modular_codegen/generated/ must remain byte-for-byte untouched"
+    );
+
+    let direct_gen_report = run_docstring_injection(&DocstringInjectionOptions {
+        target_path: gen_dir,
+        dry_run: false,
+        force: false,
+        schema_model: None,
+    })
+    .map_err(|(code, msg)| format!("Direct generated dir scan failed ({code:?}): {msg}"))?;
+    assert_eq!(direct_gen_report.files_scanned, 0);
+    assert_eq!(direct_gen_report.files_modified, 0);
+
+    fs::remove_dir_all(&dir).map_err(|e| format!("Failed to clean up temp dir: {e}"))?;
     Ok(())
 }
