@@ -55,24 +55,23 @@ fn resolve_child_part_package<'a>(
     let primary_token = inter_opt.map(|i| i.name.as_str()).unwrap_or(action_name);
     let norm_primary = normalize_alnum_lower(primary_token);
     let norm_action = normalize_alnum_lower(action_name);
-    let exact_or_prefix = p
-        .packages
-        .iter()
-        .filter(|sub| !sub.part_defs.is_empty())
-        .find(|sub| {
-            let norm_pkg = normalize_alnum_lower(&sub.name);
-            let matches_inter = sub
-                .interaction_defs
-                .iter()
-                .any(|si| normalize_alnum_lower(&si.name) == norm_primary);
-            let matches_act = sub
-                .action_defs
-                .iter()
-                .any(|sa| normalize_alnum_lower(strip_use_case_prefix(&sa.name)) == norm_action);
-            let matches_prefix = !norm_pkg.is_empty()
-                && (norm_primary.starts_with(&norm_pkg) || norm_pkg.starts_with(&norm_primary));
-            matches_inter || matches_act || matches_prefix
-        });
+    let exact_or_prefix =
+        p.packages
+            .iter()
+            .filter(|sub| !sub.part_defs.is_empty())
+            .find(|sub| {
+                let norm_pkg = normalize_alnum_lower(&sub.name);
+                let matches_inter = sub
+                    .interaction_defs
+                    .iter()
+                    .any(|si| normalize_alnum_lower(&si.name) == norm_primary);
+                let matches_act = sub.action_defs.iter().any(|sa| {
+                    normalize_alnum_lower(strip_use_case_prefix(&sa.name)) == norm_action
+                });
+                let matches_prefix = !norm_pkg.is_empty()
+                    && (norm_primary.starts_with(&norm_pkg) || norm_pkg.starts_with(&norm_primary));
+                matches_inter || matches_act || matches_prefix
+            });
     exact_or_prefix
         .or_else(|| {
             p.packages
@@ -304,9 +303,12 @@ fn allocate_single_story<'a>(
     let scope = resolve_story_structural_scope(ctx, a_idx, &action_name, owner_part, inter_opt);
     let binding = extract_story_lifelines(&scope, &action_name, act_opt, inter_opt);
 
-    let default_engine_feat_num =
-        lookup_part_feature_number(ctx.part_contexts, scope.pkg_name, &scope.default_engine_name)
-            .unwrap_or(1);
+    let default_engine_feat_num = lookup_part_feature_number(
+        ctx.part_contexts,
+        scope.pkg_name,
+        &scope.default_engine_name,
+    )
+    .unwrap_or(1);
     let engine_feat_num =
         lookup_part_feature_number(ctx.part_contexts, scope.pkg_name, &binding.target_engine)
             .unwrap_or(default_engine_feat_num);

@@ -488,4 +488,3 @@ fn test_root_container_package_resolves_child_part_feature_links_without_feat01_
     assert!(!uc02.contains("FEAT-01-"));
     Ok(())
 }
-

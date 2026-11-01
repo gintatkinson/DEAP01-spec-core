@@ -2283,10 +2283,7 @@ fn resolve_verified_dependency_target(
             .ok_or(OfflineLockGovernanceError::MalformedTomlOrLockSyntax)?;
         (n, parts.next())
     };
-    let ver_probe = match dep_ver_opt {
-        Some(v) => v,
-        None => "",
-    };
+    let ver_probe = dep_ver_opt.unwrap_or_default();
     if is_blocked_graph_crate(dep_name, ver_probe, forbidden_crates) {
         return Err(OfflineLockGovernanceError::ForbiddenSemanticDependencyDetected);
     }
