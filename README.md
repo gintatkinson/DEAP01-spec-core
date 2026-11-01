@@ -140,6 +140,7 @@ All architecture blueprints, concept papers, SysML v2 models, and specifications
 - **Runtime Metadata Engine Blueprint**: [RUNTIME_METADATA_ENGINE.md](docs/architecture/blueprints/RUNTIME_METADATA_ENGINE.md)
 - **SpecKit Native Integration Blueprint**: [SPECKIT_NATIVE_INTEGRATION.md](docs/architecture/blueprints/SPECKIT_NATIVE_INTEGRATION.md)
 - **Local Air-Gapped DeepSeek Workstation Blueprint**: [DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md](docs/architecture/blueprints/DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md)
+- **Strix Halo Unified-Memory Workstation & Compiler-Native Verification Architecture**: [DEAP_STRIX_HALO_COMPILER_NATIVE_VERIFICATION_ARCHITECTURE.md](docs/architecture/blueprints/DEAP_STRIX_HALO_COMPILER_NATIVE_VERIFICATION_ARCHITECTURE.md) (`DEAP-BLUEPRINT-WORKSTATION-002`)
 - **DeepSeek Harness Integration Blueprint**: [DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md](docs/architecture/blueprints/DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md)
 - **Poly-Repo Binary-Only Distribution & Tier Isolation Blueprint**: [DEAP_POLY_REPO_BINARY_DISTRIBUTION_ARCHITECTURE.md](docs/architecture/blueprints/DEAP_POLY_REPO_BINARY_DISTRIBUTION_ARCHITECTURE.md) (`DEAP-BLUEPRINT-POLYREPO-013`)
 - **Domain-Agnostic Mission Lifecycle Architecture Blueprint**: [DEAP_DOMAIN_AGNOSTIC_MISSION_LIFECYCLE_ARCHITECTURE.md](docs/architecture/blueprints/DEAP_DOMAIN_AGNOSTIC_MISSION_LIFECYCLE_ARCHITECTURE.md)
