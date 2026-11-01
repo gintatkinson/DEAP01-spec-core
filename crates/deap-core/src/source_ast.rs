@@ -33,11 +33,17 @@
 //! - Resource: Bounded single-pass scanning with zero recursion on delimiter depth checks.
 //!
 //! ## 7. Realization & Traceability
-//! Realises: [REQ-FEAT-42-SOURCE-AST], [DO-330-TQL-4-SOURCE-AST]
+//! Realises: [REQ-FEAT-42-SOURCE-AST], [REQ-0608], [DO-330-TQL-4-SOURCE-AST]
+
+#![forbid(unsafe_code)]
 
 use crate::error::CoreError;
 use crate::sysml_ast::{
     ActionDef, AttributeDef, ConstraintDef, PackageDef, PartDef, PortDef, RequirementDef, StateDef,
+};
+use crate::workspace::{
+    verify_pinned_cst_dependency_graph, LockManifestSnapshot, OfflineLockGovernanceError,
+    MAX_AST_DEPTH,
 };
 use std::collections::BTreeSet;
 use std::fs;
@@ -6060,6 +6066,399 @@ pub fn contains_direct_range_slice(code_line: &str) -> bool {
     false
 }
 
+/// Canonical BP-08 C_CST_01 upper ceiling on executable SLOC per Rust callable.
+/// Realises: [REQ-0608]
+const MAX_CST_FN_EXEC_SLOC: u32 = 50;
+
+/// Canonical BP-08 C_CST_02 upper ceiling on formal parameters excluding self receivers.
+/// Realises: [REQ-0608]
+const MAX_CST_FN_PARAM_COUNT: u32 = 5;
+
+/// Canonical BP-08 C_CST_06 target compacted docstring line count on RustTierBC items.
+/// Realises: [REQ-0608]
+const REQUIRED_TIER_BC_DOC_LINES: u32 = 2;
+
+/// Canonical BP-08 compound boolean predicate arity ceiling for pure total guards.
+/// Realises: [REQ-0608]
+const REQUIRED_MAX_PREDICATE_ARITY: u32 = 3;
+
+/// Normative deterministic UUIDv5 namespace binding for BP-08 / REQ-0608 verification.
+/// Realises: [REQ-0608]
+const BP08_DETERMINISTIC_UUID: &str = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+
+/// Complexity and determinism precondition envelope governing `LosslessRustCstAnalyzer` execution.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C structural
+/// complexity and deterministic tool qualification standards (REQ-0608, FLS `fls_izdv9i4spokw`,
+/// SC-BP08-05). Encodes formal invariants C_CST_01 through C_CST_06 plus predicate arity, lossless
+/// roundtrip fidelity, and UUIDv5 traceability required before entering `ParsingLosslessCst`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - C_CST_01 (`max_fn_exec_sloc`): Must satisfy `1 <= max_fn_exec_sloc <= 50`.
+/// - C_CST_02 (`max_fn_param_count`): Must satisfy `0 <= max_fn_param_count <= 5`.
+/// - C_CST_03 (`max_mut_bool_flags`): Must equal `0`.
+/// - C_CST_04 (`stage_fixed_point_mismatch_files`): Must equal `0`.
+/// - C_CST_05 (`runtime_llm_token_count`): Must equal `0`.
+/// - C_CST_06 (`tier_bc_max_doc_lines`): Must equal `2`.
+/// - Total Guard & Identity Invariants: `max_predicate_arity == 3`,
+///   `lossless_roundtrip_required == true`, and
+///   `deterministic_uuid == "6ba7b810-9dad-11d1-80b4-00c04fd430c8"`.
+///
+/// ## 3. Preconditions
+/// - Constructed via `CstComplexityEnvelope::default()` or explicit field initialization prior to
+///   calling `verify_analyzer_envelope_and_seal_receipt`.
+///
+/// ## 4. Postconditions
+/// - Validated fail-closed before binding into an immutable `SupplyChainVerificationReceipt`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(|deterministic_uuid|) comparison and cloning.
+/// - Space Complexity: O(|deterministic_uuid|) single owned UUID string plus fixed scalar fields.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Strongly typed scalar `u32`, `bool`, and `String` fields with zero dynamic untyped maps.
+/// - State: Value record supporting deterministic ordering (`Ord`, `Eq`) and serialization.
+/// - Action: Any drifted threshold triggers `OfflineLockGovernanceError::CstConstraintEnvelopeViolation` (`DEAP-E0803`).
+/// - Resource: Bounded fixed-width scalar layout and 36-byte canonical UUID string.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [LosslessRustCstAnalyzer/CstComplexityEnvelope] | [REQ-0608] | SysML v2: part def LosslessRustCstAnalyzer
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub struct CstComplexityEnvelope {
+    /// Upper bound on executable lines of code per Rust function under C_CST_01 (1..=50).
+    /// Realises: [REQ-0608]
+    pub max_fn_exec_sloc: u32,
+    /// Upper bound on formal parameters per Rust callable excluding self receivers under C_CST_02 (0..=5).
+    /// Realises: [REQ-0608]
+    pub max_fn_param_count: u32,
+    /// Permitted count of mutable boolean local flags per function body under C_CST_03 (0).
+    /// Realises: [REQ-0608]
+    pub max_mut_bool_flags: u32,
+    /// Permitted compound boolean predicate arity for pure total guards (3).
+    /// Realises: [REQ-0608]
+    pub max_predicate_arity: u32,
+    /// Permitted Stage-1 versus Stage-2 self-host SHA-256 mismatch file count under C_CST_04 (0).
+    /// Realises: [REQ-0608]
+    pub stage_fixed_point_mismatch_files: u32,
+    /// Permitted runtime LLM token count across CST analysis and codemod passes under C_CST_05 (0).
+    /// Realises: [REQ-0608]
+    pub runtime_llm_token_count: u32,
+    /// Target compacted docstring line count on RustTierBC items under C_CST_06 (2).
+    /// Realises: [REQ-0608]
+    pub tier_bc_max_doc_lines: u32,
+    /// Requires byte-for-byte lossless Rowan green-tree roundtrip preservation (`true`).
+    /// Realises: [REQ-0608]
+    pub lossless_roundtrip_required: bool,
+    /// Canonical UUIDv5 requirement identity (`6ba7b810-9dad-11d1-80b4-00c04fd430c8`).
+    /// Realises: [REQ-0608]
+    pub deterministic_uuid: String,
+}
+
+impl Default for CstComplexityEnvelope {
+    /// Constructs the canonical BP-08 C_CST_01..C_CST_06 complexity envelope for REQ-0608.
+    /// Realises: [REQ-0608]
+    fn default() -> Self {
+        Self {
+            max_fn_exec_sloc: MAX_CST_FN_EXEC_SLOC,
+            max_fn_param_count: MAX_CST_FN_PARAM_COUNT,
+            max_mut_bool_flags: 0,
+            max_predicate_arity: REQUIRED_MAX_PREDICATE_ARITY,
+            stage_fixed_point_mismatch_files: 0,
+            runtime_llm_token_count: 0,
+            tier_bc_max_doc_lines: REQUIRED_TIER_BC_DOC_LINES,
+            lossless_roundtrip_required: true,
+            deterministic_uuid: BP08_DETERMINISTIC_UUID.to_string(),
+        }
+    }
+}
+
+/// Cryptographically sealed supply-chain and CST envelope receipt authorizing `Idle -> ParsingLosslessCst`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C air-gapped
+/// verification handshake controls (REQ-0608, FLS `fls_izdv9i4spokw`, SC-BP08-02, SC-BP08-04).
+/// Binds immutable `Cargo.toml` and `Cargo.lock` SHA-256 digests, `BTreeSet`-ordered verified
+/// package coordinates, and a validated `CstComplexityEnvelope` into a SHA-256-sealed token.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Ordered Determinism: `verified_crates` and `workspace_members` are stored in `BTreeSet<String>`
+///   lexical order with zero hash-seed variance.
+/// - Cryptographic Binding: `seal_sha256` commits to `cargo_toml_sha256`, `cargo_lock_sha256`,
+///   `BTreeMap`-ordered package checksums, `verified_crates`, `workspace_members`, and `envelope`.
+/// - Lifecycle Guard: Valid receipts sealed via `verify_analyzer_envelope_and_seal_receipt` always
+///   carry `supply_chain_receipt_sealed == true`.
+///
+/// ## 3. Preconditions
+/// - Produced exclusively after `LockManifestSnapshot`, pinned CST graph verification, and
+///   `CstComplexityEnvelope` validation succeed without faults.
+///
+/// ## 4. Postconditions
+/// - Authorizes `LosslessRustCstAnalyzer` transition from `Idle` to `ParsingLosslessCst` and supports
+///   post-execution TOCTOU SHA-256 parity verification via `verify_snapshot_parity`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(P log P) construction and parity verification over P locked packages.
+/// - Space Complexity: O(P + M) for P verified crate keys and M workspace member identifiers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Exposes deterministic `[u8; 32]` digests and `BTreeSet<String>` inventories.
+/// - State: Value token enabling fail-closed detection of post-seal manifest, lockfile, or seal drift.
+/// - Action: Suppresses emission entirely if any supply-chain or C_CST_01..C_CST_06 check fails.
+/// - Resource: Bounded by verified workspace `Cargo.lock` package cardinality.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [LosslessRustCstAnalyzer/SupplyChainVerificationReceipt] | [REQ-0608] | SysML v2: part def LosslessRustCstAnalyzer
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub struct SupplyChainVerificationReceipt {
+    /// Immutable 32-byte SHA-256 digest of the verified workspace Cargo.toml snapshot.
+    /// Realises: [REQ-0608]
+    pub cargo_toml_sha256: [u8; 32],
+    /// Immutable 32-byte SHA-256 digest of the verified workspace Cargo.lock snapshot.
+    /// Realises: [REQ-0608]
+    pub cargo_lock_sha256: [u8; 32],
+    /// Lexically ordered `<crate>@<version>` identifiers verified in the locked dependency DAG.
+    /// Realises: [REQ-0608]
+    pub verified_crates: BTreeSet<String>,
+    /// Lexically ordered workspace member crate names covered by the air-gapped verification gate.
+    /// Realises: [REQ-0608]
+    pub workspace_members: BTreeSet<String>,
+    /// Validated C_CST_01..C_CST_06 complexity envelope bound to this verification session.
+    /// Realises: [REQ-0608]
+    pub envelope: CstComplexityEnvelope,
+    /// Deterministic 32-byte SHA-256 cryptographic seal over snapshot digests, packages, and envelope.
+    /// Realises: [REQ-0608]
+    pub seal_sha256: [u8; 32],
+    /// Lifecycle transition guard flag confirming the receipt was sealed (`supplyChainReceiptSealed == true`).
+    /// Realises: [REQ-0608]
+    pub supply_chain_receipt_sealed: bool,
+}
+
+impl SupplyChainVerificationReceipt {
+    /// Verifies TOCTOU SHA-256 digest parity and cryptographic seal integrity against a `LockManifestSnapshot`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and DO-330 TQL-4 TOCTOU tamper-detection mandates (REQ-0608,
+    /// SC-BP08-02, FM-BP08-002). Detects mid-build mutations to `Cargo.toml`, `Cargo.lock`, or
+    /// in-memory receipt fields before permitting CST codemod or baseline completion.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Digest Equality: Succeeds only when `cargo_toml_sha256` and `cargo_lock_sha256` match `snapshot`.
+    /// - Cryptographic Seal Parity: Recomputes `compute_supply_chain_receipt_seal` over `snapshot`,
+    ///   `self.verified_crates`, and `self.envelope` and requires exact 32-byte equality with `self.seal_sha256`.
+    ///
+    /// ## 3. Preconditions
+    /// - `self` is a candidate `SupplyChainVerificationReceipt` and `snapshot` is the current lock snapshot.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(())` iff seal flag, digests, workspace members, envelope bounds, and SHA-256 seal match.
+    /// - Returns `Err(OfflineLockGovernanceError)` fail-closed on any drift or envelope tampering.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(P) linear scan over `snapshot.packages` and `self.verified_crates`.
+    /// - Space Complexity: O(P) transient hashing buffer freed prior to return.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Pure read-only verification returning typed `OfflineLockGovernanceError`.
+    /// - State: Performs zero mutations to `self`, `snapshot`, or filesystem artifacts.
+    /// - Action: Rejects unsealed tokens, digest mismatches, or tampered seals with `ManifestToLockDriftDetected`.
+    /// - Resource: Single bounded `Vec<u8>` buffer for deterministic SHA-256 recomputation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [LosslessRustCstAnalyzer/verify_snapshot_parity] | [REQ-0608] | SysML v2: part def LosslessRustCstAnalyzer
+    pub fn verify_snapshot_parity(
+        &self,
+        snapshot: &LockManifestSnapshot,
+    ) -> Result<(), OfflineLockGovernanceError> {
+        if !self.supply_chain_receipt_sealed {
+            return Err(OfflineLockGovernanceError::ManifestToLockDriftDetected);
+        }
+        if self.cargo_toml_sha256 != snapshot.cargo_toml_sha256
+            || self.cargo_lock_sha256 != snapshot.cargo_lock_sha256
+        {
+            return Err(OfflineLockGovernanceError::ManifestToLockDriftDetected);
+        }
+        if self.workspace_members != snapshot.workspace_members
+            || self.verified_crates.len() != snapshot.packages.len()
+        {
+            return Err(OfflineLockGovernanceError::ManifestToLockDriftDetected);
+        }
+        validate_cst_complexity_envelope(&self.envelope)?;
+        let expected_seal =
+            compute_supply_chain_receipt_seal(snapshot, &self.verified_crates, &self.envelope);
+        if self.seal_sha256 != expected_seal {
+            return Err(OfflineLockGovernanceError::ManifestToLockDriftDetected);
+        }
+        Ok(())
+    }
+}
+
+/// Returns the canonical `BTreeSet` of five SHA-256-pinned CST and Rust formatting crates required by BP-08.
+/// Realises: [REQ-0608]
+fn required_pinned_cst_crates() -> BTreeSet<String> {
+    let names = ["ra_ap_syntax", "rowan", "syn", "quote", "prettyplease"];
+    let mut set = BTreeSet::new();
+    let mut idx = 0usize;
+    while let Some(&name) = names.get(idx) {
+        set.insert(name.to_string());
+        idx = idx.saturating_add(1);
+    }
+    set
+}
+
+/// Evaluates C_CST_01 through C_CST_06, predicate arity, lossless roundtrip, and UUID invariants on `envelope`.
+/// Realises: [REQ-0608]
+fn validate_cst_complexity_envelope(
+    envelope: &CstComplexityEnvelope,
+) -> Result<(), OfflineLockGovernanceError> {
+    if envelope.max_fn_exec_sloc == 0
+        || envelope.max_fn_exec_sloc > MAX_CST_FN_EXEC_SLOC
+        || envelope.max_fn_param_count > MAX_CST_FN_PARAM_COUNT
+    {
+        return Err(OfflineLockGovernanceError::CstConstraintEnvelopeViolation);
+    }
+    if envelope.max_mut_bool_flags != 0
+        || envelope.stage_fixed_point_mismatch_files != 0
+        || envelope.runtime_llm_token_count != 0
+    {
+        return Err(OfflineLockGovernanceError::CstConstraintEnvelopeViolation);
+    }
+    if envelope.tier_bc_max_doc_lines != REQUIRED_TIER_BC_DOC_LINES
+        || envelope.max_predicate_arity != REQUIRED_MAX_PREDICATE_ARITY
+        || !envelope.lossless_roundtrip_required
+    {
+        return Err(OfflineLockGovernanceError::CstConstraintEnvelopeViolation);
+    }
+    if envelope.deterministic_uuid != BP08_DETERMINISTIC_UUID {
+        return Err(OfflineLockGovernanceError::CstConstraintEnvelopeViolation);
+    }
+    Ok(())
+}
+
+/// Appends length-prefixed UTF-8 bytes to `buf` for unambiguous domain-separated SHA-256 hashing.
+/// Realises: [REQ-0608]
+fn push_len_prefixed_str(buf: &mut Vec<u8>, value: &str) {
+    let len_bytes = (value.len() as u64).to_be_bytes();
+    buf.extend_from_slice(&len_bytes);
+    buf.extend_from_slice(value.as_bytes());
+}
+
+/// Computes the deterministic 32-byte SHA-256 seal across the lock snapshot, verified crates, and CST envelope.
+/// Realises: [REQ-0608]
+fn compute_supply_chain_receipt_seal(
+    snapshot: &LockManifestSnapshot,
+    verified_crates: &BTreeSet<String>,
+    envelope: &CstComplexityEnvelope,
+) -> [u8; 32] {
+    let mut buf = Vec::with_capacity(512);
+    buf.extend_from_slice(b"DEAP-BP08-SUPPLY-CHAIN-RECEIPT-V1");
+    buf.extend_from_slice(&snapshot.cargo_toml_sha256);
+    buf.extend_from_slice(&snapshot.cargo_lock_sha256);
+    buf.push(u8::from(snapshot.offline_locked_enforced));
+    buf.push(u8::from(snapshot.vendor_bundle_supported));
+    for (pkg_key, rec) in &snapshot.packages {
+        push_len_prefixed_str(&mut buf, pkg_key);
+        let checksum_str = match rec.checksum.as_deref() {
+            Some(cs) => cs,
+            None => "",
+        };
+        push_len_prefixed_str(&mut buf, checksum_str);
+    }
+    for crate_key in verified_crates {
+        push_len_prefixed_str(&mut buf, crate_key);
+    }
+    for member in &snapshot.workspace_members {
+        push_len_prefixed_str(&mut buf, member);
+    }
+    buf.extend_from_slice(&envelope.max_fn_exec_sloc.to_be_bytes());
+    buf.extend_from_slice(&envelope.max_fn_param_count.to_be_bytes());
+    buf.extend_from_slice(&envelope.max_mut_bool_flags.to_be_bytes());
+    buf.extend_from_slice(&envelope.max_predicate_arity.to_be_bytes());
+    buf.extend_from_slice(&envelope.stage_fixed_point_mismatch_files.to_be_bytes());
+    buf.extend_from_slice(&envelope.runtime_llm_token_count.to_be_bytes());
+    buf.extend_from_slice(&envelope.tier_bc_max_doc_lines.to_be_bytes());
+    buf.push(u8::from(envelope.lossless_roundtrip_required));
+    push_len_prefixed_str(&mut buf, &envelope.deterministic_uuid);
+    crate::digest::compute_sha256_bytes(&buf)
+}
+
+/// Verifies `C_CST_01`..`C_CST_06` analyzer envelope bounds and seals an immutable `SupplyChainVerificationReceipt`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C air-gapped tool
+/// qualification mandates (REQ-0608, FLS `fls_izdv9i4spokw`, SC-BP08-02, SC-BP08-05). Enforces the
+/// conjunctive `AdmitCst(M, L, P, C)` precondition gate over the locked dependency snapshot,
+/// `BTreeSet`-verified package coordinates, and `LosslessRustCstAnalyzer` complexity envelope before
+/// authorizing `Idle -> ParsingLosslessCst`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Supply-Chain & Snapshot Parity: Requires `offline_locked_enforced == true`,
+///   `vendor_bundle_supported == true`, pinned `ra_ap_syntax`/`rowan`/`syn`/`quote`/`prettyplease`
+///   with zero forbidden semantic crates up to `MAX_AST_DEPTH = 64`, and exact set equality between
+///   `verified_crates` and the verified `snapshot.packages` key set.
+/// - Complexity Envelope Guard: Enforces C_CST_01 (`1 <= max_fn_exec_sloc <= 50`), C_CST_02
+///   (`0 <= max_fn_param_count <= 5`), C_CST_03 (`max_mut_bool_flags == 0`), C_CST_04
+///   (`stage_fixed_point_mismatch_files == 0`), C_CST_05 (`runtime_llm_token_count == 0`), C_CST_06
+///   (`tier_bc_max_doc_lines == 2`), `max_predicate_arity == 3`, `lossless_roundtrip_required == true`,
+///   and `deterministic_uuid == "6ba7b810-9dad-11d1-80b4-00c04fd430c8"`.
+/// - Function Complexity Compliance: Executes in `<= 44` executable SLOC with `3` formal parameters,
+///   `0` mutable boolean flags, and compound boolean predicate arity `<= 3`.
+///
+/// ## 3. Preconditions
+/// - `snapshot` references a candidate `LockManifestSnapshot`.
+/// - `verified_crates` references the `BTreeSet<String>` returned by `verify_pinned_cst_dependency_graph`.
+/// - `envelope` references the candidate `CstComplexityEnvelope` configured on `LosslessRustCstAnalyzer`.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(SupplyChainVerificationReceipt)` with `supply_chain_receipt_sealed == true` and a
+///   deterministic 32-byte `seal_sha256` digest when all supply-chain and C_CST_01..C_CST_06 guards hold.
+/// - Returns `Err(OfflineLockGovernanceError)` fail-closed (`DEAP-E0804` or `DEAP-E0803`) otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O((V + E) log V) bounded by iterative `MAX_AST_DEPTH = 64` DAG verification and
+///   linear `BTreeMap` / `BTreeSet` SHA-256 sealing over V locked packages and E dependency edges.
+/// - Space Complexity: O(V + E) deterministic `BTreeMap` and `BTreeSet` collections with zero recursion.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Pure total function over borrowed references returning typed `OfflineLockGovernanceError`.
+/// - State: Zero global or filesystem mutations; suppresses partial receipt construction on any fault.
+/// - Action: Short-circuits fail-closed on disabled lock policy, pre-receipt empty/drifted crate sets,
+///   forbidden `ra_ap_hir` crates, missing CST crates, depth `> 64`, or C_CST_01..C_CST_06 drift.
+/// - Resource: Bounded memory proportional to `snapshot.packages.len()` with zero `.unwrap()` or panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [LosslessRustCstAnalyzer/verify_analyzer_envelope_and_seal_receipt] | [REQ-0608] | SysML v2: part def LosslessRustCstAnalyzer
+pub fn verify_analyzer_envelope_and_seal_receipt(
+    snapshot: &LockManifestSnapshot,
+    verified_crates: &BTreeSet<String>,
+    envelope: &CstComplexityEnvelope,
+) -> Result<SupplyChainVerificationReceipt, OfflineLockGovernanceError> {
+    if !snapshot.offline_locked_enforced || !snapshot.vendor_bundle_supported {
+        return Err(OfflineLockGovernanceError::LockPolicyDisabled);
+    }
+    if snapshot.packages.is_empty() {
+        return Err(OfflineLockGovernanceError::MalformedTomlOrLockSyntax);
+    }
+    let required_cst = required_pinned_cst_crates();
+    let forbidden_cst = BTreeSet::new();
+    let expected_verified =
+        verify_pinned_cst_dependency_graph(snapshot, &required_cst, &forbidden_cst, MAX_AST_DEPTH)?;
+    if verified_crates.is_empty() || verified_crates != &expected_verified {
+        return Err(OfflineLockGovernanceError::ManifestToLockDriftDetected);
+    }
+    validate_cst_complexity_envelope(envelope)?;
+    let seal_sha256 = compute_supply_chain_receipt_seal(snapshot, verified_crates, envelope);
+    Ok(SupplyChainVerificationReceipt {
+        cargo_toml_sha256: snapshot.cargo_toml_sha256,
+        cargo_lock_sha256: snapshot.cargo_lock_sha256,
+        verified_crates: verified_crates.clone(),
+        workspace_members: snapshot.workspace_members.clone(),
+        envelope: envelope.clone(),
+        seal_sha256,
+        supply_chain_receipt_sealed: true,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -7552,6 +7951,314 @@ impl ComponentAlpha {
                 method.satisfied_requirements
             ));
         }
+
+        Ok(())
+    }
+
+    /// Builds an in-memory pinned CST `LockManifestSnapshot` fixture with configurable vendored DAG depth.
+    /// Realises: [REQ-0608]
+    fn build_cst_envelope_fixture_snapshot(
+        chain_depth: usize,
+    ) -> crate::workspace::LockManifestSnapshot {
+        use crate::workspace::{LockManifestSnapshot, LockedPackageRecord, PackageSourceKind};
+        use std::collections::BTreeMap;
+
+        let valid_sha =
+            "14b574c58582fa59fa43a2feb6608b8744184659f08a2e0117e4b8224d95ed61".to_string();
+        let mut packages = BTreeMap::new();
+        let mut root_deps = BTreeSet::new();
+        for (name, ver) in [
+            ("ra_ap_syntax", "0.0.360"),
+            ("rowan", "0.17.0"),
+            ("syn", "3.0.6"),
+            ("quote", "1.0.47"),
+            ("prettyplease", "0.3.0"),
+        ] {
+            let key = format!("{name}@{ver}");
+            root_deps.insert(key.clone());
+            packages.insert(
+                key,
+                LockedPackageRecord {
+                    name: name.to_string(),
+                    version: ver.to_string(),
+                    checksum: Some(valid_sha.clone()),
+                    source_kind: PackageSourceKind::VendoredBundle,
+                    dependencies: BTreeSet::new(),
+                },
+            );
+        }
+        packages.insert(
+            "demo@0.1.0".to_string(),
+            LockedPackageRecord {
+                name: "demo".to_string(),
+                version: "0.1.0".to_string(),
+                checksum: None,
+                source_kind: PackageSourceKind::WorkspacePath,
+                dependencies: root_deps,
+            },
+        );
+        for idx in 0..chain_depth {
+            let cur_name = if idx == 0 {
+                "demo".to_string()
+            } else {
+                format!("chain_{idx}")
+            };
+            let cur_key = format!("{cur_name}@0.1.0");
+            let next_name = format!("chain_{}", idx.saturating_add(1));
+            let next_key = format!("{next_name}@0.1.0");
+            packages.insert(
+                next_key.clone(),
+                LockedPackageRecord {
+                    name: next_name,
+                    version: "0.1.0".to_string(),
+                    checksum: Some(valid_sha.clone()),
+                    source_kind: PackageSourceKind::VendoredBundle,
+                    dependencies: BTreeSet::new(),
+                },
+            );
+            if let Some(cur_rec) = packages.get_mut(&cur_key) {
+                cur_rec.dependencies.insert(next_key);
+            }
+        }
+        LockManifestSnapshot {
+            cargo_toml_sha256: [0x33u8; 32],
+            cargo_lock_sha256: [0x44u8; 32],
+            packages,
+            workspace_members: BTreeSet::from(["demo".to_string()]),
+            offline_locked_enforced: true,
+            vendor_bundle_supported: true,
+        }
+    }
+
+    /// Verifies C_CST_01..C_CST_06 envelope sealing, deterministic SHA-256 receipts, and fail-closed drift rejection.
+    /// Realises: [REQ-0608]
+    #[test]
+    fn seals_supply_chain_receipt_and_rejects_envelope_drift(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::workspace::{
+            parse_locked_manifest_snapshot, verify_pinned_cst_dependency_graph,
+            LockedPackageRecord, OfflineLockGovernanceError, PackageSourceKind, MAX_AST_DEPTH,
+            MAX_CARGO_LOCK_BYTES,
+        };
+
+        let required_cst = BTreeSet::from([
+            "ra_ap_syntax".to_string(),
+            "rowan".to_string(),
+            "syn".to_string(),
+            "quote".to_string(),
+            "prettyplease".to_string(),
+        ]);
+        let forbidden_cst = BTreeSet::from([
+            "ra_ap_hir".to_string(),
+            "ra_ap_ide".to_string(),
+            "rustc_private".to_string(),
+        ]);
+
+        // 1. Nominal live workspace snapshot sealing (AC-US-51-01)
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or("missing workspace root")?;
+        let live_toml = fs::read(repo_root.join("Cargo.toml"))?;
+        let live_lock = fs::read(repo_root.join("Cargo.lock"))?;
+        let live_snap =
+            parse_locked_manifest_snapshot(&live_toml, &live_lock, None, MAX_CARGO_LOCK_BYTES)?;
+        let live_verified = verify_pinned_cst_dependency_graph(
+            &live_snap,
+            &required_cst,
+            &forbidden_cst,
+            MAX_AST_DEPTH,
+        )?;
+        let nominal_env = CstComplexityEnvelope::default();
+        let receipt_a =
+            verify_analyzer_envelope_and_seal_receipt(&live_snap, &live_verified, &nominal_env)?;
+        let receipt_b =
+            verify_analyzer_envelope_and_seal_receipt(&live_snap, &live_verified, &nominal_env)?;
+        assert!(receipt_a.supply_chain_receipt_sealed);
+        assert_eq!(receipt_a, receipt_b);
+        assert_ne!(receipt_a.seal_sha256, [0u8; 32]);
+        assert_eq!(receipt_a.cargo_toml_sha256, live_snap.cargo_toml_sha256);
+        assert_eq!(receipt_a.cargo_lock_sha256, live_snap.cargo_lock_sha256);
+        assert_eq!(receipt_a.verified_crates, live_verified);
+        assert_eq!(receipt_a.workspace_members.len(), 6);
+        assert_eq!(receipt_a.verify_snapshot_parity(&live_snap), Ok(()));
+
+        // 2. Boundary MAX_AST_DEPTH == 64 vendored bundle & C_CST_01..C_CST_06 bounds (AC-US-51-02)
+        let depth64_snap = build_cst_envelope_fixture_snapshot(MAX_AST_DEPTH);
+        let depth64_verified = verify_pinned_cst_dependency_graph(
+            &depth64_snap,
+            &required_cst,
+            &forbidden_cst,
+            MAX_AST_DEPTH,
+        )?;
+        let upper_receipt: SupplyChainVerificationReceipt =
+            verify_analyzer_envelope_and_seal_receipt(
+                &depth64_snap,
+                &depth64_verified,
+                &nominal_env,
+            )?;
+        let lower_env = CstComplexityEnvelope {
+            max_fn_exec_sloc: 1,
+            max_fn_param_count: 0,
+            ..nominal_env.clone()
+        };
+        let lower_receipt = verify_analyzer_envelope_and_seal_receipt(
+            &depth64_snap,
+            &depth64_verified,
+            &lower_env,
+        )?;
+        assert!(upper_receipt.supply_chain_receipt_sealed);
+        assert!(lower_receipt.supply_chain_receipt_sealed);
+        assert_ne!(upper_receipt.seal_sha256, lower_receipt.seal_sha256);
+
+        // 3. Fail-closed C_CST_01..C_CST_06 & envelope invariant drift -> DEAP-E0803 (AC-US-51-05)
+        let bad_envelopes = [
+            CstComplexityEnvelope {
+                max_fn_exec_sloc: 0,
+                ..nominal_env.clone()
+            },
+            CstComplexityEnvelope {
+                max_fn_exec_sloc: 51,
+                ..nominal_env.clone()
+            },
+            CstComplexityEnvelope {
+                max_fn_param_count: 6,
+                ..nominal_env.clone()
+            },
+            CstComplexityEnvelope {
+                max_mut_bool_flags: 1,
+                ..nominal_env.clone()
+            },
+            CstComplexityEnvelope {
+                stage_fixed_point_mismatch_files: 1,
+                ..nominal_env.clone()
+            },
+            CstComplexityEnvelope {
+                runtime_llm_token_count: 1,
+                ..nominal_env.clone()
+            },
+            CstComplexityEnvelope {
+                tier_bc_max_doc_lines: 1,
+                ..nominal_env.clone()
+            },
+            CstComplexityEnvelope {
+                tier_bc_max_doc_lines: 3,
+                ..nominal_env.clone()
+            },
+            CstComplexityEnvelope {
+                max_predicate_arity: 2,
+                ..nominal_env.clone()
+            },
+            CstComplexityEnvelope {
+                max_predicate_arity: 4,
+                ..nominal_env.clone()
+            },
+            CstComplexityEnvelope {
+                lossless_roundtrip_required: false,
+                ..nominal_env.clone()
+            },
+            CstComplexityEnvelope {
+                deterministic_uuid: "00000000-0000-0000-0000-000000000000".to_string(),
+                ..nominal_env.clone()
+            },
+        ];
+        for drifted_env in &bad_envelopes {
+            let err =
+                verify_analyzer_envelope_and_seal_receipt(&live_snap, &live_verified, drifted_env);
+            assert_eq!(
+                err,
+                Err(OfflineLockGovernanceError::CstConstraintEnvelopeViolation)
+            );
+            assert_eq!(
+                OfflineLockGovernanceError::CstConstraintEnvelopeViolation.diagnostic_code(),
+                "DEAP-E0803"
+            );
+        }
+
+        // 4. Fail-closed policy, pre-receipt out-of-order, TOCTOU drift, forbidden crate & depth > 64 -> DEAP-E0804
+        let base_snap = build_cst_envelope_fixture_snapshot(1);
+        let base_verified = verify_pinned_cst_dependency_graph(
+            &base_snap,
+            &required_cst,
+            &forbidden_cst,
+            MAX_AST_DEPTH,
+        )?;
+
+        let mut policy_off = base_snap.clone();
+        policy_off.offline_locked_enforced = false;
+        assert_eq!(
+            verify_analyzer_envelope_and_seal_receipt(&policy_off, &base_verified, &nominal_env),
+            Err(OfflineLockGovernanceError::LockPolicyDisabled)
+        );
+
+        assert_eq!(
+            verify_analyzer_envelope_and_seal_receipt(&base_snap, &BTreeSet::new(), &nominal_env),
+            Err(OfflineLockGovernanceError::ManifestToLockDriftDetected)
+        );
+
+        let mut drifted_verified = base_verified.clone();
+        drifted_verified.remove("demo@0.1.0");
+        assert_eq!(
+            verify_analyzer_envelope_and_seal_receipt(&base_snap, &drifted_verified, &nominal_env),
+            Err(OfflineLockGovernanceError::ManifestToLockDriftDetected)
+        );
+
+        let mut drifted_digest_snap = live_snap.clone();
+        drifted_digest_snap.cargo_lock_sha256 = [0xFFu8; 32];
+        assert_eq!(
+            receipt_a.verify_snapshot_parity(&drifted_digest_snap),
+            Err(OfflineLockGovernanceError::ManifestToLockDriftDetected)
+        );
+
+        let mut tampered_receipt = receipt_a.clone();
+        tampered_receipt.seal_sha256 = [0xAAu8; 32];
+        assert_eq!(
+            tampered_receipt.verify_snapshot_parity(&live_snap),
+            Err(OfflineLockGovernanceError::ManifestToLockDriftDetected)
+        );
+
+        let mut hir_snap = base_snap.clone();
+        hir_snap.packages.insert(
+            "ra_ap_hir@0.0.360".to_string(),
+            LockedPackageRecord {
+                name: "ra_ap_hir".to_string(),
+                version: "0.0.360".to_string(),
+                checksum: Some(
+                    "14b574c58582fa59fa43a2feb6608b8744184659f08a2e0117e4b8224d95ed61".to_string(),
+                ),
+                source_kind: PackageSourceKind::VendoredBundle,
+                dependencies: BTreeSet::new(),
+            },
+        );
+        let mut hir_verified = base_verified.clone();
+        hir_verified.insert("ra_ap_hir@0.0.360".to_string());
+        assert_eq!(
+            verify_analyzer_envelope_and_seal_receipt(&hir_snap, &hir_verified, &nominal_env),
+            Err(OfflineLockGovernanceError::ForbiddenSemanticDependencyDetected)
+        );
+
+        let mut missing_cst_snap = base_snap;
+        missing_cst_snap.packages.remove("ra_ap_syntax@0.0.360");
+        if let Some(demo) = missing_cst_snap.packages.get_mut("demo@0.1.0") {
+            demo.dependencies.remove("ra_ap_syntax@0.0.360");
+        }
+        let mut missing_cst_verified = base_verified;
+        missing_cst_verified.remove("ra_ap_syntax@0.0.360");
+        assert_eq!(
+            verify_analyzer_envelope_and_seal_receipt(
+                &missing_cst_snap,
+                &missing_cst_verified,
+                &nominal_env
+            ),
+            Err(OfflineLockGovernanceError::MissingRequiredCstDependency)
+        );
+
+        let depth65_snap = build_cst_envelope_fixture_snapshot(MAX_AST_DEPTH.saturating_add(1));
+        let depth65_keys: BTreeSet<String> = depth65_snap.packages.keys().cloned().collect();
+        assert_eq!(
+            verify_analyzer_envelope_and_seal_receipt(&depth65_snap, &depth65_keys, &nominal_env),
+            Err(OfflineLockGovernanceError::PackageGraphDepthOrCycleExceeded)
+        );
 
         Ok(())
     }

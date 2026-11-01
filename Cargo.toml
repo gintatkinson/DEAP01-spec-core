@@ -9,6 +9,13 @@ members = [
 ]
 resolver = "2"
 
+[workspace.dependencies]
+ra_ap_syntax = "0.0.360"
+rowan = "0.17.0"
+syn = { version = "3.0.6", features = ["full", "extra-traits", "visit", "visit-mut"] }
+quote = "1.0.47"
+prettyplease = { version = "0.3.0", features = ["verbatim"] }
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
