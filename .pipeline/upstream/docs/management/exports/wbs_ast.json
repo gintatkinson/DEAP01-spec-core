@@ -1,0 +1,494 @@
+{
+  "nodes": [
+    {
+      "wbs_code": "01.00.00",
+      "level": 1,
+      "element_name": "SysML_Model",
+      "package_name": "SysML_Model",
+      "feat_id": "EPIC-01"
+    },
+    {
+      "wbs_code": "01.01.00",
+      "level": 2,
+      "element_name": "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
+      "package_name": "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
+      "feat_id": "EPIC-01"
+    },
+    {
+      "wbs_code": "01.01.01",
+      "level": 3,
+      "element_name": "CompilerLintEnforcementGate",
+      "package_name": "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
+      "feat_id": "FEAT-01"
+    },
+    {
+      "wbs_code": "01.01.02",
+      "level": 3,
+      "element_name": "WorkspaceManifestForbidGate",
+      "package_name": "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
+      "feat_id": "FEAT-02"
+    },
+    {
+      "wbs_code": "01.01.03",
+      "level": 3,
+      "element_name": "ClippyAttributeAstScanner",
+      "package_name": "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
+      "feat_id": "FEAT-03"
+    },
+    {
+      "wbs_code": "01.01.04",
+      "level": 3,
+      "element_name": "CrateRootAttributeSanitizer",
+      "package_name": "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
+      "feat_id": "FEAT-04"
+    },
+    {
+      "wbs_code": "01.01.05",
+      "level": 3,
+      "element_name": "TestTargetLintEnforcer",
+      "package_name": "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
+      "feat_id": "FEAT-05"
+    },
+    {
+      "wbs_code": "01.02.00",
+      "level": 2,
+      "element_name": "BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint",
+      "package_name": "BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint",
+      "feat_id": "EPIC-02"
+    },
+    {
+      "wbs_code": "01.02.01",
+      "level": 3,
+      "element_name": "AntiGamingTestBodyAuditor",
+      "package_name": "BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint",
+      "feat_id": "FEAT-06"
+    },
+    {
+      "wbs_code": "01.02.02",
+      "level": 3,
+      "element_name": "Check34AstPurityAndAntiGamingGate",
+      "package_name": "BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint",
+      "feat_id": "FEAT-07"
+    },
+    {
+      "wbs_code": "01.02.03",
+      "level": 3,
+      "element_name": "FailClosedIoAstVerifier",
+      "package_name": "BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint",
+      "feat_id": "FEAT-08"
+    },
+    {
+      "wbs_code": "01.02.04",
+      "level": 3,
+      "element_name": "RangeSliceAstDetector",
+      "package_name": "BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint",
+      "feat_id": "FEAT-09"
+    },
+    {
+      "wbs_code": "01.02.05",
+      "level": 3,
+      "element_name": "SsotSymbolDeduplicationGate",
+      "package_name": "BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint",
+      "feat_id": "FEAT-10"
+    },
+    {
+      "wbs_code": "01.03.00",
+      "level": 2,
+      "element_name": "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
+      "package_name": "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
+      "feat_id": "EPIC-03"
+    },
+    {
+      "wbs_code": "01.03.01",
+      "level": 3,
+      "element_name": "BijectiveSysmlSerializer",
+      "package_name": "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
+      "feat_id": "FEAT-11"
+    },
+    {
+      "wbs_code": "01.03.02",
+      "level": 3,
+      "element_name": "CompilerRoundtripVerificationGate",
+      "package_name": "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
+      "feat_id": "FEAT-12"
+    },
+    {
+      "wbs_code": "01.03.03",
+      "level": 3,
+      "element_name": "FailClosedRecursiveDescentParser",
+      "package_name": "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
+      "feat_id": "FEAT-13"
+    },
+    {
+      "wbs_code": "01.03.04",
+      "level": 3,
+      "element_name": "NativeSigilAndLifetimeLexer",
+      "package_name": "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
+      "feat_id": "FEAT-14"
+    },
+    {
+      "wbs_code": "01.03.05",
+      "level": 3,
+      "element_name": "SysmlBijectiveRoundtripCompilerGate",
+      "package_name": "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
+      "feat_id": "FEAT-15"
+    },
+    {
+      "wbs_code": "01.04.00",
+      "level": 2,
+      "element_name": "BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint",
+      "package_name": "BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint",
+      "feat_id": "EPIC-04"
+    },
+    {
+      "wbs_code": "01.04.01",
+      "level": 3,
+      "element_name": "AgileSpecForwardProjector",
+      "package_name": "BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint",
+      "feat_id": "FEAT-16"
+    },
+    {
+      "wbs_code": "01.04.02",
+      "level": 3,
+      "element_name": "BidirectionalBacklogReconciler",
+      "package_name": "BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint",
+      "feat_id": "FEAT-17"
+    },
+    {
+      "wbs_code": "01.04.03",
+      "level": 3,
+      "element_name": "DeterministicSpecIcdWbsForwardCompiler",
+      "package_name": "BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint",
+      "feat_id": "FEAT-18"
+    },
+    {
+      "wbs_code": "01.04.04",
+      "level": 3,
+      "element_name": "LogicalIcdMatrixCompiler",
+      "package_name": "BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint",
+      "feat_id": "FEAT-19"
+    },
+    {
+      "wbs_code": "01.04.05",
+      "level": 3,
+      "element_name": "MilStd881eWbsExporter",
+      "package_name": "BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint",
+      "feat_id": "FEAT-20"
+    },
+    {
+      "wbs_code": "01.05.00",
+      "level": 2,
+      "element_name": "BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
+      "package_name": "BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
+      "feat_id": "EPIC-05"
+    },
+    {
+      "wbs_code": "01.05.01",
+      "level": 3,
+      "element_name": "Check36AstCompletenessVerifier",
+      "package_name": "BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
+      "feat_id": "FEAT-21"
+    },
+    {
+      "wbs_code": "01.05.02",
+      "level": 3,
+      "element_name": "ScopedSchemaContextResolver",
+      "package_name": "BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
+      "feat_id": "FEAT-22"
+    },
+    {
+      "wbs_code": "01.05.03",
+      "level": 3,
+      "element_name": "SevenSectionDocstringGenerator",
+      "package_name": "BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
+      "feat_id": "FEAT-23"
+    },
+    {
+      "wbs_code": "01.05.04",
+      "level": 3,
+      "element_name": "UnifiedRustDartLexicalScanner",
+      "package_name": "BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
+      "feat_id": "FEAT-24"
+    },
+    {
+      "wbs_code": "01.05.05",
+      "level": 3,
+      "element_name": "UnifiedSafetyDocstringSynthesizer",
+      "package_name": "BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
+      "feat_id": "FEAT-25"
+    },
+    {
+      "wbs_code": "01.06.00",
+      "level": 2,
+      "element_name": "BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
+      "package_name": "BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
+      "feat_id": "EPIC-06"
+    },
+    {
+      "wbs_code": "01.06.01",
+      "level": 3,
+      "element_name": "ClosedLoopDefectPublisherGate",
+      "package_name": "BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
+      "feat_id": "FEAT-26"
+    },
+    {
+      "wbs_code": "01.06.02",
+      "level": 3,
+      "element_name": "DeterministicDossierSynthesizer",
+      "package_name": "BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
+      "feat_id": "FEAT-27"
+    },
+    {
+      "wbs_code": "01.06.03",
+      "level": 3,
+      "element_name": "DeterministicStaticDefectAuditor",
+      "package_name": "BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
+      "feat_id": "FEAT-28"
+    },
+    {
+      "wbs_code": "01.06.04",
+      "level": 3,
+      "element_name": "FivePillarStaticAstAnalyzer",
+      "package_name": "BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
+      "feat_id": "FEAT-29"
+    },
+    {
+      "wbs_code": "01.06.05",
+      "level": 3,
+      "element_name": "MermaidUmlDiagramGenerator",
+      "package_name": "BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
+      "feat_id": "FEAT-30"
+    },
+    {
+      "wbs_code": "01.07.00",
+      "level": 2,
+      "element_name": "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+      "package_name": "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+      "feat_id": "EPIC-07"
+    },
+    {
+      "wbs_code": "01.07.01",
+      "level": 3,
+      "element_name": "ModularityBoundsSpec",
+      "package_name": "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+      "feat_id": "FEAT-31"
+    },
+    {
+      "wbs_code": "01.07.02",
+      "level": 3,
+      "element_name": "LayerHierarchySpec",
+      "package_name": "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+      "feat_id": "FEAT-32"
+    },
+    {
+      "wbs_code": "01.07.03",
+      "level": 3,
+      "element_name": "CompilationUnitSpec",
+      "package_name": "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+      "feat_id": "FEAT-33"
+    },
+    {
+      "wbs_code": "01.07.04",
+      "level": 3,
+      "element_name": "FourLevelLoweringEngineSpec",
+      "package_name": "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+      "feat_id": "FEAT-34"
+    },
+    {
+      "wbs_code": "01.07.05",
+      "level": 3,
+      "element_name": "ModularEmitterSuiteSpec",
+      "package_name": "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+      "feat_id": "FEAT-35"
+    },
+    {
+      "wbs_code": "01.07.06",
+      "level": 3,
+      "element_name": "FourLevelAstPartitionerAndHoister",
+      "package_name": "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+      "feat_id": "FEAT-36"
+    },
+    {
+      "wbs_code": "01.07.07",
+      "level": 3,
+      "element_name": "ModularFlutterMultiFileEmitter",
+      "package_name": "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+      "feat_id": "FEAT-37"
+    },
+    {
+      "wbs_code": "01.07.08",
+      "level": 3,
+      "element_name": "ModularRustMultiFileEmitter",
+      "package_name": "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+      "feat_id": "FEAT-38"
+    },
+    {
+      "wbs_code": "01.07.09",
+      "level": 3,
+      "element_name": "SelfHostingModularCodegenCompiler",
+      "package_name": "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+      "feat_id": "FEAT-39"
+    },
+    {
+      "wbs_code": "01.07.10",
+      "level": 3,
+      "element_name": "TopologicalLayerDagVerifier",
+      "package_name": "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+      "feat_id": "FEAT-40"
+    },
+    {
+      "wbs_code": "01.08.00",
+      "level": 2,
+      "element_name": "BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics",
+      "package_name": "BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics",
+      "feat_id": "EPIC-08"
+    },
+    {
+      "wbs_code": "01.08.01",
+      "level": 3,
+      "element_name": "AirGappedCargoLockGovernor",
+      "package_name": "BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics",
+      "feat_id": "FEAT-41"
+    },
+    {
+      "wbs_code": "01.08.02",
+      "level": 3,
+      "element_name": "LosslessRustCstAnalyzer",
+      "package_name": "BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics",
+      "feat_id": "FEAT-42"
+    },
+    {
+      "wbs_code": "01.08.03",
+      "level": 3,
+      "element_name": "StructuredModularCodegenSynthesizer",
+      "package_name": "BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics",
+      "feat_id": "FEAT-43"
+    },
+    {
+      "wbs_code": "01.08.04",
+      "level": 3,
+      "element_name": "UnifiedRustcJsonDiagnosticEmitter",
+      "package_name": "BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics",
+      "feat_id": "FEAT-44"
+    },
+    {
+      "wbs_code": "01.08.05",
+      "level": 3,
+      "element_name": "ZeroTokenRustSpanCodemodEngine",
+      "package_name": "BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics",
+      "feat_id": "FEAT-45"
+    },
+    {
+      "wbs_code": "01.09.00",
+      "level": 2,
+      "element_name": "BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper",
+      "package_name": "BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper",
+      "feat_id": "EPIC-09"
+    },
+    {
+      "wbs_code": "01.09.01",
+      "level": 3,
+      "element_name": "FrbIcdBridgeAndMiriUbGate",
+      "package_name": "BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper",
+      "feat_id": "FEAT-46"
+    },
+    {
+      "wbs_code": "01.09.02",
+      "level": 3,
+      "element_name": "IsolatedDylintMirAllocationGate",
+      "package_name": "BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper",
+      "feat_id": "FEAT-47"
+    },
+    {
+      "wbs_code": "01.09.03",
+      "level": 3,
+      "element_name": "KaniCbmcProofSynthesizer",
+      "package_name": "BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper",
+      "feat_id": "FEAT-48"
+    },
+    {
+      "wbs_code": "01.09.04",
+      "level": 3,
+      "element_name": "MultiStageVerificationOrchestrator",
+      "package_name": "BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper",
+      "feat_id": "FEAT-49"
+    },
+    {
+      "wbs_code": "01.09.05",
+      "level": 3,
+      "element_name": "StableClippyTotalFunctionGate",
+      "package_name": "BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper",
+      "feat_id": "FEAT-50"
+    },
+    {
+      "wbs_code": "01.10.00",
+      "level": 2,
+      "element_name": "BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine",
+      "package_name": "BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine",
+      "feat_id": "EPIC-10"
+    },
+    {
+      "wbs_code": "01.10.01",
+      "level": 3,
+      "element_name": "FormattingPreservingSyncSplicer",
+      "package_name": "BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine",
+      "feat_id": "FEAT-51"
+    },
+    {
+      "wbs_code": "01.10.02",
+      "level": 3,
+      "element_name": "LogosRowanSysmlCstEngine",
+      "package_name": "BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine",
+      "feat_id": "FEAT-52"
+    },
+    {
+      "wbs_code": "01.10.03",
+      "level": 3,
+      "element_name": "SalsaIncrementalCompilerDatabase",
+      "package_name": "BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine",
+      "feat_id": "FEAT-53"
+    },
+    {
+      "wbs_code": "01.10.04",
+      "level": 3,
+      "element_name": "TypedPolyglotIngestionFrontend",
+      "package_name": "BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine",
+      "feat_id": "FEAT-54"
+    },
+    {
+      "wbs_code": "01.11.00",
+      "level": 2,
+      "element_name": "BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture",
+      "package_name": "BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture",
+      "feat_id": "EPIC-11"
+    },
+    {
+      "wbs_code": "01.11.01",
+      "level": 3,
+      "element_name": "CertifiedCoreSubsetAndCoverageGate",
+      "package_name": "BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture",
+      "feat_id": "FEAT-55"
+    },
+    {
+      "wbs_code": "01.11.02",
+      "level": 3,
+      "element_name": "DualModeFerroceneToolchainGate",
+      "package_name": "BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture",
+      "feat_id": "FEAT-56"
+    },
+    {
+      "wbs_code": "01.11.03",
+      "level": 3,
+      "element_name": "FlsParagraphTraceabilitySynthesizer",
+      "package_name": "BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture",
+      "feat_id": "FEAT-57"
+    },
+    {
+      "wbs_code": "01.11.04",
+      "level": 3,
+      "element_name": "ThreeRingAssurancePartitionCompiler",
+      "package_name": "BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture",
+      "feat_id": "FEAT-58"
+    }
+  ]
+}
