@@ -1,51 +1,11 @@
-//! TDD verification test suite for `verify_baseline::blueprint_gate` Checks 1 through 5.
+//! Integration verification test suite for `verify_baseline::blueprint_gate` Checks 1 through 12,
+//! `REQ-0604`..`REQ-0606`, and Check 37 blueprint grounding.
 //!
-//! # Summary
-//! Validates passing happy-path fixtures and fail-closed negative mutations for Checks 1, 2, 3, 4,
-//! and 5 of the engineering design blueprint gate.
-//!
-//! # Parameters
-//! - Executed via `cargo test -p verify-baseline --test blueprint_gate_tests`.
-//!
-//! # Returns
-//! Process exit code 0 when all assertions hold.
-//!
-//! # Errors
-//! Fails test assertions if any fail-closed check accepts invalid input or rejects valid input.
-//!
-//! # Panics
-//! Zero `.unwrap()`, `.expect()`, `panic!`, or slice indexing (`[a..b]`) calls are used.
-//!
-//! # Safety
-//! Contains zero `unsafe` blocks.
-//!
-//! # Examples
-//! ```text
-//! cargo test -p verify-baseline --test blueprint_gate_tests
-//! ```
-//!
-//! ## 1. Safety Intent & Regulatory Scope
-//! Conforms to DO-178C Level A and DO-330 TQL-4 requirement-based and negative-mutation test mandates.
-//!
-//! ## 2. Invariants & Mathematical Properties
-//! - Every check 1..=5 has positive acceptance tests and negative fail-closed mutation probes.
-//!
-//! ## 3. Preconditions
-//! Preconditions: `verify-baseline` crate compiles with `blueprint_gate` exported.
-//!
-//! ## 4. Postconditions
-//! Postconditions: Empirically proves deterministic pass/fail behavior for Checks 1-5.
-//!
-//! ## 5. Algorithmic Complexity Bounds
-//! - Time Complexity: $O(N)$ over bounded in-memory markdown fixtures.
-//! - Space Complexity: $O(N)$ for fixture strings and parsed structures.
-//!
-//! ## 6. Failure Modes & Fault Tolerance
-//! - Any regression in Checks 1-5 triggers an immediate `assert!` failure.
-//!
-//! ## 7. Realization & Traceability
-//! Traceability: Realises: [REQ-BLUEPRINT-GATE-TESTS-1-5], [DO-330-TQL-4-BLUEPRINT-TESTS]
+//! Safety & Traceability: Realises: [REQ-BLUEPRINT-GATE-TESTS-1-5], [DO-330-TQL-4-BLUEPRINT-TESTS]
+//! Contract: Validates positive acceptance fixtures and fail-closed negative mutations across all blueprint, sync, and static-auditor gates.
+//! Bounds & Faults: Executes deterministically over bounded in-memory and RAII temporary directory fixtures with zero panics or unsafe code.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use verify_baseline::blueprint_gate::{
     check_10_compile_and_persist_sysml, check_11_source_references, check_12_publish_github_ssot,
@@ -55,55 +15,53 @@ use verify_baseline::blueprint_gate::{
     verify_closed_loop_github_payload, BlueprintCliOptions, BlueprintMetadata, BlueprintReport,
 };
 
-/// Returns a canonical valid blueprint markdown payload satisfying Checks 2, 3, 4, and 5.
-///
-/// # Summary
-/// Synthesizes a complete 7-section blueprint fixture with a valid 2-column metadata header on
-/// lines 1-10, a 5-column Derivation-Annotation Contract table in Section 1, and two components
-/// with 5-column Property and Port tables in Section 2.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Static string slice containing a valid engineering blueprint fixture.
-///
-/// # Errors
-/// Infallible helper.
-///
-/// # Panics
-/// Never panics.
-///
-/// # Safety
-/// Safe pure string literal accessor.
-///
-/// # Examples
-/// ```text
-/// let fixture = valid_blueprint_fixture();
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 golden fixture baselines.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Lines 1-10 form a complete 2-column CommonMark metadata table.
-/// - All 7 canonical H2 section headers appear in strictly increasing line order.
-///
-/// ## 3. Preconditions
-/// Preconditions: None.
-///
-/// ## 4. Postconditions
-/// Postconditions: Returned `&'static str` passes Checks 2, 3, 4, and 5 without error.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$.
-/// - Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Infallible static reference.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-TEST-FIXTURE]
+const MAX_MODULE_WALK_DEPTH: usize = 16;
+
+/// Resolves a target `.rs` file or its decomposed `<stem>/` module directory into sorted `.rs` paths.
+/// Realises: [REQ-BLUEPRINT-MODULE-RESOLVER]
+fn resolve_module_rs_files(path: &Path) -> Vec<PathBuf> {
+    if path.is_file() {
+        return vec![path.to_path_buf()];
+    }
+    let dir_path = if path.is_dir() {
+        path.to_path_buf()
+    } else {
+        path.with_extension("")
+    };
+    if !dir_path.is_dir() {
+        return Vec::new();
+    }
+    let mut collected = BTreeSet::new();
+    let mut stack = vec![(dir_path, 0usize)];
+    while let Some((current_dir, depth)) = stack.pop() {
+        if depth > MAX_MODULE_WALK_DEPTH {
+            continue;
+        }
+        let Ok(entries) = std::fs::read_dir(&current_dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                let next_depth = depth.saturating_add(1);
+                if next_depth <= MAX_MODULE_WALK_DEPTH {
+                    stack.push((entry_path, next_depth));
+                }
+            } else if file_type.is_file()
+                && entry_path.extension().and_then(|ext| ext.to_str()) == Some("rs")
+            {
+                collected.insert(entry_path);
+            }
+        }
+    }
+    collected.into_iter().collect()
+}
+
+/// Returns a canonical valid 7-section blueprint markdown payload satisfying Checks 2 through 9.
+/// Realises: [REQ-BLUEPRINT-TEST-FIXTURE]
 fn valid_blueprint_fixture() -> &'static str {
     "\
 | Attribute | Specification Detail |
@@ -243,54 +201,8 @@ pub fn validate_retry_count(retries: u32, limit: u32) -> Result<u32, &'static st
 "
 }
 
-/// Verifies that `check_1_zero_ephemeral_path` accepts valid relative and absolute paths under
-/// `<workspace_root>/docs/designs/blueprint-*.md`.
-///
-/// # Summary
-/// Confirms Check 1 resolves canonical relative and absolute blueprint paths inside `workspace_root`.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` if Check 1 rejects a valid blueprint path.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_check_1_accepts_valid_blueprint_paths
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 normal-range path equivalence verification.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Both relative `docs/designs/blueprint-01-core.md` and absolute `<ws>/docs/designs/blueprint-01-core.md`
-///   resolve to `<ws>/docs/designs/blueprint-01-core.md`.
-///
-/// ## 3. Preconditions
-/// Preconditions: Synthetic workspace path `/workspace/project` is non-ephemeral.
-///
-/// ## 4. Postconditions
-/// Postconditions: `check_1_zero_ephemeral_path` returns `Ok` with expected `PathBuf`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$.
-/// - Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Fails test if `Ok` is not returned.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-1-PASS]
+/// Verifies that `check_1_zero_ephemeral_path` accepts valid relative and absolute paths under `<workspace_root>/docs/designs/blueprint-*.md`.
+/// Realises: [REQ-BLUEPRINT-CHECK-1-PASS]
 #[test]
 fn test_check_1_accepts_valid_blueprint_paths() {
     let ws = Path::new("/workspace/deap-project");
@@ -314,52 +226,7 @@ fn test_check_1_accepts_valid_blueprint_paths() {
 }
 
 /// Verifies that `check_1_zero_ephemeral_path` fails closed on ephemeral directories and non-canonical locations.
-///
-/// # Summary
-/// Tests rejection of `/tmp/`, `/var/folders/`, `/private/tmp/`, `/private/var/folders/`,
-/// `std::env::temp_dir()`, parent-dir traversal `..`, wrong subdirectories, and wrong filenames.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` if any invalid path is accepted.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_check_1_rejects_ephemeral_and_invalid_paths
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 robustness and negative boundary testing for Check 1.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Every ephemeral prefix and non-`docs/designs/blueprint-*.md` path evaluates to `Err`.
-///
-/// ## 3. Preconditions
-/// Preconditions: None.
-///
-/// ## 4. Postconditions
-/// Postconditions: All invalid path mutations are rejected with non-empty error strings.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$.
-/// - Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Assertions verify `is_err()` across all negative probes.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-1-FAIL-CLOSED]
+/// Realises: [REQ-BLUEPRINT-CHECK-1-FAIL-CLOSED]
 #[test]
 fn test_check_1_rejects_ephemeral_and_invalid_paths() {
     let ws = Path::new("/workspace/deap-project");
@@ -402,54 +269,8 @@ fn test_check_1_rejects_ephemeral_and_invalid_paths() {
     assert!(check_1_zero_ephemeral_path(ws, outside_ws).is_err());
 }
 
-/// Verifies that `check_2_metadata_table` extracts all 8 mandatory attributes from a valid fixture
-/// and rejects missing keys, non-`REQ-` requirement IDs, and non-`subagent` generation modes.
-///
-/// # Summary
-/// Tests positive metadata extraction and negative mutations for Check 2.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` on unexpected check outcomes.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_check_2_metadata_table_pass_and_mutations
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 metadata verification and mutation testing.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Valid fixture yields `Ok(BlueprintMetadata)` with expected fields.
-/// - Mutations removing keys, breaking `REQ-`, or changing `Generation Mode` yield `Err`.
-///
-/// ## 3. Preconditions
-/// Preconditions: `valid_blueprint_fixture()` provides a valid baseline document.
-///
-/// ## 4. Postconditions
-/// Postconditions: Confirms fail-closed enforcement of all Check 2 rules.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$.
-/// - Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Assertions verify exact struct equality on pass and `is_err()` on each mutation.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-2-TESTS]
+/// Verifies `check_2_metadata_table` extracts all 8 mandatory attributes and rejects invalid keys, `REQ-` IDs, or generation modes.
+/// Realises: [REQ-BLUEPRINT-CHECK-2-TESTS]
 #[test]
 fn test_check_2_metadata_table_pass_and_mutations() {
     let valid = valid_blueprint_fixture();
@@ -503,54 +324,8 @@ fn test_check_2_metadata_table_pass_and_mutations() {
     assert!(check_2_metadata_table(&pushed_down).is_err());
 }
 
-/// Verifies that `check_3_sections` validates the exact 7-section topology and rejects missing,
-/// duplicated, or out-of-order section headers.
-///
-/// # Summary
-/// Tests positive 7-section range extraction and negative structural mutations for Check 3.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` on unexpected check outcomes.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_check_3_sections_order_and_completeness
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 structural completeness testing.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Valid fixture returns 7 contiguous `(start, end, header)` tuples in ascending line order.
-/// - Missing or swapped headers return `Err`.
-///
-/// ## 3. Preconditions
-/// Preconditions: `valid_blueprint_fixture()` contains all 7 canonical sections.
-///
-/// ## 4. Postconditions
-/// Postconditions: Confirms Section 1 through 7 ranges slice `content.lines()` cleanly.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$.
-/// - Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Assertions verify range continuity and fail-closed rejection on mutations.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-3-TESTS]
+/// Verifies `check_3_sections` validates the exact 7-section topology and rejects missing, duplicated, or out-of-order headers.
+/// Realises: [REQ-BLUEPRINT-CHECK-3-TESTS]
 #[test]
 fn test_check_3_sections_order_and_completeness() {
     let valid = valid_blueprint_fixture();
@@ -591,54 +366,8 @@ fn test_check_3_sections_order_and_completeness() {
     assert!(check_3_sections(&duplicate_sec5).is_err());
 }
 
-/// Verifies that `check_4_derivation_table` parses 5-column derivation rows (including escaped
-/// pipes `\|`) and fails closed on invalid grades, empty/placeholder cells, or missing rows.
-///
-/// # Summary
-/// Tests positive Section 1 Derivation-Annotation Contract parsing and negative mutations for Check 4.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` on unexpected check outcomes.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_check_4_derivation_table_pass_and_mutations
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 derivation provenance verification testing.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Escaped pipes `\|` inside LaTeX norms (`\|x\|`) do not split columns.
-/// - Grades outside `{Directly Evidenced, Analytically Derived, Declared Assumption}` fail closed.
-///
-/// ## 3. Preconditions
-/// Preconditions: Section 1 lines sliced via `check_3_sections`.
-///
-/// ## 4. Postconditions
-/// Postconditions: Confirms all 3 valid grades pass and invalid/empty cells fail.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$.
-/// - Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Assertions verify parsed row fields and fail-closed rejection on mutations.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-4-TESTS]
+/// Verifies `check_4_derivation_table` parses 5-column derivation rows (including escaped pipes) and rejects invalid grades or empty cells.
+/// Realises: [REQ-BLUEPRINT-CHECK-4-TESTS]
 #[test]
 fn test_check_4_derivation_table_pass_and_mutations() {
     let valid = valid_blueprint_fixture();
@@ -692,57 +421,8 @@ fn test_check_4_derivation_table_pass_and_mutations() {
     assert!(check_4_derivation_table(&zero_rows).is_err());
 }
 
-/// Verifies that `check_5_components` parses valid Section 2 components, properties, and ports,
-/// and fails closed on non-PascalCase component names, invalid property types, invalid port
-/// directions, or missing/empty tables.
-///
-/// # Summary
-/// Tests positive Section 2 component metamodel parsing and negative mutations for Check 5.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` on unexpected check outcomes.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_check_5_components_pass_and_mutations
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 SysML v2 component metamodel verification testing.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Valid fixture extracts 2 components (`TelemetryRouter` with 5 properties & 3 ports,
-///   `WatchdogMonitor` with 1 property & 1 port).
-/// - Underscored component names, lowercase primitive types (`i32`), and invalid port directions
-///   (`bidirectional`) fail closed.
-///
-/// ## 3. Preconditions
-/// Preconditions: Section 2 lines sliced via `check_3_sections`.
-///
-/// ## 4. Postconditions
-/// Postconditions: Confirms Check 5 enforces all component, property, and port invariants.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$.
-/// - Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Assertions verify extracted `ComponentSpec` structures and negative mutation rejections.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-5-TESTS]
+/// Verifies `check_5_components` parses Section 2 components, properties, and ports and rejects invalid identifiers, types, or directions.
+/// Realises: [REQ-BLUEPRINT-CHECK-5-TESTS]
 #[test]
 fn test_check_5_components_pass_and_mutations() {
     let valid = valid_blueprint_fixture();
@@ -830,56 +510,8 @@ fn test_check_5_components_pass_and_mutations() {
     assert!(check_5_components(&missing_port_table).is_err());
 }
 
-/// Verifies that `check_6_mermaid_syntax` accepts valid Mermaid blocks in Section 3 and fails
-/// closed on missing blocks, unsupported diagram headers, unquoted `<>`, `{}` in class members,
-/// secondary colons, or leaking fences.
-///
-/// # Summary
-/// Tests positive Section 3 Mermaid E1-E5 validation and negative mutations for Check 6.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` if any positive or negative Check 6 expectation is violated.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_check_6_mermaid_syntax_pass_and_mutations
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 syntactic and structural model diagram verification testing.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Valid Section 3 with `classDiagram` and `stateDiagram-v2` returns `Ok(2)`.
-/// - Missing Mermaid blocks, invalid headers (`pie`), unquoted `<`/`>`, class member `{}`,
-///   secondary colons, and unclosed fences return `Err`.
-///
-/// ## 3. Preconditions
-/// Preconditions: Section 3 lines sliced via `check_3_sections` or synthetic slice arrays.
-///
-/// ## 4. Postconditions
-/// Postconditions: Confirms Check 6 enforces all Mermaid E1-E5 rules deterministically.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over Section 3 lines.
-/// - Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Assertions verify exact block count on pass and `is_err()` across all 6 negative mutations.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-6-TESTS]
+/// Verifies `check_6_mermaid_syntax` accepts valid Section 3 Mermaid diagrams and rejects invalid headers, unquoted `<>`, `{}` members, or unclosed fences.
+/// Realises: [REQ-BLUEPRINT-CHECK-6-TESTS]
 #[test]
 fn test_check_6_mermaid_syntax_pass_and_mutations() {
     let valid = valid_blueprint_fixture();
@@ -967,56 +599,8 @@ fn test_check_6_mermaid_syntax_pass_and_mutations() {
     assert!(check_6_mermaid_syntax(&leaking_fence).is_err());
 }
 
-/// Verifies that `check_7_latex_katex` accepts valid isolated `$$` `\begin{aligned}...\end{aligned}`
-/// blocks in Section 4 and fails closed on missing aligned blocks, top-level `\begin{align}`,
-/// non-isolated `$$` delimiters, or inline `$REQ-0601$` / `$H-1$` identifier delimiters.
-///
-/// # Summary
-/// Tests positive Check 7 LaTeX/KaTeX mathematical verification and negative mutations.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` if any positive or negative Check 7 expectation is violated.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_check_7_latex_katex_pass_and_mutations
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 mathematical constraint formatting and Check 27 verification testing.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Valid Section 4 with 1 isolated `$$` `\begin{aligned}` block returns `Ok(1)`.
-/// - Missing aligned block, top-level `\begin{align}`, inline `$$x = 1$$`, and `$REQ-0601$` /
-///   `$SC-01$` / `$H-1$` / `$UCA-1$` fail closed.
-///
-/// ## 3. Preconditions
-/// Preconditions: Section 4 lines sliced via `check_3_sections` and full document string supplied.
-///
-/// ## 4. Postconditions
-/// Postconditions: Confirms Check 7 enforces all Check 27 LaTeX/KaTeX rules deterministically.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over Section 4 and full document lines.
-/// - Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Assertions verify block count on pass and `is_err()` across all negative mutations.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-7-TESTS]
+/// Verifies `check_7_latex_katex` accepts isolated `$$` `\begin{aligned}...\end{aligned}` blocks and rejects `\begin{align}`, inline `$$`, or `$REQ-*$` IDs.
+/// Realises: [REQ-BLUEPRINT-CHECK-7-TESTS]
 #[test]
 fn test_check_7_latex_katex_pass_and_mutations() {
     let valid = valid_blueprint_fixture();
@@ -1070,57 +654,8 @@ fn test_check_7_latex_katex_pass_and_mutations() {
     assert!(check_7_latex_katex(&inline_uca, &inline_uca.join("\n")).is_err());
 }
 
-/// Verifies that `check_8_bdd_and_test_target` requires `>= 5` `AC-XX` scenarios with
-/// `Given`/`When`/`Then` clauses, `>= 1` negative/fail-closed scenario, and matching
-/// `<!-- test-target: <path> -->` and `- **Test-Target**: \`<path>\`` declarations under one of
-/// the 6 upstream crates.
-///
-/// # Summary
-/// Tests positive Section 5 BDD & Test-Target verification and negative mutations for Check 8.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` if any positive or negative Check 8 expectation is violated.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_check_8_bdd_and_test_target_pass_and_mutations
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 BDD acceptance criteria and test-target binding verification.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Valid Section 5 returns `Ok((5, "crates/verify-baseline/tests/blueprint_gate_tests.rs".into()))`.
-/// - Fewer than 5 ACs, missing Given/When/Then, missing negative scenario, mismatched test-target
-///   paths, or non-upstream crate paths return `Err`.
-///
-/// ## 3. Preconditions
-/// Preconditions: Section 5 lines sliced via `check_3_sections` or synthetic slice arrays.
-///
-/// ## 4. Postconditions
-/// Postconditions: Confirms Check 8 enforces all BDD and Test-Target invariants.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over Section 5 lines.
-/// - Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Assertions verify `(ac_count, test_target)` on pass and `is_err()` across all negative mutations.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-8-TESTS]
+/// Verifies `check_8_bdd_and_test_target` enforces `>= 5` Given/When/Then `AC-XX` scenarios, `>= 1` negative scenario, and grounded `test-target` declarations.
+/// Realises: [REQ-BLUEPRINT-CHECK-8-TESTS]
 #[test]
 fn test_check_8_bdd_and_test_target_pass_and_mutations() {
     let valid = valid_blueprint_fixture();
@@ -1215,57 +750,8 @@ fn test_check_8_bdd_and_test_target_pass_and_mutations() {
     assert!(check_8_bdd_and_test_target(m5_sec5).is_err());
 }
 
-/// Verifies that `check_9_rust_code_blocks` accepts clean ` ```rust ` blocks in Section 6 and
-/// fails closed on missing Rust blocks, Check 34 regex usage, Clippy-forbid calls (`.unwrap()`,
-/// `.expect(`, `panic!(`, `todo!(`, `unimplemented!(`, direct `[a..b]` slice indexing), or Check 19
-/// domain cleanliness violations.
-///
-/// # Summary
-/// Tests positive Section 6 Rust implementation contract scanning and negative mutations for Check 9.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` if any positive or negative Check 9 expectation is violated.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_check_9_rust_code_blocks_pass_and_mutations
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 static code contract hygiene verification (Checks 19 & 34 + Clippy-forbid).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Clean ` ```rust ` block returns `Ok(1)`.
-/// - Regex tokens, `.unwrap()`, `.expect(`, `panic!(`, `todo!(`, `unimplemented!(`, `[0..4]` slice
-///   indexing, and forbidden domain tokens fail closed.
-///
-/// ## 3. Preconditions
-/// Preconditions: Section 6 lines sliced via `check_3_sections` or synthetic slice arrays.
-///
-/// ## 4. Postconditions
-/// Postconditions: Confirms Check 9 enforces all Rust code block hygiene invariants.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over Section 6 lines.
-/// - Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Assertions verify block count on pass and `is_err()` across all negative mutations.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-9-TESTS]
+/// Verifies `check_9_rust_code_blocks` accepts clean Section 6 Rust blocks and rejects missing blocks, regex usage, panicking/indexing calls, or domain tokens.
+/// Realises: [REQ-BLUEPRINT-CHECK-9-TESTS]
 #[test]
 fn test_check_9_rust_code_blocks_pass_and_mutations() {
     let valid = valid_blueprint_fixture();
@@ -1284,89 +770,33 @@ fn test_check_9_rust_code_blocks_pass_and_mutations() {
     ];
     assert!(check_9_rust_code_blocks(&no_rust).is_err());
 
-    // Mutation 2: Check 34 Zero Regex violation (assembled dynamically to keep test file clean)
-    let regex_call = ["Re", "gex::new(\"abc\")"].concat();
-    let block_with_regex = format!(
-        "## 6. Proposed Deterministic Implementation Contract\n```rust\npub fn bad() {{\n    let _r = {regex_call};\n}}\n```"
-    );
+    // Mutation 2: Check 34 Zero Regex violation
+    let block_with_regex =
+        "## 6. Proposed Deterministic Implementation Contract\n```rust\npub fn bad() {\n    let _r = Regex::new(\"abc\");\n}\n```";
     let m2_lines: Vec<&str> = block_with_regex.lines().collect();
     assert!(check_9_rust_code_blocks(&m2_lines).is_err());
 
     // Mutation 3: Clippy-forbid .unwrap() violation
-    let unwrap_call = ["opt.", "unw", "rap()"].concat();
-    let block_with_unwrap = format!(
-        "## 6. Proposed Deterministic Implementation Contract\n```rust\npub fn bad(opt: Option<u32>) -> u32 {{\n    {unwrap_call}\n}}\n```"
-    );
+    let block_with_unwrap =
+        "## 6. Proposed Deterministic Implementation Contract\n```rust\npub fn bad(opt: Option<u32>) -> u32 {\n    opt.unwrap()\n}\n```";
     let m3_lines: Vec<&str> = block_with_unwrap.lines().collect();
     assert!(check_9_rust_code_blocks(&m3_lines).is_err());
 
     // Mutation 4: Direct range slice indexing s[0..4]
-    let slice_expr = ["&s", "[0", "..4]"].concat();
-    let block_with_slice = format!(
-        "## 6. Proposed Deterministic Implementation Contract\n```rust\npub fn bad(s: &str) -> &str {{\n    {slice_expr}\n}}\n```"
-    );
+    let block_with_slice =
+        "## 6. Proposed Deterministic Implementation Contract\n```rust\npub fn bad(s: &str) -> &str {\n    &s[0..4]\n}\n```";
     let m4_lines: Vec<&str> = block_with_slice.lines().collect();
     assert!(check_9_rust_code_blocks(&m4_lines).is_err());
 
-    // Mutation 5: Check 19 forbidden domain token (assembled dynamically)
-    let forbidden_domain = ["FLIGHT_", "ENVELOPE_", "MAP"].concat();
-    let block_with_domain = format!(
-        "## 6. Proposed Deterministic Implementation Contract\n```rust\npub const BAD: &str = \"{forbidden_domain}\";\n```"
-    );
+    // Mutation 5: Check 19 forbidden domain token
+    let block_with_domain =
+        "## 6. Proposed Deterministic Implementation Contract\n```rust\npub const BAD: &str = \"FLIGHT_ENVELOPE_MAP\";\n```";
     let m5_lines: Vec<&str> = block_with_domain.lines().collect();
     assert!(check_9_rust_code_blocks(&m5_lines).is_err());
 }
 
-/// Verifies that `check_11_source_references` extracts intra-repository file paths from Section 7,
-/// strips `:line` and `#L...` anchors, ignores URLs and `#123` issue tags, and fails closed when
-/// zero local references exist or when any cited repository path does not exist on disk.
-///
-/// # Summary
-/// Tests positive Section 7 file reference existence verification and negative mutations for Check 11.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` if any positive or negative Check 11 expectation is violated.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_check_11_source_references_pass_and_mutations
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 traceability anchor existence verification (Checks 28 & 30).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Existing workspace paths (`crates/verify-baseline/src/blueprint_gate.rs:1`,
-///   `crates/verify-baseline/tests/blueprint_gate_tests.rs#L1-L50`, `Cargo.toml`) resolve cleanly.
-/// - Non-existent paths or sections with zero local references return `Err`.
-///
-/// ## 3. Preconditions
-/// Preconditions: Executed with `workspace_root` pointing to the repository root.
-///
-/// ## 4. Postconditions
-/// Postconditions: Confirms Check 11 validates on-disk existence of every cited repo file.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N + R)$ where $R$ is the number of cited repository paths.
-/// - Space Complexity: $O(R)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Assertions verify extracted path list on pass and `is_err()` on missing or non-existent paths.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-11-TESTS]
+/// Verifies `check_11_source_references` resolves workspace file references (whether `blueprint_gate.rs` or decomposed `blueprint_gate/`) and rejects phantom files.
+/// Realises: [REQ-BLUEPRINT-CHECK-11-TESTS]
 #[test]
 fn test_check_11_source_references_pass_and_mutations() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -1375,23 +805,56 @@ fn test_check_11_source_references_pass_and_mutations() {
         .and_then(Path::parent)
         .unwrap_or(manifest_dir.as_path());
 
-    let valid = valid_blueprint_fixture();
-    let lines: Vec<&str> = valid.lines().collect();
-    let ranges = check_3_sections(valid).unwrap_or_default();
+    let resolved_bp_gate_files = resolve_module_rs_files(
+        &workspace_root.join("crates/verify-baseline/src/blueprint_gate.rs"),
+    );
+    assert!(
+        !resolved_bp_gate_files.is_empty(),
+        "Expected crates/verify-baseline/src/blueprint_gate.rs (or blueprint_gate/ directory) to resolve to at least one .rs file"
+    );
+    let mut bp_gate_rel_paths = Vec::new();
+    for file_path in &resolved_bp_gate_files {
+        let src_res = std::fs::read_to_string(file_path);
+        assert!(
+            src_res.is_ok(),
+            "Expected resolved blueprint_gate source {} to be readable: {src_res:?}",
+            file_path.display()
+        );
+        if let Ok(src_text) = src_res {
+            assert!(
+                !src_text.trim().is_empty(),
+                "Expected resolved blueprint_gate source {} to be non-empty",
+                file_path.display()
+            );
+        }
+        let rel = file_path
+            .strip_prefix(workspace_root)
+            .unwrap_or(file_path)
+            .display()
+            .to_string();
+        bp_gate_rel_paths.push(rel);
+    }
+
+    let bp_gate_bullets: Vec<String> = bp_gate_rel_paths
+        .iter()
+        .map(|rel| format!("- `{rel}:1`"))
+        .collect();
+    let adapted_valid = valid_blueprint_fixture().replace(
+        "- `crates/verify-baseline/src/blueprint_gate.rs:1`",
+        &bp_gate_bullets.join("\n"),
+    );
+    let lines: Vec<&str> = adapted_valid.lines().collect();
+    let ranges = check_3_sections(&adapted_valid).unwrap_or_default();
     let (s7_start, s7_end, _) = ranges.get(6).copied().unwrap_or((0, 0, ""));
     let sec7_lines = lines.get(s7_start..s7_end).unwrap_or(&[]);
 
     let res = check_11_source_references(workspace_root, sec7_lines);
     assert!(res.is_ok(), "Expected Check 11 pass, got: {res:?}");
     let refs = res.unwrap_or_default();
-    assert_eq!(
-        refs,
-        vec![
-            "crates/verify-baseline/src/blueprint_gate.rs".to_string(),
-            "crates/verify-baseline/tests/blueprint_gate_tests.rs".to_string(),
-            "Cargo.toml".to_string(),
-        ]
-    );
+    let mut expected_refs = bp_gate_rel_paths.clone();
+    expected_refs.push("crates/verify-baseline/tests/blueprint_gate_tests.rs".to_string());
+    expected_refs.push("Cargo.toml".to_string());
+    assert_eq!(refs, expected_refs);
 
     // Mutation 1: Zero local repository references (only external URLs and issue tags)
     let no_local_refs = [
@@ -1402,69 +865,23 @@ fn test_check_11_source_references_pass_and_mutations() {
     assert!(check_11_source_references(workspace_root, &no_local_refs).is_err());
 
     // Mutation 2: Cited file path does not exist on disk
+    let first_bp_gate_anchor = format!(
+        "- `{}:10`",
+        bp_gate_rel_paths
+            .first()
+            .map(String::as_str)
+            .unwrap_or("Cargo.toml")
+    );
     let phantom_file = [
         "## 7. Source References",
-        "- `crates/verify-baseline/src/blueprint_gate.rs:10`",
+        first_bp_gate_anchor.as_str(),
         "- `crates/verify-baseline/src/non_existent_phantom_module.rs:42`",
     ];
     assert!(check_11_source_references(workspace_root, &phantom_file).is_err());
 }
 
-/// Verifies that Check 10 (`check_10_compile_and_persist_sysml` and `verify_blueprint`) compiles
-/// the blueprint Markdown into deterministic SysML v2, validates zero semantic errors and
-/// byte-for-byte roundtrip equivalence, and persists `<stem>.sysml` and `<stem>.digest.json`
-/// directly alongside the blueprint in `docs/designs/`.
-///
-/// # Summary
-/// Creates an isolated temporary workspace containing `docs/designs/blueprint-99-sample.md` and
-/// its referenced source files, runs `verify_blueprint` with `dry_run: true`, and asserts that
-/// `docs/designs/blueprint-99-sample.sysml` and `docs/designs/blueprint-99-sample.digest.json`
-/// exist on disk, are non-empty, contain `package `, `requirement def `, `part def `, and
-/// `constraint def `, and satisfy bijective `parse_sysml` -> `to_sysml` roundtrip equality.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` if Check 10 fails or persisted artifacts are missing/non-bijective.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_check_10_compiles_and_persists_sysml_and_digest_in_docs_designs
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 deterministic model compilation and bijective
-/// roundtrip verification mandates.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `to_sysml(&parse_sysml(&sysml_text)) == sysml_text`.
-/// - Persisted `.sysml` contains `package `, `requirement def `, `part def `, and `constraint def `.
-///
-/// ## 3. Preconditions
-/// Preconditions: Isolated temporary directory under `std::env::temp_dir()` is writable.
-///
-/// ## 4. Postconditions
-/// Postconditions: Temporary workspace is cleaned up on test completion.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over blueprint fixture length $N$.
-/// - Space Complexity: $O(N)$ for AST, serialized SysML text, and digest JSON.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Cleans up temporary directory before asserting test results.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-10-TESTS]
+/// Verifies Check 10 compiles blueprint Markdown into bijective SysML v2 and persists `<stem>.sysml` and `<stem>.digest.json` in `docs/designs/`.
+/// Realises: [REQ-BLUEPRINT-CHECK-10-TESTS]
 #[test]
 fn test_check_10_compiles_and_persists_sysml_and_digest_in_docs_designs() {
     let nanos = std::time::SystemTime::now()
@@ -1568,57 +985,8 @@ fn test_check_10_compiles_and_persists_sysml_and_digest_in_docs_designs() {
     std::fs::remove_dir_all(&temp_ws).unwrap_or(());
 }
 
-/// Verifies that Check 12 (`verify_closed_loop_github_payload` and `check_12_publish_github_ssot`)
-/// passes on valid `gh issue view --json` output with `[CLOSED-LOOP VERIFIED]` and fails closed on
-/// mismatched titles, missing requirement IDs, empty bodies, or invalid JSON.
-///
-/// # Summary
-/// Exercises `verify_closed_loop_github_payload` offline across positive and negative payload
-/// fixtures and tests `check_12_publish_github_ssot` in dry-run mode.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` if closed-loop verification accepts corrupted payloads or rejects valid JSON.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_check_12_closed_loop_payload_verification_passes_and_rejects_mismatch
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 closed-loop remote tracker verification mandates.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Valid JSON containing matching `title`, `body` with `expected_req_id`, `number`, and `url`
-///   returns `Ok` containing `[CLOSED-LOOP VERIFIED]`.
-/// - Mismatched title, missing requirement ID, or empty body returns `Err`.
-///
-/// ## 3. Preconditions
-/// Preconditions: In-memory JSON fixtures emulate `gh issue view --json number,title,body,url`.
-///
-/// ## 4. Postconditions
-/// Postconditions: Confirms deterministic offline closed-loop verification without network calls.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over JSON payload byte length $N$.
-/// - Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - All malformed or mismatched payloads fail closed with descriptive error strings.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-12-TESTS]
+/// Verifies Check 12 (`verify_closed_loop_github_payload` and `check_12_publish_github_ssot`) passes valid payloads and rejects title, requirement, or body mismatches.
+/// Realises: [REQ-BLUEPRINT-CHECK-12-TESTS]
 #[test]
 fn test_check_12_closed_loop_payload_verification_passes_and_rejects_mismatch() {
     let valid_json = r#"{
@@ -1684,56 +1052,8 @@ fn test_check_12_closed_loop_payload_verification_passes_and_rejects_mismatch() 
     assert!(dry_res.is_ok());
 }
 
-/// Verifies end-to-end execution of `verify_blueprint` and `run_blueprint_cli`, confirming exit
-/// code `0` on a valid 8-part blueprint and exit code `1` (without persisting `.sysml` artifacts)
-/// on a violated blueprint.
-///
-/// # Summary
-/// Tests the complete 12-gate orchestrator (`verify_blueprint`) and CLI runner (`run_blueprint_cli`)
-/// on both passing and failing blueprint files in an isolated temporary workspace.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// Unit `()` on assertion success.
-///
-/// # Errors
-/// None.
-///
-/// # Panics
-/// Panics via `assert!` if exit codes or fail-closed error accumulations do not match expectations.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_full_verify_blueprint_end_to_end_pass_and_fail_closed
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 end-to-end gate orchestration verification.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Valid blueprint yields `run_blueprint_cli == 0` and `verify_blueprint == Ok(report)`.
-/// - Violated blueprint yields `run_blueprint_cli == 1` and `verify_blueprint == Err(errors)`.
-///
-/// ## 3. Preconditions
-/// Preconditions: Isolated temporary workspace under `std::env::temp_dir()` is writable.
-///
-/// ## 4. Postconditions
-/// Postconditions: Temporary workspace is removed upon completion.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over blueprint fixture length $N$.
-/// - Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Verifies that a violated blueprint does not leave stale `.sysml` or `.digest.json` files behind.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-FULL-ORCHESTRATOR-TESTS]
+/// Verifies end-to-end execution of `verify_blueprint` and `run_blueprint_cli` on passing and failing blueprint files.
+/// Realises: [REQ-BLUEPRINT-FULL-ORCHESTRATOR-TESTS]
 #[test]
 fn test_full_verify_blueprint_end_to_end_pass_and_fail_closed() {
     let nanos = std::time::SystemTime::now()
@@ -1801,62 +1121,8 @@ fn test_full_verify_blueprint_end_to_end_pass_and_fail_closed() {
     std::fs::remove_dir_all(&temp_ws).unwrap_or(());
 }
 
-/// Tests multi-component blueprints with PascalCase classifier and primitive types across
-/// properties and ports, subheadings in Sections 3/4/6/7, and `--dry-run` SysML persistence.
-///
-/// # Summary
-/// Verifies that a blueprint containing multiple `### Component: <PascalCaseIdentifier>`
-/// subsections, `PascalCase` property/port types (including classifier names containing `"int"` or
-/// `"bool"` substrings such as `ConstraintSpec` and `BooleanPolicy`) alongside primitive types
-/// (`Integer`, `Boolean`, `Real`, `String`), and unnumbered H3 subheadings in Sections 3/4/6/7
-/// passes all 12 checks (`SemanticValidator` zero errors) and persists `.sysml` and `.digest.json`
-/// under `--dry-run`.
-///
-/// # Parameters
-/// - None.
-///
-/// # Returns
-/// `()` on test pass.
-///
-/// # Errors
-/// Fails assertion if `verify_blueprint` returns `Err` or phantom `PartDef`s are emitted.
-///
-/// # Panics
-/// Never panics via `.unwrap()` or `.expect()`.
-///
-/// # Safety
-/// Contains zero `unsafe` code.
-///
-/// # Examples
-/// ```text
-/// cargo test -p verify-baseline --test blueprint_gate_tests test_multi_component_pascal_case_types_and_dry_run_sysml_persistence
-/// ```
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 multi-component SysML v2 metamodel synthesis and
-/// semantic validation gates.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `verify_blueprint` succeeds with `Ok(BlueprintReport)` when `--dry-run` is active.
-/// - `docs/designs/<stem>.sysml` and `docs/designs/<stem>.digest.json` exist on disk after `--dry-run`.
-/// - Emitted `.sysml` contains `part def BlueprintGateEngine` and `part def ConstraintSpec` and
-///   zero phantom `PartDef`s from Section 3/4/6/7 subheadings.
-///
-/// ## 3. Preconditions
-/// Preconditions: Temporary workspace directory is writable.
-///
-/// ## 4. Postconditions
-/// Postconditions: Temporary workspace directory is cleaned up after verification.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over fixture size.
-/// - Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Detects misclassification of `PascalCase` types containing `"int"`/`"bool"` or phantom `PartDef` leakage.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-BLUEPRINT-CHECK-5-COMPONENTS], [REQ-BLUEPRINT-CHECK-10-SYSML-PERSISTENCE]
+/// Verifies multi-component blueprints with PascalCase classifier and primitive types, H3 subheadings, and `--dry-run` SysML persistence.
+/// Realises: [REQ-BLUEPRINT-CHECK-5-COMPONENTS], [REQ-BLUEPRINT-CHECK-10-SYSML-PERSISTENCE]
 #[test]
 fn test_multi_component_pascal_case_types_and_dry_run_sysml_persistence() {
     let nanos = std::time::SystemTime::now()
@@ -1880,36 +1146,45 @@ fn test_multi_component_pascal_case_types_and_dry_run_sysml_persistence() {
     std::fs::write(tests_dir.join("blueprint_gate_tests.rs"), "// test stub\n").unwrap_or(());
     std::fs::write(temp_ws.join("Cargo.toml"), "[workspace]\n").unwrap_or(());
 
-    let multi_comp_sec2 = concat!(
-        "## 2. Structural Component Metamodel\n\n",
-        "### Component: BlueprintGateEngine\n\n",
-        "#### Component Attributes\n\n",
-        "| Attribute | Type | Default | Unit | Description |\n",
-        "| :--- | :--- | :--- | :--- | :--- |\n",
-        "| `max_allowed_errors` | `Integer` | `0` | count | Maximum permitted verification errors |\n",
-        "| `strict_gate_enabled` | `Boolean` | `true` | flag | Enables strict fail-closed verification |\n",
-        "| `timeout_budget_sec` | `Real` | `5.0` | s | Bounded execution timeout budget |\n",
-        "| `default_mode` | `String` | `subagent` | token | Default generation mode token |\n",
-        "| `active_constraint_spec` | `ConstraintSpec` | `StrictSpec` | classifier | Active constraint specification classifier |\n",
-        "| `boolean_policy_mode` | `BooleanPolicy` | `FailClosed` | classifier | Policy classifier containing bool substring |\n\n",
-        "#### Component Ports\n\n",
-        "| Port | Direction | Type | Protocol | Description |\n",
-        "| :--- | :--- | :--- | :--- | :--- |\n",
-        "| `markdown_in` | in | `String` | FileBuffer | Raw blueprint markdown input |\n",
-        "| `error_count_out` | out | `Integer` | CounterPort | Emitted error count |\n",
-        "| `gate_pass_out` | out | `Boolean` | StatusPort | Gate pass boolean indicator |\n",
-        "| `elapsed_sec_out` | out | `Real` | MetricPort | Elapsed verification duration |\n",
-        "| `spec_channel` | inout | `ConstraintSpec` | SpecBus | Bidirectional constraint spec channel |\n\n",
-        "### Component: ConstraintSpec\n\n",
-        "| Attribute | Type | Default | Unit | Description |\n",
-        "| :--- | :--- | :--- | :--- | :--- |\n",
-        "| `rule_count` | `Integer` | `12` | count | Number of enforced gates |\n\n",
-        "| Port | Direction | Type | Protocol | Description |\n",
-        "| :--- | :--- | :--- | :--- | :--- |\n",
-        "| `spec_out` | out | `String` | SpecStream | Serialized specification stream |\n\n",
-        "## 3. UML & Behavioral Topology\n\n",
-        "### Structural Class Diagram\n"
-    );
+    let multi_comp_sec2 = r#"## 2. Structural Component Metamodel
+
+### Component: BlueprintGateEngine
+
+#### Component Attributes
+
+| Attribute | Type | Default | Unit | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `max_allowed_errors` | `Integer` | `0` | count | Maximum permitted verification errors |
+| `strict_gate_enabled` | `Boolean` | `true` | flag | Enables strict fail-closed verification |
+| `timeout_budget_sec` | `Real` | `5.0` | s | Bounded execution timeout budget |
+| `default_mode` | `String` | `subagent` | token | Default generation mode token |
+| `active_constraint_spec` | `ConstraintSpec` | `StrictSpec` | classifier | Active constraint specification classifier |
+| `boolean_policy_mode` | `BooleanPolicy` | `FailClosed` | classifier | Policy classifier containing bool substring |
+
+#### Component Ports
+
+| Port | Direction | Type | Protocol | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `markdown_in` | in | `String` | FileBuffer | Raw blueprint markdown input |
+| `error_count_out` | out | `Integer` | CounterPort | Emitted error count |
+| `gate_pass_out` | out | `Boolean` | StatusPort | Gate pass boolean indicator |
+| `elapsed_sec_out` | out | `Real` | MetricPort | Elapsed verification duration |
+| `spec_channel` | inout | `ConstraintSpec` | SpecBus | Bidirectional constraint spec channel |
+
+### Component: ConstraintSpec
+
+| Attribute | Type | Default | Unit | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `rule_count` | `Integer` | `12` | count | Number of enforced gates |
+
+| Port | Direction | Type | Protocol | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `spec_out` | out | `String` | SpecStream | Serialized specification stream |
+
+## 3. UML & Behavioral Topology
+
+### Structural Class Diagram
+"#;
 
     let base_fixture = valid_blueprint_fixture();
     let Some(sec2_idx) = base_fixture.find("## 2. Structural Component Metamodel\n") else {
@@ -1979,33 +1254,8 @@ fn test_multi_component_pascal_case_types_and_dry_run_sysml_persistence() {
     std::fs::remove_dir_all(&temp_ws).unwrap_or(());
 }
 
-/// Verifies `REQ-0604` `AC-01` and `AC-05`: parameterized `ActionDef` formatting in Mermaid class
-/// diagrams (`format_mermaid_operation_signature`), Feature Markdown bullets
-/// (`format_markdown_operation_bullet`), lossless reverse bullet parsing
-/// (`parse_markdown_operation_bullet`), parent Epic link resolution (`resolve_parent_epic_link`),
-/// and package story number collection (`collect_package_story_numbers`).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 bijective specification synchronization mandates.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `parse_markdown_operation_bullet(&format_markdown_operation_bullet(&act)) == Some(act)`.
-/// - Malformed bullets without `+`, `(`, `)`, or `:` return `None`.
-///
-/// ## 3. Preconditions
-/// - Valid `ActionDef`, `PackageDef`, and `StoryMeta` fixtures in memory.
-///
-/// ## 4. Postconditions
-/// - Confirms `AC-01` and `AC-05` pass and malformed inputs fail closed (`None`).
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$. Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Rejects malformed operation bullets without panicking.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-0604]
+/// Verifies `REQ-0604` `AC-01` and `AC-05`: parameterized `ActionDef` Mermaid/Markdown operation signatures, reverse bullet parsing, and parent Epic helpers.
+/// Realises: [REQ-0604]
 #[test]
 fn test_req_0604_ac01_and_ac05_operation_signatures_and_parent_epic_helpers() {
     use compile_sysml::sync::forward::{
@@ -2133,32 +1383,8 @@ fn test_req_0604_ac01_and_ac05_operation_signatures_and_parent_epic_helpers() {
     assert!(feat_md.contains(&md_bullet));
 }
 
-/// Verifies `REQ-0604` `AC-02`: deterministic Level 1C Logical ICD Matrix (`ICD_01`) and Master
-/// Signal Dictionary (`ICD_02`) compilation, persistence, and fail-closed `Diagnostic: E0200`
-/// rejection on undeclared interface endpoints or empty models.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 interface control verification mandates.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `ICD_01_SYSTEM_INTERFACE_MATRIX.md` contains `---` diagonal cells for all `PartDef` rows/columns.
-/// - `ICD_02_MASTER_SIGNAL_DICTIONARY.md` rows are lexicographically sorted.
-/// - Undeclared endpoints or empty models fail closed with `Diagnostic: E0200`.
-///
-/// ## 3. Preconditions
-/// - Temporary directory is writable.
-///
-/// ## 4. Postconditions
-/// - Confirms both ICD files are persisted and negative mutations fail closed.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V^2 + E \log E)$. Space Complexity: $O(V^2 + E)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Cleans temporary directory deterministically.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-0604]
+/// Verifies `REQ-0604` `AC-02`: Level 1C Logical ICD Matrix (`ICD_01`) and Master Signal Dictionary (`ICD_02`) compilation and `E0200` rejection.
+/// Realises: [REQ-0604]
 #[test]
 fn test_req_0604_ac02_logical_icd_matrix_and_signal_dictionary() {
     use compile_sysml::sync::forward::{
@@ -2256,31 +1482,8 @@ fn test_req_0604_ac02_logical_icd_matrix_and_signal_dictionary() {
     );
 }
 
-/// Verifies `REQ-0604` `AC-03`: deterministic Level 4 MIL-STD-881E WBS & Enterprise Export
-/// compilation, 7-file persistence, and fail-closed `Diagnostic: E0300` rejection on empty models.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to MIL-STD-881E and DO-330 TQL-4 work breakdown traceability mandates.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Emits Level 1 (`01.00.00`), Level 2 (`01.01.00`), and Level 3 (`01.01.01`) `WbsNode` items.
-/// - Writes all 7 management & enterprise export artifacts atomically.
-/// - Empty model with zero `PartDef`s fails closed with `Diagnostic: E0300`.
-///
-/// ## 3. Preconditions
-/// - Temporary directory is writable.
-///
-/// ## 4. Postconditions
-/// - Confirms all 7 WBS files exist and negative mutation returns `Diagnostic: E0300`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N \log N)$. Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Cleans temporary directory deterministically.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-0604]
+/// Verifies `REQ-0604` `AC-03`: Level 4 MIL-STD-881E WBS & Enterprise Export compilation, 7-file persistence, and `E0300` rejection on empty models.
+/// Realises: [REQ-0604]
 #[test]
 fn test_req_0604_ac03_wbs_level4_and_enterprise_exports() {
     use compile_sysml::sync::forward::{
@@ -2357,33 +1560,8 @@ fn test_req_0604_ac03_wbs_level4_and_enterprise_exports() {
     );
 }
 
-/// Verifies `REQ-0604` `AC-04`: inline HTML comment re-open state transitions
-/// (`advance_html_comment_state`), inclusive Epic counting (`count_total_epics_inclusive`), and
-/// CLI `--emit-icd` / `--emit-wbs` dispatch (`execute_emit_cli_args`).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 boundary condition verification mandates.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `advance_html_comment_state` keeps `in_html_comment == true` when a line closes `-->` and
-///   re-opens an unclosed `<!--` on the same line.
-/// - `count_total_epics_inclusive` includes the parent Epic when `parent_is_epic` is true without
-///   double-counting duplicate entries.
-///
-/// ## 3. Preconditions
-/// - None.
-///
-/// ## 4. Postconditions
-/// - Confirms all HTML comment state transitions and inclusive Epic counts match specification.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$. Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Deterministic state transitions with zero panics.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-0604]
+/// Verifies `REQ-0604` `AC-04`: inline HTML comment re-open transitions, inclusive Epic counting, and `--emit-icd` / `--emit-wbs` pre-dispatch.
+/// Realises: [REQ-0604]
 #[test]
 fn test_req_0604_ac04_html_comment_reopen_and_inclusive_epic_count() {
     use compile_sysml::sync::forward::{
@@ -2446,39 +1624,8 @@ fn test_req_0604_ac04_html_comment_reopen_and_inclusive_epic_count() {
     assert_eq!(execute_emit_cli_args(&normal_args), Ok(None));
 }
 
-/// Verifies `REQ-0605` `AC-01` through `AC-05`: unified `RustDartLexState` and
-/// `ScopedItemScannerState` across `source_ast`, `docstring`, and `docstring_gate`, multi-line Dart
-/// `@pragma(\n...\n)` 2-pass idempotency, strict `owner_name` schema isolation in
-/// `resolve_schema_context`, and deduplicated Rust `impl` header and Dart lexical scanners.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C lexical and AST
-/// parity objectives for `REQ-0605` (`AC-01`..`AC-05`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `inject_dart_file_docstrings` preserves `current_doc` and `first_annot_idx` across multi-line
-///   `@pragma(\n  'vm:prefer-inline',\n)` annotations so a second injection pass yields `count == 0`
-///   and identical output (`AC-01`, `AC-02`).
-/// - `resolve_schema_context` returns `(None, None)` when `owner_name` is `Some(owner)` and `owner`
-///   is absent from `all_parts`, preventing unmapped `impl` owners from inheriting package-level
-///   `requirement_defs` or `constraint_defs` (`AC-03`, `AC-04`).
-/// - `docstring.rs` and `docstring_gate.rs` delegate to `deap_core::source_ast` without duplicate
-///   local `extract_rust_impl_header_prefix` or `scan_dart_line_preserving_lexical_state` definitions (`AC-05`).
-///
-/// ## 3. Preconditions
-/// - None.
-///
-/// ## 4. Postconditions
-/// - Asserts `REQ-0605` `AC-01`..`AC-05` behavioral and structural invariants hold.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$. Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Deterministic assertions with zero `.unwrap()`, `.expect()`, or slice indexing.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-0605]
+/// Verifies `REQ-0605` `AC-01`..`AC-05`: unified lexer state, multi-line Dart `@pragma` idempotency, strict `owner_name` schema isolation, and deduplicated scanners.
+/// Realises: [REQ-0605]
 #[test]
 fn test_req_0605_ac01_ac05_unified_lexer_multiline_annotations_and_schema_isolation() {
     use compile_sysml::docstring::{
@@ -2496,14 +1643,14 @@ fn test_req_0605_ac01_ac05_unified_lexer_multiline_annotations_and_schema_isolat
     };
 
     // AC-01 & AC-02: Multi-line Dart @pragma annotation 2-pass idempotency and Check 36 audit
-    let dart_multiline_annot_src = concat!(
-        "@pragma(\n",
-        "  'vm:prefer-inline',\n",
-        ")\n",
-        "int computeSignalStep(int currentStep) {\n",
-        "  return currentStep + 1;\n",
-        "}\n",
-    );
+    let dart_multiline_annot_src = "\
+@pragma(
+  'vm:prefer-inline',
+)
+int computeSignalStep(int currentStep) {
+  return currentStep + 1;
+}
+";
     let pass1_res = inject_dart_file_docstrings(
         dart_multiline_annot_src,
         "app_flutter/lib/signal_step.dart",
@@ -2566,14 +1713,15 @@ fn test_req_0605_ac01_ac05_unified_lexer_multiline_annotations_and_schema_isolat
         ..Default::default()
     };
 
-    let unmapped_owner_rust = concat!(
-        "pub struct UnmappedHelper;\n\n",
-        "impl UnmappedHelper {\n",
-        "    pub fn process_frame(&self, frame_seq: u32) -> u32 {\n",
-        "        frame_seq\n",
-        "    }\n",
-        "}\n",
-    );
+    let unmapped_owner_rust = "\
+pub struct UnmappedHelper;
+
+impl UnmappedHelper {
+    pub fn process_frame(&self, frame_seq: u32) -> u32 {
+        frame_seq
+    }
+}
+";
     let mut parts_out = Vec::new();
     collect_all_parts(&schema_pkg, &mut parts_out);
     assert_eq!(parts_out.len(), 1);
@@ -2623,7 +1771,7 @@ fn test_req_0605_ac01_ac05_unified_lexer_multiline_annotations_and_schema_isolat
         Ok(2)
     );
 
-    // AC-05: Unified lexer state and absence of duplicate scanners in docstring.rs and docstring_gate.rs
+    // AC-05: Unified lexer state and absence of duplicate scanners in docstring and docstring_gate modules
     let mut dart_lex = RustDartLexState {
         language: SourceLanguage::Dart,
         ..Default::default()
@@ -2668,90 +1816,72 @@ fn test_req_0605_ac01_ac05_unified_lexer_multiline_annotations_and_schema_isolat
         .parent()
         .and_then(Path::parent)
         .unwrap_or_else(|| Path::new("."));
-    let docstring_rs_src = std::fs::read_to_string(
-        workspace_root
+    let docstring_files = resolve_module_rs_files(
+        &workspace_root
             .join("crates")
             .join("compile-sysml")
             .join("src")
             .join("docstring.rs"),
-    )
-    .unwrap_or_default();
-    assert!(
-        !docstring_rs_src.contains("fn extract_rust_impl_header_prefix("),
-        "docstring.rs must delegate extract_rust_impl_header_prefix to deap_core::source_ast"
     );
+    assert!(
+        !docstring_files.is_empty(),
+        "Expected crates/compile-sysml/src/docstring.rs (or docstring/ directory) to resolve to at least one .rs file"
+    );
+    for file_path in &docstring_files {
+        let read_res = std::fs::read_to_string(file_path);
+        assert!(
+            read_res.is_ok(),
+            "Expected {} to be readable: {read_res:?}",
+            file_path.display()
+        );
+        if let Ok(docstring_rs_src) = read_res {
+            assert!(
+                !docstring_rs_src.contains("fn extract_rust_impl_header_prefix("),
+                "{} must delegate extract_rust_impl_header_prefix to deap_core::source_ast",
+                file_path.display()
+            );
+        }
+    }
 
-    let docstring_gate_src = std::fs::read_to_string(
-        workspace_root
+    let docstring_gate_files = resolve_module_rs_files(
+        &workspace_root
             .join("crates")
             .join("verify-baseline")
             .join("src")
             .join("checks")
             .join("docstring_gate.rs"),
-    )
-    .unwrap_or_default();
-    assert!(
-        !docstring_gate_src.contains("enum DartMultilineString")
-            && !docstring_gate_src.contains("fn scan_dart_line_preserving_lexical_state("),
-        "docstring_gate.rs must delegate Dart lexical scanning to deap_core::source_ast"
     );
+    assert!(
+        !docstring_gate_files.is_empty(),
+        "Expected crates/verify-baseline/src/checks/docstring_gate.rs (or docstring_gate/ directory) to resolve to at least one .rs file"
+    );
+    for file_path in &docstring_gate_files {
+        let read_res = std::fs::read_to_string(file_path);
+        assert!(
+            read_res.is_ok(),
+            "Expected {} to be readable: {read_res:?}",
+            file_path.display()
+        );
+        if let Ok(docstring_gate_src) = read_res {
+            assert!(
+                !docstring_gate_src.contains("enum DartMultilineString")
+                    && !docstring_gate_src.contains("fn scan_dart_line_preserving_lexical_state("),
+                "{} must delegate Dart lexical scanning to deap_core::source_ast",
+                file_path.display()
+            );
+        }
+    }
 }
 
 /// RAII temporary workspace directory fixture that deterministically removes its directory tree on drop.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 isolated test fixture lifecycle management mandates,
-/// ensuring zero residual temporary files remain even when a RED test assertion aborts early.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `self.root` resides strictly underneath `std::env::temp_dir()` with a collision-free prefix,
-///   process identifier, and monotonic timestamp suffix.
-/// - `Drop::drop` removes `self.root` unconditionally when present on disk.
-///
-/// ## 3. Preconditions
-/// - Host operating system provides a writable temporary directory via `std::env::temp_dir()`.
-///
-/// ## 4. Postconditions
-/// - Created workspace directory exists on disk throughout the lifetime of `TempWorkspace` and is
-///   reclaimed upon scope exit.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(F)$ on `Drop` over $F$ created fixture entries.
-/// - Space Complexity: $O(1)$ in memory for `PathBuf` ownership.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Assertions fail closed if directory creation cannot complete; cleanup tolerates already-removed trees.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-0606/TEMP-WORKSPACE-RAII]
+/// Realises: [REQ-0606/TEMP-WORKSPACE-RAII]
 struct TempWorkspace {
     root: PathBuf,
 }
 
 impl TempWorkspace {
     /// Allocates a fresh RAII temporary workspace directory underneath `std::env::temp_dir()`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-330 TQL-4 deterministic test isolation requirements.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Returned `TempWorkspace.root` is an existing directory on disk.
-    ///
-    /// ## 3. Preconditions
-    /// - `prefix` is a non-empty ASCII identifier describing the test fixture scope.
-    ///
-    /// ## 4. Postconditions
-    /// - Directory `self.root` exists and is writable.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$.
-    /// - Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Fails test assertion immediately if `std::fs::create_dir_all` returns `Err`.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Traceability: Realises: [REQ-0606/TEMP-WORKSPACE-NEW]
+    /// Realises: [REQ-0606/TEMP-WORKSPACE-NEW]
     fn new(prefix: &str) -> Self {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -2769,28 +1899,7 @@ impl TempWorkspace {
     }
 
     /// Writes `contents` to `rel_path` inside `self.root`, creating parent directories as needed.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-330 TQL-4 deterministic file fixture construction requirements.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Returned `PathBuf` equals `self.root.join(rel_path)` and contains exact UTF-8 bytes of `contents`.
-    ///
-    /// ## 3. Preconditions
-    /// - `rel_path` is a relative path within `self.root`.
-    ///
-    /// ## 4. Postconditions
-    /// - Target file and all ancestor directories exist on disk.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(|contents|)$.
-    /// - Space Complexity: $O(1)$ beyond path buffer allocation.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Fails test assertion immediately if directory creation or file write returns `Err`.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Traceability: Realises: [REQ-0606/TEMP-WORKSPACE-WRITE]
+    /// Realises: [REQ-0606/TEMP-WORKSPACE-WRITE]
     fn write_file(&self, rel_path: &str, contents: &str) -> PathBuf {
         let full = self.root.join(rel_path);
         if let Some(parent) = full.parent() {
@@ -2813,28 +1922,7 @@ impl TempWorkspace {
 
 impl Drop for TempWorkspace {
     /// Reclaims the temporary workspace directory tree from `std::env::temp_dir()` upon scope exit.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-330 TQL-4 zero-leak filesystem hygiene across normal and unwinding exits.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Never panics during stack unwinding.
-    ///
-    /// ## 3. Preconditions
-    /// - `self.root` points to a path under `std::env::temp_dir()`.
-    ///
-    /// ## 4. Postconditions
-    /// - `self.root` is removed from disk if it existed.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(F)$ over $F$ files and subdirectories.
-    /// - Space Complexity: $O(D)$ for directory recursion depth $D$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Suppresses I/O removal errors gracefully via `.unwrap_or(())` to guarantee unwind safety.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Traceability: Realises: [REQ-0606/TEMP-WORKSPACE-DROP]
+    /// Realises: [REQ-0606/TEMP-WORKSPACE-DROP]
     fn drop(&mut self) {
         if self.root.exists() {
             std::fs::remove_dir_all(&self.root).unwrap_or(());
@@ -2843,29 +1931,7 @@ impl Drop for TempWorkspace {
 }
 
 /// Reads all synthesized `DEFECT-*.md` files from `defects_dir` into a deterministically ordered map.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-330 TQL-4 byte-level idempotency verification for `REQ-0606/AC-03`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Keys are sorted lexicographically in a `BTreeMap<String, Vec<u8>>`.
-/// - Only regular files matching `DEFECT-*.md` are collected.
-///
-/// ## 3. Preconditions
-/// - `defects_dir` exists on disk as a readable directory.
-///
-/// ## 4. Postconditions
-/// - Returns exact filename-to-byte-vector snapshot of `defects_dir`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(K \log K + B)$ for $K$ dossiers totaling $B$ bytes.
-/// - Space Complexity: $O(B)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Asserts fail-closed if directory traversal or file byte reading fails.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-0606/DOSSIER-SNAPSHOT-HELPER]
+/// Realises: [REQ-0606/DOSSIER-SNAPSHOT-HELPER]
 fn collect_defect_dossiers(defects_dir: &Path) -> std::collections::BTreeMap<String, Vec<u8>> {
     let mut dossiers = std::collections::BTreeMap::new();
     let read_res = std::fs::read_dir(defects_dir);
@@ -2902,35 +1968,7 @@ fn collect_defect_dossiers(defects_dir: &Path) -> std::collections::BTreeMap<Str
 /// 100% byte-identical two-run idempotency, `--pillar concurrency` filtering, and fail-closed CLI
 /// exit codes (`1` on missing `--path` or unbalanced braces, `2` on invalid `--pillar`).
 ///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D deterministic static defect
-/// auditing and fail-closed CLI verification mandates for `BP-06` (`REQ-0606`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Running `verify-baseline audit-code --path <ws> --dry-run` twice produces `status.code() == Some(0)`
-///   and 100% byte-identical `.pipeline/defects/DEFECT-*.md` file sets covering Pillars 1..5 (`AC-01`, `AC-03`).
-/// - Every synthesized `DEFECT-*.md` passes `verify-baseline check-defect <dossier> --dry-run` with
-///   `status.code() == Some(0)` (`AC-02`).
-/// - `--pillar concurrency` emits exclusively Pillar 3 (`E0603`) dossiers (`AC-01`).
-/// - Non-existent `--path` and unbalanced-brace `.rs` sources exit `Some(1)`; `--pillar invalid-pillar`
-///   exits `Some(2)` (`AC-04`).
-///
-/// ## 3. Preconditions
-/// - `CARGO_BIN_EXE_verify-baseline` binary is built by Cargo and `std::env::temp_dir()` is writable.
-///
-/// ## 4. Postconditions
-/// - Temporary workspaces are deterministically removed via `TempWorkspace` RAII `Drop`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N + K)$ over fixture byte size $N$ and synthesized dossier count $K$.
-/// - Space Complexity: $O(N + K)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Fails closed on unexpected CLI exit status, missing pillar coverage, non-idempotent dossier
-///   bytes, or `check-defect` validation failure.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-0606/AC-01], [REQ-0606/AC-02], [REQ-0606/AC-03], [REQ-0606/AC-04]
+/// Realises: [REQ-0606/AC-01], [REQ-0606/AC-02], [REQ-0606/AC-03], [REQ-0606/AC-04]
 #[test]
 fn req_0606_ac01_to_ac04_cli_audit_code_five_pillars_dossiers_idempotency_and_fail_closed() {
     use std::process::Command;
@@ -2980,58 +2018,54 @@ fn req_0606_ac01_to_ac04_cli_audit_code_five_pillars_dossiers_idempotency_and_fa
         "[package]\nname = \"sample_crate\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
     );
 
-    // Construct tokens via slice concatenation so Check 34 self-hosting scans on blueprint_gate_tests.rs stay pure.
-    let pub_fn_kw = ["pub", " fn"].concat();
-    let fn_kw = ["f", "n"].concat();
-    let test_attr = ["#[", "test", "]"].concat();
-    let unchecked_slice = ["&buf", "[", "0", "..", "2", "]"].concat();
-    let unchecked_idx = ["sub", "[", "0", "]"].concat();
-
     // Dirty Rust source triggering:
     // - Pillar 1 (E0601): unchecked slice `&buf[0..2]`, direct index `sub[0]`, and narrowing `wide as u8` cast
     // - Pillar 4 (E0604): 0-assertion `#[test]` function
     // - Pillar 5 (E0605): `pub fn` lacking `Realises: [REQ-...]`
-    let dirty_rust = format!(
-        "/// Computes a sample byte using unchecked slicing and narrowing cast.\n\
-         {pub_fn_kw} slice_and_cast_sample(buf: &[u8], wide: u64) -> u8 {{\n\
-             let sub = {unchecked_slice};\n\
-             let narrow = wide as u8;\n\
-             {unchecked_idx}.wrapping_add(narrow)\n\
-         }}\n\n\
-         /// Public function intentionally missing any requirement traceability tag.\n\
-         {pub_fn_kw} untraced_counter_step(current: u32) -> u32 {{\n\
-             current.saturating_add(1)\n\
-         }}\n\n\
-         {test_attr}\n\
-         {fn_kw} hollow_zero_assertion_probe() {{\n\
-             let computed = 2 + 2;\n\
-             if computed == 99 {{}}\n\
-         }}\n"
-    );
-    ws.write_file("crates/sample_crate/src/lib.rs", &dirty_rust);
+    let dirty_rust = r#"/// Computes a sample byte using unchecked slicing and narrowing cast.
+pub fn slice_and_cast_sample(buf: &[u8], wide: u64) -> u8 {
+    let sub = &buf[0..2];
+    let narrow = wide as u8;
+    sub[0].wrapping_add(narrow)
+}
+
+/// Public function intentionally missing any requirement traceability tag.
+pub fn untraced_counter_step(current: u32) -> u32 {
+    current.saturating_add(1)
+}
+
+#[test]
+fn hollow_zero_assertion_probe() {
+    let computed = 2 + 2;
+    if computed == 99 {}
+}
+"#;
+    ws.write_file("crates/sample_crate/src/lib.rs", dirty_rust);
 
     // Dirty Dart source triggering:
     // - Pillar 2 (E0602): ChangeNotifier holding undisposed StreamSubscription
     // - Pillar 3 (E0603): async method calling notifyListeners() after await without !mounted / _disposed guard
-    let dirty_dart = concat!(
-        "import 'dart:async';\n",
-        "import 'package:flutter/foundation.dart';\n\n",
-        "class SampleStreamNotifier extends ChangeNotifier {\n",
-        "  StreamSubscription<int>? _subscription;\n",
-        "  int latestValue = 0;\n\n",
-        "  void attachStream(Stream<int> source) {\n",
-        "    _subscription = source.listen((event) {\n",
-        "      latestValue = event;\n",
-        "      notifyListeners();\n",
-        "    });\n",
-        "  }\n\n",
-        "  Future<void> refreshAfterAwait(Future<int> pendingValue) async {\n",
-        "    final resolved = await pendingValue;\n",
-        "    latestValue = resolved;\n",
-        "    notifyListeners();\n",
-        "  }\n",
-        "}\n",
-    );
+    let dirty_dart = r#"import 'dart:async';
+import 'package:flutter/foundation.dart';
+
+class SampleStreamNotifier extends ChangeNotifier {
+  StreamSubscription<int>? _subscription;
+  int latestValue = 0;
+
+  void attachStream(Stream<int> source) {
+    _subscription = source.listen((event) {
+      latestValue = event;
+      notifyListeners();
+    });
+  }
+
+  Future<void> refreshAfterAwait(Future<int> pendingValue) async {
+    final resolved = await pendingValue;
+    latestValue = resolved;
+    notifyListeners();
+  }
+}
+"#;
     ws.write_file("app_flutter/lib/sample_notifier.dart", dirty_dart);
 
     let bin = env!("CARGO_BIN_EXE_verify-baseline");
@@ -3302,8 +2336,8 @@ fn req_0606_ac01_to_ac04_cli_audit_code_five_pillars_dossiers_idempotency_and_fa
     let broken_ws = TempWorkspace::new("req_0606_unbalanced_brace");
     let broken_defects = broken_ws.root.join(".pipeline").join("defects");
     assert!(std::fs::create_dir_all(&broken_defects).is_ok());
-    let broken_rs = format!("{pub_fn_kw} malformed_block() {{\n    if true {{\n");
-    broken_ws.write_file("crates/broken_crate/src/lib.rs", &broken_rs);
+    let broken_rs = "pub fn malformed_block() {\n    if true {\n";
+    broken_ws.write_file("crates/broken_crate/src/lib.rs", broken_rs);
     let broken_ws_str = broken_ws.root.to_str().unwrap_or("");
     let neg_brace_res = Command::new(bin)
         .args(["audit-code", "--path", broken_ws_str, "--dry-run"])
@@ -3350,32 +2384,7 @@ fn req_0606_ac01_to_ac04_cli_audit_code_five_pillars_dossiers_idempotency_and_fa
 /// environment (guaranteeing zero `gh` subprocess spawning) and end-to-end 12-check blueprint gate
 /// verification on `docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md`.
 ///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 hermetic offline execution and design blueprint
-/// realization verification mandates (`REQ-0606/AC-05`, `REQ-0606/AC-06`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `verify-baseline audit-code --path <clean_fixture> --dry-run` with `PATH=""` exits `Some(0)`
-///   without attempting external `gh` process resolution (`AC-05`).
-/// - `verify-baseline check-blueprint docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md --dry-run`
-///   from the repository root exits `Some(0)` (`AC-06`).
-///
-/// ## 3. Preconditions
-/// - `CARGO_BIN_EXE_verify-baseline` binary exists and repository root contains `docs/designs/blueprint-06-*.md`.
-///
-/// ## 4. Postconditions
-/// - Temporary clean workspace is removed deterministically via `TempWorkspace` RAII `Drop`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over clean fixture and `BP-06` markdown size.
-/// - Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Any attempted `gh` subprocess execution under `PATH=""` or `BP-06` gate violation fails closed
-///   with a non-zero exit status.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-0606/AC-05], [REQ-0606/AC-06]
+/// Realises: [REQ-0606/AC-05], [REQ-0606/AC-06]
 #[test]
 fn req_0606_ac05_and_ac06_dry_run_offline_isolation_and_bp06_blueprint_gate() {
     use std::process::Command;
@@ -3391,65 +2400,20 @@ fn req_0606_ac05_and_ac06_dry_run_offline_isolation_and_bp06_blueprint_gate() {
         "[package]\nname = \"clean_sample\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
     );
 
-    let pub_fn_kw = ["pub", " fn"].concat();
-    let fn_kw = ["f", "n"].concat();
-    let test_attr = ["#[", "test", "]"].concat();
-    let assert_stmt = ["assert_eq!", "(add_bounded(2, 3), 5);"].concat();
+    let clean_rust = r#"/// Computes saturating addition of two bounded counters.
+///
+/// Realises: [REQ-0606/AC-05]
+pub fn add_bounded(lhs: u32, rhs: u32) -> u32 {
+    lhs.saturating_add(rhs)
+}
 
-    let clean_rust = format!(
-        "/// Computes saturating addition of two bounded counters.\n\
-         ///\n\
-         /// ## 1. Safety Intent & Regulatory Scope\n\
-         /// Conforms to DO-178C Level A saturating arithmetic rules.\n\
-         ///\n\
-         /// ## 2. Invariants & Mathematical Properties\n\
-         /// - Output never overflows `u32::MAX`.\n\
-         ///\n\
-         /// ## 3. Preconditions\n\
-         /// - Any valid `u32` operands.\n\
-         ///\n\
-         /// ## 4. Postconditions\n\
-         /// - Returns `lhs.saturating_add(rhs)`.\n\
-         ///\n\
-         /// ## 5. Algorithmic Complexity Bounds\n\
-         /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.\n\
-         ///\n\
-         /// ## 6. Failure Modes & Fault Tolerance\n\
-         /// - Saturates at `u32::MAX` without overflow.\n\
-         ///\n\
-         /// ## 7. Realization & Traceability\n\
-         /// Traceability: Realises: [REQ-0606/AC-05]\n\
-         {pub_fn_kw} add_bounded(lhs: u32, rhs: u32) -> u32 {{\n\
-             lhs.saturating_add(rhs)\n\
-         }}\n\n\
-         /// Verifies `add_bounded` nominal saturating sum.\n\
-         ///\n\
-         /// ## 1. Safety Intent & Regulatory Scope\n\
-         /// Conforms to DO-330 TQL-4 unit verification rules.\n\
-         ///\n\
-         /// ## 2. Invariants & Mathematical Properties\n\
-         /// - `add_bounded(2, 3) == 5`.\n\
-         ///\n\
-         /// ## 3. Preconditions\n\
-         /// - None.\n\
-         ///\n\
-         /// ## 4. Postconditions\n\
-         /// - Assertion holds.\n\
-         ///\n\
-         /// ## 5. Algorithmic Complexity Bounds\n\
-         /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.\n\
-         ///\n\
-         /// ## 6. Failure Modes & Fault Tolerance\n\
-         /// - Aborts test on mismatch.\n\
-         ///\n\
-         /// ## 7. Realization & Traceability\n\
-         /// Traceability: Realises: [REQ-0606/AC-05]\n\
-         {test_attr}\n\
-         {fn_kw} verify_add_bounded() {{\n\
-             {assert_stmt}\n\
-         }}\n"
-    );
-    clean_ws.write_file("crates/clean_sample/src/lib.rs", &clean_rust);
+/// Verifies `add_bounded` nominal saturating sum.
+#[test]
+fn verify_add_bounded() {
+    assert_eq!(add_bounded(2, 3), 5);
+}
+"#;
+    clean_ws.write_file("crates/clean_sample/src/lib.rs", clean_rust);
 
     let bin = env!("CARGO_BIN_EXE_verify-baseline");
     let clean_ws_str = clean_ws.root.to_str().unwrap_or("");
@@ -3510,31 +2474,7 @@ fn req_0606_ac05_and_ac06_dry_run_offline_isolation_and_bp06_blueprint_gate() {
 /// non-existent `crates/...` path, permits `Draft` blueprints to propose unimplemented paths, and
 /// passes once the referenced `crates/...` module exists on disk.
 ///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 specification-to-code grounding verification
-/// mandates, closing the Check 37 exemption loophole for `Approved` design blueprints.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `Status == Approved` $\land \exists p \in \text{Refs}: \neg \text{exists}(p) \implies \text{Err}$.
-/// - `Status == Draft` $\implies$ proposed `docs/designs/` paths remain permitted (`Ok(())`).
-/// - `Status == Approved` $\land \forall p \in \text{Refs}: \text{exists}(p) \implies \text{Ok}(())$.
-///
-/// ## 3. Preconditions
-/// - Isolated `TempWorkspace` contains `crates/verify-baseline/src/lib.rs` and
-///   `docs/designs/blueprint-99-unimplemented.md`.
-///
-/// ## 4. Postconditions
-/// - Temporary workspace is deterministically cleaned up via `TempWorkspace` RAII `Drop`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over blueprint markdown length $N$.
-/// - Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Detects unimplemented `Approved` design blueprints (`missing_unimplemented_module.rs`) fail-closed.
-///
-/// ## 7. Realization & Traceability
-/// Traceability: Realises: [REQ-CHECK-37-APPROVED-BLUEPRINT-GROUNDING], [REQ-CHECK-37-APPROVED-GROUNDING]
+/// Realises: [REQ-CHECK-37-APPROVED-BLUEPRINT-GROUNDING], [REQ-CHECK-37-APPROVED-GROUNDING]
 #[test]
 fn check_37_rejects_approved_design_blueprint_with_nonexistent_crates_path() {
     use verify_baseline::checks::structural::check_blueprint_grounding;
@@ -3545,24 +2485,29 @@ fn check_37_rejects_approved_design_blueprint_with_nonexistent_crates_path() {
         "// existing crate root\n",
     );
 
-    let approved_bp = concat!(
-        "| Attribute | Specification Detail |\n",
-        "| :--- | :--- |\n",
-        "| **Blueprint ID** | `BP-99-UNIMPLEMENTED` |\n",
-        "| **Requirement ID** | `REQ-BP-099` |\n",
-        "| **Title** | Approved Blueprint Grounding Probe |\n",
-        "| **Status** | `Approved` |\n",
-        "| **Target Crates** | `verify-baseline` |\n",
-        "| **Tracked Issues** | `#691` |\n",
-        "| **Generation Mode** | `subagent` |\n",
-        "| **Specification Source** | `crates/verify-baseline/src/lib.rs` |\n\n",
-        "## 1. Executive Summary & Derivation-Annotation Contract\n\n",
-        "Anchored to `crates/verify-baseline/src/lib.rs`.\n\n",
-        "## 6. Proposed Deterministic Implementation Contract\n\n",
-        "Target module path: `crates/verify-baseline/src/missing_unimplemented_module.rs`.\n\n",
-        "## 7. Source References\n\n",
-        "- `crates/verify-baseline/src/lib.rs`\n",
-    );
+    let approved_bp = r#"| Attribute | Specification Detail |
+| :--- | :--- |
+| **Blueprint ID** | `BP-99-UNIMPLEMENTED` |
+| **Requirement ID** | `REQ-BP-099` |
+| **Title** | Approved Blueprint Grounding Probe |
+| **Status** | `Approved` |
+| **Target Crates** | `verify-baseline` |
+| **Tracked Issues** | `#691` |
+| **Generation Mode** | `subagent` |
+| **Specification Source** | `crates/verify-baseline/src/lib.rs` |
+
+## 1. Executive Summary & Derivation-Annotation Contract
+
+Anchored to `crates/verify-baseline/src/lib.rs`.
+
+## 6. Proposed Deterministic Implementation Contract
+
+Target module path: `crates/verify-baseline/src/missing_unimplemented_module.rs`.
+
+## 7. Source References
+
+- `crates/verify-baseline/src/lib.rs`
+"#;
     ws.write_file("docs/designs/blueprint-99-unimplemented.md", approved_bp);
 
     // 1. Approved blueprint citing non-existent crates/ module MUST fail Check 37
@@ -3598,5 +2543,30 @@ fn check_37_rejects_approved_design_blueprint_with_nonexistent_crates_path() {
     assert!(
         approved_present_res.is_ok(),
         "Expected Approved design blueprint with existing crates/ module to return Ok(()), got: {approved_present_res:?}"
+    );
+}
+
+/// Verifies `resolve_module_rs_files` resolves both a single `foo.rs` file and a decomposed
+/// `foo/{mod.rs,sub.rs}` module directory in deterministic sorted order.
+#[test]
+fn test_resolve_module_rs_files_single_file_and_decomposed_directory() {
+    let ws = TempWorkspace::new("resolve_mod_rs");
+    ws.write_file("src/foo.rs", "// single file\n");
+    let single = resolve_module_rs_files(&ws.root.join("src/foo.rs"));
+    assert_eq!(single, vec![ws.root.join("src/foo.rs")]);
+
+    let rm_res = std::fs::remove_file(ws.root.join("src/foo.rs"));
+    assert!(rm_res.is_ok(), "Failed to remove src/foo.rs: {rm_res:?}");
+
+    ws.write_file("src/foo/sub.rs", "// submodule\n");
+    ws.write_file("src/foo/mod.rs", "// mod root\n");
+    ws.write_file("src/foo/notes.txt", "ignored\n");
+    let decomposed = resolve_module_rs_files(&ws.root.join("src/foo.rs"));
+    assert_eq!(
+        decomposed,
+        vec![
+            ws.root.join("src/foo/mod.rs"),
+            ws.root.join("src/foo/sub.rs"),
+        ]
     );
 }

@@ -1,6 +1,7 @@
 //! Integration tests for Check 36: Per-Item 7-Section Safety Docstring Completeness Gate
 //! across Rust (`crates/**/src/**/*.rs`) and Dart (`app_flutter/lib/**/*.dart`) sources.
 
+use std::collections::BTreeSet;
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,6 +11,51 @@ use verify_baseline::checks::{
     check_docstring_completeness,
 };
 use walkdir::WalkDir;
+
+const MAX_MODULE_WALK_DEPTH: usize = 16;
+
+/// Resolves a target `.rs` file or its decomposed `<stem>/` module directory into sorted `.rs` paths.
+/// Realises: [REQ-CHECK-36-MODULE-RESOLVER]
+fn resolve_module_rs_files(path: &Path) -> Vec<PathBuf> {
+    if path.is_file() {
+        return vec![path.to_path_buf()];
+    }
+    let dir_path = if path.is_dir() {
+        path.to_path_buf()
+    } else {
+        path.with_extension("")
+    };
+    if !dir_path.is_dir() {
+        return Vec::new();
+    }
+    let mut collected = BTreeSet::new();
+    let mut stack = vec![(dir_path, 0usize)];
+    while let Some((current_dir, depth)) = stack.pop() {
+        if depth > MAX_MODULE_WALK_DEPTH {
+            continue;
+        }
+        let Ok(entries) = fs::read_dir(&current_dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                let next_depth = depth.saturating_add(1);
+                if next_depth <= MAX_MODULE_WALK_DEPTH {
+                    stack.push((entry_path, next_depth));
+                }
+            } else if file_type.is_file()
+                && entry_path.extension().and_then(|ext| ext.to_str()) == Some("rs")
+            {
+                collected.insert(entry_path);
+            }
+        }
+    }
+    collected.into_iter().collect()
+}
 
 struct ScopedTempWorkspace {
     root: PathBuf,
@@ -249,40 +295,65 @@ fn test_live_workspace_crates_have_100_percent_per_item_7_section_docstrings(
         .and_then(|p| p.parent())
         .ok_or("failed to resolve repo_root from CARGO_MANIFEST_DIR")?;
 
-    // 1. Verify docstring_gate.rs, source_ast.rs, docstring.rs, and code.rs satisfy Check 34 source purity and Check 36 7-section Rustdoc
+    // 1. Verify docstring_gate, source_ast, docstring, and code modules (single .rs file or decomposed directory)
+    // satisfy Check 34 source purity and Check 36 Rustdoc completeness.
     for rel_mod in [
         "crates/verify-baseline/src/checks/docstring_gate.rs",
         "crates/deap-core/src/source_ast.rs",
         "crates/compile-sysml/src/docstring.rs",
         "crates/ingest-sysml/src/translators/code.rs",
     ] {
-        let mod_path = repo_root.join(rel_mod);
-        let mod_src = fs::read_to_string(&mod_path)?;
-        let purity_res = audit_source_purity(&mod_src, rel_mod, true);
+        let resolved_files = resolve_module_rs_files(&repo_root.join(rel_mod));
         assert!(
-            purity_res.is_ok(),
-            "{} failed Check 34 source purity: {:?}",
-            rel_mod,
-            purity_res.err()
+            !resolved_files.is_empty(),
+            "Expected {} (or decomposed module directory) to resolve to at least one .rs file",
+            rel_mod
         );
-        let doc_res = audit_rust_source_docstrings(&mod_src, rel_mod);
-        assert!(
-            doc_res.is_ok(),
-            "{} failed Check 36 per-item docstring gate: {:?}",
-            rel_mod,
-            doc_res.err()
-        );
+        for file_path in resolved_files {
+            let rel_file = file_path
+                .strip_prefix(repo_root)
+                .unwrap_or(&file_path)
+                .display()
+                .to_string();
+            let mod_src = fs::read_to_string(&file_path)?;
+            let purity_res = audit_source_purity(&mod_src, &rel_file, true);
+            assert!(
+                purity_res.is_ok(),
+                "{} failed Check 34 source purity: {:?}",
+                rel_file,
+                purity_res.err()
+            );
+            let doc_res = audit_rust_source_docstrings(&mod_src, &rel_file);
+            assert!(
+                doc_res.is_ok(),
+                "{} failed Check 36 per-item docstring gate: {:?}",
+                rel_file,
+                doc_res.err()
+            );
+        }
     }
 
-    let runner_path = repo_root.join("crates/verify-baseline/src/runner.rs");
-    let runner_src = fs::read_to_string(&runner_path)?;
-    let runner_doc_res =
-        audit_rust_source_docstrings(&runner_src, "crates/verify-baseline/src/runner.rs");
+    let runner_files =
+        resolve_module_rs_files(&repo_root.join("crates/verify-baseline/src/runner.rs"));
     assert!(
-        runner_doc_res.is_ok(),
-        "runner.rs failed Check 36 per-item docstring gate: {:?}",
-        runner_doc_res.err()
+        !runner_files.is_empty(),
+        "Expected crates/verify-baseline/src/runner.rs (or runner/ directory) to resolve to at least one .rs file"
     );
+    for runner_file in runner_files {
+        let rel_runner = runner_file
+            .strip_prefix(repo_root)
+            .unwrap_or(&runner_file)
+            .display()
+            .to_string();
+        let runner_src = fs::read_to_string(&runner_file)?;
+        let runner_doc_res = audit_rust_source_docstrings(&runner_src, &rel_runner);
+        assert!(
+            runner_doc_res.is_ok(),
+            "{} failed Check 36 per-item docstring gate: {:?}",
+            rel_runner,
+            runner_doc_res.err()
+        );
+    }
 
     // 2. Verify 100% of non-test .rs files across all 6 workspace crates pass Check 36
     let crates_dir = repo_root.join("crates");
@@ -573,43 +644,43 @@ class SecondaryService {
 
 #[test]
 fn test_check_36_nested_block_comments_and_escaped_char_literals() {
-    let rust_source = concat!(
-        "/* outer block comment\n",
-        "   /* inner nested block comment */\n",
-        "   /// Member documentation.\n",
-        "   pub fn fake_inside_nested_comment() {}\n",
-        "*/\n",
-        "/// Documented function using hex and unicode character escapes alongside lifetimes.\n",
-        "///\n",
-        "/// ## 1. Safety Intent & Regulatory Scope\n",
-        "/// Verifies nested block comments and escaped char literals under DO-178C Level A.\n",
-        "///\n",
-        "/// ## 2. Invariants & Mathematical Properties\n",
-        "/// - Character escapes `\\x7F` and `\\u{10FFFF}` never perturb string or comment state.\n",
-        "///\n",
-        "/// ## 3. Preconditions\n",
-        "/// - Input slice is valid UTF-8.\n",
-        "///\n",
-        "/// ## 4. Postconditions\n",
-        "/// - Returns first matching char.\n",
-        "///\n",
-        "/// ## 5. Algorithmic Complexity Bounds\n",
-        "/// - Time Complexity: O(1).\n",
-        "/// - Space Complexity: O(1).\n",
-        "///\n",
-        "/// ## 6. Failure Modes & Fault Tolerance\n",
-        "/// - Total function with zero panics.\n",
-        "///\n",
-        "/// ## 7. Realization & Traceability\n",
-        "/// Realises: [REQ-CHECK-36-NESTED-BLOCK-COMMENT]\n",
-        "pub fn inspect_char_escapes<'a>(input: &'a str) -> (char, char, &'a str) {\n",
-        "    let del = '\\x7F';\n",
-        "    let max_scalar = '\\u{10FFFF}';\n",
-        "    let quote_ch = '\\\"';\n",
-        "    let _ = quote_ch;\n",
-        "    (del, max_scalar, input)\n",
-        "}\n"
-    );
+    let rust_source = "\
+/* outer block comment
+   /* inner nested block comment */
+   /// Member documentation.
+   pub fn fake_inside_nested_comment() {}
+*/
+/// Documented function using hex and unicode character escapes alongside lifetimes.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Verifies nested block comments and escaped char literals under DO-178C Level A.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Character escapes `\\x7F` and `\\u{10FFFF}` never perturb string or comment state.
+///
+/// ## 3. Preconditions
+/// - Input slice is valid UTF-8.
+///
+/// ## 4. Postconditions
+/// - Returns first matching char.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function with zero panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-36-NESTED-BLOCK-COMMENT]
+pub fn inspect_char_escapes<'a>(input: &'a str) -> (char, char, &'a str) {
+    let del = '\\x7F';
+    let max_scalar = '\\u{10FFFF}';
+    let quote_ch = '\\\"';
+    let _ = quote_ch;
+    (del, max_scalar, input)
+}
+";
 
     assert_eq!(
         audit_rust_source_docstrings(rust_source, "crates/demo/src/lib.rs"),
@@ -617,37 +688,37 @@ fn test_check_36_nested_block_comments_and_escaped_char_literals() {
         "Nested Rust block comment must remain active after inner `*/` until outer `*/`"
     );
 
-    let dart_source = concat!(
-        "/* outer dart block comment\n",
-        "   /* inner nested dart block comment */\n",
-        "   /// Member documentation.\n",
-        "   class FakeDartClassInNestedComment {}\n",
-        "*/\n",
-        "/// Documented Dart function after nested block comment.\n",
-        "///\n",
-        "/// ## 1. Safety Intent & Regulatory Scope\n",
-        "/// Verifies nested Dart block comments under DO-178C Level A.\n",
-        "///\n",
-        "/// ## 2. Invariants & Mathematical Properties\n",
-        "/// - Nested `/* ... */` preserves comment depth.\n",
-        "///\n",
-        "/// ## 3. Preconditions\n",
-        "/// - None.\n",
-        "///\n",
-        "/// ## 4. Postconditions\n",
-        "/// - Completes deterministically.\n",
-        "///\n",
-        "/// ## 5. Algorithmic Complexity Bounds\n",
-        "/// - Time Complexity: O(1).\n",
-        "/// - Space Complexity: O(1).\n",
-        "///\n",
-        "/// ## 6. Failure Modes & Fault Tolerance\n",
-        "/// - Infallible execution.\n",
-        "///\n",
-        "/// ## 7. Realization & Traceability\n",
-        "/// Realises: [REQ-CHECK-36-DART-NESTED-BLOCK-COMMENT]\n",
-        "void realDartFn() {}\n"
-    );
+    let dart_source = "\
+/* outer dart block comment
+   /* inner nested dart block comment */
+   /// Member documentation.
+   class FakeDartClassInNestedComment {}
+*/
+/// Documented Dart function after nested block comment.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Verifies nested Dart block comments under DO-178C Level A.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Nested `/* ... */` preserves comment depth.
+///
+/// ## 3. Preconditions
+/// - None.
+///
+/// ## 4. Postconditions
+/// - Completes deterministically.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Infallible execution.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-36-DART-NESTED-BLOCK-COMMENT]
+void realDartFn() {}
+";
 
     assert_eq!(
         audit_dart_source_docstrings(dart_source, "app_flutter/lib/nested.dart"),
@@ -689,94 +760,36 @@ fn test_check_36_nested_block_comments_and_escaped_char_literals() {
 }
 
 /// Verifies that `audit_source_purity` fails closed on outer and inner clippy lint suppressions.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 34 zero-lint-suppression verification (`test_check_36_source_purity_negative_probes`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Both outer and inner clippy allow attributes are rejected across production and test targets.
-///
-/// ## 3. Preconditions
-/// - Synthetic Rust source inputs contain outer and inner clippy suppression attributes.
-///
-/// ## 4. Postconditions
-/// - `audit_source_purity` returns `Err` for both outer and inner suppression attributes.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(L) where L is the synthetic fixture line count.
-/// - Space Complexity: O(1) bounded diagnostic output.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Invokes `audit_source_purity` directly with deterministic UTF-8 slices.
-/// - State: Stateless purity verification.
-/// - Action: Asserts `is_err()` on all negative probes.
-/// - Resource: Zero filesystem mutations.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-36-SOURCE-PURITY-NEG-PROBE]
 #[test]
 fn test_check_36_source_purity_negative_probes() {
-    let outer_allow = concat!(
-        "#",
-        "[allow(clippy::too_many_arguments)]\n",
-        "pub fn impure_fn() {}\n"
-    );
+    let outer_allow = "#[allow(clippy::too_many_arguments)]\npub fn impure_fn() {}\n";
     assert!(
         audit_source_purity(outer_allow, "crates/demo/src/lib.rs", true).is_err(),
         "audit_source_purity must reject outer clippy allow attribute in production source"
     );
 
-    let inner_allow = concat!(
-        "#!",
-        "[allow(clippy::unwrap_used)]\n",
-        "pub fn impure_mod_fn() {}\n"
-    );
+    let inner_allow = "#![allow(clippy::unwrap_used)]\npub fn impure_mod_fn() {}\n";
     assert!(
         audit_source_purity(inner_allow, "crates/demo/src/lib.rs", true).is_err(),
         "audit_source_purity must reject inner clippy allow attribute in production source"
     );
 
-    let test_allow = concat!(
-        "#[cfg(test)]\n",
-        "mod tests {\n",
-        "    #",
-        "[allow(clippy::unwrap_used)]\n",
-        "    #[test]\n",
-        "    fn bad_test() {}\n",
-        "}\n"
-    );
+    let test_allow = "\
+#[cfg(test)]
+mod tests {
+    #[allow(clippy::unwrap_used)]
+    #[test]
+    fn bad_test() {}
+}
+";
     assert!(
         audit_source_purity(test_allow, "crates/demo/src/lib.rs", true).is_err(),
         "audit_source_purity must reject clippy allow attribute inside #[cfg(test)] when check_test_targets is true"
     );
 }
 
-/// Verifies Dart nested quotes inside `${...}` string interpolations containing `//` or `/*` and multiline `@Annotation(...)` preservation.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ISO 26262 ASIL D Dart lexical and annotation completeness (refs #508).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Nested quotes inside `${...}` interpolations (`"${map["http://"]}"` and `"${map["/*"]}"`) never close the outer string literal or trigger line/block comments.
-/// - Multiline `@Annotation(\n  ...\n)` blocks preserve the preceding 7-section `current_doc` buffer until the annotated declaration line.
-///
-/// ## 3. Preconditions
-/// - Dart source fixtures contain `${...}` nested string literals with `//` and `/*` tokens and multiline `@Deprecated(...)` annotations.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(3)` when all items are documented and fails closed (`Err`) when a member following `"${map["http://"]}"` or `"${map["/*"]}"` is undocumented.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(L) over the Dart fixture line count.
-/// - Space Complexity: O(1) bounded test buffers.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Direct invocation of `audit_dart_source_docstrings`.
-/// - State: Isolated per-call lexical state.
-/// - Action: Verifies both positive and negative probes deterministically.
-/// - Resource: Zero filesystem side effects.
-///
-/// ## 7. Realization & Traceability
+/// Verifies Dart nested quotes inside `${...}` interpolations containing `//` or `/*` and multiline `@Annotation(...)` preservation.
 /// Realises: [REQ-CHECK-36-DART-INTERP-QUOTES-AND-MULTILINE-ANNOTATION]
 #[test]
 fn test_check_36_dart_interpolated_nested_quotes_with_comment_tokens_and_multiline_annotations() {
@@ -1021,32 +1034,6 @@ class TelemetryFormatter {
 }
 
 /// Verifies scoped `#[cfg(test)]` / `mod tests` handling and `pub(self)`, `unsafe`, and `extern` Rust item classification.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 Rust test-scope isolation and item classification completeness (refs #508).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `#[cfg(test)] mod tests;` and braced `mod tests { ... }` exempt only their own declaration or brace scope, never subsequent production items.
-/// - `#[cfg(test)] impl SomeType { ... }` exempts all methods inside the test-only `impl` block.
-/// - `pub(self)`, `unsafe trait`, `unsafe fn`, and `extern "C" fn` items are classified and audited for 7-section docstrings.
-///
-/// ## 3. Preconditions
-/// - In-memory Rust fixtures exercise `mod tests;`, `mod tests { ... }`, `#[cfg(test)] impl`, and extended item qualifiers.
-///
-/// ## 4. Postconditions
-/// - Rejects undocumented production items after `mod tests` and undocumented `pub(self)`/`unsafe`/`extern` items, while accepting `#[cfg(test)] impl` helpers.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(L) over the Rust fixture lines.
-/// - Space Complexity: O(1) bounded diagnostic vectors.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Direct invocation of `audit_rust_source_docstrings`.
-/// - State: Isolated per-invocation scanner state.
-/// - Action: Asserts exact negative and positive outcomes.
-/// - Resource: Zero filesystem side effects.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-36-RUST-SCOPED-CFG-TEST-AND-QUALIFIERS]
 #[test]
 fn test_check_36_rust_scoped_cfg_test_and_extended_qualifiers() {
@@ -1146,41 +1133,15 @@ pub extern "C" fn ffi_entrypoint() {}
 }
 
 /// Verifies that inline block comments and adjacent string/raw-string literals preserve token separation in Rust and Dart (refs #517).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 lexical token boundary preservation in Check 36 (`test_check_36_inline_comment_and_literal_token_separation_issue_517`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Closing `*/`, `"`, and `"#` tokens do not fuse adjacent keywords (`pub/*comment*/fn`, `pub extern"C"fn`, `pub extern r#"C"#fn`, `void/*comment*/undocumentedDartFn`).
-/// - Nested block comments (`/* outer /* inner */ pub fn fake_undocumented() {} */`) remain suppressed until outer `*/`.
-///
-/// ## 3. Preconditions
-/// - In-memory Rust and Dart fixtures contain inline block comments and string literals without surrounding spaces.
-///
-/// ## 4. Postconditions
-/// - `audit_rust_source_docstrings` and `audit_dart_source_docstrings` fail closed on all undocumented items while ignoring declarations inside nested block comments.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(L) over the fixture lines.
-/// - Space Complexity: O(1) bounded diagnostic buffers.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Direct invocation of `audit_rust_source_docstrings` and `audit_dart_source_docstrings`.
-/// - State: Isolated per-call lexical state.
-/// - Action: Asserts every undocumented symbol is reported and nested-comment symbols are excluded.
-/// - Resource: Zero filesystem mutations.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-36-TOKEN-SEPARATION-517]
 #[test]
 fn test_check_36_inline_comment_and_literal_token_separation_issue_517() {
-    let rust_fixture = concat!(
-        "/* outer /* inner */ pub fn fake_undocumented() {} */\n",
-        "pub/*comment*/fn undocumented_comment_fn() {}\n",
-        "pub/*comment*/struct UndocumentedCommentStruct {}\n",
-        "pub extern\"C\"fn undocumented_extern_fn() {}\n",
-        "pub extern r#\"C\"#fn undocumented_raw_extern_fn() {}\n",
-    );
+    let rust_fixture = r##"/* outer /* inner */ pub fn fake_undocumented() {} */
+pub/*comment*/fn undocumented_comment_fn() {}
+pub/*comment*/struct UndocumentedCommentStruct {}
+pub extern"C"fn undocumented_extern_fn() {}
+pub extern r#"C"#fn undocumented_raw_extern_fn() {}
+"##;
 
     let rust_res = audit_rust_source_docstrings(rust_fixture, "crates/demo/src/lib.rs");
     assert!(
@@ -1208,10 +1169,10 @@ fn test_check_36_inline_comment_and_literal_token_separation_issue_517() {
         );
     }
 
-    let dart_fixture = concat!(
-        "/* outer /* inner */ void fakeUndocumentedDartFn() {} */\n",
-        "void/*comment*/undocumentedDartFn() {}\n",
-    );
+    let dart_fixture = "\
+/* outer /* inner */ void fakeUndocumentedDartFn() {} */
+void/*comment*/undocumentedDartFn() {}
+";
     let dart_res = audit_dart_source_docstrings(dart_fixture, "app_flutter/lib/inline.dart");
     assert!(
         dart_res.is_err(),
@@ -1229,4 +1190,71 @@ fn test_check_36_inline_comment_and_literal_token_separation_issue_517() {
         "Expected Check 36 to flag 'undocumentedDartFn', got:\n{}",
         dart_errs
     );
+}
+
+/// Verifies `resolve_module_rs_files` resolves both a single `foo.rs` file and a decomposed `foo/` module directory within bounded depth.
+/// Realises: [REQ-CHECK-36-MODULE-RESOLVER]
+#[test]
+fn test_resolve_module_rs_files_single_file_and_decomposed_directory() -> Result<(), Box<dyn Error>>
+{
+    let ws = ScopedTempWorkspace::new("resolve_module_rs")?;
+    let src_dir = ws.root.join("src");
+    fs::create_dir_all(&src_dir)?;
+
+    // 1. Single foo.rs file resolves directly to vec![foo.rs]
+    let single_foo = src_dir.join("foo.rs");
+    fs::write(&single_foo, "// single module file\n")?;
+    assert_eq!(
+        resolve_module_rs_files(&single_foo),
+        vec![single_foo.clone()],
+        "Single foo.rs file must resolve to vec![foo.rs]"
+    );
+
+    // 2. Decomposed foo/{mod.rs, sub.rs, nested/leaf.rs} resolves recursively in deterministic BTreeSet order
+    fs::remove_file(&single_foo)?;
+    let foo_dir = src_dir.join("foo");
+    let nested_dir = foo_dir.join("nested");
+    fs::create_dir_all(&nested_dir)?;
+    let mod_rs = foo_dir.join("mod.rs");
+    let sub_rs = foo_dir.join("sub.rs");
+    let leaf_rs = nested_dir.join("leaf.rs");
+    fs::write(&sub_rs, "// sub\n")?;
+    fs::write(&mod_rs, "// mod\n")?;
+    fs::write(&leaf_rs, "// leaf\n")?;
+    fs::write(foo_dir.join("notes.md"), "ignored non-rust file\n")?;
+
+    assert_eq!(
+        resolve_module_rs_files(&single_foo),
+        vec![mod_rs, leaf_rs, sub_rs],
+        "Decomposed foo/ directory must resolve all .rs submodules in deterministic sorted order"
+    );
+
+    // 3. Depth boundary: depth 16 is included, depth 17 is excluded
+    let bar_rs = src_dir.join("bar.rs");
+    let mut cur_dir = src_dir.join("bar");
+    for level in 1..=16usize {
+        cur_dir = cur_dir.join(format!("d{level:02}"));
+    }
+    fs::create_dir_all(&cur_dir)?;
+    let depth_16_file = cur_dir.join("at_max_depth.rs");
+    fs::write(&depth_16_file, "// depth 16\n")?;
+
+    let depth_17_dir = cur_dir.join("d17");
+    fs::create_dir_all(&depth_17_dir)?;
+    let depth_17_file = depth_17_dir.join("beyond_max_depth.rs");
+    fs::write(&depth_17_file, "// depth 17\n")?;
+
+    let bar_resolved = resolve_module_rs_files(&bar_rs);
+    assert_eq!(
+        bar_resolved,
+        vec![depth_16_file],
+        "Resolver must include depth <= 16 and exclude depth 17"
+    );
+
+    // 4. Non-existent module path returns empty Vec
+    assert!(
+        resolve_module_rs_files(&src_dir.join("missing.rs")).is_empty(),
+        "Missing module path must return empty Vec"
+    );
+    Ok(())
 }

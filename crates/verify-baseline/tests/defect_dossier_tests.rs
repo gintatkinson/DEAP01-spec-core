@@ -2,6 +2,7 @@
 //! dual-location `.pipeline/defects/` persistence, GitHub SSOT publishing/editing, Closed-Loop
 //! Payload Verification Gate, and minimized `adversarial-code-auditor` skill parity (refs #465, #466, #467, #468).
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -15,6 +16,51 @@ use verify_baseline::defect_dossier::{
     validate_defect_title, validate_section_6_code_and_target_grounding,
     verify_closed_loop_payload, DefectDossierArgs,
 };
+
+const MAX_MODULE_WALK_DEPTH: usize = 16;
+
+/// Resolves a target `.rs` file or its decomposed `<stem>/` module directory into sorted `.rs` paths.
+/// Realises: [REQ-DEFECT-DOSSIER-MODULE-RESOLVER]
+fn resolve_module_rs_files(path: &Path) -> Vec<PathBuf> {
+    if path.is_file() {
+        return vec![path.to_path_buf()];
+    }
+    let dir_path = if path.is_dir() {
+        path.to_path_buf()
+    } else {
+        path.with_extension("")
+    };
+    if !dir_path.is_dir() {
+        return Vec::new();
+    }
+    let mut collected = BTreeSet::new();
+    let mut stack = vec![(dir_path, 0usize)];
+    while let Some((current_dir, depth)) = stack.pop() {
+        if depth > MAX_MODULE_WALK_DEPTH {
+            continue;
+        }
+        let Ok(entries) = fs::read_dir(&current_dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                let next_depth = depth.saturating_add(1);
+                if next_depth <= MAX_MODULE_WALK_DEPTH {
+                    stack.push((entry_path, next_depth));
+                }
+            } else if file_type.is_file()
+                && entry_path.extension().and_then(|ext| ext.to_str()) == Some("rs")
+            {
+                collected.insert(entry_path);
+            }
+        }
+    }
+    collected.into_iter().collect()
+}
 
 struct ScopedTempWorkspace {
     root: PathBuf,
@@ -445,34 +491,52 @@ fn test_defect_dossier_rs_check_34_purity_and_7_section_rustdoc(
         .parent()
         .and_then(|p| p.parent())
         .ok_or("repo root")?;
-    let path = repo_root.join("crates/verify-baseline/src/defect_dossier.rs");
-    let src = fs::read_to_string(&path)?;
-    let res = audit_source_purity(&src, "crates/verify-baseline/src/defect_dossier.rs", true);
+    let resolved_files =
+        resolve_module_rs_files(&repo_root.join("crates/verify-baseline/src/defect_dossier.rs"));
     assert!(
-        res.is_ok(),
-        "defect_dossier.rs failed Check 34 source purity: {:?}",
-        res.err()
+        !resolved_files.is_empty(),
+        "Expected crates/verify-baseline/src/defect_dossier.rs (or defect_dossier/ directory) to resolve to at least one .rs file"
     );
 
-    // Also verify the module header satisfies Tier A and every item satisfies Tier A / Tier B/C with Realises: [...]
-    let module_doc: Vec<String> = src
-        .lines()
-        .map(str::trim)
-        .take_while(|line| line.starts_with("//!"))
-        .map(String::from)
-        .collect();
-    assert!(
-        is_compliant_rust_docblock(&module_doc, true),
-        "defect_dossier.rs module header must satisfy Tier A Rustdoc contract"
-    );
+    let mut total_item_count = 0usize;
+    for path in &resolved_files {
+        let rel_path = path
+            .strip_prefix(repo_root)
+            .unwrap_or(path)
+            .display()
+            .to_string();
+        let src = fs::read_to_string(path)?;
+        let res = audit_source_purity(&src, &rel_path, true);
+        assert!(
+            res.is_ok(),
+            "{} failed Check 34 source purity: {:?}",
+            rel_path,
+            res.err()
+        );
 
-    let item_count =
-        audit_rust_source_docstrings(&src, "crates/verify-baseline/src/defect_dossier.rs")
-            .map_err(|errs| errs.join("\n"))?;
+        // Verify the module header satisfies Tier A and every item satisfies Tier A / Tier B/C with Realises: [...]
+        let module_doc: Vec<String> = src
+            .lines()
+            .map(str::trim)
+            .skip_while(|line| line.is_empty())
+            .take_while(|line| line.starts_with("//!"))
+            .map(String::from)
+            .collect();
+        assert!(
+            is_compliant_rust_docblock(&module_doc, true),
+            "{} module header must satisfy Tier A Rustdoc contract",
+            rel_path
+        );
+
+        let item_count =
+            audit_rust_source_docstrings(&src, &rel_path).map_err(|errs| errs.join("\n"))?;
+        total_item_count = total_item_count.saturating_add(item_count);
+    }
+
     assert!(
-        item_count >= 18,
-        "Expected at least 18 documented structs/enums/functions in defect_dossier.rs, found {}",
-        item_count
+        total_item_count >= 18,
+        "Expected at least 18 documented structs/enums/functions across defect_dossier module files, found {}",
+        total_item_count
     );
     Ok(())
 }
@@ -690,21 +754,11 @@ fn test_run_check_defect_publishes_by_default_without_publish_flag_and_fails_clo
 #[test]
 fn test_rejects_regex_in_section_6_rust_blocks() -> Result<(), Box<dyn std::error::Error>> {
     let base = sample_valid_critical_dossier();
-    let pat_regex_colons = ["reg", "ex::"].concat();
-    let pat_regex_new = ["Reg", "ex::new"].concat();
-    let pat_regex_set = ["Reg", "exSet"].concat();
-    let pat_use_regex = ["use", " ", "reg", "ex"].concat();
-    let ident_re = ["Reg", "ex"].concat();
+    let cpp_block = "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```";
 
     // 1. Rejection of regex colons in ```rust block
-    let snippet_1 = format!(
-        "```rust\npub fn parse_text(input: &str) -> bool {{\n    let re = {}{}::new(r\"^[a-z]+$\").unwrap();\n    re.is_match(input)\n}}\n```",
-        pat_regex_colons, ident_re
-    );
-    let regex_path = base.replace(
-        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
-        &snippet_1,
-    );
+    let snippet_1 = "```rust\npub fn parse_text(input: &str) -> bool {\n    let re = regex::Regex::new(r\"^[a-z]+$\").unwrap();\n    re.is_match(input)\n}\n```";
+    let regex_path = base.replace(cpp_block, snippet_1);
     let res1 = validate_defect_dossier(&regex_path);
     assert!(
         res1.is_err(),
@@ -718,14 +772,8 @@ fn test_rejects_regex_in_section_6_rust_blocks() -> Result<(), Box<dyn std::erro
     );
 
     // 2. Rejection of constructor
-    let snippet_2 = format!(
-        "```rust\npub fn parse_text(input: &str) -> bool {{\n    let re = {}(\"^abc\").unwrap();\n    true\n}}\n```",
-        pat_regex_new
-    );
-    let regex_new = base.replace(
-        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
-        &snippet_2,
-    );
+    let snippet_2 = "```rust\npub fn parse_text(input: &str) -> bool {\n    let re = Regex::new(\"^abc\").unwrap();\n    true\n}\n```";
+    let regex_new = base.replace(cpp_block, snippet_2);
     let res2 = validate_defect_dossier(&regex_new);
     assert!(
         res2.is_err(),
@@ -733,14 +781,9 @@ fn test_rejects_regex_in_section_6_rust_blocks() -> Result<(), Box<dyn std::erro
     );
 
     // 3. Rejection of RegexSet
-    let snippet_3 = format!(
-        "```rust\npub fn parse_set() {{\n    let set = {}::new(&[\"a\", \"b\"]).unwrap();\n}}\n```",
-        pat_regex_set
-    );
-    let regex_set = base.replace(
-        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
-        &snippet_3,
-    );
+    let snippet_3 =
+        "```rust\npub fn parse_set() {\n    let set = RegexSet::new(&[\"a\", \"b\"]).unwrap();\n}\n```";
+    let regex_set = base.replace(cpp_block, snippet_3);
     let res3 = validate_defect_dossier(&regex_set);
     assert!(
         res3.is_err(),
@@ -748,14 +791,8 @@ fn test_rejects_regex_in_section_6_rust_blocks() -> Result<(), Box<dyn std::erro
     );
 
     // 4. Rejection of use regex
-    let snippet_4 = format!(
-        "```rust\n{}::{};\npub fn helper() {{}}\n```",
-        pat_use_regex, ident_re
-    );
-    let use_regex = base.replace(
-        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
-        &snippet_4,
-    );
+    let snippet_4 = "```rust\nuse regex::Regex;\npub fn helper() {}\n```";
+    let use_regex = base.replace(cpp_block, snippet_4);
     let res4 = validate_defect_dossier(&use_regex);
     assert!(
         res4.is_err(),
@@ -764,7 +801,7 @@ fn test_rejects_regex_in_section_6_rust_blocks() -> Result<(), Box<dyn std::erro
 
     // 5. Valid Rust code without regex passes
     let valid_rust = base.replace(
-        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+        cpp_block,
         "```rust\npub fn parse_text_deterministic(input: &str) -> bool {\n    input.starts_with(\"abc\")\n}\n```",
     );
     let res5 = validate_defect_dossier(&valid_rust);
@@ -834,8 +871,17 @@ fn test_issue_474_governance_and_dry_run_contract_alignment(
     let agents_md = fs::read_to_string(repo_root.join("AGENTS.md"))?;
     let dispatch_rules =
         fs::read_to_string(repo_root.join("rules/subagent-dispatch-standards.md"))?;
-    let dossier_rs =
-        fs::read_to_string(repo_root.join("crates/verify-baseline/src/defect_dossier.rs"))?;
+    let dossier_files =
+        resolve_module_rs_files(&repo_root.join("crates/verify-baseline/src/defect_dossier.rs"));
+    assert!(
+        !dossier_files.is_empty(),
+        "Expected defect_dossier.rs (or defect_dossier/ directory) to resolve to at least one .rs file"
+    );
+    let mut dossier_rs = String::new();
+    for file_path in &dossier_files {
+        dossier_rs.push_str(&fs::read_to_string(file_path)?);
+        dossier_rs.push('\n');
+    }
 
     for (name, content) in [
         ("AGENTS.md", &agents_md),
@@ -902,14 +948,12 @@ fn test_issue_474_governance_and_dry_run_contract_alignment(
 #[test]
 fn test_section_6_rust_zero_regex_rejection() {
     let base = sample_valid_critical_dossier();
-    let kw_re = ["reg", "ex"].concat();
-    let kw_cap_re = ["Reg", "ex"].concat();
 
     // 1. Diff fence with added regex import/constructor must be rejected
     let diff_lines = vec![
         "```diff".to_string(),
-        format!("+use {}::{};", kw_re, kw_cap_re),
-        format!("+let re = {}::new(\"^a+\").unwrap();", kw_cap_re),
+        "+use regex::Regex;".to_string(),
+        "+let re = Regex::new(\"^a+\").unwrap();".to_string(),
         "```".to_string(),
     ];
     let mut errs_diff = Vec::new();
@@ -926,9 +970,9 @@ fn test_section_6_rust_zero_regex_rejection() {
 
     // 2. Whitespace-separated `use  regex`, `extern crate regex`, and `regex ::` must be rejected
     for bad_line in [
-        format!("use  {}::{};", kw_re, kw_cap_re),
-        format!("extern crate {};", kw_re),
-        format!("let _ = {} :: {}::new(\"a\");", kw_re, kw_cap_re),
+        "use  regex::Regex;".to_string(),
+        "extern crate regex;".to_string(),
+        "let _ = regex :: Regex::new(\"a\");".to_string(),
     ] {
         let sec6 = vec!["```rust".to_string(), bad_line.clone(), "```".to_string()];
         let mut errs = Vec::new();
@@ -1056,4 +1100,30 @@ fn test_domain_cleanliness_gate() {
         validate_defect_dossier(&dirty_dossier).is_err(),
         "validate_defect_dossier must reject downstream crate reference in Section 6"
     );
+}
+
+#[test]
+fn test_resolve_module_rs_files_single_file_and_decomposed_directory(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let tmp = ScopedTempWorkspace::new("resolve_mod_rs")?;
+    let src_dir = tmp.root.join("src");
+    fs::create_dir_all(&src_dir)?;
+    let single_file = src_dir.join("foo.rs");
+    fs::write(&single_file, "// single file\n")?;
+    assert_eq!(
+        resolve_module_rs_files(&single_file),
+        vec![single_file.clone()]
+    );
+
+    fs::remove_file(&single_file)?;
+    let mod_dir = src_dir.join("foo");
+    fs::create_dir_all(&mod_dir)?;
+    fs::write(mod_dir.join("sub.rs"), "// submodule\n")?;
+    fs::write(mod_dir.join("mod.rs"), "// mod root\n")?;
+    fs::write(mod_dir.join("README.md"), "ignored\n")?;
+    assert_eq!(
+        resolve_module_rs_files(&single_file),
+        vec![mod_dir.join("mod.rs"), mod_dir.join("sub.rs")]
+    );
+    Ok(())
 }
