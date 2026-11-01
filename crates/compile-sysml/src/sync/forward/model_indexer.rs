@@ -208,51 +208,6 @@ pub(crate) fn lookup_part_feature_number(
         .map(|pos| pos.saturating_add(1))
 }
 
-/// Selects the default `PartDef` engine for `p`, falling back to child subpackage parts or `part_contexts` when `p.part_defs` is empty.
-/// Realises: [REQ-SYNC-FORWARD-MODEL-INDEX]
-fn select_package_or_global_default_engine(
-    p: &PackageDef,
-    part_contexts: &[PartContext<'_>],
-) -> String {
-    if !p.part_defs.is_empty() {
-        return select_default_package_engine(p);
-    }
-    p.packages
-        .iter()
-        .find(|sub| !sub.part_defs.is_empty())
-        .map(select_default_package_engine)
-        .or_else(|| part_contexts.first().map(|ctx| ctx.part.name.clone()))
-        .unwrap_or_else(|| sanitize_id(&p.name))
-}
-
-/// Resolves the target `PartDef` engine name for `uc` within `p` (allowing child/global `part_contexts` resolution when `p.part_defs` is empty).
-/// Realises: [REQ-SYNC-FORWARD-USECASEMETA]
-fn resolve_use_case_engine_name(
-    p: &PackageDef,
-    uc: &UseCaseDef,
-    part_contexts: &[PartContext<'_>],
-    default_engine_name: &str,
-) -> String {
-    let parsed_doc = parse_use_case_doc(uc.doc.as_deref());
-    let Some(subj) = uc.subject.as_ref().or(parsed_doc.subject.as_ref()) else {
-        return default_engine_name.to_string();
-    };
-    let declared_in_pkg = p.part_defs.iter().any(|part| &part.name == subj)
-        || part_contexts
-            .iter()
-            .any(|ctx| &ctx.part.name == subj && ctx.pkg_name == p.name);
-    let declared_in_child_or_container = (p.part_defs.is_empty()
-        || p.packages
-            .iter()
-            .any(|sub| sub.part_defs.iter().any(|pt| &pt.name == subj)))
-        && part_contexts.iter().any(|ctx| &ctx.part.name == subj);
-    if declared_in_pkg || declared_in_child_or_container {
-        subj.clone()
-    } else {
-        default_engine_name.to_string()
-    }
-}
-
 /// Allocates 1-based `UseCaseMeta` descriptors across `part_packages`, pairing each `UseCaseDef` with its subject engine Feature and package User Story.
 /// Realises: [REQ-SYNC-FORWARD-USECASEMETA]
 fn collect_use_case_allocations<'a>(
@@ -264,30 +219,32 @@ fn collect_use_case_allocations<'a>(
     let mut uc_metas: Vec<UseCaseMeta<'a>> = Vec::new();
     for p in part_packages {
         let (_, subsys_dir) = resolve_package_subsystem_labels(root_pkg_name, &p.name);
-        let default_engine_name = select_package_or_global_default_engine(p, part_contexts);
+        let default_engine_name = select_default_package_engine(p);
         let default_engine_feat_num =
             lookup_part_feature_number(part_contexts, &p.name, &default_engine_name).unwrap_or(1);
         let pkg_stories: Vec<usize> = collect_package_story_numbers(story_metas, &p.name);
 
         for (u_idx, uc) in p.use_case_defs.iter().enumerate() {
-            let engine_name =
-                resolve_use_case_engine_name(p, uc, part_contexts, &default_engine_name);
-            let story_s_num = if p.part_defs.is_empty() {
-                story_metas
-                    .iter()
-                    .find(|s| {
-                        s.pkg_name == p.name
-                            && (s.caller_engine == engine_name || s.engine_name == engine_name)
-                    })
-                    .map(|s| s.s_num)
-                    .or_else(|| pkg_stories.get(u_idx).copied())
-                    .or_else(|| pkg_stories.first().copied())
+            let story_s_num = pkg_stories
+                .get(u_idx)
+                .copied()
+                .or_else(|| pkg_stories.first().copied());
+            let parsed_doc = parse_use_case_doc(uc.doc.as_deref());
+            let subject_candidate = uc.subject.as_ref().or(parsed_doc.subject.as_ref());
+            let engine_name = if let Some(subj) = subject_candidate {
+                let declared_in_pkg = p.part_defs.iter().any(|part| &part.name == subj)
+                    || part_contexts
+                        .iter()
+                        .any(|ctx| &ctx.part.name == subj && ctx.pkg_name == p.name);
+                if declared_in_pkg {
+                    subj.clone()
+                } else {
+                    default_engine_name.clone()
+                }
             } else {
-                pkg_stories
-                    .get(u_idx)
-                    .copied()
-                    .or_else(|| pkg_stories.first().copied())
+                default_engine_name.clone()
             };
+
             let engine_feat_num = lookup_part_feature_number(part_contexts, &p.name, &engine_name)
                 .unwrap_or(default_engine_feat_num);
             let u_num = uc_metas.len().saturating_add(1);

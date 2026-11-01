@@ -54,34 +54,6 @@
 | H-42 | Execute12CheckValidateDefectDossier | CompilerLintEnforcementGate |
 | H-43 | GhIssueCreateOrGhIssue | CompilerLintEnforcementGate |
 | H-44 | GhIssueViewJsonTitleBody | CompilerLintEnforcementGate |
-| H-45 | verifyDagAndLayers | CompilerLintEnforcementGate |
-| H-46 | partitionAndHoist | CompilerLintEnforcementGate |
-| H-47 | emitModularRustTree | CompilerLintEnforcementGate |
-| H-48 | emitModularFlutterTree | CompilerLintEnforcementGate |
-| H-49 | verifyFixedPointHash | CompilerLintEnforcementGate |
-| H-50 | ExecuteFourLevelLoweringPipeline | CompilerLintEnforcementGate |
-| H-51 | verifyOfflineLockedBuild | CompilerLintEnforcementGate |
-| H-52 | listRustItems | CompilerLintEnforcementGate |
-| H-53 | extractRustModule | CompilerLintEnforcementGate |
-| H-54 | verifyStageFixedPoint | CompilerLintEnforcementGate |
-| H-55 | formatNdjsonLine | CompilerLintEnforcementGate |
-| H-56 | analyzeMetrics | CompilerLintEnforcementGate |
-| H-57 | runStableClippyGate | CompilerLintEnforcementGate |
-| H-58 | verifyMirAllocationsAndReqs | CompilerLintEnforcementGate |
-| H-59 | synthesizeFrbIcdFacade | CompilerLintEnforcementGate |
-| H-60 | runMiriAndDartGate | CompilerLintEnforcementGate |
-| H-61 | synthesizeKaniProofModule | CompilerLintEnforcementGate |
-| H-62 | runKaniCbmcProofs | CompilerLintEnforcementGate |
-| H-63 | ingestPolyglotToHir | CompilerLintEnforcementGate |
-| H-64 | parseLosslessSysmlCst | CompilerLintEnforcementGate |
-| H-65 | evaluateSafetyAndEarlyCutoff | CompilerLintEnforcementGate |
-| H-66 | computeBidirectionalSplice | CompilerLintEnforcementGate |
-| H-67 | verifyPostSpliceCst | CompilerLintEnforcementGate |
-| H-68 | verifyToolchainAndStageParity | CompilerLintEnforcementGate |
-| H-69 | synthesizeThreeRingWorkspace | CompilerLintEnforcementGate |
-| H-70 | attachAndAuditFlsTraceability | CompilerLintEnforcementGate |
-| H-71 | auditCoreSubsetAndMcdcCoverage | CompilerLintEnforcementGate |
-| H-72 | verifyRingBoundariesAndMonitor | CompilerLintEnforcementGate |
 
 ## Hierarchical Control Structure Topology
 

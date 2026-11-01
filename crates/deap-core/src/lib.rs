@@ -34,8 +34,6 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-DEAP-CORE-LIB], [DO-330-TQL-4-CORE-LIB]
 
-#![forbid(unsafe_code)]
-
 pub mod diagnostics;
 pub mod digest;
 pub mod error;
@@ -58,23 +56,18 @@ pub use rules::{
     MASTER_BLUEPRINTS,
 };
 pub use source_ast::{
-    analyze_cst_v2_metrics, classify_cfg_test_excluded_doc_tier, classify_dart_member_ast,
-    classify_dart_top_level_ast, classify_rust_item_line_ast, contains_direct_range_slice,
-    discover_source_files, extract_callable_v2_metrics, extract_component_method_table,
+    classify_dart_member_ast, classify_dart_top_level_ast, classify_rust_item_line_ast,
+    contains_direct_range_slice, discover_source_files, extract_component_method_table,
     extract_dart_callable_ident, extract_dart_getter_ident, extract_leading_ast_ident,
     extract_method_signature, extract_realises_ids_from_doc_lines, ingest_source_directory,
     lower_source_ast_to_package, normalize_type_for_sysml, parse_dart_callable_signature,
     parse_dart_source_ast, parse_rust_callable_signature, parse_rust_source_ast,
-    parse_verified_lossless_cst, resolve_source_package_name, sanitize_sysml_identifier,
-    scan_rust_line_preserving_lex_state, single_char_literal_byte_len,
-    strip_leading_dart_annotations, strip_line_comment_preserving_strings, summary_from_doc_lines,
-    update_ast_delimiter_depths, validate_metrics_thresholds, validate_source_syntax,
-    validate_source_syntax_for_language, verify_analyzer_envelope_and_seal_receipt,
-    ClassifiedDocTierItem, ComponentMethodTable, CstComplexityEnvelope, CstMetricsError,
-    CstMetricsThresholds, DeapV2AstMetricsReport, DocTier, DocTierInventory,
-    ExtractedMethodSignature, FnAstMetrics, RustStringScannerState, SourceAstItem, SourceField,
-    SourceItemKind, SourceLanguage, SourceParam, SupplyChainVerificationReceipt,
-    VerifiedLosslessCst,
+    resolve_source_package_name, sanitize_sysml_identifier, scan_rust_line_preserving_lex_state,
+    single_char_literal_byte_len, strip_leading_dart_annotations,
+    strip_line_comment_preserving_strings, summary_from_doc_lines, update_ast_delimiter_depths,
+    validate_source_syntax, validate_source_syntax_for_language, ComponentMethodTable,
+    ExtractedMethodSignature, RustStringScannerState, SourceAstItem, SourceField, SourceItemKind,
+    SourceLanguage, SourceParam,
 };
 pub use sysml_ast::{
     component_matches, extract_negated_components, is_component_negated, parse_action_defs,
@@ -91,9 +84,6 @@ pub use workspace::{
     check_downstream_instructions_exist, check_gitignore_exists, check_no_ds_store_files,
     check_no_duplicate_master_blueprints, check_reconcile_backlog_tooling_exists,
     check_upstream_template_clean_landing_zones, is_upstream_compiler,
-    parse_locked_manifest_snapshot, verify_pinned_cst_dependency_graph, LockManifestSnapshot,
-    LockedPackageRecord, OfflineLockGovernanceError, PackageSourceKind, MAX_AST_DEPTH,
-    MAX_CARGO_LOCK_BYTES, MAX_MANIFEST_BYTES,
 };
 
 #[cfg(test)]

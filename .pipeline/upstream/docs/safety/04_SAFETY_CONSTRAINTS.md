@@ -180,163 +180,14 @@
 | SC-174 | UCA-174 | GhIssueViewJsonTitleBody shall remain within safe bounds under Providing |
 | SC-175 | UCA-175 | GhIssueViewJsonTitleBody shall remain within safe bounds under Too early / Too late / Out of order |
 | SC-176 | UCA-176 | GhIssueViewJsonTitleBody shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-177 | UCA-177 | verifyDagAndLayers shall remain within safe bounds under Not providing |
-| SC-178 | UCA-178 | verifyDagAndLayers shall remain within safe bounds under Providing |
-| SC-179 | UCA-179 | verifyDagAndLayers shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-180 | UCA-180 | verifyDagAndLayers shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-181 | UCA-181 | partitionAndHoist shall remain within safe bounds under Not providing |
-| SC-182 | UCA-182 | partitionAndHoist shall remain within safe bounds under Providing |
-| SC-183 | UCA-183 | partitionAndHoist shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-184 | UCA-184 | partitionAndHoist shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-185 | UCA-185 | emitModularRustTree shall remain within safe bounds under Not providing |
-| SC-186 | UCA-186 | emitModularRustTree shall remain within safe bounds under Providing |
-| SC-187 | UCA-187 | emitModularRustTree shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-188 | UCA-188 | emitModularRustTree shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-189 | UCA-189 | emitModularFlutterTree shall remain within safe bounds under Not providing |
-| SC-190 | UCA-190 | emitModularFlutterTree shall remain within safe bounds under Providing |
-| SC-191 | UCA-191 | emitModularFlutterTree shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-192 | UCA-192 | emitModularFlutterTree shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-193 | UCA-193 | verifyFixedPointHash shall remain within safe bounds under Not providing |
-| SC-194 | UCA-194 | verifyFixedPointHash shall remain within safe bounds under Providing |
-| SC-195 | UCA-195 | verifyFixedPointHash shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-196 | UCA-196 | verifyFixedPointHash shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-197 | UCA-197 | ExecuteFourLevelLoweringPipeline shall remain within safe bounds under Not providing |
-| SC-198 | UCA-198 | ExecuteFourLevelLoweringPipeline shall remain within safe bounds under Providing |
-| SC-199 | UCA-199 | ExecuteFourLevelLoweringPipeline shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-200 | UCA-200 | ExecuteFourLevelLoweringPipeline shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-201 | UCA-201 | verifyOfflineLockedBuild shall remain within safe bounds under Not providing |
-| SC-202 | UCA-202 | verifyOfflineLockedBuild shall remain within safe bounds under Providing |
-| SC-203 | UCA-203 | verifyOfflineLockedBuild shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-204 | UCA-204 | verifyOfflineLockedBuild shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-205 | UCA-205 | listRustItems shall remain within safe bounds under Not providing |
-| SC-206 | UCA-206 | listRustItems shall remain within safe bounds under Providing |
-| SC-207 | UCA-207 | listRustItems shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-208 | UCA-208 | listRustItems shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-209 | UCA-209 | extractRustModule shall remain within safe bounds under Not providing |
-| SC-210 | UCA-210 | extractRustModule shall remain within safe bounds under Providing |
-| SC-211 | UCA-211 | extractRustModule shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-212 | UCA-212 | extractRustModule shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-213 | UCA-213 | verifyStageFixedPoint shall remain within safe bounds under Not providing |
-| SC-214 | UCA-214 | verifyStageFixedPoint shall remain within safe bounds under Providing |
-| SC-215 | UCA-215 | verifyStageFixedPoint shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-216 | UCA-216 | verifyStageFixedPoint shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-217 | UCA-217 | formatNdjsonLine shall remain within safe bounds under Not providing |
-| SC-218 | UCA-218 | formatNdjsonLine shall remain within safe bounds under Providing |
-| SC-219 | UCA-219 | formatNdjsonLine shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-220 | UCA-220 | formatNdjsonLine shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-221 | UCA-221 | analyzeMetrics shall remain within safe bounds under Not providing |
-| SC-222 | UCA-222 | analyzeMetrics shall remain within safe bounds under Providing |
-| SC-223 | UCA-223 | analyzeMetrics shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-224 | UCA-224 | analyzeMetrics shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-225 | UCA-225 | runStableClippyGate shall remain within safe bounds under Not providing |
-| SC-226 | UCA-226 | runStableClippyGate shall remain within safe bounds under Providing |
-| SC-227 | UCA-227 | runStableClippyGate shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-228 | UCA-228 | runStableClippyGate shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-229 | UCA-229 | verifyMirAllocationsAndReqs shall remain within safe bounds under Not providing |
-| SC-230 | UCA-230 | verifyMirAllocationsAndReqs shall remain within safe bounds under Providing |
-| SC-231 | UCA-231 | verifyMirAllocationsAndReqs shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-232 | UCA-232 | verifyMirAllocationsAndReqs shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-233 | UCA-233 | synthesizeFrbIcdFacade shall remain within safe bounds under Not providing |
-| SC-234 | UCA-234 | synthesizeFrbIcdFacade shall remain within safe bounds under Providing |
-| SC-235 | UCA-235 | synthesizeFrbIcdFacade shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-236 | UCA-236 | synthesizeFrbIcdFacade shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-237 | UCA-237 | runMiriAndDartGate shall remain within safe bounds under Not providing |
-| SC-238 | UCA-238 | runMiriAndDartGate shall remain within safe bounds under Providing |
-| SC-239 | UCA-239 | runMiriAndDartGate shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-240 | UCA-240 | runMiriAndDartGate shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-241 | UCA-241 | synthesizeKaniProofModule shall remain within safe bounds under Not providing |
-| SC-242 | UCA-242 | synthesizeKaniProofModule shall remain within safe bounds under Providing |
-| SC-243 | UCA-243 | synthesizeKaniProofModule shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-244 | UCA-244 | synthesizeKaniProofModule shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-245 | UCA-245 | runKaniCbmcProofs shall remain within safe bounds under Not providing |
-| SC-246 | UCA-246 | runKaniCbmcProofs shall remain within safe bounds under Providing |
-| SC-247 | UCA-247 | runKaniCbmcProofs shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-248 | UCA-248 | runKaniCbmcProofs shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-249 | UCA-249 | ingestPolyglotToHir shall remain within safe bounds under Not providing |
-| SC-250 | UCA-250 | ingestPolyglotToHir shall remain within safe bounds under Providing |
-| SC-251 | UCA-251 | ingestPolyglotToHir shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-252 | UCA-252 | ingestPolyglotToHir shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-253 | UCA-253 | parseLosslessSysmlCst shall remain within safe bounds under Not providing |
-| SC-254 | UCA-254 | parseLosslessSysmlCst shall remain within safe bounds under Providing |
-| SC-255 | UCA-255 | parseLosslessSysmlCst shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-256 | UCA-256 | parseLosslessSysmlCst shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-257 | UCA-257 | evaluateSafetyAndEarlyCutoff shall remain within safe bounds under Not providing |
-| SC-258 | UCA-258 | evaluateSafetyAndEarlyCutoff shall remain within safe bounds under Providing |
-| SC-259 | UCA-259 | evaluateSafetyAndEarlyCutoff shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-260 | UCA-260 | evaluateSafetyAndEarlyCutoff shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-261 | UCA-261 | computeBidirectionalSplice shall remain within safe bounds under Not providing |
-| SC-262 | UCA-262 | computeBidirectionalSplice shall remain within safe bounds under Providing |
-| SC-263 | UCA-263 | computeBidirectionalSplice shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-264 | UCA-264 | computeBidirectionalSplice shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-265 | UCA-265 | verifyPostSpliceCst shall remain within safe bounds under Not providing |
-| SC-266 | UCA-266 | verifyPostSpliceCst shall remain within safe bounds under Providing |
-| SC-267 | UCA-267 | verifyPostSpliceCst shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-268 | UCA-268 | verifyPostSpliceCst shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-269 | UCA-269 | verifyToolchainAndStageParity shall remain within safe bounds under Not providing |
-| SC-270 | UCA-270 | verifyToolchainAndStageParity shall remain within safe bounds under Providing |
-| SC-271 | UCA-271 | verifyToolchainAndStageParity shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-272 | UCA-272 | verifyToolchainAndStageParity shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-273 | UCA-273 | synthesizeThreeRingWorkspace shall remain within safe bounds under Not providing |
-| SC-274 | UCA-274 | synthesizeThreeRingWorkspace shall remain within safe bounds under Providing |
-| SC-275 | UCA-275 | synthesizeThreeRingWorkspace shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-276 | UCA-276 | synthesizeThreeRingWorkspace shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-277 | UCA-277 | attachAndAuditFlsTraceability shall remain within safe bounds under Not providing |
-| SC-278 | UCA-278 | attachAndAuditFlsTraceability shall remain within safe bounds under Providing |
-| SC-279 | UCA-279 | attachAndAuditFlsTraceability shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-280 | UCA-280 | attachAndAuditFlsTraceability shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-281 | UCA-281 | auditCoreSubsetAndMcdcCoverage shall remain within safe bounds under Not providing |
-| SC-282 | UCA-282 | auditCoreSubsetAndMcdcCoverage shall remain within safe bounds under Providing |
-| SC-283 | UCA-283 | auditCoreSubsetAndMcdcCoverage shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-284 | UCA-284 | auditCoreSubsetAndMcdcCoverage shall remain within safe bounds under Stopped too soon / Applied too long |
-| SC-285 | UCA-285 | verifyRingBoundariesAndMonitor shall remain within safe bounds under Not providing |
-| SC-286 | UCA-286 | verifyRingBoundariesAndMonitor shall remain within safe bounds under Providing |
-| SC-287 | UCA-287 | verifyRingBoundariesAndMonitor shall remain within safe bounds under Too early / Too late / Out of order |
-| SC-288 | UCA-288 | verifyRingBoundariesAndMonitor shall remain within safe bounds under Stopped too soon / Applied too long |
 
 ## Schema-Declared Constraint Defs (SysML v2 SSOT)
 
-| Constraint Def | Expression |
-| :--- | :--- |
-| C_MOD_01 | max_file_lines >= 50 and max_file_lines <= 400 |
-| C_MOD_02 | max_items_per_file >= 1 and max_items_per_file <= 12 |
-| C_MOD_03 | max_cyclomatic_complexity >= 1 and max_cyclomatic_complexity <= 8 |
-| C_MOD_04 | stage_fixed_point_mismatch_files >= 0 and stage_fixed_point_mismatch_files <= 0 |
-| C_MOD_05 | runtime_llm_subagent_count >= 0 and runtime_llm_subagent_count <= 0 |
-| ValidBoundsEnvelope | max_file_lines >= 50 and max_file_lines <= 400 and max_items_per_file >= 1 and max_items_per_file <= 12 and max_cyclomatic_complexity >= 1 and max_cyclomatic_complexity <= 8 and max_action_steps_per_stage >= 1 and max_action_steps_per_stage <= 8 and max_transitions_per_handler >= 1 and max_transitions_per_handler <= 8 |
-| NonUpwardLayerImport | importer_tier >= 1 and importer_tier <= 3 and imported_tier >= 1 and imported_tier <= 3 and importer_tier >= imported_tier |
-| UnitObeysBounds | line_count >= 1 and line_count <= max_file_lines and item_count >= 1 and item_count <= max_items_per_file and max_function_vg >= 1 and max_function_vg <= max_cyclomatic_complexity |
-| LoweringLevelsComplete | active_level_count == 4 |
-| FixedPointBootstrapParity | stage_mismatch_files == 0 |
-| C_CST_01 | max_fn_exec_sloc >= 1 and max_fn_exec_sloc <= 50 |
-| C_CST_02 | max_fn_param_count >= 0 and max_fn_param_count <= 5 |
-| C_CST_03 | max_mut_bool_flags >= 0 and max_mut_bool_flags <= 0 |
-| C_CST_04 | stage_fixed_point_mismatch_files >= 0 and stage_fixed_point_mismatch_files <= 0 |
-| C_CST_05 | runtime_llm_token_count >= 0 and runtime_llm_token_count <= 0 |
-| C_CST_06 | tier_bc_max_doc_lines >= 2 and tier_bc_max_doc_lines <= 2 |
-| C_VER_01 | too_many_lines_threshold >= 1 and too_many_lines_threshold <= 80 |
-| C_VER_02 | too_many_arguments_threshold >= 0 and too_many_arguments_threshold <= 5 |
-| C_VER_03 | max_rt_heap_allocations >= 0 and max_rt_heap_allocations <= 0 |
-| C_VER_04 | max_miri_ub_violations >= 0 and max_miri_ub_violations <= 0 |
-| C_VER_05 | max_kani_counterexamples >= 0 and max_kani_counterexamples <= 0 |
-| C_VER_06 | default_kani_unwind_bound >= 1 and default_kani_unwind_bound <= 64 |
-| C_INC_01 | max_ast_depth >= 1 and max_ast_depth <= 64 |
-| C_INC_02 | untouched_trivia_mutation_bytes >= 0 and untouched_trivia_mutation_bytes <= 0 |
-| C_INC_03 | stage_fixed_point_mismatch_files >= 0 and stage_fixed_point_mismatch_files <= 0 |
-| C_INC_04 | query_layer_count >= 4 and query_layer_count <= 4 |
-| C_INC_05 | trivia_edit_downstream_recomputations >= 0 and trivia_edit_downstream_recomputations <= 0 |
-| C_INC_06 | polyglot_frontend_count >= 5 and polyglot_frontend_count <= 5 |
-| C_CERT_01 | max_toolchain_version_drift >= 0 and max_toolchain_version_drift <= 0 |
-| C_CERT_02 | stage_fixed_point_mismatch_files >= 0 and stage_fixed_point_mismatch_files <= 0 |
-| C_CERT_03 | unmapped_fls_item_count >= 0 and unmapped_fls_item_count <= 0 |
-| C_CERT_04 | uncertified_core_symbol_count >= 0 and uncertified_core_symbol_count <= 0 |
-| C_CERT_05 | dal_a_mcdc_coverage_min_pct >= 100 and dal_a_mcdc_coverage_min_pct <= 100 |
-| C_CERT_06 | assurance_ring_count >= 3 and assurance_ring_count <= 3 |
+No `constraint def` invariants declared in package `SysML_Model`.
 
 ## Schema-Declared Calculation Obligations (SysML v2 SSOT)
 
-| Calc Def | Expression |
-| :--- | :--- |
-| ComputeCyclomaticComplexity | decision_points + 1 |
+No `calc def` expressions declared in package `SysML_Model`.
 
 ## Schema-Declared Safety Requirement Obligations (SysML v2 SSOT)
 
@@ -348,9 +199,4 @@
 | REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint | UUIDv5:  / Complexity: Class P / Standard: IEEE 29148-2018 / RFC 2119 / Diagnostics: E0100 |
 | REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint | UUIDv5:  / Complexity: Class P / Standard: IEEE 29148-2018 / RFC 2119 / Diagnostics: E0100 |
 | REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint | UUIDv5:  / Complexity: Class P / Standard: IEEE 29148-2018 / RFC 2119 / Diagnostics: E0100 |
-| REQ_0607_BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint | UUIDv5:  / Complexity: Class P / Standard: IEEE 29148-2018 / RFC 2119 / Diagnostics: E0100 |
-| REQ_0608_BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics | UUIDv5:  / Complexity: Class P / Standard: IEEE 29148-2018 / RFC 2119 / Diagnostics: E0100 |
-| REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper | UUIDv5:  / Complexity: Class P / Standard: IEEE 29148-2018 / RFC 2119 / Diagnostics: E0100 |
-| REQ_0610_BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine | UUIDv5:  / Complexity: Class P / Standard: IEEE 29148-2018 / RFC 2119 / Diagnostics: E0100 |
-| REQ_0611_BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C | UUIDv5:  / Complexity: Class P / Standard: IEEE 29148-2018 / RFC 2119 / Diagnostics: E0100 |
 

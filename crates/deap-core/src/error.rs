@@ -4,8 +4,6 @@
 //! Contract: Categorizes all fallible `deap-core` operations into closed `Io`, `Syntax`, `Validation`, and `Workspace` error variants carrying deterministic diagnostic messages.
 //! Bounds & Faults: O(1) variant construction and borrowed string projection with zero panics, zero unchecked indexing, and deterministic `Display`, `Deref<Target = str>`, and `String` conversion.
 
-#![forbid(unsafe_code)]
-
 /// Canonical fallible return type for `deap-core` operations backed by [`CoreError`].
 ///
 /// Safety & Traceability: Realises: [REQ-DEAP-CORE-ERROR]
@@ -173,25 +171,6 @@ impl From<CoreError> for String {
     /// Realises: [REQ-DEAP-CORE-ERROR]
     fn from(err: CoreError) -> Self {
         err.into_string()
-    }
-}
-
-impl From<crate::source_ast::CstMetricsError> for CoreError {
-    /// Bridges a typed [`crate::source_ast::CstMetricsError`] into its canonical [`CoreError`] category.
-    /// Realises: [REQ-0608], [REQ-DEAP-CORE-ERROR]
-    fn from(err: crate::source_ast::CstMetricsError) -> Self {
-        let message = err.to_string();
-        match err {
-            crate::source_ast::CstMetricsError::LosslessRoundtripOrSpanMismatch { .. }
-            | crate::source_ast::CstMetricsError::MalformedUtf8OrRustSyntax { .. } => {
-                Self::syntax(message)
-            }
-            crate::source_ast::CstMetricsError::UnverifiedParsePrecondition { .. }
-            | crate::source_ast::CstMetricsError::ThresholdEnvelopeOrMetricsViolation { .. }
-            | crate::source_ast::CstMetricsError::AstDepthOrArithmeticExhaustion { .. } => {
-                Self::validation(message)
-            }
-        }
     }
 }
 

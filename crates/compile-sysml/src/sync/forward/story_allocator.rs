@@ -16,15 +16,6 @@ struct PackageStoryScanCtx<'a, 'b> {
     part_contexts: &'b [PartContext<'a>],
 }
 
-/// Effective structural `PartDef` scope and fallback engine token for binding a single User Story.
-/// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
-struct StoryStructuralScope<'a> {
-    root_pkg_name: &'a str,
-    pkg_name: &'a str,
-    part_defs: &'a [PartDef],
-    default_engine_name: String,
-}
-
 /// Resolved lifeline endpoints, initiator actor, and reply message extracted for a single User Story behavioral item.
 /// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
 struct StoryLifelineBinding {
@@ -33,99 +24,6 @@ struct StoryLifelineBinding {
     target_engine: String,
     reply_msg: String,
     interaction_name: String,
-}
-
-/// Normalizes `s` into a lowercase ASCII alphanumeric token for punctuation-insensitive AST matching.
-/// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
-pub(crate) fn normalize_alnum_lower(s: &str) -> String {
-    s.chars()
-        .filter(|c| c.is_ascii_alphanumeric())
-        .map(|c| c.to_ascii_lowercase())
-        .collect()
-}
-
-/// Resolves the child subpackage owning structural `PartDef`s for a parent container behavioral item when `p.part_defs` is empty.
-/// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
-fn resolve_child_part_package<'a>(
-    p: &'a PackageDef,
-    a_idx: usize,
-    action_name: &str,
-    inter_opt: Option<&InteractionDef>,
-) -> Option<&'a PackageDef> {
-    let primary_token = inter_opt.map(|i| i.name.as_str()).unwrap_or(action_name);
-    let norm_primary = normalize_alnum_lower(primary_token);
-    let norm_action = normalize_alnum_lower(action_name);
-    let exact_or_prefix =
-        p.packages
-            .iter()
-            .filter(|sub| !sub.part_defs.is_empty())
-            .find(|sub| {
-                let norm_pkg = normalize_alnum_lower(&sub.name);
-                let matches_inter = sub
-                    .interaction_defs
-                    .iter()
-                    .any(|si| normalize_alnum_lower(&si.name) == norm_primary);
-                let matches_act = sub.action_defs.iter().any(|sa| {
-                    normalize_alnum_lower(strip_use_case_prefix(&sa.name)) == norm_action
-                });
-                let matches_prefix = !norm_pkg.is_empty()
-                    && (norm_primary.starts_with(&norm_pkg) || norm_pkg.starts_with(&norm_primary));
-                matches_inter || matches_act || matches_prefix
-            });
-    exact_or_prefix
-        .or_else(|| {
-            p.packages
-                .iter()
-                .filter(|sub| !sub.part_defs.is_empty())
-                .nth(a_idx)
-        })
-        .or_else(|| p.packages.iter().find(|sub| !sub.part_defs.is_empty()))
-}
-
-/// Resolves the `StoryStructuralScope` (`pkg_name`, `part_defs`, `default_engine_name`) for a behavioral item in `ctx.pkg`.
-/// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
-fn resolve_story_structural_scope<'a, 'b>(
-    ctx: &'b PackageStoryScanCtx<'a, 'b>,
-    a_idx: usize,
-    action_name: &str,
-    owner_part: Option<String>,
-    inter_opt: Option<&InteractionDef>,
-) -> StoryStructuralScope<'b>
-where
-    'a: 'b,
-{
-    let p = ctx.pkg;
-    if !p.part_defs.is_empty() {
-        return StoryStructuralScope {
-            root_pkg_name: ctx.root_pkg_name,
-            pkg_name: &p.name,
-            part_defs: &p.part_defs,
-            default_engine_name: owner_part.unwrap_or_else(|| select_default_package_engine(p)),
-        };
-    }
-    if let Some(sub_pkg) = resolve_child_part_package(p, a_idx, action_name, inter_opt) {
-        return StoryStructuralScope {
-            root_pkg_name: ctx.root_pkg_name,
-            pkg_name: &sub_pkg.name,
-            part_defs: &sub_pkg.part_defs,
-            default_engine_name: owner_part
-                .unwrap_or_else(|| select_default_package_engine(sub_pkg)),
-        };
-    }
-    if let Some(first_ctx) = ctx.part_contexts.first() {
-        return StoryStructuralScope {
-            root_pkg_name: ctx.root_pkg_name,
-            pkg_name: &first_ctx.pkg_name,
-            part_defs: &[],
-            default_engine_name: owner_part.unwrap_or_else(|| first_ctx.part.name.clone()),
-        };
-    }
-    StoryStructuralScope {
-        root_pkg_name: ctx.root_pkg_name,
-        pkg_name: &p.name,
-        part_defs: &[],
-        default_engine_name: owner_part.unwrap_or_else(|| sanitize_id(&p.name)),
-    }
 }
 
 /// Collects deduplicated `PkgBehaviorItem` entries from package-level `action_defs`, `part.actions`, and remaining standalone `interaction_defs`.
@@ -170,43 +68,21 @@ fn collect_pkg_behavior_items<'a>(p: &'a PackageDef) -> Vec<PkgBehaviorItem<'a>>
     pkg_behavior_items
 }
 
-/// Resolves the sanitized sequence reply message token from an optional `InteractionDef` or `ActionDef`.
-/// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
-fn resolve_story_reply_message(
-    act_opt: Option<&ActionDef>,
-    inter_opt: Option<&InteractionDef>,
-) -> String {
-    let inter_reply = inter_opt
-        .and_then(|inter| inter.messages.get(1))
-        .and_then(|m1| m1.split_whitespace().next())
-        .map(sanitize_id);
-    let action_reply = act_opt
-        .and_then(|a| a.out_params.first())
-        .map(|out_p| {
-            if !out_p.type_name.trim().is_empty() {
-                out_p.type_name.trim()
-            } else {
-                out_p.name.trim()
-            }
-        })
-        .filter(|c| !c.is_empty())
-        .map(sanitize_id);
-    inter_reply
-        .or(action_reply)
-        .unwrap_or_else(|| "OperationComplete".to_string())
-}
-
 /// Extracts initiator actor, caller/target engines, and reply message from an optional `InteractionDef` and `ActionDef`.
 /// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
 fn extract_story_lifelines(
-    scope: &StoryStructuralScope<'_>,
+    ctx: &PackageStoryScanCtx<'_, '_>,
     action_name: &str,
+    default_engine_name: &str,
     act_opt: Option<&ActionDef>,
     inter_opt: Option<&InteractionDef>,
 ) -> StoryLifelineBinding {
+    let p = ctx.pkg;
     let mut initiator_actor: Option<String> = None;
-    let mut caller_engine = sanitize_id(scope.root_pkg_name);
-    let mut target_engine = scope.default_engine_name.clone();
+    let mut caller_engine = sanitize_id(ctx.root_pkg_name);
+    let mut target_engine = default_engine_name.to_string();
+    let mut reply_msg = "OperationComplete".to_string();
+    let mut has_inter_reply = false;
     let mut interaction_name = action_name.to_string();
 
     if let Some(inter) = inter_opt {
@@ -220,7 +96,7 @@ fn extract_story_lifelines(
             let clean_init = raw_init
                 .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
                 .trim();
-            if !clean_init.is_empty() && !scope.part_defs.iter().any(|pt| pt.name == clean_init) {
+            if !clean_init.is_empty() && !p.part_defs.iter().any(|pt| pt.name == clean_init) {
                 initiator_actor = Some(clean_init.to_string());
             }
         }
@@ -232,25 +108,44 @@ fn extract_story_lifelines(
                 target_engine = type_name.trim().to_string();
             }
         }
+        if let Some(m1) = inter.messages.get(1) {
+            if let Some(first_word) = m1.split_whitespace().next() {
+                reply_msg = sanitize_id(first_word);
+                has_inter_reply = true;
+            }
+        }
     }
 
-    if !scope.part_defs.iter().any(|pt| pt.name == caller_engine) {
-        caller_engine = scope
+    if !has_inter_reply {
+        if let Some(out_p) = act_opt.and_then(|a| a.out_params.first()) {
+            let candidate = if !out_p.type_name.trim().is_empty() {
+                out_p.type_name.trim()
+            } else {
+                out_p.name.trim()
+            };
+            if !candidate.is_empty() {
+                reply_msg = sanitize_id(candidate);
+            }
+        }
+    }
+
+    if !p.part_defs.iter().any(|pt| pt.name == caller_engine) {
+        caller_engine = p
             .part_defs
             .first()
             .map(|pt| pt.name.clone())
-            .unwrap_or_else(|| scope.default_engine_name.clone());
+            .unwrap_or_else(|| default_engine_name.to_string());
     }
-    if !scope.part_defs.iter().any(|pt| pt.name == target_engine) {
-        target_engine = scope
+    if !p.part_defs.iter().any(|pt| pt.name == target_engine) {
+        target_engine = p
             .part_defs
             .get(1)
-            .or_else(|| scope.part_defs.first())
+            .or_else(|| p.part_defs.first())
             .map(|pt| pt.name.clone())
-            .unwrap_or_else(|| scope.default_engine_name.clone());
+            .unwrap_or_else(|| default_engine_name.to_string());
     }
-    if caller_engine == target_engine && scope.part_defs.len() >= 2 {
-        target_engine = scope
+    if caller_engine == target_engine && p.part_defs.len() >= 2 {
+        target_engine = p
             .part_defs
             .iter()
             .find(|pt| pt.name != caller_engine)
@@ -262,7 +157,7 @@ fn extract_story_lifelines(
         initiator_actor,
         caller_engine,
         target_engine,
-        reply_msg: resolve_story_reply_message(act_opt, inter_opt),
+        reply_msg,
         interaction_name,
     }
 }
@@ -297,23 +192,21 @@ fn allocate_single_story<'a>(
         }
     };
 
+    let default_engine_name = owner_part.unwrap_or_else(|| select_default_package_engine(p));
     let inter_opt = explicit_inter
         .or_else(|| p.interaction_defs.get(a_idx))
         .or_else(|| p.interaction_defs.first());
-    let scope = resolve_story_structural_scope(ctx, a_idx, &action_name, owner_part, inter_opt);
-    let binding = extract_story_lifelines(&scope, &action_name, act_opt, inter_opt);
 
-    let default_engine_feat_num = lookup_part_feature_number(
-        ctx.part_contexts,
-        scope.pkg_name,
-        &scope.default_engine_name,
-    )
-    .unwrap_or(1);
+    let binding =
+        extract_story_lifelines(ctx, &action_name, &default_engine_name, act_opt, inter_opt);
+
+    let default_engine_feat_num =
+        lookup_part_feature_number(ctx.part_contexts, &p.name, &default_engine_name).unwrap_or(1);
     let engine_feat_num =
-        lookup_part_feature_number(ctx.part_contexts, scope.pkg_name, &binding.target_engine)
+        lookup_part_feature_number(ctx.part_contexts, &p.name, &binding.target_engine)
             .unwrap_or(default_engine_feat_num);
     let caller_feat_num =
-        lookup_part_feature_number(ctx.part_contexts, scope.pkg_name, &binding.caller_engine);
+        lookup_part_feature_number(ctx.part_contexts, &p.name, &binding.caller_engine);
 
     let meta = StoryMeta {
         action_name,
