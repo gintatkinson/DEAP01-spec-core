@@ -1,0 +1,234 @@
+{
+  "sha256": "b1f304f1b006d88d0b757663e60d9e05e07ac39df3953f3615b7ef6dcd37e414",
+  "total_lines": 1,
+  "node_counts": {
+    "action_defs": 6,
+    "attribute_defs": 32,
+    "calc_defs": 0,
+    "capability_defs": 0,
+    "connection_defs": 0,
+    "constraint_defs": 6,
+    "containers": 5,
+    "groupings": 0,
+    "hazard_defs": 0,
+    "identities": 0,
+    "interaction_defs": 1,
+    "item_defs": 0,
+    "leaves": 32,
+    "lists": 6,
+    "operation_defs": 0,
+    "packages": 1,
+    "part_defs": 5,
+    "port_defs": 13,
+    "requirement_defs": 1,
+    "risk_defs": 0,
+    "state_defs": 1,
+    "test_case_defs": 0,
+    "typedefs": 0,
+    "use_case_defs": 7
+  },
+  "schema_nodes": [
+    "AirGappedCargoLockGovernor",
+    "BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics",
+    "BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics_LifecycleState",
+    "BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics_SequenceInteraction",
+    "Blueprint_ID",
+    "C_CST_01",
+    "C_CST_02",
+    "C_CST_03",
+    "C_CST_04",
+    "C_CST_05",
+    "C_CST_06",
+    "Generation_Mode",
+    "LosslessRustCstAnalyzer",
+    "REQ_0608_BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics",
+    "Requirement_ID",
+    "Specification_Source",
+    "Status",
+    "StructuredModularCodegenSynthesizer",
+    "Target_Crates",
+    "Title",
+    "Tracked_Issues",
+    "UC_AC_01_Lossless_Red_Green_CST_Roundtrip_and_Exact_DEAP_v2_0_AST_Metrics_Extraction",
+    "UC_AC_02_Deterministic_BTreeMap_Item_Inventory_and_Atomic_Module_Extraction_with_Check_37_Path_Rewriting",
+    "UC_AC_03_Fail_Closed_Rejection_on_Span_Collisions_Missing_Symbols_or_Post_Splice_Syntax_Errors",
+    "UC_AC_04_Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules",
+    "UC_AC_05_Structured_Codegen_Boundary_Preserving_Stage_1_to_Stage_2_Metacircular_SHA_256_Fixed_Point",
+    "UC_AC_06_Unified_rustc_Compatible_Single_Line_JSON_Diagnostics_and_MachineApplicable_Auto_Fix_Across_All_Five_CLIs",
+    "UC_AC_07_Air_Gapped_Offline_Cargo_Lock_Reproducibility_and_Twelve_Gate_Blueprint_Conformance",
+    "UnifiedRustcJsonDiagnosticEmitter",
+    "ZeroTokenRustSpanCodemodEngine",
+    "analyzeMetrics",
+    "atomic_patch_out",
+    "cli_binary_count",
+    "codemod_command_in",
+    "codemod_error_out",
+    "deterministic_uuid",
+    "envelope_reason",
+    "extractRustModule",
+    "finding_in",
+    "formatNdjsonLine",
+    "formatted_rust_out",
+    "in_process_prettyplease",
+    "item_inventory_out",
+    "listRustItems",
+    "lock_receipt_out",
+    "lossless_roundtrip_required",
+    "lowered_ir_in",
+    "machine_applicable_only",
+    "machine_fix_inout",
+    "manifest_lock_in",
+    "max_fn_exec_sloc",
+    "max_fn_param_count",
+    "max_mut_bool_flags",
+    "max_predicate_arity",
+    "metrics_report_out",
+    "ndjson_out",
+    "offline_locked_enforced",
+    "rewrite_check37_citations",
+    "runtime_llm_token_count",
+    "rust_source_in",
+    "skip_generated_tree",
+    "stage_fixed_point_mismatch_files",
+    "tier_bc_max_doc_lines",
+    "vendor_bundle_supported",
+    "verifyOfflineLockedBuild",
+    "verifyStageFixedPoint",
+    "zero_ansi_in_json_mode"
+  ],
+  "operational_activities": [
+    {
+      "id": "OA-01",
+      "name": "verifyOfflineLockedBuild",
+      "doc": "verifyOfflineLockedBuild(lockPath)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-02",
+      "name": "listRustItems",
+      "doc": "listRustItems(path)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-03",
+      "name": "extractRustModule",
+      "doc": "extractRustModule(fromPath, toPath, itemsCsv)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-04",
+      "name": "verifyStageFixedPoint",
+      "doc": "verifyStageFixedPoint(stage1Digest)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-05",
+      "name": "formatNdjsonLine",
+      "doc": "formatNdjsonLine(msg)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-06",
+      "name": "analyzeMetrics",
+      "doc": "analyzeMetrics(source)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "operational_exchanges": [],
+  "operational_scenarios": [
+    {
+      "id": "SCN-01",
+      "name": "UC_AC_01_Lossless_Red_Green_CST_Roundtrip_and_Exact_DEAP_v2_0_AST_Metrics_Extraction",
+      "actor": "",
+      "objective": "\"Lossless Red Green CST Roundtrip and Exact DEAP v2 0 AST Metrics Extraction\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-02",
+      "name": "UC_AC_02_Deterministic_BTreeMap_Item_Inventory_and_Atomic_Module_Extraction_with_Check_37_Path_Rewriting",
+      "actor": "",
+      "objective": "\"Deterministic BTreeMap Item Inventory and Atomic Module Extraction with Check 37 Path Rewriting\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-03",
+      "name": "UC_AC_03_Fail_Closed_Rejection_on_Span_Collisions_Missing_Symbols_or_Post_Splice_Syntax_Errors",
+      "actor": "",
+      "objective": "\"Fail Closed Rejection on Span Collisions Missing Symbols or Post Splice Syntax Errors\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-04",
+      "name": "UC_AC_04_Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules",
+      "actor": "",
+      "objective": "\"Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-05",
+      "name": "UC_AC_05_Structured_Codegen_Boundary_Preserving_Stage_1_to_Stage_2_Metacircular_SHA_256_Fixed_Point",
+      "actor": "",
+      "objective": "\"Structured Codegen Boundary Preserving Stage 1 to Stage 2 Metacircular SHA 256 Fixed Point\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-06",
+      "name": "UC_AC_06_Unified_rustc_Compatible_Single_Line_JSON_Diagnostics_and_MachineApplicable_Auto_Fix_Across_All_Five_CLIs",
+      "actor": "",
+      "objective": "\"Unified rustc Compatible Single Line JSON Diagnostics and MachineApplicable Auto Fix Across All Five CLIs\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-07",
+      "name": "UC_AC_07_Air_Gapped_Offline_Cargo_Lock_Reproducibility_and_Twelve_Gate_Blueprint_Conformance",
+      "actor": "",
+      "objective": "\"Air Gapped Offline Cargo Lock Reproducibility and Twelve Gate Blueprint Conformance\"",
+      "steps": []
+    }
+  ],
+  "operational_nodes": [
+    {
+      "name": "AirGappedCargoLockGovernor",
+      "node_type": "Part",
+      "doc": "Mandates reproducible `--offline --locked` workspace builds against pinned `Cargo.lock` dependency checksums. [unit: flag]",
+      "allocated_activities": []
+    },
+    {
+      "name": "LosslessRustCstAnalyzer",
+      "node_type": "Part",
+      "doc": "Upper bound on executable lines of code per Rust function excluding comments, docblocks, attributes, and blank lines. [unit: SLOC]",
+      "allocated_activities": []
+    },
+    {
+      "name": "StructuredModularCodegenSynthesizer",
+      "node_type": "Part",
+      "doc": "Permitted Stage-1 versus Stage-2 SHA-256 file digest mismatch count across self-hosted modular codegen (`E0705`). [unit: files]",
+      "allocated_activities": []
+    },
+    {
+      "name": "UnifiedRustcJsonDiagnosticEmitter",
+      "node_type": "Part",
+      "doc": "Count of workspace CLI binaries unified on `--message-format=json` (`compile-sysml`, `verify-baseline`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`). [unit: binaries]",
+      "allocated_activities": []
+    },
+    {
+      "name": "ZeroTokenRustSpanCodemodEngine",
+      "node_type": "Part",
+      "doc": "Mandatory zero runtime LLM token consumption across item listing, module extraction, and Tier B/C docstring compaction. [unit: tokens]",
+      "allocated_activities": []
+    }
+  ],
+  "file_manifest": []
+}
