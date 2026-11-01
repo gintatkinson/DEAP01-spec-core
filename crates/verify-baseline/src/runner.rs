@@ -992,37 +992,37 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
 
     // Check 40: Interactive Gesture, 1080p-6K Viewport & Pairwise 2D HUD Non-Overlap Gate
     if let Err(errs) = check_40_interactive_gesture_and_hud_non_overlap_gate(&repo_root) {
-        eprintln!(
-            "ERROR: Check 40 failed (Interactive Gesture, 1080p-6K Viewport & Pairwise 2D HUD Non-Overlap Gate violated):"
-        );
+        eprintln!("ERROR: Check 40 failed (Interactive Gesture, 1080p-6K Viewport & Pairwise 2D HUD Non-Overlap Gate violated):");
         for e in &errs {
             eprintln!("  - {}", e);
         }
         write_defect_dossier(
-            &repo_root,
-            "Check 40 (Interactive Gesture, 1080p-6K Viewport & Pairwise 2D HUD Non-Overlap Gate)",
-            &errs,
-        );
+            &repo_root, "Check 40 (Interactive Gesture, 1080p-6K Viewport & Pairwise 2D HUD Non-Overlap Gate)", &errs);
         return Err(());
     }
     println!("Success: Check 40 verified (Interactive Gesture, 1080p-6K Viewport & Pairwise 2D HUD Non-Overlap Gate passed).");
 
     // Check 41: Track B C-ABI Solver Bridge SSOT & 5-Table SQLite Seed Parity Gate
     if let Err(errs) = check_41_solver_bridge_and_sqlite_seed_parity_gate(&repo_root) {
-        eprintln!(
-            "ERROR: Check 41 failed (Track B C-ABI Solver Bridge SSOT & 5-Table SQLite Seed Parity Gate violated):"
-        );
+        eprintln!("ERROR: Check 41 failed (Track B C-ABI Solver Bridge SSOT & 5-Table SQLite Seed Parity Gate violated):");
         for e in &errs {
             eprintln!("  - {}", e);
         }
-        write_defect_dossier(
-            &repo_root,
-            "Check 41 (Track B C-ABI Solver Bridge SSOT & 5-Table SQLite Seed Parity Gate)",
-            &errs,
-        );
+        write_defect_dossier(&repo_root, "Check 41 (Track B C-ABI Solver Bridge SSOT & 5-Table SQLite Seed Parity Gate)", &errs);
         return Err(());
     }
     println!("Success: Check 41 verified (Track B C-ABI Solver Bridge SSOT & 5-Table SQLite Seed Parity Gate passed).");
+
+    // Check 42: DoD Modularity & Ratchet AST Gate
+    if let Err(errs) = check_dod_gates(&repo_root) {
+        eprintln!("ERROR: Check 42 failed (DoD Modularity & Ratchet AST Gate violated):");
+        for e in &errs {
+            eprintln!("  - {}", e);
+        }
+        write_defect_dossier(&repo_root, "Check 42 (DoD Modularity & Ratchet AST Gate)", &errs);
+        return Err(());
+    }
+    println!("Success: Check 42 verified (DoD Modularity & Ratchet AST Gate passed).");
 
     // Platform Checks
     let dest = &options.destination;

@@ -31,20 +31,26 @@
 
 pub mod codebase;
 pub mod docstring_gate;
+pub mod dod_gates;
+#[cfg(test)]
+mod dod_gates_tests;
 pub mod domain_cleanliness_gate;
 pub mod math_katex;
 pub mod mermaid;
 pub mod parity_gates;
+pub mod ratchet_table;
 pub mod safety_stpa;
 pub mod structural;
 pub mod wbs_integrity;
 
 pub use codebase::*;
 pub use docstring_gate::*;
+pub use dod_gates::check_dod_gates;
 pub use domain_cleanliness_gate::*;
 pub use math_katex::check_latex_katex_syntax;
 pub use mermaid::check_mermaid_syntax;
 pub use parity_gates::*;
+pub use ratchet_table::{lookup_ratchet_ceiling, LEGACY_RATCHET_MAX_LINES};
 pub use safety_stpa::{check_safety_integrity, SafetyCheckOutcome};
 pub use structural::*;
 pub use wbs_integrity::{check_wbs_suite_integrity, WbsCheckOutcome};

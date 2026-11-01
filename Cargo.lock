@@ -607,10 +607,12 @@ dependencies = [
  "compile-sysml",
  "deap-core",
  "ingest-sysml",
+ "proc-macro2",
  "pulldown-cmark",
  "rayon",
  "serde",
  "serde_json",
+ "syn 2.0.119",
  "walkdir",
 ]
 
