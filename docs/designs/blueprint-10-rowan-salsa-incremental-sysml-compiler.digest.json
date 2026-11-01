@@ -1,0 +1,213 @@
+{
+  "sha256": "143be2a7067a225dfaa5f03bbf5f447d0a675e134cb8fb3c40bf67b36a2d7b6a",
+  "total_lines": 1,
+  "node_counts": {
+    "action_defs": 5,
+    "attribute_defs": 28,
+    "calc_defs": 0,
+    "capability_defs": 0,
+    "connection_defs": 0,
+    "constraint_defs": 6,
+    "containers": 4,
+    "groupings": 0,
+    "hazard_defs": 0,
+    "identities": 0,
+    "interaction_defs": 1,
+    "item_defs": 0,
+    "leaves": 28,
+    "lists": 5,
+    "operation_defs": 0,
+    "packages": 1,
+    "part_defs": 4,
+    "port_defs": 12,
+    "requirement_defs": 1,
+    "risk_defs": 0,
+    "state_defs": 1,
+    "test_case_defs": 0,
+    "typedefs": 0,
+    "use_case_defs": 7
+  },
+  "schema_nodes": [
+    "BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine",
+    "BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine_LifecycleState",
+    "BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine_SequenceInteraction",
+    "Blueprint_ID",
+    "C_INC_01",
+    "C_INC_02",
+    "C_INC_03",
+    "C_INC_04",
+    "C_INC_05",
+    "C_INC_06",
+    "FormattingPreservingSyncSplicer",
+    "Generation_Mode",
+    "LogosRowanSysmlCstEngine",
+    "REQ_0610_BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine",
+    "Requirement_ID",
+    "SalsaIncrementalCompilerDatabase",
+    "Specification_Source",
+    "Status",
+    "Target_Crates",
+    "Title",
+    "Tracked_Issues",
+    "TypedPolyglotIngestionFrontend",
+    "UC_AC_01_Lossless_logos_and_rowan_Concrete_Syntax_Tree_Full_Fidelity_Roundtrip_and_Trivia_Preservation",
+    "UC_AC_02_Resilient_Error_Recovery_Parsing_on_Incomplete_Syntax_and_Fail_Closed_MAX_AST_DEPTH_Guard",
+    "UC_AC_03_Formatting_Preserving_Bidirectional_CST_Splicing_Across_Forward_and_Reverse_Sync",
+    "UC_AC_04_Salsa_Early_Cutoff_Durability_Preventing_Downstream_Recomputations_on_Trivia_Edits",
+    "UC_AC_05_Fail_Closed_Salsa_Cycle_Detection_and_Referential_Integrity_Verification",
+    "UC_AC_06_Typed_CST_Lowering_and_Unified_JSON_Span_Diagnostics_Across_All_Five_Polyglot_Frontends",
+    "UC_AC_07_Twelve_Gate_Blueprint_Verification_and_Baseline_Cleanliness_Gate_Conformance",
+    "atomic_disjoint_splice",
+    "computeBidirectionalSplice",
+    "cycle_recovery_fail_closed",
+    "deterministic_uuid",
+    "evaluateSafetyAndEarlyCutoff",
+    "green_cst_out",
+    "hir_model_out",
+    "ingestPolyglotToHir",
+    "ingest_diag_out",
+    "json_span_diagnostics_enabled",
+    "lossless_trivia_preserved",
+    "lowered_hir_out",
+    "max_ast_depth",
+    "parseLosslessSysmlCst",
+    "polyglot_frontend_count",
+    "polyglot_source_in",
+    "pure_deterministic_btreemap",
+    "query_layer_count",
+    "resilient_error_recovery",
+    "safety_verification_out",
+    "source_revision_in",
+    "splice_diag_out",
+    "spliced_artifact_out",
+    "stage_fixed_point_mismatch_files",
+    "sync_delta_in",
+    "syntax_diag_out",
+    "sysml_source_in",
+    "trivia_edit_downstream_recomputations",
+    "untouched_trivia_mutation_bytes",
+    "verifyPostSpliceCst",
+    "zero_backtracking_lexers"
+  ],
+  "operational_activities": [
+    {
+      "id": "OA-01",
+      "name": "ingestPolyglotToHir",
+      "doc": "ingestPolyglotToHir(fileId, format)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-02",
+      "name": "parseLosslessSysmlCst",
+      "doc": "parseLosslessSysmlCst(source)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-03",
+      "name": "evaluateSafetyAndEarlyCutoff",
+      "doc": "evaluateSafetyAndEarlyCutoff(fileId)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-04",
+      "name": "computeBidirectionalSplice",
+      "doc": "computeBidirectionalSplice(fileId)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-05",
+      "name": "verifyPostSpliceCst",
+      "doc": "verifyPostSpliceCst(splicedSource)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "operational_exchanges": [],
+  "operational_scenarios": [
+    {
+      "id": "SCN-01",
+      "name": "UC_AC_01_Lossless_logos_and_rowan_Concrete_Syntax_Tree_Full_Fidelity_Roundtrip_and_Trivia_Preservation",
+      "actor": "",
+      "objective": "\"Lossless logos and rowan Concrete Syntax Tree Full Fidelity Roundtrip and Trivia Preservation\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-02",
+      "name": "UC_AC_02_Resilient_Error_Recovery_Parsing_on_Incomplete_Syntax_and_Fail_Closed_MAX_AST_DEPTH_Guard",
+      "actor": "",
+      "objective": "\"Resilient Error Recovery Parsing on Incomplete Syntax and Fail Closed MAX AST DEPTH Guard\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-03",
+      "name": "UC_AC_03_Formatting_Preserving_Bidirectional_CST_Splicing_Across_Forward_and_Reverse_Sync",
+      "actor": "",
+      "objective": "\"Formatting Preserving Bidirectional CST Splicing Across Forward and Reverse Sync\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-04",
+      "name": "UC_AC_04_Salsa_Early_Cutoff_Durability_Preventing_Downstream_Recomputations_on_Trivia_Edits",
+      "actor": "",
+      "objective": "\"Salsa Early Cutoff Durability Preventing Downstream Recomputations on Trivia Edits\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-05",
+      "name": "UC_AC_05_Fail_Closed_Salsa_Cycle_Detection_and_Referential_Integrity_Verification",
+      "actor": "",
+      "objective": "\"Fail Closed Salsa Cycle Detection and Referential Integrity Verification\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-06",
+      "name": "UC_AC_06_Typed_CST_Lowering_and_Unified_JSON_Span_Diagnostics_Across_All_Five_Polyglot_Frontends",
+      "actor": "",
+      "objective": "\"Typed CST Lowering and Unified JSON Span Diagnostics Across All Five Polyglot Frontends\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-07",
+      "name": "UC_AC_07_Twelve_Gate_Blueprint_Verification_and_Baseline_Cleanliness_Gate_Conformance",
+      "actor": "",
+      "objective": "\"Twelve Gate Blueprint Verification and Baseline Cleanliness Gate Conformance\"",
+      "steps": []
+    }
+  ],
+  "operational_nodes": [
+    {
+      "name": "FormattingPreservingSyncSplicer",
+      "node_type": "Part",
+      "doc": "Permitted Stage-1 versus Stage-2 SHA-256 digest mismatch count across self-hosted modular codegen (`E0705`). [unit: files]",
+      "allocated_activities": []
+    },
+    {
+      "name": "LogosRowanSysmlCstEngine",
+      "node_type": "Part",
+      "doc": "Hard structural nesting ceiling across nested `package`, `part`, `port`, `action`, `state`, and expression CST blocks. [unit: levels]",
+      "allocated_activities": []
+    },
+    {
+      "name": "SalsaIncrementalCompilerDatabase",
+      "node_type": "Part",
+      "doc": "Mandatory count of stratified `salsa` query groups (`SourceDatabase`, `CstDatabase`, `HirDatabase`, `SafetyVerificationDatabase`). [unit: layers]",
+      "allocated_activities": []
+    },
+    {
+      "name": "TypedPolyglotIngestionFrontend",
+      "node_type": "Part",
+      "doc": "Count of typed CST translator frontends in `crates/ingest-sysml/src/translators/` (`code.rs`, `markdown.rs`, `idl.rs`, `yang.rs`, `openapi.rs`). [unit: frontends]",
+      "allocated_activities": []
+    }
+  ],
+  "file_manifest": []
+}
