@@ -8,36 +8,36 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
     attribute Tracked_Issues : String = "#497, #506, #507";
     attribute Generation_Mode : String = "subagent";
     attribute Specification_Source : String = "crates/compile-sysml/src/sync/forward/mod.rs:1585-2078 / #507";
-    doc /* compile-sysml --forward-sync docs */
-    action def CompileSysmlForwardSyncDocs;
-    doc /* Resolve Parent Epic by pkg_name == ConOps */
-    action def ResolveParentEpicByPkgName;
-    doc /* Bind all package stories to Use Case matrices */
-    action def BindAllPackageStoriesToUse;
-    doc /* Emit symmetric ActionDef signatures and E1-E5 Mermaid */
-    action def EmitSymmetricActionDefSignaturesAndE1;
-    doc /* compile-sysml --emit-icd docs/interfaces */
-    action def CompileSysmlEmitIcdDocsInterfaces;
-    doc /* Project NxN ConnectionDef matrix and FlowDef signals */
-    action def ProjectNxNConnectionDefMatrixAndFlowDef;
-    doc /* compile-sysml --emit-wbs docs/management */
-    action def CompileSysmlEmitWbsDocsManagement;
-    doc /* Synthesize MIL-STD-881E tree and CSV/JSON exports */
-    action def SynthesizeMilStd881eTreeAnd;
-    doc /* reconcile-backlog reconcile --docs-dir docs */
-    action def ReconcileBacklogReconcileDocsDirDocs;
-    doc /* Parse CommonMark tables with in_html_comment guard */
-    action def ParseCommonMarkTablesWithInHtml;
-    doc /* Reconcile checklists with parent-inclusive epic count */
-    action def ReconcileChecklistsWithParentInclusiveEpic;
-    doc /* compile-sysml --reverse-sync docs */
-    action def CompileSysmlReverseSyncDocs;
-    doc /* Merge extracted entities into owning subpackages */
-    action def MergeExtractedEntitiesIntoOwningSubpackages;
+    doc /* `CmarkTable`, `FrontmatterDoc`, `ChecklistDoc`, `SpecSuiteBundle`, `IcdDocumentPair`, `WbsExportBundle`, and `ConopsUnitDoc` with `camino::Utf8PathBuf` paths and `toml_edit::DocumentMut`. */
+    attribute Layer_1_Domain_State_Data_Model : String = "Lossless Markdown AST, typed frontmatter DOM, and `salsa` query models";
+    doc /* `parse_markdown_tables`, `parse_frontmatter_metadata`, `emit_lossless_markdown`, `project_agile_spec_suite`, `compile_logical_icd_matrix`, `synthesize_mil_std_881e_wbs`, and `reconcile_markdown_backlog` with fail-closed diagnostics (`E0100..E0400`). */
+    attribute Layer_2_Logic_State_Management : String = "pulldown-cmark` event extraction, `salsa` derived projection queries, and comment-safe reconciliation";
+    doc /* `compile-sysml`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`, and `verify-baseline check-blueprint` CLI actuators emitting deterministic specs, ICDs, WBS exports, and `.digest.json` receipts. */
+    attribute Layer_3_Presentation_Actuator_Interface_Binding : String = "Forward compiler CLI actuators, CommonMark file serialization, and baseline quality gates";
+    doc /* project_agile_spec_suite(db, root_pkg) */
+    action def project_agile_spec_suite;
+    doc /* Evaluate salsa query_agile_specs(root_pkg) */
+    action def EvaluateSalsaQueryAgileSpecs;
+    doc /* compile_logical_icd_matrix(db, root_pkg) */
+    action def compile_logical_icd_matrix;
+    doc /* Evaluate salsa query_logical_icd(root_pkg) */
+    action def EvaluateSalsaQueryLogicalIcd;
+    doc /* synthesize_mil_std_881e_wbs(db, root_pkg) */
+    action def synthesize_mil_std_881e_wbs;
+    doc /* Evaluate salsa query_mil_std_881e_wbs(root_pkg) */
+    action def EvaluateSalsaQueryMilStd881e;
+    doc /* reconcile_markdown_backlog(frontmatter, checklist) */
+    action def reconcile_markdown_backlog;
+    doc /* Execute toml_edit and comment-safe checklist sync */
+    action def ExecuteTomlEditAndCommentSafe;
+    doc /* assemble_conops_master(units) */
+    action def assemble_conops_master;
+    doc /* Stream pulldown-cmark events via pulldown-cmark-to-cmark */
+    action def StreamPulldownCmarkEventsViaPulldown;
     doc /* UUIDv5:  | Complexity: Class P | Standard: IEEE 29148-2018 / RFC 2119 | Diagnostics: E0100 */
     requirement def REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint {
         id = "REQ-0604";
-        text = "The Digital Engineering Agent Platform (DEAP) compiler pipeline SHALL deterministically project all Agile functional specifications (docs/epics/, docs/features/, docs/user-stories/, docs/use-cases/), Logical Interface Control Documents (docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md,";
+        text = "The Digital Engineering Agent Platform (DEAP) compiler pipeline (DEAP-BP-DET-04, subsystem DeterministicSpecIcdWbsForwardCompiler, deterministic UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c4, complexity class Class P, diagnostic code bindings E0100, E0200, E0300, E0400, governed by ISO/IEC/IEEE";
         attribute uuidv5 : String = "";
         attribute complexity_class : String = "Class P";
         attribute governing_standard : String = "IEEE 29148-2018 / RFC 2119";
@@ -110,29 +110,26 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_SequenceInteraction {
         lifeline CLI : Operator_Or_CI_Runner;
-        lifeline Fwd : compile_sysml_Forward;
-        lifeline Icd : LogicalIcdMatrixCompiler;
-        lifeline Wbs : MilStd881eWbsExporter;
-        lifeline Rec : reconcile_backlog_Tool;
-        lifeline Rev : compile_sysml_Reverse;
-        message CompileSysmlForwardSyncDocs from CLI to Fwd;
-        message ResolveParentEpicByPkgName from Fwd to Fwd;
-        message BindAllPackageStoriesToUse from Fwd to Fwd;
-        message EmitSymmetricActionDefSignaturesAndE1 from Fwd to Fwd;
-        message reply_EpicsFeaturesStoriesAndUseCases from Fwd to CLI;
-        message CompileSysmlEmitIcdDocsInterfaces from CLI to Icd;
-        message ProjectNxNConnectionDefMatrixAndFlowDef from Icd to Icd;
-        message reply_Icd01AndIcd02Written from Icd to CLI;
-        message CompileSysmlEmitWbsDocsManagement from CLI to Wbs;
-        message SynthesizeMilStd881eTreeAnd from Wbs to Wbs;
-        message reply_Wbs0103AndEnterpriseExports from Wbs to CLI;
-        message ReconcileBacklogReconcileDocsDirDocs from CLI to Rec;
-        message ParseCommonMarkTablesWithInHtml from Rec to Rec;
-        message ReconcileChecklistsWithParentInclusiveEpic from Rec to Rec;
-        message reply_ZeroUnpopulatedPlaceholdersOrSpoofedIDs from Rec to CLI;
-        message CompileSysmlReverseSyncDocs from CLI to Rev;
-        message MergeExtractedEntitiesIntoOwningSubpackages from Rev to Rev;
-        message reply_BitIdenticalSysMLV2AstAnd from Rev to CLI;
+        lifeline Fwd : compile_sysml_projections_agile;
+        lifeline Icd : compile_sysml_projections_icd;
+        lifeline Wbs : compile_sysml_projections_wbs;
+        lifeline Rec : reconcile_backlog_cmark_reconciler;
+        lifeline Asm : assemble_conops_cmark_assembler;
+        message project_agile_spec_suite from CLI to Fwd;
+        message EvaluateSalsaQueryAgileSpecs from Fwd to Fwd;
+        message reply_SpecSuiteBundleEmitted from Fwd to CLI;
+        message compile_logical_icd_matrix from CLI to Icd;
+        message EvaluateSalsaQueryLogicalIcd from Icd to Icd;
+        message reply_IcdDocumentPairEmitted from Icd to CLI;
+        message synthesize_mil_std_881e_wbs from CLI to Wbs;
+        message EvaluateSalsaQueryMilStd881e from Wbs to Wbs;
+        message reply_WbsExportBundleEmitted from Wbs to CLI;
+        message reconcile_markdown_backlog from CLI to Rec;
+        message ExecuteTomlEditAndCommentSafe from Rec to Rec;
+        message reply_ReconcileReceiptReturned from Rec to CLI;
+        message assemble_conops_master from CLI to Asm;
+        message StreamPulldownCmarkEventsViaPulldown from Asm to Asm;
+        message reply_ConopsMasterWritten from Asm to CLI;
     }
     doc /* Maximum deterministic execution bound for `--forward-sync` across all package subtrees. [unit: ms] */
     part def AgileSpecForwardProjector {

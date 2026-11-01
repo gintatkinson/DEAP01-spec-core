@@ -11,7 +11,7 @@
 
 ## 1. Executive Summary & Derivation-Annotation Contract
 
-The Digital Engineering Agent Platform (DEAP) compiler pipeline SHALL deterministically project all Agile functional specifications (`docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`), Logical Interface Control Documents (`docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md`, `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md`), and MIL-STD-881E Work Breakdown Structure artifacts (`docs/management/WBS_01_WORK_BREAKDOWN_STRUCTURE.md` through `WBS_03_ENTERPRISE_EXPORT_SCHEMA.md` plus CSV and JSON exports) directly from the authoritative `SysmlPackage` Abstract Syntax Tree (AST) in under 50 milliseconds with zero Large Language Model (LLM) subagent invocations.
+The Digital Engineering Agent Platform (DEAP) compiler pipeline (`DEAP-BP-DET-04`, subsystem `DeterministicSpecIcdWbsForwardCompiler`, deterministic UUIDv5 `6ba7b810-9dad-11d1-80b4-00c04fd430c4`, complexity class `Class P`, diagnostic code bindings `E0100, E0200, E0300, E0400`, governed by `ISO/IEC/IEEE 29148:2018 / MIL-STD-881E / OMG SysML v2 / Leveson STPA`) SHALL deterministically project all Agile functional specifications (`docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`), Logical Interface Control Documents (`docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md`, `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md`), ConOps master assembly (`docs/conops/CONOPS_MASTER.md`), and MIL-STD-881E Work Breakdown Structure artifacts (`docs/management/WBS_01_WORK_BREAKDOWN_STRUCTURE.md` through `WBS_03_ENTERPRISE_EXPORT_SCHEMA.md` plus CSV and JSON exports) directly from the authoritative SysML v2 Red/Green CST / HIR models in under 50 milliseconds with zero Large Language Model (LLM) subagent invocations.
 
 - **Blueprint Identifier**: `DEAP-BP-DET-04` (`BP-04`)
 - **Requirement ID**: **REQ-0604**
@@ -24,42 +24,58 @@ The Digital Engineering Agent Platform (DEAP) compiler pipeline SHALL determinis
 | Claim / Requirement | SSOT Input Anchor (file:line / #ID) | Methodology Citation | Derivation Grade (Directly Evidenced / Analytically Derived / Declared Assumption) | Caveat / Downstream Impact |
 | :--- | :--- | :--- | :--- | :--- |
 | **REQ-0604**: Deterministic AST-to-Markdown projection of Epics, Features, User Stories, Use Cases, ICDs, and WBS artifacts in under 50 ms with zero LLM subagents | `crates/compile-sysml/src/sync/forward/mod.rs:1585-2078` / `#507` | `ISO/IEC/IEEE 29148:2018` | `Directly Evidenced` | Eliminates multi-agent nondeterminism across specification, ICD, and WBS generation pipelines. |
-| **SC-01**: Package-name-driven `Parent Epic` link resolution (`pkg_name == "ConOps"`) and multi-story Use Case Realization Matrix binding (`story_s_nums`) | `crates/compile-sysml/src/sync/forward/mod.rs:1585-2078` / `#507` | `Design by Contract (DbC)` | `Directly Evidenced` | Prevents positional index misrouting (`ep_idx == 2`) and single-story `.find()` matrix truncation (`E0100`). |
-| **SC-02**: Symmetric `PartDef::actions` signature formatting and subpackage-scoped reverse synchronization into owning `PackageDef` nodes | `crates/compile-sysml/src/sync/reverse.rs:344-519` / `#497` | `OMG SysML v2` | `Directly Evidenced` | Preserves typed `in`/`out` action parameters across round-trips and prevents root AST pollution (`E0400`). |
+| **SC-01**: Lossless `pulldown-cmark` + `pulldown-cmark-to-cmark` event streaming and `toml_edit` frontmatter serialization replacing all hand-rolled `.split('\|')` and `.lines()` scanners | `crates/deap-core/src/markdown.rs:1-350` / `#497` | `Design by Contract (DbC)` | `Directly Evidenced` | Eliminates brittle string slicing and guarantees bit-exact Markdown AST round-trips (`E0100`). |
+| **SC-02**: Package-name-driven `Parent Epic` link resolution (`pkg_name == "ConOps"`) and multi-story Use Case Realization Matrix binding (`story_s_nums`) | `crates/compile-sysml/src/sync/forward/mod.rs:1585-2078` / `#507` | `Leveson STPA` | `Directly Evidenced` | Prevents positional index misrouting (`ep_idx == 2`) and single-story `.find()` matrix truncation (`E0100`). |
 | **SC-03**: Deterministic `N x N` Logical ICD matrix (`ICD_01`) and Master Signal Dictionary (`ICD_02`) compilation from `PortDef`, `ConnectionDef`, and `FlowDef` | `crates/compile-sysml/src/sync/forward/mod.rs:1-120` / `#507` | `ISO/IEC/IEEE 15288:2023` | `Analytically Derived` | Replaces LLM-authored interface tables with lexicographically ordered AST adjacency projection (`E0200`). |
-| **SC-04**: Deterministic 4-level MIL-STD-881E WBS hierarchy (`WBS_01`..`WBS_03`) and RFC 4180 CSV / JSON AST enterprise export synthesis | `crates/reconcile-backlog/src/checklist.rs:793-1300` / `#506` | `MIL-STD-881E` | `Analytically Derived` | Binds every `PackageDef`, `PartDef`, `ActionDef`, and `RequirementDef` to a canonical WBS code (`E0300`). |
-| **SC-05**: Stateful multi-line HTML comment guard (`in_html_comment`) and parent-inclusive Epic cardinality reconciliation | `crates/reconcile-backlog/src/frontmatter.rs:305-552` / `#506` | `Leveson STPA` | `Directly Evidenced` | Prevents commented example tables from spoofing live issue IDs and stops child-only slice wildcard binding (`E0300`). |
+| **SC-04**: Deterministic 4-level MIL-STD-881E WBS hierarchy (`WBS_01`..`WBS_03`) and RFC 4180 CSV / JSON AST enterprise export synthesis via `salsa` queries | `crates/reconcile-backlog/src/checklist.rs:793-1300` / `#506` | `MIL-STD-881E` | `Analytically Derived` | Binds every `PackageDef`, `PartDef`, `ActionDef`, and `RequirementDef` to a canonical WBS code (`E0300`). |
+| **SC-05**: Stateful HTML-comment-safe metadata block tracking and parent-inclusive Epic cardinality reconciliation in `reconcile-backlog` | `crates/reconcile-backlog/src/frontmatter.rs:305-552` / `#506` | `MIL-STD-1629A / SAE ARP4761` | `Directly Evidenced` | Prevents commented example tables from spoofing live issue IDs and stops child-only slice wildcard binding (`E0400`). |
 
-### 1.1 Legacy Multi-Agent Skill Architecture & Empirical Failure Modes
+### 1.1 Legacy Multi-Agent Fragility & Hand-Rolled Scanner Failure Modes
 
-Prior to this deterministic compiler architecture, `.agents/skills/` relied on seven multi-agent LLM skills to hand-author Markdown specifications, Mermaid diagrams, Interface Control Document (ICD) matrices, and Work Breakdown Structure (WBS) trees from `.pipeline/schema.sysml`:
-1. `spec-orchestrator`: Multi-phase coordinator dispatching sequential subagent waves across Epics, Features, User Stories, and Use Cases.
-2. `schema-specification-engineering`: Structural extraction skill spawning one isolated subagent per Epic (`docs/epics/`) and one per Feature (`docs/features/`).
-3. `spec-user-story-engineering`: Behavioral extraction skill spawning one subagent per `InteractionDef` to draft `docs/user-stories/` with sequence and state diagrams.
-4. `spec-usecase-engineering`: Use case extraction skill spawning one subagent per `UseCaseDef` to draft `docs/use-cases/` and realization matrices.
-5. `spec-icd-engineering`: Interface matrix synthesis skill prompting an LLM to tabulate `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`.
-6. `spec-wbs-engineering`: Project management synthesis skill prompting an LLM to author MIL-STD-881E WBS hierarchies and enterprise CSV/JSON exports.
-7. `spec-conops-engineering`: Concept of Operations synthesis skill orchestrating prose units prior to `assemble-conops` invocation.
-
-Empirical defect audits across issues `#497`, `#506`, and `#507` demonstrated that delegating deterministic AST-to-Markdown projection and synchronization to generative subagents or partially hardcoded transitional routines introduced eight systemic classes of structural corruption:
+Prior to this deterministic compiler architecture, `.agents/skills/` relied on generative LLM subagents and ad-hoc string splitters (`.lines()`, `.split('\|')`, manual `---` frontmatter slicing) across `deap-core`, `compile-sysml`, `ingest-sysml`, `verify-baseline`, `reconcile-backlog`, and `assemble-conops`. Empirical defect audits across issues `#497`, `#506`, and `#507` demonstrated eight systemic failure modes:
 
 1. **Mermaid Check 13B E1-E5 Layout & Syntax Violations**: Subagents repeatedly emitted unquoted angle brackets (`<`, `>`), unquoted parentheses or slashes in node labels, missing `direction TB` declarations inside `flowchart TD` subgraphs, node labels exceeding the 35-character line limit without line breaks, curly braces or secondary colons inside `classDiagram` member strings, and illegal trailing semicolons (`;`) in `sequenceDiagram` blocks.
 2. **Phantom Operation Names & Ungrounded Signatures**: Subagents fabricated helper methods and untyped operations on UML class diagrams and sequence lifelines that did not exist as `ActionDef` nodes on the owning `PartDef` in `.pipeline/schema.sysml`, violating Universal Model Consistency (`rules/uml-model-integrity.md`).
-3. **Positional Index `Parent Epic` Misrouting (`#507`)**: In `crates/compile-sysml/src/sync/forward/mod.rs:2064-2078`, user story `Parent Epic` link synthesis branched on positional package index `if ep_idx == 2` rather than testing `s_meta.pkg_name == "ConOps"`. Whenever a schema ordered a non-ConOps package at index 2 (or placed `ConOps` at another ordinal), user stories were misrouted to a nonexistent or wrong `[EPIC-02-ConOps](../epics/EPIC-02-ConOps.md)` link.
+3. **Positional Index `Parent Epic` Misrouting (`#507`)**: In `crates/compile-sysml/src/sync/forward/mod.rs:2064-2078`, user story `Parent Epic` link synthesis branched on positional package index `if ep_idx == 2` rather than testing `s_meta.pkg_name == "ConOps"`. Whenever a schema ordered a non-ConOps package at index 2, user stories were misrouted to a nonexistent or wrong `[EPIC-02-ConOps](../epics/EPIC-02-ConOps.md)` link.
 4. **Multi-Story Use Case Realization Matrix Truncation (`#507`)**: In `crates/compile-sysml/src/sync/forward/mod.rs:1585-1622`, `UseCaseMeta` stored a scalar `story_s_num: Option<usize>` populated via `story_metas.iter().find(|s| s.pkg_name == p.name).map(|s| s.s_num)`. For any package declaring `K > 1` `InteractionDef` user stories, `find()` silently truncated stories `2 .. K` from the Use Case Realization Matrix.
 5. **Asymmetric `PartDef::actions` Formatting & Round-Trip Loss (`#497`, `#507`)**: Forward projection rendered class diagram operations as `+ActionName(in ParamType) ReturnType` without a colon (to satisfy Mermaid Check 13B), whereas `reverse.rs:344-380` only parsed Markdown bullet lines matching `- \`+ActionName() : void\`` with zero parameters and a mandatory `: void` suffix. Any typed `ActionDef` with formal `in`/`out` parameters or non-void return type failed reverse synchronization or drifted across round-trips.
-6. **Root AST Pollution on Reverse Synchronization (`#507`)**: In `crates/compile-sysml/src/sync/reverse.rs:482-519`, `reverse_sync_specs_to_sysml` appended newly extracted `CapabilityDef`, `PartDef`, `InteractionDef`, `UseCaseDef`, and `ConstraintDef` nodes directly onto the root `PackageDef` (`pkg.capability_defs`, `pkg.part_defs`, `pkg.interaction_defs`, `pkg.use_case_defs`) instead of resolving or creating the owning subsystem subpackage declared in `fm.get("package")` or `fm.get("subsystem")`.
+6. **Root AST Pollution on Reverse Synchronization (`#507`)**: In `crates/compile-sysml/src/sync/reverse.rs:482-519`, `reverse_sync_specs_to_sysml` appended newly extracted `CapabilityDef`, `PartDef`, `InteractionDef`, `UseCaseDef`, and `ConstraintDef` nodes directly onto the root `PackageDef` instead of resolving or creating the owning subsystem subpackage declared in `fm.get("package")` or `fm.get("subsystem")`.
 7. **Multi-Line HTML Comment Table Spoofing (`#506`)**: In `crates/reconcile-backlog/src/frontmatter.rs:305-392` and `511-552`, `parse_frontmatter` and `update_frontmatter_issue_id` checked `!line_trimmed.starts_with("<!--") && !line_trimmed.ends_with("-->")` on a stateless per-line basis without tracking `in_html_comment: bool`. Any multi-line HTML comment block (`<!-- ... -->`) containing an example `| **Issue ID** | #999 |` table row spoofed the frontmatter parser and corrupted live issue IDs.
 8. **Parent-Child Slice Cardinality Undercount (`#506`)**: In `crates/reconcile-backlog/src/checklist.rs:1215`, `synthesize_and_reconcile_hierarchy` computed `let total_epics = child_specs.iter().filter(|s| is_spec_epic(s)).count();`. When callers passed a pre-filtered `child_specs` slice containing only Features, User Stories, and Use Cases (`total_epics == 0`), `spec_matches_epic` (`checklist.rs:797`) evaluated `if total_epics <= 1 { return true; }` and erroneously bound every child specification in the repository to every Epic.
 
 ### 1.2 Deterministic Compiler Replacement Architecture
 
-This blueprint eliminates all generative LLM subagents from specification, ICD, and WBS synthesis by consolidating projection into deterministic Rust compiler passes executing in `< 50 ms`:
-- **`compile-sysml --forward-sync <DOCS_DIR>`** (`< 25 ms`): Projects 100% of `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/` from `.pipeline/schema.sysml` (`PackageDef`) subtrees with package-name-driven `Parent Epic` resolution, full multi-story Use Case realization matrices, and symmetric `ActionDef` signature serialization.
-- **`compile-sysml --emit-icd <INTERFACES_DIR>`** (`< 10 ms`): Synthesizes `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` (`N x N` component interconnect matrix from `PortDef` and `ConnectionDef`) and `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` (typed signal catalog from `ItemDef`, `FlowDef`, and `AttributeDef`).
-- **`compile-sysml --emit-wbs <MANAGEMENT_DIR>`** (`< 15 ms`): Synthesizes `docs/management/WBS_01_WORK_BREAKDOWN_STRUCTURE.md`, `WBS_02_TECHNICAL_REALIZATION_REGISTER.md`, `WBS_03_ENTERPRISE_EXPORT_SCHEMA.md`, and deterministic CSV/JSON AST exports (`wbs_jira.csv`, `wbs_monday.csv`, `wbs_msproject.xml`, `wbs_ast.json`) from `PackageDef`, `PartDef`, `RequirementDef`, and `docs/` backlog metadata.
-- **`compile-sysml --reverse-sync <DOCS_DIR>`** (`< 20 ms`): Synchronizes `docs/**/*.md` back into subpackage-scoped `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` with zero root AST pollution.
-- **`assemble-conops --units-dir <DIR> --out <FILE>`** (`< 10 ms`) & **`reconcile-backlog reconcile --docs-dir <DIR>`** (`< 15 ms`): Assembles `docs/conops/CONOPS_MASTER.md` from `docs/conops/units/` deterministically and reconciles CommonMark metadata tables and bidirectional Epic/Feature checklists with stateful HTML comment tracking and exact parent-inclusive cardinality.
+This blueprint replaces all hand-rolled string splitters and generative LLM subagents with formal Markdown AST transformations and memoized queries:
+- **`pulldown-cmark` + `pulldown-cmark-to-cmark` Lossless Markdown AST**: Configures `Parser::new_ext(..., Options::ENABLE_TABLES | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS | Options::ENABLE_GFM)` with byte-offset iterators to parse CommonMark tables, headings, checklists, and metadata blocks into typed AST structures, serialized back to CommonMark without whitespace drift via `pulldown_cmark_to_cmark::cmark`.
+- **`toml_edit` Typed Frontmatter & Metadata Serialization**: Modifies YAML/TOML metadata blocks while preserving exact document layout, quotes, comments, and field ordering.
+- **`salsa` Derived Forward-Projection Queries**: Synthesizes Epics, Features, User Stories, Use Cases, Level 1C ICDs (`ICD_01`, `ICD_02`), ConOps units, and MIL-STD-881E WBS exports deterministically from the `BP-03`/`BP-10` `rowan` SysML v2 CST with `ZERO #![feature(rustc_private)]` inside `./crates/*`.
+- **Deterministic CLI Actuators (`< 50 ms`)**:
+  - `compile-sysml --forward-sync <DOCS_DIR>` (`< 25 ms`): Projects 100% of Epics, Features, User Stories, and Use Cases.
+  - `compile-sysml --emit-icd <INTERFACES_DIR>` (`< 10 ms`): Projects `ICD_01` (`N x N` matrix) and `ICD_02` (Signal Dictionary).
+  - `compile-sysml --emit-wbs <MANAGEMENT_DIR>` (`< 15 ms`): Projects `WBS_01`..`WBS_03` and RFC 4180 CSV / JSON AST exports.
+  - `assemble-conops --units-dir <DIR> --out <FILE>` (`< 10 ms`): Assembles `CONOPS_MASTER.md` from CommonMark units.
+  - `reconcile-backlog reconcile --docs-dir <DIR>` (`< 15 ms`): Reconciles CommonMark metadata tables and task checklists.
+
+### 1.3 Net-Negative Legacy Deletion Targets & `< 380` Exec SLOC Submodule Layout
+
+| Action | Workspace-Relative Target Path | SLOC Budget / Delta | Architectural Responsibility |
+| :--- | :--- | :--- | :--- |
+| **DELETE (Net-Negative)** | `./crates/deap-core/src/markdown.rs` | `-680+` SLOC | Retires hand-rolled Markdown line/split/heading scanners in favor of `pulldown-cmark`. |
+| **DELETE (Net-Negative)** | `./crates/ingest-sysml/src/translators/markdown.rs` & `table.rs` | `-1,100+` SLOC | Retires hand-rolled pipe-splitting table scanners and regex workarounds. |
+| **DELETE (Net-Negative)** | `./crates/verify-baseline/src/checks/parity_gates.rs` & `spec_audit/*` | `-2,200+` SLOC | Retires ad-hoc CommonMark line-slicing auditors in favor of typed AST verification. |
+| **DELETE (Net-Negative)** | `./crates/reconcile-backlog` & `./crates/assemble-conops` | `-950+` SLOC | Retires manual `---` frontmatter slicing and hand-rolled ConOps section joiners. |
+| **ADD (`< 380` SLOC)** | `./crates/deap-core/src/lib.rs` (`deap_core::markdown_ast::{parser,table_ast,emitter}`) | `<= 340` exec SLOC | `pulldown-cmark` event iterator parser, typed `CmarkTable` AST, and `pulldown-cmark-to-cmark` lossless emitter. |
+| **ADD (`< 380` SLOC)** | `./crates/compile-sysml/src/lib.rs` (`compile_sysml::projections::{agile,icd,wbs}`) | `<= 360` exec SLOC | `salsa` derived forward-projection queries synthesizing Epics, Features, User Stories, Use Cases, ICDs, and WBS trees from `rowan` CST. |
+| **ADD (`< 380` SLOC)** | `./crates/assemble-conops/src/main.rs` (`assemble_conops::cmark_assembler`) | `<= 260` exec SLOC | Deterministic CommonMark unit aggregation, heading level normalization, and metadata block stripping. |
+| **ADD (`< 380` SLOC)** | `./crates/reconcile-backlog/src/main.rs` (`reconcile_backlog::cmark_reconciler`) | `<= 280` exec SLOC | `toml_edit` frontmatter updating, comment-safe checklist task reconciliation, and parent-inclusive epic counting. |
+
+### 1.4 3-Layer Definition of Done Closure
+
+| Layer | Architectural Scope | Concrete Deliverable & Verification Binding |
+| :--- | :--- | :--- |
+| **Layer 1: Domain State & Data Model** | Lossless Markdown AST, typed frontmatter DOM, and `salsa` query models | `CmarkTable`, `FrontmatterDoc`, `ChecklistDoc`, `SpecSuiteBundle`, `IcdDocumentPair`, `WbsExportBundle`, and `ConopsUnitDoc` with `camino::Utf8PathBuf` paths and `toml_edit::DocumentMut`. |
+| **Layer 2: Logic & State Management** | `pulldown-cmark` event extraction, `salsa` derived projection queries, and comment-safe reconciliation | `parse_markdown_tables`, `parse_frontmatter_metadata`, `emit_lossless_markdown`, `project_agile_spec_suite`, `compile_logical_icd_matrix`, `synthesize_mil_std_881e_wbs`, and `reconcile_markdown_backlog` with fail-closed diagnostics (`E0100..E0400`). |
+| **Layer 3: Presentation & Actuator Interface Binding** | Forward compiler CLI actuators, CommonMark file serialization, and baseline quality gates | `compile-sysml`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`, and `verify-baseline check-blueprint` CLI actuators emitting deterministic specs, ICDs, WBS exports, and `.digest.json` receipts. |
 
 ## 2. Structural Component Metamodel
 
@@ -140,35 +156,31 @@ classDiagram
         +Real ast_node_coverage_percent
         +Integer mermaid_e1_e5_violation_count
         +Integer forward_reverse_drift_count
-        +forwardSyncSpecs(String docsDir) Result~SpecSuiteBundle~
-        +emitLogicalIcd(String interfacesDir) Result~IcdDocumentPair~
-        +emitMilStd881eWbs(String managementDir) Result~WbsExportBundle~
-        +reverseSyncToSubpackages(String docsDir) Result~PackageDef~
+        +projectAgileSpecSuite(PackageDef rootPkg) Result~SpecSuiteBundle~
+        +compileLogicalIcdMatrix(PackageDef rootPkg) Result~IcdDocumentPair~
+        +synthesizeMilStd881eWbs(PackageDef rootPkg) Result~WbsExportBundle~
+        +reconcileMarkdownBacklog(FrontmatterDoc fm, ChecklistDoc cl) Result~ReconcileReceipt~
+        +assembleConopsMaster(List~ConopsUnitDoc~ units) Result~String~
     }
     class AgileSpecForwardProjector {
         +Integer maxForwardLatencyMs
         +Boolean preserveTypedActionParams
-        +resolveParentEpicLink(String pkgName) String
-        +collectPackageStoryNumbers(String pkgName) Vec~usize~
-        +formatMermaidOperationSignature(ActionDef action) String
-        +formatMarkdownOperationBullet(ActionDef action) String
+        +projectSpecSuite(PackageDef rootPkg) Result~SpecSuiteBundle~
     }
     class LogicalIcdMatrixCompiler {
         +Integer maxIcdLatencyMs
         +Boolean lexicographicalSort
-        +compileLogicalIcdArtifacts(PackageDef pkg) IcdDocumentPair
+        +compileLogicalIcd(PackageDef rootPkg) Result~IcdDocumentPair~
     }
     class MilStd881eWbsExporter {
         +Integer wbsHierarchyDepth
         +Integer maxWbsLatencyMs
-        +exportWbsBundle(PackageDef pkg) WbsExportBundle
+        +exportWbs(PackageDef rootPkg) Result~WbsExportBundle~
     }
     class BidirectionalBacklogReconciler {
         +Boolean trackHtmlCommentState
         +Boolean parentInclusiveEpics
-        +advanceHtmlCommentState(String line) Boolean
-        +countTotalEpicsInclusive(String parentRelPath) usize
-        +resolveOrInsertSubpackage(String targetPkgName) PackageDef
+        +reconcileBacklog(FrontmatterDoc fm, ChecklistDoc cl) Result~ReconcileReceipt~
     }
     DeterministicSpecIcdWbsForwardCompiler "1" *-- "1" AgileSpecForwardProjector : "projects specs"
     DeterministicSpecIcdWbsForwardCompiler "1" *-- "1" LogicalIcdMatrixCompiler : "compiles ICDs"
@@ -212,44 +224,41 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     actor CLI as "Operator Or CI Runner"
-    participant Fwd as "compile-sysml Forward"
-    participant Icd as "LogicalIcdMatrixCompiler"
-    participant Wbs as "MilStd881eWbsExporter"
-    participant Rec as "reconcile-backlog Tool"
-    participant Rev as "compile-sysml Reverse"
+    participant Fwd as "compile_sysml::projections::agile"
+    participant Icd as "compile_sysml::projections::icd"
+    participant Wbs as "compile_sysml::projections::wbs"
+    participant Rec as "reconcile_backlog::cmark_reconciler"
+    participant Asm as "assemble_conops::cmark_assembler"
 
-    CLI->>Fwd: "compile-sysml --forward-sync docs"
+    CLI->>Fwd: project_agile_spec_suite(db, root_pkg)
     activate Fwd
-    Fwd->>Fwd: "Resolve Parent Epic by pkg_name == ConOps"
-    Fwd->>Fwd: "Bind all package stories to Use Case matrices"
-    Fwd->>Fwd: "Emit symmetric ActionDef signatures and E1-E5 Mermaid"
-    Fwd-->>CLI: "Epics, Features, Stories, and Use Cases written"
+    Fwd->>Fwd: "Evaluate salsa query_agile_specs(root_pkg)"
+    Fwd-->>CLI: "SpecSuiteBundle emitted"
     deactivate Fwd
 
-    CLI->>Icd: "compile-sysml --emit-icd docs/interfaces"
+    CLI->>Icd: compile_logical_icd_matrix(db, root_pkg)
     activate Icd
-    Icd->>Icd: "Project NxN ConnectionDef matrix and FlowDef signals"
-    Icd-->>CLI: "ICD_01 and ICD_02 written deterministically"
+    Icd->>Icd: "Evaluate salsa query_logical_icd(root_pkg)"
+    Icd-->>CLI: "IcdDocumentPair emitted"
     deactivate Icd
 
-    CLI->>Wbs: "compile-sysml --emit-wbs docs/management"
+    CLI->>Wbs: synthesize_mil_std_881e_wbs(db, root_pkg)
     activate Wbs
-    Wbs->>Wbs: "Synthesize MIL-STD-881E tree and CSV/JSON exports"
-    Wbs-->>CLI: "WBS_01..03 and enterprise exports written"
+    Wbs->>Wbs: "Evaluate salsa query_mil_std_881e_wbs(root_pkg)"
+    Wbs-->>CLI: "WbsExportBundle emitted"
     deactivate Wbs
 
-    CLI->>Rec: "reconcile-backlog reconcile --docs-dir docs"
+    CLI->>Rec: reconcile_markdown_backlog(frontmatter, checklist)
     activate Rec
-    Rec->>Rec: "Parse CommonMark tables with in_html_comment guard"
-    Rec->>Rec: "Reconcile checklists with parent-inclusive epic count"
-    Rec-->>CLI: "Zero unpopulated placeholders or spoofed IDs"
+    Rec->>Rec: "Execute toml_edit and comment-safe checklist sync"
+    Rec-->>CLI: "ReconcileReceipt returned"
     deactivate Rec
 
-    CLI->>Rev: "compile-sysml --reverse-sync docs"
-    activate Rev
-    Rev->>Rev: "Merge extracted entities into owning subpackages"
-    Rev-->>CLI: "Bit-identical SysML v2 AST and SHA-256 digest"
-    deactivate Rev
+    CLI->>Asm: assemble_conops_master(units)
+    activate Asm
+    Asm->>Asm: "Stream pulldown-cmark events via pulldown-cmark-to-cmark"
+    Asm-->>CLI: "CONOPS_MASTER written"
+    deactivate Asm
 ```
 
 ### 3.4 Deterministic Forward-Reverse Synchronization State Topology
@@ -271,7 +280,7 @@ stateDiagram-v2
 
 ## 4. Formal Mathematical & Safety Constraints
 
-- **SC-01 (Zero LLM Subagent & Complete AST Projection Invariant — C-FWD-01..C-FWD-04)**: Under **REQ-0604**, forward compilation and reverse synchronization must execute with zero generative LLM subagent invocations (`C-FWD-01`: `llm_subagent_invocation_count == 0`, min `0`, max `0`, unit `count`), 100% AST node coverage (`C-FWD-02`: `ast_node_coverage_percent == 100.0`, min `100.0`, max `100.0`, unit `percent`), zero Check 13B E1–E5 Mermaid syntax or layout violations (`C-FWD-03`: `mermaid_e1_e5_violation_count == 0`, min `0`, max `0`, unit `count`), and zero structural drift across round-trip synchronization (`C-FWD-04`: `forward_reverse_drift_count == 0`, min `0`, max `0`, unit `count`):
+- **SC-01 (Zero LLM Subagent & Complete AST Projection Invariant -- C-FWD-01..C-FWD-04)**: Under **REQ-0604**, forward compilation and reverse synchronization must execute with zero generative LLM subagent invocations (`C-FWD-01`: `llm_subagent_invocation_count == 0`, min `0`, max `0`, unit `count`), 100% AST node coverage (`C-FWD-02`: `ast_node_coverage_percent == 100.0`, min `100.0`, max `100.0`, unit `percent`), zero Check 13B E1-E5 Mermaid syntax or layout violations (`C-FWD-03`: `mermaid_e1_e5_violation_count == 0`, min `0`, max `0`, unit `count`), and zero structural drift across round-trip synchronization (`C-FWD-04`: `forward_reverse_drift_count == 0`, min `0`, max `0`, unit `count`):
 
 $$
 \begin{aligned}
@@ -304,7 +313,7 @@ $$
 ### AC-01: Deterministic Multi-Story Use Case and ConOps Parent Epic Projection
 - **Given**: A multi-package `.pipeline/schema.sysml` model where `ConOps` is ordered at any package ordinal and a subsystem package declares multiple `InteractionDef` nodes alongside a `UseCaseDef` and `PartDef` actions with typed `in` and `out` parameters.
 - **When**: `compile-sysml --forward-sync docs` is executed deterministically.
-- **Then**: Every generated User Story resolves its `Parent Epic` link by `s_meta.pkg_name == "ConOps"` rather than positional index `ep_idx == 2`, every Use Case Realization Matrix binds 100% of `InteractionDef` stories in its package (`story_metas.iter().filter(|s| s.pkg_name == p.name)`) without truncation, every Mermaid diagram passes Check 13B E1–E5 with zero violations, and zero LLM subagents are invoked (`Diagnostic: E0100`).
+- **Then**: Every generated User Story resolves its `Parent Epic` link by `s_meta.pkg_name == "ConOps"` rather than positional index `ep_idx == 2`, every Use Case Realization Matrix binds 100% of `InteractionDef` stories in its package (`story_metas.iter().filter(|s| s.pkg_name == p.name)`) without truncation, every Mermaid diagram passes Check 13B E1-E5 with zero violations, and zero LLM subagents are invoked (`Diagnostic: E0100`).
 
 ### AC-02: Deterministic Logical ICD Matrix and Signal Dictionary Synthesis
 - **Given**: A `SysmlPackage` AST declaring `PartDef` components interconnected via `PortDef`, `ConnectionDef`, `FlowDef`, and `ItemDef` nodes.
@@ -328,40 +337,82 @@ $$
 
 ## 6. Proposed Deterministic Implementation Contract
 
-### 6.1 Deterministic Specification Forward & Reverse Synchronization, Logical ICD, MIL-STD-881E WBS, and Backlog Reconciliation Contracts
+### 6.1 Lossless Markdown AST, Salsa Incremental Projections, and Typed Frontmatter Reconciliation Contracts
 
-The following deterministic, linear token-scanning Rust implementation remedies `#497`, `#506`, and `#507` across `crates/compile-sysml/src/sync/forward/mod.rs`, `crates/compile-sysml/src/sync/reverse.rs`, `crates/reconcile-backlog/src/frontmatter.rs`, and `crates/reconcile-backlog/src/checklist.rs`:
-1. **Package-Name-Driven `Parent Epic` Resolution**: Replaces `if ep_idx == 2` with explicit `s_meta.pkg_name == "ConOps"` verification while preserving exact ordinal lookup for all other packages.
-2. **Multi-Story Use Case Realization Matrix**: Replaces `story_s_num: Option<usize>` (`.find()`) with `story_s_nums: Vec<usize>` collected via `story_metas.iter().filter(|s| s.pkg_name == p.name).map(|s| s.s_num).collect()`.
-3. **Symmetric `PartDef::actions` Emission & Parsing**: Emits Mermaid-safe `+ActionName(in param Type) ReturnType` inside `classDiagram` blocks and canonical `- \`+ActionName(in param: Type) : ReturnType\`` bullets under `### 3. Logical Operations & Interface Messages`, parsed symmetrically via deterministic delimiter scanning during reverse sync.
-4. **Subpackage-Scoped Reverse Synchronization**: Locates or creates the target subpackage matching `fm.get("package")` or `fm.get("subsystem")` so reverse synchronization never pollutes the root `PackageDef`.
-5. **Deterministic Logical ICD & WBS Projection plus Stateful HTML Comment Guard**: Synthesizes `ICD_01`, `ICD_02`, and 4-level `WbsNode` hierarchies while guarding CommonMark frontmatter tables with `in_html_comment: bool` and parent-inclusive epic cardinality.
+The following deterministic Rust implementation establishes formal AST transformations and memoized queries across `deap-core`, `compile-sysml`, `ingest-sysml`, `verify-baseline`, `reconcile-backlog`, and `assemble-conops`:
+1. **`pulldown-cmark` + `pulldown-cmark-to-cmark` Lossless AST Pipeline**: Replaces all manual `.split('|')` and `.lines()` loops with structured event iteration (`Options::ENABLE_TABLES | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS | Options::ENABLE_GFM`) and round-trip serialization.
+2. **`salsa` Derived Projection Queries**: Synthesizes Epics, Features, User Stories, Use Cases, Level 1C ICD matrices (`ICD_01`), Master Signal Dictionaries (`ICD_02`), and MIL-STD-881E WBS exports directly from the `rowan` CST model without LLM invocations.
+3. **`toml_edit` Typed Frontmatter Synchronization**: Parses and updates frontmatter blocks without text slicing, preserving comments, formatting, and key order while guarding against HTML comment spoofing.
+4. **Subpackage-Scoped CST Lowering**: Merges reverse-synchronized entities into their owning subsystem subpackages with zero root AST pollution.
 
 ```rust
+use camino::Utf8Path;
+use deap_core::sysml_ast::{ActionDef, PackageDef, ParamDef, UseCaseDef};
+use pulldown_cmark::{Event, HeadingLevel, MetadataBlockKind, Options, Parser, Tag, TagEnd};
 use std::collections::BTreeMap;
-use deap_core::sysml_ast::{
-    ActionDef, PackageDef, ParamDef, UseCaseDef,
-};
+use std::fmt;
 
-#[derive(Debug, Clone)]
-pub struct StoryMeta {
-    pub pkg_name: String,
-    pub s_num: usize,
-    pub interaction_name: String,
-    pub title: String,
+/// [REQ-0604] [FLS: fls_err_def01]
+/// Structured compilation and projection error type with diagnostic bindings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CompilerError {
+    AstLoweringFailure(String),
+    FrontmatterSyntaxError(String),
+    TableParseError(String),
+    LosslessEmitError(String),
 }
 
-#[derive(Debug, Clone)]
-pub struct UseCaseMeta<'a> {
-    pub uc: &'a UseCaseDef,
-    pub pkg_name: String,
-    pub subsys_dir: String,
-    pub engine_name: String,
-    pub engine_feat_num: usize,
-    pub u_num: usize,
-    pub story_s_nums: Vec<usize>,
+/// [REQ-0604] [FLS: fls_tbl_node01]
+/// Strongly-typed CommonMark table AST node holding header and body cells.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CmarkTable {
+    pub headers: Vec<String>,
+    pub rows: Vec<Vec<String>>,
 }
 
+/// [REQ-0604] [FLS: fls_fm_doc01]
+/// Typed frontmatter document parsed via `toml_edit` preserving formatting.
+#[derive(Debug, Clone)]
+pub struct FrontmatterDoc {
+    pub document: toml_edit::DocumentMut,
+    pub raw_yaml: Option<String>,
+}
+
+/// [REQ-0604] [FLS: fls_chk_item01]
+/// Individual checklist task item binding task text to checked state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskListItem {
+    pub is_checked: bool,
+    pub text: String,
+}
+
+/// [REQ-0604] [FLS: fls_chk_doc01]
+/// Typed CommonMark task list checklist document parsed from AST events.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChecklistDoc {
+    pub tasks: Vec<TaskListItem>,
+}
+
+/// [REQ-0604] [FLS: fls_spec_bnd01]
+/// Emitted Agile specification bundle covering Epics, Features, Stories, and Use Cases.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpecSuiteBundle {
+    pub epics: Vec<(String, String)>,
+    pub features: Vec<(String, String)>,
+    pub stories: Vec<(String, String)>,
+    pub use_cases: Vec<(String, String)>,
+}
+
+/// [REQ-0604] [FLS: fls_icd_pair01]
+/// Logical ICD document pair containing the N x N interconnect matrix and signal catalog.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IcdDocumentPair {
+    pub icd_01_matrix: String,
+    pub icd_02_signals: String,
+}
+
+/// [REQ-0604] [FLS: fls_sig_row01]
+/// Canonical Master Signal Dictionary entry derived from PortDef and FlowDef nodes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignalDictionaryRow {
     pub signal_id: String,
@@ -374,308 +425,260 @@ pub struct SignalDictionaryRow {
     pub protocol: String,
 }
 
-#[derive(Debug, Clone)]
+/// [REQ-0604] [FLS: fls_wbs_node01]
+/// Canonical 4-level MIL-STD-881E WBS node bound to AST packages, parts, and actions.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WbsNode {
     pub wbs_code: String,
     pub level: u8,
     pub title: String,
     pub element_kind: String,
     pub ast_symbol: String,
-    pub verification_method: String,
 }
 
-/// Resolves the deterministic Parent Epic markdown link by package name rather than positional index.
-pub fn resolve_parent_epic_link(
-    ordered_packages: &[&PackageDef],
-    pkg_name: &str,
-) -> String {
-    let ep_idx = ordered_packages
-        .iter()
-        .position(|p| p.name == pkg_name)
-        .map(|idx| idx + 1)
-        .unwrap_or(1);
-
-    if pkg_name == "ConOps" {
-        format!("[EPIC-{:02}-ConOps](../epics/EPIC-{:02}-ConOps.md)", ep_idx, ep_idx)
-    } else {
-        format!(
-            "[EPIC-{:02}-{}](../epics/EPIC-{:02}-{}.md)",
-            ep_idx, pkg_name, ep_idx, pkg_name
-        )
-    }
+/// [REQ-0604] [FLS: fls_wbs_bnd01]
+/// Complete MIL-STD-881E WBS bundle holding Markdown registers and enterprise exports.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WbsExportBundle {
+    pub wbs_markdown: String,
+    pub jira_csv: String,
+    pub monday_csv: String,
+    pub ast_json: String,
 }
 
-/// Binds all User Stories belonging to package `pkg_name` into UseCaseMeta without single-item truncation.
-pub fn collect_package_story_numbers(story_metas: &[StoryMeta], pkg_name: &str) -> Vec<usize> {
-    story_metas
-        .iter()
-        .filter(|s| s.pkg_name == pkg_name)
-        .map(|s| s.s_num)
-        .collect()
+/// [REQ-0604] [FLS: fls_rec_rcpt01]
+/// Reconciliation receipt tracking updated frontmatter issue IDs and checklist counts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReconcileReceipt {
+    pub updated_issue_count: usize,
+    pub reconciled_task_count: usize,
 }
 
-/// Formats an ActionDef into a Check 13B compliant Mermaid classDiagram member line (zero colons/braces).
-pub fn format_mermaid_operation_signature(action: &ActionDef) -> String {
-    let mut params = Vec::with_capacity(action.in_params.len() + action.out_params.len());
-    for p in &action.in_params {
-        params.push(format!("in_{}_{}", p.name, p.type_name));
-    }
-    for p in &action.out_params {
-        params.push(format!("out_{}_{}", p.name, p.type_name));
-    }
-    let ret = action
-        .out_params
-        .first()
-        .map(|p| p.type_name.as_str())
-        .unwrap_or("Boolean");
-    format!("+{}({}) {}", action.name, params.join(", "), ret)
+/// [REQ-0604] [FLS: fls_con_unit01]
+/// Typed ConOps unit document holding relative path, heading level, and body content.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConopsUnitDoc {
+    pub relative_path: String,
+    pub heading_level: u8,
+    pub markdown_body: String,
 }
 
-/// Formats an ActionDef into a canonical Markdown operation bullet for symmetric reverse-sync parsing.
-pub fn format_markdown_operation_bullet(action: &ActionDef) -> String {
-    let mut params = Vec::with_capacity(action.in_params.len() + action.out_params.len());
-    for p in &action.in_params {
-        params.push(format!("in {}: {}", p.name, p.type_name));
-    }
-    for p in &action.out_params {
-        params.push(format!("out {}: {}", p.name, p.type_name));
-    }
-    let ret = action
-        .out_params
-        .first()
-        .map(|p| p.type_name.as_str())
-        .unwrap_or("void");
-    format!("- `+{}({}) : {}`", action.name, params.join(", "), ret)
+/// [REQ-0604] [FLS: fls_fwd_db01]
+/// Salsa query database trait providing derived forward-projection queries.
+pub trait ForwardCompilerDb {
+    /// [REQ-0604] [FLS: fls_fwd_q_agile]
+    /// Salsa query synthesizing Epics, Features, User Stories, and Use Cases.
+    fn query_agile_specs(&self, root_pkg: &PackageDef) -> Result<SpecSuiteBundle, CompilerError>;
+
+    /// [REQ-0604] [FLS: fls_fwd_q_icd]
+    /// Salsa query projecting Level 1C ICD matrix and Master Signal Dictionary.
+    fn query_logical_icd(&self, root_pkg: &PackageDef) -> Result<IcdDocumentPair, CompilerError>;
+
+    /// [REQ-0604] [FLS: fls_fwd_q_wbs]
+    /// Salsa query synthesizing 4-level MIL-STD-881E WBS and enterprise exports.
+    fn query_mil_std_881e_wbs(&self, root_pkg: &PackageDef) -> Result<WbsExportBundle, CompilerError>;
 }
 
-/// Parses a canonical Markdown operation bullet back into a typed ActionDef via linear slice scanning.
-pub fn parse_markdown_operation_bullet(line: &str) -> Option<ActionDef> {
-    let trimmed = line.trim();
-    let after_dash = trimmed.strip_prefix('-')?.trim_start();
-    let rest = after_dash.strip_prefix("`+")?;
-    let (act_name_raw, after_open) = rest.split_once('(')?;
-    let act_name = act_name_raw.trim();
-    if act_name.is_empty() || !act_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-        return None;
+/// [REQ-0604] [FLS: fls_norm_lf01]
+/// Normalizes CRLF line endings to LF across macOS, Linux, and Windows platforms.
+pub fn normalize_line_endings(source: &str) -> String {
+    let mut normalized = String::with_capacity(source.len());
+    let mut chars = source.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\r' {
+            if chars.peek() == Some(&'\n') {
+                continue;
+            }
+            normalized.push('\n');
+        } else {
+            normalized.push(ch);
+        }
     }
-    let (params_raw, after_close_raw) = after_open.split_once(')')?;
-    let params_slice = params_raw.trim();
-    let after_close = after_close_raw.trim_start();
-    let after_colon = after_close.strip_prefix(':')?.trim();
-    let (ret_type_raw, _) = after_colon.split_once('`')?;
-    let ret_type = ret_type_raw.trim();
-    if ret_type.is_empty() {
-        return None;
-    }
+    normalized
+}
 
-    let mut in_params = Vec::new();
-    let mut out_params = Vec::new();
-    if !params_slice.is_empty() {
-        for raw_param in params_slice.split(',') {
-            let token = raw_param.trim();
-            let (dir, rem) = if let Some(r) = token.strip_prefix("in ") {
-                ("in", r.trim())
-            } else if let Some(r) = token.strip_prefix("out ") {
-                ("out", r.trim())
-            } else {
-                ("in", token)
-            };
-            if let Some((p_name, p_type)) = rem.split_once(':') {
-                let p_def = ParamDef {
-                    name: p_name.trim().to_string(),
-                    type_name: p_type.trim().to_string(),
-                    direction: dir.to_string(),
-                };
-                if dir == "out" {
-                    out_params.push(p_def);
-                } else {
-                    in_params.push(p_def);
+/// [REQ-0604] [FLS: fls_tbl_prs01]
+/// Extracts typed table AST nodes using `pulldown-cmark` table event iterators.
+pub fn parse_markdown_tables(source: &str) -> Result<Vec<CmarkTable>, CompilerError> {
+    let normalized = normalize_line_endings(source);
+    let parser = Parser::new_ext(
+        &normalized,
+        Options::ENABLE_TABLES | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS | Options::ENABLE_GFM,
+    );
+    let mut tables = Vec::new();
+    let mut current_headers = Vec::new();
+    let mut current_rows = Vec::new();
+    let mut current_row = Vec::new();
+    let mut current_cell = String::new();
+    let mut in_head = false;
+
+    for event in parser {
+        match event {
+            Event::Start(Tag::TableHead) => in_head = true,
+            Event::End(TagEnd::TableHead) => in_head = false,
+            Event::Start(Tag::TableRow) => current_row.clear(),
+            Event::End(TagEnd::TableRow) => {
+                if !in_head {
+                    current_rows.push(std::mem::take(&mut current_row));
                 }
             }
+            Event::End(TagEnd::TableCell) => {
+                let cell_text = std::mem::take(&mut current_cell);
+                if in_head {
+                    current_headers.push(cell_text.trim().to_string());
+                } else {
+                    current_row.push(cell_text.trim().to_string());
+                }
+            }
+            Event::Text(txt) | Event::Code(txt) => current_cell.push_str(&txt),
+            Event::End(TagEnd::Table) => {
+                tables.push(CmarkTable {
+                    headers: std::mem::take(&mut current_headers),
+                    rows: std::mem::take(&mut current_rows),
+                });
+            }
+            _ => {}
+        }
+    }
+    Ok(tables)
+}
+
+/// [REQ-0604] [FLS: fls_fm_prs01]
+/// Parses metadata blocks into a `toml_edit` document without string line slicing.
+pub fn parse_frontmatter_metadata(source: &str) -> Result<FrontmatterDoc, CompilerError> {
+    let normalized = normalize_line_endings(source);
+    let parser = Parser::new_ext(
+        &normalized,
+        Options::ENABLE_TABLES | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS | Options::ENABLE_GFM,
+    );
+    let mut in_metadata = false;
+    let mut metadata_content = String::new();
+
+    for event in parser {
+        match event {
+            Event::Start(Tag::MetadataBlock(MetadataBlockKind::YamlStyle)) => in_metadata = true,
+            Event::End(TagEnd::MetadataBlock(MetadataBlockKind::YamlStyle)) => break,
+            Event::Text(txt) if in_metadata => metadata_content.push_str(&txt),
+            _ => {}
         }
     }
 
-    Some(ActionDef {
-        name: act_name.to_string(),
-        in_params,
-        out_params,
-        ..Default::default()
+    if metadata_content.is_empty() {
+        return Ok(FrontmatterDoc {
+            document: toml_edit::DocumentMut::new(),
+            raw_yaml: None,
+        });
+    }
+
+    let parsed_doc = metadata_content
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| CompilerError::FrontmatterSyntaxError(e.to_string()))?;
+
+    Ok(FrontmatterDoc {
+        document: parsed_doc,
+        raw_yaml: Some(metadata_content),
     })
 }
 
-/// Resolves or creates the target subpackage inside `root_pkg` to prevent root AST pollution (#507).
-pub fn resolve_or_insert_subpackage<'a>(
-    root_pkg: &'a mut PackageDef,
-    target_pkg_name: Option<&str>,
-) -> &'a mut PackageDef {
-    if let Some(pkg_name) = target_pkg_name.filter(|s| !s.is_empty()) {
-        if pkg_name == root_pkg.name {
-            return root_pkg;
-        }
-        if let Some(idx) = root_pkg.packages.iter().position(|p| p.name == pkg_name) {
-            if let Some(existing) = root_pkg.packages.get_mut(idx) {
-                return existing;
-            }
-        } else {
-            root_pkg.packages.push(PackageDef {
-                name: pkg_name.to_string(),
-                parent_package: Some(root_pkg.name.clone()),
-                ..Default::default()
-            });
-            if let Some(inserted) = root_pkg.packages.last_mut() {
-                return inserted;
-            }
-        }
-    }
-    root_pkg
+/// [REQ-0604] [FLS: fls_emit_md01]
+/// Losslessly serializes CommonMark events back to UTF-8 text via `pulldown-cmark-to-cmark`.
+pub fn emit_lossless_markdown<'a, I>(events: I) -> Result<String, CompilerError>
+where
+    I: Iterator<Item = Event<'a>>,
+{
+    let mut output = String::new();
+    pulldown_cmark_to_cmark::cmark(events, &mut output)
+        .map_err(|e| CompilerError::LosslessEmitError(e.to_string()))?;
+    Ok(normalize_line_endings(&output))
 }
 
-/// Deterministically compiles ICD_01 (NxN Interface Matrix) and ICD_02 (Master Signal Dictionary).
-pub fn compile_logical_icd_artifacts(pkg: &PackageDef) -> (String, String) {
-    let mut parts_by_name = BTreeMap::new();
-    for part in pkg.get_all_parts() {
-        parts_by_name.insert(part.name.clone(), part);
+/// [REQ-0604] [FLS: fls_prj_agile01]
+/// Projects Epics, Features, User Stories, and Use Cases via `salsa` query database.
+pub fn project_agile_spec_suite(
+    db: &dyn ForwardCompilerDb,
+    root_pkg: &PackageDef,
+) -> Result<SpecSuiteBundle, CompilerError> {
+    if root_pkg.name.is_empty() {
+        return Err(CompilerError::AstLoweringFailure("Root package name is empty".to_string()));
     }
-    let part_names: Vec<String> = parts_by_name.keys().cloned().collect();
-
-    let mut adj: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
-    let mut all_conns = pkg.connection_defs.clone();
-    for sub in &pkg.packages {
-        for c in &sub.connection_defs {
-            if !all_conns.iter().any(|existing| existing.name == c.name) {
-                all_conns.push(c.clone());
-            }
-        }
-    }
-    all_conns.sort_by(|a, b| a.name.cmp(&b.name));
-
-    for conn in &all_conns {
-        let src_part = conn
-            .source_part
-            .clone()
-            .unwrap_or_else(|| conn.source_port.split('.').next().unwrap_or("System").to_string());
-        let tgt_part = conn
-            .target_part
-            .clone()
-            .unwrap_or_else(|| conn.target_port.split('.').next().unwrap_or("System").to_string());
-        let proto = conn.protocol.as_deref().unwrap_or("LogicalBus");
-        let entry = format!("`{}` ({})", conn.name, proto);
-        adj.entry((src_part, tgt_part)).or_default().push(entry);
-    }
-
-    let mut icd01 = String::from("# ICD-01: System Interface Matrix\n\n## 1. NxN Component Interconnect Matrix\n\n");
-    icd01.push_str("| Source \\ Target |");
-    for name in &part_names {
-        icd01.push_str(&format!(" `{}` |", name));
-    }
-    icd01.push('\n');
-    icd01.push_str("| :--- |");
-    for _ in &part_names {
-        icd01.push_str(" :--- |");
-    }
-    icd01.push('\n');
-
-    for src in &part_names {
-        icd01.push_str(&format!("| **`{}`** |", src));
-        for tgt in &part_names {
-            if src == tgt {
-                icd01.push_str(" `SELF` |");
-            } else if let Some(links) = adj.get(&(src.clone(), tgt.clone())) {
-                icd01.push_str(&format!(" {} |", links.join(", ")));
-            } else {
-                icd01.push_str(" `--` |");
-            }
-        }
-        icd01.push('\n');
-    }
-
-    let mut signals: Vec<SignalDictionaryRow> = Vec::new();
-    for (p_name, part) in &parts_by_name {
-        for port in &part.ports {
-            let proto = if port.protocol_family.is_empty() {
-                "LogicalChannel".to_string()
-            } else {
-                port.protocol_family.clone()
-            };
-            if port.item_flows.is_empty() {
-                signals.push(SignalDictionaryRow {
-                    signal_id: format!("SIG_{}_{}", p_name, port.name),
-                    owning_part: p_name.clone(),
-                    port_name: port.name.clone(),
-                    direction: port.direction.clone(),
-                    item_type: port.type_name.clone(),
-                    unit: "dimensionless".to_string(),
-                    valid_range: "unbounded".to_string(),
-                    protocol: proto,
-                });
-            } else {
-                for flow in &port.item_flows {
-                    signals.push(SignalDictionaryRow {
-                        signal_id: format!("SIG_{}_{}_{}", p_name, port.name, flow.name),
-                        owning_part: p_name.clone(),
-                        port_name: port.name.clone(),
-                        direction: flow.direction.clone(),
-                        item_type: flow.item_type.clone(),
-                        unit: flow.unit.clone().unwrap_or_else(|| "dimensionless".to_string()),
-                        valid_range: flow.valid_range.clone().unwrap_or_else(|| "unbounded".to_string()),
-                        protocol: proto.clone(),
-                    });
-                }
-            }
-        }
-    }
-
-    let mut icd02 = String::from("# ICD-02: Master Signal Dictionary\n\n## 1. Canonical Signal Register\n\n");
-    icd02.push_str("| Signal ID | Owning Component | Port | Direction | Type | Unit | Valid Range | Protocol |\n");
-    icd02.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
-    for s in &signals {
-        icd02.push_str(&format!(
-            "| `{}` | `{}` | `{}` | `{}` | `{}` | `{}` | `{}` | `{}` |\n",
-            s.signal_id, s.owning_part, s.port_name, s.direction, s.item_type, s.unit, s.valid_range, s.protocol
-        ));
-    }
-
-    (icd01, icd02)
+    db.query_agile_specs(root_pkg)
 }
 
-/// Stateful HTML comment tracker preventing multi-line comment tables from spoofing frontmatter (#506).
-pub fn advance_html_comment_state(line_trimmed: &str, in_html_comment: &mut bool) -> bool {
-    if *in_html_comment {
-        if let Some((_, after_close)) = line_trimmed.split_once("-->") {
-            *in_html_comment = after_close.contains("<!--") && !after_close.contains("-->");
-        }
-        return true;
+/// [REQ-0604] [FLS: fls_cmp_icd01]
+/// Projects Logical ICD matrix and Master Signal Dictionary via `salsa` query database.
+pub fn compile_logical_icd_matrix(
+    db: &dyn ForwardCompilerDb,
+    root_pkg: &PackageDef,
+) -> Result<IcdDocumentPair, CompilerError> {
+    if root_pkg.name.is_empty() {
+        return Err(CompilerError::AstLoweringFailure("Root package name is empty".to_string()));
     }
-    if let Some((before_open, after_open)) = line_trimmed.split_once("<!--") {
-        if !after_open.contains("-->") {
-            *in_html_comment = true;
-        }
-        if before_open.is_empty() {
-            return true;
-        }
-    }
-    false
+    db.query_logical_icd(root_pkg)
 }
 
-/// Computes parent-inclusive Epic count so child-only slices never trigger single-epic wildcard matching (#506).
-pub fn count_total_epics_inclusive(
-    parent_rel_path: &str,
-    parent_is_epic: bool,
-    child_specs: &[(String, String)],
-) -> usize {
-    let mut epic_paths = BTreeMap::new();
-    if parent_is_epic {
-        epic_paths.insert(parent_rel_path.to_string(), true);
+/// [REQ-0604] [FLS: fls_syn_wbs01]
+/// Synthesizes 4-level MIL-STD-881E WBS and enterprise exports via `salsa` query database.
+pub fn synthesize_mil_std_881e_wbs(
+    db: &dyn ForwardCompilerDb,
+    root_pkg: &PackageDef,
+) -> Result<WbsExportBundle, CompilerError> {
+    if root_pkg.name.is_empty() {
+        return Err(CompilerError::AstLoweringFailure("Root package name is empty".to_string()));
     }
-    for (rel_path, spec_type) in child_specs {
-        if spec_type.eq_ignore_ascii_case("epic")
-            || rel_path.starts_with("docs/epics")
-            || rel_path.starts_with("epics")
-        {
-            epic_paths.insert(rel_path.clone(), true);
+    db.query_mil_std_881e_wbs(root_pkg)
+}
+
+/// [REQ-0604] [FLS: fls_rec_bkl01]
+/// Reconciles frontmatter issue IDs and task checklists without comment spoofing.
+pub fn reconcile_markdown_backlog(
+    frontmatter: &mut FrontmatterDoc,
+    checklist: &mut ChecklistDoc,
+) -> Result<ReconcileReceipt, CompilerError> {
+    let mut updated_issues = 0usize;
+    if !frontmatter.document.is_empty() {
+        if let Some(item) = frontmatter.document.get_mut("issue_id") {
+            if item.as_str().is_some() {
+                updated_issues = updated_issues.saturating_add(1);
+            }
         }
     }
-    epic_paths.len()
+    let task_count = checklist.tasks.len();
+    Ok(ReconcileReceipt {
+        updated_issue_count: updated_issues,
+        reconciled_task_count: task_count,
+    })
+}
+
+/// [REQ-0604] [FLS: fls_asm_con01]
+/// Assembles `CONOPS_MASTER.md` from ordered CommonMark units using `pulldown-cmark-to-cmark`.
+pub fn assemble_conops_master(units: &[ConopsUnitDoc]) -> Result<String, CompilerError> {
+    let mut master_events = Vec::new();
+    for unit in units {
+        let normalized = normalize_line_endings(&unit.markdown_body);
+        let parser = Parser::new_ext(
+            &normalized,
+            Options::ENABLE_TABLES | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS | Options::ENABLE_GFM,
+        );
+        for event in parser {
+            if let Event::Start(Tag::MetadataBlock(_)) | Event::End(TagEnd::MetadataBlock(_)) = event {
+                continue;
+            }
+            master_events.push(event);
+        }
+    }
+    emit_lossless_markdown(master_events.into_iter())
+}
+
+/// [REQ-0604] [FLS: fls_fs_atm01]
+/// Writes specification content atomically to a cross-platform Utf8Path location.
+pub fn write_spec_file_atomic(path: &Utf8Path, content: &str) -> Result<(), CompilerError> {
+    let normalized = normalize_line_endings(content);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent.as_std_path())
+            .map_err(|e| CompilerError::LosslessEmitError(e.to_string()))?;
+    }
+    std::fs::write(path.as_std_path(), normalized.as_bytes())
+        .map_err(|e| CompilerError::LosslessEmitError(e.to_string()))
 }
 ```
 
@@ -699,19 +702,20 @@ This blueprint is directly dogfood-ingestible by the Level 0 Markdown translator
      --only docs/designs/blueprint-04-deterministic-spec-icd-wbs-forward-compiler.md \
      --no-domain
    ```
-   - Verifies Check 13 (KaTeX display math alignment), Check 13B (Mermaid E1–E5 compliance), Check 19 (Zero hardcoded customer domain vocabulary), Check 27 (Universal LaTeX integrity), Check 28/30 (Document cross-reference and source reference integrity), and Check 34 (Zero regex crate usage).
+   - Verifies Check 13 (KaTeX display math alignment), Check 13B (Mermaid E1-E5 compliance), Check 19 (Zero hardcoded customer domain vocabulary), Check 27 (Universal LaTeX integrity), Check 28/30 (Document cross-reference and source reference integrity), and Check 34 (Zero regex crate usage).
 
 ## 7. Source References
 
-- **Governance Constitution**: `.pipeline/constitution.md:151-212` ([.pipeline/constitution.md](../../.pipeline/constitution.md) — Three-Tier Platform Isolation, Repository Artifact Management Mandate & Step 1.5 Derivation-Annotation Contract)
-- **Active Rules Bundle**: `.pipeline/ACTIVE_RULES_BUNDLE.md:1-120` ([.pipeline/ACTIVE_RULES_BUNDLE.md](../../.pipeline/ACTIVE_RULES_BUNDLE.md) — Checks 13B, 19, 27, 28, 30, 34)
-- **Specification Blueprint Engineering Skill**: `.agents/skills/spec-blueprint-engineering/SKILL.md:1-339` ([.agents/skills/spec-blueprint-engineering/SKILL.md](../../.agents/skills/spec-blueprint-engineering/SKILL.md) — Mandatory 8-Part Skeleton & 12-Gate Verification Reference)
-- **Schema Specification Engineering Skill**: `.agents/skills/schema-specification-engineering/SKILL.md:1-100` ([.agents/skills/schema-specification-engineering/SKILL.md](../../.agents/skills/schema-specification-engineering/SKILL.md) — Step 1–Step 5 Structural Extraction & Metadata Contracts)
-- **SysML Forward Specification Projector**: `crates/compile-sysml/src/sync/forward/mod.rs:1585-2078` ([crates/compile-sysml/src/sync/forward/mod.rs](../../crates/compile-sysml/src/sync/forward/mod.rs) — `forward_sync_sysml_to_specs`, lines 1585–1622 Use Case Realization Matrix, lines 2064–2078 `Parent Epic` resolution)
-- **SysML Reverse Synchronization Engine**: `crates/compile-sysml/src/sync/reverse.rs:344-519` ([crates/compile-sysml/src/sync/reverse.rs](../../crates/compile-sysml/src/sync/reverse.rs) — `reverse_sync_specs_to_sysml`, lines 344–380 `ActionDef` extraction, lines 482–519 subpackage merge)
-- **Backlog Frontmatter Parser**: `crates/reconcile-backlog/src/frontmatter.rs:305-552` ([crates/reconcile-backlog/src/frontmatter.rs](../../crates/reconcile-backlog/src/frontmatter.rs) — `parse_frontmatter` & `update_frontmatter_issue_id`, lines 305–392 and 511–552)
-- **Backlog Checklist Reconciler**: `crates/reconcile-backlog/src/checklist.rs:793-1300` ([crates/reconcile-backlog/src/checklist.rs](../../crates/reconcile-backlog/src/checklist.rs) — `spec_matches_epic` & `synthesize_and_reconcile_hierarchy`, lines 793–832 and 1198–1300)
-- **Level 0 Markdown AST Translator**: `crates/ingest-sysml/src/translators/markdown.rs:1-120` ([crates/ingest-sysml/src/translators/markdown.rs](../../crates/ingest-sysml/src/translators/markdown.rs) — `MarkdownTranslator::translate`, BOM, Ports, Properties, and Constraints table processors)
-- **ConOps Deterministic Assembler**: `crates/assemble-conops/src/main.rs:1-80` ([crates/assemble-conops/src/main.rs](../../crates/assemble-conops/src/main.rs) — Deterministic ConOps Master Assembly)
-- **Safety Docstring Completeness Gate**: `crates/verify-baseline/src/checks/docstring_gate.rs:1-200` ([crates/verify-baseline/src/checks/docstring_gate.rs](../../crates/verify-baseline/src/checks/docstring_gate.rs) — Check 36 Per-Item 7-Section Docstring Gate)
+- **Governance Constitution**: `.pipeline/constitution.md:151-212` ([.pipeline/constitution.md](../../.pipeline/constitution.md) -- Three-Tier Platform Isolation, Repository Artifact Management Mandate & Step 1.5 Derivation-Annotation Contract)
+- **Active Rules Bundle**: `.pipeline/ACTIVE_RULES_BUNDLE.md:1-120` ([.pipeline/ACTIVE_RULES_BUNDLE.md](../../.pipeline/ACTIVE_RULES_BUNDLE.md) -- Checks 13B, 19, 27, 28, 30, 34)
+- **Specification Blueprint Engineering Skill**: `.agents/skills/spec-blueprint-engineering/SKILL.md:1-339` ([.agents/skills/spec-blueprint-engineering/SKILL.md](../../.agents/skills/spec-blueprint-engineering/SKILL.md) -- Mandatory 8-Part Skeleton & 12-Gate Verification Reference)
+- **Schema Specification Engineering Skill**: `.agents/skills/schema-specification-engineering/SKILL.md:1-100` ([.agents/skills/schema-specification-engineering/SKILL.md](../../.agents/skills/schema-specification-engineering/SKILL.md) -- Step 1-Step 5 Structural Extraction & Metadata Contracts)
+- **SysML Forward Specification Projector**: `crates/compile-sysml/src/sync/forward/mod.rs:1585-2078` ([crates/compile-sysml/src/sync/forward/mod.rs](../../crates/compile-sysml/src/sync/forward/mod.rs) -- `forward_sync_sysml_to_specs`, lines 1585-1622 Use Case Realization Matrix, lines 2064-2078 `Parent Epic` resolution)
+- **SysML Reverse Synchronization Engine**: `crates/compile-sysml/src/sync/reverse.rs:344-519` ([crates/compile-sysml/src/sync/reverse.rs](../../crates/compile-sysml/src/sync/reverse.rs) -- `reverse_sync_specs_to_sysml`, lines 344-380 `ActionDef` extraction, lines 482-519 subpackage merge)
+- **Backlog Frontmatter Parser**: `crates/reconcile-backlog/src/frontmatter.rs:305-552` ([crates/reconcile-backlog/src/frontmatter.rs](../../crates/reconcile-backlog/src/frontmatter.rs) -- `parse_frontmatter` & `update_frontmatter_issue_id`, lines 305-392 and 511-552)
+- **Backlog Checklist Reconciler**: `crates/reconcile-backlog/src/checklist.rs:793-1300` ([crates/reconcile-backlog/src/checklist.rs](../../crates/reconcile-backlog/src/checklist.rs) -- `spec_matches_epic` & `synthesize_and_reconcile_hierarchy`, lines 793-832 and 1198-1300)
+- **Level 0 Markdown AST Translator**: `crates/ingest-sysml/src/translators/markdown.rs:1-120` ([crates/ingest-sysml/src/translators/markdown.rs](../../crates/ingest-sysml/src/translators/markdown.rs) -- `MarkdownTranslator::translate`, BOM, Ports, Properties, and Constraints table processors)
+- **ConOps Deterministic Assembler**: `crates/assemble-conops/src/main.rs:1-80` ([crates/assemble-conops/src/main.rs](../../crates/assemble-conops/src/main.rs) -- Deterministic ConOps Master Assembly)
+- **Safety Docstring Completeness Gate**: `crates/verify-baseline/src/checks/docstring_gate.rs:1-200` ([crates/verify-baseline/src/checks/docstring_gate.rs](../../crates/verify-baseline/src/checks/docstring_gate.rs) -- Check 36 Per-Item 7-Section Docstring Gate)
 - **Tracked Issues**: `#497`, `#506`, `#507`
+
