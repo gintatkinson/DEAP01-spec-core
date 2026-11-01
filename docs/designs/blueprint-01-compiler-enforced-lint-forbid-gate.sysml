@@ -1,168 +1,182 @@
 doc /* Translated from Level 0 OEM Markdown specification */
-package BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint {
+package BP_01_Compiler_Enforced_Forbid_Lint_Gate_Lossless_CST_Attribute_Verification_and_Modular_SLOC_Ceiling_Architecture_Blueprint {
     attribute Blueprint_ID : String = "BP-01";
     attribute Requirement_ID : String = "REQ-0601";
-    attribute Title : String = "Compiler-Enforced Forbid Lint Gate and Zero-Suppression AST Architecture Blueprint";
+    attribute Title : String = "Compiler-Enforced Forbid Lint Gate, Lossless CST Attribute Verification, and Modular SLOC Ceiling Architecture Blueprint";
     attribute Status : String = "Approved";
     attribute Target_Crates : String = "crates/deap-core, crates/verify-baseline, crates/compile-sysml, crates/ingest-sysml, crates/assemble-conops, crates/reconcile-backlog";
     attribute Tracked_Issues : String = "#491, #492, #496, #497, #498, #499, #500, #501, #502, #506, #508";
     attribute Generation_Mode : String = "subagent";
-    attribute Specification_Source : String = "Cargo.toml:1-25 / crates/verify-baseline/src/checks/structural.rs:1-120 / #491";
-    doc /* Execute cargo clippy --workspace --all-targets */
-    action def ExecuteCargoClippyWorkspaceAllTargets;
-    doc /* Read [workspace.lints.clippy] forbid table */
-    action def ReadWorkspaceLintsClippyForbidTable;
+    attribute Specification_Source : String = "Cargo.toml:1-25 / clippy.toml:1-15 / crates/verify-baseline/src/checks/structural.rs:1-120 / #491";
+    doc /* Invoke cargo clippy --workspace --all-targets --message-format=json */
+    action def InvokeCargoClippyWorkspaceAllTargets;
+    doc /* Load [workspace.lints] forbid table and clippy.toml (80 lines, 5 args, disallowed-types) */
+    action def LoadWorkspaceLintsForbidTableAnd;
     doc /* Execute verify-baseline . --no-domain */
     action def ExecuteVerifyBaselineNoDomain;
-    doc /* Run scan_clippy_allow_tokens on all crates/ ** / *.rs */
-    action def RunScanClippyAllowTokensOn;
-    doc /* Execute ingest-sysml --schema blueprint-01 --format markdown */
-    action def ExecuteIngestSysmlSchemaBlueprint01;
+    doc /* Parse crates/ ** / *.rs via ra_ap_syntax::SourceFile (audit ast::Attr + <= 500 exec SLOC ratchet) */
+    action def ParseCratesRsViaRaAp;
+    doc /* Execute verify-baseline check-blueprint blueprint-01 --dry-run */
+    action def ExecuteVerifyBaselineCheckBlueprintBlueprint;
     doc /* UUIDv5:  | Complexity: Class P | Standard: IEEE 29148-2018 / RFC 2119 | Diagnostics: E0100 */
-    requirement def REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint {
+    requirement def REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_Lossless_CST_Attribute_Verification_and_Modular_SLOC_Ceiling_Architecture_Blueprint {
         id = "REQ-0601";
         text = "The Digital Engineering Agent Platform (DEAP) specification and verification compiler (CompilerLintEnforcementGate, legacy blueprint reference DEAP-BP-DET-01, UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c1, Complexity Class P, diagnostic bindings **E0453**, **E0100**, **E0304**, governed by DO-178C";
         attribute uuidv5 : String = "";
         attribute complexity_class : String = "Class P";
         attribute governing_standard : String = "IEEE 29148-2018 / RFC 2119";
         attribute diagnostic_codes : String = "E0100";
-        attribute ac_01_rustc_e0453_hard_rejection_of_inner_and_outer_clippy_allow_attributes : String = "- **Given**: [workspace.lints.clippy] in root Cargo.toml configures unwrap_used = \"forbid\", expect_used = \"forbid\", panic = \"forbid\", indexing_slicing = \"forbid\", disallowed_types = \"forbid\", and type_complexity = \"forbid\". - **When**: Any production or test module in crates/ introduces #![allow(clippy::unwrap_used)] or #[allow(clippy::indexing_slicing)]. - **Then**: cargo check --workspace --all-targets and cargo clippy --workspace --all-targets fail closed with non-zero exit status and emit error[E0453]: allow(clippy::...) overruled by outer forbid(clippy::...).";
-        attribute ac_02_check_34_multi_line_whitespace_insensitive_suppression_rejection : String = "- **Given**: The Check 34 zero-regex token-stream scanner scan_clippy_allow_tokens in crates/verify-baseline/src/checks/structural.rs. - **When**: A Rust file contains a single-line or multi-line whitespace-split attribute such as #[ allow ( clippy :: expect_used ) ] or #![ cfg_attr ( test , allow ( clippy :: panic ) ) ]. - **Then**: ./target/release/verify-baseline . --no-domain detects the normalized #![allow(clippy::...)] or #[allow(clippy::...)] token sequence, reports the exact file path and starting 1-based line number, and fails closed with exit code 1.";
-        attribute ac_03_unconditional_test_target_enforcement_without_conditional_exemption : String = "- **Given**: Unit test modules (#[cfg(test)] mod tests) and integration test files (crates/ * /tests/ *.rs) across all six workspace crates. - **When**: cargo test --workspace and ./target/release/verify-baseline . --no-domain are executed. - **Then**: Zero #![cfg_attr(test, allow(...))] exemptions exist, all test assertions use fallible Result return signatures or pattern matching instead of .unwrap(), .expect(), or direct slice indexing, and all workspace tests pass.";
-        attribute ac_04_semantic_type_alias_replacement_for_type_complexity : String = "- **Given**: Complex nested return or collection signatures in crates/deap-core/src/source_ast.rs and crates/compile-sysml/src/lib.rs. - **When**: clippy::type_complexity = \"forbid\" is active across the workspace. - **Then**: All #[allow(clippy::type_complexity)] attributes are removed and replaced by documented semantic pub type aliases (ExtractedMethodSignature and ComponentMethodTable) or domain structs that compile with zero warnings under cargo clippy --workspace --all-targets -- -D warnings.";
-        attribute ac_05_dogfood_ingestion_and_sysml_v2_compilation_of_req_0601 : String = "- **Given**: This blueprint specification docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --dry-run is executed. - **Then**: All 12 mechanical blueprint verification gates pass, and the translator synthesizes REQ-0601, CompilerLintEnforcementGate, its interface ports, state attributes, formal constraints (C-LINT-01..C-LINT-03), and AC-01..AC-05 into docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.sysml and.";
-        doc /* \begin{aligned} T_{\text{scan}}(F, B) &= \sum_{i=1}^{F} O(B_i) = O(B_{\text{total}}) \\ S_{\text{scan}}(A_{\max}, V) &= O(A_{\max} + V) \\ E_{\text{suppression}} &= 0 \end{aligned} */
-        constraint def Invariant_REQ_0601_C_LINT_03;
-        doc /* \begin{aligned} \text{ValidWorkspace}(W) &\iff (E_{\text{suppression}}(W) = 0) \land (\text{Cov}_{\text{forbid}}(W) = 100) \land (N_{\text{crates}}(W) = 6) \\ \text{GateVerdict}(W) &\iff \prod_{c=1}^{6} \text{ForbidInherited}(c) \cdot \prod_{i=1}^{F} \mathbb{I}\left(\lvert \text{ScanAllow}(f_i) \rvert = 0\right) = 1 \end{aligned} */
+        attribute ac_01_official_rustc_e0453_cargo_clippy_json_threshold_enforcement : String = "- **Given**: ./Cargo.toml configures [workspace.lints.rust] and [workspace.lints.clippy] at \"forbid\", and ./clippy.toml configures too-many-lines-threshold = 80, too-many-arguments-threshold = 5, and disallowed-types. - **When**: cargo clippy --workspace --all-targets --message-format=json is executed against any production or test module in ./crates/ * that introduces #![allow(clippy::unwrap_used)], exceeds the configured Clippy structural thresholds under denied Clippy pedantic/complexity gates, or references a disallowed type. - **Then**: The official compiler pipeline fails closed with.";
+        attribute ac_02_lossless_ra_ap_syntax_cst_rejection_of_allow_suppressions_and_rustc_private : String = "- **Given**: The ra_ap_syntax lossless CST attribute verifier in ./crates/verify-baseline/src/checks/structural.rs operating on CRLF/LF-normalized UTF-8 source trees. - **When**: A Rust file in ./crates/ * contains #![allow(clippy::expect_used)], multi-line #[ cfg_attr ( test , allow ( clippy :: panic ) ) ], #![feature(rustc_private)], or lacks required crate/workspace forbid/deny governance, while string literals and comments mentioning those tokens are ignored by CST node typing. - **Then**: ./target/release/verify-baseline . --no-domain identifies the exact ast::Attr CST node, reports the.";
+        attribute ac_03_modular_380_sloc_target_500_exec_sloc_ceiling_and_monotonic_downward_legacy_ratchet : String = "- **Given**: New and refactored Rust modules under ./crates/ * governed by the < 380 executable SLOC modular target, <= 500 executable SLOC hard ceiling, and the downward legacy ratchet table. - **When**: Any unratcheted module exceeds 500 non-trivia/non-test CST executable lines, or a ratcheted legacy module increases above its recorded ratchet ceiling R_t(f). - **Then**: The CST SLOC gate fails closed with exit code 1, whereas reducing a legacy module below 500 executable SLOC permanently graduates it out of the legacy ratchet toward 0 remaining exceptions.";
+        attribute ac_04_cross_platform_portability_semantic_type_alias_compliance_across_macos_linux_and_windows : String = "- **Given**: Workspace binaries, unit tests (#[cfg(test)]), integration tests (./crates/ * /tests/ *.rs), and canonical semantic type aliases (ExtractedMethodSignature, ComponentMethodTable) migrated into the new < 380-SLOC ra_ap_syntax typed item extractor deap_core::rust_cst::items (rust_cst/items.rs under ./crates/deap-core/src/, Streams 4.2 and 4.4) replacing the completely deleted ./crates/deap-core/src/source_ast.rs (-1,049 SLOC). - **When**: cargo test --workspace and ./target/release/verify-baseline . --no-domain execute across macOS, Linux, and Windows environments with CRLF or LF.";
+        attribute ac_05_dogfood_ingestion_and_sysml_v2_compilation_of_req_0601 : String = "- **Given**: This blueprint specification ./docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md. - **When**: ./target/release/verify-baseline check-blueprint ./docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md is executed. - **Then**: All 12 mechanical blueprint verification gates pass (12/12), and the translator synthesizes **REQ-0601**, CompilerLintEnforcementGate, its interface ports, state attributes, formal constraints (**C-LINT-01**..**C-LINT-04**), and **AC-01**..**AC-05** into ./docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.sysml and.";
+        doc /* \begin{aligned} T_{\text{cst}}(F, N) &= \sum_{i=1}^{F} O(N_i) = O(N_{\text{total}}) \\ \text{ExecSLOC}(f_i) &= \left\lvert \left\{ \ell \in \text{Lines}_{\text{LF}}(f_i) \setminus \text{CfgTest}(f_i) \;\middle|\; \exists \tau \in \text{Tokens}_{\text{CST}}(\ell), \; \neg \text{IsTrivia}(\tau) \right\} \right\rvert \\ \text{Budget}(f_i, t) &= \begin{cases} 500 & \text{if } f_i \notin \mathcal{L}_t \quad (\text{target } < 380) \\ R_t(f_i) & \text{if } f_i \in \mathcal{L}_t \quad \text{with } R_{t+1}(f_i) = \min\left(R_t(f_i), \text{ExecSLOC}(f_i)\right) \to 0 \end{cases} \end{aligned} */
+        constraint def Invariant_REQ_0601_C_LINT_04;
+        doc /* \begin{aligned} \text{ValidWorkspace}(W) &\iff (E_{\text{allow}}(W) = 0) \land (E_{\text{rustc\_private}}(W) = 0) \land (\text{Cov}_{\text{forbid}}(W) = 100) \land (N_{\text{crates}}(W) = 6) \\ \text{GateVerdict}(W, t) &\iff \text{ClippyJsonOk}(W) \cdot \prod_{i=1}^{F} \mathbb{I}\left(\lvert \text{CstViolations}(f_i) \rvert = 0 \land \text{ExecSLOC}(f_i) \le \text{Budget}(f_i, t)\right) = 1 \end{aligned} */
         constraint def Invariant_REQ_0601_FormalInvariant;
-        require Invariant_REQ_0601_C_LINT_03;
+        require Invariant_REQ_0601_C_LINT_04;
         require Invariant_REQ_0601_FormalInvariant;
-        verify by AC_01_Rustc_E0453_Hard_Rejection_of_Inner_and_Outer_Clippy_Allow_Attributes;
-        verify by AC_02_Check_34_Multi_Line_Whitespace_Insensitive_Suppression_Rejection;
-        verify by AC_03_Unconditional_Test_Target_Enforcement_Without_Conditional_Exemption;
-        verify by AC_04_Semantic_Type_Alias_Replacement_for_Type_Complexity;
+        verify by AC_01_Official_Rustc_E0453_Cargo_Clippy_JSON_Threshold_Enforcement;
+        verify by AC_02_Lossless_ra_ap_syntax_CST_Rejection_of_Allow_Suppressions_and_rustc_private;
+        verify by AC_03_Modular_380_SLOC_Target_500_Exec_SLOC_Ceiling_and_Monotonic_Downward_Legacy_Ratchet;
+        verify by AC_04_Cross_Platform_Portability_Semantic_Type_Alias_Compliance_Across_macOS_Linux_and_Windows;
         verify by AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0601;
         satisfy by CompilerLintEnforcementGate;
     }
     doc /* Extracted from Mermaid stateDiagram specification. */
-    state def BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_LifecycleState {
-        state ScanningSource;
-        state SkippingLineComment;
-        state SkippingBlockComment;
-        state InspectingAttribute;
-        state NormalizingBracketBody;
-        state ViolationRecorded;
-        transition Initial_to_ScanningSource first Initial then ScanningSource;
-        transition ScanningSource_to_SkippingLineComment_on_slashSlashDetected first ScanningSource accept slashSlashDetected then SkippingLineComment;
-        transition SkippingLineComment_to_ScanningSource_on_newlineReached first SkippingLineComment accept newlineReached then ScanningSource;
-        transition ScanningSource_to_SkippingBlockComment_on_slashStarDetected first ScanningSource accept slashStarDetected then SkippingBlockComment;
-        transition SkippingBlockComment_to_ScanningSource_on_starSlashReached first SkippingBlockComment accept starSlashReached then ScanningSource;
-        transition ScanningSource_to_InspectingAttribute_on_hashTokenDetected first ScanningSource accept hashTokenDetected then InspectingAttribute;
-        transition InspectingAttribute_to_NormalizingBracketBody_on_openingBracketDetected first InspectingAttribute accept openingBracketDetected then NormalizingBracketBody;
-        transition InspectingAttribute_to_ScanningSource_on_nonAttributeHash first InspectingAttribute accept nonAttributeHash then ScanningSource;
-        transition NormalizingBracketBody_to_ViolationRecorded_on_forbiddenNeedleMatched first NormalizingBracketBody accept forbiddenNeedleMatched then ViolationRecorded;
-        transition NormalizingBracketBody_to_ScanningSource_on_depthZeroClean first NormalizingBracketBody accept depthZeroClean then ScanningSource;
-        transition ViolationRecorded_to_ScanningSource_on_continueLinearScan first ViolationRecorded accept continueLinearScan then ScanningSource;
-        transition ScanningSource_to_Terminal_on_endOfStream first ScanningSource accept endOfStream then Terminal;
+    state def BP_01_Compiler_Enforced_Forbid_Lint_Gate_Lossless_CST_Attribute_Verification_and_Modular_SLOC_Ceiling_Architecture_Blueprint_LifecycleState {
+        state RunningClippyJson;
+        state GateRejected;
+        state ParsingLosslessCst;
+        state AuditingAstAttrs;
+        state MeasuringExecSloc;
+        state RatchetTightened;
+        state GateVerified;
+        transition Initial_to_RunningClippyJson first Initial then RunningClippyJson;
+        transition RunningClippyJson_to_GateRejected_on_clippyJsonErrorOrE0453 first RunningClippyJson accept clippyJsonErrorOrE0453 then GateRejected;
+        transition RunningClippyJson_to_ParsingLosslessCst_on_clippyJsonClean first RunningClippyJson accept clippyJsonClean then ParsingLosslessCst;
+        transition ParsingLosslessCst_to_GateRejected_on_cstSyntaxErrorsDetected first ParsingLosslessCst accept cstSyntaxErrorsDetected then GateRejected;
+        transition ParsingLosslessCst_to_AuditingAstAttrs_on_cstLosslessTreeReady first ParsingLosslessCst accept cstLosslessTreeReady then AuditingAstAttrs;
+        transition AuditingAstAttrs_to_GateRejected_on_allowOrRustcPrivateAttrFound first AuditingAstAttrs accept allowOrRustcPrivateAttrFound then GateRejected;
+        transition AuditingAstAttrs_to_MeasuringExecSloc_on_allAstAttrsCompliant first AuditingAstAttrs accept allAstAttrsCompliant then MeasuringExecSloc;
+        transition MeasuringExecSloc_to_GateRejected_on_execSlocExceeds500OrRatchet first MeasuringExecSloc accept execSlocExceeds500OrRatchet then GateRejected;
+        transition MeasuringExecSloc_to_RatchetTightened_on_legacyFileReducedBelowBudget first MeasuringExecSloc accept legacyFileReducedBelowBudget then RatchetTightened;
+        transition MeasuringExecSloc_to_GateVerified_on_execSlocWithinModularBudget first MeasuringExecSloc accept execSlocWithinModularBudget then GateVerified;
+        transition RatchetTightened_to_GateVerified_on_ratchetMonotonicallyUpdated first RatchetTightened accept ratchetMonotonicallyUpdated then GateVerified;
+        transition GateRejected_to_Terminal first GateRejected then Terminal;
+        transition GateVerified_to_Terminal first GateVerified then Terminal;
     }
-    doc /* - **Given**: [workspace.lints.clippy] in root Cargo.toml configures unwrap_used = \"forbid\", expect_used = \"forbid\", panic = \"forbid\", indexing_slicing = \"forbid\", disallowed_types = \"forbid\", and type_complexity = \"forbid\". - **When**: Any production or test module in crates/ introduces #![allow(clippy::unwrap_used)] or #[allow(clippy::indexing_slicing)]. - **Then**: cargo check --workspace --all-targets and cargo clippy --workspace --all-targets fail closed with non-zero exit status and emit error[E0453]: allow(clippy::...) overruled by outer forbid(clippy::...). */
-    use case def UC_AC_01_Rustc_E0453_Hard_Rejection_of_Inner_and_Outer_Clippy_Allow_Attributes {
+    doc /* - **Given**: ./Cargo.toml configures [workspace.lints.rust] and [workspace.lints.clippy] at \"forbid\", and ./clippy.toml configures too-many-lines-threshold = 80, too-many-arguments-threshold = 5, and disallowed-types. - **When**: cargo clippy --workspace --all-targets --message-format=json is executed against any production or test module in ./crates/ * that introduces #![allow(clippy::unwrap_used)], exceeds the configured Clippy structural thresholds under denied Clippy pedantic/complexity gates, or references a disallowed type. - **Then**: The official compiler pipeline fails closed with. */
+    use case def UC_AC_01_Official_Rustc_E0453_Cargo_Clippy_JSON_Threshold_Enforcement {
         subject CompilerLintEnforcementGate;
-        objective "Rustc E0453 Hard Rejection of Inner and Outer Clippy Allow Attributes";
+        objective "Official Rustc E0453 Cargo Clippy JSON Threshold Enforcement";
     }
-    doc /* - **Given**: The Check 34 zero-regex token-stream scanner scan_clippy_allow_tokens in crates/verify-baseline/src/checks/structural.rs. - **When**: A Rust file contains a single-line or multi-line whitespace-split attribute such as #[ allow ( clippy :: expect_used ) ] or #![ cfg_attr ( test , allow ( clippy :: panic ) ) ]. - **Then**: ./target/release/verify-baseline . --no-domain detects the normalized #![allow(clippy::...)] or #[allow(clippy::...)] token sequence, reports the exact file path and starting 1-based line number, and fails closed with exit code 1. */
-    use case def UC_AC_02_Check_34_Multi_Line_Whitespace_Insensitive_Suppression_Rejection {
+    doc /* - **Given**: The ra_ap_syntax lossless CST attribute verifier in ./crates/verify-baseline/src/checks/structural.rs operating on CRLF/LF-normalized UTF-8 source trees. - **When**: A Rust file in ./crates/ * contains #![allow(clippy::expect_used)], multi-line #[ cfg_attr ( test , allow ( clippy :: panic ) ) ], #![feature(rustc_private)], or lacks required crate/workspace forbid/deny governance, while string literals and comments mentioning those tokens are ignored by CST node typing. - **Then**: ./target/release/verify-baseline . --no-domain identifies the exact ast::Attr CST node, reports the. */
+    use case def UC_AC_02_Lossless_ra_ap_syntax_CST_Rejection_of_Allow_Suppressions_and_rustc_private {
         subject CompilerLintEnforcementGate;
-        objective "Check 34 Multi Line Whitespace Insensitive Suppression Rejection";
+        objective "Lossless ra ap syntax CST Rejection of Allow Suppressions and rustc private";
     }
-    doc /* - **Given**: Unit test modules (#[cfg(test)] mod tests) and integration test files (crates/ * /tests/ *.rs) across all six workspace crates. - **When**: cargo test --workspace and ./target/release/verify-baseline . --no-domain are executed. - **Then**: Zero #![cfg_attr(test, allow(...))] exemptions exist, all test assertions use fallible Result return signatures or pattern matching instead of .unwrap(), .expect(), or direct slice indexing, and all workspace tests pass. */
-    use case def UC_AC_03_Unconditional_Test_Target_Enforcement_Without_Conditional_Exemption {
+    doc /* - **Given**: New and refactored Rust modules under ./crates/ * governed by the < 380 executable SLOC modular target, <= 500 executable SLOC hard ceiling, and the downward legacy ratchet table. - **When**: Any unratcheted module exceeds 500 non-trivia/non-test CST executable lines, or a ratcheted legacy module increases above its recorded ratchet ceiling R_t(f). - **Then**: The CST SLOC gate fails closed with exit code 1, whereas reducing a legacy module below 500 executable SLOC permanently graduates it out of the legacy ratchet toward 0 remaining exceptions. */
+    use case def UC_AC_03_Modular_380_SLOC_Target_500_Exec_SLOC_Ceiling_and_Monotonic_Downward_Legacy_Ratchet {
         subject CompilerLintEnforcementGate;
-        objective "Unconditional Test Target Enforcement Without Conditional Exemption";
+        objective "Modular 380 SLOC Target 500 Exec SLOC Ceiling and Monotonic Downward Legacy Ratchet";
     }
-    doc /* - **Given**: Complex nested return or collection signatures in crates/deap-core/src/source_ast.rs and crates/compile-sysml/src/lib.rs. - **When**: clippy::type_complexity = \"forbid\" is active across the workspace. - **Then**: All #[allow(clippy::type_complexity)] attributes are removed and replaced by documented semantic pub type aliases (ExtractedMethodSignature and ComponentMethodTable) or domain structs that compile with zero warnings under cargo clippy --workspace --all-targets -- -D warnings. */
-    use case def UC_AC_04_Semantic_Type_Alias_Replacement_for_Type_Complexity {
+    doc /* - **Given**: Workspace binaries, unit tests (#[cfg(test)]), integration tests (./crates/ * /tests/ *.rs), and canonical semantic type aliases (ExtractedMethodSignature, ComponentMethodTable) migrated into the new < 380-SLOC ra_ap_syntax typed item extractor deap_core::rust_cst::items (rust_cst/items.rs under ./crates/deap-core/src/, Streams 4.2 and 4.4) replacing the completely deleted ./crates/deap-core/src/source_ast.rs (-1,049 SLOC). - **When**: cargo test --workspace and ./target/release/verify-baseline . --no-domain execute across macOS, Linux, and Windows environments with CRLF or LF. */
+    use case def UC_AC_04_Cross_Platform_Portability_Semantic_Type_Alias_Compliance_Across_macOS_Linux_and_Windows {
         subject CompilerLintEnforcementGate;
-        objective "Semantic Type Alias Replacement for Type Complexity";
+        objective "Cross Platform Portability Semantic Type Alias Compliance Across macOS Linux and Windows";
     }
-    doc /* - **Given**: This blueprint specification docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --dry-run is executed. - **Then**: All 12 mechanical blueprint verification gates pass, and the translator synthesizes REQ-0601, CompilerLintEnforcementGate, its interface ports, state attributes, formal constraints (C-LINT-01..C-LINT-03), and AC-01..AC-05 into docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.sysml and. */
+    doc /* - **Given**: This blueprint specification ./docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md. - **When**: ./target/release/verify-baseline check-blueprint ./docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md is executed. - **Then**: All 12 mechanical blueprint verification gates pass (12/12), and the translator synthesizes **REQ-0601**, CompilerLintEnforcementGate, its interface ports, state attributes, formal constraints (**C-LINT-01**..**C-LINT-04**), and **AC-01**..**AC-05** into ./docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.sysml and. */
     use case def UC_AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0601 {
         subject CompilerLintEnforcementGate;
         objective "Dogfood Ingestion and SysML v2 Compilation of REQ 0601";
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
-    interaction def BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_SequenceInteraction {
+    interaction def BP_01_Compiler_Enforced_Forbid_Lint_Gate_Lossless_CST_Attribute_Verification_and_Modular_SLOC_Ceiling_Architecture_Blueprint_SequenceInteraction {
         lifeline Eng : Compiler_Engineer_CI;
-        lifeline Cargo : cargo_clippy_rustc;
-        lifeline Manifest : Root_Cargo_toml;
-        lifeline Check34 : verify_baseline;
+        lifeline Cargo : cargo_clippy_message_format_json;
+        lifeline Config : Cargo_toml_clippy_toml;
+        lifeline CstGate : verify_baseline;
         lifeline Ingest : ingest_sysml;
-        message ExecuteCargoClippyWorkspaceAllTargets from Eng to Cargo;
-        message ReadWorkspaceLintsClippyForbidTable from Cargo to Manifest;
-        message reply_ReturnForbidRulesForUnwrapExpect from Manifest to Cargo;
-        message reply_EmitE0453HardErrorIfAny from Cargo to Eng;
-        message ExecuteVerifyBaselineNoDomain from Eng to Check34;
-        message RunScanClippyAllowTokensOn from Check34 to Check34;
-        message reply_ReturnExitCode0WhenAllowed from Check34 to Eng;
-        message ExecuteIngestSysmlSchemaBlueprint01 from Eng to Ingest;
+        message InvokeCargoClippyWorkspaceAllTargets from Eng to Cargo;
+        message LoadWorkspaceLintsForbidTableAnd from Cargo to Config;
+        message reply_ReturnCompilerLintPolicyAcross6 from Config to Cargo;
+        message reply_StreamStructuredNdjsonDiagnostics from Cargo to Eng;
+        message ExecuteVerifyBaselineNoDomain from Eng to CstGate;
+        message ParseCratesRsViaRaAp from CstGate to CstGate;
+        message reply_ReturnExitCode0WhenSuppressions from CstGate to Eng;
+        message ExecuteVerifyBaselineCheckBlueprintBlueprint from Eng to Ingest;
         message reply_EmitCanonicalSysMLV2AstAnd from Ingest to Eng;
     }
-    doc /* Configures `clippy::unwrap_used = "forbid"` across the workspace [unit: flag] */
+    doc /* Configures `clippy::unwrap_used = "forbid"` in `./Cargo.toml` [unit: flag] */
     part def CompilerLintEnforcementGate {
         attribute forbid_unwrap_used : Boolean = true;
-        doc /* Configures `clippy::expect_used = "forbid"` across the workspace [unit: flag] */
+        doc /* Configures `clippy::expect_used = "forbid"` in `./Cargo.toml` [unit: flag] */
         attribute forbid_expect_used : Boolean = true;
-        doc /* Configures `clippy::panic = "forbid"` across the workspace [unit: flag] */
+        doc /* Configures `clippy::panic = "forbid"` in `./Cargo.toml` [unit: flag] */
         attribute forbid_panic : Boolean = true;
-        doc /* Configures `clippy::indexing_slicing = "forbid"` across the workspace [unit: flag] */
+        doc /* Configures `clippy::indexing_slicing = "forbid"` in `./Cargo.toml` [unit: flag] */
         attribute forbid_indexing_slicing : Boolean = true;
-        doc /* Configures `clippy::disallowed_types = "forbid"` across the workspace [unit: flag] */
+        doc /* Configures `clippy::disallowed_types = "forbid"` and `./clippy.toml` `disallowed-types` [unit: flag] */
         attribute forbid_disallowed_types : Boolean = true;
-        doc /* Configures `clippy::type_complexity = "forbid"` across the workspace [unit: flag] */
+        doc /* Configures `clippy::type_complexity = "forbid"` in `./Cargo.toml` [unit: flag] */
         attribute forbid_type_complexity : Boolean = true;
-        doc /* Maximum permitted `allow(clippy::` attribute occurrences across `crates/` [unit: count] */
+        doc /* Function body ceiling configured in `./clippy.toml` (`too-many-lines-threshold = 80`) [unit: lines] */
+        attribute too_many_lines_threshold : Integer = 80;
+        doc /* Function parameter ceiling configured in `./clippy.toml` (`too-many-arguments-threshold = 5`) [unit: count] */
+        attribute too_many_arguments_threshold : Integer = 5;
+        doc /* Target modular executable SLOC budget (`< 380` SLOC) per Rust module [unit: lines] */
+        attribute target_module_exec_sloc : Integer = 380;
+        doc /* Hard fail-closed executable SLOC ceiling (`<= 500` SLOC) enforced with downward ratchet to `0` [unit: lines] */
+        attribute max_module_exec_sloc_ceiling : Integer = 500;
+        doc /* Maximum permitted `#[allow(...)]` or `#![feature(rustc_private)]` CST nodes across `./crates/ *` [unit: count] */
         attribute allowed_suppression_count : Integer = 0;
         doc /* Percentage of workspace safety lints enforced at `forbid` level (**C-LINT-02**) [unit: percent] */
         attribute forbid_rule_coverage : Integer = 100;
         doc /* Number of workspace member crates inheriting `[lints] workspace = true` (**C-LINT-03**) [unit: count] */
         attribute crates_enforced_count : Integer = 6;
-        doc /* Ingests root `Cargo.toml` and member crate manifest files for `[workspace.lints]` verification [protocol: FilesystemUTF8] */
-        port in CargoManifestInputPort : String {
-            flow in CargoManifestInputPort_flow : String;
+        doc /* Ingests `./Cargo.toml` (`[workspace.lints]`) and `./clippy.toml` thresholds via `camino::Utf8Path` [protocol: TomlDocument] */
+        port in CargoWorkspaceConfigPort : String {
+            flow in CargoWorkspaceConfigPort_flow : String;
         }
-        doc /* Streams UTF-8 bytes from production and test `.rs` files into the Check 34 attribute scanner [protocol: TokenStream] */
-        port in RustSourceTokenStreamPort : String {
-            flow in RustSourceTokenStreamPort_flow : String;
+        doc /* Consumes structured NDJSON compiler diagnostics from `cargo clippy --message-format=json` [protocol: CargoJsonLines] */
+        port in ClippyJsonStreamPort : String {
+            flow in ClippyJsonStreamPort_flow : String;
         }
-        doc /* Emits deterministic `rustc` `E0453` diagnostics when `allow(...)` conflicts with workspace `forbid(...)` [protocol: RustcDiagnostic] */
+        doc /* Parses CRLF/LF-normalized UTF-8 `.rs` files into lossless `ra_ap_syntax::SourceFile` syntax trees [protocol: RaApSyntaxCst] */
+        port in RaSyntaxCstInputPort : String {
+            flow in RaSyntaxCstInputPort_flow : String;
+        }
+        doc /* Emits deterministic `rustc` `E0453` and Clippy threshold diagnostics across macOS, Linux, and Windows [protocol: RustcDiagnostic] */
         port out CompilerDiagnosticOutputPort : String {
             flow out CompilerDiagnosticOutputPort_flow : String;
         }
-        doc /* Emits fail-closed Check 34 verification verdict (`Ok` or sorted `Err` violation vector) [protocol: GateVerdict] */
+        doc /* Emits fail-closed CST attribute and SLOC ratchet verification verdict (`Ok` or sorted `Err` vector) [protocol: GateVerdict] */
         port out BaselineGateVerdictPort : Boolean {
             flow out BaselineGateVerdictPort_flow : Boolean;
         }
     }
-    doc /* Enforces forbid lint levels in root Cargo.toml and workspace = true inheritance across all member crates. */
-    part def WorkspaceManifestForbidGate {
+    doc /* Invokes cargo clippy --workspace --all-targets --message-format=json using std::path / camino and ./clippy.toml (too-many-lines-threshold = 80, too-many-arguments-threshold = 5, disallowed-types) and parses structured compiler-message payloads. */
+    part def ClippyJsonDiagnosticGate {
         attribute quantity : Integer = 1;
         port in cmd_in : String;
         port out status_out : String;
     }
-    doc /* Zero-regex multi-line token-stream scanner in Check 34 rejecting allow(clippy:: attribute sequences. */
-    part def ClippyAttributeAstScanner {
+    doc /* Parses .rs files into lossless ra_ap_syntax::SourceFile CSTs (zero hand-rolled lexers, zero rustc_private) to audit #![forbid(...)], #![deny(...)], and forbidden #[allow(...)] / cfg_attr attributes. */
+    part def RaSyntaxCstAttributeVerifier {
         attribute quantity : Integer = 1;
         port in cmd_in : String;
         port out status_out : String;
     }
-    doc /* Strips crate-level #![allow(clippy::...)] headers and replaces complex tuples with named structs or type aliases. */
-    part def CrateRootAttributeSanitizer {
+    doc /* Computes executable SLOC directly from lossless CST non-trivia tokens, enforcing < 380 target SLOC, <= 500 hard executable SLOC ceiling, and monotonic downward legacy ratchet convergence to 0. */
+    part def ModularSlocRatchetEnforcer {
         attribute quantity : Integer = 1;
         port in cmd_in : String;
         port out status_out : String;
     }
-    doc /* Enforces identical forbid lint discipline across unit tests (#[cfg(test)]) and integration tests (tests/ *.rs). */
-    part def TestTargetLintEnforcer {
+    doc /* Enforces identical forbid lint discipline across unit tests (#[cfg(test)]) and integration tests (tests/ *.rs) with CRLF/LF normalization across macOS, Linux, and Windows. */
+    part def CrossPlatformTestTargetEnforcer {
         attribute quantity : Integer = 1;
         port in cmd_in : String;
         port out status_out : String;

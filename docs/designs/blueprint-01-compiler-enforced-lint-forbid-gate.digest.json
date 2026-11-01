@@ -3,7 +3,7 @@
   "total_lines": 1,
   "node_counts": {
     "action_defs": 5,
-    "attribute_defs": 21,
+    "attribute_defs": 25,
     "calc_defs": 0,
     "capability_defs": 0,
     "connection_defs": 0,
@@ -14,12 +14,12 @@
     "identities": 0,
     "interaction_defs": 1,
     "item_defs": 0,
-    "leaves": 21,
+    "leaves": 25,
     "lists": 5,
     "operation_defs": 0,
     "packages": 1,
     "part_defs": 5,
-    "port_defs": 12,
+    "port_defs": 13,
     "requirement_defs": 1,
     "risk_defs": 0,
     "state_defs": 1,
@@ -28,37 +28,38 @@
     "use_case_defs": 5
   },
   "schema_nodes": [
-    "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
-    "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_LifecycleState",
-    "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_SequenceInteraction",
+    "BP_01_Compiler_Enforced_Forbid_Lint_Gate_Lossless_CST_Attribute_Verification_and_Modular_SLOC_Ceiling_Architecture_Blueprint",
+    "BP_01_Compiler_Enforced_Forbid_Lint_Gate_Lossless_CST_Attribute_Verification_and_Modular_SLOC_Ceiling_Architecture_Blueprint_LifecycleState",
+    "BP_01_Compiler_Enforced_Forbid_Lint_Gate_Lossless_CST_Attribute_Verification_and_Modular_SLOC_Ceiling_Architecture_Blueprint_SequenceInteraction",
     "BaselineGateVerdictPort",
     "Blueprint_ID",
-    "CargoManifestInputPort",
-    "ClippyAttributeAstScanner",
+    "CargoWorkspaceConfigPort",
+    "ClippyJsonDiagnosticGate",
+    "ClippyJsonStreamPort",
     "CompilerDiagnosticOutputPort",
     "CompilerLintEnforcementGate",
-    "CrateRootAttributeSanitizer",
-    "ExecuteCargoClippyWorkspaceAllTargets",
-    "ExecuteIngestSysmlSchemaBlueprint01",
+    "CrossPlatformTestTargetEnforcer",
+    "ExecuteVerifyBaselineCheckBlueprintBlueprint",
     "ExecuteVerifyBaselineNoDomain",
     "Generation_Mode",
-    "REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
-    "ReadWorkspaceLintsClippyForbidTable",
+    "InvokeCargoClippyWorkspaceAllTargets",
+    "LoadWorkspaceLintsForbidTableAnd",
+    "ModularSlocRatchetEnforcer",
+    "ParseCratesRsViaRaAp",
+    "REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_Lossless_CST_Attribute_Verification_and_Modular_SLOC_Ceiling_Architecture_Blueprint",
+    "RaSyntaxCstAttributeVerifier",
+    "RaSyntaxCstInputPort",
     "Requirement_ID",
-    "RunScanClippyAllowTokensOn",
-    "RustSourceTokenStreamPort",
     "Specification_Source",
     "Status",
     "Target_Crates",
-    "TestTargetLintEnforcer",
     "Title",
     "Tracked_Issues",
-    "UC_AC_01_Rustc_E0453_Hard_Rejection_of_Inner_and_Outer_Clippy_Allow_Attributes",
-    "UC_AC_02_Check_34_Multi_Line_Whitespace_Insensitive_Suppression_Rejection",
-    "UC_AC_03_Unconditional_Test_Target_Enforcement_Without_Conditional_Exemption",
-    "UC_AC_04_Semantic_Type_Alias_Replacement_for_Type_Complexity",
+    "UC_AC_01_Official_Rustc_E0453_Cargo_Clippy_JSON_Threshold_Enforcement",
+    "UC_AC_02_Lossless_ra_ap_syntax_CST_Rejection_of_Allow_Suppressions_and_rustc_private",
+    "UC_AC_03_Modular_380_SLOC_Target_500_Exec_SLOC_Ceiling_and_Monotonic_Downward_Legacy_Ratchet",
+    "UC_AC_04_Cross_Platform_Portability_Semantic_Type_Alias_Compliance_Across_macOS_Linux_and_Windows",
     "UC_AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0601",
-    "WorkspaceManifestForbidGate",
     "allowed_suppression_count",
     "cmd_in",
     "crates_enforced_count",
@@ -69,22 +70,26 @@
     "forbid_rule_coverage",
     "forbid_type_complexity",
     "forbid_unwrap_used",
+    "max_module_exec_sloc_ceiling",
     "quantity",
-    "status_out"
+    "status_out",
+    "target_module_exec_sloc",
+    "too_many_arguments_threshold",
+    "too_many_lines_threshold"
   ],
   "operational_activities": [
     {
       "id": "OA-01",
-      "name": "ExecuteCargoClippyWorkspaceAllTargets",
-      "doc": "Execute cargo clippy --workspace --all-targets",
+      "name": "InvokeCargoClippyWorkspaceAllTargets",
+      "doc": "Invoke cargo clippy --workspace --all-targets --message-format=json",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
       "id": "OA-02",
-      "name": "ReadWorkspaceLintsClippyForbidTable",
-      "doc": "Read [workspace.lints.clippy] forbid table",
+      "name": "LoadWorkspaceLintsForbidTableAnd",
+      "doc": "Load [workspace.lints] forbid table and clippy.toml (80 lines, 5 args, disallowed-types)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -99,16 +104,16 @@
     },
     {
       "id": "OA-04",
-      "name": "RunScanClippyAllowTokensOn",
-      "doc": "Run scan_clippy_allow_tokens on all crates/ ** / *.rs",
+      "name": "ParseCratesRsViaRaAp",
+      "doc": "Parse crates/ ** / *.rs via ra_ap_syntax::SourceFile (audit ast::Attr + <= 500 exec SLOC ratchet)",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
       "id": "OA-05",
-      "name": "ExecuteIngestSysmlSchemaBlueprint01",
-      "doc": "Execute ingest-sysml --schema blueprint-01 --format markdown",
+      "name": "ExecuteVerifyBaselineCheckBlueprintBlueprint",
+      "doc": "Execute verify-baseline check-blueprint blueprint-01 --dry-run",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -118,30 +123,30 @@
   "operational_scenarios": [
     {
       "id": "SCN-01",
-      "name": "UC_AC_01_Rustc_E0453_Hard_Rejection_of_Inner_and_Outer_Clippy_Allow_Attributes",
+      "name": "UC_AC_01_Official_Rustc_E0453_Cargo_Clippy_JSON_Threshold_Enforcement",
       "actor": "",
-      "objective": "\"Rustc E0453 Hard Rejection of Inner and Outer Clippy Allow Attributes\"",
+      "objective": "\"Official Rustc E0453 Cargo Clippy JSON Threshold Enforcement\"",
       "steps": []
     },
     {
       "id": "SCN-02",
-      "name": "UC_AC_02_Check_34_Multi_Line_Whitespace_Insensitive_Suppression_Rejection",
+      "name": "UC_AC_02_Lossless_ra_ap_syntax_CST_Rejection_of_Allow_Suppressions_and_rustc_private",
       "actor": "",
-      "objective": "\"Check 34 Multi Line Whitespace Insensitive Suppression Rejection\"",
+      "objective": "\"Lossless ra ap syntax CST Rejection of Allow Suppressions and rustc private\"",
       "steps": []
     },
     {
       "id": "SCN-03",
-      "name": "UC_AC_03_Unconditional_Test_Target_Enforcement_Without_Conditional_Exemption",
+      "name": "UC_AC_03_Modular_380_SLOC_Target_500_Exec_SLOC_Ceiling_and_Monotonic_Downward_Legacy_Ratchet",
       "actor": "",
-      "objective": "\"Unconditional Test Target Enforcement Without Conditional Exemption\"",
+      "objective": "\"Modular 380 SLOC Target 500 Exec SLOC Ceiling and Monotonic Downward Legacy Ratchet\"",
       "steps": []
     },
     {
       "id": "SCN-04",
-      "name": "UC_AC_04_Semantic_Type_Alias_Replacement_for_Type_Complexity",
+      "name": "UC_AC_04_Cross_Platform_Portability_Semantic_Type_Alias_Compliance_Across_macOS_Linux_and_Windows",
       "actor": "",
-      "objective": "\"Semantic Type Alias Replacement for Type Complexity\"",
+      "objective": "\"Cross Platform Portability Semantic Type Alias Compliance Across macOS Linux and Windows\"",
       "steps": []
     },
     {
@@ -156,31 +161,31 @@
     {
       "name": "CompilerLintEnforcementGate",
       "node_type": "Part",
-      "doc": "Configures `clippy::unwrap_used = \"forbid\"` across the workspace [unit: flag]",
+      "doc": "Configures `clippy::unwrap_used = \"forbid\"` in `./Cargo.toml` [unit: flag]",
       "allocated_activities": []
     },
     {
-      "name": "WorkspaceManifestForbidGate",
+      "name": "ClippyJsonDiagnosticGate",
       "node_type": "Part",
-      "doc": "Enforces forbid lint levels in root Cargo.toml and workspace = true inheritance across all member crates.",
+      "doc": "Invokes cargo clippy --workspace --all-targets --message-format=json using std::path / camino and ./clippy.toml (too-many-lines-threshold = 80, too-many-arguments-threshold = 5, disallowed-types) and parses structured compiler-message payloads.",
       "allocated_activities": []
     },
     {
-      "name": "ClippyAttributeAstScanner",
+      "name": "RaSyntaxCstAttributeVerifier",
       "node_type": "Part",
-      "doc": "Zero-regex multi-line token-stream scanner in Check 34 rejecting allow(clippy:: attribute sequences.",
+      "doc": "Parses .rs files into lossless ra_ap_syntax::SourceFile CSTs (zero hand-rolled lexers, zero rustc_private) to audit #![forbid(...)], #![deny(...)], and forbidden #[allow(...)] / cfg_attr attributes.",
       "allocated_activities": []
     },
     {
-      "name": "CrateRootAttributeSanitizer",
+      "name": "ModularSlocRatchetEnforcer",
       "node_type": "Part",
-      "doc": "Strips crate-level #![allow(clippy::...)] headers and replaces complex tuples with named structs or type aliases.",
+      "doc": "Computes executable SLOC directly from lossless CST non-trivia tokens, enforcing < 380 target SLOC, <= 500 hard executable SLOC ceiling, and monotonic downward legacy ratchet convergence to 0.",
       "allocated_activities": []
     },
     {
-      "name": "TestTargetLintEnforcer",
+      "name": "CrossPlatformTestTargetEnforcer",
       "node_type": "Part",
-      "doc": "Enforces identical forbid lint discipline across unit tests (#[cfg(test)]) and integration tests (tests/ *.rs).",
+      "doc": "Enforces identical forbid lint discipline across unit tests (#[cfg(test)]) and integration tests (tests/ *.rs) with CRLF/LF normalization across macOS, Linux, and Windows.",
       "allocated_activities": []
     }
   ],
