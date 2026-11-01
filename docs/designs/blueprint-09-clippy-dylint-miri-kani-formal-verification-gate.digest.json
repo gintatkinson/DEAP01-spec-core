@@ -1,0 +1,234 @@
+{
+  "sha256": "33dd3182891e3c7e2e06ae5f40b17a9584f86f356f17d554824dbbe852aa7468",
+  "total_lines": 1,
+  "node_counts": {
+    "action_defs": 6,
+    "attribute_defs": 33,
+    "calc_defs": 0,
+    "capability_defs": 0,
+    "connection_defs": 0,
+    "constraint_defs": 6,
+    "containers": 5,
+    "groupings": 0,
+    "hazard_defs": 0,
+    "identities": 0,
+    "interaction_defs": 1,
+    "item_defs": 0,
+    "leaves": 33,
+    "lists": 6,
+    "operation_defs": 0,
+    "packages": 1,
+    "part_defs": 5,
+    "port_defs": 12,
+    "requirement_defs": 1,
+    "risk_defs": 0,
+    "state_defs": 1,
+    "test_case_defs": 0,
+    "typedefs": 0,
+    "use_case_defs": 7
+  },
+  "schema_nodes": [
+    "BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper",
+    "BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_LifecycleState",
+    "BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction",
+    "Blueprint_ID",
+    "C_VER_01",
+    "C_VER_02",
+    "C_VER_03",
+    "C_VER_04",
+    "C_VER_05",
+    "C_VER_06",
+    "FrbIcdBridgeAndMiriUbGate",
+    "Generation_Mode",
+    "IsolatedDylintMirAllocationGate",
+    "KaniCbmcProofSynthesizer",
+    "MultiStageVerificationOrchestrator",
+    "REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper",
+    "Requirement_ID",
+    "Specification_Source",
+    "StableClippyTotalFunctionGate",
+    "Status",
+    "Target_Crates",
+    "Title",
+    "Tracked_Issues",
+    "UC_AC_01_Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement",
+    "UC_AC_02_Stage_2_Isolated_Nightly_Dylint_MIR_Zero_Allocation_Proof_on_Real_Time_Control_Loops",
+    "UC_AC_03_Stage_2_Compile_Time_MIR_Requirement_Binding_Verification_Against_Active_SysML_Digests",
+    "UC_AC_04_Stage_3_Deterministic_flutter_rust_bridge_FFI_Synthesis_with_Fail_Closed_ICD_Boundary_Guards",
+    "UC_AC_05_Stage_3_Miri_Tree_Borrows_Abstract_Machine_Undefined_Behavior_Rejection_on_FFI_and_Ring_Buffer_Bridges",
+    "UC_AC_06_Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification",
+    "UC_AC_07_Fail_Closed_Four_Stage_Orchestration_and_Twelve_Gate_Blueprint_Bijective_SysML_Persistence",
+    "cbmc_proof_receipt_out",
+    "clippy_ndjson_out",
+    "default_kani_unwind_bound",
+    "denied_clippy_lint_count",
+    "deterministic_uuid",
+    "disallowed_types_count",
+    "dylint_ndjson_out",
+    "fail_closed_short_circuit",
+    "forbid_unsafe_in_domain",
+    "frb_facade_and_dart_out",
+    "gate_invocation_in",
+    "isolated_nightly_workspace",
+    "json_diagnostic_stream",
+    "kani_proof_module_out",
+    "max_dart_analyze_infos",
+    "max_kani_counterexamples",
+    "max_miri_ub_violations",
+    "max_rt_heap_allocations",
+    "max_unverified_req_links",
+    "mir_body_graph_in",
+    "miri_aliasing_model",
+    "miri_and_dart_receipt_out",
+    "plugin_toolchain_channel",
+    "runKaniCbmcProofs",
+    "runMiriAndDartGate",
+    "runStableClippyGate",
+    "structured_prettyplease_codegen",
+    "synthesizeFrbIcdFacade",
+    "synthesizeKaniProofModule",
+    "sysml_icd_ast_in",
+    "sysml_safety_ast_in",
+    "too_many_arguments_threshold",
+    "too_many_lines_threshold",
+    "unified_gate_ndjson_out",
+    "verification_stage_count",
+    "verifyMirAllocationsAndReqs",
+    "workspace_manifest_in"
+  ],
+  "operational_activities": [
+    {
+      "id": "OA-01",
+      "name": "runStableClippyGate",
+      "doc": "runStableClippyGate(workspacePath)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-02",
+      "name": "verifyMirAllocationsAndReqs",
+      "doc": "verifyMirAllocationsAndReqs(digestPath)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-03",
+      "name": "synthesizeFrbIcdFacade",
+      "doc": "synthesizeFrbIcdFacade(icdSchemaPath)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-04",
+      "name": "runMiriAndDartGate",
+      "doc": "runMiriAndDartGate(bridgeCratePath)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-05",
+      "name": "synthesizeKaniProofModule",
+      "doc": "synthesizeKaniProofModule(safetyAstIr)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-06",
+      "name": "runKaniCbmcProofs",
+      "doc": "runKaniCbmcProofs(targetCratePath)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "operational_exchanges": [],
+  "operational_scenarios": [
+    {
+      "id": "SCN-01",
+      "name": "UC_AC_01_Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement",
+      "actor": "",
+      "objective": "\"Stage 1 Universal Stable Clippy Total Function and clippy toml Threshold Enforcement\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-02",
+      "name": "UC_AC_02_Stage_2_Isolated_Nightly_Dylint_MIR_Zero_Allocation_Proof_on_Real_Time_Control_Loops",
+      "actor": "",
+      "objective": "\"Stage 2 Isolated Nightly Dylint MIR Zero Allocation Proof on Real Time Control Loops\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-03",
+      "name": "UC_AC_03_Stage_2_Compile_Time_MIR_Requirement_Binding_Verification_Against_Active_SysML_Digests",
+      "actor": "",
+      "objective": "\"Stage 2 Compile Time MIR Requirement Binding Verification Against Active SysML Digests\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-04",
+      "name": "UC_AC_04_Stage_3_Deterministic_flutter_rust_bridge_FFI_Synthesis_with_Fail_Closed_ICD_Boundary_Guards",
+      "actor": "",
+      "objective": "\"Stage 3 Deterministic flutter rust bridge FFI Synthesis with Fail Closed ICD Boundary Guards\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-05",
+      "name": "UC_AC_05_Stage_3_Miri_Tree_Borrows_Abstract_Machine_Undefined_Behavior_Rejection_on_FFI_and_Ring_Buffer_Bridges",
+      "actor": "",
+      "objective": "\"Stage 3 Miri Tree Borrows Abstract Machine Undefined Behavior Rejection on FFI and Ring Buffer Bridges\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-06",
+      "name": "UC_AC_06_Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification",
+      "actor": "",
+      "objective": "\"Stage 4 Deterministic Kani CBMC Proof Synthesis and STPA Unsafe Control Action Falsification\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-07",
+      "name": "UC_AC_07_Fail_Closed_Four_Stage_Orchestration_and_Twelve_Gate_Blueprint_Bijective_SysML_Persistence",
+      "actor": "",
+      "objective": "\"Fail Closed Four Stage Orchestration and Twelve Gate Blueprint Bijective SysML Persistence\"",
+      "steps": []
+    }
+  ],
+  "operational_nodes": [
+    {
+      "name": "FrbIcdBridgeAndMiriUbGate",
+      "node_type": "Part",
+      "doc": "Permitted Rust Abstract Machine undefined-behavior findings under `cargo +nightly miri test` with Tree Borrows. [unit: violations]",
+      "allocated_activities": []
+    },
+    {
+      "name": "IsolatedDylintMirAllocationGate",
+      "node_type": "Part",
+      "doc": "Permitted transitive heap allocation or dynamic drop-deallocation terminators reachable from any `#[rt_loop]` function. [unit: allocs]",
+      "allocated_activities": []
+    },
+    {
+      "name": "KaniCbmcProofSynthesizer",
+      "node_type": "Part",
+      "doc": "Permitted reachable CBMC property failures (panics, overflows, div-by-zero, OOB, or STPA `UCA-*` breaches). [unit: counterexamples]",
+      "allocated_activities": []
+    },
+    {
+      "name": "MultiStageVerificationOrchestrator",
+      "node_type": "Part",
+      "doc": "Ordered verification stage count (`Stage 1 Clippy` -> `Stage 2 Dylint MIR` -> `Stage 3 FRB + Miri` -> `Stage 4 Kani CBMC`). [unit: stages]",
+      "allocated_activities": []
+    },
+    {
+      "name": "StableClippyTotalFunctionGate",
+      "node_type": "Part",
+      "doc": "Mandatory count of total-function, cast-safety, arithmetic, unsafe-doc, and structural complexity Clippy lints set to `deny` or `forbid`. [unit: lints]",
+      "allocated_activities": []
+    }
+  ],
+  "file_manifest": []
+}
