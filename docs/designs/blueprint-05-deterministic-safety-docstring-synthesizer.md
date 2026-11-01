@@ -2,61 +2,50 @@
 | :--- | :--- |
 | **Blueprint ID** | `BP-05` |
 | **Requirement ID** | `REQ-0605` |
-| **Title** | Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint |
+| **Title** | Lossless CST Safety Docstring Synthesizer and Check 36 Verification Blueprint |
 | **Status** | `Approved` |
 | **Target Crates** | `crates/deap-core, crates/compile-sysml, crates/verify-baseline` |
-| **Tracked Issues** | `#498, #500, #501, #508, #510` |
+| **Tracked Issues** | `#498, #500, #501, #508, #510, #742` |
 | **Generation Mode** | `subagent` |
-| **Specification Source** | `crates/deap-core/src/source_ast.rs:1-120` |
+| **Specification Source** | `crates/compile-sysml/src/docstring.rs:1-120 / crates/verify-baseline/src/checks/docstring_gate.rs:1-120` |
 
 ## 1. Executive Summary & Derivation-Annotation Contract
 
-The Digital Engineering Agent Platform (DEAP) requires 100% of production Rust (`.rs`) and Dart (`.dart`) declarations to carry complete, non-placeholder 7-section high-assurance safety docstrings (`## 1. Safety Intent & Regulatory Scope` through `## 7. Realization & Traceability`) bound to formal SysML v2 requirements (`Realises: [<REQ-ID>]`). Under Blueprint **BP-05** (`DEAP-BP-DET-05`, requirement **REQ-0605**, subsystem `UnifiedSafetyDocstringSynthesizer`, UUIDv5 `6ba7b810-9dad-11d1-80b4-00c04fd430c5`, Complexity Class P, diagnostic code bindings **E0100**, **E0304**, **E0400**, governing standards DO-178C Level A / ISO 26262 ASIL D / ECSS-E-ST-40C / IEEE 29148-2018), historically LLM subagents were tasked with hand-authoring or repairing these 7-section docstrings across thousands of items while three independent crates maintained separate, hand-rolled lexical scanners to parse and verify them.
+The Digital Engineering Agent Platform (DEAP) specification and verification toolchain (`UnifiedSafetyDocstringSynthesizer`, blueprint reference `DEAP-BP-DET-05`, requirement **REQ-0605**, UUIDv5 `6ba7b810-9dad-11d1-80b4-00c04fd430c5`, Complexity Class P, diagnostic code bindings **E0100**, **E0304**, **E0400**, governing standards DO-178C Level A / ISO 26262 ASIL D / ECSS-E-ST-40C / IEEE 29148-2018) transitions all Rust safety docstring synthesis and baseline verification off fragile hand-rolled line, regex, and character scanners onto `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `ra_ap_text_edit` (`TextEdit`, `TextEditBuilder`), and `ra_ap_line_index` (`LineIndex`). Historically, over 8,200 lines of heuristic string slicing and ad-hoc `.lines()` parsers were duplicated across `compile-sysml` and `verify-baseline`, causing false-positive docstring violations, string-literal mangling, comment-token collision, and severe docstring bloat where non-actuator helper items were populated with redundant multi-section templates.
 
 | Claim / Requirement | SSOT Input Anchor (file:line / #ID) | Methodology Citation | Derivation Grade (Directly Evidenced / Analytically Derived / Declared Assumption) | Caveat / Downstream Impact |
 | :--- | :--- | :--- | :--- | :--- |
-| **REQ-0605**: Unified AST safety docstring synthesis and Check 36 completeness verification across Rust and Dart sources | `crates/deap-core/src/source_ast.rs:1-120` / `#498, #500, #501, #508, #510` | `DO-178C Level A / ISO/IEC/IEEE 29148:2018` | `Directly Evidenced` | Eliminates LLM hand-authoring of 7-section docstrings and unifies lexical analysis across `deap-core`, `compile-sysml`, and `verify-baseline`. |
-| **SC-01**: Zero magic byte-offset constants (`10` or `14`) and zero duplicate Rust/Dart lexers outside `deap_core::source_ast` | `crates/deap-core/src/source_ast.rs:120-260` / `#500, #501, #508` | `Leveson STPA / Design by Contract (DbC)` | `Directly Evidenced` | Replaces heuristic lifetime lookahead and flat block-comment booleans with exact grammar recognition, nested `block_comment_depth`, `r#"..."#`, and Dart `${...}` frame stacks. |
-| **SC-02**: Scoped brace-depth tracking for `mod tests` and `#[cfg(test)]` blocks plus `unsafe`/`extern`/`pub(self)` and multi-line `@pragma` support | `crates/verify-baseline/src/checks/docstring_gate.rs:350-760` / `#508` | `DO-178C Section 6.3.4 / DO-330 TQL-4` | `Directly Evidenced` | Prevents `mod tests` from silencing post-test production items and eliminates false-positive docstring violations on `#[cfg(test)]` blocks. |
-| **SC-03**: Strict `owner_name`-isolated `resolve_schema_context` over recursive `part.parts` hierarchies with zero `.first()` fallback | `crates/compile-sysml/src/docstring.rs:1763-2162` / `#498, #510` | `OMG SysML v2 / MIL-STD-1629A` | `Analytically Derived` | Unmapped source items receive deterministic module-scoped traceability tags rather than inheriting unrelated package-level `.first()` requirements. |
-| **SC-04**: Bit-for-bit idempotent docstring injection ($\Delta_{\text{idempotent}}(S) = 0$) and Check 34 per-function normalized body uniqueness | `crates/verify-baseline/src/checks/structural.rs:1-120` / `#498` | `ECSS-E-ST-40C / ISO 26262 Part 6` | `Analytically Derived` | Second execution of `compile-sysml --inject-safety-docstrings` produces zero byte diff while satisfying Check 36 and Check 34 uniqueness gates. |
+| **REQ-0605**: Lossless CST docstring synthesis and Check 36 verification via `ra_ap_syntax` + `ra_ap_text_edit` + `ra_ap_line_index` | `crates/compile-sysml/src/docstring.rs:1-120 / crates/verify-baseline/src/checks/docstring_gate.rs:1-120` / `#498, #500, #501, #508, #510, #742` | `DO-178C Level A / ISO/IEC/IEEE 29148:2018` | `Directly Evidenced` | Replaces all hand-rolled Rust line/comment scanners with lossless CST traversal, surgical byte-span text editing, and zero `#![feature(rustc_private)]`. |
+| **SC-01**: Net-negative legacy scanner deletion (~8,200+ SLOC) and `< 380` exec SLOC modular decomposition | `crates/compile-sysml/src/docstring.rs:1-5631 / crates/verify-baseline/src/checks/docstring_gate.rs:1-3751` / `#742` | `Leveson STPA / Design by Contract (DbC)` | `Directly Evidenced` | Strips `-4,900+` SLOC from `docstring.rs` and `-3,300+` SLOC from `docstring_gate.rs`, replacing them with four focused `< 380` exec SLOC submodules. |
+| **SC-02**: Lossless CST docstring traversal reading exact `///`, `//!`, and `#[doc = "..."]` without touching literals or code comments | `crates/deap-core/src/source_ast.rs:1-120` / `#500, #501, #508` | `DO-178C Section 6.3.4 / DO-330 TQL-4` | `Directly Evidenced` | Leverages `ra_ap_syntax::ast::{HasDocComments, HasAttrs}` to isolate outer/inner doc comments strictly from string literals and internal inline comments. |
+| **SC-03**: Anti-bloat Tier-A vs Tier-B/C contract (`<= 4` lines for Tier-B/C; multi-section Tier-A strictly for `[DOC-TIER: A]`) | `crates/compile-sysml/src/docstring.rs:1763-2162` / `#498, #510` | `OMG SysML v2 / MIL-STD-1629A` | `Analytically Derived` | Halts docstring bloat by enforcing compact `<= 4`-line docstrings carrying `[REQ-*]` and `[FLS: fls_*]` for all internal items, reserving 7-section blocks for actuators. |
+| **SC-04**: Bit-for-bit idempotent synthesis ($\Delta_{\text{idempotent}}(S) = 0$) via `ra_ap_text_edit::TextEdit` and anti-padding compaction | `crates/verify-baseline/src/checks/structural.rs:1-120` / `#498` | `ECSS-E-ST-40C / ISO 26262 Part 6` | `Analytically Derived` | Guarantees non-overlapping surgical byte-span edits, bit-for-bit idempotency on repeated application, and seamless `--compact-tier-bc` support. |
 
-Forensic audit of issues `#498`, `#500`, `#501`, `#508`, and `#510` demonstrated that both LLM hand-authoring of docstrings and the triplication of Rust/Dart lexical scanners across three crates introduced systemic correctness failures:
+### Net-Negative Legacy Scanner Deletion & Submodule Decomposition Targets
 
-1. **Three Diverging Rust/Dart Lexical Scanners & Magic Offset Heuristics (`#500`, `#501`, `#508`)**:
-   - The workspace maintained three separate lexical state machines in `crates/deap-core/src/source_ast.rs`, `crates/compile-sysml/src/docstring.rs` (lines `1869-2046`), and `crates/verify-baseline/src/checks/docstring_gate.rs` (lines `763-1180`).
-   - To distinguish Rust character literals (`'a'`, `'\u{10FFFF}'`) from lifetime annotations (`'a`, `'static`), the legacy scanners used hardcoded magic byte offsets (`close_pos <= 10` in `docstring.rs:2012` and `i.saturating_add(14)` in `docstring_gate.rs:852`), which misclassified valid lifetime tokens and character escapes when two lifetimes appeared within 10 or 14 bytes on the same signature line.
-   - All three legacy scanners used a flat boolean latch (`in_block_comment: bool`) instead of a nesting counter (`block_comment_depth: usize`), causing nested Rust block comments (`/* outer /* inner */ still in comment */`) to prematurely exit on the first `*/` and expose commented-out tokens as live declarations.
-   - In `crates/deap-core/src/source_ast.rs`, `strip_line_comment_preserving_strings` and `update_ast_delimiter_depths` lacked hashed raw-string state tracking (`r#"..."#`) and unconditionally applied Dart `${...}` interpolation switching to Rust string literals containing `"${"` (`#501`), while `crates/verify-baseline/src/checks/docstring_gate.rs` lacked a recursive `InterpolationFrame` stack for nested quotes and comments inside Dart `${...}` interpolations (`#508`).
+Forensic audit of issues `#498`, `#500`, `#501`, `#508`, `#510`, and `#742` identified that the workspace maintained ~8,200+ SLOC of fragile, hand-rolled Rust docstring and comment parsers that attempted to simulate compiler lexical analysis with string lookaheads, regexes, and magic byte offsets:
+1. **`compile-sysml` Hand-Rolled Docstring Scanner Deletion (`-4,900+` SLOC)**: Retires and strips 4,900+ SLOC of manual line scanners, delimiter state trackers, and template replacers in `crates/compile-sysml/src/docstring.rs`.
+2. **`verify-baseline` Check 36 Hand-Rolled Gate Deletion (`-3,300+` SLOC)**: Retires and strips 3,300+ SLOC of heuristic docblock auditors, section regexes, and brace-depth balancers in `crates/verify-baseline/src/checks/docstring_gate.rs`.
+3. **Net Legacy Scanner Deletion Target**: `~8,200+` SLOC net deletion of unmaintainable text-scanning boilerplate across the toolchain.
+4. **Target Submodule Layout (`< 380` Executable SLOC per Module)**:
+   - `deap_core::rust_cst::doc_edit` (planned `doc_edit.rs` under `crates/deap-core/src/`, `<= 340` exec SLOC): Lossless CST item extraction, `ast::HasDocComments` / `ast::HasAttrs` traversal, and `ra_ap_text_edit` surgical span planning.
+   - `compile_sysml::docstring_cst` (planned `docstring_cst.rs` under `crates/compile-sysml/src/`, `<= 360` exec SLOC): Forward deterministic docstring synthesis, `--compact-tier-bc` anti-padding compaction, and idempotent file injection.
+   - `verify_baseline::checks::docstring_cst_gate` (planned `docstring_cst_gate.rs` under `crates/verify-baseline/src/checks/`, `<= 280` exec SLOC): Check 36 lossless AST completeness verification and non-zero diagnostic reporting.
+   - `verify_baseline::checks::docstring_tier_rules` (planned `docstring_tier_rules.rs` under `crates/verify-baseline/src/checks/`, `<= 240` exec SLOC): Tier-A vs Tier-B/C validation, `<= 4`-line Tier-B/C ceiling, and `[REQ-*]` / `[FLS: fls_*]` anchor validation.
 
-2. **Unbounded Test-Scope Latches, Classifier Gaps & Multi-Line Annotation Erasure (`#508`)**:
-   - In `crates/verify-baseline/src/checks/docstring_gate.rs`, encountering `mod tests {` set a sticky boolean `in_mod_tests = true` that was never reset when the test module's closing brace `}` returned to top-level depth, silently exempting every production `pub fn` or `pub struct` declared after `mod tests` in the same file.
-   - Conversely, `#[cfg(test)]` placed on an `impl` block or helper item without an enclosing `mod tests` was not tracked by brace depth, causing false-positive docstring violations on test-only items.
-   - The Rust item classifier omitted `pub unsafe fn`, `pub extern "C" fn`, `unsafe trait`, `unsafe impl`, and `pub(self)` visibility prefixes, while the Dart scanner cleared `current_doc` whenever a multi-line annotation (`@pragma(\n  'vm:prefer-inline',\n)`) spanned multiple lines between the `///` docblock and the target declaration (`#508`).
 
-3. **Unscoped `.first()` Schema Fallback, Cross-Entity Attribution & Generic Arrow Bugs (`#498`, `#510`)**:
-   - In `crates/compile-sysml/src/docstring.rs`, `resolve_schema_context` previously fell back to `pkg.requirement_defs.first()` and `pkg.constraint_defs.first()` when `matched_entity_pkg` was present, falsely attributing the first requirement and constraint in a package to every unrelated struct or helper function in that module (`#498`).
-   - Package-level fallback queries searched `target_ident = owner_name.unwrap_or(item_name)` alongside `item_name` without isolating `owner_name` when `owner_name.is_some()`, causing methods on an unmapped struct (`impl SecondaryMonitor { pub fn primary_controller(&self) }`) to inherit requirements belonging to an unrelated `PartDef` named `PrimaryController`.
-   - `resolve_schema_context` inspected only top-level `pkg.part_defs` and ignored nested `part.parts` hierarchies; `extract_rust_impl_target_name` treated the `>` in `impl<F: Fn(u32) -> bool> Target<F>` as closing the `<...>` generic parameter list (`#510`); and lines containing a declaration immediately after an inline block comment closure (`/* comment */ pub fn foo()`) were skipped when the line started in block-comment state.
+### Deterministic Lossless CST Replacement Architecture
 
-| Defect Cluster | Legacy Failure Mechanism | Affected Files & Locations | Tracker Issues |
-| :--- | :--- | :--- | :--- |
-| **Diverging Lexers & Magic Offsets** | Triplicated Rust/Dart lexers, `close_pos <= 10` / `i + 14` lifetime heuristics, boolean `in_block_comment`, missing `r#"..."#` & Dart `${...}` frames | `source_ast.rs`, `docstring.rs:1869-2046`, `docstring_gate.rs:763-1180` | `#500`, `#501`, `#508` |
-| **Test Latch & Classifier Gaps** | Unbounded `in_mod_tests = true` latch, `#[cfg(test)] impl` false positives, missing `unsafe`/`extern`/`pub(self)`, multi-line Dart `@pragma` doc erasure | `docstring_gate.rs:350-760`, `docstring_gate.rs:1182-1510` | `#508` |
-| **Schema Context & `impl` Parsing** | `.first()` fallback on `matched_entity_pkg`, cross-entity `owner_name` vs `item_name` collision, missing nested `part.parts`, `->` inside `impl<...>`, post-`*/` skip | `docstring.rs:1763-2162` | `#498`, `#510` |
-
-### Deterministic Compiler Replacement Architecture
-
-To eliminate LLM hand-authoring of 7-section safety docstrings and eradicate lexical drift across crates:
-1. **Single Canonical AST & Lexical Engine (`deap_core::source_ast`)**: Consolidate 100% of Rust and Dart lexical scanning, character-literal vs. lifetime recognition (`single_char_literal_byte_len`), nested block-comment tracking, hashed raw-string scanning, Dart `${...}` interpolation frame stacks, `mod tests` / `#[cfg(test)]` brace-depth scoping, and declaration classification into `crates/deap-core/src/source_ast.rs`.
-2. **Deterministic Forward Docstring Synthesis (`compile-sysml --inject-safety-docstrings`)**: Delegate all source tokenization and declaration discovery in `crates/compile-sysml/src/docstring.rs` to `deap_core::source_ast`, paired with strict, zero-fallback `resolve_schema_context` resolution over recursive `part.parts` hierarchies so `compile-sysml` synthesizes and updates all 7-section docstrings deterministically in $O(N)$ time.
-3. **Unified AST Gate Verification (`verify-baseline` Check 36)**: Delegate Check 36 (`audit_rust_source_docstrings` and `audit_dart_source_docstrings` in `crates/verify-baseline/src/checks/docstring_gate.rs`) to the identical `deap_core::source_ast` lexical and item-classification primitives, guaranteeing 0% divergence between what `compile-sysml` injects and what `verify-baseline` audits.
+To eliminate heuristic docstring parsing and enforce anti-bloat tier rules:
+1. **`ra_ap_syntax` Lossless Traversal**: Parse Rust sources into `ra_ap_syntax::SourceFile` and inspect `ast::Item` nodes (`Fn`, `Struct`, `Enum`, `Trait`, `Impl`, `Const`, `TypeAlias`, `Module`) via `ast::HasDocComments` and `ast::HasAttrs`. Extract raw `DocComment` tokens and `#[doc = "..."]` attributes directly from the CST, completely ignoring string literals, macro invocations, and interior code comments.
+2. **`ra_ap_text_edit` & `ra_ap_line_index` Surgical Synthesis**: Use `ra_ap_line_index::LineIndex` to map line/column positions to UTF-8 byte offsets, and construct non-overlapping surgical edit plans with `ra_ap_text_edit::TextEditBuilder`. Second passes produce empty edit sets ($\Delta_{\text{idempotent}}(S) = 0$).
+3. **Anti-Bloat Tier-A vs Tier-B/C Contract**: Multi-section docblocks are strictly restricted to explicit `[DOC-TIER: A]` safety-actuator entrypoints. All other documented declarations enforce concise `<= 4`-line Tier-B/C docstrings carrying `[REQ-*]` and/or `[FLS: fls_*]` traceability anchors.
 
 ---
 
 ## 2. Structural Component Metamodel
 
-The `UnifiedSafetyDocstringSynthesizer` subsystem unifies Rust and Dart lexical analysis, SysML v2 requirement/constraint context resolution, 7-section DO-178C docstring synthesis, and Check 36 completeness verification under a single deterministic compiler architecture.
+The `UnifiedSafetyDocstringSynthesizer` subsystem coordinates lossless CST docstring extraction, tiered forward synthesis, anti-padding compaction, and Check 36 baseline verification.
 
 ### Component: UnifiedSafetyDocstringSynthesizer
 
@@ -64,36 +53,36 @@ The `UnifiedSafetyDocstringSynthesizer` subsystem unifies Rust and Dart lexical 
 
 | Part Name | Type | Quantity | Description |
 | :--- | :--- | :--- | :--- |
-| `UnifiedRustDartLexicalScanner` | Component | 1 | Canonical zero-regex lexical state machine in `deap_core::source_ast` handling nested `/* */`, `r#"..."#`, Dart `${...}` frames, and exact char-literal vs. lifetime disambiguation |
-| `ScopedSchemaContextResolver` | Component | 1 | Strict SysML v2 requirement and constraint resolver in `compile-sysml` traversing recursive `part.parts` trees with `owner_name` isolation and zero `.first()` fallback |
-| `SevenSectionDocstringGenerator` | Component | 1 | Deterministic forward synthesizer interpolating AST parameters, return types, struct fields, invariants, and `Realises:` bindings into unique 7-section docblocks |
-| `Check36AstCompletenessVerifier` | Component | 1 | Baseline verification gate in `verify-baseline` auditing 100% per-item 7-section docstring coverage and Check 34 normalized body uniqueness using `deap_core::source_ast` |
+| `LosslessCstDocstringScanner` | Component | 1 | Canonical CST traversal engine in `deap_core::rust_cst::doc_edit` inspecting `ast::HasDocComments` and `ast::HasAttrs` |
+| `TieredDocstringSurgicalSynthesizer` | Component | 1 | Forward docstring injector in `compile_sysml::docstring_cst` executing `ra_ap_text_edit` plans with `--compact-tier-bc` |
+| `DocstringTierEnforcementGate` | Component | 1 | Verifier in `verify_baseline::checks::docstring_tier_rules` enforcing Tier-A actuator restriction and `<= 4`-line Tier-B/C ceiling |
+| `Check36CstCompletenessVerifier` | Component | 1 | Check 36 gate in `verify_baseline::checks::docstring_cst_gate` auditing 100% item coverage and bit-for-bit idempotency |
 
 #### 2.2 Component Attributes & State Properties
 
 | Attribute | Type | Default | Unit | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `magic_offset_constant_count` | `Integer` | `0` | `count` | Count of hardcoded byte-offset lookahead constants (`10` or `14`) in character/lifetime lexing |
-| `lexer_duplication_count` | `Integer` | `0` | `count` | Count of duplicate Rust/Dart lexical state machines outside `deap_core::source_ast` |
-| `false_attribution_count` | `Integer` | `0` | `count` | Count of unmapped source items receiving `.first()` fallback or cross-entity requirement bindings |
-| `docstring_idempotency_diff_bytes` | `Integer` | `0` | `bytes` | Byte diff produced when re-running `compile-sysml --inject-safety-docstrings` on enriched source |
+| `legacy_scanner_deletion_sloc` | `Integer` | `8200` | `lines` | Net-negative SLOC target for legacy hand-rolled docstring scanner deletion |
+| `max_submodule_exec_sloc` | `Integer` | `380` | `lines` | Maximum permissible executable SLOC ceiling for newly decomposed CST submodules |
+| `max_tier_bc_doc_lines` | `Integer` | `4` | `lines` | Maximum allowed docstring line count for Tier-B/C non-actuator declarations |
+| `docstring_idempotency_diff_bytes` | `Integer` | `0` | `bytes` | Byte diff produced when re-running docstring synthesis on an already synthesized file |
 
 #### 2.3 Component Interface Ports
 
 | Port | Direction | Type | Protocol | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `SourceCodeFileInputPort` | `in` | `String` | `FilesystemUTF8` | Ingests raw UTF-8 `.rs` and `.dart` source files from target workspace directories |
-| `SysmlSchemaTraceabilityPort` | `in` | `PackageDef` | `AstReference` | Supplies parsed SysML v2 `PartDef`, `ActionDef`, `RequirementDef`, and `ConstraintDef` AST hierarchies |
-| `EnrichedSourceOutputPort` | `out` | `String` | `AtomicFileWrite` | Emits bit-for-bit idempotent `.rs` and `.dart` source files enriched with 7-section safety docstrings |
-| `Check36VerificationReportPort` | `out` | `Boolean` | `GateVerdict` | Emits deterministic Check 36 and Check 34 docstring completeness and uniqueness verdicts |
+| `SourceCodeFileInputPort` | `in` | `String` | `FilesystemUTF8` | Ingests CRLF/LF-normalized UTF-8 `.rs` source files via `camino::Utf8Path` |
+| `SysmlSchemaTraceabilityPort` | `in` | `PackageDef` | `AstReference` | Supplies parsed SysML v2 `RequirementDef` and `ConstraintDef` AST hierarchies |
+| `EnrichedSourceOutputPort` | `out` | `String` | `AtomicFileWrite` | Emits bit-for-bit idempotent `.rs` files enriched with surgically edited tiered docstrings |
+| `Check36VerificationReportPort` | `out` | `Boolean` | `GateVerdict` | Emits deterministic Check 36 completeness, tier compliance, and idempotency verdicts |
 
 #### 2.4 Formal Parametric & Structural Constraints
 
 | Constraint ID | Parameter | Min | Max | Unit | Expression |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `C-DOC-01` | `magic_offset_constant_count` | 0 | 0 | count | `magic_offset_constant_count == 0` |
-| `C-DOC-02` | `lexer_duplication_count` | 0 | 0 | count | `lexer_duplication_count == 0` |
-| `C-DOC-03` | `false_attribution_count` | 0 | 0 | count | `false_attribution_count == 0` |
+| `C-DOC-01` | `legacy_scanner_deletion_sloc` | 8000 | 12000 | lines | `legacy_scanner_deletion_sloc >= 8000` |
+| `C-DOC-02` | `max_submodule_exec_sloc` | 0 | 380 | lines | `max_submodule_exec_sloc <= 380` |
+| `C-DOC-03` | `max_tier_bc_doc_lines` | 1 | 4 | lines | `max_tier_bc_doc_lines <= 4` |
 | `C-DOC-04` | `docstring_idempotency_diff_bytes` | 0 | 0 | bytes | `docstring_idempotency_diff_bytes == 0` |
 
 ---
@@ -105,58 +94,65 @@ The `UnifiedSafetyDocstringSynthesizer` subsystem unifies Rust and Dart lexical 
 ```mermaid
 classDiagram
     class UnifiedSafetyDocstringSynthesizer {
-        +Integer magic_offset_constant_count
-        +Integer lexer_duplication_count
-        +Integer false_attribution_count
+        +Integer legacy_scanner_deletion_sloc
+        +Integer max_submodule_exec_sloc
+        +Integer max_tier_bc_doc_lines
         +Integer docstring_idempotency_diff_bytes
-        +single_char_literal_byte_len(String slice) Option~usize~
-        +classify_rust_item_line_ast(String code) Option~ItemTuple~
-        +extract_rust_impl_header_prefix(String code) Option~String~
-        +resolve_schema_context_strict(PackageDef pkg, String owner, String item) SchemaPair
+        +extract_item_doc_info(Item item, LineIndex line_index) Option~DocCommentInfo~
+        +build_tier_bc_docstring(String req_id, String fls_id, String summary) String
+        +plan_docstring_surgical_edits(String source, Utf8Path file_path, bool compact_tier_bc) Result~DocstringSynthesisPlan~
+        +apply_docstring_synthesis(String source, DocstringSynthesisPlan plan) Result~String~
+        +audit_source_file_docstrings(Utf8Path file_path, String source) Result~DocstringGateViolationList~
     }
-    class RustDartLexState {
-        +SourceLanguage language
-        +usize block_comment_depth
-        +Option~usize~ raw_hash_count
-        +Vec~InterpolationFrame~ interp_stack
+    class DocCommentInfo {
+        +DocTier tier
+        +usize line_count
+        +bool has_req_anchor
+        +bool has_fls_anchor
+        +TextRange text_range
     }
-    class ScopedItemScannerState {
-        +Option~usize~ mod_tests_brace_depth
-        +Option~usize~ cfg_test_block_brace_depth
-        +bool cfg_test_pending
-        +usize dart_annotation_paren_depth
+    class DocstringSynthesisPlan {
+        +Utf8PathBuf target_path
+        +bool tier_bc_compacted
     }
-    UnifiedSafetyDocstringSynthesizer "1" *-- "1" RustDartLexState : "owns"
-    UnifiedSafetyDocstringSynthesizer "1" *-- "1" ScopedItemScannerState : "tracks"
+    class DocstringGateViolation {
+        +Utf8PathBuf file_path
+        +usize line_number
+        +String item_ident
+        +String detail
+    }
+    UnifiedSafetyDocstringSynthesizer "1" *-- "1..*" DocCommentInfo : "inspects"
+    UnifiedSafetyDocstringSynthesizer "1" *-- "1" DocstringSynthesisPlan : "builds"
+    UnifiedSafetyDocstringSynthesizer "1" *-- "0..*" DocstringGateViolation : "reports"
 ```
 
-### 3.2 Unified Lexical, Synthesis & Check 36 Verification Architecture
+### 3.2 Unified Lossless CST Synthesis & Check 36 Verification Flow
 
 ```mermaid
 flowchart TD
-    subgraph "Tier 1 - deap-core Canonical AST"
+    subgraph "Tier 1 - deap-core Lossless CST Engine"
         direction TB
-        L1["RustDartLexState<br/>Nested Comments & Raw Strings"]
-        L2["single_char_literal_byte_len<br/>Zero Magic Offset Lexer"]
-        L3["ScopedItemScannerState<br/>mod tests & cfg(test) Scope"]
+        L1["ra_ap_syntax::SourceFile::parse<br/>CRLF/LF Normalized UTF-8"]
+        L2["ast::HasDocComments & ast::HasAttrs<br/>Exact Comment Node Traversal"]
+        L3["extract_item_doc_info<br/>DocCommentInfo Extraction"]
         L1 --> L2
         L2 --> L3
     end
 
-    subgraph "Tier 2 - compile-sysml Synthesizer"
+    subgraph "Tier 2 - compile-sysml Surgical Synthesizer"
         direction TB
-        S1["collect_all_parts<br/>Recursive part.parts Walker"]
-        S2["resolve_schema_context_strict<br/>Owner-Isolated Zero Fallback"]
-        S3["7-Section Docstring Emitter<br/>Idempotent Atomic Writer"]
+        S1["plan_docstring_surgical_edits<br/>TextEditBuilder Span Collector"]
+        S2["build_tier_bc_docstring<br/>Anti-Bloat & Compact Tier-B/C"]
+        S3["apply_docstring_synthesis<br/>ra_ap_text_edit Application"]
         S1 --> S2
         S2 --> S3
     end
 
-    subgraph "Tier 3 - verify-baseline Check 36"
+    subgraph "Tier 3 - verify-baseline Check 36 & Tier Gate"
         direction TB
-        V1["audit_rust_source_docstrings<br/>100% Item Coverage Gate"]
-        V2["audit_dart_source_docstrings<br/>Multi-Line Annotation Aware"]
-        V3["Check 34 seen_docblocks<br/>Normalized Body Uniqueness"]
+        V1["audit_source_file_docstrings<br/>100% Item Coverage Check"]
+        V2["docstring_tier_rules<br/>Tier-A Actuator & Line Ceiling"]
+        V3["Idempotency Verification<br/>Empty TextEdit Verification"]
         V1 --> V2
         V2 --> V3
     end
@@ -171,28 +167,28 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     actor CLI as "Compiler CLI / CI Pipeline"
-    participant Core as "deap-core::source_ast"
-    participant Synth as "compile-sysml::docstring"
-    participant Gate as "verify-baseline::docstring_gate"
+    participant Core as "deap_core::rust_cst::doc_edit"
+    participant Synth as "compile_sysml::docstring_cst"
+    participant Gate as "verify_baseline::checks::docstring_cst_gate"
     participant Ingest as "ingest-sysml"
 
-    CLI->>Synth: "Run compile-sysml --inject-safety-docstrings <DIR>"
+    CLI->>Synth: "plan_docstring_surgical_edits(source, path, compact)"
     activate Synth
-    Synth->>Core: "Scan source lines via RustDartLexState and ScopedItemScannerState"
+    Synth->>Core: "extract_item_doc_info(item, line_index)"
     activate Core
-    Core-->>Synth: "Return declaration items, owner_name, params, fields, invariants"
+    Core-->>Synth: "Return DocCommentInfo with tier, span, anchors"
     deactivate Core
-    Synth->>Synth: "Resolve schema context via collect_all_parts without .first() fallback"
-    Synth-->>CLI: "Write 7-section docstrings atomically with 0 diff on second pass"
+    Synth->>Synth: "apply_docstring_synthesis(source, plan)"
+    Synth-->>CLI: "Emit bit-for-bit idempotent source"
     deactivate Synth
 
-    CLI->>Gate: "Run verify-baseline . --no-domain (Check 36 & Check 34)"
+    CLI->>Gate: "audit_source_file_docstrings(path, source)"
     activate Gate
-    Gate->>Core: "Tokenize .rs and .dart files using shared deap-core lexical state"
+    Gate->>Core: "extract_item_doc_info(item, line_index)"
     activate Core
-    Core-->>Gate: "Return scoped production items excluding mod tests & cfg(test)"
+    Core-->>Gate: "Return DocCommentInfo"
     deactivate Core
-    Gate-->>CLI: "Verify 7 sections, non-empty Realises tag, and unique normalized body"
+    Gate-->>CLI: "Emit Vec of DocstringGateViolation"
     deactivate Gate
 
     CLI->>Ingest: "Run ingest-sysml --schema blueprint-05 --format markdown"
@@ -203,35 +199,35 @@ sequenceDiagram
 
 ---
 
+
 ## 4. Formal Mathematical & Safety Constraints
 
 ### 4.1 Mathematical Complexity & Idempotency Formulations
 
-Under **REQ-0605** and parametric constraints `C-DOC-01` through `C-DOC-04`, lexical scanning, schema context resolution, and forward docstring injection satisfy the following linear complexity and idempotency bounds:
+Under **REQ-0605** and parametric constraints `C-DOC-01` through `C-DOC-04`, lossless CST parsing, surgical text editing, and forward docstring injection satisfy the following linear complexity and idempotency bounds:
 
 $$
 \begin{aligned}
-T_{\text{lex}}(B) &= O(B) \\
-T_{\text{resolve}}(I, P, R, C) &= O(I \cdot (P + R + C)) \\
+T_{\text{cst}}(B) &= O(B) \\
+T_{\text{edit}}(E) &= O(E \log E) \\
 \Delta_{\text{idempotent}}(S) &= \lVert f_{\text{inject}}(f_{\text{inject}}(S, M), M) - f_{\text{inject}}(S, M) \rVert_1 = 0
 \end{aligned}
 $$
 
 - Parameter Definitions & Engineering Units:
-- $T_{\text{lex}}(B)$: Single-pass lexical scanning time complexity over $B$ UTF-8 source bytes.
-- $B$: Total byte length of the scanned `.rs` or `.dart` source file ($B \ge 0$).
-- $T_{\text{resolve}}(I, P, R, C)$: Total schema context resolution time across $I$ source AST declarations, $P$ total `PartDef` nodes (including nested `part.parts`), $R$ `RequirementDef` nodes, and $C$ `ConstraintDef` nodes.
-- $S$: Input source file byte vector prior to docstring injection.
-- $M$: Authoritative SysML v2 `PackageDef` schema model.
+- $T_{\text{cst}}(B)$: Lossless CST traversal and token classification time complexity over $B$ UTF-8 source bytes ($B \ge 0$).
+- $T_{\text{edit}}(E)$: Time complexity for sorting, validating, and applying $E$ disjoint text edit operations via `ra_ap_text_edit::TextEdit`.
+- $S$: Input source file byte vector prior to docstring synthesis.
+- $M$: Authoritative SysML v2 `PackageDef` schema model containing requirement and constraint definitions.
 - $f_{\text{inject}}(S, M)$: Deterministic forward docstring synthesis operator in `compile-sysml --inject-safety-docstrings`.
 - $\Delta_{\text{idempotent}}(S)$: L1 byte-stream difference between first and second docstring synthesis passes ($\Delta_{\text{idempotent}}(S) = 0\text{ bytes}$).
 
 ### 4.2 Safety Constraints & Parametric Invariants
 
-- **SC-01 (Zero Magic Offset & Single Lexer Invariant — `C-DOC-01`, `C-DOC-02`)**: `magic_offset_constant_count == 0` and `lexer_duplication_count == 0`. All character-literal vs. lifetime disambiguation executes via exact grammar inspection (`single_char_literal_byte_len`), and 100% of Rust and Dart tokenization delegates to `deap_core::source_ast`.
-- **SC-02 (Scoped Test & Annotation Preservation Invariant)**: Brace depth for `mod tests` and `#[cfg(test)]` blocks is tracked precisely to its closing delimiter so subsequent production declarations are never silently exempted, and multi-line Dart `@pragma(...)` annotations never erase preceding `///` docblocks.
-- **SC-03 (Owner-Isolated Schema Resolution Without Fallback — `C-DOC-03`)**: `false_attribution_count == 0`. `resolve_schema_context_strict` traverses recursive `part.parts` hierarchies in deterministic pre-order, isolates `owner_name` from `item_name` when `owner_name` is present, and never falls back to `.first()`.
-- **SC-04 (Bit-for-Bit Synthesis Idempotency — `C-DOC-04`)**: `docstring_idempotency_diff_bytes == 0`. Re-running `compile-sysml --inject-safety-docstrings` on an already enriched directory produces zero byte modifications and zero Check 36 or Check 34 uniqueness violations.
+- **SC-01 (Net-Negative Deletion Invariant -- `C-DOC-01`, `C-DOC-02`)**: `legacy_scanner_deletion_sloc >= 8000` and `max_submodule_exec_sloc <= 380`. All hand-rolled line, regex, and character parsers in `compile-sysml` (`-4,900+` SLOC) and `verify-baseline` (`-3,300+` SLOC) are excised and replaced with modular submodules under 380 executable SLOC.
+- **SC-02 (Lossless CST Traversal Invariant)**: Docstring tokens are discovered strictly via `ra_ap_syntax::ast::{HasDocComments, HasAttrs}` over parsed `SourceFile` nodes. Raw string literals, comments inside function bodies, and test items are never confused with item docstrings.
+- **SC-03 (Anti-Bloat Tier-B/C Invariant -- `C-DOC-03`)**: `max_tier_bc_doc_lines <= 4`. Items not marked with `[DOC-TIER: A]` enforce concise docstrings carrying `[REQ-*]` and `[FLS: fls_*]` anchors spanning at most 4 lines, preventing docstring bloat across internal codebase items.
+- **SC-04 (Bit-for-Bit Synthesis Idempotency -- `C-DOC-04`)**: `docstring_idempotency_diff_bytes == 0`. Applying `DocstringSynthesisPlan` across any workspace crate produces zero diff on consecutive runs, and all edits are non-overlapping byte spans managed through `TextEditBuilder`.
 
 ---
 
@@ -241,326 +237,242 @@ $$
 
 - **Test-Target**: `crates/verify-baseline/tests/blueprint_gate_tests.rs`
 
-### AC-01: Unified Rust and Dart Lexical State Machine Without Magic Offsets
-- **Given**: `.rs` and `.dart` source files containing nested `/* outer /* inner */ */` block comments, hashed raw strings `r#"..."#` and `r##"..."##`, Rust string literals containing `"${"`, Dart interpolated strings `"value: ${map['key']}"` containing nested quotes and comments, multi-byte UTF-8 character literals `'↑'`, and multiple short lifetimes `fn foo<'a, 'b>(x: &'a str, y: &'b str)` within 10 bytes.
-- **When**: `deap_core::source_ast`, `compile-sysml --inject-safety-docstrings`, and `verify-baseline` Check 36 scan the files.
-- **Then**: All three crates execute the single unified `deap_core::source_ast` lexical engine with zero magic byte-offset constants (`10` or `14`), zero false string states on lifetimes or Rust `"${"` literals, and 100% recognition of declarations following mid-line `*/` closures.
+### AC-01: Lossless CST Docstring Traversal via `ra_ap_syntax`
+- **Given**: Rust source files containing `///` outer line docstrings, `//!` inner module docstrings, `#[doc = "..."]` attributes, raw string literals containing doc markers (`r#"/// not a doc"#`), and interior block comments.
+- **When**: `deap_core::rust_cst::doc_edit::extract_item_doc_info` parses the source file.
+- **Then**: Exact docstring tokens and ranges are resolved via `ast::HasDocComments` without misclassifying string literals or interior code comments, and without invoking any hand-rolled `.lines()` or `.trim_start_matches("///")` scanners.
 
-### AC-02: Strict Schema Context Resolution and Recursive Part Traversal
-- **Given**: A multi-part SysML v2 `PackageDef` containing `PrimaryController` (`REQ-PC-001`, constraint `ThermalLimit`), a nested `PartDef` `NestedSubunit` (`REQ-NS-002`) inside `SecondaryMonitor.parts`, and an unmapped Rust struct `SecondaryMonitor` with method `pub fn primary_controller(&self)` and free function `pub fn unmapped_helper()`.
-- **When**: `resolve_schema_context` is invoked during `compile-sysml --inject-safety-docstrings`.
-- **Then**: `PrimaryController` resolves `REQ-PC-001` and `ThermalLimit`, `NestedSubunit` resolves `REQ-NS-002` via `collect_all_parts`, and both `SecondaryMonitor::primary_controller` and `unmapped_helper` resolve `(None, None)` without falling back to `.first()` or stealing `PrimaryController`'s requirement.
+### AC-02: Deterministic Surgical Byte-Span Synthesis via `ra_ap_text_edit`
+- **Given**: A Rust source file with undocumented or partially documented `ast::Item` nodes.
+- **When**: `compile_sysml::docstring_cst::plan_docstring_surgical_edits` generates a `DocstringSynthesisPlan` and applies it via `apply_docstring_synthesis`.
+- **Then**: Docstrings are inserted or updated using non-overlapping `TextEditBuilder` byte spans, subsequent execution yields zero edits ($\Delta_{\text{idempotent}}(S) = 0$), and compilation requires zero `#![feature(rustc_private)]`.
 
-### AC-03: Scoped `mod tests` Brace Tracking, `unsafe`/`extern` Classification, and Arrow-Aware `impl` Headers
-- **Given**: A Rust module containing `#[cfg(test)] mod tests { ... }` followed by a production `pub unsafe fn post_test_api()`, a `#[cfg(test)] impl MockHelper { ... }` block, an `impl<F: Fn(u32) -> bool> FilterEngine<F>` block, and a Dart class method preceded by a multi-line `@pragma(\n  'vm:prefer-inline',\n)` annotation.
-- **When**: `compile-sysml --inject-safety-docstrings` and `verify-baseline` Check 36 inspect the files.
-- **Then**: `mod tests` exits cleanly at its closing brace so `post_test_api` is audited (and fail-closed rejected with a non-zero violation error if undocumented), `#[cfg(test)] impl MockHelper` is excluded from production docstring requirements, `FilterEngine` methods receive `owner_name: Some("FilterEngine")`, and the multi-line `@pragma` preserves the preceding `///` docblock intact.
+### AC-03: Anti-Bloat Tier-A vs Tier-B/C Contract and Line Ceilings
+- **Given**: A codebase containing both public safety-actuator entrypoints and internal helper functions, structs, and type aliases.
+- **When**: `verify_baseline::checks::docstring_tier_rules` and `docstring_cst_gate` audit the declarations.
+- **Then**: Multi-section Tier-A docblocks are validated exclusively on items with explicit `[DOC-TIER: A]` markers, while all other documented items enforce concise `<= 4`-line Tier-B/C docstrings carrying `[REQ-*]` and `[FLS: fls_*]` anchors.
 
-### AC-04: Bit-for-Bit Idempotency and Fail-Closed Check 34 Per-Function Normalized Body Uniqueness
-- **Given**: Any Rust crate or Dart source directory enriched by `compile-sysml --inject-safety-docstrings <DIR>`, as well as a negative fixture containing duplicate normalized docstring bodies or missing sections.
-- **When**: `compile-sysml --inject-safety-docstrings <DIR>` is executed a second time and followed by `./target/release/verify-baseline . --no-domain`.
-- **Then**: The second synthesis pass produces `0` modified bytes (`docstring_idempotency_diff_bytes == 0`), every synthesized docblock passes Check 36 7-section completeness and Check 34 `seen_docblocks` uniqueness, and any invalid, missing, or duplicate docstring body is rejected fail-closed with a non-zero exit code.
+### AC-04: Net-Negative Legacy Scanner Deletion and `< 380` Exec SLOC Ceiling
+- **Given**: The legacy codebase containing ~8,200+ SLOC of hand-rolled string scanners in `compile-sysml/src/docstring.rs` and `verify-baseline/src/checks/docstring_gate.rs`.
+- **When**: The refactored CST architecture is deployed.
+- **Then**: At least 8,000 legacy SLOC are excised, and every newly created submodule (`doc_edit.rs`, `docstring_cst.rs`, `docstring_cst_gate.rs`, `docstring_tier_rules.rs`) strictly complies with the `< 380` executable SLOC ceiling.
 
 ### AC-05: Dogfood Ingestion and SysML v2 Compilation of REQ-0605
 - **Given**: This blueprint specification `docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md`.
 - **When**: `./target/release/verify-baseline check-blueprint docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --dry-run` and `./target/release/ingest-sysml --schema docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --format markdown` are executed.
-- **Then**: The translator parses **REQ-0605**, `UnifiedSafetyDocstringSynthesizer`, all four BOM subcomponents, all four interface ports, all four state attributes, all four parametric constraints (`C-DOC-01`..`C-DOC-04`), and **AC-01**..**AC-05** into canonical SysML v2 AST structures and persists `docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.sysml` and `docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.digest.json` with exit code `0`.
+- **Then**: All 12 mechanical verification gates pass (`12/12`), canonical SysML v2 AST structures are emitted, and the verification exits with code 0.
 
 ---
 
 ## 6. Proposed Deterministic Implementation Contract
 
-### 6.1 Unified `RustDartLexState` & Zero-Magic-Offset Lexing (`deap_core::source_ast`)
+### 6.1 Lossless CST Docstring Extraction & Classification (`deap_core::rust_cst::doc_edit`)
 
-All three crates (`deap-core`, `compile-sysml`, and `verify-baseline`) MUST use the unified lexical state machine exported by `crates/deap-core/src/source_ast.rs`. Hardcoded lookahead limits (`close_pos <= 10` and `i.saturating_add(14)`) are replaced by exact grammar recognition of Rust character literals (`single_char_literal_byte_len`), nested block comment depth tracking (`block_comment_depth: usize`), hashed raw string tracking (`raw_hash_count: Option<usize>`), and a language-gated `InterpolationFrame` stack for Dart `${...}` string interpolations:
+The following typed contracts define lossless CST extraction and non-overlapping surgical text editing across macOS, Linux, and Windows using `ra_ap_syntax`, `ra_ap_text_edit`, and `ra_ap_line_index` with zero `#![feature(rustc_private)]`:
 
 ```rust
-/// Saved string state pushed when entering a Dart `${...}` string interpolation expression.
+use camino::{Utf8Path, Utf8PathBuf};
+use ra_ap_line_index::LineIndex;
+use ra_ap_syntax::{ast::{self, HasAttrs, HasDocComments}, AstNode, SourceFile, TextRange};
+use ra_ap_text_edit::{TextEdit, TextEditBuilder};
+
+/// Maximum permitted line count for Tier-B/C non-actuator docstrings.
+/// [REQ-0605] [FLS: fls_max_tier_bc_lines]
+pub const MAX_TIER_BC_DOC_LINES: usize = 4;
+
+/// Safety documentation tier classifying items into Tier-A actuators or Tier-B/C internal items.
+/// [REQ-0605] [FLS: fls_doc_tier_decl]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct InterpolationFrame {
-    /// Opening quote delimiter byte (`b'"'` or `b'\''`).
-    pub quote_byte: u8,
-    /// Whether the outer Dart string is triple-quoted (`"""` or `'''`).
-    pub is_triple: bool,
-    /// Whether the outer string is raw (`r"..."` or `r'...'`).
-    pub is_raw: bool,
-    /// Nesting depth of `{` braces inside the active `${...}` expression (`>= 1`).
-    pub brace_depth: usize,
+pub enum DocTier {
+    TierA,
+    TierBC,
 }
 
-/// Canonical multi-line lexical scanner state shared by `deap-core`, `compile-sysml`, and `verify-baseline`.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct RustDartLexState {
-    /// Target source language (`SourceLanguage::Rust` or `SourceLanguage::Dart`).
-    pub language: SourceLanguage,
-    /// Nesting depth of `/* ... */` block comments (`0` when outside block comments).
-    pub block_comment_depth: usize,
-    /// Active Rust raw string delimiter `#` count (`Some(k)` inside `r#...#"..."#...#`).
-    pub raw_hash_count: Option<usize>,
-    /// Active quoted string state `(quote_byte, is_triple, is_raw)`.
-    pub active_string: Option<(u8, bool, bool)>,
-    /// Stack of enclosing Dart string states suspended by `${...}` interpolations.
-    pub interp_stack: Vec<InterpolationFrame>,
+/// Parsed docstring metadata extracted losslessly from `ra_ap_syntax` CST nodes.
+/// [REQ-0605] [FLS: fls_doc_comment_info]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocCommentInfo {
+    pub tier: DocTier,
+    pub line_count: usize,
+    pub has_req_anchor: bool,
+    pub has_fls_anchor: bool,
+    pub text_range: TextRange,
 }
 
-/// Recognizes a Rust character literal at byte 0 of `slice` without magic byte-offset limits.
-/// Returns `Some(byte_len)` iff `slice` starts with `'c'`, `'\n'`, `'\x7F'`, or `'\u{...}'`;
-/// returns `None` for lifetimes (`'a`, `'static`, `'lifetime_alpha`).
-pub fn single_char_literal_byte_len(slice: &str) -> Option<usize> {
-    if !slice.starts_with('\'') {
+/// Concrete byte-span text edit plan containing non-overlapping replacements.
+/// [REQ-0605] [FLS: fls_synthesis_plan]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocstringSynthesisPlan {
+    pub target_path: Utf8PathBuf,
+    pub edits: Vec<(TextRange, String)>,
+    pub tier_bc_compacted: bool,
+}
+
+/// Structured baseline verification failure emitted during Check 36 CST auditing.
+/// [REQ-0605] [FLS: fls_gate_violation]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocstringGateViolation {
+    pub file_path: Utf8PathBuf,
+    pub line_number: usize,
+    pub item_ident: String,
+    pub detail: String,
+}
+
+/// Extracts docstring metadata from an `ast::Item` using lossless CST traversal.
+/// [REQ-0605] [FLS: fls_extract_item_doc]
+pub fn extract_item_doc_info(
+    item: &ast::Item,
+    line_index: &LineIndex,
+) -> Option<DocCommentInfo> {
+    let mut comments = Vec::new();
+    for comment in item.doc_comments() {
+        comments.push(comment);
+    }
+    if comments.is_empty() {
         return None;
     }
-    let rest = slice.get(1..)?;
-    if rest.starts_with('\\') {
-        let after_backslash = rest.get(1..)?;
-        let mut chars = after_backslash.chars();
-        let first = chars.next()?;
-        if first == 'x' {
-            if after_backslash.get(3..4) == Some("'") {
-                return Some(6);
-            }
-        } else if first == 'u' {
-            if let Some(close_brace) = after_backslash.find('}') {
-                let quote_pos = close_brace.saturating_add(1);
-                if after_backslash.get(quote_pos..quote_pos.saturating_add(1)) == Some("'") {
-                    return Some(close_brace.saturating_add(4));
-                }
-            }
-        } else {
-            let esc_len = first.len_utf8();
-            if after_backslash.get(esc_len..esc_len.saturating_add(1)) == Some("'") {
-                return Some(esc_len.saturating_add(3));
-            }
-        }
-        None
+    let first = comments.first()?;
+    let last = comments.last()?;
+    let range = TextRange::new(first.syntax().text_range().start(), last.syntax().text_range().end());
+    let mut combined = String::new();
+    for c in &comments {
+        combined.push_str(c.text());
+        combined.push('\n');
+    }
+    let tier = if combined.contains("[DOC-TIER: A]") {
+        DocTier::TierA
     } else {
-        let ch = rest.chars().next()?;
-        let ch_len = ch.len_utf8();
-        if ch != '\'' && ch != '\\' && rest.get(ch_len..ch_len.saturating_add(1)) == Some("'") {
-            Some(ch_len.saturating_add(2))
-        } else {
-            None
+        DocTier::TierBC
+    };
+    let line_start = line_index.line_col(range.start()).line;
+    let line_end = line_index.line_col(range.end()).line;
+    let line_count = line_end.saturating_sub(line_start).saturating_add(1) as usize;
+    Some(DocCommentInfo {
+        tier,
+        line_count,
+        has_req_anchor: combined.contains("[REQ-"),
+        has_fls_anchor: combined.contains("[FLS: fls_"),
+        text_range: range,
+    })
+}
+
+/// Synthesizes a compact, anti-bloat Tier-B/C docstring adhering to the `<= 4`-line limit.
+/// [REQ-0605] [FLS: fls_build_tier_bc]
+pub fn build_tier_bc_docstring(
+    req_id: &str,
+    fls_id: &str,
+    summary: &str,
+) -> String {
+    let clean_summary = summary.trim();
+    let clean_req = req_id.trim();
+    let clean_fls = fls_id.trim();
+    format!("/// {clean_summary}\n/// [{clean_req}] [FLS: {clean_fls}]\n")
+}
+
+/// Plans surgical byte-span docstring edits over a parsed source file without overlap.
+/// [REQ-0605] [FLS: fls_plan_edits]
+pub fn plan_docstring_surgical_edits(
+    source: &str,
+    file_path: &Utf8Path,
+    compact_tier_bc: bool,
+) -> Result<DocstringSynthesisPlan, String> {
+    let normalized = source.replace("\r\n", "\n");
+    let parsed = SourceFile::parse(&normalized);
+    let line_index = LineIndex::new(&normalized);
+    let mut edits = Vec::new();
+    for item in parsed.tree().items() {
+        if let Some(info) = extract_item_doc_info(&item, &line_index) {
+            if compact_tier_bc && info.tier == DocTier::TierBC && info.line_count > MAX_TIER_BC_DOC_LINES {
+                let compact = build_tier_bc_docstring("REQ-0605", "fls_compacted", "Compacted Tier-B/C docstring.");
+                edits.push((info.text_range, compact));
+            }
         }
     }
+    Ok(DocstringSynthesisPlan {
+        target_path: file_path.to_path_buf(),
+        edits,
+        tier_bc_compacted: compact_tier_bc,
+    })
+}
+
+/// Applies a `DocstringSynthesisPlan` atomically to source text using `TextEditBuilder`.
+/// [REQ-0605] [FLS: fls_apply_synthesis]
+pub fn apply_docstring_synthesis(
+    source: &str,
+    plan: &DocstringSynthesisPlan,
+) -> Result<String, String> {
+    if plan.edits.is_empty() {
+        return Ok(source.to_string());
+    }
+    let mut builder = TextEditBuilder::default();
+    for (range, replacement) in &plan.edits {
+        builder.replace(*range, replacement.clone());
+    }
+    let edit: TextEdit = builder.finish();
+    let mut output = source.to_string();
+    edit.apply(&mut output);
+    Ok(output)
+}
+
+/// Audits a source file for Check 36 completeness, tier constraints, and traceability anchors.
+/// [REQ-0605] [FLS: fls_audit_docstrings]
+pub fn audit_source_file_docstrings(
+    file_path: &Utf8Path,
+    source: &str,
+) -> Result<Vec<DocstringGateViolation>, String> {
+    let normalized = source.replace("\r\n", "\n");
+    let parsed = SourceFile::parse(&normalized);
+    let line_index = LineIndex::new(&normalized);
+    let mut violations = Vec::new();
+    for item in parsed.tree().items() {
+        let item_ident = item.syntax().first_token().map(|t| t.text().to_string()).unwrap_or_else(|| "unknown".into());
+        let line_num = line_index.line_col(item.syntax().text_range().start()).line as usize + 1;
+        match extract_item_doc_info(&item, &line_index) {
+            None => {
+                violations.push(DocstringGateViolation {
+                    file_path: file_path.to_path_buf(),
+                    line_number: line_num,
+                    item_ident,
+                    detail: "missing required safety docstring on production item".into(),
+                });
+            }
+            Some(info) => {
+                if info.tier == DocTier::TierBC && info.line_count > MAX_TIER_BC_DOC_LINES {
+                    violations.push(DocstringGateViolation {
+                        file_path: file_path.to_path_buf(),
+                        line_number: line_num,
+                        item_ident: item_ident.clone(),
+                        detail: format!("Tier-B/C docstring line count {} exceeds max ceiling {}", info.line_count, MAX_TIER_BC_DOC_LINES),
+                    });
+                }
+                if !info.has_req_anchor && !info.has_fls_anchor {
+                    violations.push(DocstringGateViolation {
+                        file_path: file_path.to_path_buf(),
+                        line_number: line_num,
+                        item_ident,
+                        detail: "docstring lacks mandatory [REQ-*] or [FLS: fls_*] anchor".into(),
+                    });
+                }
+            }
+        }
+    }
+    Ok(violations)
 }
 ```
 
-When `scan_line_with_unified_lex_state(line: &str, state: &mut RustDartLexState) -> String` processes a line:
-- If `state.block_comment_depth > 0`:
-  - In Rust mode (`state.language == SourceLanguage::Rust`), encountering `/*` increments `state.block_comment_depth` by `1`; encountering `*/` decrements `state.block_comment_depth` by `1`.
-  - Crucially, when `state.block_comment_depth` reaches `0` mid-line (for example, `/* comment */ pub fn calibrate() {}`), the scanner emits a single space `' '` and **continues scanning the remainder of the line** in normal code mode so post-`*/` declarations are never skipped (`#510`).
-- If `state.active_string` is `Some((quote, is_triple, is_raw))`:
-  - When `state.language == SourceLanguage::Dart`, `!is_raw`, and `bytes.get(i..i + 2) == Some(b"${")`, the scanner pushes `InterpolationFrame { quote_byte: quote, is_triple, is_raw, brace_depth: 1 }` onto `state.interp_stack`, sets `state.active_string = None`, and transitions into normal code scanning for the interior of `${...}`. In Rust mode, `"${"` is treated strictly as ordinary string content (`#501`).
-- In normal code mode (`state.block_comment_depth == 0 && state.active_string.is_none()`):
-  - If `state.interp_stack.last_mut()` is `Some(frame)`: encountering `{` increments `frame.brace_depth`; encountering `}` decrements `frame.brace_depth`, and when `frame.brace_depth == 0`, pops `frame` and restores `state.active_string = Some((frame.quote_byte, frame.is_triple, frame.is_raw))` (`#508`).
+### 6.2 Three-Layer Definition of Done Closure
 
-### 6.2 Scoped `mod tests` Brace Tracking, `unsafe`/`extern` Classification & Arrow-Aware `impl` Parsing
+Every implementation task derived from **BP-05** (**REQ-0605**) closes all three architectural Definition of Done layers with zero `N/A` exemptions:
 
-To prevent `mod tests` from silencing subsequent production declarations and to handle `#[cfg(test)]` blocks, multi-line Dart annotations, `unsafe`/`extern` items, and `Fn(...) -> Ret` generic bounds (`#508`, `#510`):
+| DoD Layer | Architectural Responsibility | Concrete Module & Interface Realization | Verification Gate |
+| :--- | :--- | :--- | :--- |
+| **(1) Domain State & Data Model** | CST docstring models, synthesis plans, doc tiers, and structured violation diagnostics | `DocTier`, `DocCommentInfo`, `DocstringSynthesisPlan`, `DocstringGateViolation` in `< 380`-SLOC planned `doc_edit.rs` under `crates/deap-core/src/` | **AC-01**, **AC-02** (`cargo test -p deap-core`) |
+| **(2) Logic & State Management** | Lossless CST traversal, non-overlapping surgical edit generation, anti-padding compaction, and tier rule enforcement | Planned submodules `compile_sysml::docstring_cst` (`plan_docstring_surgical_edits`, `apply_docstring_synthesis`) and `verify_baseline::checks::{docstring_cst_gate, docstring_tier_rules}` | **AC-02**, **AC-03**, **AC-04** (`cargo test -p compile-sysml -p verify-baseline`) |
+| **(3) Presentation & Actuator Interface Binding** | CLI flag actuation (`compile-sysml --inject-safety-docstrings`, `--compact-tier-bc`) and Check 36 baseline gate report emission | `crates/compile-sysml/src/cli.rs` and `crates/verify-baseline/src/checks/mod.rs` binding to terminal outputs and non-zero exit codes | **AC-01**, **AC-04**, **AC-05** (`./target/release/verify-baseline . --no-domain`) |
 
-```rust
-/// Tracks scoped test-only brace depth for `mod tests` and `#[cfg(test)]` items/blocks.
-#[derive(Debug, Clone, Default)]
-pub struct ScopedItemScannerState {
-    /// Brace depth prior to entering `mod tests {`, cleared as soon as `brace_depth <= entry_depth`.
-    pub mod_tests_brace_depth: Option<usize>,
-    /// Brace depth prior to entering a `#[cfg(test)]`-annotated block (`impl`, `mod`, `fn`, `struct`).
-    pub cfg_test_block_brace_depth: Option<usize>,
-    /// Whether `#[cfg(test)]` was seen on the current attribute group awaiting its target item.
-    pub cfg_test_pending: bool,
-    /// Nesting depth of multi-line Dart annotation parentheses `@pragma(\n...\n)`.
-    pub dart_annotation_paren_depth: usize,
-}
+### 6.3 Dogfooding Pipeline Ingestion & Verification Protocol
 
-/// Classifies a comment-stripped Rust declaration line, supporting `pub(crate)`, `pub(super)`,
-/// `pub(self)`, `pub(in ...)`, `const`, `async`, `unsafe`, and `extern "ABI"` modifiers.
-pub fn classify_rust_item_line_ast(code: &str) -> Option<(SourceItemKind, String)> {
-    let mut rest = code.trim_start();
-    if let Some(after_pub) = rest.strip_prefix("pub") {
-        let after_pub_trim = after_pub.trim_start();
-        if after_pub_trim.starts_with('(') {
-            if let Some((_, after_vis_paren)) = after_pub_trim.split_once(')') {
-                rest = after_vis_paren.trim_start();
-            }
-        } else if after_pub.starts_with(char::is_whitespace) {
-            rest = after_pub_trim;
-        }
-    }
-    loop {
-        if let Some(r) = rest.strip_prefix("const ") {
-            rest = r.trim_start();
-        } else if let Some(r) = rest.strip_prefix("async ") {
-            rest = r.trim_start();
-        } else if let Some(r) = rest.strip_prefix("unsafe ") {
-            rest = r.trim_start();
-        } else if let Some(r) = rest.strip_prefix("extern ") {
-            let r_trim = r.trim_start();
-            if let Some(after_quote) = r_trim.strip_prefix('"') {
-                if let Some((_, after_abi)) = after_quote.split_once('"') {
-                    rest = after_abi.trim_start();
-                    continue;
-                }
-            }
-            rest = r_trim;
-        } else {
-            break;
-        }
-    }
-    if let Some(r) = rest.strip_prefix("struct ") {
-        return extract_leading_ast_ident(r.trim_start()).map(|n| (SourceItemKind::Struct, n));
-    }
-    if let Some(r) = rest.strip_prefix("enum ") {
-        return extract_leading_ast_ident(r.trim_start()).map(|n| (SourceItemKind::Enum, n));
-    }
-    if let Some(r) = rest.strip_prefix("trait ") {
-        return extract_leading_ast_ident(r.trim_start()).map(|n| (SourceItemKind::Trait, n));
-    }
-    if let Some(r) = rest.strip_prefix("fn ") {
-        return extract_leading_ast_ident(r.trim_start()).map(|n| (SourceItemKind::Function, n));
-    }
-    None
-}
-
-/// Extracts the target type identifier from a Rust `impl` header, ignoring `->` return-type arrows
-/// inside `impl<F: Fn(u32) -> bool> Target<F>` generic bounds and stripping `where` clauses.
-pub fn extract_rust_impl_header_prefix(code: &str) -> Option<String> {
-    let after_unsafe = code.strip_prefix("unsafe ").unwrap_or(code).trim_start();
-    let rest = if let Some(r) = after_unsafe.strip_prefix("impl<") {
-        let mut depth: usize = 1;
-        let mut end_idx: Option<usize> = None;
-        let mut prev_ch: Option<char> = None;
-        for (i, ch) in r.char_indices() {
-            if ch == '<' {
-                depth = depth.saturating_add(1);
-            } else if ch == '>' && prev_ch != Some('-') {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    end_idx = Some(i.saturating_add(1));
-                    break;
-                }
-            }
-            prev_ch = Some(ch);
-        }
-        r.get(end_idx?..).unwrap_or("").trim_start()
-    } else {
-        after_unsafe.strip_prefix("impl ")?.trim_start()
-    };
-
-    let before_brace = rest.split_once('{').map(|(b, _)| b.trim()).unwrap_or(rest);
-    let before_where = before_brace
-        .split_once(" where ")
-        .map(|(b, _)| b.trim())
-        .unwrap_or(before_brace)
-        .trim_end_matches(" where")
-        .trim();
-    let target_part = if let Some((_, after_for)) = before_where.split_once(" for ") {
-        after_for.trim()
-    } else {
-        before_where
-    };
-    let target_clean = target_part
-        .trim_start_matches('&')
-        .trim_start_matches("mut ")
-        .trim();
-    extract_leading_ast_ident(target_clean)
-}
-```
-
-### 6.3 Strict `resolve_schema_context` Scoping Without `.first()` Fallback (`docstring.rs`)
-
-In `crates/compile-sysml/src/docstring.rs`, `resolve_schema_context` resolves `(Option<String>, Option<String>)` for `(owner_name, item_name)` with three strict invariants (`#498`, `#510`):
-1. **Recursive `part.parts` Traversal**: `collect_all_parts` traverses both `pkg.part_defs` and all nested `part.parts` children iteratively using an explicit stack so nested subsystem `PartDef` nodes are resolved identically to top-level parts.
-2. **Strict `owner_name` vs. `item_name` Isolation**:
-   - When `owner_name` is `Some(owner)`, part lookup searches `all_parts` **only** for a `PartDef` matching `owner`. If `owner` matches a `PartDef`, `matched_req` and `matched_constraint` are extracted from that `owner_part` and refined if `owner_part.actions` contains an action matching `item_name`. If `owner` does **not** match any `PartDef` in the schema, package-level `requirement_defs` and `constraint_defs` are queried **only** against `owner` (never against `item_name` alone), preventing a method named `fn primary_controller(&self)` on an unmapped struct `SecondaryMonitor` from stealing `PrimaryController`'s requirement.
-   - When `owner_name` is `None` (a top-level struct, enum, trait, or free function), `all_parts` is searched for `item_name`, and if no `PartDef` matches, `pkg.requirement_defs` and `pkg.constraint_defs` are searched for an explicit `name`, `req_id`, or `satisfied_by` match against `item_name` (never matching standalone `pkg.action_defs` without a corresponding requirement/constraint).
-3. **Zero `.first()` Fallback**: If no explicit identifier match exists in `all_parts`, `requirement_defs`, or `constraint_defs`, `resolve_schema_context` returns `(None, None)` so the synthesizer generates a deterministic module-scoped traceability tag (`REQ-<MODULE>-<ITEM>`) rather than attributing an unrelated `.first()` schema requirement.
-
-```rust
-/// Collects all top-level and nested `PartDef` nodes within `pkg` in deterministic pre-order.
-pub fn collect_all_parts<'a>(pkg: &'a PackageDef, out: &mut Vec<&'a PartDef>) {
-    let mut stack: Vec<&'a PartDef> = pkg.part_defs.iter().rev().collect();
-    while let Some(part) = stack.pop() {
-        out.push(part);
-        for child in part.parts.iter().rev() {
-            stack.push(child);
-        }
-    }
-}
-
-/// Strictly resolves `(req_id, constraint_expr)` for `(owner_name, item_name)` with zero `.first()` fallback.
-pub fn resolve_schema_context_strict(
-    schema_model: Option<&PackageDef>,
-    owner_name: Option<&str>,
-    item_name: &str,
-) -> (Option<String>, Option<String>) {
-    let Some(root_pkg) = schema_model else {
-        return (None, None);
-    };
-
-    let mut all_pkgs: Vec<&PackageDef> = Vec::new();
-    let mut stack: Vec<&PackageDef> = vec![root_pkg];
-    while let Some(curr) = stack.pop() {
-        all_pkgs.push(curr);
-        for sub in curr.packages.iter().rev() {
-            stack.push(sub);
-        }
-    }
-
-    let mut all_parts: Vec<&PartDef> = Vec::new();
-    for pkg in &all_pkgs {
-        collect_all_parts(pkg, &mut all_parts);
-    }
-
-    if let Some(owner) = owner_name {
-        if let Some(owner_part) = all_parts
-            .iter()
-            .copied()
-            .find(|p| schema_identifiers_match(&p.name, owner))
-        {
-            let (mut req, mut constraint) = extract_part_req_and_constraint(&all_pkgs, owner_part);
-            if let Some(act) = owner_part
-                .actions
-                .iter()
-                .find(|a| schema_identifiers_match(&a.name, item_name))
-            {
-                if let Some(act_c) = owner_part
-                    .constraints
-                    .iter()
-                    .find(|c| schema_identifiers_match(&c.name, &act.name))
-                {
-                    constraint = format_constraint(&act_c.name, &act_c.expression);
-                }
-                if req.is_none() {
-                    req = find_pkg_requirement(&all_pkgs, &act.name);
-                }
-            }
-            return (req, constraint);
-        }
-        // Owner struct is unmapped in schema: match package-level defs against `owner` only, never `item_name`.
-        return (
-            find_pkg_requirement(&all_pkgs, owner),
-            find_pkg_constraint(&all_pkgs, owner),
-        );
-    }
-
-    if let Some(part) = all_parts
-        .iter()
-        .copied()
-        .find(|p| schema_identifiers_match(&p.name, item_name))
-    {
-        return extract_part_req_and_constraint(&all_pkgs, part);
-    }
-
-    (
-        find_pkg_requirement(&all_pkgs, item_name),
-        find_pkg_constraint(&all_pkgs, item_name),
-    )
-}
-```
-
-### 6.4 Dogfooding Pipeline Ingestion & Verification Protocol
-
-To verify that this blueprint is both structurally compliant with all baseline quality gates and dogfood-ingestible by the Level 0 Markdown AST translator without mutating the upstream clean landing zones (`schema/` and `.pipeline/schema.sysml`), execute the following deterministic verification sequence:
+To verify that this blueprint is both structurally compliant with all 12 baseline quality gates and dogfood-ingestible by the Level 0 Markdown AST translator without mutating upstream clean landing zones (`schema/` and `.pipeline/schema.sysml`), execute:
 
 ```bash
 ./target/release/verify-baseline check-blueprint \
@@ -577,10 +489,11 @@ To verify that this blueprint is both structurally compliant with all baseline q
 ## 7. Source References
 
 - **Governance Constitution**: `.pipeline/constitution.md:1-120` (Three-Tier Platform Isolation, Universal Quality Gates)
-- **Canonical Source Code AST & Lexical Engine**: `crates/deap-core/src/source_ast.rs:1-180` (`RustStringScannerState`, `single_char_literal_byte_len`, `parse_rust_source_ast`, `parse_dart_source_ast`)
-- **7-Section Safety Docstring Synthesizer**: `crates/compile-sysml/src/docstring.rs:1763-2162` (`inject_safety_docstrings`, `resolve_schema_context`, `collect_all_parts`, `extract_rust_impl_header_prefix`)
-- **Check 36 Docstring Completeness Gate**: `crates/verify-baseline/src/checks/docstring_gate.rs:1-120` (`check_source_docstring_completeness`, `audit_rust_source_docstrings`, `audit_dart_source_docstrings`)
-- **Check 34 Source Purity & Uniqueness Gate**: `crates/verify-baseline/src/checks/structural.rs:1-120` (`audit_source_purity`, `seen_docblocks` normalized body uniqueness check)
+- **Active Rules Bundle**: `.pipeline/ACTIVE_RULES_BUNDLE.md:1-120` (Checks 13B, 19, 27, 30, 34, 36)
+- **Legacy Source Code AST Scanner (`deap-core`)**: `crates/deap-core/src/source_ast.rs:1-120` (Hand-rolled scanner slated for lossless `ra_ap_syntax` and `ra_ap_text_edit` migration)
+- **Forward Docstring Synthesizer (`compile-sysml`)**: `crates/compile-sysml/src/docstring.rs:1-120` (`-4,900+` SLOC legacy scanner retirement and surgical CST injection target)
+- **Check 36 Docstring Completeness Gate (`verify-baseline`)**: `crates/verify-baseline/src/checks/docstring_gate.rs:1-120` (`-3,300+` SLOC legacy scanner retirement and lossless CST Check 36 audit target)
+- **Source Purity & Uniqueness Gate (`verify-baseline`)**: `crates/verify-baseline/src/checks/structural.rs:1-120` (`audit_source_purity` and Check 34 AST purity)
 - **Level 0 Markdown AST Translator**: `crates/ingest-sysml/src/translators/markdown.rs:1-120` (`MarkdownTranslator::translate`, BOM, Port, Property, and Constraint table processors)
-- **Sibling AST Ingestion Specification**: `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md:1-120` (`FEAT-42` CLI contracts and 7-section safety docstring EBNF grammar)
-- **Tracked Issues**: `#498`, `#500`, `#501`, `#508`, `#510`
+- **Tracked Issues**: `#498, #500, #501, #508, #510, #742`
+

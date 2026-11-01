@@ -1,163 +1,161 @@
 doc /* Translated from Level 0 OEM Markdown specification */
-package BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint {
+package BP_05_Lossless_CST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint {
     attribute Blueprint_ID : String = "BP-05";
     attribute Requirement_ID : String = "REQ-0605";
-    attribute Title : String = "Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint";
+    attribute Title : String = "Lossless CST Safety Docstring Synthesizer and Check 36 Verification Blueprint";
     attribute Status : String = "Approved";
     attribute Target_Crates : String = "crates/deap-core, crates/compile-sysml, crates/verify-baseline";
-    attribute Tracked_Issues : String = "#498, #500, #501, #508, #510";
+    attribute Tracked_Issues : String = "#498, #500, #501, #508, #510, #742";
     attribute Generation_Mode : String = "subagent";
-    attribute Specification_Source : String = "crates/deap-core/src/source_ast.rs:1-120";
-    doc /* Count of hardcoded byte-offset lookahead constants (`10` or `14`) in character/lifetime lexing [unit: count] */
-    attribute magic_offset_constant_count : Integer = 0;
-    doc /* Count of duplicate Rust/Dart lexical state machines outside `deap_core::source_ast` [unit: count] */
-    attribute lexer_duplication_count : Integer = 0;
-    doc /* Count of unmapped source items receiving `.first()` fallback or cross-entity requirement bindings [unit: count] */
-    attribute false_attribution_count : Integer = 0;
-    doc /* Byte diff produced when re-running `compile-sysml --inject-safety-docstrings` on enriched source [unit: bytes] */
+    attribute Specification_Source : String = "crates/compile-sysml/src/docstring.rs:1-120 / crates/verify-baseline/src/checks/docstring_gate.rs:1-120";
+    doc /* Net-negative SLOC target for legacy hand-rolled docstring scanner deletion [unit: lines] */
+    attribute legacy_scanner_deletion_sloc : Integer = 8200;
+    doc /* Maximum permissible executable SLOC ceiling for newly decomposed CST submodules [unit: lines] */
+    attribute max_submodule_exec_sloc : Integer = 380;
+    doc /* Maximum allowed docstring line count for Tier-B/C non-actuator declarations [unit: lines] */
+    attribute max_tier_bc_doc_lines : Integer = 4;
+    doc /* Byte diff produced when re-running docstring synthesis on an already synthesized file [unit: bytes] */
     attribute docstring_idempotency_diff_bytes : Integer = 0;
-    doc /* Ingests raw UTF-8 `.rs` and `.dart` source files from target workspace directories */
+    doc /* Ingests CRLF/LF-normalized UTF-8 `.rs` source files via `camino::Utf8Path` */
     port in SourceCodeFileInputPort : String {
-        doc /* Ingests raw UTF-8 `.rs` and `.dart` source files from target workspace directories */
+        doc /* Ingests CRLF/LF-normalized UTF-8 `.rs` source files via `camino::Utf8Path` */
         flow in SourceCodeFileInputPort_flow : String;
     }
-    doc /* Supplies parsed SysML v2 `PartDef`, `ActionDef`, `RequirementDef`, and `ConstraintDef` AST hierarchies */
+    doc /* Supplies parsed SysML v2 `RequirementDef` and `ConstraintDef` AST hierarchies */
     port in SysmlSchemaTraceabilityPort : PackageDef {
-        doc /* Supplies parsed SysML v2 `PartDef`, `ActionDef`, `RequirementDef`, and `ConstraintDef` AST hierarchies */
+        doc /* Supplies parsed SysML v2 `RequirementDef` and `ConstraintDef` AST hierarchies */
         flow in SysmlSchemaTraceabilityPort_flow : PackageDef;
     }
-    doc /* Emits bit-for-bit idempotent `.rs` and `.dart` source files enriched with 7-section safety docstrings */
+    doc /* Emits bit-for-bit idempotent `.rs` files enriched with surgically edited tiered docstrings */
     port out EnrichedSourceOutputPort : String {
-        doc /* Emits bit-for-bit idempotent `.rs` and `.dart` source files enriched with 7-section safety docstrings */
+        doc /* Emits bit-for-bit idempotent `.rs` files enriched with surgically edited tiered docstrings */
         flow out EnrichedSourceOutputPort_flow : String;
     }
-    doc /* Emits deterministic Check 36 and Check 34 docstring completeness and uniqueness verdicts */
+    doc /* Emits deterministic Check 36 completeness, tier compliance, and idempotency verdicts */
     port out Check36VerificationReportPort : Boolean {
-        doc /* Emits deterministic Check 36 and Check 34 docstring completeness and uniqueness verdicts */
+        doc /* Emits deterministic Check 36 completeness, tier compliance, and idempotency verdicts */
         flow out Check36VerificationReportPort_flow : Boolean;
     }
-    doc /* Run compile-sysml --inject-safety-docstrings <DIR> */
-    action def RunCompileSysmlInjectSafetyDocstrings;
-    doc /* Scan source lines via RustDartLexState and ScopedItemScannerState */
-    action def ScanSourceLinesViaRustDartLexStateAnd;
-    doc /* Resolve schema context via collect_all_parts without .first() fallback */
-    action def ResolveSchemaContextViaCollectAll;
-    doc /* Run verify-baseline . --no-domain (Check 36 & Check 34) */
-    action def RunVerifyBaselineNoDomain;
-    doc /* Tokenize .rs and .dart files using shared deap-core lexical state */
-    action def TokenizeRsAndDartFilesUsing;
+    doc /* plan_docstring_surgical_edits(source, path, compact) */
+    action def plan_docstring_surgical_edits;
+    doc /* extract_item_doc_info(item, line_index) */
+    action def extract_item_doc_info;
+    doc /* apply_docstring_synthesis(source, plan) */
+    action def apply_docstring_synthesis;
+    doc /* audit_source_file_docstrings(path, source) */
+    action def audit_source_file_docstrings;
     doc /* Run ingest-sysml --schema blueprint-05 --format markdown */
     action def RunIngestSysmlSchemaBlueprint05;
-    doc /* [unit: count] */
+    doc /* [unit: lines] */
     assert constraint C_DOC_01 {
-        magic_offset_constant_count >= 0 and magic_offset_constant_count <= 0;
+        legacy_scanner_deletion_sloc >= 8000 and legacy_scanner_deletion_sloc <= 12000;
     }
-    doc /* [unit: count] */
+    doc /* [unit: lines] */
     assert constraint C_DOC_02 {
-        lexer_duplication_count >= 0 and lexer_duplication_count <= 0;
+        max_submodule_exec_sloc >= 0 and max_submodule_exec_sloc <= 380;
     }
-    doc /* [unit: count] */
+    doc /* [unit: lines] */
     assert constraint C_DOC_03 {
-        false_attribution_count >= 0 and false_attribution_count <= 0;
+        max_tier_bc_doc_lines >= 1 and max_tier_bc_doc_lines <= 4;
     }
     doc /* [unit: bytes] */
     assert constraint C_DOC_04 {
         docstring_idempotency_diff_bytes >= 0 and docstring_idempotency_diff_bytes <= 0;
     }
     doc /* UUIDv5:  | Complexity: Class P | Standard: IEEE 29148-2018 / RFC 2119 | Diagnostics: E0100 */
-    requirement def REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint {
+    requirement def REQ_0605_BP_05_Lossless_CST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint {
         id = "REQ-0605";
-        text = "The Digital Engineering Agent Platform (DEAP) requires 100% of production Rust (.rs) and Dart (.dart) declarations to carry complete, non-placeholder 7-section high-assurance safety docstrings (## 1. Safety Intent & Regulatory Scope through ## 7. Realization & Traceability) bound to formal SysML v2";
+        text = "The Digital Engineering Agent Platform (DEAP) specification and verification toolchain (UnifiedSafetyDocstringSynthesizer, blueprint reference DEAP-BP-DET-05, requirement **REQ-0605**, UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c5, Complexity Class P, diagnostic code bindings **E0100**, **E0304**,";
         attribute uuidv5 : String = "";
         attribute complexity_class : String = "Class P";
         attribute governing_standard : String = "IEEE 29148-2018 / RFC 2119";
         attribute diagnostic_codes : String = "E0100";
-        attribute ac_01_unified_rust_and_dart_lexical_state_machine_without_magic_offsets : String = "- **Given**: .rs and .dart source files containing nested / * outer / * inner * / * / block comments, hashed raw strings r#\"...\"# and r##\"...\"##, Rust string literals containing \"{\", Dart interpolated strings \"value: {map['key']}\" containing nested quotes and comments, multi-byte UTF-8 character literals '↑', and multiple short lifetimes fn foo<'a, 'b>(x: &'a str, y: &'b str) within 10 bytes. - **When**: deap_core::source_ast, compile-sysml --inject-safety-docstrings, and verify-baseline Check 36 scan the files. - **Then**: All three crates execute the single unified.";
-        attribute ac_02_strict_schema_context_resolution_and_recursive_part_traversal : String = "- **Given**: A multi-part SysML v2 PackageDef containing PrimaryController (REQ-PC-001, constraint ThermalLimit), a nested PartDef NestedSubunit (REQ-NS-002) inside SecondaryMonitor.parts, and an unmapped Rust struct SecondaryMonitor with method pub fn primary_controller(&self) and free function pub fn unmapped_helper(). - **When**: resolve_schema_context is invoked during compile-sysml --inject-safety-docstrings. - **Then**: PrimaryController resolves REQ-PC-001 and ThermalLimit, NestedSubunit resolves REQ-NS-002 via collect_all_parts, and both SecondaryMonitor::primary_controller and.";
-        attribute ac_03_scoped_mod_tests_brace_tracking_unsafe_extern_classification_and_arrow_aware_impl_headers : String = "- **Given**: A Rust module containing #[cfg(test)] mod tests { ... } followed by a production pub unsafe fn post_test_api(), a #[cfg(test)] impl MockHelper { ... } block, an impl<F: Fn(u32) -> bool> FilterEngine<F> block, and a Dart class method preceded by a multi-line @pragma( 'vm:prefer-inline',) annotation. - **When**: compile-sysml --inject-safety-docstrings and verify-baseline Check 36 inspect the files. - **Then**: mod tests exits cleanly at its closing brace so post_test_api is audited (and fail-closed rejected with a non-zero violation error if undocumented), #[cfg(test)] impl.";
-        attribute ac_04_bit_for_bit_idempotency_and_fail_closed_check_34_per_function_normalized_body_uniqueness : String = "- **Given**: Any Rust crate or Dart source directory enriched by compile-sysml --inject-safety-docstrings <DIR>, as well as a negative fixture containing duplicate normalized docstring bodies or missing sections. - **When**: compile-sysml --inject-safety-docstrings <DIR> is executed a second time and followed by ./target/release/verify-baseline . --no-domain. - **Then**: The second synthesis pass produces 0 modified bytes (docstring_idempotency_diff_bytes == 0), every synthesized docblock passes Check 36 7-section completeness and Check 34 seen_docblocks uniqueness, and any invalid, missing,.";
-        attribute ac_05_dogfood_ingestion_and_sysml_v2_compilation_of_req_0605 : String = "- **Given**: This blueprint specification docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --dry-run and ./target/release/ingest-sysml --schema docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --format markdown are executed. - **Then**: The translator parses **REQ-0605**, UnifiedSafetyDocstringSynthesizer, all four BOM subcomponents, all four interface ports, all four state attributes, all four parametric.";
-        doc /* \begin{aligned} T_{\text{lex}}(B) &= O(B) \\ T_{\text{resolve}}(I, P, R, C) &= O(I \cdot (P + R + C)) \\ \Delta_{\text{idempotent}}(S) &= \lVert f_{\text{inject}}(f_{\text{inject}}(S, M), M) - f_{\text{inject}}(S, M) \rVert_1 = 0 \end{aligned} */
-        constraint def Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lexical_scanning_schema_context_resolution_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds;
-        require Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lexical_scanning_schema_context_resolution_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds;
-        verify by AC_01_Unified_Rust_and_Dart_Lexical_State_Machine_Without_Magic_Offsets;
-        verify by AC_02_Strict_Schema_Context_Resolution_and_Recursive_Part_Traversal;
-        verify by AC_03_Scoped_mod_tests_Brace_Tracking_unsafe_extern_Classification_and_Arrow_Aware_impl_Headers;
-        verify by AC_04_Bit_for_Bit_Idempotency_and_Fail_Closed_Check_34_Per_Function_Normalized_Body_Uniqueness;
+        attribute ac_01_lossless_cst_docstring_traversal_via_ra_ap_syntax : String = "- **Given**: Rust source files containing /// outer line docstrings, //! inner module docstrings, #[doc = \"...\"] attributes, raw string literals containing doc markers (r#\"/// not a doc\"#), and interior block comments. - **When**: deap_core::rust_cst::doc_edit::extract_item_doc_info parses the source file. - **Then**: Exact docstring tokens and ranges are resolved via ast::HasDocComments without misclassifying string literals or interior code comments, and without invoking any hand-rolled .lines() or .trim_start_matches(\"///\") scanners.";
+        attribute ac_02_deterministic_surgical_byte_span_synthesis_via_ra_ap_text_edit : String = "- **Given**: A Rust source file with undocumented or partially documented ast::Item nodes. - **When**: compile_sysml::docstring_cst::plan_docstring_surgical_edits generates a DocstringSynthesisPlan and applies it via apply_docstring_synthesis. - **Then**: Docstrings are inserted or updated using non-overlapping TextEditBuilder byte spans, subsequent execution yields zero edits (_{idempotent}(S) = 0), and compilation requires zero #![feature(rustc_private)].";
+        attribute ac_03_anti_bloat_tier_a_vs_tier_b_c_contract_and_line_ceilings : String = "- **Given**: A codebase containing both public safety-actuator entrypoints and internal helper functions, structs, and type aliases. - **When**: verify_baseline::checks::docstring_tier_rules and docstring_cst_gate audit the declarations. - **Then**: Multi-section Tier-A docblocks are validated exclusively on items with explicit [DOC-TIER: A] markers, while all other documented items enforce concise <= 4-line Tier-B/C docstrings carrying [REQ-*] and [FLS: fls_*] anchors.";
+        attribute ac_04_net_negative_legacy_scanner_deletion_and_380_exec_sloc_ceiling : String = "- **Given**: The legacy codebase containing ~8,200+ SLOC of hand-rolled string scanners in compile-sysml/src/docstring.rs and verify-baseline/src/checks/docstring_gate.rs. - **When**: The refactored CST architecture is deployed. - **Then**: At least 8,000 legacy SLOC are excised, and every newly created submodule (doc_edit.rs, docstring_cst.rs, docstring_cst_gate.rs, docstring_tier_rules.rs) strictly complies with the < 380 executable SLOC ceiling.";
+        attribute ac_05_dogfood_ingestion_and_sysml_v2_compilation_of_req_0605 : String = "- **Given**: This blueprint specification docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --dry-run and ./target/release/ingest-sysml --schema docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --format markdown are executed. - **Then**: All 12 mechanical verification gates pass (12/12), canonical SysML v2 AST structures are emitted, and the verification exits with code 0.";
+        doc /* \begin{aligned} T_{\text{cst}}(B) &= O(B) \\ T_{\text{edit}}(E) &= O(E \log E) \\ \Delta_{\text{idempotent}}(S) &= \lVert f_{\text{inject}}(f_{\text{inject}}(S, M), M) - f_{\text{inject}}(S, M) \rVert_1 = 0 \end{aligned} */
+        constraint def Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lossless_CST_parsing_surgical_text_editing_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds;
+        require Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lossless_CST_parsing_surgical_text_editing_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds;
+        verify by AC_01_Lossless_CST_Docstring_Traversal_via_ra_ap_syntax;
+        verify by AC_02_Deterministic_Surgical_Byte_Span_Synthesis_via_ra_ap_text_edit;
+        verify by AC_03_Anti_Bloat_Tier_A_vs_Tier_B_C_Contract_and_Line_Ceilings;
+        verify by AC_04_Net_Negative_Legacy_Scanner_Deletion_and_380_Exec_SLOC_Ceiling;
         verify by AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0605;
-        satisfy by Check36AstCompletenessVerifier;
+        satisfy by Check36CstCompletenessVerifier;
     }
     doc /* Synthesized deterministic package lifecycle state machine. */
-    state def BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState {
-        state Check36AstCompletenessVerifier_State;
-        state ScopedSchemaContextResolver_State;
-        state SevenSectionDocstringGenerator_State;
-        transition Initial_to_Check36AstCompletenessVerifier_State first Initial then Check36AstCompletenessVerifier_State;
-        transition Check36AstCompletenessVerifier_State_to_ScopedSchemaContextResolver_State_on_RunCompileSysmlInjectSafetyDocstrings first Check36AstCompletenessVerifier_State accept RunCompileSysmlInjectSafetyDocstrings then ScopedSchemaContextResolver_State;
-        transition ScopedSchemaContextResolver_State_to_SevenSectionDocstringGenerator_State_on_ScanSourceLinesViaRustDartLexStateAnd first ScopedSchemaContextResolver_State accept ScanSourceLinesViaRustDartLexStateAnd then SevenSectionDocstringGenerator_State;
-        transition SevenSectionDocstringGenerator_State_to_Terminal first SevenSectionDocstringGenerator_State then Terminal;
+    state def BP_05_Lossless_CST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState {
+        state Check36CstCompletenessVerifier_State;
+        state DocstringTierEnforcementGate_State;
+        state LosslessCstDocstringScanner_State;
+        transition Initial_to_Check36CstCompletenessVerifier_State first Initial then Check36CstCompletenessVerifier_State;
+        transition Check36CstCompletenessVerifier_State_to_DocstringTierEnforcementGate_State_on_plan_docstring_surgical_edits first Check36CstCompletenessVerifier_State accept plan_docstring_surgical_edits then DocstringTierEnforcementGate_State;
+        transition DocstringTierEnforcementGate_State_to_LosslessCstDocstringScanner_State_on_extract_item_doc_info first DocstringTierEnforcementGate_State accept extract_item_doc_info then LosslessCstDocstringScanner_State;
+        transition LosslessCstDocstringScanner_State_to_Terminal first LosslessCstDocstringScanner_State then Terminal;
     }
-    doc /* - **Given**: .rs and .dart source files containing nested / * outer / * inner * / * / block comments, hashed raw strings r#\"...\"# and r##\"...\"##, Rust string literals containing \"{\", Dart interpolated strings \"value: {map['key']}\" containing nested quotes and comments, multi-byte UTF-8 character literals '↑', and multiple short lifetimes fn foo<'a, 'b>(x: &'a str, y: &'b str) within 10 bytes. - **When**: deap_core::source_ast, compile-sysml --inject-safety-docstrings, and verify-baseline Check 36 scan the files. - **Then**: All three crates execute the single unified. */
-    use case def UC_AC_01_Unified_Rust_and_Dart_Lexical_State_Machine_Without_Magic_Offsets {
-        subject Check36AstCompletenessVerifier;
-        objective "Unified Rust and Dart Lexical State Machine Without Magic Offsets";
+    doc /* - **Given**: Rust source files containing /// outer line docstrings, //! inner module docstrings, #[doc = \"...\"] attributes, raw string literals containing doc markers (r#\"/// not a doc\"#), and interior block comments. - **When**: deap_core::rust_cst::doc_edit::extract_item_doc_info parses the source file. - **Then**: Exact docstring tokens and ranges are resolved via ast::HasDocComments without misclassifying string literals or interior code comments, and without invoking any hand-rolled .lines() or .trim_start_matches(\"///\") scanners. */
+    use case def UC_AC_01_Lossless_CST_Docstring_Traversal_via_ra_ap_syntax {
+        subject Check36CstCompletenessVerifier;
+        objective "Lossless CST Docstring Traversal via ra ap syntax";
     }
-    doc /* - **Given**: A multi-part SysML v2 PackageDef containing PrimaryController (REQ-PC-001, constraint ThermalLimit), a nested PartDef NestedSubunit (REQ-NS-002) inside SecondaryMonitor.parts, and an unmapped Rust struct SecondaryMonitor with method pub fn primary_controller(&self) and free function pub fn unmapped_helper(). - **When**: resolve_schema_context is invoked during compile-sysml --inject-safety-docstrings. - **Then**: PrimaryController resolves REQ-PC-001 and ThermalLimit, NestedSubunit resolves REQ-NS-002 via collect_all_parts, and both SecondaryMonitor::primary_controller and. */
-    use case def UC_AC_02_Strict_Schema_Context_Resolution_and_Recursive_Part_Traversal {
-        subject Check36AstCompletenessVerifier;
-        objective "Strict Schema Context Resolution and Recursive Part Traversal";
+    doc /* - **Given**: A Rust source file with undocumented or partially documented ast::Item nodes. - **When**: compile_sysml::docstring_cst::plan_docstring_surgical_edits generates a DocstringSynthesisPlan and applies it via apply_docstring_synthesis. - **Then**: Docstrings are inserted or updated using non-overlapping TextEditBuilder byte spans, subsequent execution yields zero edits (_{idempotent}(S) = 0), and compilation requires zero #![feature(rustc_private)]. */
+    use case def UC_AC_02_Deterministic_Surgical_Byte_Span_Synthesis_via_ra_ap_text_edit {
+        subject Check36CstCompletenessVerifier;
+        objective "Deterministic Surgical Byte Span Synthesis via ra ap text edit";
     }
-    doc /* - **Given**: A Rust module containing #[cfg(test)] mod tests { ... } followed by a production pub unsafe fn post_test_api(), a #[cfg(test)] impl MockHelper { ... } block, an impl<F: Fn(u32) -> bool> FilterEngine<F> block, and a Dart class method preceded by a multi-line @pragma( 'vm:prefer-inline',) annotation. - **When**: compile-sysml --inject-safety-docstrings and verify-baseline Check 36 inspect the files. - **Then**: mod tests exits cleanly at its closing brace so post_test_api is audited (and fail-closed rejected with a non-zero violation error if undocumented), #[cfg(test)] impl. */
-    use case def UC_AC_03_Scoped_mod_tests_Brace_Tracking_unsafe_extern_Classification_and_Arrow_Aware_impl_Headers {
-        subject Check36AstCompletenessVerifier;
-        objective "Scoped mod tests Brace Tracking unsafe extern Classification and Arrow Aware impl Headers";
+    doc /* - **Given**: A codebase containing both public safety-actuator entrypoints and internal helper functions, structs, and type aliases. - **When**: verify_baseline::checks::docstring_tier_rules and docstring_cst_gate audit the declarations. - **Then**: Multi-section Tier-A docblocks are validated exclusively on items with explicit [DOC-TIER: A] markers, while all other documented items enforce concise <= 4-line Tier-B/C docstrings carrying [REQ-*] and [FLS: fls_*] anchors. */
+    use case def UC_AC_03_Anti_Bloat_Tier_A_vs_Tier_B_C_Contract_and_Line_Ceilings {
+        subject Check36CstCompletenessVerifier;
+        objective "Anti Bloat Tier A vs Tier B C Contract and Line Ceilings";
     }
-    doc /* - **Given**: Any Rust crate or Dart source directory enriched by compile-sysml --inject-safety-docstrings <DIR>, as well as a negative fixture containing duplicate normalized docstring bodies or missing sections. - **When**: compile-sysml --inject-safety-docstrings <DIR> is executed a second time and followed by ./target/release/verify-baseline . --no-domain. - **Then**: The second synthesis pass produces 0 modified bytes (docstring_idempotency_diff_bytes == 0), every synthesized docblock passes Check 36 7-section completeness and Check 34 seen_docblocks uniqueness, and any invalid, missing,. */
-    use case def UC_AC_04_Bit_for_Bit_Idempotency_and_Fail_Closed_Check_34_Per_Function_Normalized_Body_Uniqueness {
-        subject Check36AstCompletenessVerifier;
-        objective "Bit for Bit Idempotency and Fail Closed Check 34 Per Function Normalized Body Uniqueness";
+    doc /* - **Given**: The legacy codebase containing ~8,200+ SLOC of hand-rolled string scanners in compile-sysml/src/docstring.rs and verify-baseline/src/checks/docstring_gate.rs. - **When**: The refactored CST architecture is deployed. - **Then**: At least 8,000 legacy SLOC are excised, and every newly created submodule (doc_edit.rs, docstring_cst.rs, docstring_cst_gate.rs, docstring_tier_rules.rs) strictly complies with the < 380 executable SLOC ceiling. */
+    use case def UC_AC_04_Net_Negative_Legacy_Scanner_Deletion_and_380_Exec_SLOC_Ceiling {
+        subject Check36CstCompletenessVerifier;
+        objective "Net Negative Legacy Scanner Deletion and 380 Exec SLOC Ceiling";
     }
-    doc /* - **Given**: This blueprint specification docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --dry-run and ./target/release/ingest-sysml --schema docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --format markdown are executed. - **Then**: The translator parses **REQ-0605**, UnifiedSafetyDocstringSynthesizer, all four BOM subcomponents, all four interface ports, all four state attributes, all four parametric. */
+    doc /* - **Given**: This blueprint specification docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --dry-run and ./target/release/ingest-sysml --schema docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --format markdown are executed. - **Then**: All 12 mechanical verification gates pass (12/12), canonical SysML v2 AST structures are emitted, and the verification exits with code 0. */
     use case def UC_AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0605 {
-        subject Check36AstCompletenessVerifier;
+        subject Check36CstCompletenessVerifier;
         objective "Dogfood Ingestion and SysML v2 Compilation of REQ 0605";
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
-    interaction def BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction {
+    interaction def BP_05_Lossless_CST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction {
         lifeline CLI : Compiler_CLI_CI_Pipeline;
-        lifeline Core : deap_core_source_ast;
-        lifeline Synth : compile_sysml_docstring;
-        lifeline Gate : verify_baseline_docstring_gate;
+        lifeline Core : deap_core_rust_cst_doc_edit;
+        lifeline Synth : compile_sysml_docstring_cst;
+        lifeline Gate : verify_baseline_checks_docstring_cst_gate;
         lifeline Ingest : ingest_sysml;
-        message RunCompileSysmlInjectSafetyDocstrings from CLI to Synth;
-        message ScanSourceLinesViaRustDartLexStateAnd from Synth to Core;
-        message reply_ReturnDeclarationItemsOwnerNameParams from Core to Synth;
-        message ResolveSchemaContextViaCollectAll from Synth to Synth;
-        message reply_Write7SectionDocstringsAtomicallyWith from Synth to CLI;
-        message RunVerifyBaselineNoDomain from CLI to Gate;
-        message TokenizeRsAndDartFilesUsing from Gate to Core;
-        message reply_ReturnScopedProductionItemsExcludingMod from Core to Gate;
-        message reply_Verify7SectionsNonEmptyRealises from Gate to CLI;
+        message plan_docstring_surgical_edits from CLI to Synth;
+        message extract_item_doc_info from Synth to Core;
+        message reply_ReturnDocCommentInfoWithTierSpanAnchors from Core to Synth;
+        message apply_docstring_synthesis from Synth to Synth;
+        message reply_EmitBitForBitIdempotentSource from Synth to CLI;
+        message audit_source_file_docstrings from CLI to Gate;
+        message extract_item_doc_info from Gate to Core;
+        message reply_ReturnDocCommentInfo from Core to Gate;
+        message reply_EmitVecOfDocstringGateViolation from Gate to CLI;
         message RunIngestSysmlSchemaBlueprint05 from CLI to Ingest;
         message reply_EmitCanonicalSysMLV2AstFor from Ingest to CLI;
     }
-    doc /* Baseline verification gate in `verify-baseline` auditing 100% per-item 7-section docstring coverage and Check 34 normalized body uniqueness using `deap_core::source_ast` */
-    part def Check36AstCompletenessVerifier {
+    doc /* Check 36 gate in `verify_baseline::checks::docstring_cst_gate` auditing 100% item coverage and bit-for-bit idempotency */
+    part def Check36CstCompletenessVerifier {
         attribute quantity : Integer = 1;
         attribute type : String = "Component";
     }
-    doc /* Strict SysML v2 requirement and constraint resolver in `compile-sysml` traversing recursive `part.parts` trees with `owner_name` isolation and zero `.first()` fallback */
-    part def ScopedSchemaContextResolver {
+    doc /* Verifier in `verify_baseline::checks::docstring_tier_rules` enforcing Tier-A actuator restriction and `<= 4`-line Tier-B/C ceiling */
+    part def DocstringTierEnforcementGate {
         attribute quantity : Integer = 1;
         attribute type : String = "Component";
     }
-    doc /* Deterministic forward synthesizer interpolating AST parameters, return types, struct fields, invariants, and `Realises:` bindings into unique 7-section docblocks */
-    part def SevenSectionDocstringGenerator {
+    doc /* Canonical CST traversal engine in `deap_core::rust_cst::doc_edit` inspecting `ast::HasDocComments` and `ast::HasAttrs` */
+    part def LosslessCstDocstringScanner {
         attribute quantity : Integer = 1;
         attribute type : String = "Component";
     }
-    doc /* Canonical zero-regex lexical state machine in `deap_core::source_ast` handling nested `/ * * /`, `r#"..."#`, Dart `${...}` frames, and exact char-literal vs. lifetime disambiguation */
-    part def UnifiedRustDartLexicalScanner {
+    doc /* Forward docstring injector in `compile_sysml::docstring_cst` executing `ra_ap_text_edit` plans with `--compact-tier-bc` */
+    part def TieredDocstringSurgicalSynthesizer {
         attribute quantity : Integer = 1;
         attribute type : String = "Component";
     }
