@@ -31,6 +31,7 @@
 
 pub mod codebase;
 pub mod docstring_gate;
+pub mod docstring_tier_rules;
 pub mod dod_gates;
 #[cfg(test)]
 mod dod_gates_tests;

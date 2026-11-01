@@ -118,8 +118,10 @@ fn strip_leading_doc_attr<'a>(first: &TokenTree, tail: &'a [TokenTree]) -> Optio
 
 /// Detects whether any `#[derive(...)]` attribute in `file` derives `Logos` (`[REQ-0608]`).
 fn file_derives_logos(file: &syn::File) -> bool {
+    /// Accumulator visitor flagging `#[derive(Logos)]` attributes (`[REQ-0608]`).
     struct LogosDetector(bool);
     impl<'ast> Visit<'ast> for LogosDetector {
+        /// Inspects `#[derive(...)]` metadata for a `Logos` path segment (`[REQ-0608]`).
         fn visit_attribute(&mut self, attr: &'ast syn::Attribute) {
             if attr.path().is_ident("derive") {
                 let _ = attr.parse_nested_meta(|m| { self.0 |= m.path.segments.last().is_some_and(|s| s.ident == "Logos"); Ok(()) });
@@ -213,6 +215,7 @@ impl DodAstVisitor<'_> {
 }
 
 impl<'ast> Visit<'ast> for DodAstVisitor<'_> {
+    /// Tracks nested `#[cfg(test)]` item scopes across AST traversal (`[REQ-0608]`).
     fn visit_item(&mut self, node: &'ast syn::Item) {
         let prev = self.in_test_scope;
         self.in_test_scope |= item_has_test_cfg(node);
@@ -220,11 +223,13 @@ impl<'ast> Visit<'ast> for DodAstVisitor<'_> {
         self.in_test_scope = prev;
     }
 
+    /// Enforces `<= 80`-line span and `<= 5`-parameter bounds on free functions (`[REQ-0601]`).
     fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
         self.check_fn_bounds(&node.sig, fn_decl_start_line(Some(&node.vis), None, &node.sig), node.block.brace_token.span.close().end().line);
         visit::visit_item_fn(self, node);
     }
 
+    /// Enforces `<= 80`-line span and `<= 5`-parameter bounds on inherent and trait impl methods (`[REQ-0601]`).
     fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
         let def_line = node.defaultness.as_ref().map(|d| d.span.start().line);
         self.check_fn_bounds(&node.sig, fn_decl_start_line(Some(&node.vis), def_line, &node.sig), node.block.brace_token.span.close().end().line);
@@ -234,6 +239,7 @@ impl<'ast> Visit<'ast> for DodAstVisitor<'_> {
         self.in_test_scope = prev;
     }
 
+    /// Enforces `<= 80`-line span and `<= 5`-parameter bounds on trait method declarations (`[REQ-0601]`).
     fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
         let end = node.default.as_ref().map(|b| b.brace_token.span.close().end().line)
             .or_else(|| node.semi_token.as_ref().map(|s| s.span.end().line))
@@ -245,12 +251,14 @@ impl<'ast> Visit<'ast> for DodAstVisitor<'_> {
         self.in_test_scope = prev;
     }
 
+    /// Skips `#[doc = ...]` attributes so docstring text never triggers literal bans (`[REQ-0608]`).
     fn visit_attribute(&mut self, node: &'ast syn::Attribute) {
         if !node.path().is_ident("doc") {
             visit::visit_attribute(self, node);
         }
     }
 
+    /// Rejects `.char_indices()` and `.chars().peekable()` in modules without `Logos` (`[REQ-0608]`).
     fn visit_expr_method_call(&mut self, node: &'ast syn::ExprMethodCall) {
         if !self.has_logos {
             let line = node.method.span().start().line;
@@ -263,6 +271,7 @@ impl<'ast> Visit<'ast> for DodAstVisitor<'_> {
         visit::visit_expr_method_call(self, node);
     }
 
+    /// Rejects hardcoded host user directories and OS shared-library suffixes outside tests (`[REQ-0608]`).
     fn visit_lit_str(&mut self, node: &'ast syn::LitStr) {
         if !self.in_test_scope && is_banned_host_or_lib_literal(&node.value()) {
             let line = node.span().start().line;
@@ -270,6 +279,7 @@ impl<'ast> Visit<'ast> for DodAstVisitor<'_> {
         }
     }
 
+    /// Scans string literals embedded inside macro token trees outside test scopes (`[REQ-0608]`).
     fn visit_macro(&mut self, node: &'ast syn::Macro) {
         if !self.in_test_scope {
             let mut stack = vec![node.tokens.clone()];

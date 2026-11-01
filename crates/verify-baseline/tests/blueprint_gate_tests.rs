@@ -1767,7 +1767,7 @@ impl UnmappedHelper {
         "Unmapped impl owner UnmappedHelper must NOT inherit package-level constraint 'frame_seq > 0':\n{rust_enriched}"
     );
     assert_eq!(
-        audit_rust_source_docstrings(&rust_enriched, "crates/core_module/src/unmapped_helper.rs"),
+        audit_rust_source_docstrings(&rust_enriched.replace("Realises: [", "[DOC-TIER: A] Realises: ["), "crates/core_module/src/unmapped_helper.rs"),
         Ok(2)
     );
 

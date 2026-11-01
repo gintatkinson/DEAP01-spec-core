@@ -1061,7 +1061,6 @@ fn is_audited_source_path(rel: &str) -> bool {
 /// Realises: [REQ-CHECK-34-STRICT-IO-ARMS-SCOPE]
 fn enforces_strict_io_arms(file_rel: &str) -> bool {
     !matches_module_file_or_dir(file_rel, "sysml_ast")
-        && !matches_module_file_or_dir(file_rel, "workspace")
         && !matches_module_file_or_dir(file_rel, "parity_gates")
 }
 
@@ -4171,7 +4170,7 @@ mod tests {
 //! Contract: Enforces deterministic baseline parity checks across audited artifacts.
 //! Bounds & Faults: O(N) bounded traversal; fails closed with diagnostic vectors.
 
-/// Public gate carrier documented with a Tier A 4-Block Contract.
+/// [DOC-TIER: A] Public gate carrier documented with a Tier A 4-Block Contract.
 ///
 /// Safety & Traceability: Realises: [REQ-PARITY-CARRIER]
 /// Contract: Wraps immutable verification threshold `limit`.
@@ -4181,7 +4180,7 @@ pub struct SampleGate {
 }
 
 impl SampleGate {
-    /// Evaluates the configured gate limit via a Tier A 4-Block Contract.
+    /// [DOC-TIER: A] Evaluates the configured gate limit via a Tier A 4-Block Contract.
     ///
     /// Safety & Traceability: Realises: [REQ-PARITY-INHERENT-PUB]
     /// Contract: Pure read-only accessor returning `self.limit`.
@@ -4205,7 +4204,7 @@ impl Default for SampleGate {
     }
 }
 
-/// High-integrity parity check documented with full 7-section Tier A Rustdoc.
+/// [DOC-TIER: A] High-integrity parity check documented with full 7-section Tier A Rustdoc.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A.
@@ -4235,7 +4234,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
     Ok(())
 }
 
-/// Public helper documented with a Tier A 4-Block Contract.
+/// [DOC-TIER: A] Public helper documented with a Tier A 4-Block Contract.
 ///
 /// Safety & Traceability: Realises: [REQ-PARITY-PUB-4BLOCK]
 /// Contract: Increments `count` with saturating arithmetic.
@@ -4270,7 +4269,7 @@ fn local_step(v: usize) -> usize {
             res_clean.err()
         );
 
-        let partial_tier_a = r#"/// Partial doc missing section 7 and Realises tag.
+        let partial_tier_a = r#"/// [DOC-TIER: A] Partial doc missing section 7 and Realises tag.
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A.
 /// ## 2. Invariants & Mathematical Properties
@@ -4302,7 +4301,7 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             errs_partial_a
         );
 
-        let downgraded_pub = r#"/// Concise two-line docstring is invalid on unrestricted Tier A pub fn.
+        let downgraded_pub = r#"/// [DOC-TIER: A] Concise two-line docstring is invalid on explicit Tier A pub fn.
 /// Realises: [REQ-DOWNGRADED-PUB]
 pub fn downgraded_api() {}
 "#;
@@ -4518,7 +4517,7 @@ impl Default for UnitGate {
     #[test]
     fn test_check_34_hardening_f_rejects_duplicate_boilerplate_rustdoc(
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let body = r#"///
+        let body = r#"/// [DOC-TIER: A]
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A.
 ///
@@ -5521,8 +5520,6 @@ impl Default for UnitGate {
         for exempt_path in [
             "crates/deap-core/src/sysml_ast.rs",
             "crates/deap-core/src/sysml_ast/sub.rs",
-            "crates/deap-core/src/workspace.rs",
-            "crates/deap-core/src/workspace/sub.rs",
             "crates/verify-baseline/src/checks/parity_gates.rs",
             "crates/verify-baseline/src/checks/parity_gates/sub.rs",
         ] {
@@ -5537,6 +5534,8 @@ impl Default for UnitGate {
         for strict_path in [
             "crates/verify-baseline/src/checks/structural.rs",
             "crates/verify-baseline/src/checks/structural/sub.rs",
+            "crates/deap-core/src/workspace.rs",
+            "crates/deap-core/src/workspace/sub.rs",
             "crates/deap-core/src/markdown.rs",
             "crates/deap-core/src/markdown/sub.rs",
             "crates/deap-core/src/source_ast.rs",
@@ -5576,7 +5575,7 @@ impl Default for UnitGate {
              //! Safety & Traceability: Realises: [REQ-DECOMPOSED-FIXTURE]\n\
              //! Contract: Pure deterministic test fixture.\n\
              //! Bounds & Faults: O(1) time and space; infallible.\n\n\
-             /// Evaluates deterministic constant.\n\
+             /// [DOC-TIER: A] Evaluates deterministic constant.\n\
              ///\n\
              /// Safety & Traceability: Realises: [REQ-DECOMPOSED-FN]\n\
              /// Contract: Returns `1`.\n\

@@ -266,21 +266,23 @@ pub fn check_no_duplicate_master_blueprints(repo_root: &Path) -> Result<(), Vec<
         }
     }
 
+    let io_err = |p: &Path, e: std::io::Error| {
+        vec![format!("Check 12 failed: Unable to read {}: {e}", p.display())]
+    };
     let pubspec_path = repo_root.join("app_flutter").join("pubspec.yaml");
     if pubspec_path.is_file() {
-        if let Ok(pubspec_text) = fs::read_to_string(&pubspec_path) {
-            if !pubspec_text.contains("name: app_flutter") && pubspec_text.contains("app_flutter:")
-            {
-                let tier1_sdk_files = [
-                    "app_flutter/lib/features/layout/component_factory.dart",
-                    "app_flutter/lib/features/layout/layout.dart",
-                    "app_flutter/lib/core/theme/theme_controller.dart",
-                    "app_flutter/lib/domain/result.dart",
-                ];
-                for rel_file in &tier1_sdk_files {
-                    if repo_root.join(rel_file).exists() {
-                        duplicates.push(rel_file.to_string());
-                    }
+        let pubspec_text =
+            fs::read_to_string(&pubspec_path).map_err(|e| io_err(&pubspec_path, e))?;
+        if !pubspec_text.contains("name: app_flutter") && pubspec_text.contains("app_flutter:") {
+            let tier1_sdk_files = [
+                "app_flutter/lib/features/layout/component_factory.dart",
+                "app_flutter/lib/features/layout/layout.dart",
+                "app_flutter/lib/core/theme/theme_controller.dart",
+                "app_flutter/lib/domain/result.dart",
+            ];
+            for rel_file in &tier1_sdk_files {
+                if repo_root.join(rel_file).exists() {
+                    duplicates.push(rel_file.to_string());
                 }
             }
         }
@@ -291,23 +293,15 @@ pub fn check_no_duplicate_master_blueprints(repo_root: &Path) -> Result<(), Vec<
         .join("architecture")
         .join("blueprints");
     if blueprints_dir.is_dir() {
-        if let Ok(entries) = fs::read_dir(&blueprints_dir) {
-            for entry in entries.flatten() {
-                if entry.path().is_file()
-                    && entry
-                        .path()
-                        .extension()
-                        .map(|ext| ext == "md")
-                        .unwrap_or(false)
-                {
-                    let rel = entry
-                        .path()
-                        .strip_prefix(repo_root)
-                        .unwrap_or(&entry.path())
-                        .display()
-                        .to_string();
-                    duplicates.push(rel);
-                }
+        for entry_res in fs::read_dir(&blueprints_dir).map_err(|e| io_err(&blueprints_dir, e))? {
+            let path = entry_res.map_err(|e| io_err(&blueprints_dir, e))?.path();
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "md") {
+                let rel = path
+                    .strip_prefix(repo_root)
+                    .unwrap_or(&path)
+                    .display()
+                    .to_string();
+                duplicates.push(rel);
             }
         }
     }
@@ -776,8 +770,10 @@ mod tests {
                 .join("app_flutter/lib/features/layout/component_factory.dart"),
         )?;
         assert!(check_no_duplicate_master_blueprints(&tmp.path).is_ok());
+        // Negative Case G: unreadable/invalid-UTF-8 pubspec.yaml must fail closed
+        fs::write(tmp.path.join("app_flutter/pubspec.yaml"), [0xFF_u8, 0xFE])?;
+        assert!(check_no_duplicate_master_blueprints(&tmp.path).is_err());
         fs::remove_dir_all(tmp.path.join("app_flutter"))?;
-
         // Upstream repo exempt
         fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
         assert!(check_no_duplicate_master_blueprints(&tmp.path).is_ok());

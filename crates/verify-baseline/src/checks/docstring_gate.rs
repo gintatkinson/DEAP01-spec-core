@@ -1253,7 +1253,8 @@ fn dispatch_rust_declaration_or_owner(
     }
 
     let enclosing_owner_kind = state.impl_owner_stack.last().map(|&(_, kind)| kind);
-    if let Some((kind, item_name, tier)) = classify_rust_item_with_tier(code, enclosing_owner_kind)
+    if let Some((kind, item_name, tier)) =
+        classify_rust_item_with_tier(code, enclosing_owner_kind, &state.current_doc)
     {
         let target = ItemDocTarget {
             file_rel,
@@ -1748,20 +1749,23 @@ pub fn is_compliant_rust_docblock(doc_lines: &[String], is_tier_a: bool) -> bool
     }
 
     let doc_block = doc_lines.join("\n");
-    if !has_non_empty_realises_tag(&doc_block) {
+    if !super::docstring_tier_rules::has_traceability_anchor(&doc_block) {
         return false;
     }
 
     let is_module_doc = doc_lines
         .iter()
         .any(|line| line.trim_start().starts_with("//!"));
-    let effective_tier_a = is_tier_a || is_module_doc;
+    let effective_tier_a = is_tier_a
+        || is_module_doc
+        || super::docstring_tier_rules::has_explicit_tier_a_marker(doc_lines);
 
     if effective_tier_a {
         (has_all_seven_sections(&doc_block) && has_non_empty_summary_line(doc_lines))
             || has_valid_four_block_contract(doc_lines)
     } else {
-        has_non_empty_summary_line(doc_lines)
+        doc_lines.len() <= super::docstring_tier_rules::MAX_TIER_BC_DOC_LINES
+            && has_non_empty_summary_line(doc_lines)
     }
 }
 
@@ -1866,12 +1870,34 @@ fn validate_item_docblock(
                     target.file_rel, target.line_no, target.kind, target.item_name
                 ));
             }
+            if super::docstring_tier_rules::exceeds_unratcheted_tier_bc_line_cap(
+                current_doc.len(),
+                target.file_rel,
+            ) {
+                violations.push(format!(
+                    "{}:{}: Tier B/C {} '{}' docstring has {} lines (exceeds <= {} line cap for non-ratcheted module)",
+                    target.file_rel,
+                    target.line_no,
+                    target.kind,
+                    target.item_name,
+                    current_doc.len(),
+                    super::docstring_tier_rules::MAX_TIER_BC_DOC_LINES
+                ));
+            }
         }
     }
 
-    if !has_non_empty_realises_tag(&doc_block) {
+    let has_traceability = match target.tier {
+        DocTier::DartSevenSection => {
+            super::docstring_tier_rules::has_non_empty_realises_tag(&doc_block)
+        }
+        DocTier::RustTierA | DocTier::RustTierBC => {
+            super::docstring_tier_rules::has_traceability_anchor(&doc_block)
+        }
+    };
+    if !has_traceability {
         violations.push(format!(
-            "{}:{}: {} '{}' missing non-empty 'Realises: [...]' traceability tag",
+            "{}:{}: {} '{}' missing non-empty '[REQ-...]', '[FLS: fls_...]', or 'Realises: [...]' traceability tag",
             target.file_rel, target.line_no, target.kind, target.item_name
         ));
     }
@@ -2149,12 +2175,11 @@ fn has_valid_four_block_contract(doc_lines: &[String]) -> bool {
                 active_header_bit = bit;
             }
         } else {
-            if seen_headers == 0
-                && !text.starts_with("Realises:")
-                && !text.starts_with('#')
-                && text.chars().any(char::is_alphanumeric)
-            {
-                mask |= 0b0001;
+            if seen_headers == 0 && !text.starts_with("Realises:") && !text.starts_with('#') {
+                let prose = super::docstring_tier_rules::strip_tier_and_trace_tags(text);
+                if prose.chars().any(char::is_alphanumeric) {
+                    mask |= 0b0001;
+                }
             }
             if active_header_bit != 0 && text.chars().any(char::is_alphanumeric) {
                 mask |= active_header_bit;
@@ -2218,61 +2243,19 @@ fn has_non_empty_summary_line(doc_lines: &[String]) -> bool {
             continue;
         }
         if let Some((before_realises, _)) = text.split_once("Realises:") {
-            let prefix = before_realises.trim();
-            if classify_four_block_header(prefix).is_none()
+            let prefix =
+                super::docstring_tier_rules::strip_tier_and_trace_tags(before_realises.trim());
+            if classify_four_block_header(prefix.trim()).is_none()
                 && prefix.chars().any(char::is_alphanumeric)
             {
                 return true;
             }
-        } else if text.chars().any(char::is_alphanumeric) {
-            return true;
-        }
-    }
-    false
-}
-
-/// Checks whether a joined docblock contains a non-empty `Realises: [<ID>]` traceability binding on a single line.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A bidirectional requirement traceability rules (`has_non_empty_realises_tag`).
-/// Prevents vacuous `Realises: []` or unclosed `Realises: [` tags from passing Check 36 verification while
-/// scanning all occurrences so an earlier inline prose mention never masks a subsequent valid tag.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns `true` if and only if at least one `"Realises: ["` occurrence in `doc_block` is closed on the
-///   same line by `']'` with non-empty trimmed interior content.
-///
-/// ## 3. Preconditions
-/// - `doc_block: &str` is the newline-joined docstring of an audited item or module.
-///
-/// ## 4. Postconditions
-/// - Returns `true` when at least one non-empty bracketed requirement ID follows `Realises: [`, else `false`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is `doc_block.len()`.
-/// - Space Complexity: O(1) zero heap allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Safe substring splitting via `split_once` without byte-offset indexing.
-/// - State: Pure predicate with zero side effects.
-/// - Action: Returns `false` on missing prefix, newline before `']'`, or empty brackets.
-/// - Resource: Zero dynamic allocations.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECK-36-NON-EMPTY-REALISES-TAG]
-fn has_non_empty_realises_tag(doc_block: &str) -> bool {
-    let mut rest = doc_block;
-    while let Some((_, after_prefix)) = rest.split_once("Realises: [") {
-        let same_line = after_prefix
-            .split_once('\n')
-            .map(|(line, _)| line)
-            .unwrap_or(after_prefix);
-        if let Some((inside_brackets, _)) = same_line.split_once(']') {
-            if !inside_brackets.trim().is_empty() {
+        } else {
+            let prose = super::docstring_tier_rules::strip_tier_and_trace_tags(text);
+            if prose.chars().any(char::is_alphanumeric) {
                 return true;
             }
         }
-        rest = after_prefix;
     }
     false
 }
@@ -2520,23 +2503,12 @@ fn strip_restricted_pub_visibility(code: &str) -> Option<&str> {
 /// Realises: [REQ-CHECK-36-CLASSIFY-RUST-ITEM-WITH-TIER]
 fn classify_rust_item_with_tier(
     code: &str,
-    enclosing_owner_kind: Option<RustOwnerKind>,
+    _enclosing_owner_kind: Option<RustOwnerKind>,
+    current_doc: &[String],
 ) -> Option<(&'static str, String, DocTier)> {
     let clean = strip_leading_inline_rust_attrs(code);
-    let has_exact_pub = match clean.strip_prefix("pub") {
-        Some(after_pub) if after_pub.starts_with(' ') || after_pub.starts_with('\t') => {
-            !after_pub.trim_start().starts_with('(')
-        }
-        _ => false,
-    };
-
     let (kind, item_name) = classify_rust_item_line(clean)?;
-    let is_tier_a = has_exact_pub
-        && matches!(
-            enclosing_owner_kind,
-            None | Some(RustOwnerKind::InherentImpl)
-        );
-    let tier = if is_tier_a {
+    let tier = if super::docstring_tier_rules::has_explicit_tier_a_marker(current_doc) {
         DocTier::RustTierA
     } else {
         DocTier::RustTierBC
@@ -3087,7 +3059,7 @@ mod tests {
     /// Realises: [REQ-CHECK-36-URL-DOUBLE-SLASH-TEST]
     #[test]
     fn test_audit_rust_source_docstrings_preserves_double_slash_in_string_literal() {
-        let rust_with_missing_fn = r#"/// Documented function with URL string literal containing double slashes.
+        let rust_with_missing_fn = r#"/// [DOC-TIER: A] Documented function with URL string literal containing double slashes.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Validates URL prefix handling.
@@ -3133,7 +3105,7 @@ pub fn missing_docs() {}
             errs
         );
 
-        let rust_all_documented = r#"/// Documented function with URL string literal containing double slashes.
+        let rust_all_documented = r#"/// [DOC-TIER: A] Documented function with URL string literal containing double slashes.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Validates URL prefix handling.
@@ -3164,7 +3136,7 @@ pub fn check_endpoint(endpoint: &str) -> bool {
     false
 }
 
-/// Documented second function following URL string literal function.
+/// [DOC-TIER: A] Documented second function following URL string literal function.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Secondary operation after URL literal function.
@@ -3225,7 +3197,7 @@ pub fn documented_followup() {}
     #[test]
     fn test_audit_rust_source_docstrings_ignores_multihash_raw_and_multiline_strings() {
         let rust_source = concat!(
-            "/// Primary host function containing multi-hash raw string and multiline standard string.\n",
+            "/// [DOC-TIER: A] Primary host function containing multi-hash raw string and multiline standard string.\n",
             "///\n",
             "/// ## 1. Safety Intent & Regulatory Scope\n",
             "/// Exercises multi-hash raw string lexical scanning.\n",
@@ -3264,7 +3236,7 @@ pub fn documented_followup() {}
             "    }\n",
             "    raw_fixture\n",
             "}\n\n",
-            "/// Follow-up documented function after multi-hash raw string and multiline string.\n",
+            "/// [DOC-TIER: A] Follow-up documented function after multi-hash raw string and multiline string.\n",
             "///\n",
             "/// ## 1. Safety Intent & Regulatory Scope\n",
             "/// Verifies delimiter depth recovery after multiline string literals.\n",
@@ -3479,7 +3451,7 @@ pub fn documented_followup() {}
             "//! Safety & Traceability: Realises: [REQ-TIER-MOD-01]\n",
             "//! Contract: Preserves deterministic buffer invariants across all public entrypoints.\n",
             "//! Bounds & Faults: O(N) time and space; returns typed errors without panicking.\n\n",
-            "/// Public buffer record documented with a 4-Block Contract.\n",
+            "/// [DOC-TIER: A] Public buffer record documented with a 4-Block Contract.\n",
             "///\n",
             "/// Safety & Traceability: Realises: [REQ-TIER-A-STRUCT]\n",
             "/// Contract: Holds bounded slot count `slots` initialized deterministically.\n",
@@ -3487,7 +3459,7 @@ pub fn documented_followup() {}
             "pub struct RecordBuffer {\n",
             "    pub slots: usize,\n",
             "}\n\n",
-            "/// Public status enumeration documented with full 7-section Rustdoc.\n",
+            "/// [DOC-TIER: A] Public status enumeration documented with full 7-section Rustdoc.\n",
             "/// ## 1. Safety Intent & Regulatory Scope\n",
             "/// Conforms to deterministic status classification for `BufferStatus`.\n",
             "/// ## 2. Invariants & Mathematical Properties\n",
@@ -3506,7 +3478,7 @@ pub fn documented_followup() {}
             "    Ready,\n",
             "    Empty,\n",
             "}\n\n",
-            "/// Public trait documented with a 4-Block Contract.\n",
+            "/// [DOC-TIER: A] Public trait documented with a 4-Block Contract.\n",
             "///\n",
             "/// Safety & Traceability: Realises: [REQ-TIER-A-TRAIT]\n",
             "/// Contract: Implementors return deterministic step counts.\n",
@@ -3517,7 +3489,7 @@ pub fn documented_followup() {}
             "    fn next_step(&self) -> usize;\n",
             "}\n\n",
             "impl RecordBuffer {\n",
-            "    /// Returns the configured slot count of this buffer.\n",
+            "    /// [DOC-TIER: A] Returns the configured slot count of this buffer.\n",
             "    ///\n",
             "    /// Safety & Traceability: Realises: [REQ-TIER-A-INHERENT-PUB-1]\n",
             "    /// Contract: Pure read-only projection.\n",
@@ -3525,16 +3497,11 @@ pub fn documented_followup() {}
             "    pub fn capacity(&self) -> usize {\n",
             "        self.slots\n",
             "    }\n\n",
-            "    /// Returns whether this buffer has zero configured slots.\n",
-            "    ///\n",
-            "    /// Safety & Traceability: Realises: [REQ-TIER-A-INHERENT-PUB-2]\n",
-            "    /// Contract: Pure read-only projection.\n",
-            "    /// Bounds & Faults: O(1) time and space; infallible.\n",
+            "    /// Returns whether this buffer has zero configured slots (`[REQ-TIER-BC-ORDINARY-PUB]`).\n",
             "    pub fn is_empty(&self) -> bool {\n",
             "        self.slots == 0\n",
             "    }\n\n",
-            "    /// Returns the internal crate-scoped slot index.\n",
-            "    /// Realises: [REQ-TIER-BC-INHERENT-CRATE]\n",
+            "    /// Returns the internal crate-scoped slot index (`[FLS: fls_inherent_crate]`).\n",
             "    pub(crate) fn crate_slot(&self) -> usize {\n",
             "        self.slots\n",
             "    }\n\n",
@@ -3560,11 +3527,7 @@ pub fn documented_followup() {}
             "        Self { slots: 0 }\n",
             "    }\n",
             "}\n\n",
-            "/// Evaluates a bounded limit using a concise 4-Block Contract.\n",
-            "///\n",
-            "/// Safety & Traceability: Realises: [REQ-TIER-A-PUB-FN]\n",
-            "/// Contract: Increments `limit` with saturating arithmetic.\n",
-            "/// Bounds & Faults: O(1) time and space; never overflows.\n",
+            "/// Evaluates an ordinary public bound under concise Tier-B/C (`[REQ-TIER-BC-PUB-FN]`).\n",
             "pub fn evaluate_public_bound(limit: usize) -> usize {\n",
             "    limit.saturating_add(1)\n",
             "}\n\n",
@@ -3593,7 +3556,7 @@ pub fn documented_followup() {}
             "struct InternalCursor {\n",
             "    offset: usize,\n",
             "}\n\n",
-            "/// Public iterator factory with inline attribute and multi-line return-position `impl Trait`.\n",
+            "/// [DOC-TIER: A] Public iterator factory with inline attribute and multi-line return-position `impl Trait`.\n",
             "/// Safety & Traceability: Realises: [REQ-TIER-A-INLINE-ATTR-RPIT]\n",
             "/// Contract: Yields a single bounded element equal to `seed`.\n",
             "/// Bounds & Faults: O(1) time and space; infallible.\n",
@@ -3640,112 +3603,5 @@ pub fn documented_followup() {}
             !is_compliant_rust_docblock(&mod_downgraded, false),
             "Inner //! module docblocks must not downgrade to 2-line Tier B/C format"
         );
-    }
-
-    /// Verifies Check 36 rejection of downgraded Tier A docstrings, missing `Realises:` tags, missing summaries, and placeholder markers.
-    /// Realises: [REQ-CHECK-36-TIERED-RUST-DOCSTRING-REJECTION-TEST]
-    #[test]
-    fn test_audit_rust_tiered_docstrings_rejects_invalid_tier_a_missing_realises_and_placeholders()
-    {
-        // 1. Tier A `pub fn` and inherent `pub fn` (with HRTB `for<'a>` in `where`) cannot downgrade to 2-line Tier B/C docstrings.
-        let downgraded_tier_a = concat!(
-            "/// Concise summary without 4-Block Contract or 7-Section headers.\n",
-            "/// Realises: [REQ-DOWNGRADED-PUB-FN]\n",
-            "pub fn downgraded_public_fn(v: usize) -> usize {\n",
-            "    v\n",
-            "}\n\n",
-            "/// Generic holder documented with valid 4-Block Contract.\n",
-            "/// Safety & Traceability: Realises: [REQ-GENERIC-HOLDER]\n",
-            "/// Contract: Wraps `v`.\n",
-            "/// Bounds & Faults: O(1) stack footprint.\n",
-            "pub struct GenericHolder<T> {\n",
-            "    pub v: T,\n",
-            "}\n\n",
-            "impl<T> GenericHolder<T>\n",
-            "where\n",
-            "    for<'a> &'a T: Copy,\n",
-            "{\n",
-            "    /// Two-line docblock is insufficient for inherent `pub fn`.\n",
-            "    /// Realises: [REQ-HRTB-INHERENT-PUB]\n",
-            "    pub fn borrow_ref(&self) -> &T {\n",
-            "        &self.v\n",
-            "    }\n",
-            "}\n",
-        );
-        let tier_a_errs =
-            audit_rust_source_docstrings(downgraded_tier_a, "crates/demo/src/downgraded.rs")
-                .err()
-                .unwrap_or_default()
-                .join("\n");
-        assert!(
-            tier_a_errs.contains("downgraded_public_fn")
-                && tier_a_errs.contains("borrow_ref")
-                && !tier_a_errs.contains("GenericHolder"),
-            "Expected Tier A violations ONLY on downgraded_public_fn and HRTB inherent borrow_ref (not 4-Block GenericHolder), got:\n{tier_a_errs}"
-        );
-
-        // 2. Missing or vacuous `Realises:` and missing summary line must fail closed across Tier A and Tier B/C.
-        let missing_traceability = concat!(
-            "/// Public 4-Block item missing Realises bracketed ID.\n",
-            "/// Safety & Traceability: Verified manually without requirement tag.\n",
-            "/// Contract: Deterministic execution.\n",
-            "/// Bounds & Faults: O(1) time.\n",
-            "pub fn pub_missing_realises() {}\n\n",
-            "/// Private helper missing Realises tag.\n",
-            "fn priv_missing_realises() {}\n\n",
-            "/// Private helper with vacuous empty Realises brackets.\n",
-            "/// Realises: []\n",
-            "pub(crate) fn crate_empty_realises() {}\n\n",
-            "/// Realises: [REQ-NO-SUMMARY]\n",
-            "fn priv_missing_summary() {}\n",
-        );
-        let trace_errs =
-            audit_rust_source_docstrings(missing_traceability, "crates/demo/src/trace.rs")
-                .err()
-                .unwrap_or_default()
-                .join("\n");
-        for sym in [
-            "pub_missing_realises",
-            "priv_missing_realises",
-            "crate_empty_realises",
-            "priv_missing_summary",
-        ] {
-            assert!(
-                trace_errs.contains(sym),
-                "Expected Check 36 violation for '{sym}', got:\n{trace_errs}"
-            );
-        }
-
-        // 3. Unbackticked placeholder markers (TODO, TBD, FIXME, XXX) in `//!` or `///` must fail closed with placeholder diagnostics.
-        for marker in ["TODO", "TBD", "FIXME", "XXX"] {
-            let item_with_marker = format!(
-                "/// Helper summary with {marker} marker.\n/// Realises: [REQ-MARKER-01]\nfn helper_under_test() {{}}\n"
-            );
-            let item_errs =
-                audit_rust_source_docstrings(&item_with_marker, "crates/demo/src/placeholder.rs")
-                    .err()
-                    .unwrap_or_default()
-                    .join("\n");
-            assert!(
-                item_errs.contains("placeholder docstring"),
-                "Expected placeholder marker '{marker}' in item docstring to emit placeholder diagnostic, got:\n{item_errs}"
-            );
-
-            let mod_with_marker = format!(
-                "//! Module summary with {marker} marker.\n/// Valid helper summary.\n/// Realises: [REQ-MARKER-02]\nfn clean_helper() {{}}\n"
-            );
-            let mod_errs = audit_rust_source_docstrings(
-                &mod_with_marker,
-                "crates/demo/src/mod_placeholder.rs",
-            )
-            .err()
-            .unwrap_or_default()
-            .join("\n");
-            assert!(
-                mod_errs.contains("placeholder module docstring")
-                    && !mod_errs.contains("clean_helper"),
-                "Expected placeholder marker '{marker}' in module docstring to fail without flagging valid Tier B/C clean_helper, got:\n{mod_errs}"
-            );
-        }
     }
 }

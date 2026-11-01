@@ -650,7 +650,7 @@ fn test_check_36_nested_block_comments_and_escaped_char_literals() {
    /// Member documentation.
    pub fn fake_inside_nested_comment() {}
 */
-/// Documented function using hex and unicode character escapes alongside lifetimes.
+/// [DOC-TIER: A] Documented function using hex and unicode character escapes alongside lifetimes.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Verifies nested block comments and escaped char literals under DO-178C Level A.
@@ -1063,7 +1063,7 @@ pub fn undocumented_after_test_mod() {}
     );
 
     // 2. `#[cfg(test)] impl` methods must be exempted while subsequent production items are audited.
-    let rust_cfg_test_impl = r#"/// Documented carrier struct for cfg(test) impl block verification.
+    let rust_cfg_test_impl = r#"/// [DOC-TIER: A] Documented carrier struct for cfg(test) impl block verification.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Verifies scoped #[cfg(test)] impl block exemption under DO-178C Level A.

@@ -34,6 +34,7 @@ impl ScopedTempDir {
 }
 
 impl Drop for ScopedTempDir {
+    /// Removes the temporary workspace directory on scope exit (`[REQ-0601]`).
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
