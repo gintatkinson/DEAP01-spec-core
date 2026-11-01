@@ -400,3 +400,92 @@ fn test_arch_06_forward_sync_zero_wall_clock_timestamps() -> Result<(), Box<dyn 
 
     Ok(())
 }
+
+/// Builds a synthetic two-subpackage container model where `SysML_Model` holds standalone interactions and use cases while `PartDef`s live in child subpackages.
+/// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
+fn build_two_subpackage_container_fixture() -> PackageDef {
+    use deap_core::sysml_ast::{InteractionDef, UseCaseDef};
+    let mk_inter = |name: &str, msg: &str| InteractionDef {
+        name: name.to_string(),
+        lifelines: vec!["SystemActor".to_string(), "SysMLModel".to_string()],
+        messages: vec![msg.to_string()],
+        ..Default::default()
+    };
+    let mk_uc = |name: &str, subj: &str| UseCaseDef {
+        name: name.to_string(),
+        subject: Some(subj.to_string()),
+        ..Default::default()
+    };
+    let mk_sub = |pkg_name: &str, part_name: &str| PackageDef {
+        name: pkg_name.to_string(),
+        part_defs: vec![PartDef {
+            name: part_name.to_string(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    PackageDef {
+        name: "SysML_Model".to_string(),
+        interaction_defs: vec![
+            mk_inter("Sub01AlphaSequenceInteraction", "ExecuteAlpha"),
+            mk_inter("Sub02BetaSequenceInteraction", "ExecuteBeta"),
+        ],
+        use_case_defs: vec![
+            mk_uc("UC01AlphaVerification", "AlphaEnforcementGate"),
+            mk_uc("UC02BetaVerification", "BetaPurityAuditor"),
+        ],
+        packages: vec![
+            mk_sub("Sub_01_Alpha", "AlphaEnforcementGate"),
+            mk_sub("Sub_02_Beta", "BetaPurityAuditor"),
+        ],
+        ..Default::default()
+    }
+}
+
+/// Verifies that a root container package with zero local `PartDef`s binds standalone `InteractionDef` stories and `UseCaseDef` subjects to child subpackage `FEAT-XX-<PartDef>.md` files without emitting broken `FEAT-01-SysML_Model.md` links or cross-package `FEAT-01` pollution.
+///
+/// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
+#[test]
+fn test_root_container_package_resolves_child_part_feature_links_without_feat01_pollution(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = build_two_subpackage_container_fixture();
+    let opts = ForwardSyncOptions {
+        schema_path: PathBuf::from("schema/model.sysml"),
+        docs_dir: PathBuf::from("docs"),
+        out_dir: None,
+        dry_run: true,
+        force: true,
+    };
+    let generated = forward_sync_sysml_to_specs(&root, &opts)?;
+
+    assert!(generated.contains_key("features/FEAT-01-AlphaEnforcementGate.md"));
+    assert!(generated.contains_key("features/FEAT-02-BetaPurityAuditor.md"));
+    for (path, content) in &generated {
+        assert!(
+            !content.contains("FEAT-01-SysML_Model.md"),
+            "Broken synthetic package-slug feature link emitted in {path}"
+        );
+    }
+
+    let us01 = generated
+        .get("user-stories/US-01-Sub01AlphaSequenceInteraction.md")
+        .ok_or("missing US-01")?;
+    let us02 = generated
+        .get("user-stories/US-02-Sub02BetaSequenceInteraction.md")
+        .ok_or("missing US-02")?;
+    let uc01 = generated
+        .get("use-cases/UC-01-AlphaVerification.md")
+        .ok_or("missing UC-01")?;
+    let uc02 = generated
+        .get("use-cases/UC-02-BetaVerification.md")
+        .ok_or("missing UC-02")?;
+
+    assert!(us01.contains("../features/FEAT-01-AlphaEnforcementGate.md"));
+    assert!(us02.contains("../features/FEAT-02-BetaPurityAuditor.md"));
+    assert!(!us02.contains("FEAT-01-"));
+    assert!(uc01.contains("../features/FEAT-01-AlphaEnforcementGate.md"));
+    assert!(uc02.contains("../features/FEAT-02-BetaPurityAuditor.md"));
+    assert!(!uc02.contains("FEAT-01-"));
+    Ok(())
+}
+

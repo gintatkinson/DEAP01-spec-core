@@ -222,6 +222,27 @@ fn collect_story_constraints<'a>(handles: &StoryAstHandles<'a>) -> Vec<&'a Const
     story_constraints
 }
 
+/// Formats a canonical `- [ ] [Feature XX: [Subsys] Part](../features/FEAT-XX-Part.md)` checklist line resolved against `part_contexts`.
+/// Realises: [REQ-SYNC-FORWARD-STORY-EMITTER]
+fn format_story_feature_bullet(
+    feat_num: usize,
+    fallback_subsys: &str,
+    fallback_part: &str,
+    part_contexts: &[PartContext<'_>],
+) -> String {
+    let resolved = part_contexts.get(feat_num.saturating_sub(1));
+    let subsys = resolved
+        .map(|c| c.subsys_display.as_str())
+        .unwrap_or(fallback_subsys);
+    let part_name = resolved
+        .map(|c| c.part.name.as_str())
+        .unwrap_or(fallback_part);
+    format!(
+        "- [ ] [Feature {:02}: [{}] {}](../features/FEAT-{:02}-{}.md)",
+        feat_num, subsys, part_name, feat_num, part_name
+    )
+}
+
 /// Builds the required Features checklist, Parent Epic link, Specification Source link, and Source References block for `s_meta`.
 /// Realises: [REQ-SYNC-FORWARD-STORY-EMITTER]
 fn build_story_links_and_sources(
@@ -231,39 +252,27 @@ fn build_story_links_and_sources(
 ) -> StoryLinksAndSources {
     let mut req_features_list = Vec::new();
     if let Some(c_num) = s_meta.caller_feat_num {
-        let c_subsys = index
-            .part_contexts
-            .get(c_num.saturating_sub(1))
-            .map(|c| c.subsys_display.as_str())
-            .unwrap_or(s_meta.subsys_display.as_str());
-        req_features_list.push(format!(
-            "- [ ] [Feature {:02}: [{}] {}](../features/FEAT-{:02}-{}.md)",
-            c_num, c_subsys, s_meta.caller_engine, c_num, s_meta.caller_engine
+        req_features_list.push(format_story_feature_bullet(
+            c_num,
+            &s_meta.subsys_display,
+            &s_meta.caller_engine,
+            &index.part_contexts,
         ));
     }
     if Some(s_meta.engine_feat_num) != s_meta.caller_feat_num {
-        let e_subsys = index
-            .part_contexts
-            .get(s_meta.engine_feat_num.saturating_sub(1))
-            .map(|c| c.subsys_display.as_str())
-            .unwrap_or(s_meta.subsys_display.as_str());
-        req_features_list.push(format!(
-            "- [ ] [Feature {:02}: [{}] {}](../features/FEAT-{:02}-{}.md)",
+        req_features_list.push(format_story_feature_bullet(
             s_meta.engine_feat_num,
-            e_subsys,
-            s_meta.engine_name,
-            s_meta.engine_feat_num,
-            s_meta.engine_name
+            &s_meta.subsys_display,
+            &s_meta.engine_name,
+            &index.part_contexts,
         ));
     }
     if req_features_list.is_empty() {
-        req_features_list.push(format!(
-            "- [ ] [Feature {:02}: [{}] {}](../features/FEAT-{:02}-{}.md)",
+        req_features_list.push(format_story_feature_bullet(
             s_meta.engine_feat_num,
-            s_meta.subsys_display,
-            s_meta.engine_name,
-            s_meta.engine_feat_num,
-            s_meta.engine_name
+            &s_meta.subsys_display,
+            &s_meta.engine_name,
+            &index.part_contexts,
         ));
     }
 

@@ -275,8 +275,14 @@ fn build_use_case_realization_and_sources(
     index: &ForwardSyncIndex<'_>,
 ) -> (String, String, String) {
     let feat_link_num = uc_m.engine_feat_num;
-    let feat_part = &uc_m.engine_name;
-    let feat_subsys = to_display_name(&uc_m.pkg_name);
+    let resolved_feat = index.part_contexts.get(feat_link_num.saturating_sub(1));
+    let feat_part = resolved_feat
+        .map(|ctx| ctx.part.name.as_str())
+        .unwrap_or(uc_m.engine_name.as_str());
+    let fallback_subsys = to_display_name(&uc_m.pkg_name);
+    let feat_subsys = resolved_feat
+        .map(|ctx| ctx.subsys_display.as_str())
+        .unwrap_or(fallback_subsys.as_str());
     let feat_issue = format_issue_id_cell(resolve_existing_issue_id(
         &index.target_out_dir,
         &format!("features/FEAT-{:02}-{}.md", feat_link_num, feat_part),
