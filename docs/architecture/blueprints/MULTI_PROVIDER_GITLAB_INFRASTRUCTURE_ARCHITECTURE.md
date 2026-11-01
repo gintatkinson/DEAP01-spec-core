@@ -658,7 +658,7 @@ stateDiagram-v2
 
 ### 4.3 DO-178C Objective Traceability & SORA Risk Reduction Mapping
 
-Every GitLab Issue and its associated markdown specification file (`docs/epics/EPIC-*.md`, `docs/features/FEAT-*.md`, `docs/user-stories/US-*.md`, `docs/use-cases/UC-*.md`) maintain bi-directional traceability to SysML v2 model elements (`crates/deap-core/src/sysml_ast.rs` and `crates/compile-sysml/src/lib.rs`) and DO-178C lifecycle objectives:
+Every GitLab Issue and its associated markdown specification file (`docs/epics/EPIC-*.md`, `docs/features/FEAT-*.md`, `docs/user-stories/US-*.md`, `docs/use-cases/UC-*.md`) maintain bi-directional traceability to SysML v2 model elements (`crates/deap-core/src/sysml_ast/mod.rs` and `crates/compile-sysml/src/lib.rs`) and DO-178C lifecycle objectives:
 
 ```mermaid
 flowchart TD
@@ -1137,7 +1137,7 @@ flowchart TD
 
 | Crate Path | Binary / Library Target | Primary Architectural Responsibility | Grounded Source Files & Key Symbols |
 | :--- | :--- | :--- | :--- |
-| **`crates/deap-core`** | Library (`deap_core`) | Shared rules engine, SysML v2 AST parser, Rust/Dart/TS source AST inspector, markdown/Mermaid/KaTeX validator, and structured diagnostics. | `crates/deap-core/src/lib.rs`<br>`crates/deap-core/src/rules.rs` (`CodebaseRules`, `TrackerRules`, `MetaConfig`, `ValidationRules`)<br>`crates/deap-core/src/sysml_ast.rs`<br>`crates/deap-core/src/source_ast.rs`<br>`crates/deap-core/src/markdown.rs`<br>`crates/deap-core/src/diagnostics.rs`<br>`crates/deap-core/src/workspace.rs` |
+| **`crates/deap-core`** | Library (`deap_core`) | Shared rules engine, SysML v2 AST parser, Rust/Dart/TS source AST inspector, markdown/Mermaid/KaTeX validator, and structured diagnostics. | `crates/deap-core/src/lib.rs`<br>`crates/deap-core/src/rules.rs` (`CodebaseRules`, `TrackerRules`, `MetaConfig`, `ValidationRules`)<br>`crates/deap-core/src/sysml_ast/mod.rs`<br>`crates/deap-core/src/source_ast.rs`<br>`crates/deap-core/src/markdown.rs`<br>`crates/deap-core/src/diagnostics.rs`<br>`crates/deap-core/src/workspace.rs` |
 | **`crates/reconcile-backlog`** | Binary (`./target/release/reconcile-backlog`) & Library (`reconcile_backlog`) | Multi-provider backlog reconciliation (`gh`, `glab`, `OfflineTracker`), frontmatter & checklist synchronization, and verified issue/defect creation (`create-issue`). | `crates/reconcile-backlog/src/main.rs`<br>`crates/reconcile-backlog/src/lib.rs` (`ReconcileOptions`, `ReconcileSummary`, `run_reconciliation`, `validate_checklist_publish_integrity`)<br>`crates/reconcile-backlog/src/tracker.rs` (`TrackerClient`, `TrackerIssue`, `TrackerLabel`, `GitHubTracker`, `OfflineTracker`, `IssueIndex`, `is_resolved_label`, `normalize_label`)<br>`crates/reconcile-backlog/src/create_issue.rs` (`CreateIssueArgs`, `execute_create_issue`, `validate_body_file`)<br>`crates/reconcile-backlog/src/checklist.rs`<br>`crates/reconcile-backlog/src/frontmatter.rs` |
 | **`crates/verify-baseline`** | Binary (`./target/release/verify-baseline`) & Library (`verify_baseline`) | 33-check mechanical baseline & parity auditor, secret scanner (`check-secrets`), commit message linter (`commit-msg`), hook installer (`setup-hooks`), and 7-section defect dossier validator (`check-defect`). | `crates/verify-baseline/src/main.rs`<br>`crates/verify-baseline/src/lib.rs`<br>`crates/verify-baseline/src/runner.rs` (`BaselineOptions`, `run`)<br>`crates/verify-baseline/src/defect_dossier.rs` (`DossierSection`, `DefectDossierArgs`, `validate_defect_dossier`, `run_check_defect`)<br>`crates/verify-baseline/src/check_secrets.rs`<br>`crates/verify-baseline/src/commit_msg.rs`<br>`crates/verify-baseline/src/setup_hooks.rs`<br>`crates/verify-baseline/src/checks/mod.rs` |
 | **`crates/compile-sysml`** | Binary (`./target/release/compile-sysml`) & Library (`compile_sysml`) | SysML v2 schema compiler, reverse codebase-to-SysML synchronization (`--sync`), STPA/FMECA safety completeness validator, and 7-section docstring auditor (`--audit-docstrings`). | `crates/compile-sysml/src/main.rs`<br>`crates/compile-sysml/src/lib.rs`<br>`crates/compile-sysml/src/docstring.rs` |
@@ -1270,12 +1270,12 @@ flowchart TD
 
 #### 7.3.1 Mathematical Formalization of AST Partitioning
 
-Complex cyber-physical systems modeled in `.pipeline/schema.sysml` span structural `part def` nodes, `port def` interfaces, `action def` behaviors, `state def` state machines, `requirement def` constraints, and `use case def` operational scenarios. `crates/deap-core/src/sysml_ast.rs` and `crates/compile-sysml/src/lib.rs` parse the SysML v2 schema into a strongly-typed AST so that each single-item subagent receives only its relevant AST subgraph:
+Complex cyber-physical systems modeled in `.pipeline/schema.sysml` span structural `part def` nodes, `port def` interfaces, `action def` behaviors, `state def` state machines, `requirement def` constraints, and `use case def` operational scenarios. `crates/deap-core/src/sysml_ast/mod.rs` and `crates/compile-sysml/src/lib.rs` parse the SysML v2 schema into a strongly-typed AST so that each single-item subagent receives only its relevant AST subgraph:
 
 $$\text{AST}_{\text{slice}} = \text{Closure}(\mathcal{N}_{\text{target}}, \mathcal{E}_{\text{deps}})$$
 
 Where:
-- $\mathcal{N}_{\text{target}}$ is the target SysML v2 declaration (`part def`, `action def`, `port def`, `state def`, `requirement def`, or `use case def`) parsed by `crates/deap-core/src/sysml_ast.rs`.
+- $\mathcal{N}_{\text{target}}$ is the target SysML v2 declaration (`part def`, `action def`, `port def`, `state def`, `requirement def`, or `use case def`) parsed by `crates/deap-core/src/sysml_ast/mod.rs`.
 - $\mathcal{E}_{\text{deps}}$ represents the connected port bindings, item flows, and requirement verification links validated by `crates/compile-sysml/src/lib.rs`.
 
 ```mermaid

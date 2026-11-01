@@ -36,7 +36,7 @@ The **Digital Engineering Agent Platform (DEAP)** specification compiler establi
 
 To achieve sub-millisecond AST lookups while guaranteeing deterministic persistence across multi-agent workflows, DEAP defines a dual-tier persistence model:
 1. **Durable Version-Controlled Repository Tier**: Canonical human-readable and machine-verifiable models stored as SysML v2 source files (`.sysml`), CommonMark specifications (`.md`), and JSON schemas (`.json`).
-2. **Deterministic Content-Addressed AST Storage Tier**: Pure Rust AST persistence and incremental caching (`AstPersistenceEngine` and `IncrementalAstCache` in `crates/deap-core/src/sysml_ast.rs`, alongside `SchemaDigest` and `write_atomic` in `crates/compile-sysml/src/semantic/digest.rs`), providing deterministic `BTreeMap`/`BTreeSet` serialization, content-addressed SHA-256 cache entries under `.pipeline/cache/ast/<sha256>.json`, and atomic sibling-file rename writes.
+2. **Deterministic Content-Addressed AST Storage Tier**: Pure Rust AST persistence and incremental caching (`AstPersistenceEngine` and `IncrementalAstCache` in `crates/deap-core/src/sysml_ast/mod.rs`, alongside `SchemaDigest` and `write_atomic` in `crates/compile-sysml/src/semantic/digest.rs`), providing deterministic `BTreeMap`/`BTreeSet` serialization, content-addressed SHA-256 cache entries under `.pipeline/cache/ast/<sha256>.json`, and atomic sibling-file rename writes.
 
 ```mermaid
 flowchart TD
@@ -50,7 +50,7 @@ flowchart TD
 
     subgraph RustWorkspace ["Modular Cargo Workspace Crates"]
         direction TB
-        CoreCrate["crates/deap-core<br/>(sysml_ast.rs Persistence)"]
+        CoreCrate["crates/deap-core<br/>(sysml_ast/mod.rs Persistence)"]
         IngestCrate["crates/ingest-sysml<br/>(Multi-Schema Ingestion)"]
         CompileCrate["crates/compile-sysml<br/>(lib.rs & sync/forward/mod.rs)"]
         VerifyCrate["crates/verify-baseline<br/>(runner.rs & checks/)"]
@@ -87,7 +87,7 @@ The DEAP persistence and specification compiler toolchain is structured as a 6-c
 DEAP01-spec-core/
 ├── Cargo.toml                      # Workspace manifest (resolver = "2")
 ├── crates/
-│   ├── deap-core/                  # Shared AST (sysml_ast.rs), persistence, cache, rules, markdown
+│   ├── deap-core/                  # Shared AST (sysml_ast/mod.rs), persistence, cache, rules, markdown
 │   ├── compile-sysml/              # SysML v2 parser, semantic digest, STPA, forward/reverse sync
 │   ├── ingest-sysml/               # Multi-format Level 0 schema & source AST ingestion engine
 │   ├── verify-baseline/            # Baseline verification runner (runner.rs & checks/)
@@ -99,19 +99,19 @@ DEAP01-spec-core/
 
 | Crate | Key Modules | Responsibility | Dependencies |
 | :--- | :--- | :--- | :--- |
-| **`crates/deap-core`** | `crates/deap-core/src/sysml_ast.rs`, `crates/deap-core/src/lib.rs`, `crates/deap-core/src/diagnostics.rs` | Authoritative SysML v2 AST metamodel (`SysmlModel`, `PackageDef`, `PartDef`, `PortDef`, `ActionDef`, `StateDef`, `RequirementDef`, `HazardDef`), deterministic persistence (`AstPersistenceEngine`), content-addressed caching (`IncrementalAstCache`), token-bounded slicing (`AstSlice`), runtime metadata descriptors (`TypeDescriptor`, `FieldDescriptor`), and CoT audit records (`CotAuditRecord`, `CotAuditLog`). | `serde`, `serde_json`, `walkdir`, `chrono`, `uuid` |
+| **`crates/deap-core`** | `crates/deap-core/src/sysml_ast/mod.rs`, `crates/deap-core/src/lib.rs`, `crates/deap-core/src/diagnostics.rs` | Authoritative SysML v2 AST metamodel (`SysmlModel`, `PackageDef`, `PartDef`, `PortDef`, `ActionDef`, `StateDef`, `RequirementDef`, `HazardDef`), deterministic persistence (`AstPersistenceEngine`), content-addressed caching (`IncrementalAstCache`), token-bounded slicing (`AstSlice`), runtime metadata descriptors (`TypeDescriptor`, `FieldDescriptor`), and CoT audit records (`CotAuditRecord`, `CotAuditLog`). | `serde`, `serde_json`, `walkdir`, `chrono`, `uuid` |
 | **`crates/compile-sysml`** | `crates/compile-sysml/src/lib.rs`, `crates/compile-sysml/src/flutter_codegen.rs`, `crates/compile-sysml/src/semantic/digest.rs`, `crates/compile-sysml/src/sync/forward/mod.rs` | Lexical/syntactic SysML v2 compiler, atomic schema digest generation (`SchemaDigest`, `write_atomic`), unified 8-pillar STPA/FMECA synthesis, MBD contract export, bidirectional Markdown specification synchronization (`forward_sync_sysml_to_specs`, `reverse_sync_specs_to_sysml`), and deterministic generation of Flutter contracts, seeds, and C-ABI DTOs (`crates/compile-sysml/src/flutter_codegen.rs`). | `deap-core`, `serde`, `serde_json`, `walkdir`, `chrono`, `clap` |
 | **`crates/ingest-sysml`** | `crates/ingest-sysml/src/lib.rs`, `crates/ingest-sysml/src/main.rs` | Level 0 multi-format schema and source code AST ingestion engine lowering `.sysml`, `.yaml`, `.json`, `.proto`, `.idl`, `.arxml`, `.yang`, `.rs`, and `.dart` into `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. | `deap-core`, `compile-sysml`, `serde`, `serde_json`, `walkdir`, `clap` |
 | **`crates/verify-baseline`** | `crates/verify-baseline/src/runner.rs`, `crates/verify-baseline/src/checks/structural.rs`, `crates/verify-baseline/src/checks/parity_gates.rs`, `crates/verify-baseline/src/checks/codebase.rs` | Fail-closed baseline verification runner executing Checks 10 through 41 across structural hygiene, codebase AST gates (Checks 38-41: anti-hardcoding, zero-mocking, viewport contracts, and solver bridge parity), Mermaid/KaTeX syntax, STPA safety integrity, Level 1C ICD completeness, and blueprint grounding, emitting `DefectDossier` artifacts to `.pipeline/defects/`. | `deap-core`, `compile-sysml`, `serde`, `serde_json`, `walkdir`, `chrono`, `clap` |
 | **`crates/assemble-conops`** | `crates/assemble-conops/src/main.rs` | Deterministic assembler and verifier for hierarchical Concept of Operations (`docs/conops/`) and Tactical Mission Intent specification units. | `deap-core`, `compile-sysml`, `serde`, `serde_json`, `walkdir`, `clap` |
 | **`crates/reconcile-backlog`** | `crates/reconcile-backlog/src/lib.rs`, `crates/reconcile-backlog/src/main.rs` | Deterministic frontmatter parser, checklist reconciler, and GitHub/GitLab issue synchronization engine. | `deap-core`, `serde`, `serde_json`, `walkdir`, `clap` |
 
-### 2.2 Core Persistence, Cache & Metadata Types (`crates/deap-core/src/sysml_ast.rs`)
+### 2.2 Core Persistence, Cache & Metadata Types (`crates/deap-core/src/sysml_ast/mod.rs`)
 
-All AST persistence, content-addressed caching, and runtime type descriptor structures are implemented in `crates/deap-core/src/sysml_ast.rs` and re-exported from `crates/deap-core/src/lib.rs`:
+All AST persistence, content-addressed caching, and runtime type descriptor structures are implemented in `crates/deap-core/src/sysml_ast/mod.rs` and re-exported from `crates/deap-core/src/lib.rs`:
 
 ```rust
-// Grounded in crates/deap-core/src/sysml_ast.rs
+// Grounded in crates/deap-core/src/sysml_ast/mod.rs
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -227,7 +227,7 @@ impl IncrementalAstCache {
 
 ### 3.1 Mathematical Formulation of Sub-AST Slicing
 
-Let the full system specification model (`SysmlModel` / `PackageDef` in `crates/deap-core/src/sysml_ast.rs`) be formalized as a typed, directed, attributed graph:
+Let the full system specification model (`SysmlModel` / `PackageDef` in `crates/deap-core/src/sysml_ast/mod.rs`) be formalized as a typed, directed, attributed graph:
 
 $$
 \mathcal{G} = (\mathcal{V}, \mathcal{E}, \tau, \alpha)
@@ -239,7 +239,7 @@ where:
 - $\tau: \mathcal{V} \to \mathcal{T}$ maps each node to a metamodel classifier type.
 - $\alpha: \mathcal{V} \to \mathcal{A}$ maps nodes to attribute dictionaries (`AttributeDef` identifiers, types, default values, and documentation).
 
-For a target focal subsystem or package $v_0 \in \mathcal{V}$, an **Atomic Agent Slice** $\mathcal{S}(v_0)$ (`AstSlice` in `crates/deap-core/src/sysml_ast.rs`) is the induced subgraph over an active node subset $\mathcal{V}_{\text{slice}} \subseteq \mathcal{V}$:
+For a target focal subsystem or package $v_0 \in \mathcal{V}$, an **Atomic Agent Slice** $\mathcal{S}(v_0)$ (`AstSlice` in `crates/deap-core/src/sysml_ast/mod.rs`) is the induced subgraph over an active node subset $\mathcal{V}_{\text{slice}} \subseteq \mathcal{V}$:
 
 $$
 \mathcal{V}_{\text{slice}} = \{v_0\} \cup \mathcal{N}_{\text{child}}(v_0) \cup \mathcal{N}_{\text{port}}(v_0) \cup \mathcal{N}_{\text{conn}}(v_0) \cup \mathcal{B}_{\text{type}}(v_0)
@@ -251,10 +251,10 @@ $$
 |\text{TokenCount}(\text{Serialize}(\mathcal{S}(v_0)))| \le 4096
 $$
 
-### 3.2 Slicing Algorithm & Token Budgeting (`crates/deap-core/src/sysml_ast.rs`)
+### 3.2 Slicing Algorithm & Token Budgeting (`crates/deap-core/src/sysml_ast/mod.rs`)
 
 ```rust
-// Grounded in crates/deap-core/src/sysml_ast.rs
+// Grounded in crates/deap-core/src/sysml_ast/mod.rs
 use serde::{Deserialize, Serialize};
 
 /// Bounded AST subgraph slice guaranteed not to exceed `max_tokens` (<= 4,096 tokens).
@@ -326,7 +326,7 @@ Every artifact generated across the engineering lifecycle follows a deterministi
 sequenceDiagram
     participant User as Operator / Schema Author
     participant Ingest as crates/ingest-sysml
-    participant Core as crates/deap-core (sysml_ast.rs)
+    participant Core as crates/deap-core (sysml_ast/mod.rs)
     participant Compile as crates/compile-sysml
     participant Verify as crates/verify-baseline
 
@@ -368,7 +368,7 @@ sequenceDiagram
 
 ## 5. Transactional Atomic File Staging & Safe Rollback
 
-To eliminate race conditions, corrupted partial writes, and unintended overwrites during multi-agent execution, all file modifications in `crates/deap-core/src/sysml_ast.rs` (`AstPersistenceEngine::persist_model`, `IncrementalAstCache::load_or_parse`) and `crates/compile-sysml/src/semantic/digest.rs` (`write_atomic`, `SchemaDigest::write_to_file`) adhere to atomic staging semantics:
+To eliminate race conditions, corrupted partial writes, and unintended overwrites during multi-agent execution, all file modifications in `crates/deap-core/src/sysml_ast/mod.rs` (`AstPersistenceEngine::persist_model`, `IncrementalAstCache::load_or_parse`) and `crates/compile-sysml/src/semantic/digest.rs` (`write_atomic`, `SchemaDigest::write_to_file`) adhere to atomic staging semantics:
 
 1. **Sibling Temporary File Isolation**: Files are initially serialized and written to an isolated sibling temporary file (`<path>.tmp`) in the same target filesystem directory.
 2. **Pre-Commit Verification**: All content is validated against schema constraints (`crates/verify-baseline/src/checks/parity_gates.rs`), KaTeX formatting (`crates/deap-core/src/markdown.rs`), zero em dash invariants, and structural purity rules (`crates/verify-baseline/src/checks/structural.rs`).

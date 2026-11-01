@@ -200,7 +200,7 @@ The deterministic lifecycle contract engine is codified within the 6-crate Rust 
 
 | Crate Identifier | Architecture & Responsibilities | Key Dependencies | Quality Gate Contract |
 | :--- | :--- | :--- | :--- |
-| **`crates/deap-core`** | Houses the canonical SysML v2 / KerML AST (`crates/deap-core/src/sysml_ast.rs` defining `SysmlModel`, `AstSlice`, `SysmlModel::slice_package_subsystem`, `IncrementalAstCache`, `CotAuditRecord`, `CotAuditLog`), Markdown AST utilities, and shared verification rules. | `serde`, `serde_json`, `walkdir`, `chrono`, `uuid` | Partition AST representations into strongly-typed context slices (`<= 4,096` tokens) with deterministic FNV-1a digest caching. |
+| **`crates/deap-core`** | Houses the canonical SysML v2 / KerML AST (`crates/deap-core/src/sysml_ast/mod.rs` defining `SysmlModel`, `AstSlice`, `SysmlModel::slice_package_subsystem`, `IncrementalAstCache`, `CotAuditRecord`, `CotAuditLog`), Markdown AST utilities, and shared verification rules. | `serde`, `serde_json`, `walkdir`, `chrono`, `uuid` | Partition AST representations into strongly-typed context slices (`<= 4,096` tokens) with deterministic FNV-1a digest caching. |
 | **`crates/ingest-sysml`** | Level 0 requirement and specification ingestion engine (`crates/ingest-sysml/src/lib.rs`) transforming stakeholder requirements and interface definitions into canonical SysML v2 textual AST models. | `deap-core`, `compile-sysml`, `clap`, `serde`, `serde_json`, `walkdir`, `chrono`, `rayon` | Deterministic Level 0 ingestion into valid SysML v2 packages with zero data loss. |
 | **`crates/compile-sysml`** | Bidirectional SysML v2 compiler, STPA 10-pillar safety suite generator (`crates/compile-sysml/src/lib.rs`, `crates/compile-sysml/src/stpa/safety_suite/mod.rs`), and forward specification synchronizer (`crates/compile-sysml/src/sync/forward/mod.rs`). | `deap-core`, `clap`, `serde`, `serde_json`, `walkdir`, `chrono` | Generates 100% compliant Epics, Features, User Stories, Use Cases, and STPA safety artifacts with zero semantic drift. |
 | **`crates/verify-baseline`** | Fail-closed baseline verification runner (`crates/verify-baseline/src/runner.rs`) executing Checks 10 through 37, including STPA safety integrity (`crates/verify-baseline/src/checks/safety_stpa.rs`) and specification parity gates (`crates/verify-baseline/src/checks/parity_gates.rs`). | `deap-core`, `clap`, `serde`, `serde_json`, `walkdir`, `chrono`, `pulldown-cmark`, `rayon` | Single binary entrypoint returning deterministic exit codes (`0` on full compliance, non-zero with 5-Whys defect dossier on violation). |
@@ -209,7 +209,7 @@ The deterministic lifecycle contract engine is codified within the 6-crate Rust 
 
 ### 6.2 Strongly-Typed AST Slicing Mechanics (<= 4,096 Tokens)
 
-To guarantee that language model inference and formal constraint solvers remain immune to attention decay, context loss, and truncation, `crates/deap-core` (`crates/deap-core/src/sysml_ast.rs`) implements deterministic AST slicing via `SysmlModel::slice_package_subsystem`, returning bounded `AstSlice` records cached through `IncrementalAstCache`:
+To guarantee that language model inference and formal constraint solvers remain immune to attention decay, context loss, and truncation, `crates/deap-core` (`crates/deap-core/src/sysml_ast/mod.rs`) implements deterministic AST slicing via `SysmlModel::slice_package_subsystem`, returning bounded `AstSlice` records cached through `IncrementalAstCache`:
 - **Structural Partitioning**: Every structural subsystem graph $\mathcal{G}_{\mathrm{sub}} = (V, E)$ in `SysmlModel` is traversed and partitioned along subsystem containment boundaries into self-contained `AstSlice` units.
 - **Strict Token Floor & Ceiling**: Every AST slice $\mathcal{S}_k$ (`AstSlice`) is strictly bounded to $\le 4,096$ tokens (`AstSlice::MAX_TOKEN_BUDGET`):
 $$
@@ -221,7 +221,7 @@ $$
 
 ### 6.3 Dual-LLM Air-Gapped Agent Dispatch Protocol
 
-To guarantee mathematical determinism, total intellectual property containment, and complete immunity to cloud rate-limiting or content censorship, DEAP utilizes a dual-LLM air-gapped agent dispatch architecture backed by `CotAuditRecord` and `CotAuditLog` in `crates/deap-core/src/sysml_ast.rs`:
+To guarantee mathematical determinism, total intellectual property containment, and complete immunity to cloud rate-limiting or content censorship, DEAP utilizes a dual-LLM air-gapped agent dispatch architecture backed by `CotAuditRecord` and `CotAuditLog` in `crates/deap-core/src/sysml_ast/mod.rs`:
 1. **Reasoning Slot (DeepSeek-R1)**:
    - Dedicated Chain-of-Thought (CoT) reasoning model executing on air-gapped workstation hardware.
    - Streams formal mathematical proofs, reachability derivations, and safety invariant checks via `CotAuditLog` and `CotAuditRecord` directly into `.pipeline/diagnostics/cot_audit_log.json`.

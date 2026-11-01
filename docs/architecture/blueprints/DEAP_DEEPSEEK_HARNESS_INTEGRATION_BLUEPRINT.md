@@ -39,7 +39,7 @@ primary_technology_profile: "Modular Cargo Workspace: crates/deap-core, crates/c
 The **DEAP Agent Orchestration Engine**, powered by the **DEAP-Seek Agent Engine**, establishes a unified, air-gapped agentic orchestration framework for the Digital Engineering Agent Platform (DEAP).
 
 Formally architected as a **Modular Pure Rust Cargo Workspace Architecture** (`Cargo.toml`), the platform organizes SysML v2 compilation, strongly-typed AST slicing (`<= 4,096` tokens), Chain-of-Thought (CoT) audit persistence, and baseline verification across the workspace crates:
-1. **`crates/deap-core`** (`crates/deap-core/src/sysml_ast.rs`, `crates/deap-core/src/diagnostics.rs`, `crates/deap-core/src/markdown.rs`, `crates/deap-core/src/rules.rs`, `crates/deap-core/src/source_ast.rs`, `crates/deap-core/src/workspace.rs`): Core systems engineering SysML v2 AST metamodel (`PackageDef`, `PartDef`, `RequirementDef`, `PortDef`, `ActionDef`, `StateDef`, `UseCaseDef`, `TestCaseDef`, `SysmlModel`), bounded AST context slicing (`AstSlice`, `IncrementalAstCache`), Chain-of-Thought audit structures (`CotAuditRecord`, `CotAuditLog`), and formal assurance level definitions (`AssuranceLevel::Tier1..5`).
+1. **`crates/deap-core`** (`crates/deap-core/src/sysml_ast/mod.rs`, `crates/deap-core/src/diagnostics.rs`, `crates/deap-core/src/markdown.rs`, `crates/deap-core/src/rules.rs`, `crates/deap-core/src/source_ast.rs`, `crates/deap-core/src/workspace.rs`): Core systems engineering SysML v2 AST metamodel (`PackageDef`, `PartDef`, `RequirementDef`, `PortDef`, `ActionDef`, `StateDef`, `UseCaseDef`, `TestCaseDef`, `SysmlModel`), bounded AST context slicing (`AstSlice`, `IncrementalAstCache`), Chain-of-Thought audit structures (`CotAuditRecord`, `CotAuditLog`), and formal assurance level definitions (`AssuranceLevel::Tier1..5`).
 2. **`crates/compile-sysml`** (`crates/compile-sysml/src/main.rs`, `crates/compile-sysml/src/lib.rs`): SysML v2 / KerML compilation gate (`run_compilation_gate`), `SemanticValidator`, `SchemaDigest`, 10-pillar STPA safety suite transpilation (`--stpa-transpile`, `--stpa`), 7-section safety docstring synthesis (`--inject-safety-docstrings`, `--extract-source`), and bidirectional specification synchronization (`--forward-sync`, `--reverse-sync`).
 3. **`crates/verify-baseline`** (`crates/verify-baseline/src/runner.rs`, `crates/verify-baseline/src/defect_dossier.rs`, `crates/verify-baseline/src/checks/structural.rs`): Baseline verification runner orchestrating Checks 10 through 36 (`BaselineOptions`, `write_defect_dossier`), 12-check adversarial defect dossier validation (`DossierSection`, `DossierSeverity`, `DefectDossierArgs`, `DefectSchemaValidation`), and structural repository checks (`check_gitignore_exists`, `check_no_ds_store_files`, `check_no_duplicate_master_blueprints`, `check_downstream_instructions_exist`).
 4. **`crates/reconcile-backlog`** (`crates/reconcile-backlog/src/lib.rs`): Pure Rust Agile backlog reconciler (`LoadedSpec`, `ReconcileOptions`, `ReconcileSummary`) synchronizing Epics, Features, User Stories, and Use Cases with the issue tracker.
@@ -92,7 +92,7 @@ flowchart TD
    Enable high-assurance organizations operating under DO-178C / DO-254 or SORA SAIL High-Risk categories to execute complete DEAP pipelines in 100% air-gapped labs without transmitting proprietary control laws, CONOPS, or safety statecharts to cloud LLM endpoints.
 
 2. **Deterministic Chain-of-Thought (CoT) Safety Audit Evidence**:
-   Automatically capture and archive raw DeepSeek-R1 reasoning traces (`<think>...</think>`) into `.pipeline/diagnostics/cot_audit_log.json` using `CotAuditRecord` and `CotAuditLog` in `crates/deap-core/src/sysml_ast.rs`. Every safety constraint (`SC-1..N`), System-Theoretic Process Analysis (STPA) Unsafe Control Action (`UCA-1..N`), and Run-Time Assurance (RTA) switching threshold is backed by immutable, traceable LLM reasoning evidence for multi-authority regulatory reviews (`AssuranceLevel::Tier1..5`).
+   Automatically capture and archive raw DeepSeek-R1 reasoning traces (`<think>...</think>`) into `.pipeline/diagnostics/cot_audit_log.json` using `CotAuditRecord` and `CotAuditLog` in `crates/deap-core/src/sysml_ast/mod.rs`. Every safety constraint (`SC-1..N`), System-Theoretic Process Analysis (STPA) Unsafe Control Action (`UCA-1..N`), and Run-Time Assurance (RTA) switching threshold is backed by immutable, traceable LLM reasoning evidence for multi-authority regulatory reviews (`AssuranceLevel::Tier1..5`).
 
 3. **Autonomous End-to-End Pipeline State Machine**:
    Eliminate manual human context-switching between pipeline stages. The native Rust workspace binaries (`./target/release/ingest-sysml`, `./target/release/compile-sysml`, `./target/release/assemble-conops`, `./target/release/reconcile-backlog`, and `./target/release/verify-baseline`) orchestrate the handoff from Pipeline 0 (SysML v2 textual model and `pipeline0_handoff_contract.json`) to Pipeline 1 (Agile backlog generation) and Pipeline 2 (serial subagent RED-GREEN TDD code synthesis) with automated quality gate enforcement (`./target/release/verify-baseline . --no-domain`).
@@ -108,7 +108,7 @@ flowchart TD
     subgraph PipelineFlow["Native Rust Execution Topology"]
         direction TB
         CLI["crates/compile-sysml:<br/>main.rs & lib.rs Entrypoint"]
-        ASTSlicer["crates/deap-core:<br/>sysml_ast.rs AstSlice (<= 4096)"]
+        ASTSlicer["crates/deap-core:<br/>sysml_ast/mod.rs AstSlice (<= 4096)"]
         AuditEngine["crates/deap-core:<br/>CotAuditRecord & CotAuditLog"]
         BacklogSync["crates/reconcile-backlog:<br/>lib.rs Backlog Reconciler"]
         GateEnforcer["crates/verify-baseline:<br/>runner.rs & structural.rs"]
@@ -126,12 +126,12 @@ The DEAP orchestration engine establishes a deterministic **Dual-LLM Air-Gapped 
 
 1. **Reasoning Slot (DeepSeek-R1)**:
    - **Role**: Mathematical, architectural, and safety invariant reasoning (STPA hazard analysis, SORA SAIL risk bounds, SysML v2 metamodel consistency, and temporal logic).
-   - **Streaming CoT Audit**: Emits raw `<think>...</think>` Chain-of-Thought tokens serialized via `CotAuditRecord` and `CotAuditLog` (`crates/deap-core/src/sysml_ast.rs`) directly to `.pipeline/diagnostics/cot_audit_log.json` with cryptographic `prompt_sha256` verification.
+   - **Streaming CoT Audit**: Emits raw `<think>...</think>` Chain-of-Thought tokens serialized via `CotAuditRecord` and `CotAuditLog` (`crates/deap-core/src/sysml_ast/mod.rs`) directly to `.pipeline/diagnostics/cot_audit_log.json` with cryptographic `prompt_sha256` verification.
    - **Contract Synthesis**: Emits verified semantic specifications and JSON handoff contracts (`pipeline0_handoff_contract.json`).
 
 2. **Execution Slot (Qwen-2.5-Coder)**:
    - **Role**: Deterministic code generation, BDD scenario realization, ROS 2 C++ / SPARK Ada 2014 / Rust implementation, and artifact packaging.
-   - **Bounded Context**: Ingests the finalized reasoning state along with bounded, strongly-typed `AstSlice` windows (`<= 4,096` tokens) partitioned by `crates/deap-core/src/sysml_ast.rs`.
+   - **Bounded Context**: Ingests the finalized reasoning state along with bounded, strongly-typed `AstSlice` windows (`<= 4,096` tokens) partitioned by `crates/deap-core/src/sysml_ast/mod.rs`.
    - **High-Velocity Synthesis**: Runs with low temperature ($T = 0.1$) for deterministic, syntax-compliant code synthesis with zero hallucinated API methods.
 
 ### 3.2 Modular Cargo Workspace Architecture
@@ -147,7 +147,7 @@ flowchart TD
         reconcile_backlog["crates/reconcile-backlog<br/>src/lib.rs<br/>Agile Backlog Reconciler"]
         ingest_sysml["crates/ingest-sysml<br/>src/main.rs<br/>Level 0 Schema Ingestion"]
         assemble_conops["crates/assemble-conops<br/>src/main.rs<br/>ConOps & Mission Assembly"]
-        deap_core["crates/deap-core<br/>src/sysml_ast.rs<br/>AstSlice & CotAuditLog"]
+        deap_core["crates/deap-core<br/>src/sysml_ast/mod.rs<br/>AstSlice & CotAuditLog"]
     end
 
     compile_sysml --> deap_core
@@ -161,7 +161,7 @@ flowchart TD
 #### 3.2.1 Workspace Crate Breakdown
 
 1. **`crates/deap-core`**:
-   - **`crates/deap-core/src/sysml_ast.rs`**: Canonical SysML v2 AST metamodel (`PackageDef`, `PartDef`, `RequirementDef`, `PortDef`, `ActionDef`, `StateDef`, `UseCaseDef`, `TestCaseDef`, `HazardDef`, `RiskDef`, `ConnectionDef`, `CalcDef`, `FlowDef`, `AttributeDef`, `SysmlModel`, `UnifiedSchemaModelExtractor`), bounded AST slicing (`AstSlice`, `IncrementalAstCache`), and Chain-of-Thought audit logging (`CotAuditRecord`, `CotAuditLog`).
+   - **`crates/deap-core/src/sysml_ast/mod.rs`**: Canonical SysML v2 AST metamodel (`PackageDef`, `PartDef`, `RequirementDef`, `PortDef`, `ActionDef`, `StateDef`, `UseCaseDef`, `TestCaseDef`, `HazardDef`, `RiskDef`, `ConnectionDef`, `CalcDef`, `FlowDef`, `AttributeDef`, `SysmlModel`, `UnifiedSchemaModelExtractor`), bounded AST slicing (`AstSlice`, `IncrementalAstCache`), and Chain-of-Thought audit logging (`CotAuditRecord`, `CotAuditLog`).
    - **`crates/deap-core/src/diagnostics.rs`, `crates/deap-core/src/markdown.rs`, `crates/deap-core/src/rules.rs`, `crates/deap-core/src/source_ast.rs`, `crates/deap-core/src/workspace.rs`**: Shared diagnostic structures (`DefectDossier`, `Diagnostic`, `DiagnosticSeverity`, `WhyEntry`), Mermaid/LaTeX syntax validators, source AST extractors, and workspace topology rules.
 
 2. **`crates/compile-sysml`**:
@@ -181,7 +181,7 @@ flowchart TD
 
 ### 3.3 Strongly-Typed AST Slicing & Caching Mechanics ($\le 4,096$ Tokens)
 
-To prevent LLM context saturation and reasoning degradation during large-scale system synthesis, `crates/deap-core/src/sysml_ast.rs` defines strongly-typed AST slicing (`AstSlice`) and content-addressed AST caching (`IncrementalAstCache`):
+To prevent LLM context saturation and reasoning degradation during large-scale system synthesis, `crates/deap-core/src/sysml_ast/mod.rs` defines strongly-typed AST slicing (`AstSlice`) and content-addressed AST caching (`IncrementalAstCache`):
 
 $$
 \text{AST}_{\text{slice}} = \text{Closure}(\mathcal{N}_{\text{target}}, \mathcal{E}_{\text{deps}}) \quad \text{such that} \quad |\text{Tokens}(\text{AST}_{\text{slice}})| \le 4096
@@ -191,7 +191,7 @@ $$
 * **Bounded Context Allocation**: Every subagent dispatch receives a bounded `AstSlice` (`<= 4,096` tokens) cached via `IncrementalAstCache`, guaranteeing deterministic attention and eliminating hallucinations caused by bloated prompt windows.
 
 ```rust
-// Grounded in crates/deap-core/src/sysml_ast.rs
+// Grounded in crates/deap-core/src/sysml_ast/mod.rs
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AstSlice {
@@ -266,12 +266,12 @@ sequenceDiagram
 
 ## 5. Regulatory Chain-of-Thought (CoT) Audit Log Specification
 
-Every reasoning step is captured using the strongly-typed `CotAuditRecord` and `CotAuditLog` structures grounded in `crates/deap-core/src/sysml_ast.rs` and persisted at `.pipeline/diagnostics/cot_audit_log.json`:
+Every reasoning step is captured using the strongly-typed `CotAuditRecord` and `CotAuditLog` structures grounded in `crates/deap-core/src/sysml_ast/mod.rs` and persisted at `.pipeline/diagnostics/cot_audit_log.json`:
 
-### 5.1 Rust Data Structures (`crates/deap-core/src/sysml_ast.rs`)
+### 5.1 Rust Data Structures (`crates/deap-core/src/sysml_ast/mod.rs`)
 
 ```rust
-// Grounded in crates/deap-core/src/sysml_ast.rs
+// Grounded in crates/deap-core/src/sysml_ast/mod.rs
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CotAuditRecord {
@@ -353,7 +353,7 @@ ast_slicing:
   enabled: true
   max_slice_tokens: 4096
   strategy: "semantic_closure"
-  source_module: "crates/deap-core/src/sysml_ast.rs"
+  source_module: "crates/deap-core/src/sysml_ast/mod.rs"
 
 pipeline_settings:
   pipeline0:
@@ -481,7 +481,7 @@ To preserve enterprise intellectual property while providing maximum transparenc
 
 ### 7.1 Tier 1: Upstream Source Repository (`DEAP01-spec-core`)
 The upstream repository is the confidential engineering core containing full source code and engineering assets:
-* **Cargo Workspace Crates**: Located in `crates/deap-core`, `crates/compile-sysml`, `crates/verify-baseline`, `crates/reconcile-backlog`, `crates/ingest-sysml`, and `crates/assemble-conops`, implementing the SysML v2 AST metamodel (`crates/deap-core/src/sysml_ast.rs`), AST slicing (`AstSlice`, `IncrementalAstCache`), CoT audit logging (`CotAuditRecord`, `CotAuditLog`), compilation (`crates/compile-sysml/src/main.rs`, `crates/compile-sysml/src/lib.rs`), and verification (`crates/verify-baseline/src/runner.rs`, `crates/verify-baseline/src/defect_dossier.rs`, `crates/verify-baseline/src/checks/structural.rs`) with 7-section safety rustdoc documentation.
+* **Cargo Workspace Crates**: Located in `crates/deap-core`, `crates/compile-sysml`, `crates/verify-baseline`, `crates/reconcile-backlog`, `crates/ingest-sysml`, and `crates/assemble-conops`, implementing the SysML v2 AST metamodel (`crates/deap-core/src/sysml_ast/mod.rs`), AST slicing (`AstSlice`, `IncrementalAstCache`), CoT audit logging (`CotAuditRecord`, `CotAuditLog`), compilation (`crates/compile-sysml/src/main.rs`, `crates/compile-sysml/src/lib.rs`), and verification (`crates/verify-baseline/src/runner.rs`, `crates/verify-baseline/src/defect_dossier.rs`, `crates/verify-baseline/src/checks/structural.rs`) with 7-section safety rustdoc documentation.
 * **Build System & Packaging Automation**: Workspace `Cargo.toml`, `Cargo.lock`, and native Rust CLI entrypoints.
 * **Test Suites & Continuous Integration**: Native Rust `#[test]` unit and integration suites (`cargo test --workspace`) validating compiler, backlog reconciler, and baseline verifier invariants.
 
@@ -512,9 +512,9 @@ The modular Rust workspace release architecture follows a four-phase rollout sch
 
 | Phase | Milestone | Scope & Deliverables | Verification Gate |
 | :--- | :--- | :--- | :--- |
-| **Phase 1** | **Modular Cargo Workspace & AST Slicing Specification** | Define workspace crates (`crates/deap-core`, `crates/compile-sysml`, `crates/verify-baseline`, `crates/reconcile-backlog`, `crates/ingest-sysml`, `crates/assemble-conops`); formalize strongly-typed AST slicing (`AstSlice`, `IncrementalAstCache`) and CoT audit structures (`CotAuditRecord`, `CotAuditLog`) in `crates/deap-core/src/sysml_ast.rs`. | Cargo workspace manifests validated; AST slicing and CoT audit schemas verified. |
-| **Phase 2** | **Core Engine Checks 10--36 & AST Metamodel Implementation** | Implement native SysML v2 AST parser (`crates/deap-core/src/sysml_ast.rs`), compilation gate (`crates/compile-sysml/src/main.rs`, `crates/compile-sysml/src/lib.rs`), formal Checks 10--36 (`crates/verify-baseline/src/runner.rs`, `crates/verify-baseline/src/checks/structural.rs`), and deterministic ConOps assembly (`crates/assemble-conops/src/main.rs`). | 100% mechanical parity across Checks 10--36; `cargo test --workspace` passes. |
-| **Phase 3** | **Dual-LLM Air-Gapped CoT Audit & Defect Dossier Hardening** | Persist DeepSeek-R1 reasoning traces via `CotAuditRecord` and `CotAuditLog` (`crates/deap-core/src/sysml_ast.rs`) to `.pipeline/diagnostics/cot_audit_log.json` and enforce 12-check defect dossier validation (`crates/verify-baseline/src/defect_dossier.rs`). | End-to-end air-gapped verification run passes without external network access. |
+| **Phase 1** | **Modular Cargo Workspace & AST Slicing Specification** | Define workspace crates (`crates/deap-core`, `crates/compile-sysml`, `crates/verify-baseline`, `crates/reconcile-backlog`, `crates/ingest-sysml`, `crates/assemble-conops`); formalize strongly-typed AST slicing (`AstSlice`, `IncrementalAstCache`) and CoT audit structures (`CotAuditRecord`, `CotAuditLog`) in `crates/deap-core/src/sysml_ast/mod.rs`. | Cargo workspace manifests validated; AST slicing and CoT audit schemas verified. |
+| **Phase 2** | **Core Engine Checks 10--36 & AST Metamodel Implementation** | Implement native SysML v2 AST parser (`crates/deap-core/src/sysml_ast/mod.rs`), compilation gate (`crates/compile-sysml/src/main.rs`, `crates/compile-sysml/src/lib.rs`), formal Checks 10--36 (`crates/verify-baseline/src/runner.rs`, `crates/verify-baseline/src/checks/structural.rs`), and deterministic ConOps assembly (`crates/assemble-conops/src/main.rs`). | 100% mechanical parity across Checks 10--36; `cargo test --workspace` passes. |
+| **Phase 3** | **Dual-LLM Air-Gapped CoT Audit & Defect Dossier Hardening** | Persist DeepSeek-R1 reasoning traces via `CotAuditRecord` and `CotAuditLog` (`crates/deap-core/src/sysml_ast/mod.rs`) to `.pipeline/diagnostics/cot_audit_log.json` and enforce 12-check defect dossier validation (`crates/verify-baseline/src/defect_dossier.rs`). | End-to-end air-gapped verification run passes without external network access. |
 | **Phase 4** | **Zero-Source Downstream Packaging & Verification Pipeline** | Deploy pre-compiled native Rust binaries (`compile-sysml`, `verify-baseline`, `reconcile-backlog`, `ingest-sysml`, `assemble-conops`) and Markdown governance. Verify downstream repository contains 0 compiler source files. | `./target/release/verify-baseline . --no-domain` passes with exit code 0. |
 
 ### 8.1 Maintenance & Upstream Tracking

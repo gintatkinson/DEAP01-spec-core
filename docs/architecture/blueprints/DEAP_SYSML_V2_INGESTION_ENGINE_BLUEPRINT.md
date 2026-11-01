@@ -69,8 +69,8 @@ flowchart TD
 ```
 
 ### Key Vision & Objectives:
-1. **Seamless Level 0 & SysML v2 MBSE Ingestion:** Translate brownfield/greenfield schemas (`.yaml`, `.json`, `.proto`, `.idl`, `.arxml`, `.yang`, `.md`) via `crates/ingest-sysml` and parse OMG SysML v2 textual declarations (`package`, `part def`, `port`, `connection`, `action def`, `state def`, `attribute`, `requirement def`, `constraint def`, `calc def`, `use case def`, `test case def`) into strongly-typed AST hierarchies (`SysmlModel` and `PackageDef`) in `crates/deap-core/src/sysml_ast.rs` and `crates/compile-sysml/src/parser/grammar/mod.rs`.
-2. **Incremental AST Caching:** Maintain a deterministic, SHA-256 content-addressed AST cache (`.pipeline/cache/ast/<sha256>.json`) via `IncrementalAstCache` and `AstPersistenceEngine` in `crates/deap-core/src/sysml_ast.rs` using `sha2::Sha256` and `serde_json` to eliminate redundant re-parsing of unchanged model units across CI/CD and subagent execution loops.
+1. **Seamless Level 0 & SysML v2 MBSE Ingestion:** Translate brownfield/greenfield schemas (`.yaml`, `.json`, `.proto`, `.idl`, `.arxml`, `.yang`, `.md`) via `crates/ingest-sysml` and parse OMG SysML v2 textual declarations (`package`, `part def`, `port`, `connection`, `action def`, `state def`, `attribute`, `requirement def`, `constraint def`, `calc def`, `use case def`, `test case def`) into strongly-typed AST hierarchies (`SysmlModel` and `PackageDef`) in `crates/deap-core/src/sysml_ast/mod.rs` and `crates/compile-sysml/src/parser/grammar/mod.rs`.
+2. **Incremental AST Caching:** Maintain a deterministic, SHA-256 content-addressed AST cache (`.pipeline/cache/ast/<sha256>.json`) via `IncrementalAstCache` and `AstPersistenceEngine` in `crates/deap-core/src/sysml_ast/mod.rs` using `sha2::Sha256` and `serde_json` to eliminate redundant re-parsing of unchanged model units across CI/CD and subagent execution loops.
 3. **Strongly-Typed AST Slicing:** Partition monolithic model trees into context-isolated, strongly-typed `AstSlice` subgraphs strictly bounded at $\le 4,096$ tokens via `SysmlModel::slice_package_subsystem` (invoked with `--slice-package <pkg>`), enabling zero-truncation consumption by specialized synthesis subagents.
 4. **Deterministic Specification Sync & Backlog Reconciliation:** Synchronize SysML v2 packages, parts, actions, states, hazards, and requirements bidirectionally with Markdown specifications (`crates/compile-sysml/src/sync/mod.rs`), ConOps units (`crates/assemble-conops/src/main.rs`), and multi-provider GitHub/GitLab issue trackers (`crates/reconcile-backlog/src/lib.rs`) with 100% structural fidelity.
 5. **Tier-1 Commercial Toolchain Integration:** Interoperate with MATLAB / Simulink / Stateflow / Embedded Coder (`slreq.ReqSet`, Stateflow `.sfx` charts, `Simulink.Bus` objects) via `MbdExportBundle`, `synthesize_mbd_bundle`, and `export_mbd_artifacts` (`--export-mbd <dir>`) in `crates/compile-sysml/src/lib.rs` and `crates/compile-sysml/src/main.rs`.
@@ -91,7 +91,7 @@ DEAP01-spec-core/
 ├── crates/
 │   ├── deap-core/                                    # Shared AST, source inspection, Markdown/Mermaid/KaTeX gates, rules
 │   │   └── src/
-│   │       ├── sysml_ast.rs                          # Core SysML v2 AST (SysmlModel, PackageDef, PartDef, AstSlice, etc.)
+│   │       ├── sysml_ast/mod.rs                      # Core SysML v2 AST (SysmlModel, PackageDef, PartDef, AstSlice, etc.)
 │   │       ├── source_ast.rs                         # Multi-language source code AST & Realises tag extractor
 │   │       ├── markdown.rs                           # Markdown, Mermaid (E1-E5), and KaTeX structural validators
 │   │       ├── workspace.rs                          # Workspace path & repository role inspectors
@@ -128,7 +128,7 @@ DEAP01-spec-core/
 │           └── lib.rs                                # Issue synchronization, DAG ordering & traceability engine
 ```
 
-- **`crates/deap-core` (`deap_core`)**: Provides the canonical SysML v2 AST (`crates/deap-core/src/sysml_ast.rs`), source code AST inspector (`crates/deap-core/src/source_ast.rs`), Markdown/Mermaid/KaTeX validators (`crates/deap-core/src/markdown.rs`), workspace inspectors (`crates/deap-core/src/workspace.rs`), governance rules (`crates/deap-core/src/rules.rs`), and structured diagnostics (`crates/deap-core/src/diagnostics.rs`).
+- **`crates/deap-core` (`deap_core`)**: Provides the canonical SysML v2 AST (`crates/deap-core/src/sysml_ast/mod.rs`), source code AST inspector (`crates/deap-core/src/source_ast.rs`), Markdown/Mermaid/KaTeX validators (`crates/deap-core/src/markdown.rs`), workspace inspectors (`crates/deap-core/src/workspace.rs`), governance rules (`crates/deap-core/src/rules.rs`), and structured diagnostics (`crates/deap-core/src/diagnostics.rs`).
 - **`crates/ingest-sysml` (`ingest-sysml`)**: Implements the Level 0 brownfield/greenfield ingestion engine (`crates/ingest-sysml/src/main.rs`, `crates/ingest-sysml/src/lib.rs`, `crates/ingest-sysml/src/detectors.rs`, `crates/ingest-sysml/src/digest.rs`, `crates/ingest-sysml/src/translators/mod.rs`), converting heterogeneous engineering schemas and OEM tables into canonical SysML v2 (`schema/*.sysml`).
 - **`crates/compile-sysml` (`compile-sysml`)**: Houses the formal SysML v2 lexer and grammar parser (`crates/compile-sysml/src/parser/grammar/mod.rs`), semantic validator and SHA-256 digest generator (`crates/compile-sysml/src/semantic/digest.rs`), bidirectional specification synchronizer (`crates/compile-sysml/src/sync/mod.rs`), STPA/FMECA safety synthesizer (`crates/compile-sysml/src/stpa/safety_suite/mod.rs`), 7-section safety docstring injector (`crates/compile-sysml/src/docstring.rs`), and MATLAB/Simulink MBD exporter (`crates/compile-sysml/src/lib.rs`).
 - **`crates/verify-baseline` (`verify-baseline`)**: Implements the fail-closed baseline and parity verification runner (`crates/verify-baseline/src/runner.rs`, `crates/verify-baseline/src/checks/structural.rs`, `crates/verify-baseline/src/checks/parity_gates.rs`, `crates/verify-baseline/src/checks/safety_stpa.rs`).
@@ -161,7 +161,7 @@ flowchart TD
 
 ### 2.2 AST Grammar & Primitive Extraction
 
-The SysML v2 parser in `crates/compile-sysml/src/parser/grammar/mod.rs` (`SysmlParser`) and the structural extractors in `crates/deap-core/src/sysml_ast.rs` process standard OMG SysML v2 / KerML structural, behavioral, and verification primitives:
+The SysML v2 parser in `crates/compile-sysml/src/parser/grammar/mod.rs` (`SysmlParser`) and the structural extractors in `crates/deap-core/src/sysml_ast/mod.rs` process standard OMG SysML v2 / KerML structural, behavioral, and verification primitives:
 - `package` (`PackageDef`): Top-level and nested namespace containers mapping to functional domains and Agile Epics.
 - `part def` / `part` (`PartDef`): Structural components, subsystems, and physical/logical blocks with recursive sub-parts, satisfied requirements, and safety stereotype bindings.
 - `port def` / `port` (`PortDef`, `InterfaceDef`, `FlowDef`): Dynamic interface points, conjugated ports, protocol families, electrical attributes, and typed item flows with explicit directionality (`in`, `out`, `inout`).
@@ -175,10 +175,10 @@ The SysML v2 parser in `crates/compile-sysml/src/parser/grammar/mod.rs` (`SysmlP
 - `use case def` / `interaction def` / `test case def` / `capability` (`UseCaseDef`, `InteractionDef`, `TestCaseDef`, `CapabilityDef`): Actors, interaction lifelines/messages, verification test cases (`verify requirement`), and subsystem capabilities.
 - `item def` / `import` (`ItemDef`, `ImportDef`): Structured payload definitions and namespace imports.
 
-### 2.3 Strongly-Typed AST Data Structures in Rust (`crates/deap-core/src/sysml_ast.rs`)
+### 2.3 Strongly-Typed AST Data Structures in Rust (`crates/deap-core/src/sysml_ast/mod.rs`)
 
 ```rust
-// Canonical AST structures grounded in crates/deap-core/src/sysml_ast.rs
+// Canonical AST structures grounded in crates/deap-core/src/sysml_ast/mod.rs
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -400,7 +400,7 @@ pub struct TypeDescriptor {
 
 ### 2.4 Strongly-Typed AST Slicing Mechanics ($\le 4,096$ Tokens)
 
-To guarantee that autonomous synthesis subagents operate without context truncation or hallucination, `crates/deap-core/src/sysml_ast.rs` and `crates/compile-sysml` incorporate a deterministic package and subsystem slicing engine (`SysmlModel::slice_package_subsystem`, exposed via `--slice-package <pkg>`). Large monolithic models spanning tens of thousands of tokens are partitioned into coherent, self-contained `AstSlice` projections strictly bounded at $\le 4,096$ tokens.
+To guarantee that autonomous synthesis subagents operate without context truncation or hallucination, `crates/deap-core/src/sysml_ast/mod.rs` and `crates/compile-sysml` incorporate a deterministic package and subsystem slicing engine (`SysmlModel::slice_package_subsystem`, exposed via `--slice-package <pkg>`). Large monolithic models spanning tens of thousands of tokens are partitioned into coherent, self-contained `AstSlice` projections strictly bounded at $\le 4,096$ tokens.
 
 ```mermaid
 flowchart TD
@@ -442,7 +442,7 @@ flowchart TD
 4. **Token Budget Guarantee ($\le 4,096$ Tokens):** The slicing engine measures the token footprint of the serialized `AstSlice` representation. If the estimated token count exceeds `max_tokens` ($4,096$), `SysmlModel::slice_package_subsystem` deterministically partitions behavioral statecharts and actions from structural part declarations into complementary sub-slices so every emitted `AstSlice` satisfies `token_count <= 4096`.
 
 ```rust
-// AST Slicing Interface grounded in crates/deap-core/src/sysml_ast.rs
+// AST Slicing Interface grounded in crates/deap-core/src/sysml_ast/mod.rs
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AstSlice {
@@ -497,14 +497,14 @@ impl SysmlModel {
 
 ### 2.5 Incremental AST Parser Caching (`.pipeline/cache/ast/<sha256>.json`)
 
-To optimize compilation velocity and support rapid continuous verification loops across `compile-sysml` and `verify-baseline`, `crates/deap-core/src/sysml_ast.rs` implements deterministic content-addressed caching via `IncrementalAstCache` and `AstPersistenceEngine`:
+To optimize compilation velocity and support rapid continuous verification loops across `compile-sysml` and `verify-baseline`, `crates/deap-core/src/sysml_ast/mod.rs` implements deterministic content-addressed caching via `IncrementalAstCache` and `AstPersistenceEngine`:
 
 1. **SHA-256 Fingerprint Computation:** For every input `.sysml` schema file, `IncrementalAstCache` computes a cryptographic SHA-256 content digest using `sha2::Sha256` (aligned with `crates/compile-sysml/src/semantic/digest.rs` and `crates/ingest-sysml/src/digest.rs`).
 2. **Cache Keying & Layout:** Cached AST artifacts are persisted as deterministic JSON snapshots under `.pipeline/cache/ast/<sha256>.json` via `serde_json` and `AstPersistenceEngine`.
 3. **Delta Dependency Invalidation:** When a `.sysml` file is modified, its SHA-256 content digest changes automatically, invalidating only the modified unit while unchanged package trees resolve directly from `.pipeline/cache/ast/<sha256>.json`.
 
 ```rust
-// Incremental AST Cache & Persistence Engine grounded in crates/deap-core/src/sysml_ast.rs
+// Incremental AST Cache & Persistence Engine grounded in crates/deap-core/src/sysml_ast/mod.rs
 
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -561,9 +561,9 @@ impl IncrementalAstCache {
 
 ### 2.6 Custom Safety Stereotypes & AST Field Bindings
 
-The SysML v2 grammar parser (`crates/compile-sysml/src/parser/grammar/mod.rs`) and AST model (`crates/deap-core/src/sysml_ast.rs`) extract custom DEAP safety stereotypes embedded in SysML v2 declarations or `doc /* ... */` blocks and bind them directly to typed fields on `PartDef` and `RequirementDef` (`triggers_hazards`, `safety_realises`, and `layer`), as well as `HazardDef` and `RiskDef` nodes:
+The SysML v2 grammar parser (`crates/compile-sysml/src/parser/grammar/mod.rs`) and AST model (`crates/deap-core/src/sysml_ast/mod.rs`) extract custom DEAP safety stereotypes embedded in SysML v2 declarations or `doc /* ... */` blocks and bind them directly to typed fields on `PartDef` and `RequirementDef` (`triggers_hazards`, `safety_realises`, and `layer`), as well as `HazardDef` and `RiskDef` nodes:
 
-| Stereotype Syntax | Target AST Struct & Field (`crates/deap-core/src/sysml_ast.rs`) | Extraction & Semantic Linkage |
+| Stereotype Syntax | Target AST Struct & Field (`crates/deap-core/src/sysml_ast/mod.rs`) | Extraction & Semantic Linkage |
 | :--- | :--- | :--- |
 | `@TriggersHazard(id="HAZ-NNN", severity="SeverityLevel")` | `PartDef::triggers_hazards`, `RequirementDef::triggers_hazards`, `HazardDef` | Binds structural/requirement elements to the STPA/FMECA hazard matrix (`crates/compile-sysml/src/stpa/safety_suite/mod.rs`); enforces BDD negative scenario generation. |
 | `@SafetyRealises(requirement="REQ-NNN")` | `PartDef::safety_realises`, `RequirementDef::safety_realises`, `PartDef::satisfied_requirements` | Establishes bi-directional traceability between `PartDef` blocks, `RequirementDef` items, and downstream code `Realises:` docstrings verified by `verify-baseline`. |
@@ -575,7 +575,7 @@ To guarantee mathematical determinism, intellectual property containment, and im
 
 1. **Reasoning Slot (DeepSeek-R1)**:
    - Dedicated Chain-of-Thought (CoT) reasoning model executing on sovereign air-gapped workstation hardware.
-   - Ingests strongly-typed `AstSlice` payloads ($\le 4,096$ tokens) produced by `SysmlModel::slice_package_subsystem` in `crates/deap-core/src/sysml_ast.rs` to derive formal semantics, invariant boundaries, and state reachability matrices.
+   - Ingests strongly-typed `AstSlice` payloads ($\le 4,096$ tokens) produced by `SysmlModel::slice_package_subsystem` in `crates/deap-core/src/sysml_ast/mod.rs` to derive formal semantics, invariant boundaries, and state reachability matrices.
    - Streams formal mathematical proofs, reachability derivations, and safety invariant checks into `.pipeline/diagnostics/cot_audit_log.json` formatted via `crates/deap-core/src/diagnostics.rs`.
    - Never generates raw application code directly; outputs verified formal derivations and boundary assertions.
 
@@ -775,7 +775,7 @@ Bus_Subsystem_01.Elements = elems;
 
 ## 5. Evolved 3-Layer Pure Rust Code & Docstring Synthesis Engine (`compile-sysml` & `deap-core`)
 
-The 3-Layer Code & Safety Docstring Synthesis Engine in `crates/compile-sysml/src/docstring.rs` and `crates/deap-core/src/sysml_ast.rs` (`TypeDescriptor`, `FieldDescriptor`, `PartDef::layer`) translates the SysML v2 `PackageDef` / `SysmlModel` AST into target source code and 7-section safety docstrings (`./target/release/compile-sysml --inject-safety-docstrings <dir>` and `--extract-source <dir>`), guaranteeing strict separation across domain states, safety statecharts, and display/actuator interfaces.
+The 3-Layer Code & Safety Docstring Synthesis Engine in `crates/compile-sysml/src/docstring.rs` and `crates/deap-core/src/sysml_ast/mod.rs` (`TypeDescriptor`, `FieldDescriptor`, `PartDef::layer`) translates the SysML v2 `PackageDef` / `SysmlModel` AST into target source code and 7-section safety docstrings (`./target/release/compile-sysml --inject-safety-docstrings <dir>` and `--extract-source <dir>`), guaranteeing strict separation across domain states, safety statecharts, and display/actuator interfaces.
 
 ```mermaid
 flowchart TD
@@ -942,7 +942,7 @@ flowchart TD
 
 | Phase | Core Deliverables | Key Workspace Crates & Modules | Exit Criteria & Verification Gate |
 | :--- | :--- | :--- | :--- |
-| **Phase 1: AST, Ingestion & Slicing Engine** | Level 0 schema translators, SysML v2 AST structures, SHA-256 JSON cache, and $\le 4,096$ token AST slicer | `crates/deap-core` (`sysml_ast.rs`), `crates/ingest-sysml` (`main.rs`, `lib.rs`, `detectors.rs`, `digest.rs`, `translators/mod.rs`) | `./target/release/ingest-sysml` emits valid `schema/*.sysml`; `SysmlModel::slice_package_subsystem` and `IncrementalAstCache` pass all unit tests. |
+| **Phase 1: AST, Ingestion & Slicing Engine** | Level 0 schema translators, SysML v2 AST structures, SHA-256 JSON cache, and $\le 4,096$ token AST slicer | `crates/deap-core` (`sysml_ast/mod.rs`), `crates/ingest-sysml` (`main.rs`, `lib.rs`, `detectors.rs`, `digest.rs`, `translators/mod.rs`) | `./target/release/ingest-sysml` emits valid `schema/*.sysml`; `SysmlModel::slice_package_subsystem` and `IncrementalAstCache` pass all unit tests. |
 | **Phase 2: Compiler, STPA & MATLAB Adapter** | Recursive grammar parser, semantic SHA-256 digest, STPA safety suite, and MBD exporter (`MbdExportBundle`) | `crates/compile-sysml` (`parser/grammar.rs`, `semantic/digest.rs`, `stpa/safety_suite.rs`, `docstring.rs`, `lib.rs`, `main.rs`) | `./target/release/compile-sysml --compile` and `--export-mbd <dir>` emit `.pipeline/schema.sysml`, `.pipeline/schema-digest.json`, `.slreq.json`, `.sfx`, and `simulink_bus.m`. |
 | **Phase 3: ConOps, Spec Sync & Backlog Reconciler** | ConOps unit assembly, bidirectional SysML-to-Markdown sync, and GitHub/GitLab issue reconciliation | `crates/assemble-conops` (`main.rs`), `crates/compile-sysml` (`sync/mod.rs`), `crates/reconcile-backlog` (`lib.rs`) | `./target/release/assemble-conops`, `./target/release/compile-sysml --forward-sync`, and `./target/release/reconcile-backlog` project 100% of SysML packages and requirements. |
 | **Phase 4: Parity Gate & Continuous Compliance** | Fail-closed structural, Mermaid/KaTeX, STPA, and bi-directional AST parity verification runner | `crates/verify-baseline` (`runner.rs`, `checks/structural.rs`, `checks/parity_gates.rs`, `checks/safety_stpa.rs`) | `./target/release/verify-baseline . --no-domain` and `cargo test --workspace` pass 100% green with zero orphaned requirements or unverified symbols. |

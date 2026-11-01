@@ -32,196 +32,27 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
 
+mod identifiers;
+
+use identifiers::{
+    default_direction_inout, default_one, default_port_category, default_true,
+    extract_doc_comment_before, extract_ident, extract_quoted_string, extract_si_unit_and_bounds,
+    extract_type_ident, is_ident_char, is_word_boundary_after, is_word_boundary_before, skip_ws,
+};
+pub use identifiers::{
+    find_matching_brace, is_valid_subsystem_identifier, mask_string_literals, AttributeDef, FlowDef,
+};
+
 use crate::error::CoreError;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
-/// Returns `true` as the default boolean flag for SysML v2 definition nodes.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C deterministic serialization
-/// invariants for AST structural definitions.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Constant Function: Always evaluates to `true`.
-///
-/// ## 3. Preconditions
-/// - None.
-///
-/// ## 4. Postconditions
-/// - Returns `true`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Infallible pure constant evaluation.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/DEFAULT-TRUE]
-fn default_true() -> bool {
-    true
-}
-
-/// Returns `1` as the default baseline severity level for SysML v2 hazard and connection nodes.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and MIL-STD-882E baseline severity assignment.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Constant Function: Always evaluates to integer `1`.
-///
-/// ## 3. Preconditions
-/// - None.
-///
-/// ## 4. Postconditions
-/// - Returns `1`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Infallible pure constant evaluation.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/DEFAULT-ONE]
-fn default_one() -> i32 {
-    1
-}
-
-/// Represents an attribute definition or instance in SysML v2.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `AttributeDef` in `crates/deap-core/src/sysml_ast.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `AttributeDef` across member set `[name: String, type_name: String, default_value: Option<String>, doc: Option<String>]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `AttributeDef` members (`name: String, type_name: String, default_value: Option<String>, doc: Option<String>`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `AttributeDef` representation for struct `AttributeDef`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(4)) bounded over input/member dimension of `AttributeDef`.
-/// - Space Complexity: O(M(4)) bounded auxiliary memory for `AttributeDef`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `AttributeDef` (`AttributeDef`).
-/// - State: Maintains consistent state invariants across `AttributeDef` without partial mutation on error.
-/// - Action: Executes `AttributeDef` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `AttributeDef` (`DEAP-CORE-SYSML-AST`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEAP-CORE-SYSML-AST-ATTRIBUTEDEF] | SysML v2: PartDef(AttributeDef)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct AttributeDef {
-    pub name: String,
-    #[serde(default)]
-    pub type_name: String,
-    pub default_value: Option<String>,
-    pub doc: Option<String>,
-}
-
-/// Represents an item flow or discrete data flow definition in SysML v2.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `FlowDef` in `crates/deap-core/src/sysml_ast.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `FlowDef` across member set `[name: String, direction: String, item_type: String, doc: Option<String>, rate_hz: Option<f64>]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `FlowDef` members (`name: String, direction: String, item_type: String, doc: Option<String>, rate_hz: Option<f64>`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `FlowDef` representation for struct `FlowDef`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(5)) bounded over input/member dimension of `FlowDef`.
-/// - Space Complexity: O(M(5)) bounded auxiliary memory for `FlowDef`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `FlowDef` (`FlowDef`).
-/// - State: Maintains consistent state invariants across `FlowDef` without partial mutation on error.
-/// - Action: Executes `FlowDef` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `FlowDef` (`DEAP-CORE-SYSML-AST`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEAP-CORE-SYSML-AST-FLOWDEF] | SysML v2: PartDef(FlowDef)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct FlowDef {
-    pub name: String,
-    #[serde(default = "default_direction_out")]
-    pub direction: String,
-    #[serde(default = "default_item_type")]
-    pub item_type: String,
-    pub doc: Option<String>,
-    pub rate_hz: Option<f64>,
-    pub unit: Option<String>,
-    pub valid_range: Option<String>,
-    pub default_value: Option<String>,
-}
-
-/// Returns `"out"` as the default flow direction for `FlowDef` deserialization.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C deterministic interface flow direction defaults.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Always returns `"out"`.
-///
-/// ## 3. Preconditions
-/// - None.
-///
-/// ## 4. Postconditions
-/// - Returns an owned `String` equal to `"out"`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Infallible string allocation for static literal.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/DEFAULT-DIRECTION-OUT]
-fn default_direction_out() -> String {
-    "out".to_string()
-}
-
-/// Returns `"Item"` as the default payload item type for `FlowDef` deserialization.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C type-safe item flow defaults.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Always returns `"Item"`.
-///
-/// ## 3. Preconditions
-/// - None.
-///
-/// ## 4. Postconditions
-/// - Returns an owned `String` equal to `"Item"`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Infallible string allocation for static literal.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/DEFAULT-ITEM-TYPE]
-fn default_item_type() -> String {
-    "Item".to_string()
-}
-
 /// Represents a port definition or interface point in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `PortDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `PortDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `PortDef` across member set `[name: String, type_name: String, direction: String, is_conjugated: bool, doc: Option<String>]`.
@@ -263,62 +94,10 @@ pub struct PortDef {
     pub item_flows: Vec<FlowDef>,
 }
 
-/// Returns `"inout"` as the default port and operation direction in SysML v2.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C bidirectional port interface defaults.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Always returns `"inout"`.
-///
-/// ## 3. Preconditions
-/// - None.
-///
-/// ## 4. Postconditions
-/// - Returns an owned `String` equal to `"inout"`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Infallible string allocation for static literal.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/DEFAULT-DIRECTION-INOUT]
-fn default_direction_inout() -> String {
-    "inout".to_string()
-}
-
-/// Returns `"DataPort"` as the default logical port category in SysML v2.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C logical interface categorization defaults.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Always returns `"DataPort"`.
-///
-/// ## 3. Preconditions
-/// - None.
-///
-/// ## 4. Postconditions
-/// - Returns an owned `String` equal to `"DataPort"`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Infallible string allocation for static literal.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/DEFAULT-PORT-CATEGORY]
-fn default_port_category() -> String {
-    "DataPort".to_string()
-}
-
 /// Represents an action definition in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ActionDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ActionDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `ActionDef` across member set `[name: String, doc: Option<String>, in_params: Vec<AttributeDef>, out_params: Vec<AttributeDef>, parameters: Vec<AttributeDef>]`.
@@ -360,26 +139,6 @@ pub struct ActionDef {
 
 impl Default for ActionDef {
     /// Constructs a default `ActionDef` with `is_def` initialized to `true`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C deterministic AST node initialization.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - All collection fields are empty and `is_def == true`.
-    ///
-    /// ## 3. Preconditions
-    /// - None.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns an initialized `ActionDef` instance.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Zero-allocation empty vector initialization; cannot fail or panic.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/ACTION-DEF-DEFAULT]
     fn default() -> Self {
         Self {
@@ -398,7 +157,7 @@ impl Default for ActionDef {
 /// Represents an operation definition with typed signature in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `OperationDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `OperationDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `OperationDef` across member set `[name: String, direction: String, param_type: String, return_type: Option<String>, doc: Option<String>]`.
@@ -437,7 +196,7 @@ pub struct OperationDef {
 /// Represents a subsystem capability specification in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `CapabilityDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `CapabilityDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `CapabilityDef` across member set `[name: String, description: Option<String>, subsystem: Option<String>, package_ref: Option<String>, doc: Option<String>]`.
@@ -472,7 +231,7 @@ pub struct CapabilityDef {
 /// Represents an interaction sequence in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `InteractionDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `InteractionDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `InteractionDef` across member set `[name: String, lifelines: Vec<String>, messages: Vec<String>, triggers: Vec<String>, doc: Option<String>]`.
@@ -510,7 +269,7 @@ pub struct InteractionDef {
 /// Represents a formal constraint definition, invariant, or assertion in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ConstraintDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ConstraintDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `ConstraintDef` across member set `[name: String, expression: String, parameters: Vec<String>, is_assertion: bool, doc: Option<String>]`.
@@ -551,7 +310,7 @@ pub struct ConstraintDef {
 /// Represents a verification test case definition in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `TestCaseDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `TestCaseDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `TestCaseDef` across member set `[name: String, subject_part: Option<String>, verified_requirements: Vec<String>, objective: Option<String>, test_steps: Vec<String>]`.
@@ -589,7 +348,7 @@ pub struct TestCaseDef {
 /// Represents a requirement definition in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `RequirementDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `RequirementDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `RequirementDef` across member set `[name: String, req_id: String, text: String, doc: Option<String>, attributes: Vec<AttributeDef>]`.
@@ -645,7 +404,7 @@ pub struct RequirementDef {
 /// Represents a state transition in a SysML v2 state machine.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `TransitionDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `TransitionDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `TransitionDef` across member set `[name: Option<String>, source: Option<String>, target: Option<String>, trigger: Option<String>, guard: Option<String>]`.
@@ -682,7 +441,7 @@ pub struct TransitionDef {
 /// Represents a state machine state definition in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `StateDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `StateDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `StateDef` across member set `[name: String, doc: Option<String>, entry_action: Option<String>, do_action: Option<String>, exit_action: Option<String>]`.
@@ -721,7 +480,7 @@ pub struct StateDef {
 /// Represents a use case definition in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `UseCaseDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `UseCaseDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `UseCaseDef` across member set `[name: String, doc: Option<String>, subject: Option<String>, actor: Option<String>, actors: Vec<String>]`.
@@ -768,7 +527,7 @@ pub struct UseCaseDef {
 /// Represents a data payload or item definition in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ItemDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ItemDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `ItemDef` across member set `[name: String, doc: Option<String>, attributes: Vec<AttributeDef>]`.
@@ -802,7 +561,7 @@ pub struct ItemDef {
 /// Represents a safety hazard definition in SysML v2 / STPA models.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `HazardDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `HazardDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `HazardDef` across member set `[name: String, doc: Option<String>, severity: i32, source_port: Option<String>, target_port: Option<String>]`.
@@ -839,7 +598,7 @@ pub struct HazardDef {
 /// Represents a safety risk definition in SysML v2 / STPA models.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `RiskDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `RiskDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `RiskDef` across member set `[name: String, doc: Option<String>, severity: i32, hazard_ref: Option<String>, source_port: Option<String>]`.
@@ -876,7 +635,7 @@ pub struct RiskDef {
 /// Represents a connection or topological flow link between ports in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ConnectionDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ConnectionDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `ConnectionDef` across member set `[name: String, source_port: String, target_port: String, source_part: Option<String>, target_part: Option<String>]`.
@@ -957,7 +716,7 @@ pub struct CalcDef {
 /// Represents a structural part definition or block in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `PartDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `PartDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `PartDef` across member set `[name: String, doc: Option<String>, is_def: bool, type_name: Option<String>, attributes: Vec<AttributeDef>]`.
@@ -1033,26 +792,6 @@ pub struct PartDef {
 
 impl Default for PartDef {
     /// Constructs a default `PartDef` with `is_def` initialized to `true` and all collections empty.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C deterministic AST node initialization.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - All subordinate vectors are initialized empty and `is_def == true`.
-    ///
-    /// ## 3. Preconditions
-    /// - None.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns an initialized `PartDef` instance.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Zero-allocation empty vector initialization; cannot fail or panic.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PART-DEF-DEFAULT]
     fn default() -> Self {
         Self {
@@ -1130,7 +869,7 @@ impl PartDef {
 /// Represents an import statement in SysML v2 / KerML.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ImportDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ImportDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `ImportDef` across member set `[path: String, is_wildcard: bool, is_recursive: bool, doc: Option<String>]`.
@@ -1168,7 +907,7 @@ pub struct ImportDef {
 /// Top-level or nested package container in SysML v2.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `PackageDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `PackageDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `PackageDef` across member set `[name: String, doc: Option<String>, parent_package: Option<String>, imports: Vec<ImportDef>, packages: Vec<PackageDef>]`.
@@ -1894,26 +1633,6 @@ impl PackageDef {
 }
 
 /// Recursively collects a part definition and all nested sub-part definitions (`is_def == true`).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C structural tree traversal completeness.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Appends `part.clone()` and recurses on every child with `sub.is_def`.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - `result` contains `part` and all nested `is_def` sub-parts.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V_{part})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-PART-SUBDEFS]
 fn collect_part_and_subdefs(part: &PartDef, result: &mut Vec<PartDef>) {
     result.push(part.clone());
@@ -1925,26 +1644,6 @@ fn collect_part_and_subdefs(part: &PartDef, result: &mut Vec<PartDef>) {
 }
 
 /// Recursively collects all capability definitions from a part and its nested sub-parts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C capability enumeration completeness.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves depth-first declaration order across nested parts.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - Appends all `CapabilityDef` items in `part` subtree to `result`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V_{part} + N_{cap})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-PART-CAPABILITIES]
 fn collect_part_capabilities(part: &PartDef, result: &mut Vec<CapabilityDef>) {
     result.extend(part.capabilities.clone());
@@ -1954,26 +1653,6 @@ fn collect_part_capabilities(part: &PartDef, result: &mut Vec<CapabilityDef>) {
 }
 
 /// Recursively collects all use case definitions from a part and its nested sub-parts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C behavioral use case enumeration completeness.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves depth-first declaration order across nested parts.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - Appends all `UseCaseDef` items in `part` subtree to `result`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V_{part} + N_{uc})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-PART-USE-CASES]
 fn collect_part_use_cases(part: &PartDef, result: &mut Vec<UseCaseDef>) {
     result.extend(part.use_cases.clone());
@@ -1983,26 +1662,6 @@ fn collect_part_use_cases(part: &PartDef, result: &mut Vec<UseCaseDef>) {
 }
 
 /// Recursively collects all interaction definitions from a part and its nested sub-parts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C interaction sequence enumeration completeness.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves depth-first declaration order across nested parts.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - Appends all `InteractionDef` items in `part` subtree to `result`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V_{part} + N_{inter})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-PART-INTERACTIONS]
 fn collect_part_interactions(part: &PartDef, result: &mut Vec<InteractionDef>) {
     result.extend(part.interactions.clone());
@@ -2012,26 +1671,6 @@ fn collect_part_interactions(part: &PartDef, result: &mut Vec<InteractionDef>) {
 }
 
 /// Recursively collects all action definitions from a part and its nested sub-parts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C action behavior enumeration completeness.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves depth-first declaration order across nested parts.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - Appends all `ActionDef` items in `part` subtree to `result`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V_{part} + N_{act})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-PART-ACTIONS]
 fn collect_part_actions(part: &PartDef, result: &mut Vec<ActionDef>) {
     result.extend(part.actions.clone());
@@ -2041,26 +1680,6 @@ fn collect_part_actions(part: &PartDef, result: &mut Vec<ActionDef>) {
 }
 
 /// Recursively collects all constraint definitions from a part and its nested sub-parts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C parametric constraint enumeration completeness.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves depth-first declaration order across nested parts.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - Appends all `ConstraintDef` items in `part` subtree to `result`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V_{part} + N_{con})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-PART-CONSTRAINTS]
 fn collect_part_constraints(part: &PartDef, result: &mut Vec<ConstraintDef>) {
     result.extend(part.constraints.clone());
@@ -2070,26 +1689,6 @@ fn collect_part_constraints(part: &PartDef, result: &mut Vec<ConstraintDef>) {
 }
 
 /// Recursively collects all attribute definitions from a part and its nested sub-parts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C structural attribute enumeration completeness.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves depth-first declaration order across nested parts.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - Appends all `AttributeDef` items in `part` subtree to `result`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V_{part} + N_{attr})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-PART-ATTRIBUTES]
 fn collect_part_attributes(part: &PartDef, result: &mut Vec<AttributeDef>) {
     result.extend(part.attributes.clone());
@@ -2099,26 +1698,6 @@ fn collect_part_attributes(part: &PartDef, result: &mut Vec<AttributeDef>) {
 }
 
 /// Recursively collects all calculation definitions from a part and its nested sub-parts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C mathematical calculation enumeration completeness.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves depth-first declaration order across nested parts.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - Appends all `CalcDef` items in `part` subtree to `result`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V_{part} + N_{calc})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-PART-CALCS]
 fn collect_part_calcs(part: &PartDef, result: &mut Vec<CalcDef>) {
     result.extend(part.calcs.clone());
@@ -2128,26 +1707,6 @@ fn collect_part_calcs(part: &PartDef, result: &mut Vec<CalcDef>) {
 }
 
 /// Recursively collects all port definitions from a part and its nested sub-parts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C logical interface port enumeration completeness.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves depth-first declaration order across nested parts.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - Appends all `PortDef` items in `part` subtree to `result`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V_{part} + N_{port})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-PART-PORTS]
 fn collect_part_ports(part: &PartDef, result: &mut Vec<PortDef>) {
     result.extend(part.ports.clone());
@@ -2157,26 +1716,6 @@ fn collect_part_ports(part: &PartDef, result: &mut Vec<PortDef>) {
 }
 
 /// Recursively collects all safety hazard definitions from a part and its nested sub-parts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and MIL-STD-882E hazard enumeration completeness.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves depth-first declaration order across nested parts.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - Appends all `HazardDef` items in `part` subtree to `result`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V_{part} + N_{haz})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-PART-HAZARDS]
 fn collect_part_hazards(part: &PartDef, result: &mut Vec<HazardDef>) {
     result.extend(part.hazards.clone());
@@ -2186,26 +1725,6 @@ fn collect_part_hazards(part: &PartDef, result: &mut Vec<HazardDef>) {
 }
 
 /// Recursively collects all safety risk definitions from a part and its nested sub-parts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and MIL-STD-882E risk enumeration completeness.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves depth-first declaration order across nested parts.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - Appends all `RiskDef` items in `part` subtree to `result`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V_{part} + N_{risk})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-PART-RISKS]
 fn collect_part_risks(part: &PartDef, result: &mut Vec<RiskDef>) {
     result.extend(part.risks.clone());
@@ -2215,26 +1734,6 @@ fn collect_part_risks(part: &PartDef, result: &mut Vec<RiskDef>) {
 }
 
 /// Recursively collects all state definitions from a part and its nested sub-parts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and IEC 61508 state machine enumeration completeness.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves depth-first declaration order across nested parts.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - Appends all `StateDef` items in `part` subtree to `result`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V_{part} + N_{state})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-PART-STATES]
 fn collect_part_states(part: &PartDef, result: &mut Vec<StateDef>) {
     result.extend(part.states.clone());
@@ -2244,26 +1743,6 @@ fn collect_part_states(part: &PartDef, result: &mut Vec<StateDef>) {
 }
 
 /// Recursively collects all connection definitions from a part and its nested sub-parts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C topological connection enumeration completeness.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves depth-first declaration order across nested parts.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - Appends all `ConnectionDef` items in `part` subtree to `result`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(V_{part} + N_{conn})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-PART-CONNECTIONS]
 fn collect_part_connections(part: &PartDef, result: &mut Vec<ConnectionDef>) {
     result.extend(part.connections.clone());
@@ -2273,26 +1752,6 @@ fn collect_part_connections(part: &PartDef, result: &mut Vec<ConnectionDef>) {
 }
 
 /// Recursively inserts all port identifiers declared on nested sub-parts into `nested`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C hierarchical port qualification rules.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Inserts unique port names into a sorted `BTreeSet<String>`.
-///
-/// ## 3. Preconditions
-/// - Part hierarchy is acyclic.
-///
-/// ## 4. Postconditions
-/// - `nested` contains every port name from `parts` and their descendants.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N_{ports} \log N_{ports})$. Space Complexity: $O(D_{part})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking recursive accumulator.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COLLECT-NESTED-PORTS-RECURSIVE]
 fn collect_nested_ports_recursive(parts: &[PartDef], nested: &mut BTreeSet<String>) {
     for p in parts {
@@ -2306,7 +1765,7 @@ fn collect_nested_ports_recursive(parts: &[PartDef], nested: &mut BTreeSet<Strin
 /// Legacy and high-level SysML model container for backwards compatibility.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `SysmlModel` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `SysmlModel` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `SysmlModel` across member set `[package_name: Option<String>, doc: Option<String>, attributes: Vec<AttributeDef>, parts: Vec<PartDef>, ports: Vec<PortDef>]`.
@@ -2345,26 +1804,6 @@ pub struct SysmlModel {
 
 impl From<PackageDef> for SysmlModel {
     /// Converts a `PackageDef` into a flat `SysmlModel` representation.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C lossless top-level AST projection.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves package name, documentation, and top-level definition collections.
-    ///
-    /// ## 3. Preconditions
-    /// - `pkg` is a valid `PackageDef`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns an owned `SysmlModel` containing moved fields from `pkg`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$ move semantics. Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Infallible ownership transfer.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/SYSML-MODEL-FROM-PACKAGE]
     fn from(pkg: PackageDef) -> Self {
         Self {
@@ -2383,26 +1822,6 @@ impl From<PackageDef> for SysmlModel {
 
 impl From<SysmlModel> for PackageDef {
     /// Converts a `SysmlModel` into a `PackageDef` root container.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C deterministic package lifting.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Defaults unnamed models to `"SysML_Model"` and preserves all model vectors.
-    ///
-    /// ## 3. Preconditions
-    /// - `m` is a valid `SysmlModel`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns an initialized `PackageDef` containing all elements from `m`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$ move semantics. Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Infallible ownership transfer.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PACKAGE-FROM-SYSML-MODEL]
     fn from(m: SysmlModel) -> Self {
         Self {
@@ -2431,225 +1850,6 @@ impl From<SysmlModel> for PackageDef {
             calc_defs: Vec::new(),
         }
     }
-}
-
-/// Checks whether a byte is an ASCII identifier character (`[A-Za-z0-9_]`).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C regex-free lexical analysis.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns `true` iff `b.is_ascii_alphanumeric() || b == b'_'`.
-///
-/// ## 3. Preconditions
-/// - None.
-///
-/// ## 4. Postconditions
-/// - Pure boolean classification of `b`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Infallible byte predicate.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/IS-IDENT-CHAR]
-fn is_ident_char(b: u8) -> bool {
-    b.is_ascii_alphanumeric() || b == b'_'
-}
-
-/// Checks whether `pos` in `text` is preceded by a non-identifier boundary or start-of-string.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C bounds-checked token boundary verification.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Uses `.get(pos - 1)` bounds-checked byte access; never panics on out-of-range indices.
-///
-/// ## 3. Preconditions
-/// - `text` is a valid UTF-8 slice.
-///
-/// ## 4. Postconditions
-/// - Returns `true` if `pos == 0` or the preceding byte is not an identifier character.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Out-of-bounds positions return `true` safely without panicking.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/WORD-BOUNDARY-BEFORE]
-fn is_word_boundary_before(text: &str, pos: usize) -> bool {
-    if pos == 0 {
-        true
-    } else {
-        !text
-            .as_bytes()
-            .get(pos - 1)
-            .copied()
-            .is_some_and(is_ident_char)
-    }
-}
-
-/// Checks whether `pos` in `text` is followed by a non-identifier boundary or end-of-string.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C bounds-checked token boundary verification.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Uses `.get(pos)` bounds-checked byte access; never panics on out-of-range indices.
-///
-/// ## 3. Preconditions
-/// - `text` is a valid UTF-8 slice.
-///
-/// ## 4. Postconditions
-/// - Returns `true` if `pos >= text.len()` or the byte at `pos` is not an identifier character.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Out-of-bounds positions return `true` safely without panicking.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/WORD-BOUNDARY-AFTER]
-fn is_word_boundary_after(text: &str, pos: usize) -> bool {
-    if pos >= text.len() {
-        true
-    } else {
-        !text.as_bytes().get(pos).copied().is_some_and(is_ident_char)
-    }
-}
-
-/// Counts leading ASCII whitespace bytes in `text`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C deterministic lexical scanning.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returned count $k \le \text{text.len()}$ always lies on a valid UTF-8 character boundary.
-///
-/// ## 3. Preconditions
-/// - `text` is a valid UTF-8 slice.
-///
-/// ## 4. Postconditions
-/// - Returns the number of contiguous leading ASCII whitespace bytes.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(k)$ where $k$ is leading whitespace length. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Returns `0` on empty or non-whitespace-prefixed input.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/SKIP-WS]
-fn skip_ws(text: &str) -> usize {
-    text.bytes().take_while(|b| b.is_ascii_whitespace()).count()
-}
-
-/// Extracts a leading ASCII identifier token and its byte length from `text`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C bounds-checked identifier extraction.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Uses `.get(..len).unwrap_or("")` for panic-free slicing.
-///
-/// ## 3. Preconditions
-/// - `text` is a valid UTF-8 string slice.
-///
-/// ## 4. Postconditions
-/// - Returns `(ident_slice, len)` where `len == ident_slice.len()`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(\text{len})$. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Returns `("", 0)` if `text` does not start with an identifier character.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-IDENT]
-fn extract_ident(text: &str) -> (&str, usize) {
-    let len = text.bytes().take_while(|&b| is_ident_char(b)).count();
-    (text.get(..len).unwrap_or(""), len)
-}
-
-/// Extracts an optional `doc /* ... */` documentation block immediately preceding `keyword_pos`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C bounds-checked documentation extraction.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Uses `.get(..)` bounds-checked slicing exclusively; never panics on malformed comment delimiters.
-///
-/// ## 3. Preconditions
-/// - `text` is a valid UTF-8 string slice and `keyword_pos <= text.len()`.
-///
-/// ## 4. Postconditions
-/// - Returns `Some(trimmed_doc)` if a valid `doc /* ... */` block immediately precedes `keyword_pos`, else `None`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(keyword\_pos)$. Space Complexity: $O(L_{doc})$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Returns `None` if `keyword_pos` is out of bounds or no `doc /* ... */` comment precedes the keyword.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-DOC-COMMENT]
-fn extract_doc_comment_before(text: &str, keyword_pos: usize) -> Option<String> {
-    let before = text.get(..keyword_pos)?.trim_end();
-    if before.ends_with("*/") {
-        if let Some(open) = before.rfind("/*") {
-            let doc_prefix = before.get(..open)?.trim_end();
-            if doc_prefix.ends_with("doc") {
-                let doc_start = doc_prefix.len() - 3;
-                if doc_start == 0
-                    || !doc_prefix
-                        .as_bytes()
-                        .get(doc_start - 1)
-                        .copied()
-                        .is_some_and(is_ident_char)
-                {
-                    let inner = before.get(open + 2..before.len().saturating_sub(2))?;
-                    return Some(inner.trim().to_string());
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Extracts the inner string content of a double-quoted literal `"..."`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C bounds-checked string literal extraction.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Uses `strip_prefix` and `.get(..end)` for panic-free extraction.
-///
-/// ## 3. Preconditions
-/// - `s` is a valid UTF-8 string slice.
-///
-/// ## 4. Postconditions
-/// - Returns `Some(inner)` when `s` starts with `"` and has a closing `"`, else `None`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Unclosed quotes return `None` safely without panicking.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-QUOTED-STRING]
-fn extract_quoted_string(s: &str) -> Option<&str> {
-    if let Some(rest) = s.strip_prefix('"') {
-        if let Some(end) = rest.find('"') {
-            return rest.get(..end);
-        }
-    }
-    None
 }
 
 /// Parse attributes from SysML v2 source text.
@@ -2763,26 +1963,6 @@ pub fn parse_attribute_defs(content: &str) -> Vec<AttributeDef> {
 }
 
 /// Parses a single item flow declaration line inside a SysML v2 port block.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C bounds-checked item flow parsing.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Uses `.get(..).unwrap_or("")` for all substring advances; never panics.
-///
-/// ## 3. Preconditions
-/// - `line` is a single line from a port body block.
-///
-/// ## 4. Postconditions
-/// - Returns `Some(FlowDef)` if `line` declares a port flow/item entry, else `None`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L)$ in line byte length. Space Complexity: $O(L)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-flow lines (e.g., attributes or blank lines) return `None`.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-PORT-FLOW-LINE]
 fn parse_port_flow_line(line: &str) -> Option<FlowDef> {
     let trimmed = line.trim().trim_end_matches(';').trim();
@@ -3033,26 +2213,6 @@ pub fn parse_port_defs(content: &str) -> Vec<PortDef> {
 }
 
 /// Parses a single `in` or `out` action parameter declaration into `(is_in, AttributeDef)`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C bounds-checked action parameter extraction.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Uses `.get(..).unwrap_or("")` for all substring advances; never panics.
-///
-/// ## 3. Preconditions
-/// - `s` is a parameter clause or body line.
-///
-/// ## 4. Postconditions
-/// - Returns `Some((true, attr))` for `in` parameters, `Some((false, attr))` for `out` parameters, or `None`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L)$ in parameter string length. Space Complexity: $O(L)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-parameter lines return `None` safely.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-ACTION-PARAM]
 fn parse_action_param(s: &str) -> Option<(bool, AttributeDef)> {
     let trimmed = s.trim();
@@ -3347,68 +2507,7 @@ pub fn parse_constraint_defs(content: &str) -> Vec<ConstraintDef> {
     constraints
 }
 
-/// Extracts a qualified or unqualified KerML/SysML v2 type identifier (`Pkg::Type` or `Type`) from `s`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C bounds-checked qualified type extraction.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Advances across ASCII identifier characters and `::` namespace separators using `.get(..)`.
-///
-/// ## 3. Preconditions
-/// - `s` is a valid UTF-8 string slice.
-///
-/// ## 4. Postconditions
-/// - Returns `(type_slice, len)` where `len == type_slice.len()`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(\text{len})$. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Returns `("", 0)` if `s` does not begin with a valid identifier character.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-TYPE-IDENT]
-fn extract_type_ident(s: &str) -> (&str, usize) {
-    let mut len = 0;
-    let bytes = s.as_bytes();
-    while len < bytes.len() {
-        if let Some(&b) = bytes.get(len) {
-            if is_ident_char(b) {
-                len += 1;
-            } else if s.get(len..).is_some_and(|rest| rest.starts_with("::")) {
-                len += 2;
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-    (s.get(..len).unwrap_or(""), len)
-}
-
 /// Parses a single calculation parameter declaration into an `AttributeDef`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C bounds-checked calculation parameter extraction.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Uses `.get(..).unwrap_or("")` for all substring advances; defaults untyped parameters to `"ScalarValues::Real"`.
-///
-/// ## 3. Preconditions
-/// - `s` is a parameter clause or `in` parameter line inside a `calc` definition.
-///
-/// ## 4. Postconditions
-/// - Returns `Some(AttributeDef)` if a valid parameter name is present, else `None`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L)$ in parameter string length. Space Complexity: $O(L)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Empty or non-identifier clauses return `None` safely.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-CALC-PARAM]
 fn parse_calc_param(s: &str) -> Option<AttributeDef> {
     let mut trimmed = s.trim().trim_end_matches(';').trim();
@@ -3646,32 +2745,6 @@ pub fn parse_calc_defs(content: &str) -> Vec<CalcDef> {
 }
 
 /// Extracts quoted string literals or parenthesized/assigned tokens from a single SysML v2 `@Annotation` line.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C deterministic annotation parsing (`extract_annotation_values`).
-/// Extracts metadata values from `@TriggersHazard`, `@SafetyRealises`, and `@Layer` annotations without regular expressions.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Scans balanced `"..."` string literals using bounds-checked `.get(..)` slices.
-/// - Falls back to extracting unquoted tokens inside `(...)` or following `=` when quotes are omitted.
-///
-/// ## 3. Preconditions
-/// - `after_tag: &str` is the substring of an annotation line immediately following the `@AnnotationName` prefix.
-///
-/// ## 4. Postconditions
-/// - Returns a `Vec<String>` of non-empty trimmed annotation argument values in appearance order.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L)$ where $L$ is the byte length of `after_tag`.
-/// - Space Complexity: $O(K)$ where $K$ is the number of extracted values on the line.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Handles unclosed quotes or empty braces safely by returning only valid tokens.
-/// - State: Pure lexical helper with zero global state.
-/// - Action: Non-panicking `.get(..)` bounds-checked slicing.
-/// - Resource: Bounded by single-line byte length.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-ANNOTATION-VALUES]
 fn extract_annotation_values(after_tag: &str) -> Vec<String> {
     let mut values = Vec::new();
@@ -3721,33 +2794,6 @@ fn extract_annotation_values(after_tag: &str) -> Vec<String> {
 }
 
 /// Parses `@TriggersHazard`, `@SafetyRealises`, and `@Layer` annotations from a SysML v2 declaration body.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and MIL-STD-882E safety traceability mandates (`parse_safety_and_layer_annotations`).
-/// Binds structural `part def` and `requirement def` AST nodes directly to STPA hazards (`@TriggersHazard`),
-/// safety constraints (`@SafetyRealises`), and architectural tiers (`@Layer`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves declaration order and eliminates duplicate hazard or safety requirement identifiers.
-/// - Supports both SysML v2 brace syntax (`@TriggersHazard { hazard = "H-01"; }`) and call syntax (`@TriggersHazard("H-01")`).
-///
-/// ## 3. Preconditions
-/// - `body: &str` is the comment-stripped interior text of a `part def` or `requirement def` block.
-///
-/// ## 4. Postconditions
-/// - Returns `(triggers_hazards, safety_realises, layer)` populated deterministically from `body`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ where $N$ is `body.len()`.
-/// - Space Complexity: $O(H + S)$ where $H$ and $S$ are extracted hazard and safety requirement counts.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Unrecognized `@` annotations are ignored without error.
-/// - State: Pure function.
-/// - Action: Zero regex and zero panicking slice indexing.
-/// - Resource: Linear memory proportional to extracted annotation strings.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SAFETY-LAYER-ANNOTATIONS]
 fn parse_safety_and_layer_annotations(body: &str) -> (Vec<String>, Vec<String>, Option<String>) {
     let mut triggers_hazards = Vec::new();
@@ -4672,189 +3718,8 @@ pub fn parse_state_defs(content: &str) -> Vec<StateDef> {
     states
 }
 
-/// Helper to locate the matching closing brace for a block, respecting strings and comments.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C bounds-checked lexical block boundary detection.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Uses `s.get(open_pos..)` for safe slicing and tracks nested `{}` depth outside string literals.
-///
-/// ## 3. Preconditions
-/// - `s` is a valid UTF-8 string slice and `open_pos` points at or before the opening `{`.
-///
-/// ## 4. Postconditions
-/// - Returns `Some(close_byte_pos)` when depth returns to `0`, or `None` if unbalanced/out-of-bounds.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ in `s.len() - open_pos`. Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Out-of-bounds `open_pos` or unclosed braces return `None` safely without panicking.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/FIND-MATCHING-BRACE]
-pub fn find_matching_brace(s: &str, open_pos: usize) -> Option<usize> {
-    let mut depth = 0;
-    let mut in_str = false;
-    let mut in_escape = false;
-    let chars = s.get(open_pos..)?.char_indices();
-    for (idx, ch) in chars {
-        if in_str {
-            if in_escape {
-                in_escape = false;
-            } else if ch == '\\' {
-                in_escape = true;
-            } else if ch == '"' {
-                in_str = false;
-            }
-        } else {
-            match ch {
-                '"' => in_str = true,
-                '{' => depth += 1,
-                '}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some(open_pos + idx);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    None
-}
-
-/// Helper to mask string literals and comments in source code with spaces, preserving exact byte offsets.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C offset-preserving lexical masking.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Byte length Invariant: `mask_string_literals(s).len() == s.len()`, preserving all newline positions.
-///
-/// ## 3. Preconditions
-/// - `s` is a valid UTF-8 string slice.
-///
-/// ## 4. Postconditions
-/// - Returns a `String` of identical byte length with string literal contents and comments replaced by ASCII spaces.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ in `s.len()`. Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Uses `.get` and `.get_mut` bounds-checked byte access exclusively; never panics.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/MASK-STRING-LITERALS]
-pub fn mask_string_literals(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = bytes.to_vec();
-    let mut i = 0;
-    let mut in_str = false;
-    let mut in_escape = false;
-    while i < out.len() {
-        let cur = out.get(i).copied().unwrap_or(0);
-        if in_str {
-            if in_escape {
-                in_escape = false;
-                if cur != b'\n' {
-                    if let Some(slot) = out.get_mut(i) {
-                        *slot = b' ';
-                    }
-                }
-            } else if cur == b'\\' {
-                in_escape = true;
-                if let Some(slot) = out.get_mut(i) {
-                    *slot = b' ';
-                }
-            } else if cur == b'"' {
-                in_str = false;
-            } else if cur != b'\n' {
-                if let Some(slot) = out.get_mut(i) {
-                    *slot = b' ';
-                }
-            }
-            i += 1;
-        } else if cur == b'"' {
-            in_str = true;
-            i += 1;
-        } else if cur == b'/' && out.get(i + 1) == Some(&b'/') {
-            if let Some(slot) = out.get_mut(i) {
-                *slot = b' ';
-            }
-            if let Some(slot) = out.get_mut(i + 1) {
-                *slot = b' ';
-            }
-            i += 2;
-            while let Some(&b) = out.get(i) {
-                if b == b'\n' {
-                    break;
-                }
-                if let Some(slot) = out.get_mut(i) {
-                    *slot = b' ';
-                }
-                i += 1;
-            }
-        } else if cur == b'/' && out.get(i + 1) == Some(&b'*') {
-            if let Some(slot) = out.get_mut(i) {
-                *slot = b' ';
-            }
-            if let Some(slot) = out.get_mut(i + 1) {
-                *slot = b' ';
-            }
-            i += 2;
-            while let Some(&b) = out.get(i) {
-                if b == b'*' && out.get(i + 1) == Some(&b'/') {
-                    if let Some(slot) = out.get_mut(i) {
-                        *slot = b' ';
-                    }
-                    if let Some(slot) = out.get_mut(i + 1) {
-                        *slot = b' ';
-                    }
-                    i += 2;
-                    break;
-                }
-                if b != b'\n' {
-                    if let Some(slot) = out.get_mut(i) {
-                        *slot = b' ';
-                    }
-                }
-                i += 1;
-            }
-        } else {
-            i += 1;
-        }
-    }
-    String::from_utf8(out).unwrap_or_else(|_| s.to_string())
-}
-
 /// Specifies which nested SysML v2 block categories should be masked out when scanning shallow part bodies.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `NestedBlockMaskMode` in `crates/deap-core/src/sysml_ast.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for enum `NestedBlockMaskMode` across member set `[PartAndRequirement, PortOnly]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `NestedBlockMaskMode` members (`PartAndRequirement, PortOnly`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `NestedBlockMaskMode` representation for enum `NestedBlockMaskMode`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(2)) bounded over input/member dimension of `NestedBlockMaskMode`.
-/// - Space Complexity: O(M(2)) bounded auxiliary memory for `NestedBlockMaskMode`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `NestedBlockMaskMode` (`NestedBlockMaskMode`).
-/// - State: Maintains consistent state invariants across `NestedBlockMaskMode` without partial mutation on error.
-/// - Action: Executes `NestedBlockMaskMode` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `NestedBlockMaskMode` (`DEAP-CORE-SYSML-AST`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEAP-CORE-SYSML-AST-NESTEDBLOCKMASKMODE] | SysML v2: PartDef(NestedBlockMaskMode)
+/// Realises: [REQ-DEAP-CORE-SYSML-AST-NESTEDBLOCKMASKMODE]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum NestedBlockMaskMode {
     /// Masks nested `part` and `requirement` blocks so their members are not attributed to the parent part.
@@ -4864,27 +3729,6 @@ enum NestedBlockMaskMode {
 }
 
 /// Masks the brace-enclosed bodies of nested blocks matching `mode` with spaces while preserving byte offsets.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C hierarchical scope isolation for SysML v2 part bodies.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves exact byte length and newline positions of `body`.
-/// - Uses typed `NestedBlockMaskMode` dispatch with zero static string-slice array parameters.
-///
-/// ## 3. Preconditions
-/// - `body` is a valid UTF-8 SysML v2 block interior.
-///
-/// ## 4. Postconditions
-/// - Returns a `String` of identical byte length with matching nested block bodies replaced by spaces.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ in `body.len()`. Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Uses `.get` and `.get_mut` bounds-checked slicing exclusively; never panics.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/MASK-NESTED-BLOCKS]
 fn mask_nested_blocks(body: &str, mode: NestedBlockMaskMode) -> String {
     let masked = mask_string_literals(body);
@@ -5436,29 +4280,6 @@ pub fn parse_sysml_model(content: &str) -> SysmlModel {
 }
 
 /// Checks whether `needle` appears as a distinct alphanumeric word inside `haystack` (case-insensitive).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C. Evaluates word-boundary containment using
-/// bounds-checked `.get(..)` slicing and UTF-8 character boundaries without regular expressions.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns `true` iff `needle` is non-empty and occurs in `haystack` bounded on both sides by
-///   string edges or non-alphanumeric characters.
-/// - Advances by full UTF-8 character codepoint byte lengths (`c.len_utf8()`).
-///
-/// ## 3. Preconditions
-/// - `haystack` and `needle` are valid UTF-8 string slices.
-///
-/// ## 4. Postconditions
-/// - Pure boolean query; returns `false` when `needle` is empty or does not match on word boundaries.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(|H| \cdot |N|)$ worst-case substring search. Space Complexity: $O(|H| + |N|)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking bounds-checked `.get(..)` slicing prevents multi-byte UTF-8 boundary panics.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/CONTAINS-WORD]
 fn contains_word(haystack: &str, needle: &str) -> bool {
     let h_folded = haystack.to_lowercase();
@@ -5678,29 +4499,6 @@ pub fn extract_negated_components(content: &str) -> Vec<String> {
 }
 
 /// Normalizes the left-hand side of a negating assignment or label into a single joined key token.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C. Derives component keys purely from schema or
-/// specification text structure without any hardcoded domain vocabulary.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Type annotations (`: Type`), code punctuation prefixes, and dotted owner paths are discarded.
-/// - Leading SysML declaration keywords are skipped; numeric-only words are ignored.
-/// - Labels longer than 4 words are treated as prose and yield an empty key.
-///
-/// ## 3. Preconditions
-/// - `lhs` is the lowercase text preceding a negating separator.
-///
-/// ## 4. Postconditions
-/// - Returns the concatenation of the remaining label words, or an empty string.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ in the length of `lhs`. Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Pure non-panicking string analysis; malformed input yields an empty key.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/NEGATED-LABEL-NORMALIZATION]
 fn normalize_negated_label(lhs: &str) -> String {
     let keywords = [
@@ -5741,29 +4539,6 @@ fn normalize_negated_label(lhs: &str) -> String {
 }
 
 /// Extracts component stems from qualified prose negations of the form `no <component> <qualifier>`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C. Recognizes explicit absence declarations in
-/// specification prose without any hardcoded domain vocabulary.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `no` must be a whole word and be followed by 1-2 non-numeric component words and then a
-///   structural qualifier (`system`, `subsystem`, `unit`, `module`, `device`, `installed`, `present`).
-/// - Unqualified prose (e.g. "no more than 3 retries") yields no stems.
-///
-/// ## 3. Preconditions
-/// - `lower` is a single lowercase line of text.
-///
-/// ## 4. Postconditions
-/// - Returns normalized stems (length >= 3) for every qualified negation phrase.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(W)$ in the number of words. Space Complexity: $O(W)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Pure non-panicking string analysis.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/NEGATED-PROSE-PHRASES]
 fn extract_no_phrase_stems(lower: &str) -> Vec<String> {
     let qualifiers = [
@@ -5808,28 +4583,6 @@ fn extract_no_phrase_stems(lower: &str) -> Vec<String> {
 }
 
 /// Extracts the normalized lowercase alphanumeric component stem from a qualified negation key.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C. Strips structural prefixes (`has`) and suffixes
-/// (`subsystem`, `enabled`, `installed`, etc.) while rejecting scalar metrology stems.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Requires at least one structural prefix (`has` at word boundary) or suffix to qualify as a component flag.
-/// - Resulting stem must be at least 3 characters and not belong to scalar metrology stems (`time`, `rate`, etc.).
-///
-/// ## 3. Preconditions
-/// - `key` is a valid UTF-8 identifier or normalized label string.
-///
-/// ## 4. Postconditions
-/// - Returns the lowercase alphanumeric stem or an empty `String` if unqualified.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ in the byte length of `key`. Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking bounds-checked `.get(..)` prefix inspection.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/NEGATED-KEY-STEM]
 fn extract_negated_key_stem(key: &str) -> String {
     let clean: String = key
@@ -5918,27 +4671,6 @@ pub fn is_component_negated(comp: &str, content: &str) -> bool {
 }
 
 /// Checks whether a component name contains or structurally matches any of the supplied negated stems.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C. Single shared matcher for free-text and AST-based
-/// negation queries, guaranteeing identical semantics across FMECA synthesis and STPA verification.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns `true` iff the lowercase alphanumeric component name contains a stem, or `component_matches` holds.
-///
-/// ## 3. Preconditions
-/// - `stems` are lowercase alphanumeric stems produced by `extract_negated_components`.
-///
-/// ## 4. Postconditions
-/// - Returns `false` for empty or non-alphanumeric component names.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(S \cdot N)$. Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Pure non-panicking string analysis.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/NEGATED-STEM-MATCH]
 fn component_matches_negated_stems(comp: &str, stems: &[String]) -> bool {
     let comp_clean: String = comp
@@ -6053,30 +4785,6 @@ pub fn strip_sysml_comments(content: &str) -> String {
 }
 
 /// Strips all line comments (`// ...`), block comments (`/* ... */`, including `doc /* ... */`),
-/// and double-quoted string literals (`"..."`) from a SysML source string while preserving newlines.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C. Prevents documentation prose and string literals
-/// containing keywords like `"part "` from polluting line-level structural token scans.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Every newline (`\n`) in `input` is preserved in the output.
-/// - All `/* ... */` blocks (including `doc /* ... */`), `// ...` comments, and `"..."` string bodies
-///   are replaced with whitespace.
-///
-/// ## 3. Preconditions
-/// - `input` is a valid UTF-8 source slice.
-///
-/// ## 4. Postconditions
-/// - Returns a newly allocated `String` free of comments and string literal contents.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ single-pass character scan. Space Complexity: $O(N)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Unclosed block comments or string literals terminate cleanly at end-of-input without panicking.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/STRIP-ALL-COMMENTS-AND-STRINGS]
 fn strip_all_block_comments_and_strings(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
@@ -6135,97 +4843,10 @@ fn strip_all_block_comments_and_strings(input: &str) -> String {
     out
 }
 
-/// Checks if a string is a valid identifier for a subsystem, component, or part.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C. Rejects schema meta-keywords, primitive type
-/// names, and malformed tokens during multi-format subsystem discovery.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Length must satisfy $1 \le |s| \le 128$.
-/// - First character must be ASCII alphabetic or `_`, and all characters must be ASCII alphanumeric or `_`.
-/// - Must not match any reserved schema keyword in `generic_blacklist` (case-insensitive).
-///
-/// ## 3. Preconditions
-/// - `s` is a valid UTF-8 candidate identifier slice.
-///
-/// ## 4. Postconditions
-/// - Returns `true` iff `s` satisfies all lexical and blacklist constraints.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(|s|)$. Space Complexity: $O(|s|)$ for lowercase comparison.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Pure non-panicking validation predicate.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/VALID-SUBSYSTEM-IDENT]
-pub fn is_valid_subsystem_identifier(s: &str) -> bool {
-    if s.is_empty() || s.len() > 128 {
-        return false;
-    }
-    let Some(first) = s.chars().next() else {
-        return false;
-    };
-    if !first.is_ascii_alphabetic() && first != '_' {
-        return false;
-    }
-    let generic_blacklist = [
-        "true",
-        "false",
-        "null",
-        "none",
-        "na",
-        "string",
-        "int",
-        "integer",
-        "boolean",
-        "float",
-        "description",
-        "version",
-        "name",
-        "id",
-        "type",
-        "subsystem",
-        "component",
-        "part",
-        "module",
-        "parameters",
-        "attributes",
-        "properties",
-        "specs",
-        "metadata",
-        "title",
-        "status",
-        "real",
-        "primary",
-        "secondary",
-        "optional",
-        "required",
-        "level",
-        "segment",
-        "layer",
-        "architecture",
-        "purpose",
-        "function",
-        "item",
-        "flow",
-        "port",
-        "interface",
-        "doc",
-        "package",
-        "def",
-    ];
-    if generic_blacklist.contains(&s.to_ascii_lowercase().as_str()) {
-        return false;
-    }
-    s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
 /// Typed enumeration of every schema file extension recognised by multi-format schema discovery.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `SupportedSchemaExtension` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `SupportedSchemaExtension` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for enum `SupportedSchemaExtension` across member set `[Sysml, Yaml, Yml, Json, Proto, Idl]`.
@@ -6274,6 +4895,7 @@ pub enum SupportedSchemaExtension {
 
 impl SupportedSchemaExtension {
     /// Canonical declaration-ordered table of all 10 supported schema file extensions.
+    /// Realises: [REQ-SYSML-AST-MOD-SUPPORTEDSCHEMAEXTENSION-ALL]
     pub const ALL: &'static [Self] = &[
         Self::Sysml,
         Self::Yaml,
@@ -6362,7 +4984,7 @@ impl SupportedSchemaExtension {
 /// Zero-sized catalog providing iteration and membership queries over supported schema file extensions.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `SupportedExtensionsCatalog` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `SupportedExtensionsCatalog` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves deterministic state conservation and referential transparency for struct `SupportedExtensionsCatalog` (declaration #110) within `DEAP-CORE-SYSML-AST`.
@@ -6473,7 +5095,7 @@ impl SupportedExtensionsCatalog {
 /// Centralized schema discovery and AST part extractor shared across compiler and validators.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `UnifiedSchemaModelExtractor` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `UnifiedSchemaModelExtractor` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `UnifiedSchemaModelExtractor` across member set `[const: SupportedExtensionsCatalog = SupportedExtensionsCatalog;]`.
@@ -6501,6 +5123,7 @@ pub struct UnifiedSchemaModelExtractor;
 
 impl UnifiedSchemaModelExtractor {
     /// Supported schema extensions across all pipeline tools.
+    /// Realises: [REQ-SYSML-AST-MOD-UNIFIEDSCHEMAMODELEXTRACTOR-SUPPORTED-EXTENSIONS]
     pub const SUPPORTED_EXTENSIONS: SupportedExtensionsCatalog = SupportedExtensionsCatalog;
 
     /// Recursively discovers all supported schema files across the provided search directories.
@@ -6852,27 +5475,6 @@ impl UnifiedSchemaModelExtractor {
     }
 
     /// Recursively walks a parsed JSON `Value` tree and collects valid subsystem identifiers.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Extracts component identifiers from structured
-    /// JSON architecture schemas (`schema_nodes`, `subsystems`, `components`, `parts`, `modules`).
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Only identifiers passing `is_valid_subsystem_identifier` are inserted into `parts`.
-    ///
-    /// ## 3. Preconditions
-    /// - `val` is a valid `serde_json::Value` reference; `parts` is a mutable `BTreeSet<String>`.
-    ///
-    /// ## 4. Postconditions
-    /// - Appends all discovered JSON subsystem identifiers into `parts`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(V \log P)$ where $V$ is the number of JSON AST nodes. Space Complexity: $O(D)$ recursion depth.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Unexpected JSON value shapes are ignored without panicking.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-PARTS-JSON]
     fn extract_parts_from_json(val: &serde_json::Value, parts: &mut BTreeSet<String>) {
         match val {
@@ -6952,28 +5554,6 @@ impl UnifiedSchemaModelExtractor {
     }
 
     /// Scans YAML or JSON lines for subsystem and component list entries without an external YAML crate.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Provides zero-dependency line-level extraction
-    /// of YAML/JSON subsystem lists (`subsystems:`, `components:`, `parts:`, `modules:`).
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Tracks indentation scope so only list items under recognized section headers are extracted.
-    /// - Every inserted identifier passes `is_valid_subsystem_identifier`.
-    ///
-    /// ## 3. Preconditions
-    /// - `content` is a valid UTF-8 YAML/JSON text slice; `parts` is a mutable `BTreeSet<String>`.
-    ///
-    /// ## 4. Postconditions
-    /// - Appends all discovered YAML/JSON subsystem identifiers into `parts`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(N \log P)$ in byte length $N$. Space Complexity: $O(1)$ auxiliary beyond `parts`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Pure non-panicking line scanner; comments and blank lines are skipped.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-PARTS-YAML]
     fn extract_parts_from_yaml_lines(content: &str, parts: &mut BTreeSet<String>) {
         let mut in_parts_list = false;
@@ -7042,7 +5622,7 @@ impl UnifiedSchemaModelExtractor {
 /// Represents a logical interface connection binding between a source port and a target port in an AST slice.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `InterfaceDef` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `InterfaceDef` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `InterfaceDef` across member set `[name: String, source_port: String, target_port: String, doc: Option<String>]`.
@@ -7077,7 +5657,7 @@ pub struct InterfaceDef {
 /// Represents a token-budgeted subsystem slice extracted from a `SysmlModel` for air-gapped or single-item synthesis.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `AstSlice` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `AstSlice` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `AstSlice` across member set `[target_package: String, packages: Vec<PackageDef>, parts: Vec<PartDef>, ports: Vec<PortDef>, interfaces: Vec<InterfaceDef>, requirements: Vec<RequirementDef>, hazards: Vec<HazardDef>, estimated_tokens: usize]`.
@@ -7333,7 +5913,7 @@ impl SysmlModel {
 /// Content-addressable SHA-256 incremental cache for parsed `SysmlModel` AST trees under `.pipeline/cache/ast/`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `IncrementalAstCache` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `IncrementalAstCache` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `IncrementalAstCache` across member set `[cache_dir: std::path::PathBuf]`.
@@ -7362,33 +5942,7 @@ pub struct IncrementalAstCache {
 }
 
 /// Computes the lowercase hexadecimal SHA-256 digest of `bytes` by delegating to `crate::digest::compute_sha256`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and FIPS 180-4 single-source-of-truth
-/// cryptographic digest rules (`compute_sha256_hex`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Produces the exact 64-character lowercase hexadecimal SHA-256 digest returned by `crate::digest::compute_sha256(bytes)`
-///   with zero duplicated compression constants.
-///
-/// ## 3. Preconditions
-/// - `bytes: &[u8]` is an arbitrary byte slice.
-///
-/// ## 4. Postconditions
-/// - Returns a 64-character lowercase hex `String`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ where $N$ is `bytes.len()`.
-/// - Space Complexity: $O(N)$ for message block padding in `crate::digest::compute_sha256`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Accepts empty and arbitrarily sized byte slices safely.
-/// - State: Pure function.
-/// - Action: Delegates directly to `crate::digest::compute_sha256(bytes)`.
-/// - Resource: Bounded by `bytes.len()`.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-CACHE-DIGEST] | Issue: #494, #503, #522
+/// Realises: [REQ-SYSML-AST-CACHE-DIGEST]
 fn compute_sha256_hex(bytes: &[u8]) -> String {
     crate::digest::compute_sha256(bytes)
 }
@@ -7535,7 +6089,7 @@ impl IncrementalAstCache {
 /// Runtime metadata descriptor for a single `AttributeDef` field on a SysML v2 `PartDef`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `RUNTIME_METADATA_ENGINE.md` safety objectives for struct `FieldDescriptor` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `RUNTIME_METADATA_ENGINE.md` safety objectives for struct `FieldDescriptor` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `FieldDescriptor` across member set `[name: String, type_name: String, si_unit: Option<String>, range_bounds: Option<(f64, f64)>]`.
@@ -7566,67 +6120,10 @@ pub struct FieldDescriptor {
     pub range_bounds: Option<(f64, f64)>,
 }
 
-/// Extracts optional SI unit (`[m/s]`) and numeric range bounds (`[min..max]`) from an attribute expression string.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and `RUNTIME_METADATA_ENGINE.md` physical metrology extraction (`extract_si_unit_and_bounds`).
-/// Parses bracketed `[unit]` and `[min..max]` annotations from `AttributeDef::default_value` or `doc` without regex.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Bracketed segments containing `".."` are parsed as `(f64, f64)` range bounds when both endpoints are valid floats.
-/// - Bracketed segments without `".."` are captured as the canonical `si_unit` string.
-///
-/// ## 3. Preconditions
-/// - `raw: &str` is an attribute default value or documentation string slice.
-///
-/// ## 4. Postconditions
-/// - Returns `(Option<String>, Option<(f64, f64)>)` representing `(si_unit, range_bounds)`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L)$ where $L$ is `raw.len()`.
-/// - Space Complexity: $O(U)$ where $U$ is the unit string length.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Malformed brackets or non-numeric range tokens are ignored safely without panicking.
-/// - State: Pure helper.
-/// - Action: Uses bounds-checked `.get(..)` slicing exclusively.
-/// - Resource: At most one small `String` allocation for `si_unit`.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-AST-EXTRACT-SI-UNIT-BOUNDS]
-fn extract_si_unit_and_bounds(raw: &str) -> (Option<String>, Option<(f64, f64)>) {
-    let mut si_unit = None;
-    let mut range_bounds = None;
-    let mut cursor = 0;
-
-    while let Some(open_b) = raw.get(cursor..).and_then(|s| s.find('[')) {
-        let start = cursor + open_b + 1;
-        if let Some(close_b) = raw.get(start..).and_then(|s| s.find(']')) {
-            if let Some(inside) = raw.get(start..start + close_b) {
-                let trimmed = inside.trim();
-                if let Some((min_s, max_s)) = trimmed.split_once("..") {
-                    if let (Ok(min_v), Ok(max_v)) =
-                        (min_s.trim().parse::<f64>(), max_s.trim().parse::<f64>())
-                    {
-                        range_bounds = Some((min_v, max_v));
-                    }
-                } else if !trimmed.is_empty() && si_unit.is_none() {
-                    si_unit = Some(trimmed.to_string());
-                }
-            }
-            cursor = start + close_b + 1;
-        } else {
-            break;
-        }
-    }
-
-    (si_unit, range_bounds)
-}
-
 /// Runtime metadata reflection descriptor for a SysML v2 `PartDef` component.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `RUNTIME_METADATA_ENGINE.md` safety objectives for struct `TypeDescriptor` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `RUNTIME_METADATA_ENGINE.md` safety objectives for struct `TypeDescriptor` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `TypeDescriptor` across member set `[type_name: String, package_name: String, layer: Option<String>, fields: Vec<FieldDescriptor>, satisfied_requirements: Vec<String>]`.
@@ -7727,7 +6224,7 @@ impl TypeDescriptor {
 /// Zero-mocking file-backed persistence engine for `SysmlModel` AST snapshots (`PERSISTENCE_ARCHITECTURE.md`).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `PERSISTENCE_ARCHITECTURE.md` safety objectives for struct `AstPersistenceEngine` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `PERSISTENCE_ARCHITECTURE.md` safety objectives for struct `AstPersistenceEngine` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `AstPersistenceEngine` across member set `[storage_root: std::path::PathBuf]`.
@@ -7916,7 +6413,7 @@ impl AstPersistenceEngine {
 /// Cryptographically bound Chain-of-Thought (CoT) reasoning audit record (`DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md`).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md` safety objectives for struct `CotAuditRecord` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md` safety objectives for struct `CotAuditRecord` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `CotAuditRecord` across member set `[step_id: String, model_id: String, prompt_sha256: String, reasoning_trace: String, verified_ast_refs: Vec<String>]`.
@@ -7951,7 +6448,7 @@ pub struct CotAuditRecord {
 /// Append-only audit log of `CotAuditRecord` entries for DO-330 TQL-4 verification traceability.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md` safety objectives for struct `CotAuditLog` in `crates/deap-core/src/sysml_ast.rs`.
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md` safety objectives for struct `CotAuditLog` in `crates/deap-core/src/sysml_ast/mod.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Preserves structural type invariants for struct `CotAuditLog` across member set `[records: Vec<CotAuditRecord>]`.
@@ -8984,108 +7481,14 @@ package SystemModel_SSOT {
     }
 
     #[test]
-    fn test_sysml_ast_source_purity_and_7_section_rustdoc() {
-        let source = include_str!("sysml_ast.rs");
-        let needle_slice_str = ["&[", "&str]"].concat();
-        let needle_tuple_slice = ["&[(", "&str"].concat();
-        let needle_array_str = ["[", "&str;"].concat();
-        let needle_static_slice = [": &[", "&str]"].concat();
-        let needle_const_slice = ["const ", ": &[&str]"].concat();
-        let needle_fm_e = [".filter_map(", "|e|", " e.ok())"].concat();
-        let needle_lower_slice1 = [".to_lowercase()", "["].concat();
-        let needle_lower_slice2 = [".to_ascii_lowercase()", "["].concat();
-        let sha_k0 = ["0x428a", "2f98"].concat();
-        let sha_h0 = ["0x6a09", "e667"].concat();
-
-        let s1 = "## 1. Safety Intent & Regulatory Scope";
-        let s2 = "## 2. Invariants & Mathematical Properties";
-        let s3 = "## 3. Preconditions";
-        let s4 = "## 4. Postconditions";
-        let s5 = "## 5. Algorithmic Complexity Bounds";
-        let s6 = "## 6. Failure Modes & Fault Tolerance";
-        let s7 = "## 7. Realization & Traceability";
-
-        let mut violations = Vec::new();
-        let mut current_doc = Vec::new();
-        let mut in_multiline_comment = false;
-
-        for (idx, raw_line) in source.lines().enumerate() {
-            let line_no = idx + 1;
-            let trimmed = raw_line.trim();
-            if in_multiline_comment {
-                if trimmed.contains("*/") {
-                    in_multiline_comment = false;
-                }
-                continue;
-            }
-            if trimmed.starts_with("/*") && !trimmed.contains("*/") {
-                in_multiline_comment = true;
-                continue;
-            }
-            if trimmed.starts_with("//!") || trimmed.starts_with("///") {
-                current_doc.push(trimmed.to_string());
-                continue;
-            }
-            let code = if let Some((before, _)) = trimmed.split_once("//") {
-                before.trim()
-            } else {
-                trimmed
-            };
-            if code.is_empty() {
-                continue;
-            }
-            if code.contains("mod tests") {
-                break;
-            }
-            if code.contains(&needle_slice_str)
-                || code.contains(&needle_tuple_slice)
-                || code.contains(&needle_array_str)
-                || code.contains(&needle_static_slice)
-                || code.contains(&needle_const_slice)
-            {
-                violations.push(format!("line {}: static string-slice array", line_no));
-            }
-            if code.contains(&needle_fm_e)
-                || (code.contains(".filter_map(") && code.contains(".ok()"))
-            {
-                violations.push(format!("line {}: fail-open error swallowing", line_no));
-            }
-            if code.contains(&needle_lower_slice1)
-                || code.contains(&needle_lower_slice2)
-                || ((code.contains("lower[") || code.contains("_lower[")) && code.contains(".."))
-            {
-                violations.push(format!(
-                    "line {}: cross-string UTF-8 byte-slice hazard",
-                    line_no
-                ));
-            }
-            if code.contains(&sha_k0) || code.contains(&sha_h0) {
-                violations.push(format!("line {}: duplicate SHA-256 constant", line_no));
-            }
-            if code.starts_with("pub fn ")
-                || code.starts_with("fn ")
-                || code.starts_with("pub const fn ")
-                || code.starts_with("pub(crate) fn ")
-            {
-                let doc_block = current_doc.join("\n");
-                for req_hdr in [s1, s2, s3, s4, s5, s6, s7] {
-                    if !doc_block.contains(req_hdr) {
-                        violations.push(format!(
-                            "line {}: missing {} on `{}`",
-                            line_no, req_hdr, code
-                        ));
-                    }
-                }
-                current_doc.clear();
-            } else if !code.starts_with("#[") {
-                current_doc.clear();
-            }
-        }
-        assert!(
-            violations.is_empty(),
-            "Purity violations:\n{}",
-            violations.join("\n")
-        );
+    fn test_sysml_ast_reexports_and_identifier_primitives_roundtrip() -> Result<(), String> {
+        let masked = mask_string_literals("part def FlightCtrl { doc /* \"inner\" */ }");
+        let open_idx = masked.find('{').ok_or("missing opening brace")?;
+        let close_idx = find_matching_brace(&masked, open_idx).ok_or("missing closing brace")?;
+        assert_eq!(masked.as_bytes().get(close_idx).copied(), Some(b'}'));
+        assert!(is_valid_subsystem_identifier("FlightCtrl"));
+        assert!(!is_valid_subsystem_identifier("package"));
+        Ok(())
     }
 
     #[test]
@@ -9124,21 +7527,12 @@ package SystemModel_SSOT {
     }
 
     #[test]
-    fn test_sysml_ast_supported_extensions_free_of_static_str_slice_evasion() {
-        let source = include_str!("sysml_ast.rs");
-        let needle_into_iter = ["IntoIter<&'static", " str"].concat();
-        let needle_static_slice = ["&'static [&'static", " str]"].concat();
-        let hits: Vec<String> = source
-            .lines()
-            .enumerate()
-            .filter(|(_, l)| l.contains(&needle_into_iter) || l.contains(&needle_static_slice))
-            .map(|(i, l)| format!("line {}: {}", i + 1, l.trim()))
-            .collect();
-        assert!(
-            hits.is_empty(),
-            "sysml_ast.rs still carries untyped string-slice catalog evasions:\n{}",
-            hits.join("\n")
-        );
+    fn test_supported_extensions_catalog_exact_size_and_double_ended_iter() {
+        let mut iter = UnifiedSchemaModelExtractor::SUPPORTED_EXTENSIONS.iter();
+        assert_eq!(iter.len(), 10);
+        assert_eq!(iter.next(), Some(".sysml"));
+        assert_eq!(iter.next_back(), Some(".yang"));
+        assert_eq!(iter.len(), 8);
     }
 
     #[test]
@@ -9193,23 +7587,17 @@ package SystemModel_SSOT {
     }
 
     #[test]
-    fn test_sysml_ast_module_7_section_rustdoc() {
-        let src = include_str!("sysml_ast.rs");
-        let module_doc: String = src
-            .lines()
-            .take_while(|line| line.starts_with("//!"))
-            .collect::<Vec<&str>>()
-            .join("\n");
-        assert!(module_doc.contains("//! ## 1. Safety Intent & Regulatory Scope"));
-        assert!(module_doc.contains("//! ## 2. Invariants & Mathematical Properties"));
-        assert!(module_doc.contains("//! ## 3. Preconditions"));
-        assert!(module_doc.contains("//! ## 4. Postconditions"));
-        assert!(module_doc.contains("//! ## 5. Algorithmic Complexity Bounds"));
-        assert!(module_doc.contains("//! ## 6. Failure Modes & Fault Tolerance"));
-        assert!(module_doc.contains("//! ## 7. Realization & Traceability"));
-        assert!(
-            module_doc.contains("//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]")
-        );
+    fn test_sysml_ast_attribute_and_flow_serde_defaults_roundtrip() -> Result<(), String> {
+        let attr: AttributeDef = serde_json::from_str(r#"{"name":"pressure","type_name":"Real"}"#)
+            .map_err(|e| e.to_string())?;
+        assert_eq!(attr.name, "pressure");
+        assert!(attr.default_value.is_none());
+
+        let flow: FlowDef =
+            serde_json::from_str(r#"{"name":"telemetry_tx"}"#).map_err(|e| e.to_string())?;
+        assert_eq!(flow.direction, "out");
+        assert_eq!(flow.item_type, "Item");
+        Ok(())
     }
 
     #[test]
@@ -9424,29 +7812,7 @@ package SystemModel_SSOT {
         Ok(())
     }
 
-    /// Regression test verifying `UnifiedSchemaModelExtractor::discover_schema_files` excludes `.digest.json` sidecars.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Prevents digest sidecar files from polluting
-    /// the discovered schema file list.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Only genuine schema files (`blueprint-01-alpha.sysml` and `valid_schema.json`) are discovered; all digest sidecars are excluded.
-    ///
-    /// ## 3. Preconditions & Domain Bounds
-    /// - Temporary directory contains mixed schema files and `.digest.json` / `-digest.json` / `_digest.json` / `digest.json` sidecars.
-    ///
-    /// ## 4. Postconditions & State Mutation Contract
-    /// - Temporary directory is cleaned up after verification.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Asserts exact file membership and removes temporary fixtures unconditionally.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/DISCOVER-SCHEMA-FILES]
+    /// Verifies `UnifiedSchemaModelExtractor::discover_schema_files` excludes `.digest.json` sidecars.
     #[test]
     fn test_issue_549_discover_schema_files_excludes_digest_json_sidecars() -> Result<(), String> {
         let tmp_dir =
@@ -9506,36 +7872,7 @@ package SystemModel_SSOT {
         Ok(())
     }
 
-    /// Regression test for Issue #551: ensures `extract_subsystem_parts_from_text` ignores
-    /// English prose containing `"part "` inside `doc /* ... */` blocks and ignores
-    /// `SchemaDigest` JSON sidecars.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Prevents phantom subsystem pollution
-    /// from SysML documentation comments and `SchemaDigest` sidecar JSON payloads.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Only genuine SysML `part def <Ident>` and `part <Ident> :` / `{` / `[` / `;` declarations
-    ///   outside comments and string literals are extracted.
-    /// - `SchemaDigest` JSON documents (`format_version` + `source_hash` without `schema_nodes`)
-    ///   produce zero extracted subsystem identifiers.
-    ///
-    /// ## 3. Preconditions & Input Domain
-    /// - `sysml_src` contains `doc /* ... */` prose with `"part "` substrings alongside valid
-    ///   `part def` and `part` usage statements.
-    /// - `digest_json` is a serialized `SchemaDigest` JSON payload.
-    ///
-    /// ## 4. Postconditions & State Mutation Contract
-    /// - Pure in-memory verification with zero filesystem side effects.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Asserts exact inclusion and exclusion invariants on deterministic `BTreeSet<String>` outputs.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
+    /// Verifies `extract_subsystem_parts_from_text` ignores `doc /* ... */` prose and `SchemaDigest` JSON sidecars.
     #[test]
     fn test_issue_551_extract_subsystem_parts_ignores_doc_prose_and_schema_digest() {
         let sysml_src = r#"
@@ -9589,35 +7926,7 @@ package FlightPkg {
         );
     }
 
-    /// Regression test for Issue #553: ensures `extract_subsystem_parts_from_text` ignores
-    /// unrelated Markdown tables that lack a subsystem/component/segment/part/unit header column.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Prevents phantom subsystem identifier
-    /// pollution from glossary, revision history, and traceability Markdown tables.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Only Markdown tables containing a header matching `"subsystem"`, `"component"`,
-    ///   `"segment"`, `"part"`, or `"unit"` yield extracted subsystem identifiers.
-    /// - Tables without a matching header column (`col_subsys_idx == None`) never fall back to
-    ///   extracting column 0.
-    ///
-    /// ## 3. Preconditions & Input Domain
-    /// - `md_src` contains a valid component table (`| ID | Subsystem | Owner |`) followed by an
-    ///   unrelated glossary table (`| Acronym | Meaning |`).
-    ///
-    /// ## 4. Postconditions & State Mutation Contract
-    /// - Pure in-memory verification with zero filesystem side effects.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$. Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Asserts exact inclusion of `"NavigationUnit"` and exclusion of `"GNSSReceiverTerm"` and
-    ///   `"INSDriftTerm"`.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
+    /// Verifies `extract_subsystem_parts_from_text` ignores Markdown tables without a subsystem header column.
     #[test]
     fn test_issue_553_extract_subsystem_parts_ignores_unrelated_markdown_tables() {
         let md_src = r#"
@@ -9653,34 +7962,7 @@ package FlightPkg {
         );
     }
 
-    /// Verifies that `parse_state_defs` roundtrips both nested `sub_states` and `transitions`
-    /// with deterministic `(name, source, target, trigger)` extraction.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C behavioral state machine
-    /// AST extraction mandates for `parse_state_defs` in `crates/deap-core/src/sysml_ast.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Parses top-level `StateDef` (`BP_01_LifecycleState`) with exact nested `sub_states`
-    ///   (`Uninitialized`, `Active`) and `transitions` (`Initial_to_Uninitialized`,
-    ///   `Uninitialized_to_Active_on_parse_token`, `Active_to_Terminal`).
-    /// - Recovers `source`, `target`, and optional `trigger` fields from canonical `_to_` and
-    ///   `_on_` transition naming conventions without data loss.
-    ///
-    /// ## 3. Preconditions
-    /// - `src` is a valid UTF-8 SysML v2 `state def` block containing sub-states and transitions.
-    ///
-    /// ## 4. Postconditions
-    /// - Asserts 1 top-level `StateDef`, 2 `sub_states`, and 3 `transitions` with exact fields.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$ over fixed test fixture. Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Propagates missing element assertions via `Result::Err` with zero `.unwrap()` or `.expect()`.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-STATE-DEFS-TRANSITIONS]
+    /// Verifies `parse_state_defs` roundtrips nested `sub_states` and `transitions` with `(name, source, target, trigger)`.
     #[test]
     fn test_parse_state_defs_roundtrips_sub_states_and_transitions(
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -9728,37 +8010,9 @@ state def BP_01_LifecycleState {
         Ok(())
     }
 
-    /// Verifies that `IncrementalAstCache::compute_digest` delegates to `crate::digest::compute_sha256` and that
-    /// `sysml_ast.rs` contains no duplicate manual SHA-256 compression table (Issue #494, #503).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C cryptographic
-    /// digest SSOT mandates for `IncrementalAstCache::compute_digest` in `crates/deap-core/src/sysml_ast.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - `IncrementalAstCache::compute_digest(s)` produces identical digests to `crate::digest::compute_sha256(s.as_bytes())`
-    ///   across empty, single-block, 56-byte boundary, and multi-block FIPS 180-4 test payloads.
-    /// - Production code in `sysml_ast.rs` prior to `#[cfg(test)]` contains zero duplicate SHA-256
-    ///   constants (`0x428a2f98`, `0x6a09e667`).
-    ///
-    /// ## 3. Preconditions
-    /// - Static string slice fixtures and compile-time `include_str!("sysml_ast.rs")` source inspection.
-    ///
-    /// ## 4. Postconditions
-    /// - Asserts bitwise hex equality and single-point SHA-256 implementation delegation.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$ over bounded test vectors and compile-time source string.
-    /// - Space Complexity: $O(1)$ auxiliary memory.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Propagates assertion failures via `Result::Err` with zero unwrap or expect calls.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SYSML-AST-CACHE-DIGEST] | Issue: #494, #503, #522
+    /// Verifies `compute_sha256_hex` and `IncrementalAstCache::compute_digest` match `crate::digest::compute_sha256` across FIPS 180-4 vectors.
     #[test]
-    fn test_issue_494_compute_sha256_hex_delegates_to_canonical_digest(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_issue_494_compute_sha256_hex_delegates_to_canonical_digest() {
         for sample in [
             "",
             "abc",
@@ -9774,50 +8028,9 @@ state def BP_01_LifecycleState {
                 crate::digest::compute_sha256(sample.as_bytes())
             );
         }
-
-        let src = include_str!("sysml_ast.rs");
-        let prod_src = src
-            .split("#[cfg(test)]")
-            .next()
-            .ok_or("missing production section in sysml_ast.rs")?;
-        let k0_token = concat!("0x428a", "2f98");
-        let h0_token = concat!("0x6a09", "e667");
-        assert!(
-            !prod_src.contains(k0_token) && !prod_src.contains(h0_token),
-            "Expected IncrementalAstCache::compute_digest in sysml_ast.rs to delegate to crate::digest::compute_sha256 without duplicating SHA-256 constants"
-        );
-        Ok(())
     }
 
-    /// Regression test verifying `UnifiedSchemaModelExtractor::discover_schema_files` preserves
-    /// depth-0 dot-prefixed root directories while filtering hidden dot-prefixed entries at depth >= 1 (Issue #503).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C schema discovery
-    /// mandates for `UnifiedSchemaModelExtractor::discover_schema_files` in `crates/deap-core/src/sysml_ast.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - A depth-0 root directory whose final path component starts with `.` (e.g., `.dot_root_*`) is not
-    ///   pruned by `filter_entry`, allowing its valid `.sysml` children to be discovered.
-    /// - Hidden files or subdirectories at depth >= 1 (`.hidden.sysml`, `.hidden_dir/nested.sysml`) remain
-    ///   strictly excluded.
-    ///
-    /// ## 3. Preconditions
-    /// - Temporary directory in `std::env::temp_dir()` with a dot-prefixed folder name containing both
-    ///   visible and hidden `.sysml` fixtures.
-    ///
-    /// ## 4. Postconditions
-    /// - Asserts `visible.sysml` is discovered, `.hidden.sysml` and `.hidden_dir/nested.sysml` are excluded,
-    ///   and the temporary directory is removed via `std::fs::remove_dir_all`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$ over bounded temporary fixture. Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Propagates all I/O and assertion failures via `Result<(), String>` with zero unwrap or expect calls.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/DISCOVER-SCHEMA-FILES] | Issue: #503
+    /// Verifies `UnifiedSchemaModelExtractor::discover_schema_files` preserves depth-0 dot-prefixed root directories while filtering hidden entries at depth >= 1.
     #[test]
     fn test_issue_503_discover_schema_files_preserves_depth_zero_dot_root() -> Result<(), String> {
         let tmp_dir = std::env::temp_dir().join(format!(

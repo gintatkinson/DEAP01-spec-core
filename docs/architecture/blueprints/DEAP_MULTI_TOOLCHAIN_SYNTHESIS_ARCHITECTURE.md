@@ -93,7 +93,7 @@ Rather than binding systems engineering workflows to any single commercial model
 flowchart TD
     subgraph Frontend_IR ["Universal Front-End IR"]
         direction TB
-        AST_IR["OMG SysML v2 AST Metamodel<br/>crates/deap-core/src/sysml_ast.rs"]
+        AST_IR["OMG SysML v2 AST Metamodel<br/>crates/deap-core/src/sysml_ast/mod.rs"]
     end
 
     subgraph DEAP_Compiler ["DEAP Synthesis Compiler Engine"]
@@ -146,7 +146,7 @@ To execute deterministic multi-toolchain synthesis without runtime memory hazard
 DEAP01-spec-core/
 ├── Cargo.toml                  # Workspace root manifest (6-crate topology)
 ├── crates/
-│   ├── deap-core/              # Canonical SysML v2 AST (`src/sysml_ast.rs`), source AST, diagnostics, and rules
+│   ├── deap-core/              # Canonical SysML v2 AST (`src/sysml_ast/mod.rs`), source AST, diagnostics, and rules
 │   ├── compile-sysml/          # SysML v2 compiler, MBD bundle synthesis (`src/lib.rs`), STPA, and sync (`src/sync/forward/mod.rs`)
 │   ├── ingest-sysml/           # Heterogeneous Level 0 specification AST translators (`src/translators/mod.rs`)
 │   ├── verify-baseline/        # Mechanical verification runner (`src/runner.rs`) and parity/docstring gates (`src/checks/`)
@@ -154,7 +154,7 @@ DEAP01-spec-core/
 │   └── reconcile-backlog/      # Pure Rust Agile backlog & tracker reconciliation engine (`src/lib.rs`)
 ```
 
-- **`crates/deap-core`**: Defines the canonical SysML v2 AST data structures and slicing primitives in `crates/deap-core/src/sysml_ast.rs` (`SysmlModel`, `PackageDef`, `PartDef`, `PortDef`, `ActionDef`, `StateDef`, `ConstraintDef`, `RequirementDef`, `AstSlice`, `SysmlModel::slice_package_subsystem`, `IncrementalAstCache`, `TypeDescriptor`, `FieldDescriptor`), source AST extraction (`crates/deap-core/src/source_ast.rs`), Markdown/Mermaid/KaTeX verifiers (`crates/deap-core/src/markdown.rs`), and structured diagnostic dossiers (`crates/deap-core/src/diagnostics.rs`).
+- **`crates/deap-core`**: Defines the canonical SysML v2 AST data structures and slicing primitives in `crates/deap-core/src/sysml_ast/mod.rs` (`SysmlModel`, `PackageDef`, `PartDef`, `PortDef`, `ActionDef`, `StateDef`, `ConstraintDef`, `RequirementDef`, `AstSlice`, `SysmlModel::slice_package_subsystem`, `IncrementalAstCache`, `TypeDescriptor`, `FieldDescriptor`), source AST extraction (`crates/deap-core/src/source_ast.rs`), Markdown/Mermaid/KaTeX verifiers (`crates/deap-core/src/markdown.rs`), and structured diagnostic dossiers (`crates/deap-core/src/diagnostics.rs`).
 - **`crates/compile-sysml`**: Provides the SysML v2 / KerML compiler, cryptographic `SchemaDigest` generator, and MBD / 3-Layer contract synthesis engine in `crates/compile-sysml/src/lib.rs` (`MbdExportBundle`, `synthesize_mbd_bundle`, `export_mbd_artifacts`), forward specification synchronization in `crates/compile-sysml/src/sync/forward/mod.rs`, and the CLI entrypoint in `crates/compile-sysml/src/main.rs` (`--compile`, `--slice-package <pkg>`, `--export-mbd <dir>`, `--stpa-transpile`, `--forward-sync`, `--reverse-sync`, `--inject-safety-docstrings`, `--extract-source`).
 - **`crates/ingest-sysml`**: Provides heterogeneous Level 0 specification AST translators in `crates/ingest-sysml/src/translators/mod.rs` (`idl`, `markdown`, `openapi`, `yang`, `code`) that lower external schemas into canonical SysML v2 AST models.
 - **`crates/verify-baseline`**: Orchestrates mechanical baseline and parity verification in `crates/verify-baseline/src/runner.rs` across `crates/verify-baseline/src/checks/structural.rs`, `crates/verify-baseline/src/checks/parity_gates.rs`, and `crates/verify-baseline/src/checks/docstring_gate.rs` (Checks 10 through 36).
@@ -162,14 +162,14 @@ DEAP01-spec-core/
 - **`crates/reconcile-backlog`**: Synchronizes local Epics, Features, User Stories, Use Cases, and WBS checklists with the remote issue tracker via `crates/reconcile-backlog/src/lib.rs`.
 
 #### Strongly-Typed AST Slicing Mechanics (<= 4,096 Tokens)
-Autonomous AI code generation subagents require focused, context-isolated inputs to eliminate context saturation and prevent cross-boundary hallucinations. The AST slicing engine in `crates/deap-core/src/sysml_ast.rs` (`SysmlModel::slice_package_subsystem` returning `AstSlice`, invoked via `./target/release/compile-sysml --slice-package <pkg>` in `crates/compile-sysml/src/main.rs`) provides:
+Autonomous AI code generation subagents require focused, context-isolated inputs to eliminate context saturation and prevent cross-boundary hallucinations. The AST slicing engine in `crates/deap-core/src/sysml_ast/mod.rs` (`SysmlModel::slice_package_subsystem` returning `AstSlice`, invoked via `./target/release/compile-sysml --slice-package <pkg>` in `crates/compile-sysml/src/main.rs`) provides:
 1. **Topological Subgraph Partitioning:** `SysmlModel::slice_package_subsystem` decomposes the canonical `SysmlModel` / `PackageDef` hierarchy into a targeted `AstSlice` focused on a single subsystem package, port boundary, or statechart.
 2. **Strict Context Budget (<= 4,096 tokens):** Calculates the exact token footprint of serialized AST nodes. Slices exceeding 4,096 tokens are recursively partitioned along interface boundaries.
-3. **Interface Stubbing & Typed Descriptors:** Slices project boundary types through `TypeDescriptor` and `FieldDescriptor` in `crates/deap-core/src/sysml_ast.rs`, replacing out-of-scope model entities with typed interface contracts and port stubs so each slice is syntactically and semantically self-contained.
+3. **Interface Stubbing & Typed Descriptors:** Slices project boundary types through `TypeDescriptor` and `FieldDescriptor` in `crates/deap-core/src/sysml_ast/mod.rs`, replacing out-of-scope model entities with typed interface contracts and port stubs so each slice is syntactically and semantically self-contained.
 
 #### Incremental AST Parser Caching & MBD Contract Synthesis
 To accelerate multi-toolchain synthesis across incremental model revisions and emit deterministic 3-Layer MBD contracts:
-1. **Content-Hash Keying (`IncrementalAstCache`):** Input schemas are indexed by SHA-256 content hashes via `IncrementalAstCache` in `crates/deap-core/src/sysml_ast.rs` and `SchemaDigest` in `crates/compile-sysml/src/lib.rs` (persisted to `.pipeline/schema-digest.json` and `.pipeline/cache/ast/<sha256>.bin`).
+1. **Content-Hash Keying (`IncrementalAstCache`):** Input schemas are indexed by SHA-256 content hashes via `IncrementalAstCache` in `crates/deap-core/src/sysml_ast/mod.rs` and `SchemaDigest` in `crates/compile-sysml/src/lib.rs` (persisted to `.pipeline/schema-digest.json` and `.pipeline/cache/ast/<sha256>.bin`).
 2. **Sub-Millisecond Deserialization:** Pre-parsed AST models are loaded via deterministic deserialization, bypassing lexical and grammar parsing when source files in the `FileDigestEntry` manifest are unmodified.
 3. **MBD & 3-Layer Contract Synthesis (`MbdExportBundle`):** `synthesize_mbd_bundle` and `export_mbd_artifacts` in `crates/compile-sysml/src/lib.rs` (invoked via `./target/release/compile-sysml --export-mbd <dir>` in `crates/compile-sysml/src/main.rs` alongside `crates/compile-sysml/src/sync/forward/mod.rs`) deterministically synthesize `MbdExportBundle` artifacts across (1) Domain State & Data Models (`TypeDescriptor`, `FieldDescriptor`), (2) Logic & State Management (`state def`, `action def`, `calc def`), and (3) Presentation & Actuator Interface Bindings (`port def`, `connection def`).
 
@@ -367,7 +367,7 @@ SLDV uses automated formal methods (powered by the Prover Technology proof engin
 
 ### 3.4 SysML v2 to Tier-1 MBD Transformation Rules
 
-In `crates/compile-sysml/src/lib.rs`, `synthesize_mbd_bundle` and `export_mbd_artifacts` (invoked via `./target/release/compile-sysml --export-mbd <dir>` in `crates/compile-sysml/src/main.rs`) lower `SysmlModel` / `PackageDef` AST nodes (`TypeDescriptor`, `FieldDescriptor` in `crates/deap-core/src/sysml_ast.rs`) into an `MbdExportBundle` containing Tier-1 MBD artifacts:
+In `crates/compile-sysml/src/lib.rs`, `synthesize_mbd_bundle` and `export_mbd_artifacts` (invoked via `./target/release/compile-sysml --export-mbd <dir>` in `crates/compile-sysml/src/main.rs`) lower `SysmlModel` / `PackageDef` AST nodes (`TypeDescriptor`, `FieldDescriptor` in `crates/deap-core/src/sysml_ast/mod.rs`) into an `MbdExportBundle` containing Tier-1 MBD artifacts:
 
 ```sysml
 /* Canonical SysML v2 Input */
@@ -1021,4 +1021,4 @@ status: "PRODUCTION-GRADE"
 
 ## Section 9: Architectural Summary & Verification Parity Gate
 
-The **DEAP Multi-Toolchain Synthesis & Formal Verification Architecture** bridges abstract systems engineering with concrete execution and formal proof ecosystems. By establishing the **OMG SysML v2 AST** (`crates/deap-core/src/sysml_ast.rs`) as the immutable intermediate representation and governing transformations through rigorous platform profiles (`.pipeline/profiles/*.md`), native Rust compilation (`./target/release/compile-sysml --compile`, `--slice-package <pkg>`, `--export-mbd <dir>`), Level 0 ingestion (`./target/release/ingest-sysml`), ConOps assembly (`./target/release/assemble-conops`), backlog reconciliation (`./target/release/reconcile-backlog`), and mechanical verification gates (`./target/release/verify-baseline . --no-domain` in `crates/verify-baseline/src/runner.rs`), DEAP guarantees absolute specification-model-code parity across the entire safety-critical lifecycle.
+The **DEAP Multi-Toolchain Synthesis & Formal Verification Architecture** bridges abstract systems engineering with concrete execution and formal proof ecosystems. By establishing the **OMG SysML v2 AST** (`crates/deap-core/src/sysml_ast/mod.rs`) as the immutable intermediate representation and governing transformations through rigorous platform profiles (`.pipeline/profiles/*.md`), native Rust compilation (`./target/release/compile-sysml --compile`, `--slice-package <pkg>`, `--export-mbd <dir>`), Level 0 ingestion (`./target/release/ingest-sysml`), ConOps assembly (`./target/release/assemble-conops`), backlog reconciliation (`./target/release/reconcile-backlog`), and mechanical verification gates (`./target/release/verify-baseline . --no-domain` in `crates/verify-baseline/src/runner.rs`), DEAP guarantees absolute specification-model-code parity across the entire safety-critical lifecycle.

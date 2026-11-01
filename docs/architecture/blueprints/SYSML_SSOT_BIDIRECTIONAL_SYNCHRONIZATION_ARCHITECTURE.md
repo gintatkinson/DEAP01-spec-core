@@ -121,7 +121,7 @@ DEAP01-spec-core/
 ### Workspace Crate Inventory & Grounded Module Topology
 
 - **`crates/deap-core`**: Core AST primitives, slicing, caching, markdown/KaTeX/Mermaid verification, and workspace governance rules:
-  - `src/sysml_ast.rs` (`SysmlModel`, `AstSlice`, `IncrementalAstCache`, `PartDef`, `PortDef`, `RequirementDef`, `HazardDef`)
+  - `src/sysml_ast/mod.rs` (`SysmlModel`, `AstSlice`, `IncrementalAstCache`, `PartDef`, `PortDef`, `RequirementDef`, `HazardDef`)
   - `src/source_ast.rs`
   - `src/markdown.rs`
   - `src/workspace.rs`
@@ -153,13 +153,13 @@ DEAP01-spec-core/
   - `src/lib.rs`
 
 ### 3.1 Strongly-Typed AST Slicing Mechanics (<= 4,096 Tokens)
-During forward projection and reverse synchronization, model complexity can exceed the context window limits of autonomous LLM subagents. The `deap-core` slicing engine (`crates/deap-core/src/sysml_ast.rs` via `AstSlice` and `SysmlModel`) partitions the global model into strongly-typed, context-isolated subgraphs:
+During forward projection and reverse synchronization, model complexity can exceed the context window limits of autonomous LLM subagents. The `deap-core` slicing engine (`crates/deap-core/src/sysml_ast/mod.rs` via `AstSlice` and `SysmlModel`) partitions the global model into strongly-typed, context-isolated subgraphs:
 1. **Target Subsystem Slicing:** Extracts a discrete subsystem package and its immediate boundaries.
 2. **Context Budget Enforcement:** Strictly bounds each `AstSlice` to $\le 4,096$ tokens, preventing prompt truncation and output degradation.
 3. **Contract Stubbing:** Replaces external dependencies with typed `PortDef` interfaces, preserving closed-world validity within the slice.
 
 ### 3.2 Incremental AST Parser Caching
-To ensure sub-second turnaround during multi-agent synchronization loops, `IncrementalAstCache` in `crates/deap-core/src/sysml_ast.rs` and `crates/compile-sysml/src/semantic/digest.rs` enforce:
+To ensure sub-second turnaround during multi-agent synchronization loops, `IncrementalAstCache` in `crates/deap-core/src/sysml_ast/mod.rs` and `crates/compile-sysml/src/semantic/digest.rs` enforce:
 1. **Content-Hash Keyed Cache:** `.pipeline/cache/ast/<sha256>.bin` stores pre-parsed representations of the AST keyed by SHA-256 content digests.
 2. **Selective Delta Parsing:** Only files whose SHA-256 fingerprint has changed are re-lexed and re-parsed by `crates/compile-sysml/src/parser/grammar/mod.rs`. Unchanged modules are loaded directly from disk cache.
 

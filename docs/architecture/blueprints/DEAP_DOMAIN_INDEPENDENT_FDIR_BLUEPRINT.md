@@ -242,7 +242,7 @@ flowchart TD
 
 The compiler enforces strict gates ensuring zero domain coupling:
 
-1. **Gate 1: AST Extraction Gate (`crates/ingest-sysml/src/lib.rs` and `crates/deap-core/src/sysml_ast.rs`)**:
+1. **Gate 1: AST Extraction Gate (`crates/ingest-sysml/src/lib.rs` and `crates/deap-core/src/sysml_ast/mod.rs`)**:
    - Asserts that generic models (`Node1`, `Node2`, `SigA`, `FaultB`) parse with 100% fidelity.
 2. **Gate 2: Zero Domain String Linter (`crates/verify-baseline/src/lib.rs`)**:
    - Scans all upstream parser crates for forbidden concrete domain words and vehicle primitives to guarantee pure abstract semantics.
@@ -261,7 +261,7 @@ The deterministic FDIR engine is implemented within the 6-crate Rust workspace a
 
 | Crate Identifier | Architecture & Responsibilities | Key Dependencies | Quality Gate Contract |
 | :--- | :--- | :--- | :--- |
-| **`deap-core`** (`crates/deap-core`) | Foundational shared library hosting SysML v2 / KerML AST structures (`SysmlModel`, `PartDef`, `ActionDef`, `StateDef`, `HazardDef`, `RiskDef`, `ConstraintDef`, `RequirementDef`, `TestCaseDef`, `AstSlice`, `CotAuditLog` in `crates/deap-core/src/sysml_ast.rs`), source AST extractors (`crates/deap-core/src/source_ast.rs`), diagnostics (`crates/deap-core/src/diagnostics.rs`), markdown/Mermaid/KaTeX syntax verifiers (`crates/deap-core/src/markdown.rs`), governance rules (`crates/deap-core/src/rules.rs`), and workspace checks (`crates/deap-core/src/workspace.rs`). | `serde`, `serde_json`, `walkdir`, `chrono`, `uuid` | Pure deterministic domain-independent core with zero panics and strict Clippy lints. |
+| **`deap-core`** (`crates/deap-core`) | Foundational shared library hosting SysML v2 / KerML AST structures (`SysmlModel`, `PartDef`, `ActionDef`, `StateDef`, `HazardDef`, `RiskDef`, `ConstraintDef`, `RequirementDef`, `TestCaseDef`, `AstSlice`, `CotAuditLog` in `crates/deap-core/src/sysml_ast/mod.rs`), source AST extractors (`crates/deap-core/src/source_ast.rs`), diagnostics (`crates/deap-core/src/diagnostics.rs`), markdown/Mermaid/KaTeX syntax verifiers (`crates/deap-core/src/markdown.rs`), governance rules (`crates/deap-core/src/rules.rs`), and workspace checks (`crates/deap-core/src/workspace.rs`). | `serde`, `serde_json`, `walkdir`, `chrono`, `uuid` | Pure deterministic domain-independent core with zero panics and strict Clippy lints. |
 | **`ingest-sysml`** (`crates/ingest-sysml`) | Ground 0.0 SysML v2 ingestion engine and structural/behavioral schema extractor (`crates/ingest-sysml/src/lib.rs`, `crates/ingest-sysml/src/main.rs`). | `deap-core`, `compile-sysml`, `clap`, `serde`, `serde_json`, `walkdir`, `chrono`, `rayon` | Deterministically ingests source schemas and reverse-engineered packages into canonical `.sysml` AST models. |
 | **`compile-sysml`** (`crates/compile-sysml`) | SysML v2 / KerML compiler, STPA/FMECA/FDIR safety transpiler, schema digest generator (`.pipeline/schema-digest.json`), and specification synchronization engine (`crates/compile-sysml/src/lib.rs`, `crates/compile-sysml/src/main.rs`). | `deap-core`, `clap`, `serde`, `serde_json`, `walkdir`, `chrono` | Compiles validated AST models into schema digests, safety matrices, and synchronized specification artifacts with zero semantic drift. |
 | **`verify-baseline`** (`crates/verify-baseline`) | Deterministic baseline verification harness enforcing all workspace quality gates, Mermaid/KaTeX compliance, domain-independence checks, FDIR/STPA traceability closure, and defect dossier validation (`crates/verify-baseline/src/lib.rs`, `crates/verify-baseline/src/main.rs`). | `deap-core`, `clap`, `serde`, `serde_json`, `walkdir`, `chrono`, `pulldown-cmark`, `rayon` | Single verification entrypoint returning deterministic exit codes (`0` on full compliance, non-zero on violation). |
@@ -270,7 +270,7 @@ The deterministic FDIR engine is implemented within the 6-crate Rust workspace a
 
 ### 6.2 Strongly-Typed AST Slicing Mechanics (<= 4,096 Tokens)
 
-To guarantee that language model inference and formal constraint solvers remain immune to attention decay, context loss, and truncation, `deap-core` (`crates/deap-core/src/sysml_ast.rs` via `AstSlice` and `AstPersistenceEngine`) and `compile-sysml` (`crates/compile-sysml/src/lib.rs`) implement deterministic AST slicing:
+To guarantee that language model inference and formal constraint solvers remain immune to attention decay, context loss, and truncation, `deap-core` (`crates/deap-core/src/sysml_ast/mod.rs` via `AstSlice` and `AstPersistenceEngine`) and `compile-sysml` (`crates/compile-sysml/src/lib.rs`) implement deterministic AST slicing:
 - **Structural Partitioning**: Every structural subsystem graph $\mathcal{G}_{\mathrm{sub}} = (V, E)$ is traversed and partitioned along subsystem containment boundaries into self-contained AST slices.
 - **Strict Token Floor & Ceiling**: Every AST slice $\mathcal{S}_k$ is strictly bounded to $\le 4,096$ tokens:
 $$
@@ -285,7 +285,7 @@ $$
 To guarantee mathematical determinism, total intellectual property containment, and complete immunity to cloud rate-limiting or content censorship, DEAP utilizes a dual-LLM air-gapped agent dispatch architecture:
 1. **Reasoning Slot (DeepSeek-R1)**:
    - Dedicated Chain-of-Thought (CoT) reasoning model executing on air-gapped workstation hardware.
-   - Streams formal mathematical proofs, reachability derivations, and safety invariant checks directly into `.pipeline/diagnostics/cot_audit_log.json` (`CotAuditLog` and `CotAuditRecord` in `crates/deap-core/src/sysml_ast.rs`).
+   - Streams formal mathematical proofs, reachability derivations, and safety invariant checks directly into `.pipeline/diagnostics/cot_audit_log.json` (`CotAuditLog` and `CotAuditRecord` in `crates/deap-core/src/sysml_ast/mod.rs`).
    - Never generates raw code directly; outputs verified formal derivations and boundary assertions.
 2. **Execution Slot (Qwen-2.5-Coder)**:
    - High-throughput deterministic code and specification synthesis model.

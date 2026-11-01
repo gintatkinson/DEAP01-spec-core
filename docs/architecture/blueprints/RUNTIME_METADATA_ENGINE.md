@@ -31,9 +31,9 @@ target_regulatory_frameworks:
 
 The **DEAP Runtime Metadata Engine** eliminates hardcoded domain classes, static layout assumptions, and compile-time data structures across both compiler pipelines and client presentation tiers. In strict adherence to the **Pure Schema-Driven Compiler Invariant**:
 - The application engine and UI adapters possess ZERO hardcoded domain concepts at compile time.
-- All entity types, structural fields, relations, visual symbols, validation invariants, and section hierarchies are discovered dynamically at runtime from the connected data sources and SysML v2 AST models (`crates/deap-core/src/sysml_ast.rs`).
+- All entity types, structural fields, relations, visual symbols, validation invariants, and section hierarchies are discovered dynamically at runtime from the connected data sources and SysML v2 AST models (`crates/deap-core/src/sysml_ast/mod.rs`).
 - All system models are expressed via purely symbolic computer science primitives: `PartDef_Alpha`, `Subsystem_01`, `Port_A`, `Action_01`, `Constraint_Invariant`.
-- Static layout files with hardcoded field enumerations are prohibited; schemas are ingested dynamically from SysML v2 AST, Protocol Buffers reflection (`FileDescriptorSet`), and relational schema dictionaries via `UnifiedSchemaModelExtractor` (`crates/deap-core/src/sysml_ast.rs`).
+- Static layout files with hardcoded field enumerations are prohibited; schemas are ingested dynamically from SysML v2 AST, Protocol Buffers reflection (`FileDescriptorSet`), and relational schema dictionaries via `UnifiedSchemaModelExtractor` (`crates/deap-core/src/sysml_ast/mod.rs`).
 
 ```mermaid
 flowchart TD
@@ -89,7 +89,7 @@ DEAP01-spec-core/
 
 | Crate | Primary Modules | Responsibility in Metadata & AST Architecture |
 | :--- | :--- | :--- |
-| **`crates/deap-core`** | `src/sysml_ast.rs`, `src/source_ast.rs`, `src/rules.rs`, `src/diagnostics.rs`, `src/markdown.rs`, `src/workspace.rs` | Defines canonical SysML v2 AST models (`PackageDef`, `PartDef`, `PortDef`, `AttributeDef`, `FlowDef`, `ActionDef`, `ConstraintDef`, `RequirementDef`, `StateDef`, `ConnectionDef`, `CalcDef`, `SysmlModel`), multi-format schema discovery (`UnifiedSchemaModelExtractor`, `SupportedSchemaExtension`, `SupportedExtensionsCatalog`), and source AST lowering (`SourceAstItem`, `lower_source_ast_to_package`). |
+| **`crates/deap-core`** | `src/sysml_ast/mod.rs`, `src/source_ast.rs`, `src/rules.rs`, `src/diagnostics.rs`, `src/markdown.rs`, `src/workspace.rs` | Defines canonical SysML v2 AST models (`PackageDef`, `PartDef`, `PortDef`, `AttributeDef`, `FlowDef`, `ActionDef`, `ConstraintDef`, `RequirementDef`, `StateDef`, `ConnectionDef`, `CalcDef`, `SysmlModel`), multi-format schema discovery (`UnifiedSchemaModelExtractor`, `SupportedSchemaExtension`, `SupportedExtensionsCatalog`), and source AST lowering (`SourceAstItem`, `lower_source_ast_to_package`). |
 | **`crates/compile-sysml`** | `src/lib.rs`, `src/parser/grammar.rs`, `src/semantic/digest.rs`, `src/stpa/`, `src/sync/`, `src/flutter_codegen.rs` | Parses textual SysML v2 models (`SysmlParser`, `parse_sysml_tree`), computes atomic SHA-256 digests (`SchemaDigest`, `FileDigestEntry`, `generate_digest`), synthesizes STPA/FMECA matrices, executes bidirectional specification sync, and deterministically generates Flutter contracts, seeds, and C-ABI DTOs (`crates/compile-sysml/src/flutter_codegen.rs`). |
 | **`crates/verify-baseline`** | `src/runner.rs`, `src/checks/parity_gates.rs`, `src/checks/domain_cleanliness_gate.rs`, `src/checks/codebase.rs` | Enforces 41 deterministic verification gates across AST parity, schema cleanliness, traceability, Mermaid/KaTeX rendering, defect dossiers, and adversarial AST codebase checks 38-41 (`crates/verify-baseline/src/checks/codebase.rs`). |
 | **`crates/ingest-sysml`** | `src/lib.rs`, `src/main.rs` | Discovers and translates Level 0 specifications (`.sysml`, `.yaml`, `.yml`, `.json`, `.proto`, `.idl`, `.arxml`, `.md`, `.yang`) into `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. |
@@ -100,15 +100,15 @@ DEAP01-spec-core/
 
 ## 3. Core AST Models & Runtime Metadata Projection Contracts
 
-### 3.1 Canonical SysML v2 AST Structures (`crates/deap-core/src/sysml_ast.rs`)
+### 3.1 Canonical SysML v2 AST Structures (`crates/deap-core/src/sysml_ast/mod.rs`)
 
-The authoritative structural and behavioral metadata in `crates/deap-core/src/sysml_ast.rs` is represented by strongly-typed, `serde`-serializable AST definitions:
+The authoritative structural and behavioral metadata in `crates/deap-core/src/sysml_ast/mod.rs` is represented by strongly-typed, `serde`-serializable AST definitions:
 
 ```rust
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// Represents an attribute definition or instance in SysML v2 (`crates/deap-core/src/sysml_ast.rs`).
+/// Represents an attribute definition or instance in SysML v2 (`crates/deap-core/src/sysml_ast/mod.rs`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AttributeDef {
     pub name: String,
@@ -118,7 +118,7 @@ pub struct AttributeDef {
     pub doc: Option<String>,
 }
 
-/// Represents a port definition or interface point in SysML v2 (`crates/deap-core/src/sysml_ast.rs`).
+/// Represents a port definition or interface point in SysML v2 (`crates/deap-core/src/sysml_ast/mod.rs`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PortDef {
     pub name: String,
@@ -136,7 +136,7 @@ pub struct PortDef {
     pub flows: Vec<FlowDef>,
 }
 
-/// Represents a structural part definition or block in SysML v2 (`crates/deap-core/src/sysml_ast.rs`).
+/// Represents a structural part definition or block in SysML v2 (`crates/deap-core/src/sysml_ast/mod.rs`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PartDef {
     pub name: String,
@@ -166,12 +166,12 @@ pub struct PartDef {
 
 ### 3.2 Dynamic UI Projection Descriptors & DataSource Contract
 
-Downstream presentation shells project `PackageDef` and `PartDef` AST nodes from `crates/deap-core/src/sysml_ast.rs` into runtime `TypeDescriptor` and `FieldDescriptor` views without hardcoded domain classes:
+Downstream presentation shells project `PackageDef` and `PartDef` AST nodes from `crates/deap-core/src/sysml_ast/mod.rs` into runtime `TypeDescriptor` and `FieldDescriptor` views without hardcoded domain classes:
 
 ```rust
 use serde::{Deserialize, Serialize};
 
-/// Describes one entity type projected dynamically from `PartDef` (`crates/deap-core/src/sysml_ast.rs`).
+/// Describes one entity type projected dynamically from `PartDef` (`crates/deap-core/src/sysml_ast/mod.rs`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypeDescriptor {
     pub type_name: String,                      // e.g. "Subsystem_01", "PartDef_Alpha"
@@ -261,7 +261,7 @@ pub enum DataSourceError {
 
 ## 4. Strongly-Typed AST Slicing Mechanics ($\le 4,096$ Tokens)
 
-To enable context-isolated subagent execution and zero-bloat client data synchronization, the Runtime Metadata Engine projects AST subtrees extracted via `PackageDef::get_all_parts` and `PartDef::find_part_mut` (`crates/deap-core/src/sysml_ast.rs`) through an **AST Slicing Window**:
+To enable context-isolated subagent execution and zero-bloat client data synchronization, the Runtime Metadata Engine projects AST subtrees extracted via `PackageDef::get_all_parts` and `PartDef::find_part_mut` (`crates/deap-core/src/sysml_ast/mod.rs`) through an **AST Slicing Window**:
 
 ### 4.1 Token Budget Invariant
 
@@ -283,7 +283,7 @@ Any peripheral nodes exceeding the 4,096 token boundary are stubbed as opaque in
 
 ## 5. Multi-Source Pluggable Data Source Engine
 
-The Metadata Engine supports three canonical data source implementations operating without compile-time domain code, backed by `UnifiedSchemaModelExtractor` (`crates/deap-core/src/sysml_ast.rs`) across all 10 `SupportedSchemaExtension` formats (`.sysml`, `.yaml`, `.yml`, `.json`, `.proto`, `.idl`, `.arxml`, `.md`, `.markdown`, `.yang`):
+The Metadata Engine supports three canonical data source implementations operating without compile-time domain code, backed by `UnifiedSchemaModelExtractor` (`crates/deap-core/src/sysml_ast/mod.rs`) across all 10 `SupportedSchemaExtension` formats (`.sysml`, `.yaml`, `.yml`, `.json`, `.proto`, `.idl`, `.arxml`, `.md`, `.markdown`, `.yang`):
 
 ### 5.1 Relational Schema Dictionary (SQLite Backend)
 
@@ -350,7 +350,7 @@ To prevent high-frequency telemetry event storms from freezing user interfaces o
 
 | Legacy Anti-Pattern | Runtime Metadata Engine Remediation |
 | :--- | :--- |
-| Hardcoded Dart / TypeScript domain classes (`SubsystemA`, `PartModelB`) | Generic presentation adapters rendering `TypeDescriptor` collections projected from `PartDef` (`crates/deap-core/src/sysml_ast.rs`). |
+| Hardcoded Dart / TypeScript domain classes (`SubsystemA`, `PartModelB`) | Generic presentation adapters rendering `TypeDescriptor` collections projected from `PartDef` (`crates/deap-core/src/sysml_ast/mod.rs`). |
 | Hardcoded `switch(node.id)` statements for icon mapping | Dynamic `TypeDescriptor.icon_symbol` resolution. |
 | Hardcoded UI layout groupings in views | Declarative `FieldDescriptor.section_label` and `section_order`. |
 | Hardcoded validation logic per field key | Declarative boundaries (`min_value`, `max_value`, `regex_pattern`, `required`) derived from `ConstraintDef`. |

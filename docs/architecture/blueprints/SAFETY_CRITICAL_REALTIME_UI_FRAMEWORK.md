@@ -136,14 +136,14 @@ sequenceDiagram
 ```
 
 #### Layer Mapping for Pattern A
-1. **Layer 1 (Domain State & Signal Model)**: Supervisory Parameter Output Buffer / Telemetry Input Stream (`FlowDef` and `AttributeDef` in `crates/deap-core/src/sysml_ast.rs`).
-2. **Layer 2 (Logic & Safety State Management)**: Display Kernel Widget Definition Tree and Symbolic Attribute Registry (`PartDef` and `PortDef` in `crates/deap-core/src/sysml_ast.rs`).
-3. **Layer 3 (Display & Actuator Interface Binding)**: Deterministic Display Kernel Vector Engine rendering to hardware frame buffer and actuator interface (`ActionDef` and `ConstraintDef` in `crates/deap-core/src/sysml_ast.rs`).
+1. **Layer 1 (Domain State & Signal Model)**: Supervisory Parameter Output Buffer / Telemetry Input Stream (`FlowDef` and `AttributeDef` in `crates/deap-core/src/sysml_ast/mod.rs`).
+2. **Layer 2 (Logic & Safety State Management)**: Display Kernel Widget Definition Tree and Symbolic Attribute Registry (`PartDef` and `PortDef` in `crates/deap-core/src/sysml_ast/mod.rs`).
+3. **Layer 3 (Display & Actuator Interface Binding)**: Deterministic Display Kernel Vector Engine rendering to hardware frame buffer and actuator interface (`ActionDef` and `ConstraintDef` in `crates/deap-core/src/sysml_ast/mod.rs`).
 
 ---
 
 ### 3.2 Pattern B: Real-Time Safety Statecharts & Symbology Engine
-Pattern B is optimized for high-speed, discrete event-driven statechart execution (`StateDef` and `TransitionDef` in `crates/deap-core/src/sysml_ast.rs`) and vector symbology generation.
+Pattern B is optimized for high-speed, discrete event-driven statechart execution (`StateDef` and `TransitionDef` in `crates/deap-core/src/sysml_ast/mod.rs`) and vector symbology generation.
 
 ```mermaid
 stateDiagram-v2
@@ -165,13 +165,13 @@ stateDiagram-v2
 
 #### Layer Mapping for Pattern B
 1. **Layer 1 (Domain State & Signal Model)**: Continuous System State Vector $x(t) \in \mathbb{R}^n$ / Discrete Input Event Frame $\Sigma$.
-2. **Layer 2 (Logic & Safety State Management)**: Safety Statechart / Hierarchical Finite State Machine (FSM) Mode Controller (`StateDef` and `TransitionDef` in `crates/deap-core/src/sysml_ast.rs`).
+2. **Layer 2 (Logic & Safety State Management)**: Safety Statechart / Hierarchical Finite State Machine (FSM) Mode Controller (`StateDef` and `TransitionDef` in `crates/deap-core/src/sysml_ast/mod.rs`).
 3. **Layer 3 (Display & Actuator Interface Binding)**: Vector Graphic Symbology with priority-based layer rasterization and Actuator Output Command Interface.
 
 ---
 
 ### 3.3 Pattern C: Decoupled Operator Consoles
-Pattern C provides a model-driven, reactive presentation architecture for supervisory engineering consoles and operator workstations using BDD-verified ViewModels (`UseCaseDef`, `RequirementDef`, and `TestCaseDef` in `crates/deap-core/src/sysml_ast.rs`).
+Pattern C provides a model-driven, reactive presentation architecture for supervisory engineering consoles and operator workstations using BDD-verified ViewModels (`UseCaseDef`, `RequirementDef`, and `TestCaseDef` in `crates/deap-core/src/sysml_ast/mod.rs`).
 
 ```mermaid
 flowchart TD
@@ -200,7 +200,7 @@ flowchart TD
 #### Layer Mapping for Pattern C
 1. **Layer 1 (Domain State & Signal Model)**: Console Domain Model / Sensor Telemetry & Persistent Repository.
 2. **Layer 2 (Logic & Safety State Management)**: ViewModel / Reactive State Holder handling user commands.
-3. **Layer 3 (Display & Actuator Interface Binding)**: GUI Component / Widget Binding + BDD Acceptance Test (`TestCaseDef` in `crates/deap-core/src/sysml_ast.rs`) asserting:
+3. **Layer 3 (Display & Actuator Interface Binding)**: GUI Component / Widget Binding + BDD Acceptance Test (`TestCaseDef` in `crates/deap-core/src/sysml_ast/mod.rs`) asserting:
    `User Action -> ViewModel Action -> State Change -> Display/Actuator Binding Render`.
 
 ---
@@ -213,7 +213,7 @@ The Real-Time UI Framework is grounded in the DEAP pure Rust Cargo workspace (`C
 DEAP01-spec-core/
 ├── Cargo.toml                      # Workspace manifest (forbid unsafe_code, deny unwrap/expect/panic)
 ├── crates/
-│   ├── deap-core/                  # Core SysML v2 AST (sysml_ast.rs) & workspace scan rules (rules.rs)
+│   ├── deap-core/                  # Core SysML v2 AST (sysml_ast/mod.rs) & workspace scan rules (rules.rs)
 │   ├── compile-sysml/              # SysML v2 compiler (lib.rs) & STPA safety suite (stpa/safety_suite.rs)
 │   ├── verify-baseline/            # Fail-closed gate runner (runner.rs) & parity gates (checks/parity_gates.rs)
 │   ├── ingest-sysml/               # Level 0 schema ingestion & normalization CLI
@@ -225,7 +225,7 @@ DEAP01-spec-core/
 
 | Crate | Key Modules | Responsibility |
 | :--- | :--- | :--- |
-| **`crates/deap-core`** | `crates/deap-core/src/sysml_ast.rs`, `crates/deap-core/src/rules.rs` | Canonical SysML v2 AST structures (`PartDef`, `PortDef`, `ActionDef`, `StateDef`, `TransitionDef`, `ConstraintDef`, `RequirementDef`, `TestCaseDef`, `FlowDef`, `AttributeDef`) and deterministic workspace traversal rules (`ExcludedDir`). |
+| **`crates/deap-core`** | `crates/deap-core/src/sysml_ast/mod.rs`, `crates/deap-core/src/rules.rs` | Canonical SysML v2 AST structures (`PartDef`, `PortDef`, `ActionDef`, `StateDef`, `TransitionDef`, `ConstraintDef`, `RequirementDef`, `TestCaseDef`, `FlowDef`, `AttributeDef`) and deterministic workspace traversal rules (`ExcludedDir`). |
 | **`crates/compile-sysml`** | `crates/compile-sysml/src/lib.rs`, `crates/compile-sysml/src/stpa/safety_suite/mod.rs` | Deterministic SysML v2 parser (`parse_sysml`, `SysmlParser`), bidirectional specification synchronization (`forward_sync_sysml_to_specs`, `reverse_sync_specs_to_sysml`), and 10-pillar STPA/FMECA safety suite synthesis (`ProofTemplate`, `emit_safety_suite`, `transpile_safety_suite`). |
 | **`crates/verify-baseline`** | `crates/verify-baseline/src/runner.rs`, `crates/verify-baseline/src/checks/parity_gates.rs` | Sequential fail-closed verification runner (`BaselineOptions`, `has_concrete_specifications`) executing Checks 10 through 36 and semantic diagram-to-AST parity gates (`ParityOutcome`, `DiagramType`). |
 | **`crates/ingest-sysml`** | `crates/ingest-sysml/src/main.rs` | Level 0 structural schema ingestion into normalized SysML v2 AST packages (`./target/release/ingest-sysml`). |
@@ -236,7 +236,7 @@ DEAP01-spec-core/
 
 ## 5. Strongly-Typed AST Slicing Mechanics ($\le 4,096$ Tokens)
 
-To synthesize UI components and state machines within strict context boundaries, `crates/deap-core/src/sysml_ast.rs` and `crates/compile-sysml/src/lib.rs` slice UI metamodels (`PartDef`, `StateDef`, `TransitionDef`, `PortDef`) into discrete subgraphs:
+To synthesize UI components and state machines within strict context boundaries, `crates/deap-core/src/sysml_ast/mod.rs` and `crates/compile-sysml/src/lib.rs` slice UI metamodels (`PartDef`, `StateDef`, `TransitionDef`, `PortDef`) into discrete subgraphs:
 
 $$
 \mathcal{V}_{\text{ui\_slice}} = \{w_0\} \cup \mathcal{N}_{\text{child\_widgets}}(w_0) \cup \mathcal{N}_{\text{state\_bindings}}(w_0)
@@ -285,7 +285,7 @@ flowchart TD
 ## 8. Verification, Formal Coverage & BDD Acceptance Strategy
 
 ### 8.1 100% Modified Condition/Decision Coverage (MC/DC)
-For safety-critical decision logic modeled in `crates/deap-core/src/sysml_ast.rs` (`ConstraintDef`, `TransitionDef`) and synthesized via `crates/compile-sysml/src/stpa/safety_suite/mod.rs` (`ProofTemplate`), all Boolean expressions in state transitions (e.g., `if (signal_a < threshold_1 && signal_b > threshold_2 && invariant_active)`) undergo formal condition isolation:
+For safety-critical decision logic modeled in `crates/deap-core/src/sysml_ast/mod.rs` (`ConstraintDef`, `TransitionDef`) and synthesized via `crates/compile-sysml/src/stpa/safety_suite/mod.rs` (`ProofTemplate`), all Boolean expressions in state transitions (e.g., `if (signal_a < threshold_1 && signal_b > threshold_2 && invariant_active)`) undergo formal condition isolation:
 - Every condition must be shown to independently affect the decision outcome.
 - Condition trees are statically extracted and verified via native Rust semantic acceptance test harnesses (`crates/verify-baseline/src/runner.rs` and `crates/verify-baseline/src/checks/parity_gates.rs`).
 

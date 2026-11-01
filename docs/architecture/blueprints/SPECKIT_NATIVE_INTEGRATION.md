@@ -88,7 +88,7 @@ flowchart TD
 
 In adopting Spec Kit concepts natively, DEAP maintains complete architectural sovereignty and preserves its non-negotiable core strengths:
 
-1. **Deterministic Schema-to-Agile Compilation**: SysML v2 AST nodes (`PackageDef`, `PartDef`, `PortDef`, `ActionDef`, `ConstraintDef`, `RequirementDef`, `UseCaseDef`, `TestCaseDef` in `crates/deap-core/src/sysml_ast.rs`) compile deterministically into Epics, Features, User Stories, and Use Cases via `crates/compile-sysml/src/sync/mod.rs` with full mathematical provenance.
+1. **Deterministic Schema-to-Agile Compilation**: SysML v2 AST nodes (`PackageDef`, `PartDef`, `PortDef`, `ActionDef`, `ConstraintDef`, `RequirementDef`, `UseCaseDef`, `TestCaseDef` in `crates/deap-core/src/sysml_ast/mod.rs`) compile deterministically into Epics, Features, User Stories, and Use Cases via `crates/compile-sysml/src/sync/mod.rs` with full mathematical provenance.
 2. **Context-Isolated Subagent Dispatch**: Every worker begins with a fresh, isolated context window, preventing prompt drift and cross-task contamination.
 3. **Deterministic Multi-Stage Compilation & Verification Pipeline**: Level 0 ingestion (`crates/ingest-sysml`), SysML v2 semantic compilation and STPA safety suite synthesis (`crates/compile-sysml`), ConOps assembly (`crates/assemble-conops`), backlog reconciliation (`crates/reconcile-backlog`), and fail-closed baseline verification across Checks 10 through 36 with 5-Whys `DefectDossier` artifacts persisted to `.pipeline/defects/` (`crates/verify-baseline/src/runner.rs`).
 4. **Two-Stage Review Gates**: Independent, blocking verification gates (specification compliance followed by code quality review).
@@ -151,7 +151,7 @@ DEAP01-spec-core/
     │       ├── markdown.rs                 # check_latex_katex_syntax, check_mermaid_syntax
     │       ├── rules.rs                    # CodebaseRules, MetaConfig, EXCLUDED_DIRS, MASTER_BLUEPRINTS
     │       ├── source_ast.rs               # Rust/Dart source AST extraction & SysML lowering
-    │       ├── sysml_ast.rs                # SysmlModel, PackageDef, PartDef, parse_sysml
+    │       ├── sysml_ast/mod.rs            # SysmlModel, PackageDef, PartDef, parse_sysml
     │       └── workspace.rs                # is_upstream_compiler & Checks 10, 11, 12, 14, 15, 16
     ├── ingest-sysml/                       # Level 0 Ground Truth to SysML v2 AST ingestion engine
     │   └── src/
@@ -181,7 +181,7 @@ DEAP01-spec-core/
 
 | Crate | Primary Modules & Key Symbols | Responsibility & Native CLI Entrypoint |
 | :--- | :--- | :--- |
-| **`crates/deap-core`** | `crates/deap-core/src/sysml_ast.rs` (`SysmlModel`, `PackageDef`, `PartDef`, `parse_sysml`), `crates/deap-core/src/markdown.rs` (`check_latex_katex_syntax`, `check_mermaid_syntax`), `crates/deap-core/src/workspace.rs` (`is_upstream_compiler`), `crates/deap-core/src/rules.rs` (`CodebaseRules`, `MASTER_BLUEPRINTS`) | Shared library crate providing deterministic SysML v2 AST models, KaTeX/Mermaid syntax validators, governance rule models, and workspace topology checks. |
+| **`crates/deap-core`** | `crates/deap-core/src/sysml_ast/mod.rs` (`SysmlModel`, `PackageDef`, `PartDef`, `parse_sysml`), `crates/deap-core/src/markdown.rs` (`check_latex_katex_syntax`, `check_mermaid_syntax`), `crates/deap-core/src/workspace.rs` (`is_upstream_compiler`), `crates/deap-core/src/rules.rs` (`CodebaseRules`, `MASTER_BLUEPRINTS`) | Shared library crate providing deterministic SysML v2 AST models, KaTeX/Mermaid syntax validators, governance rule models, and workspace topology checks. |
 | **`crates/ingest-sysml`** | `crates/ingest-sysml/src/main.rs`, `crates/ingest-sysml/src/lib.rs` (`translate_markdown`, `translate_yang`, `translate_openapi`, `translate_idl`, `filter_ast_to_target_scope`) | Ingests Level 0 Markdown, YANG, OpenAPI, and IDL inputs into canonical `PackageDef` ASTs with closed-world scope filtering via `./target/release/ingest-sysml`. |
 | **`crates/compile-sysml`** | `crates/compile-sysml/src/main.rs`, `crates/compile-sysml/src/sync/mod.rs` (`forward_sync_sysml_to_specs`, `reverse_sync_specs_to_sysml`), `crates/compile-sysml/src/stpa/safety_suite/mod.rs` (`ProofTemplate`, `PROOF_TEMPLATES`) | Parses and validates SysML v2 schemas, executes bidirectional Markdown specification sync, and transpiles the 10-pillar STPA safety suite via `./target/release/compile-sysml`. |
 | **`crates/verify-baseline`** | `crates/verify-baseline/src/runner.rs` (`run`, `BaselineOptions`, `write_defect_dossier`), `crates/verify-baseline/src/spec_audit/mod.rs` (`run_spec_audit`, `SpecAuditOptions`) | Executes fail-closed repository baseline verification (Checks 10 through 36) and specification quality/coverage audits via `./target/release/verify-baseline . --no-domain`. |
@@ -192,7 +192,7 @@ DEAP01-spec-core/
 
 ## 5. Strongly-Typed AST Slicing & Scope Filtering ($\le 4,096$ Tokens)
 
-To prevent LLM context saturation when transmitting constitutional rules and architectural schemas, `crates/deap-core/src/sysml_ast.rs` and `crates/ingest-sysml/src/lib.rs` (`filter_ast_to_target_scope`) isolate target `PackageDef` subgraphs:
+To prevent LLM context saturation when transmitting constitutional rules and architectural schemas, `crates/deap-core/src/sysml_ast/mod.rs` and `crates/ingest-sysml/src/lib.rs` (`filter_ast_to_target_scope`) isolate target `PackageDef` subgraphs:
 
 $$
 \mathcal{V}_{\text{spec\_slice}} = \{s_0\} \cup \mathcal{N}_{\text{requirements}}(s_0) \cup \mathcal{N}_{\text{verifications}}(s_0)
