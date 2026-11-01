@@ -6,8 +6,8 @@
 | Version | `2.0` |
 | Status | `Active / Normative` |
 | Supersedes | `1.0` |
-| Applies to | All Rust code in DEAP Tier-0 DO-330 offline compiler/verification crates and Track B discrete-time Rust simulation/FFI crates |
-| Target assurance | DO-178C DAL A readiness, DO-330 TQL-4 readiness, ARINC 653 partitioning readiness, ARINC 661 CDS boundary readiness |
+| Applies to | All Rust code in DEAP Tier-0 DO-330 offline compiler/verification crates, Ring-1 `#![no_std]` Ferrocene safety kernels, and Ring-2 discrete-time simulation/FFI bridge crates |
+| Target assurance | DO-178C DAL A readiness, DO-330 TQL-4 readiness, ISO 26262 ASIL D / IEC 61508 SIL 4 readiness, Ferrocene FLS language-semantics traceability, ARINC 653/661 3-ring partitioning readiness |
 | Companion standards | [DART_FLUTTER_CODING_STANDARD.md](./DART_FLUTTER_CODING_STANDARD.md), [README.md](./README.md) |
 | Owner | DEAP Systems Engineering |
 | Review requirement | Fresh reviewer subagent and explicit user approval before adoption |
@@ -26,17 +26,32 @@ This standard is not a certificate. It does not by itself establish DO-178C DAL 
 
 The following sources remain authoritative and are consolidated here:
 
-- `Cargo.toml` workspace lints.
-- Check 34 source purity.
+- Open-source **Ferrocene Language Specification (`FLS`)** paragraph anchors (`[FLS: fls_*]`) defining normative Rust syntax, type-system, memory-model, and execution semantics.
+- Dual-mode toolchain parity manifests: `criticalup.toml` (qualified Ferrocene compiler and certified `core` subset) and version-matched `rust-toolchain.toml` (token-free developer and sandbox parity).
+- `Cargo.toml` `[workspace.lints.clippy]` and `clippy.toml` quantitative complexity/disallowed-type policy.
+- Check 34 AST/token source purity and Check 36 Tiered Documentation gates.
 - `rules/tdd-mandate.md`.
 - `rules/domain-engineering-standards.md`.
 - `rules/dual-track-mbd-verification.md`.
 - Native Rust requirements in `README.md`.
 - `skills/spec-blueprint-engineering/SKILL.md`.
-- FFI-specific lints in the dedicated FFI crate manifest.
+- Compiler-native verification and 3-ring certification architecture blueprints:
+  - `docs/architecture/blueprints/DEAP_STRIX_HALO_COMPILER_NATIVE_VERIFICATION_ARCHITECTURE.md`
+  - `docs/designs/blueprint-08-rust-analyzer-cst-refactoring-and-json-diagnostics.md`
+  - `docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md`
+  - `docs/designs/blueprint-10-rowan-salsa-incremental-sysml-compiler.md`
+  - `docs/designs/blueprint-11-ferrocene-do178c-do330-3ring-certification-architecture.md`
+- FFI-specific lints in the dedicated Ring-2 FFI crate manifest.
 - `.pipeline/constitution.md` and `.pipeline/ACTIVE_RULES_BUNDLE.md`.
 
 If this standard and the current verifier disagree, the standard records the conflict explicitly and the verifier must be corrected upstream. Do not add code or comments solely to satisfy a naive verifier.
+
+### 2.1 Normative Language Semantics (FLS) and Dual-Mode Toolchain Parity
+
+- **Ferrocene Language Specification (`FLS`) Baseline**: Normative Rust language semantics across all upstream Tier-0 compiler crates (`crates/deap-core`, `crates/verify-baseline`, `crates/compile-sysml`, `crates/ingest-sysml`, `crates/assemble-conops`, `crates/reconcile-backlog`) and downstream safety crates are anchored to the open-source Ferrocene Language Specification (`FLS`). Safety-relevant language constructs (integer overflow checks, `#[repr(C)]` layout, pattern exhaustiveness, lifetime/borrowing invariants, and `unsafe` soundness preconditions) cite stable `[FLS: fls_*]` paragraph identifiers rather than informal blog posts or unstable compiler internals.
+- **Dual-Mode Toolchain Parity (`blueprint-11`)**: Every governed workspace maintains byte-identical source compatibility across two lockstep toolchain configurations without conditional source forks (`docs/designs/blueprint-11-ferrocene-do178c-do330-3ring-certification-architecture.md`):
+  1. **Qualified Certification Mode (`criticalup.toml`)**: Pins the qualified Ferrocene toolchain (`ferrocene-rustc`), pre-certified `#![no_std]` `core` target subset, `symbol-report` binary inspector, and `blanket` / LLVM structural coverage runtime used to emit DO-178C, DO-330, ISO 26262, and IEC 61508 qualification artifacts.
+  2. **Developer & Sandbox Parity Mode (`rust-toolchain.toml`)**: Pins the exact version-matched upstream `rustc` base release corresponding to the `criticalup.toml` Ferrocene release, enabling zero-license-token local TDD, CI sandbox execution, and offline air-gapped verification with identical language semantics and lint behavior.
 
 ## 3. Core Engineering Principles
 
@@ -98,6 +113,7 @@ No 28-line 7-section boilerplate is required or permitted on private helpers, cr
 ### 4.2 Traceability rules
 
 - Every `Realises: [REQ-ID]` tag must point to a real requirement, SysML AST node, or approved design artifact.
+- Safety-critical Ring-1 `#![no_std]` kernel items, Ring-2 `unsafe` FFI/HAL contracts, and real-time `#[rt_loop]` functions must pair `[REQ-*]` requirement tags with normative Ferrocene Language Specification `[FLS: fls_*]` anchors wherever language-level representation, evaluation, or soundness guarantees are relied upon (verified mechanically by Stage 2 `Dylint` in Section 15.1).
 - If no upstream domain requirement applies to a foundational utility, cite the governing architecture/compiler requirement or approved design artifact explicitly. Never invent a fake ID.
 - Do not copy generic boilerplate such as "O(M(2)) bounded over input/member dimension" onto trivial code.
 - Do not duplicate docblocks.
@@ -201,15 +217,24 @@ Unbounded recursion is forbidden in safety-critical paths.
   - end-to-end harness tests, not design statements alone.
 - FFI and partitioning claims require evidence. A design document is not evidence.
 
+### 10.1 Three-Ring Assurance Containment Architecture
+
+Downstream systems integrating Rust safety logic with an operator console enforce the 3-Ring Assurance Containment Architecture defined in `docs/designs/blueprint-11-ferrocene-do178c-do330-3ring-certification-architecture.md`:
+
+- **Ring-1 (`#![no_std]` Certified Safety Kernel -- DAL-A/B / ASIL-D / SIL-4)**: Pure deterministic control laws, state machines, voting logic, STPA `UCA-*`/`SC-*` interlocks, and the authoritative `SafetyMonitor` reside in a `#![no_std]`, `#![forbid(unsafe_code)]`, zero-heap-allocation `safety_kernel` crate linked exclusively against the Ferrocene `symbol-report`-verified certified `core` subset.
+- **Ring-2 (Isolated FFI / OS / HAL Bridge -- Audited Boundary)**: All `#[repr(C)]` C-ABI exports, OS/HAL I/O adapters, and `compile-sysml`-synthesized `flutter_rust_bridge` transport shims reside strictly in Ring-2. Every `unsafe` block carries a `// SAFETY:` proof comment citing `[FLS: fls_*]` preconditions (`clippy::undocumented_unsafe_blocks` denied), traps unwinding via `std::panic::catch_unwind`, validates range/discriminant bounds before constructing Ring-1 types, and passes `cargo +nightly miri test` with `-Zmiri-tree-borrows`.
+- **Ring-3 (Untrusted Presentation & Operator Input Shell -- DAL-D/E / QM)**: Downstream HMI clients (`app_flutter/`) execute outside the trusted computing base. Safety-critical operator commands and annunciations crossing Ring-3 -> Ring-2 -> Ring-1 require Ring-1 `SafetyMonitor` sequence-numbered CRC-32C/SHA-256 readback and challenge-response interlocks so corrupted or stale UI frames cannot trigger unauthorized actuation.
+
 ## 11. DO-178C DAL A and DO-330 TQL-4 Readiness
 
 For DAL A readiness, the repository must provide:
 
-- requirement-to-code and requirement-to-test traceability;
-- MC/DC structural coverage evidence for safety-relevant code;
+- requirement-to-code (`[REQ-*]` and `[FLS: fls_*]`) and requirement-to-test (`TEST-*`) traceability;
+- DO-178C Table A-7 statement, decision, and MC/DC structural coverage evidence via Ferrocene `blanket` / LLVM instrumentation bound to SysML `TEST-*` cases, plus Ferrocene `symbol-report` certified `core` subset verification on Ring-1 `#![no_std]` binaries;
+- formal bounded model-checking proof harnesses (`#[kani::proof]`) for SysML `constraint def`, port `[min..max]`, `state def`, and STPA `UCA-*`/`SC-*` invariants;
 - independence evidence for verification;
 - robustness and boundary testing;
-- configuration management and problem-reporting records;
+- configuration management, dual-mode `criticalup.toml` / `rust-toolchain.toml` lockstep parity, and problem-reporting records;
 - deterministic build and tool outputs.
 
 For DO-330 TQL-4 readiness, any tool that generates, transforms, or verifies safety data must have:
@@ -253,6 +278,15 @@ The Rust compiler, code generators, SysML compilers, and verifiers are tools. Th
 - Keep `cargo fmt`, `cargo clippy -- -D warnings`, and the build clean.
 - Do not suppress lints without an approved, scoped, documented waiver.
 
+### 14.1 Compiler-Native Refactoring, Codegen, and Incremental Compilation Contract
+
+Ad-hoc regex text surgery, line-sliced Rust codemods, and raw string-concatenated Rust emitters are prohibited across Tier-0 tooling. Compiler, refactoring, and diagnostic workflows follow `docs/designs/blueprint-08-rust-analyzer-cst-refactoring-and-json-diagnostics.md` and `docs/designs/blueprint-10-rowan-salsa-incremental-sysml-compiler.md`:
+
+- **Lossless Rust CST Codemods (`ra_ap_syntax` / `rowan`)**: Automated Rust structural inspection, god-file decomposition, and Tier B/C docstring compaction execute over lossless `ra_ap_syntax` Concrete Syntax Trees via `crates/compile-sysml/src/cli.rs` flags (`--list-rust-items`, `--extract-rust-module`, `--compact-tier-bc`), preserving comments, attributes, and exact token trivia without brittle line-offset slicing.
+- **Typed AST Code Generation (`syn` + `quote` + `prettyplease`)**: Synthesized Rust domain modules, Ring-2 FFI guards, and Stage 4 `#[kani::proof]` harnesses are constructed as typed `syn` / `proc_macro2` token trees via `quote!` and formatted deterministically with `prettyplease`, eliminating string-interpolation syntax defects and line-packing evasion.
+- **Incremental SysML v2 Compilation (`logos` + `rowan` + `salsa`)**: SysML v2 ingestion, lossless syntax-tree construction, and semantic validation (`crates/deap-core/src/sysml_ast/mod.rs` and `crates/compile-sysml/src/driver.rs`) use `logos` zero-copy lexing, `rowan` lossless green/red CST nodes for error-recovering parse trees, and `salsa` demand-driven incremental query memoization (`blueprint-10`).
+- **Unified `--message-format=json` `MachineApplicable` Diagnostics**: Verification and compilation binaries (`crates/verify-baseline/src/runner.rs` and `crates/compile-sysml/src/cli.rs`) support structured `--message-format=json` diagnostic emission mirroring `rustc` JSON spans with `MachineApplicable` replacement edits so automated repair loops apply deterministic span-verified fixes (`blueprint-08`).
+
 ## 15. Mandatory Gates and Enforcement
 
 Run the applicable gates for the changed path:
@@ -277,19 +311,34 @@ Client and operator console HMI verification gates are defined in [DART_FLUTTER_
 
 Enforcement must be AST-based or token-based. Substring scanners are not acceptable for code purity or documentation quality. A gate failure blocks the issue. Do not weaken the gate or hide the failure.
 
+### 15.1 Five-Stage Compiler and Formal Verification Gatekeeper
+
+All upstream Tier-0 crates and downstream 3-ring Rust workspaces enforce the layered 5-Stage Compiler and Formal Verification Gatekeeper defined in `docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md`, `docs/designs/blueprint-11-ferrocene-do178c-do330-3ring-certification-architecture.md`, and `docs/architecture/blueprints/DEAP_STRIX_HALO_COMPILER_NATIVE_VERIFICATION_ARCHITECTURE.md`:
+
+| Stage | Verification Engine | Normative Scope & Enforced Invariants |
+| :--- | :--- | :--- |
+| **Stage 1** | Stable / Ferrocene `[workspace.lints.clippy]` + `clippy.toml` | Denies `unwrap_used`, `expect_used`, `panic`, `todo`, `unimplemented`, `unreachable`, `indexing_slicing`, `arithmetic_side_effects`, `cast_possible_truncation`, `cast_sign_loss`, and `undocumented_unsafe_blocks`; enforces `too-many-lines-threshold = 80`, `too-many-arguments-threshold = 5`, and `disallowed-types` policy in `clippy.toml`. |
+| **Stage 2** | Isolated nightly `Dylint` (`rustc_middle::mir` plugin) | Runs out-of-tree against `rustc_middle::mir` CFGs to verify zero heap allocations (`alloc`, `Box`, dynamic collection growth) reachable from `#[rt_loop]` real-time hot paths and mechanically audit `[REQ-*]` / `[FLS: fls_*]` traceability tags without coupling production builds to nightly `rustc`. |
+| **Stage 3** | `#![forbid(unsafe_code)]` + `cargo +nightly miri test` | Enforces `#![forbid(unsafe_code)]` on all pure domain, SysML compiler, and Ring-1 `safety_kernel` crates; executes `MIRIFLAGS="-Zmiri-tree-borrows" cargo +nightly miri test` across isolated Ring-2 FFI/HAL bridge modules to prove absence of aliasing, provenance, alignment, and uninitialized-memory UB. |
+| **Stage 4** | `compile-sysml`-synthesized `#[kani::proof]` (CBMC) | Synthesizes bounded model-checking proof harnesses from SysML v2 `constraint def` blocks, port `[min..max]` scalar intervals, `state def` transition tables, and STPA `UCA-*` / `SC-*` safety constraints to formally verify panic freedom and invariant preservation across upstream DEAP parsers and downstream safety crates. |
+| **Stage 5** | Ferrocene `symbol-report` + `blanket` / LLVM Table A-7 | Verifies Ring-1 `#![no_std]` safety kernels link exclusively against the Ferrocene pre-certified `core` symbol subset via `symbol-report`, and generates DO-178C Table A-7 statement, decision, and MC/DC structural coverage reports bound directly to SysML `TEST-*` verification cases. |
+
 ## 16. Certification Evidence Package
 
 A certification claim requires at least:
 
 - a software development and verification plan;
-- requirement, design, and code standards with objective mapping;
-- requirement-to-code and requirement-to-test traceability;
-- MC/DC structural coverage evidence;
+- requirement, design, and code standards mapped to `[FLS: fls_*]` Ferrocene Language Specification sections and DO-178C / DO-330 objectives;
+- dual-mode `criticalup.toml` and `rust-toolchain.toml` version-parity configuration records;
+- requirement-to-code (`[REQ-*]`, `[FLS: fls_*]`) and requirement-to-test (`TEST-*`) bidirectional traceability;
+- Stage 4 `#[kani::proof]` CBMC formal verification reports covering SysML `constraint def`, port `[min..max]`, `state def`, and STPA `UCA-*`/`SC-*` properties;
+- Stage 5 Ferrocene `symbol-report` certified `core` subset logs for Ring-1 `#![no_std]` kernels and `blanket` / LLVM Table A-7 statement, decision, and MC/DC structural coverage evidence bound to SysML `TEST-*`;
+- Stage 2 `Dylint` `#[rt_loop]` zero-allocation MIR audit logs and Stage 3 `Miri` (`-Zmiri-tree-borrows`) Ring-2 FFI soundness logs;
 - independence and review records;
 - configuration management and problem reporting;
 - tool qualification evidence for generation and verification tools;
 - ARINC 653 partitioning evidence where applicable;
-- ARINC 661 CDS/UA interface evidence where applicable;
+- ARINC 661 CDS/UA interface and Ring-1 `SafetyMonitor` interlock evidence where applicable;
 - a safety case with zero unresolved `PENDING_PARAMETER` cells.
 
 Do not claim DAL A, TQL-4, ARINC 653, or ARINC 661 compliance without this evidence.
@@ -300,17 +349,18 @@ A reviewer must confirm:
 
 - [ ] The change is scoped to one issue.
 - [ ] Every production file is under 500 executable SLOC or has an approved justification.
-- [ ] Functions are under 80 executable lines or have a written justification.
-- [ ] No function has more than 5 parameters or more than 3 independent mutable boolean flags without a state type.
+- [ ] Functions are under 80 executable lines (`too-many-lines-threshold = 80`) or have a written justification.
+- [ ] No function has more than 5 parameters (`too-many-arguments-threshold = 5`) or more than 3 independent mutable boolean flags without a state type.
 - [ ] Recursion is bounded or replaced by iteration; depth tests exist.
-- [ ] No god-file growth; new responsibilities are split.
+- [ ] No god-file growth; new responsibilities are split via lossless `ra_ap_syntax` CST refactoring (`--list-rust-items`, `--extract-rust-module`) where automated, and codegen uses `syn`/`quote`/`prettyplease`.
 - [ ] No stringly-typed production errors.
 - [ ] No scanner evasion, line packing, or metric gaming.
-- [ ] No direct slice indexing or unchecked arithmetic on untrusted input.
-- [ ] No `unsafe` outside the FFI boundary.
-- [ ] No panic, unwrap, expect, todo, unimplemented, dbg, or regex.
-- [ ] Documentation is tier-appropriate; no 7-section boilerplate on trivial items.
-- [ ] Traceability points to real requirements or AST nodes.
+- [ ] No direct slice indexing or unchecked arithmetic on untrusted input (`indexing_slicing`, `arithmetic_side_effects`, `cast_possible_truncation`, `cast_sign_loss` denied).
+- [ ] `#![forbid(unsafe_code)]` holds outside Ring-2 FFI/HAL boundaries; Ring-2 `unsafe` blocks are documented (`undocumented_unsafe_blocks` denied) and pass `cargo +nightly miri test` (`-Zmiri-tree-borrows`).
+- [ ] No panic, unwrap, expect, todo, unimplemented, unreachable, dbg, or regex.
+- [ ] Documentation is tier-appropriate; no 7-section boilerplate on trivial items (`--compact-tier-bc` compliant).
+- [ ] Traceability points to real `[REQ-*]` requirements/AST nodes and pairs `[FLS: fls_*]` anchors on safety-critical Ring-1/Ring-2/`#[rt_loop]` items.
+- [ ] Stage 2 `Dylint` (`#[rt_loop]` zero-allocation MIR gate), Stage 4 `#[kani::proof]` harnesses, and Stage 5 `symbol-report` / Table A-7 coverage gates pass where applicable.
 - [ ] Negative and exception paths are tested.
 - [ ] RED failure was recorded before implementation.
 - [ ] GREEN gates pass with raw output.
@@ -321,14 +371,22 @@ A reviewer must confirm:
 
 The following anti-patterns were identified in the current upstream compiler codebase. They are recorded here as known deviations. The standard is not conformant until they are corrected or formally waived.
 
+Active workspace remediation is executed mechanically through the compiler-native refactoring, incremental SysML CST/query, and 5-stage formal verification architecture specified in:
+
+- `docs/architecture/blueprints/DEAP_STRIX_HALO_COMPILER_NATIVE_VERIFICATION_ARCHITECTURE.md`
+- `docs/designs/blueprint-08-rust-analyzer-cst-refactoring-and-json-diagnostics.md`
+- `docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md`
+- `docs/designs/blueprint-10-rowan-salsa-incremental-sysml-compiler.md`
+- `docs/designs/blueprint-11-ferrocene-do178c-do330-3ring-certification-architecture.md`
+
 | Anti-pattern | Evidence supplied by the audit | Required correction |
 | :--- | :--- | :--- |
-| 7-section docstring noise floor | `reconcile-backlog/src/tracker.rs`, `compile-sysml/src/docstring.rs`: 25-30 lines of boilerplate on 3-line getters, `Default` impls, and private helpers. | Apply the Tier A/B/C model in Section 4. Replace Check 36 with a tier-aware AST check. Remove mechanical filler. |
-| Unbounded recursion and stack exhaustion | `semantic/digest.rs` (`accumulate_package_counts`, `collect_schema_nodes`), `semantic/validator.rs` (`check_parts_recursive`), `semantic/serializer.rs` (`to_sysml`) recurse directly on AST depth. | Bound all recursion with `MAX_AST_DEPTH` or use iterative traversal. Add depth-limit tests and stack-budget evidence. |
-| Monolithic god files and high-arity functions | `compile-sysml/src/sync/forward.rs` (~3,000 lines), `parser/grammar.rs` (~2,400 lines), `stpa/safety_suite.rs` (~2,000 lines); functions span hundreds of lines with deep state. | Split by responsibility to the 500/80/5 limits. Replace flag webs with state enums. Design for MC/DC. |
-| Stringly-typed errors | `driver.rs`, `sync/forward.rs`, `sync/reverse.rs`, `reconcile-backlog/src/tracker.rs` return `Result<_, String>` or `Result<i32, (i32, String)>`. | Replace with typed error enums or stable `#[repr(u16)]` codes. Remove string-prefix fault handling. |
-| Scanner-evasion hacks and metric gaming | `concat!("reg", "ex::")`, `concat!(".unwrap", "()")`, `["pan", "ic!("].concat()` in `blueprint_gate.rs` and `docstring.rs`; one-line packing and `.then_some().unwrap_or()` in `modular_codegen/emitters/rust_emitter.rs`. | Ban evasion. Upgrade Check 34 to token or AST scanning. Enforce one statement per line and rustfmt. |
-| Unchecked slice indexing and arithmetic | `reconcile-backlog/src/frontmatter.rs`, `checklist.rs`, `compile-sysml/src/lexer/scanner.rs` use direct slicing and raw `+`/`-` arithmetic. | Use `.get()`, `split_at_checked`, `char_indices`, and checked arithmetic. Add UTF-8 boundary and fuzz tests. |
+| 7-section docstring noise floor | `reconcile-backlog/src/tracker.rs`, `compile-sysml/src/docstring.rs`: 25-30 lines of boilerplate on 3-line getters, `Default` impls, and private helpers. | Apply the Tier A/B/C model in Section 4. Execute lossless `ra_ap_syntax` CST compaction (`--compact-tier-bc`, `blueprint-08`) and enforce tier-aware AST Check 36 with `--message-format=json` `MachineApplicable` diagnostics. |
+| Unbounded recursion and stack exhaustion | `semantic/digest.rs` (`accumulate_package_counts`, `collect_schema_nodes`), `semantic/validator.rs` (`check_parts_recursive`), `semantic/serializer.rs` (`to_sysml`) recurse directly on AST depth. | Bound all recursion with `MAX_AST_DEPTH` or migrate to `logos` + `rowan` lossless CST iterative traversal with `salsa` memoized queries (`blueprint-10`), backed by Stage 4 `#[kani::proof]` depth-bound harnesses (`blueprint-09`). |
+| Monolithic god files and high-arity functions | `compile-sysml/src/sync/forward.rs` (~3,000 lines), `parser/grammar.rs` (~2,400 lines), `stpa/safety_suite.rs` (~2,000 lines); functions span hundreds of lines with deep state. | Decompose via `ra_ap_syntax` `--list-rust-items` and `--extract-rust-module` (`blueprint-08`) to the 500/80/5 limits enforced by Stage 1 `clippy.toml` (`too-many-lines-threshold = 80`, `too-many-arguments-threshold = 5`, `blueprint-09`). |
+| Stringly-typed errors | `driver.rs`, `sync/forward.rs`, `sync/reverse.rs`, `reconcile-backlog/src/tracker.rs` return `Result<_, String>` or `Result<i32, (i32, String)>`. | Replace with typed error enums or stable `#[repr(u16)]` codes and emit unified `--message-format=json` diagnostics (`blueprint-08`). Remove string-prefix fault handling. |
+| Scanner-evasion hacks and metric gaming | `concat!("reg", "ex::")`, `concat!(".unwrap", "()")`, `["pan", "ic!("].concat()` in `blueprint_gate.rs` and `docstring.rs`; one-line packing and `.then_some().unwrap_or()` in `modular_codegen/emitters/rust_emitter.rs`. | Ban evasion. Replace raw string-template emitters with `syn`/`quote`/`prettyplease` AST codegen (`blueprint-08`) and enforce Stage 1-5 Clippy, `Dylint` MIR, `Miri`, `Kani`, and Ferrocene `symbol-report` gates (`blueprint-09`, `blueprint-11`). |
+| Unchecked slice indexing and arithmetic | `reconcile-backlog/src/frontmatter.rs`, `checklist.rs`, `compile-sysml/src/lexer/scanner.rs` use direct slicing and raw `+`/`-` arithmetic. | Enforce Stage 1 Clippy `indexing_slicing`, `arithmetic_side_effects`, `cast_possible_truncation`, and `cast_sign_loss` (`blueprint-09`), migrate lexing to `logos` + `rowan` (`blueprint-10`), and prove bounds via Stage 4 `#[kani::proof]` harnesses. |
 
 ## 19. Waivers and Deviations
 

@@ -7,7 +7,7 @@
 | Status | `Active / Normative` |
 | Supersedes | `1.0` |
 | Applies to | All Dart and Flutter client, operator console, and HMI code under `app_flutter/` in DEAP downstream application repositories |
-| Target assurance | DO-178C DAL B/C HMI readiness, ARINC 661 User Application / Cockpit Display System boundary readiness, safety-critical operator console determinism |
+| Target assurance | Ring-3 DO-178C DAL-D/E / ISO 26262 QM assurance containment, DO-178C DAL B/C HMI display/control determinism, ARINC 661 CDS/UA & Ring-2/Ring-1 FFI boundary isolation |
 | Companion standards | [RUST_CODING_STANDARD.md](./RUST_CODING_STANDARD.md), [README.md](./README.md) |
 | Owner | DEAP Systems Engineering |
 | Review requirement | Fresh reviewer subagent and explicit user approval before adoption |
@@ -21,13 +21,24 @@ This standard defines mandatory Dart and Flutter architectural, domain-modeling,
 - **Safety-Critical HMI Readiness**: Rules in this document target DO-178C DAL B/C display and operator-control readiness and ARINC 661 Cockpit Display System / User Application (CDS/UA) partition boundary isolation, ensuring deterministic rendering, bounded frame latency, explicit degraded-mode indication, and zero UI-induced corruption of safety kernels.
 - **Governance Precedence**: This standard is subordinate to the project constitution (`.pipeline/constitution.md`), `.pipeline/ACTIVE_RULES_BUNDLE.md`, and active platform profiles. Where two rules overlap, the stricter rule governs. Conflicts must be resolved via an approved remediation plan, never silently bypassed.
 - **Evidence Over Assertion**: Compliance with this coding standard does not by itself constitute DO-178C or ARINC 661 certification. Any certification or assurance readiness claim requires complete requirement-to-code-to-test traceability, structural coverage, live persistence verification, and frame-time profiling evidence.
-- **Cross-Language Boundary**: Tier-0 DO-330 offline compiler/verification crates, Track B discrete-time Rust simulation kernels, and the native side of `#[repr(C)]` FFI adapters are governed by [RUST_CODING_STANDARD.md](./RUST_CODING_STANDARD.md). Shared cross-language assurance invariants are indexed in [README.md](./README.md).
+- **Cross-Language Boundary**: Tier-0 DO-330 offline compiler/verification crates, Ring-1 `#![no_std]` Ferrocene Rust safety kernels, Track B discrete-time Rust simulation kernels, and the native side of Ring-2 `#[repr(C)]` / `flutter_rust_bridge` FFI adapters are governed by [RUST_CODING_STANDARD.md](./RUST_CODING_STANDARD.md). Shared cross-language assurance invariants and the 5-stage compiler/formal verification hierarchy are indexed in [README.md](./README.md).
 
 ### 1.2 Strict Target Directory Confinement (`app_flutter/`)
 
 - All Dart source files (`lib/**`), automated tests (`test/**`, `integration_test/**`), asset bundles, platform runner wrappers, `pubspec.yaml`, `pubspec.lock`, and `analysis_options.yaml` MUST reside strictly within `app_flutter/`.
 - Writing Dart source files, generated serialization adapters, configuration files, or build outputs at the repository root or outside `app_flutter/` is strictly prohibited.
-- When integrating with a Track B Rust simulation or control engine via `dart:ffi`, FFI consumer bindings reside exclusively inside `app_flutter/lib/src/ffi/` and consume read-only snapshot buffers and bounded command ring buffers without mutating native engine heap memory directly.
+- When integrating with a downstream Rust control or simulation engine via `dart:ffi` / `flutter_rust_bridge`, generated and consumer FFI bindings reside exclusively inside `app_flutter/lib/src/ffi/`, pass `dart analyze --fatal-infos` with zero diagnostics, and consume read-only snapshot buffers and bounded command ring buffers without mutating native engine heap memory directly.
+
+### 1.3 Ring-3 Assurance Containment & Ring-2/Ring-1 FFI Boundary Rules
+
+Per `docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md`, `docs/designs/blueprint-11-ferrocene-do178c-do330-3ring-certification-architecture.md`, and `docs/architecture/blueprints/DEAP_STRIX_HALO_COMPILER_NATIVE_VERIFICATION_ARCHITECTURE.md`, downstream operator consoles enforce strict 3-Ring Assurance Containment:
+
+- **Ring-3 Untrusted Presentation & Input Shell (`app_flutter/` -- DAL-D/E / QM Containment)**: The Flutter runtime, Skia/Impeller GPU renderer, and Dart garbage-collected isolate heap operate strictly inside a Ring-3 DO-178C DAL-D/E / ISO 26262 QM assurance-containment envelope. Ring-3 functions solely as a deterministic display projection and untrusted operator-input shell; it never executes safety-critical control laws, authority arbitration, or unguarded actuator writes.
+- **Ring-2 Synthesized FFI Guard Isolation (`flutter_rust_bridge` + `Miri`)**: Ring-3 is physically and logically isolated from Ring-1 (`#![no_std]` Ferrocene Rust `safety_kernel`) by Ring-2 -- a narrow `#[repr(C)]` and `crates/compile-sysml`-synthesized `flutter_rust_bridge` FFI guard layer. On the Rust side, Ring-2 traps panics via `std::panic::catch_unwind`, validates scalar bounds and enum discriminants before constructing Ring-1 types, and is verified for memory/aliasing soundness under `cargo +nightly miri test` (`-Zmiri-tree-borrows`). On the Dart side (`app_flutter/lib/src/ffi/**`), all synthesized and wrapper FFI bindings MUST pass `dart analyze --fatal-infos` without `// ignore:` suppressions.
+- **Ring-1 `SafetyMonitor` Sequence-Numbered CRC/SHA-256 Readback & Challenge-Response Interlocks**:
+  - Every safety-critical operator command initiated in Ring-3 MUST traverse a deterministic two-step **Propose -> Ring-1 Readback/Challenge -> Operator Confirm -> Ring-1 Authorize** interlock enforced by the Ring-1 `SafetyMonitor`.
+  - Command envelopes and Ring-1 safety annunciations carry monotonic sequence numbers, freshness epochs, and CRC-32C or SHA-256 integrity digests computed and verified inside Ring-1.
+  - Ring-3 confirmation views and annunciation banners MUST render the Ring-1-echoed readback payload and digest-verified state verbatim rather than optimistic local ViewModel state, transitioning immediately to an explicit `Failure<T>` / stale-interlock state on any sequence gap, timeout, or CRC/SHA-256 mismatch.
 
 ## 2. Architectural Isolation & MVVM 3-Layer Definition of Done
 
@@ -270,12 +281,14 @@ Widget and ViewModel test suites MUST pump teardown cycles (`await tester.pumpWi
 | Unguarded `notifyListeners()` / `setState()` after `await` or uncancelled `StreamSubscription`s | Post-disposal `FlutterError` exceptions, memory leaks, and zombie callbacks mutating stale views (Check 39). | Enforce `_disposed` and `mounted` guards after every `await` and deterministic reverse-order teardown in `dispose()` (Sections 6.3, 7). |
 | Synchronous `File.*Sync()` / heavy parsing on UI isolate or instantiating controllers inside `build()` | Drops frame rendering below 60 FPS (`> 16.67 ms` jank spikes) and leaks per-frame allocations. | Offload work `> 2.0 ms` via `Isolate.run` using pure DTOs; keep `build()` pure and allocate controllers exclusively in `initState` (Section 6.1, 6.2). |
 | Monolithic `> 500` SLOC god widgets and silent `// ignore:` analyzer directives | Defeats static verification, inflates cyclomatic complexity (`v(G) > 10`), and blocks reviewability. | Decompose to `< 500` SLOC/file, `<= 60` SLOC/method, `v(G) <= 10`, nesting `<= 4`, with zero unwaived lint suppressions (Section 9.1). |
+| Hand-rolled unverified `dart:ffi` pointer mutation or optimistic Ring-3 safety actuation without Ring-1 `SafetyMonitor` readback | Violates 3-ring DAL-D/E / QM containment and risks corrupting Ring-1 `safety_kernel` state (`blueprint-09`, `blueprint-11`). | Route exclusively through `crates/compile-sysml`-synthesized `flutter_rust_bridge` Ring-2 guards (`Miri` + `dart analyze --fatal-infos`) and enforce Ring-1 CRC/SHA-256 sequence-numbered `SafetyMonitor` readback/challenge-response interlocks (Section 1.3). |
 
 ## 10. Mandatory Verification Gates & Review Checklist
 
-All downstream Dart and Flutter changes MUST pass the following verification gates with zero warnings or errors prior to commit:
+All downstream Dart and Flutter changes (including `app_flutter/lib/src/ffi/` Ring-2 consumer bindings) MUST pass the following verification gates with zero infos, warnings, or errors prior to commit:
 
 ```bash
+cd app_flutter && dart analyze --fatal-infos
 cd app_flutter && flutter analyze --fatal-infos --fatal-warnings
 cd app_flutter && flutter test
 ./target/release/verify-baseline .
@@ -286,6 +299,7 @@ During downstream full-application verification gates, run the target platform r
 ### Reviewer Verification Checklist
 
 - [ ] All Dart/Flutter files reside strictly inside `app_flutter/` with zero root source writes.
+- [ ] Ring-3 (`app_flutter/`) preserves DAL-D/E / QM assurance containment, communicates with Ring-1 (`#![no_std]` Ferrocene `safety_kernel`) exclusively via `crates/compile-sysml`-synthesized `flutter_rust_bridge` Ring-2 FFI guards passing `dart analyze --fatal-infos`, and enforces Ring-1 CRC/SHA-256 sequence-numbered `SafetyMonitor` readback/challenge-response interlocks for safety-critical commands and annunciations.
 - [ ] All 3 MVVM layers (Domain State, ViewModel Logic, Display/Actuator Binding) are closed with zero `N/A` placeholders.
 - [ ] All 15 Mandatory Domain Engineering Standards (Section 3) are satisfied (`Result<T>`, `sealed class`, `@immutable`, zero `dynamic`, `const`, value equality, `typedef`, `._()` factories, pure DTO separation).
 - [ ] DartDoc adheres to the Section 4 Tiered Model (Tier A 7-section or 4-Block Contract; Tier B/C 1-3 line summary + `Realises: [REQ-ID]`; zero placeholder tokens).
