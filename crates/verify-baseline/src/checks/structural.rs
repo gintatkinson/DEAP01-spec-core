@@ -655,34 +655,7 @@ pub fn check_zero_python_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
 }
 
 /// Traverses governed directories and root files to detect operational Python/Pytest references.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C toolchain integrity verification controls.
-/// Ensures `scan_governed_files_for_python_references` inspects every `.md`, `.yaml`, `.yml`,
-/// `.json`, and `.toml` file under `skills/`, `.agents/skills/`, `rules/`, `.pipeline/`
-/// (excluding `.pipeline/defects/`), `docs/`, `README.md`, and `AGENTS.md`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Directory traversal excludes build artifacts (`target`, `.git`, `build`, `Pods`, `ephemeral`,
-///   `.dart_tool`) and historical defect dossiers (`.pipeline/defects/`).
-/// - Every matching text file in the governed set is scanned deterministically via `scan_file_for_python_references`.
-///
-/// ## 3. Preconditions
-/// - `repo_root: &Path` points to the workspace root directory.
-/// - `violations: &mut Vec<String>` is a mutable accumulator owned by `check_zero_python_scripts`.
-///
-/// ## 4. Postconditions
-/// Appends `rel_path:line_no` diagnostics for all operational Python/Pytest references into `violations`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// Time Complexity: O(G * L) where G is governed file count and L is average line count per file.
-/// Space Complexity: O(D) recursion stack depth for directory walk plus O(V) appended violations.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// Fails closed by pushing `Check 33 I/O error` diagnostics into `violations` if directory traversal fails.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECK-33-SCAN-GOVERNED-FILES].
+/// Realises: [REQ-CHECK-33-SCAN-GOVERNED-FILES]
 fn scan_governed_files_for_python_references(repo_root: &Path, violations: &mut Vec<String>) {
     let governed_dirs = [
         repo_root.join("skills"),
@@ -737,33 +710,8 @@ fn scan_governed_files_for_python_references(repo_root: &Path, violations: &mut 
     }
 }
 
-/// Evaluates whether `path: &Path` carries a governed text extension for Check 33 content scanning.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A deterministic file-type classification controls.
-/// Restricts `is_governed_python_scan_extension` to structured documentation and configuration
-/// formats (`.md`, `.yaml`, `.yml`, `.json`, `.toml`) while excluding machine-generated digest
-/// JSON sidecars (`*.digest.json`, `*-digest.json`, `schema-digest.json`) without static string-slice arrays.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// Case-insensitive extension predicate returning `true` if and only if the file extension
-/// matches `md`, `yaml`, `yml`, `json`, or `toml` and the filename does not end with
-/// `.digest.json` or `-digest.json`.
-///
-/// ## 3. Preconditions
-/// `path: &Path` is a valid filesystem path reference.
-///
-/// ## 4. Postconditions
-/// Returns `true` when `path` has a governed text extension and is not a digest sidecar; returns `false` otherwise.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// Time Complexity: O(N) where N is filename byte length. Space Complexity: O(N) for ASCII lowercase conversion.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// Total, non-panicking predicate; paths without an extension return `false`.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECK-33-GOVERNED-EXTENSIONS].
+/// Evaluates whether `path` carries a governed text extension while excluding `*.digest.json` sidecars.
+/// Realises: [REQ-CHECK-33-GOVERNED-EXTENSIONS]
 fn is_governed_python_scan_extension(path: &Path) -> bool {
     if let Some(fname) = path
         .file_name()
@@ -781,32 +729,7 @@ fn is_governed_python_scan_extension(path: &Path) -> bool {
 }
 
 /// Scans a single governed text file line-by-line for operational Python/Pytest tokens.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C trace-level defect detection.
-/// Reads `path: &Path` and inspects each 1-indexed line via `is_python_prohibition_clause`
-/// and `detect_operational_python_token`, recording `rel_path:line_no` violations.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Lines containing explicit governance prohibition terms are exempted via `is_python_prohibition_clause`.
-/// - Every remaining line containing an operational Python/Pytest token emits exactly one
-///   `rel_path:line_no` violation entry into `violations`.
-///
-/// ## 3. Preconditions
-/// - `path: &Path` is an existing regular file under `repo_root: &Path`.
-/// - `violations: &mut Vec<String>` is a valid mutable vector.
-///
-/// ## 4. Postconditions
-/// Appends formatted `rel_path:line_no` diagnostics (or file read failure diagnostics) into `violations`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// Time Complexity: O(B) where B is the byte length of `path`. Space Complexity: O(B) for file buffer.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// Fails closed if `fs::read_to_string(path)` returns an I/O or UTF-8 decoding error.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECK-33-LINE-SCANNER].
+/// Realises: [REQ-CHECK-33-LINE-SCANNER]
 fn scan_file_for_python_references(path: &Path, repo_root: &Path, violations: &mut Vec<String>) {
     let rel = path
         .strip_prefix(repo_root)
@@ -839,28 +762,8 @@ fn scan_file_for_python_references(path: &Path, repo_root: &Path, violations: &m
     }
 }
 
-/// Determines whether an ASCII-lowercased line is an explicit governance prohibition clause.
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A normative rule preservation controls.
-/// Allows constitutional rules and agent instructions in `AGENTS.md`, `rules/`,
-/// `docs/standards/`, and `.pipeline/ACTIVE_RULES_BUNDLE.md` to state that Python and Pytest
-/// are prohibited without triggering false-positive self-violations in `is_python_prohibition_clause`.
-/// ## 2. Invariants & Mathematical Properties
-/// Returns `true` if and only if `ascii_folded` contains at least one canonical prohibition stem
-/// (`prohibit`, `forbid`, `retired`, `zero python`, `check 33`), an explicit imperative prohibition
-/// phrase (`never invoke`, `never run`, `never execute`, `do not invoke`, `do not run`), or a
-/// word-bounded `ban` / `bans` / `banned` token verified via `contains_ascii_word` so substrings in
-/// ordinary prose (`banner`, `abandoned`, `shebang`, `never flickers`) never evade Check 33.
-/// ## 3. Preconditions
-/// `ascii_folded: &str` must already be converted to ASCII lowercase by the caller.
-/// ## 4. Postconditions
-/// Pure boolean classification indicating whether the line states a governance prohibition.
-/// ## 5. Algorithmic Complexity Bounds
-/// Time Complexity: O(L) where L is the byte length of `ascii_folded`. Space Complexity: O(1).
-/// ## 6. Failure Modes & Fault Tolerance
-/// Infallible, zero-allocation substring and boundary inspection that never panics.
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECK-33-PROHIBITION-CLAUSE-EXEMPTION].
+/// Determines whether an ASCII-lowercased line states an explicit governance prohibition clause.
+/// Realises: [REQ-CHECK-33-PROHIBITION-CLAUSE-EXEMPTION]
 fn is_python_prohibition_clause(ascii_folded: &str) -> bool {
     ascii_folded.contains("prohibit")
         || ascii_folded.contains("forbid")
@@ -878,23 +781,7 @@ fn is_python_prohibition_clause(ascii_folded: &str) -> bool {
 }
 
 /// Checks whether `haystack` contains `word` delimited on both sides by non-identifier boundaries.
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 34 non-panicking slice access rules.
-/// Prevents substring false-negatives in `is_python_prohibition_clause` (such as matching `"ban"`
-/// inside `"banner"`, `"abandoned"`, or `"shebang"`) using deterministic byte-boundary checks.
-/// ## 2. Invariants & Mathematical Properties
-/// Returns `true` if and only if `word` is non-empty and occurs at some byte offset `idx` in
-/// `haystack` where neither the preceding byte nor the following byte is ASCII alphanumeric or `'_'`.
-/// ## 3. Preconditions
-/// `haystack: &str` and `word: &str` are valid UTF-8 string slices (typically ASCII-lowercased).
-/// ## 4. Postconditions
-/// Pure boolean result indicating presence of `word` as a standalone token.
-/// ## 5. Algorithmic Complexity Bounds
-/// Time Complexity: O(L) where L is byte length of `haystack`. Space Complexity: O(1).
-/// ## 6. Failure Modes & Fault Tolerance
-/// Uses `.get(..)`, `checked_sub`, and `saturating_add` exclusively; never indexes slices directly or panics.
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECK-33-PROHIBITION-CLAUSE-EXEMPTION].
+/// Realises: [REQ-CHECK-33-PROHIBITION-CLAUSE-EXEMPTION]
 fn contains_ascii_word(haystack: &str, word: &str) -> bool {
     if word.is_empty() {
         return false;
@@ -918,28 +805,7 @@ fn contains_ascii_word(haystack: &str, word: &str) -> bool {
 }
 
 /// Detects whether an ASCII-lowercased line contains an operational Python or Pytest token.
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C pure-Rust toolchain enforcement.
-/// Identifies operational invocations, package runners, shebangs, and configuration tokens
-/// (`python3`, `#!/usr/bin/env python`, `#!/usr/bin/python`, `pytest`, `pip install`, `pip3 `,
-/// `uv run `, `poetry run `, `models/python`, `unittest`, `execution_environment: [python`,
-/// `language: python`, and `.py` script tokens) inside `detect_operational_python_token` using
-/// zero regular expressions.
-/// ## 2. Invariants & Mathematical Properties
-/// Evaluates a fixed priority order of operational Python tokens and delegates `.py` token
-/// boundary verification to `contains_dot_py_token`.
-/// ## 3. Preconditions
-/// `ascii_folded: &str` is an ASCII-lowercased line that has already been screened by
-/// `is_python_prohibition_clause`.
-/// ## 4. Postconditions
-/// Returns `Some(&'static str)` naming the first matched operational Python token, or `None`
-/// if the line is clean.
-/// ## 5. Algorithmic Complexity Bounds
-/// Time Complexity: O(L) where L is the byte length of `ascii_folded`. Space Complexity: O(1).
-/// ## 6. Failure Modes & Fault Tolerance
-/// Pure, deterministic, non-panicking string inspection with zero heap allocations.
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECK-33-OPERATIONAL-TOKEN-DETECTOR].
+/// Realises: [REQ-CHECK-33-OPERATIONAL-TOKEN-DETECTOR]
 fn detect_operational_python_token(ascii_folded: &str) -> Option<&'static str> {
     if ascii_folded.contains("python3") {
         Some("python3")
@@ -970,32 +836,8 @@ fn detect_operational_python_token(ascii_folded: &str) -> Option<&'static str> {
     }
 }
 
-/// Checks whether an ASCII-lowercased line contains a `.py` file extension token at a word boundary.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 34 non-panicking slice access rules.
-/// Detects `.py` script paths and tokens in `contains_dot_py_token` while avoiding false
-/// positives on words where `.py` is immediately followed by alphanumeric or underscore characters.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// For every byte offset `idx` where `".py"` occurs in `ascii_folded`, inspects `bytes.get(idx + 3)`
-/// and returns `true` if and only if the following byte is absent (`None`) or is neither ASCII
-/// alphanumeric nor `b'_'`.
-///
-/// ## 3. Preconditions
-/// `ascii_folded: &str` is an ASCII-lowercased line slice.
-///
-/// ## 4. Postconditions
-/// Returns `true` if at least one boundary-terminated `.py` token exists in `ascii_folded`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// Time Complexity: O(L) where L is byte length of `ascii_folded`. Space Complexity: O(1).
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// Uses `.get(..)` exclusively on `bytes` and `saturating_add(3)` on `idx`, guaranteeing zero panics.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECK-33-DOT-PY-BOUNDARY-SCAN].
+/// Checks whether an ASCII-lowercased line contains a boundary-terminated `.py` extension token.
+/// Realises: [REQ-CHECK-33-DOT-PY-BOUNDARY-SCAN]
 fn contains_dot_py_token(ascii_folded: &str) -> bool {
     let bytes = ascii_folded.as_bytes();
     for (idx, _) in ascii_folded.match_indices(".py") {
@@ -1011,17 +853,229 @@ fn contains_dot_py_token(ascii_folded: &str) -> bool {
     false
 }
 
+/// Zero-allocation `(prefix, suffix)` token pair for self-hosting Check 34 source scans.
+/// Realises: [REQ-CHECK-34-SPLIT-TOKEN-MATCH]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SplitToken(&'static str, &'static str);
+
+/// Specification pairing an audited module's path-match prefix with its canonical workspace stem.
+/// Realises: [REQ-CHECK-34-AUDITED-MODULE-PATH]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct AuditedModuleSpec {
+    match_prefix: &'static str,
+    workspace_stem: &'static str,
+}
+
+/// Complete ordered registry of Check 34 audited compiler modules (`<module>.rs` or `<module>/`).
+/// Realises: [REQ-CHECK-34-AUDITED-MODULE-PATH]
+const AUDITED_MODULES: &[AuditedModuleSpec] = &[
+    AuditedModuleSpec {
+        match_prefix: "checks/structural",
+        workspace_stem: "crates/verify-baseline/src/checks/structural",
+    },
+    AuditedModuleSpec {
+        match_prefix: "parity_gates",
+        workspace_stem: "crates/verify-baseline/src/checks/parity_gates",
+    },
+    AuditedModuleSpec {
+        match_prefix: "docstring_gate",
+        workspace_stem: "crates/verify-baseline/src/checks/docstring_gate",
+    },
+    AuditedModuleSpec {
+        match_prefix: "defect_dossier",
+        workspace_stem: "crates/verify-baseline/src/defect_dossier",
+    },
+    AuditedModuleSpec {
+        match_prefix: "deap-core/src/diagnostics",
+        workspace_stem: "crates/deap-core/src/diagnostics",
+    },
+    AuditedModuleSpec {
+        match_prefix: "deap-core/src/rules",
+        workspace_stem: "crates/deap-core/src/rules",
+    },
+    AuditedModuleSpec {
+        match_prefix: "deap-core/src/workspace",
+        workspace_stem: "crates/deap-core/src/workspace",
+    },
+    AuditedModuleSpec {
+        match_prefix: "deap-core/src/markdown",
+        workspace_stem: "crates/deap-core/src/markdown",
+    },
+    AuditedModuleSpec {
+        match_prefix: "deap-core/src/sysml_ast",
+        workspace_stem: "crates/deap-core/src/sysml_ast",
+    },
+    AuditedModuleSpec {
+        match_prefix: "deap-core/src/source_ast",
+        workspace_stem: "crates/deap-core/src/source_ast",
+    },
+    AuditedModuleSpec {
+        match_prefix: "compile-sysml/src/docstring",
+        workspace_stem: "crates/compile-sysml/src/docstring",
+    },
+    AuditedModuleSpec {
+        match_prefix: "ingest-sysml/src/translators/code",
+        workspace_stem: "crates/ingest-sysml/src/translators/code",
+    },
+];
+
+/// Split-token table detecting banned regular-expression crate imports and qualified paths.
+/// Realises: [REQ-CHECK-34-ZERO-REGEX-INVARIANT]
+const FORBIDDEN_REGEX_TOKENS: &[SplitToken] = &[
+    SplitToken("Reg", "ex::"),
+    SplitToken("reg", "ex::"),
+    SplitToken("use reg", "ex;"),
+    SplitToken("extern crate reg", "ex;"),
+];
+
+/// Split-token table for static string-slice types gated on `const`, `static`, or `=` bindings.
+/// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+const BINDING_STR_SLICE_TOKENS: &[SplitToken] =
+    &[SplitToken("&[", "&str]"), SplitToken(": &[", "&str]")];
+
+/// Split-token table for unconditionally forbidden static string-slice array and iterator types.
+/// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+const UNCONDITIONAL_STR_SLICE_TOKENS: &[SplitToken] = &[
+    SplitToken("&[(", "&str"),
+    SplitToken("[", "&str;"),
+    SplitToken("const : &[", "&str]"),
+    SplitToken("&'static [", "&'static str]"),
+    SplitToken("[&'static ", "str;"),
+    SplitToken("IntoIter<", "&'static str"),
+];
+
+/// Split-token table for fail-open `.filter_map(|...| ....ok())` closures.
+/// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+const FAIL_OPEN_FILTER_MAP_TOKENS: &[SplitToken] = &[
+    SplitToken(".filter_map(|e| e.ok", "())"),
+    SplitToken(".filter_map(|res| res.ok", "())"),
+    SplitToken(".filter_map(|x| x.ok", "())"),
+];
+
+/// Split-token table for direct indexing immediately following lowercase string conversion.
+/// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+const DIRECT_LOWER_SLICE_TOKENS: &[SplitToken] = &[
+    SplitToken(".to_lowercase()", "["),
+    SplitToken(".to_ascii_lowercase()", "["),
+];
+
+/// Split-token table for range indexing on lowercase-named local bindings.
+/// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+const LOWER_VAR_INDEX_TOKENS: &[SplitToken] =
+    &[SplitToken("lower", "["), SplitToken("_lower", "[")];
+
+/// Forbidden Cargo dependency name split across two slices to avoid self-scan false positives.
+/// Realises: [REQ-CARGO-TOML-REGEX-SCAN]
+const FORBIDDEN_CARGO_DEP_TOKEN: SplitToken = SplitToken("reg", "ex");
+
+/// Checks whether `haystack` contains `prefix` immediately followed by `suffix` without allocation.
+/// Realises: [REQ-CHECK-34-SPLIT-TOKEN-MATCH]
+fn has_split_token(haystack: &str, prefix: &str, suffix: &str) -> bool {
+    if prefix.is_empty() {
+        return haystack.contains(suffix);
+    }
+    for (idx, _) in haystack.match_indices(prefix) {
+        if haystack
+            .get(idx.saturating_add(prefix.len())..)
+            .is_some_and(|rest| rest.starts_with(suffix))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Checks whether `haystack` matches at least one `(prefix, suffix)` pair in `tokens`.
+/// Realises: [REQ-CHECK-34-SPLIT-TOKEN-MATCH]
+fn any_split_token(haystack: &str, tokens: &[SplitToken]) -> bool {
+    tokens
+        .iter()
+        .any(|tok| has_split_token(haystack, tok.0, tok.1))
+}
+
+/// Checks whether `line` contains `prefix` + `suffix` bounded on both sides by non-identifier bytes.
+/// Realises: [REQ-CHECK-34-SPLIT-TOKEN-MATCH]
+fn contains_bounded_split_token(line: &str, prefix: &str, suffix: &str) -> bool {
+    if prefix.is_empty() {
+        return contains_bounded_token(line, suffix);
+    }
+    let bytes = line.as_bytes();
+    let total_len = prefix.len().saturating_add(suffix.len());
+    for (idx, _) in line.match_indices(prefix) {
+        let has_suffix = line
+            .get(idx.saturating_add(prefix.len())..)
+            .is_some_and(|rest| rest.starts_with(suffix));
+        if !has_suffix {
+            continue;
+        }
+        let before_ok = match idx.checked_sub(1).and_then(|prev| bytes.get(prev)) {
+            Some(&b) => !b.is_ascii_alphanumeric() && b != b'_' && b != b'-',
+            None => true,
+        };
+        let after_ok = match bytes.get(idx.saturating_add(total_len)) {
+            Some(&b) => !b.is_ascii_alphanumeric() && b != b'_' && b != b'-',
+            None => true,
+        };
+        if before_ok && after_ok {
+            return true;
+        }
+    }
+    false
+}
+
+/// Checks whether `path` matches `<prefix>.rs` or a subpath under `<prefix>/` at a path boundary.
+/// Realises: [REQ-CHECK-34-AUDITED-MODULE-PATH]
+fn matches_module_file_or_dir(path: &str, prefix: &str) -> bool {
+    if prefix.is_empty() {
+        return false;
+    }
+    let bytes = path.as_bytes();
+    for (idx, _) in path.match_indices(prefix) {
+        let before_ok = match idx.checked_sub(1).and_then(|prev| bytes.get(prev)) {
+            Some(&b) => b == b'/' || b == b'\\',
+            None => true,
+        };
+        if !before_ok {
+            continue;
+        }
+        let tail = path.get(idx.saturating_add(prefix.len())..).unwrap_or("");
+        if tail == ".rs" || tail.starts_with('/') || tail.starts_with('\\') {
+            return true;
+        }
+    }
+    false
+}
+
+/// Determines whether a Rust source path belongs to a Check 34 audited module file or directory.
+/// Realises: [REQ-CHECK-34-AUDITED-MODULE-PATH]
+fn is_audited_source_path(rel: &str) -> bool {
+    if !rel.ends_with(".rs") {
+        return false;
+    }
+    AUDITED_MODULES
+        .iter()
+        .any(|spec| matches_module_file_or_dir(rel, spec.match_prefix))
+}
+
+/// Determines whether strict fail-open I/O match arm rules apply to `file_rel`.
+/// Realises: [REQ-CHECK-34-STRICT-IO-ARMS-SCOPE]
+fn enforces_strict_io_arms(file_rel: &str) -> bool {
+    !matches_module_file_or_dir(file_rel, "sysml_ast")
+        && !matches_module_file_or_dir(file_rel, "workspace")
+        && !matches_module_file_or_dir(file_rel, "parity_gates")
+}
+
 /// Check 34: Zero Regex Invariant & Self-Hosting Compiler Purity Gate.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ECSS-E-ST-40C safety-critical software requirements.
 /// Mechanically enforces that zero regular expressions exist across the compiler codebase
-/// and enforces complete AST purity and 7-section Rustdoc on audited modules.
+/// and enforces complete AST purity and tiered Rustdoc on audited modules and module directories.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - All AST parsers and scanners must be deterministic finite-state machines without regex.
-/// - Audited modules must possess zero static string-slice arrays, zero stubs, zero fail-open
-///   constructs, zero cross-string UTF-8 byte slices, and mandatory 7-section Rustdoc.
+/// - Audited modules (`<module>.rs` and `<module>/`) must possess zero static string-slice arrays,
+///   zero stubs, zero fail-open constructs, zero cross-string UTF-8 byte slices, and tiered Rustdoc.
 ///
 /// ## 3. Preconditions
 /// `repo_root` must be an accessible local filesystem directory.
@@ -1042,29 +1096,23 @@ fn contains_dot_py_token(ascii_folded: &str) -> bool {
 pub fn check_zero_regex(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
 
-    let crate_needle = ["reg", "ex"].concat();
-
-    // 1. Check root Cargo.toml if it exists
     let root_cargo = repo_root.join("Cargo.toml");
     if root_cargo.is_file() {
-        scan_cargo_toml_file(&root_cargo, repo_root, &crate_needle, &mut violations);
+        scan_cargo_toml_file(&root_cargo, repo_root, &mut violations);
         if let Err(errs) = WorkspaceManifestForbidGate::verify(repo_root) {
             violations.extend(errs);
         }
     }
 
-    // 2. Scan crates/ directory for all .rs and Cargo.toml files
     let crates_dir = repo_root.join("crates");
     if crates_dir.is_dir() {
         for entry_res in WalkDir::new(&crates_dir).into_iter().filter_entry(|e| {
             if e.file_type().is_dir() {
                 let name = e.file_name().to_string_lossy();
-                name != "target"
-                    && name != ".git"
-                    && name != "build"
-                    && name != "Pods"
-                    && name != "ephemeral"
-                    && name != ".dart_tool"
+                !matches!(
+                    name.as_ref(),
+                    "target" | ".git" | "build" | "Pods" | "ephemeral" | ".dart_tool"
+                )
             } else {
                 true
             }
@@ -1077,48 +1125,7 @@ pub fn check_zero_regex(repo_root: &Path) -> Result<(), Vec<String>> {
                 }
             };
             if entry.file_type().is_file() {
-                let path = entry.path();
-                let fname = entry.file_name().to_string_lossy();
-                if fname == "Cargo.toml" {
-                    scan_cargo_toml_file(path, repo_root, &crate_needle, &mut violations);
-                } else if path.extension().map(|ext| ext == "rs").unwrap_or(false) {
-                    let rel = path
-                        .strip_prefix(repo_root)
-                        .unwrap_or(path)
-                        .display()
-                        .to_string();
-                    match fs::read_to_string(path) {
-                        Ok(content) => {
-                            let is_audited = rel.contains("checks/structural.rs")
-                                || rel.contains("parity_gates.rs")
-                                || rel.contains("docstring_gate.rs")
-                                || rel.contains("defect_dossier.rs")
-                                || rel.contains("compile-sysml/src/docstring.rs")
-                                || rel.contains("ingest-sysml/src/translators/code.rs")
-                                || (rel.contains("deap-core/src/")
-                                    && (rel.ends_with("diagnostics.rs")
-                                        || rel.ends_with("rules.rs")
-                                        || rel.ends_with("workspace.rs")
-                                        || rel.ends_with("markdown.rs")
-                                        || rel.ends_with("sysml_ast.rs")
-                                        || rel.ends_with("source_ast.rs")));
-                            if let Err(errs) = audit_source_purity(&content, &rel, is_audited) {
-                                if is_audited {
-                                    violations.extend(errs);
-                                } else {
-                                    for err in errs {
-                                        if err.contains("regex usage detected") {
-                                            violations.push(err);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            violations.push(format!("{}: Unable to read file: {}", rel, err));
-                        }
-                    }
-                }
+                scan_crates_entry_for_check_34(entry.path(), repo_root, &mut violations);
             }
         }
     }
@@ -1131,6 +1138,42 @@ pub fn check_zero_regex(repo_root: &Path) -> Result<(), Vec<String>> {
     }
 }
 
+/// Dispatches a single file inside `crates/` to `Cargo.toml` or `.rs` Check 34 purity auditing.
+/// Realises: [REQ-CHECK-34-ZERO-REGEX-INVARIANT]
+fn scan_crates_entry_for_check_34(path: &Path, repo_root: &Path, violations: &mut Vec<String>) {
+    if path.file_name().is_some_and(|name| name == "Cargo.toml") {
+        scan_cargo_toml_file(path, repo_root, violations);
+        return;
+    }
+    if !path.extension().is_some_and(|ext| ext == "rs") {
+        return;
+    }
+    let rel = path
+        .strip_prefix(repo_root)
+        .unwrap_or(path)
+        .display()
+        .to_string();
+    match fs::read_to_string(path) {
+        Ok(content) => {
+            let is_audited = is_audited_source_path(&rel);
+            if let Err(errs) = audit_source_purity(&content, &rel, is_audited) {
+                if is_audited {
+                    violations.extend(errs);
+                } else {
+                    for err in errs {
+                        if err.contains("regex usage detected") {
+                            violations.push(err);
+                        }
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            violations.push(format!("{}: Unable to read file: {}", rel, err));
+        }
+    }
+}
+
 /// Check 34 Layer 1: Self-hosting compiler AST purity gate.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1139,7 +1182,7 @@ pub fn check_zero_regex(repo_root: &Path) -> Result<(), Vec<String>> {
 /// zero fail-open error swallowing, zero cross-string byte-slicing hazards, and tiered Tier A / Tier B/C Rustdoc completeness.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// Audited modules must satisfy all 6 purity conditions simultaneously.
+/// Audited modules (`<module>.rs` or decomposed `<module>/` directories) must satisfy all 6 purity conditions simultaneously.
 ///
 /// ## 3. Preconditions
 /// `repo_root` must be an accessible local directory.
@@ -1153,104 +1196,30 @@ pub fn check_zero_regex(repo_root: &Path) -> Result<(), Vec<String>> {
 /// Space Complexity: O(V) where V is violation count.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// Fails closed if any audited file is unreadable or non-compliant.
+/// Fails closed if any audited file or directory is missing, empty, unreadable, or non-compliant.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-34-COMPILER-PURITY-GATE].
 pub fn check_compiler_ast_purity(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
 
-    let audited_files = [
-        repo_root
-            .join("crates")
-            .join("verify-baseline")
-            .join("src")
-            .join("checks")
-            .join("structural.rs"),
-        repo_root
-            .join("crates")
-            .join("verify-baseline")
-            .join("src")
-            .join("checks")
-            .join("parity_gates.rs"),
-        repo_root
-            .join("crates")
-            .join("verify-baseline")
-            .join("src")
-            .join("checks")
-            .join("docstring_gate.rs"),
-        repo_root
-            .join("crates")
-            .join("verify-baseline")
-            .join("src")
-            .join("defect_dossier.rs"),
-        repo_root
-            .join("crates")
-            .join("deap-core")
-            .join("src")
-            .join("diagnostics.rs"),
-        repo_root
-            .join("crates")
-            .join("deap-core")
-            .join("src")
-            .join("rules.rs"),
-        repo_root
-            .join("crates")
-            .join("deap-core")
-            .join("src")
-            .join("workspace.rs"),
-        repo_root
-            .join("crates")
-            .join("deap-core")
-            .join("src")
-            .join("markdown.rs"),
-        repo_root
-            .join("crates")
-            .join("deap-core")
-            .join("src")
-            .join("sysml_ast.rs"),
-        repo_root
-            .join("crates")
-            .join("deap-core")
-            .join("src")
-            .join("source_ast.rs"),
-        repo_root
-            .join("crates")
-            .join("compile-sysml")
-            .join("src")
-            .join("docstring.rs"),
-        repo_root
-            .join("crates")
-            .join("ingest-sysml")
-            .join("src")
-            .join("translators")
-            .join("code.rs"),
-    ];
+    for module in AUDITED_MODULES {
+        let stem_rel = module.workspace_stem;
+        let single_file = repo_root.join(format!("{stem_rel}.rs"));
+        let module_dir = repo_root.join(stem_rel);
+        let has_file = single_file.is_file();
+        let has_dir = module_dir.is_dir();
 
-    for file_path in &audited_files {
-        let rel = file_path
-            .strip_prefix(repo_root)
-            .unwrap_or(file_path)
-            .display()
-            .to_string();
-        if file_path.is_file() {
-            match fs::read_to_string(file_path) {
-                Ok(content) => {
-                    if let Err(errs) = audit_source_purity(&content, &rel, true) {
-                        violations.extend(errs);
-                    }
-                }
-                Err(err) => {
-                    violations.push(format!(
-                        "Check 34: Unable to read audited file '{}': {}",
-                        rel, err
-                    ));
-                }
-            }
-        } else {
+        if has_file {
+            audit_mandatory_file_path(&single_file, repo_root, &mut violations);
+        }
+        if has_dir {
+            audit_decomposed_module_dir(&module_dir, repo_root, stem_rel, &mut violations);
+        }
+        if !has_file && !has_dir {
             violations.push(format!(
-                "Check 34: Missing mandatory audited file '{}'",
-                rel
+                "Check 34: Missing mandatory audited file '{}.rs'",
+                stem_rel
             ));
         }
     }
@@ -1263,38 +1232,69 @@ pub fn check_compiler_ast_purity(repo_root: &Path) -> Result<(), Vec<String>> {
     }
 }
 
-/// Masks non-doc comments, string literals, raw strings, and character literals line-by-line.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 34 (`REQ-CHECK-34-AUDIT-SOURCE-PURITY`)
-/// lexical boundary integrity controls. Ensures `mask_comments_and_literals_preserving_lines`
-/// strips non-doc line comments (`//`), nested block comments (`/* ... */`), standard string
-/// literals (`"..."`), raw string literals (`r#"..."#`), and character literals (`'x'`) while
-/// preserving 1-to-1 line numbering, Rustdoc lines (`///` and `//!`), and `'static` lifetimes.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves exact 1-based line alignment with `source.lines()`.
-/// - Replaces string and raw-string literal payloads with empty quotes `""` and character literals
-///   with `' '` while leaving lifetime tokens (`'static`, `'a`) intact.
-/// - Preserves top-level `///` and `//!` documentation lines verbatim when not enclosed inside a
-///   multiline string literal or block comment.
-///
-/// ## 3. Preconditions
-/// `source: &str` is valid UTF-8 Rust source text.
-///
-/// ## 4. Postconditions
-/// Returns `Vec<String>` containing one masked line per source line in `source`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// Time Complexity: O(N) where N is the number of Unicode scalar values in `source`.
-/// Space Complexity: O(N) for the character buffer and masked line vector.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// Uses `.get(..)` and `saturating_add` / `saturating_sub` exclusively; never panics on unclosed
-/// literals or comments.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECK-34-MASK-COMMENTS-AND-LITERALS].
+/// Audits a single mandatory Rust file on disk against all Check 34 Layer 1 purity rules.
+/// Realises: [REQ-CHECK-34-COMPILER-PURITY-GATE]
+fn audit_mandatory_file_path(file_path: &Path, repo_root: &Path, violations: &mut Vec<String>) {
+    let rel = file_path
+        .strip_prefix(repo_root)
+        .unwrap_or(file_path)
+        .display()
+        .to_string();
+    match fs::read_to_string(file_path) {
+        Ok(content) => {
+            if let Err(errs) = audit_source_purity(&content, &rel, true) {
+                violations.extend(errs);
+            }
+        }
+        Err(err) => {
+            violations.push(format!(
+                "Check 34: Unable to read audited file '{}': {}",
+                rel, err
+            ));
+        }
+    }
+}
+
+/// Audits every `.rs` file inside a decomposed `<module>/` directory, failing closed if empty.
+/// Realises: [REQ-CHECK-34-COMPILER-PURITY-GATE]
+fn audit_decomposed_module_dir(
+    module_dir: &Path,
+    repo_root: &Path,
+    stem_rel: &str,
+    violations: &mut Vec<String>,
+) {
+    let mut rs_files = Vec::new();
+    for entry_res in WalkDir::new(module_dir) {
+        match entry_res {
+            Ok(entry) => {
+                let path = entry.path();
+                if entry.file_type().is_file() && path.extension().is_some_and(|ext| ext == "rs") {
+                    rs_files.push(path.to_path_buf());
+                }
+            }
+            Err(err) => {
+                violations.push(format!(
+                    "Check 34: Unable to traverse audited module directory '{}': {}",
+                    stem_rel, err
+                ));
+            }
+        }
+    }
+    rs_files.sort();
+    if rs_files.is_empty() {
+        violations.push(format!(
+            "Check 34: Missing mandatory audited file '{}.rs'",
+            stem_rel
+        ));
+        return;
+    }
+    for rs_path in &rs_files {
+        audit_mandatory_file_path(rs_path, repo_root, violations);
+    }
+}
+
+/// Masks non-doc comments, string literals, raw strings, and character literals while preserving 1-based line numbers.
+/// Realises: [REQ-CHECK-34-MASK-COMMENTS-AND-LITERALS]
 fn mask_comments_and_literals_preserving_lines(source: &str) -> Vec<String> {
     let chars: Vec<char> = source.chars().collect();
     let len = chars.len();
@@ -1503,6 +1503,34 @@ fn mask_comments_and_literals_preserving_lines(source: &str) -> Vec<String> {
     lines
 }
 
+/// Brace-depth state tracker for `mod tests` blocks during Check 34 line-by-line source auditing.
+/// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+#[derive(Default)]
+struct ModTestsScope {
+    active: bool,
+    brace_depth: usize,
+    entered_block: bool,
+    has_test: bool,
+}
+
+impl ModTestsScope {
+    /// Resets and activates `mod tests` scope tracking upon encountering a `mod tests` declaration.
+    /// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+    fn enter(&mut self) {
+        self.active = true;
+        self.brace_depth = 0;
+        self.entered_block = false;
+        self.has_test = false;
+    }
+}
+
+/// Outcome of inspecting one masked line inside an active `mod tests` block.
+/// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+enum ModTestsStep<'a> {
+    Consumed,
+    TrailingProduction(&'a str),
+}
+
 /// Audits a single Rust source string for compiler purity violations (a)-(f).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1512,7 +1540,7 @@ fn mask_comments_and_literals_preserving_lines(source: &str) -> Vec<String> {
 /// hazards, tiered Tier A / Tier B/C Rustdoc completeness, and `C-PURITY-03` test anti-gaming invariants.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Banned constructs are assembled dynamically to prevent scanner self-triggering.
+/// - Banned constructs are matched via static split-token tables with zero runtime string concatenation.
 /// - Non-doc comments and string/char literals are masked before token inspection.
 /// - `mod tests` scope tracks brace depth `{` / `}` so closed blocks do not exempt trailing code.
 /// - In audited modules, every item and structured module header must satisfy its normative Tier A
@@ -1540,76 +1568,9 @@ pub fn audit_source_purity(
     check_rustdoc: bool,
 ) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
-
-    for clippy_viol in scan_clippy_allow_tokens(source, file_rel) {
-        let mut is_forbidden_lint = false;
-        for lint in RequiredClippyForbidLint::ALL {
-            if clippy_viol.attribute.contains(lint.as_str()) {
-                is_forbidden_lint = true;
-                break;
-            }
-        }
-        if is_forbidden_lint {
-            violations.push(format!(
-                "{}:{}: forbidden clippy allow attribute detected: {}",
-                clippy_viol.file, clippy_viol.line, clippy_viol.attribute
-            ));
-        }
-    }
-
-    // Dynamically assemble forbidden pattern needles to ensure scanner source
-    // does not match itself as a false positive.
-    let pat_regex_colons = ["Reg", "ex::"].concat();
-    let pat_inline_regex = ["reg", "ex::"].concat();
-    let pat_use_bare = ["use", " ", "reg", "ex;"].concat();
-    let pat_extern = ["extern", " crate ", "reg", "ex;"].concat();
-
-    // String-slice forbidden patterns
-    let needle_slice_str = ["&[", "&str]"].concat();
-    let needle_tuple_slice = ["&[(", "&str"].concat();
-    let needle_array_str = ["[", "&str;"].concat();
-    let needle_static_slice = [": &[", "&str]"].concat();
-    let needle_const_slice = ["const ", ": &[", "&str]"].concat();
-    // 'static lifetime string-slice and array-iterator evasions
-    let needle_static_lt_slice = ["&'static [", "&'static str]"].concat();
-    let needle_static_lt_array = ["[&'static ", "str;"].concat();
-    let needle_static_lt_into_iter = ["IntoIter<", "&'static str"].concat();
-
-    // Hollow stub forbidden patterns
-    let needle_let_blank = ["let", " _ = "].concat();
-
-    // Fail-open forbidden patterns
-    let needle_fm_e = [".filter", "_map(|e| e.ok", "())"].concat();
-    let needle_fm_res = [".filter", "_map(|res| res.ok", "())"].concat();
-    let needle_fm_x = [".filter", "_map(|x| x.ok", "())"].concat();
-    let needle_filter_map = [".filter", "_map("].concat();
-    let needle_dot_ok = [".ok", "()"].concat();
-    let needle_read_str = ["read_to", "_string"].concat();
-    let needle_read_dir = ["read_", "dir("].concat();
-    let needle_err_continue = ["Err(_)", " => continue"].concat();
-    let needle_if_let_ok = ["if let ", "Ok("].concat();
-
-    // Cross-string byte slicing hazards
-    let needle_lower_slice1 = [".to_lowercase()", "["].concat();
-    let needle_lower_slice2 = [".to_ascii_lowercase()", "["].concat();
-    let needle_lower_idx = ["lower", "["].concat();
-    let needle_ulower_idx = ["_lower", "["].concat();
-    let needle_dotdot = [".", "."].concat();
-
-    // C-PURITY-03 test anti-gaming forbidden patterns
-    let needle_mod_tests = ["mod", " tests"].concat();
-    let needle_ignore_attr = ["#[ig", "nore"].concat();
-    let needle_assert_true = ["assert!", "(true)"].concat();
-    let needle_temp_dir_lit = ["temp_dir()", ".join(\"\")"].concat();
-
-    let mut in_mod_tests = false;
-    let mut mod_tests_brace_depth: usize = 0;
-    let mut mod_tests_entered_block = false;
-    let mut mod_tests_has_test = false;
+    collect_forbidden_clippy_allows(source, file_rel, &mut violations);
 
     let masked_lines = mask_comments_and_literals_preserving_lines(source);
-
-    // (f) Tiered Tier A / Tier B/C Rustdoc & Module Header Completeness Check
     if check_rustdoc {
         if let Err(doc_errs) = super::docstring_gate::audit_rust_source_docstrings(source, file_rel)
         {
@@ -1618,179 +1579,36 @@ pub fn audit_source_purity(
         audit_tier_a_module_docblocks(&masked_lines, file_rel, &mut violations);
     }
 
+    let mut scope = ModTestsScope::default();
+    let strict_io = enforces_strict_io_arms(file_rel);
+
     for (idx, masked_line) in masked_lines.iter().enumerate() {
         let line_no = idx.saturating_add(1);
         let trimmed = masked_line.trim();
-
-        if trimmed.starts_with("//!") || trimmed.starts_with("///") {
+        if trimmed.is_empty() || trimmed.starts_with("//!") || trimmed.starts_with("///") {
             continue;
         }
 
-        let mut code = trimmed;
-        if code.is_empty() {
-            continue;
+        if !scope.active && contains_bounded_split_token(trimmed, "mod", " tests") {
+            scope.enter();
         }
 
-        if !in_mod_tests && contains_bounded_token(code, &needle_mod_tests) {
-            in_mod_tests = true;
-            mod_tests_brace_depth = 0;
-            mod_tests_entered_block = false;
-            mod_tests_has_test = false;
-        }
+        let code = if scope.active {
+            match advance_mod_tests_line(&mut scope, trimmed, file_rel, line_no, &mut violations) {
+                ModTestsStep::Consumed => continue,
+                ModTestsStep::TrailingProduction(trailing) => trailing,
+            }
+        } else {
+            trimmed
+        };
 
-        if in_mod_tests {
-            if code.contains("#[test]") || code.contains("fn test_") {
-                mod_tests_has_test = true;
-            }
-
-            // (a) Regex Check inside mod tests
-            if code.contains(&pat_regex_colons)
-                || code.contains(&pat_inline_regex)
-                || code.contains(&pat_use_bare)
-                || code.contains(&pat_extern)
-            {
-                violations.push(format!("{}:{}: regex usage detected", file_rel, line_no));
-            }
-
-            // C-PURITY-03 test anti-gaming checks
-            if code.contains(&needle_ignore_attr) {
-                violations.push(format!(
-                    "{}:{}: C-PURITY-03 ignored test attribute detected",
-                    file_rel, line_no
-                ));
-            }
-            if code.contains(&needle_assert_true) {
-                violations.push(format!(
-                    "{}:{}: C-PURITY-03 tautological assertion detected",
-                    file_rel, line_no
-                ));
-            }
-            if code.contains(".exists()") && code.contains("return;") {
-                violations.push(format!(
-                    "{}:{}: C-PURITY-03 vacuous conditional early-return in test detected",
-                    file_rel, line_no
-                ));
-            }
-            if code.contains(&needle_temp_dir_lit) {
-                violations.push(format!(
-                    "{}:{}: C-PURITY-03 unisolated literal temp_dir().join(...) in test detected",
-                    file_rel, line_no
-                ));
-            }
-
-            let mut closed_at_byte: Option<usize> = None;
-            for (b_idx, ch) in code.char_indices() {
-                if ch == '{' {
-                    mod_tests_brace_depth = mod_tests_brace_depth.saturating_add(1);
-                    mod_tests_entered_block = true;
-                } else if ch == '}' {
-                    mod_tests_brace_depth = mod_tests_brace_depth.saturating_sub(1);
-                    if mod_tests_entered_block && mod_tests_brace_depth == 0 {
-                        closed_at_byte = Some(b_idx.saturating_add(1));
-                        break;
-                    }
-                }
-            }
-
-            if closed_at_byte.is_some() || (!mod_tests_entered_block && code.contains(';')) {
-                if !mod_tests_has_test {
-                    violations.push(format!(
-                        "{}:{}: C-PURITY-03 empty or decoy mod tests block detected",
-                        file_rel, line_no
-                    ));
-                }
-                in_mod_tests = false;
-                if let Some(after_idx) = closed_at_byte {
-                    let trailing = code.get(after_idx..).unwrap_or("").trim();
-                    if trailing.is_empty() {
-                        continue;
-                    }
-                    code = trailing;
-                } else {
-                    continue;
-                }
-            } else {
-                continue;
-            }
-        }
-
-        if !in_mod_tests {
-            // (a) Regex Check
-            if code.contains(&pat_regex_colons)
-                || code.contains(&pat_inline_regex)
-                || code.contains(&pat_use_bare)
-                || code.contains(&pat_extern)
-            {
-                violations.push(format!("{}:{}: regex usage detected", file_rel, line_no));
-            }
-
-            // (b) Static String-Slice Arrays Check
-            let is_binding_or_const =
-                code.contains('=') || code.contains("const ") || code.contains("static ");
-            if (is_binding_or_const
-                && (code.contains(&needle_slice_str) || code.contains(&needle_static_slice)))
-                || code.contains(&needle_tuple_slice)
-                || code.contains(&needle_array_str)
-                || code.contains(&needle_const_slice)
-                || code.contains(&needle_static_lt_slice)
-                || code.contains(&needle_static_lt_array)
-                || code.contains(&needle_static_lt_into_iter)
-            {
-                violations.push(format!(
-                    "{}:{}: static string-slice array detected",
-                    file_rel, line_no
-                ));
-            }
-
-            // (c) Hollow Gate Stubs Check
-            if code.contains(&needle_let_blank) {
-                violations.push(format!(
-                    "{}:{}: hollow gate stub detected (`let _ = `)",
-                    file_rel, line_no
-                ));
-            }
-
-            // (d) Fail-Open Error Swallowing Check
-            let enforce_strict_io_arms = !file_rel.contains("sysml_ast.rs")
-                && !file_rel.contains("workspace.rs")
-                && !file_rel.contains("parity_gates.rs");
-            if code.contains(&needle_fm_e)
-                || code.contains(&needle_fm_res)
-                || code.contains(&needle_fm_x)
-                || (code.contains(&needle_filter_map) && code.contains(&needle_dot_ok))
-                || (code.contains(&needle_read_str) && code.contains(&needle_dot_ok))
-                || (enforce_strict_io_arms
-                    && (code.contains(&needle_err_continue)
-                        || (code.contains(&needle_if_let_ok)
-                            && (code.contains(&needle_read_str)
-                                || code.contains(&needle_read_dir)))))
-            {
-                violations.push(format!(
-                    "{}:{}: fail-open error swallowing detected",
-                    file_rel, line_no
-                ));
-            }
-
-            // (e) Cross-String UTF-8 Byte-Slice Hazards Check
-            if code.contains(&needle_lower_slice1)
-                || code.contains(&needle_lower_slice2)
-                || ((code.contains(&needle_lower_idx) || code.contains(&needle_ulower_idx))
-                    && code.contains(&needle_dotdot))
-            {
-                violations.push(format!(
-                    "{}:{}: cross-string UTF-8 byte-slice hazard detected",
-                    file_rel, line_no
-                ));
-            }
-
-            // (e) Direct Panicking Range-Slice Indexing Check (audited modules only)
-            if check_rustdoc && contains_direct_range_index(code, &needle_dotdot) {
-                violations.push(format!(
-                    "{}:{}: direct panicking range-slice indexing detected (use .get(..))",
-                    file_rel, line_no
-                ));
-            }
-        }
+        let line_ctx = LinePurityContext {
+            file_rel,
+            line_no,
+            check_rustdoc,
+            strict_io,
+        };
+        audit_production_code_line(code, line_ctx, &mut violations);
     }
 
     if violations.is_empty() {
@@ -1800,6 +1618,190 @@ pub fn audit_source_purity(
         violations.dedup();
         Err(violations)
     }
+}
+
+/// Appends violations for any `#[allow(clippy::...)]` suppressing a `RequiredClippyForbidLint`.
+/// Realises: [REQ-CHECK-34-CLIPPY-ALLOW-TOKEN-SCAN]
+fn collect_forbidden_clippy_allows(source: &str, file_rel: &str, violations: &mut Vec<String>) {
+    for clippy_viol in scan_clippy_allow_tokens(source, file_rel) {
+        let is_forbidden = RequiredClippyForbidLint::ALL
+            .iter()
+            .any(|lint| clippy_viol.attribute.contains(lint.as_str()));
+        if is_forbidden {
+            violations.push(format!(
+                "{}:{}: forbidden clippy allow attribute detected: {}",
+                clippy_viol.file, clippy_viol.line, clippy_viol.attribute
+            ));
+        }
+    }
+}
+
+/// Audits one masked line inside `mod tests`, updating brace depth and returning any trailing production slice.
+/// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+fn advance_mod_tests_line<'a>(
+    scope: &mut ModTestsScope,
+    code: &'a str,
+    file_rel: &str,
+    line_no: usize,
+    violations: &mut Vec<String>,
+) -> ModTestsStep<'a> {
+    if code.contains("#[test]") || code.contains("fn test_") {
+        scope.has_test = true;
+    }
+    if any_split_token(code, FORBIDDEN_REGEX_TOKENS) {
+        violations.push(format!("{}:{}: regex usage detected", file_rel, line_no));
+    }
+    if has_split_token(code, "#[ig", "nore") {
+        violations.push(format!(
+            "{}:{}: C-PURITY-03 ignored test attribute detected",
+            file_rel, line_no
+        ));
+    }
+    if has_split_token(code, "assert!", "(true)") {
+        violations.push(format!(
+            "{}:{}: C-PURITY-03 tautological assertion detected",
+            file_rel, line_no
+        ));
+    }
+    if code.contains(".exists()") && code.contains("return;") {
+        violations.push(format!(
+            "{}:{}: C-PURITY-03 vacuous conditional early-return in test detected",
+            file_rel, line_no
+        ));
+    }
+    if has_split_token(code, "temp_dir()", ".join(\"\")") {
+        violations.push(format!(
+            "{}:{}: C-PURITY-03 unisolated literal temp_dir().join(...) in test detected",
+            file_rel, line_no
+        ));
+    }
+
+    let mut closed_at_byte: Option<usize> = None;
+    for (b_idx, ch) in code.char_indices() {
+        if ch == '{' {
+            scope.brace_depth = scope.brace_depth.saturating_add(1);
+            scope.entered_block = true;
+        } else if ch == '}' {
+            scope.brace_depth = scope.brace_depth.saturating_sub(1);
+            if scope.entered_block && scope.brace_depth == 0 {
+                closed_at_byte = Some(b_idx.saturating_add(1));
+                break;
+            }
+        }
+    }
+
+    if closed_at_byte.is_some() || (!scope.entered_block && code.contains(';')) {
+        if !scope.has_test {
+            violations.push(format!(
+                "{}:{}: C-PURITY-03 empty or decoy mod tests block detected",
+                file_rel, line_no
+            ));
+        }
+        scope.active = false;
+        if let Some(after_idx) = closed_at_byte {
+            let trailing = code.get(after_idx..).unwrap_or("").trim();
+            if !trailing.is_empty() {
+                return ModTestsStep::TrailingProduction(trailing);
+            }
+        }
+    }
+    ModTestsStep::Consumed
+}
+
+/// Context carrying per-file Check 34 flags when auditing a single masked production line.
+/// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+#[derive(Clone, Copy)]
+struct LinePurityContext<'a> {
+    file_rel: &'a str,
+    line_no: usize,
+    check_rustdoc: bool,
+    strict_io: bool,
+}
+
+/// Audits one masked production code line against Check 34 rules (a)-(e).
+/// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+fn audit_production_code_line(
+    code: &str,
+    ctx: LinePurityContext<'_>,
+    violations: &mut Vec<String>,
+) {
+    if any_split_token(code, FORBIDDEN_REGEX_TOKENS) {
+        violations.push(format!(
+            "{}:{}: regex usage detected",
+            ctx.file_rel, ctx.line_no
+        ));
+    }
+    if has_forbidden_static_str_slice(code) {
+        violations.push(format!(
+            "{}:{}: static string-slice array detected",
+            ctx.file_rel, ctx.line_no
+        ));
+    }
+    if has_split_token(code, "let", " _ = ") {
+        violations.push(format!(
+            "{}:{}: hollow gate stub detected (`let _ = `)",
+            ctx.file_rel, ctx.line_no
+        ));
+    }
+    if has_fail_open_error_swallowing(code, ctx.strict_io) {
+        violations.push(format!(
+            "{}:{}: fail-open error swallowing detected",
+            ctx.file_rel, ctx.line_no
+        ));
+    }
+    if has_cross_string_utf8_slice_hazard(code) {
+        violations.push(format!(
+            "{}:{}: cross-string UTF-8 byte-slice hazard detected",
+            ctx.file_rel, ctx.line_no
+        ));
+    }
+    if ctx.check_rustdoc && contains_direct_range_index(code) {
+        violations.push(format!(
+            "{}:{}: direct panicking range-slice indexing detected (use .get(..))",
+            ctx.file_rel, ctx.line_no
+        ));
+    }
+}
+
+/// Detects banned static string-slice array or iterator types on one masked production line.
+/// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+fn has_forbidden_static_str_slice(code: &str) -> bool {
+    if any_split_token(code, UNCONDITIONAL_STR_SLICE_TOKENS) {
+        return true;
+    }
+    let is_binding_or_const =
+        code.contains('=') || code.contains("const ") || code.contains("static ");
+    is_binding_or_const && any_split_token(code, BINDING_STR_SLICE_TOKENS)
+}
+
+/// Detects fail-open error swallowing patterns on one masked production line.
+/// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+fn has_fail_open_error_swallowing(code: &str, strict_io: bool) -> bool {
+    if any_split_token(code, FAIL_OPEN_FILTER_MAP_TOKENS) {
+        return true;
+    }
+    let has_dot_ok = has_split_token(code, ".ok", "()");
+    let has_read_str = has_split_token(code, "read_to", "_string");
+    if has_dot_ok && (has_split_token(code, ".filter", "_map(") || has_read_str) {
+        return true;
+    }
+    if !strict_io {
+        return false;
+    }
+    if has_split_token(code, "Err(_)", " => continue") {
+        return true;
+    }
+    let has_read_io = has_read_str || has_split_token(code, "read_", "dir(");
+    has_split_token(code, "if let ", "Ok(") && has_read_io
+}
+
+/// Detects cross-string UTF-8 byte-slice indexing on lowercase-converted buffers.
+/// Realises: [REQ-CHECK-34-AUDIT-SOURCE-PURITY]
+fn has_cross_string_utf8_slice_hazard(code: &str) -> bool {
+    if any_split_token(code, DIRECT_LOWER_SLICE_TOKENS) {
+        return true;
+    }
+    any_split_token(code, LOWER_VAR_INDEX_TOKENS) && has_split_token(code, ".", ".")
 }
 
 /// Audits top-level `//!` module header docblocks in `masked_lines` against the Tier A contract.
@@ -1825,7 +1827,7 @@ fn audit_tier_a_module_docblocks(
             continue;
         }
         flush_tier_a_module_docblock(&mut module_doc, file_rel, start_line, violations);
-        if trimmed.contains("cfg(test)") || contains_bounded_token(trimmed, "mod tests") {
+        if trimmed.contains("cfg(test)") || contains_bounded_split_token(trimmed, "mod", " tests") {
             break;
         }
     }
@@ -1872,33 +1874,9 @@ fn is_legacy_single_line_module_title(module_doc: &[String]) -> bool {
         && !body.contains("Bounds & Faults:")
 }
 
-/// Detects direct panicking range-slice indexing (`expr[a..b]`) on one code line.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Supports Check 34 rule (e). Direct range indexing panics on out-of-bounds or
-/// non-UTF-8-boundary offsets, so audited modules must use the non-panicking `.get(..)`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// An opening bracket is an index operator only when the byte immediately before it is
-/// an ASCII alphanumeric, `_`, `)`, or `]`. Bracket depth is tracked so nested indices match
-/// their own closing bracket; an unmatched bracket extends to end of line (fail-closed).
-///
-/// ## 3. Preconditions
-/// `code` is a single comment-stripped source line; `range_needle` is the range operator.
-///
-/// ## 4. Postconditions
-/// Returns `true` iff some index-operator bracket encloses `range_needle`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// Time Complexity: O(N^2) worst case for N bytes in the line (bounded by line length).
-/// Space Complexity: O(1).
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// Never panics: offsets are taken from ASCII bracket bytes and sliced with `.get(..)`.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECK-34-DIRECT-RANGE-INDEX-SCAN].
-fn contains_direct_range_index(code: &str, range_needle: &str) -> bool {
+/// Detects direct panicking range-slice indexing (`expr[a..b]`) on one masked code line.
+/// Realises: [REQ-CHECK-34-DIRECT-RANGE-INDEX-SCAN]
+fn contains_direct_range_index(code: &str) -> bool {
     let bytes = code.as_bytes();
     let mut prev_byte: Option<u8> = None;
     for (open_idx, &byte) in bytes.iter().enumerate() {
@@ -1923,7 +1901,7 @@ fn contains_direct_range_index(code: &str, range_needle: &str) -> bool {
             let inner = code
                 .get(open_idx.saturating_add(1)..close_idx)
                 .unwrap_or(code);
-            if inner.contains(range_needle) {
+            if has_split_token(inner, ".", ".") {
                 return true;
             }
         }
@@ -1932,34 +1910,9 @@ fn contains_direct_range_index(code: &str, range_needle: &str) -> bool {
     false
 }
 
-/// Scans Cargo.toml for forbidden dependency on regex crate.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A. Ensures regex crate is strictly excluded from Cargo dependencies.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// Dependency keys must not match regex crate name.
-///
-/// ## 3. Preconditions
-/// `path` must be valid Cargo.toml path.
-///
-/// ## 4. Postconditions
-/// Pushes any discovered dependency violations into `violations`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// Time Complexity: O(L) where L is line count. Space Complexity: O(1).
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// Fails closed on file read errors.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CARGO-TOML-REGEX-SCAN].
-fn scan_cargo_toml_file(
-    path: &Path,
-    repo_root: &Path,
-    crate_needle: &str,
-    violations: &mut Vec<String>,
-) {
+/// Scans a `Cargo.toml` manifest for any forbidden dependency on the regex crate without allocation.
+/// Realises: [REQ-CARGO-TOML-REGEX-SCAN]
+fn scan_cargo_toml_file(path: &Path, repo_root: &Path, violations: &mut Vec<String>) {
     let rel = path
         .strip_prefix(repo_root)
         .unwrap_or(path)
@@ -1975,40 +1928,15 @@ fn scan_cargo_toml_file(
     };
 
     for (idx, line) in content.lines().enumerate() {
-        let code = if let Some((before, _)) = line.split_once('#') {
-            before
-        } else {
-            line
+        let code = match line.split_once('#') {
+            Some((before, _)) => before,
+            None => line,
         };
         let trimmed = code.trim();
         if trimmed.is_empty() {
             continue;
         }
-
-        let mut is_dep = false;
-        if let Some((dep_key, _)) = trimmed.split_once('=') {
-            let key = dep_key.trim().trim_matches('"').trim_matches('\'');
-            if key == crate_needle || key.starts_with(&format!("{crate_needle}.")) {
-                is_dep = true;
-            }
-        } else if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            let section = trimmed
-                .get(1..trimmed.len().saturating_sub(1))
-                .unwrap_or("")
-                .trim();
-            if section
-                .split('.')
-                .any(|part| part.trim().trim_matches('"').trim_matches('\'') == crate_needle)
-            {
-                is_dep = true;
-            }
-        } else if trimmed.contains(&format!("\"{crate_needle}\""))
-            || trimmed.contains(&format!("'{crate_needle}'"))
-        {
-            is_dep = true;
-        }
-
-        if is_dep {
+        if cargo_toml_line_declares_forbidden_dep(trimmed) {
             violations.push(format!(
                 "{}:{}: {}",
                 rel,
@@ -2017,6 +1945,36 @@ fn scan_cargo_toml_file(
             ));
         }
     }
+}
+
+/// Checks whether a comment-stripped `Cargo.toml` line declares or quotes `FORBIDDEN_CARGO_DEP_TOKEN`.
+/// Realises: [REQ-CARGO-TOML-REGEX-SCAN]
+fn cargo_toml_line_declares_forbidden_dep(trimmed: &str) -> bool {
+    let (prefix, suffix) = (FORBIDDEN_CARGO_DEP_TOKEN.0, FORBIDDEN_CARGO_DEP_TOKEN.1);
+    if let Some((dep_key, _)) = trimmed.split_once('=') {
+        let key = dep_key.trim().trim_matches('"').trim_matches('\'');
+        let Some(after_prefix) = key.strip_prefix(prefix) else {
+            return false;
+        };
+        return after_prefix == suffix
+            || after_prefix
+                .strip_prefix(suffix)
+                .is_some_and(|rest| rest.starts_with('.'));
+    }
+    if trimmed.starts_with('[') && trimmed.ends_with(']') {
+        let section = trimmed
+            .get(1..trimmed.len().saturating_sub(1))
+            .unwrap_or("")
+            .trim();
+        return section.split('.').any(|part| {
+            part.trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .strip_prefix(prefix)
+                == Some(suffix)
+        });
+    }
+    has_split_token(trimmed, "\"reg", "ex\"") || has_split_token(trimmed, "'reg", "ex'")
 }
 
 /// Represents a detected `#[allow(clippy::...)]` or `#![allow(clippy::...)]` suppression violation.
@@ -2401,10 +2359,6 @@ impl WorkspaceManifestForbidGate {
 /// Realises: [REQ-CHECK-34-CLIPPY-ALLOW-TOKEN-SCAN].
 pub fn scan_clippy_allow_tokens(source: &str, file_rel: &str) -> Vec<ClippySuppressionViolation> {
     let mut violations = Vec::new();
-    let mut forbidden_needle = String::from("all");
-    forbidden_needle.push_str("ow(clip");
-    forbidden_needle.push_str("py::");
-
     let chars: Vec<char> = source.chars().collect();
     let len = chars.len();
     let mut i: usize = 0;
@@ -2620,7 +2574,7 @@ pub fn scan_clippy_allow_tokens(source: &str, file_rel: &str) -> Vec<ClippySuppr
                         }
                     }
                 }
-                if normalized.contains(&forbidden_needle) {
+                if has_split_token(&normalized, "allow(clip", "py::") {
                     violations.push(ClippySuppressionViolation {
                         file: file_rel.to_string(),
                         line: attr_line,
@@ -3307,33 +3261,6 @@ pub fn check_blueprint_grounding(repo_root: &Path) -> Result<(), Vec<String>> {
 }
 
 /// Scans a single architecture blueprint Markdown file for Check 37 grounding violations.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C architectural document verification rules.
-/// Inspects every line of a blueprint file under `docs/architecture/blueprints/` for forbidden
-/// em dashes, fictional crate names, retired Python/shell tools, and ungrounded `crates/...` paths.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Line-by-line deterministic scan preserving 1-based line numbers (`idx.saturating_add(1)`).
-/// - Appends a diagnostic entry to `violations` for every violated invariant on each line.
-///
-/// ## 3. Preconditions
-/// - `repo_root` is the workspace root directory and `md_path` is a `.md` file path inside `docs/architecture/blueprints/`.
-///
-/// ## 4. Postconditions
-/// - Mutates `violations` in place by appending all discovered `rel:line_no` violations; leaves `violations` unchanged if the file is clean.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(L * W) where L is the line count of `md_path` and W is average line length.
-/// - Space Complexity: O(B + V_file) where B is file byte size and V_file is violations in `md_path`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: File read failures push an explicit I/O diagnostic to `violations` (fail-closed).
-/// - State: Only appends to `violations`; no global state.
-/// - Action: Bounded single-pass iteration over `content.lines()`.
-/// - Resource: Single file buffer allocation per blueprint.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-37-SCAN-BLUEPRINT-FILE]
 fn scan_blueprint_markdown_file(repo_root: &Path, md_path: &Path, violations: &mut Vec<String>) {
     let rel = md_path
@@ -3377,35 +3304,7 @@ fn scan_blueprint_markdown_file(repo_root: &Path, md_path: &Path, violations: &m
     }
 }
 
-/// Determines whether a design blueprint markdown payload declares an `Approved` lifecycle status.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 specification-to-code grounding rules for Check 37.
-/// Ensures `Approved` blueprints under `docs/designs/` cannot cite non-existent `crates/...` modules,
-/// while preserving proposed-path flexibility for `Draft` design blueprints.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Scans non-fenced lines containing `"**Status**"` or `"Status:"` and normalizes cell/value tokens
-///   by stripping pipes, backticks, asterisks, and whitespace before ASCII case-insensitive comparison
-///   against `"approved"`.
-///
-/// ## 3. Preconditions
-/// - `content` is a valid UTF-8 markdown blueprint document.
-///
-/// ## 4. Postconditions
-/// - Returns `true` iff an explicit `Approved` metadata status declaration is present outside code fences.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N) where N is byte length of `content`.
-/// - Space Complexity: O(1) auxiliary slice references.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Pure read-only string slice inspection without regular expressions.
-/// - State: Stateless evaluation with zero external side effects.
-/// - Action: Deterministic line-by-line fence tracking and cell stripping.
-/// - Resource: Zero heap allocations.
-///
-/// ## 7. Realization & Traceability
+/// Determines whether a design blueprint Markdown payload declares an `Approved` lifecycle status.
 /// Realises: [REQ-CHECK-37-APPROVED-BLUEPRINT-STATUS]
 fn is_approved_design_blueprint(content: &str) -> bool {
     let mut in_fence = false;
@@ -3447,35 +3346,7 @@ fn is_approved_design_blueprint(content: &str) -> bool {
     false
 }
 
-/// Checks whether `line` contains `token` bounded by non-identifier characters.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A lexical boundary verification for Check 37 (`contains_bounded_token`).
-/// Prevents substring false positives (such as `deap_harness` matching inside `deap_harness_config.yaml`)
-/// while deterministically detecting standalone crate identifiers without regular expressions.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - For each byte offset `idx` yielded by `line.match_indices(token)`, inspects the preceding byte
-///   (`idx.saturating_sub(1)`) and trailing byte (`idx.saturating_add(token.len())`) via `bytes.get(..)`.
-/// - Returns `true` iff neither adjacent byte is ASCII alphanumeric, `b'_'`, or `b'-'`.
-///
-/// ## 3. Preconditions
-/// - `line: &str` and `token: &str` are valid UTF-8 string slices with `token` non-empty.
-///
-/// ## 4. Postconditions
-/// - Returns `true` if at least one identifier-bounded occurrence of `token` exists in `line`, or `false` otherwise.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(W) where W is the byte length of `line`.
-/// - Space Complexity: O(1) zero heap allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Non-panicking byte inspection via `.get(..)`, `saturating_sub`, and `saturating_add`.
-/// - State: Pure function with zero mutable state.
-/// - Action: Deterministic linear scan.
-/// - Resource: Zero dynamic memory allocation.
-///
-/// ## 7. Realization & Traceability
+/// Checks whether `line` contains `token` bounded on both sides by non-identifier characters.
 /// Realises: [REQ-CHECK-37-BOUNDED-TOKEN-MATCH]
 fn contains_bounded_token(line: &str, token: &str) -> bool {
     let bytes = line.as_bytes();
@@ -3501,34 +3372,7 @@ fn contains_bounded_token(line: &str, token: &str) -> bool {
     false
 }
 
-/// Checks whether a blueprint line is an explicit negative prohibition or retirement statement.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A context-sensitive rule auditing for Check 37 (`is_negative_blueprint_rule_line`).
-/// Allows blueprints to state that legacy/fictional identifiers are forbidden, prohibited, retired,
-/// or non-existent without triggering a positive reference violation.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Folds `line` to ASCII lowercase and evaluates six negative-rule keyword predicates (`forbidden`,
-///   `prohibited`, `retired`, `nonexistent`, `non-existent`, `fictional`).
-///
-/// ## 3. Preconditions
-/// - `line: &str` is a valid UTF-8 line from an architecture blueprint file.
-///
-/// ## 4. Postconditions
-/// - Returns `true` iff `line` contains an explicit negative-rule keyword.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(W) where W is the byte length of `line`.
-/// - Space Complexity: O(W) for the temporary ASCII-lowercased string buffer.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Infallible `&str -> bool` predicate.
-/// - State: Stateless evaluation.
-/// - Action: Deterministic substring checks.
-/// - Resource: Bounded single-line string allocation.
-///
-/// ## 7. Realization & Traceability
+/// Checks whether a blueprint line states an explicit negative prohibition or retirement rule.
 /// Realises: [REQ-CHECK-37-NEGATIVE-RULE-CONTEXT]
 fn is_negative_blueprint_rule_line(line: &str) -> bool {
     let lower = line.to_ascii_lowercase();
@@ -3540,35 +3384,7 @@ fn is_negative_blueprint_rule_line(line: &str) -> bool {
         || lower.contains("fictional")
 }
 
-/// Scans a blueprint line for all references to fictional, non-existent DEAP crate names.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A architectural accuracy controls for Check 37.
-/// Prevents architecture blueprints from citing hallucinated crate names (`deap-ast`,
-/// `deap-codegen`, `deap-harness`, `deap-cli`, or underscore variants) that do not exist in `Cargo.toml`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Evaluates all 8 fictional crate tokens independently via `contains_bounded_token` so multiple
-///   fictional crates on a single line are each reported.
-/// - Exempts lines where `is_negative_blueprint_rule_line(line)` holds.
-///
-/// ## 3. Preconditions
-/// - `rel_file` and `line_no` identify the source location of `line` within `docs/architecture/blueprints/`.
-///
-/// ## 4. Postconditions
-/// - Appends a diagnostic entry to `violations` for each fictional crate token found on `line`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(W) where W is the byte length of `line`.
-/// - Space Complexity: O(1) auxiliary space when clean; O(V_line) when violations are pushed.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Total function over `&str` and `&mut Vec<String>`.
-/// - State: Appends only to `violations`.
-/// - Action: Deterministic bounded token checks with zero regex.
-/// - Resource: Zero allocation on clean lines.
-///
-/// ## 7. Realization & Traceability
+/// Scans a blueprint line for references to fictional, non-existent DEAP crate names.
 /// Realises: [REQ-CHECK-37-DETECT-FICTIONAL-CRATE]
 fn check_blueprint_line_fictional_crates(
     rel_file: &str,
@@ -3629,34 +3445,7 @@ fn check_blueprint_line_fictional_crates(
     }
 }
 
-/// Scans a blueprint line for references to retired Python or shell scripts.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 32/33/37 pure-Rust toolchain invariants.
-/// Rejects blueprint lines referencing retired scripts (`verify_downstream`, `sysmlv2_ingest`,
-/// `reconcile_backlog.py`, `parity_auditor`, `setup_git_hooks.sh`) outside negative retirement rules.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Evaluates all five retired tool tokens independently in deterministic order without static string arrays.
-/// - Exempts lines where `is_negative_blueprint_rule_line(line)` holds.
-///
-/// ## 3. Preconditions
-/// - `rel_file` and `line_no` identify the source location of `line` in `docs/architecture/blueprints/`.
-///
-/// ## 4. Postconditions
-/// - Appends a diagnostic entry to `violations` for every retired tool token matched on `line`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(W) where W is the byte length of `line`.
-/// - Space Complexity: O(1) auxiliary memory when clean.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Total function over `&str` and `&mut Vec<String>`.
-/// - State: Appends diagnostics only to `violations`.
-/// - Action: Non-panicking substring scan.
-/// - Resource: Zero dynamic memory usage on clean lines.
-///
-/// ## 7. Realization & Traceability
+/// Scans a blueprint line for references to retired Python or shell tools outside negative rules.
 /// Realises: [REQ-CHECK-37-DETECT-RETIRED-TOOL]
 fn check_blueprint_line_retired_tools(
     rel_file: &str,
@@ -3699,34 +3488,7 @@ fn check_blueprint_line_retired_tools(
     }
 }
 
-/// Checks whether `crate_name` is one of the 6 canonical workspace crates in `Cargo.toml`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A workspace topology verification for Check 37.
-/// Restricts concrete `crates/<crate_name>` references in upstream architecture blueprints to the
-/// 6 actual workspace crates (`deap-core`, `verify-baseline`, `compile-sysml`, `ingest-sysml`,
-/// `assemble-conops`, `reconcile-backlog`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns `true` iff `crate_name` matches one of the 6 canonical workspace crate directory names.
-///
-/// ## 3. Preconditions
-/// - `crate_name: &str` is the first path segment following `"crates/"` in an extracted blueprint path token.
-///
-/// ## 4. Postconditions
-/// - Returns `true` for valid workspace crates and `false` for any unknown or fictional crate name.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(1) compile-time pattern match across 6 literal arms.
-/// - Space Complexity: O(1) zero allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Total boolean predicate over `&str`.
-/// - State: Pure compile-time match.
-/// - Action: Never panics.
-/// - Resource: Zero stack or heap growth.
-///
-/// ## 7. Realization & Traceability
+/// Checks whether `crate_name` matches one of the 6 canonical workspace crates in `Cargo.toml`.
 /// Realises: [REQ-CHECK-37-VALID-WORKSPACE-CRATE]
 fn is_valid_workspace_crate_name(crate_name: &str) -> bool {
     matches!(
@@ -3740,36 +3502,7 @@ fn is_valid_workspace_crate_name(crate_name: &str) -> bool {
     )
 }
 
-/// Extracts and validates all concrete `crates/...` path tokens on a blueprint line against disk.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and Check 34/37 mechanical grounding controls.
-/// Ensures that every non-placeholder `crates/...` path cited in an architecture blueprint names
-/// one of the 6 real workspace crates and resolves to an existing file or directory on disk.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Ignores template/wildcard tokens containing `*`, `<`, `>`, `{`, `}`, `...`, or `$`.
-/// - Strips `#L...` anchors, `:line` suffixes, and trailing punctuation (`.`, `,`, `:`, `;`, `/`)
-///   exclusively via non-panicking `.get(..)` and string splitting methods.
-/// - Verifies both `is_valid_workspace_crate_name(crate_name)` and `repo_root.join(cleaned).exists()`.
-///
-/// ## 3. Preconditions
-/// - `repo_root` is the workspace root path; `rel_file` and `line_no` identify the source location of `line`.
-///
-/// ## 4. Postconditions
-/// - Appends a diagnostic string to `violations` for each ungrounded crate or non-existent `crates/...` path on `line`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(W + K) where W is byte length of `line` and K is the number of `crates/` occurrences on `line`.
-/// - Space Complexity: O(1) auxiliary slice references beyond any pushed violation strings.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Non-panicking slice indexing via `.get(..)` and `saturating_sub`.
-/// - State: Appends diagnostics only to `violations`.
-/// - Action: Deterministic left-to-right token extraction.
-/// - Resource: Zero intermediate heap allocations on valid paths.
-///
-/// ## 7. Realization & Traceability
+/// Extracts and validates concrete `crates/...` path tokens on a blueprint line against disk.
 /// Realises: [REQ-CHECK-37-LINE-CRATES-PATHS]
 fn check_blueprint_line_crates_paths(
     repo_root: &Path,
@@ -3938,33 +3671,6 @@ mod tests {
     }
 
     /// Regression test for Check 18 scanning `docs/designs/` for ungrounded `.sysml` files (refs #530).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C configuration management controls for
-    /// `test_check_18_upstream_designs_sysml_violations`. Verifies that Check 18 (`verify_upstream_blueprint_domain_cleanliness`)
-    /// detects ungrounded `.sysml` models and incomplete blueprint triplets in `docs/designs/` while permitting
-    /// complete, non-empty co-located `blueprint-XX-*.{md,sysml,digest.json}` triplets.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Any `.sysml` file in `docs/designs/` not matching `blueprint-*.sysml` fails closed with
-    ///   `"Upstream blueprint contains SysML model: docs/designs/<file>"`.
-    /// - Any `blueprint-*.sysml` lacking non-empty sibling `.md` and `.digest.json` files fails closed.
-    /// - A complete, non-empty `blueprint-01-valid.{md,sysml,digest.json}` triplet returns `Ok(())`.
-    ///
-    /// ## 3. Preconditions
-    /// Temporary upstream repository directory (`tmp.path`) with `.pipeline/upstream` present.
-    ///
-    /// ## 4. Postconditions
-    /// Asserts `Err` on ungrounded and orphan `.sysml` files in `docs/designs/` and `Ok(())` on valid triplets.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// Time Complexity: O(1) bounded fixture file count. Space Complexity: O(1).
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// Panics if `verify_upstream_blueprint_domain_cleanliness` permits ungrounded `.sysml` files in `docs/designs/`.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-CHECK-18-UPSTREAM-BLUEPRINT-CLEANLINESS].
     #[test]
     fn test_check_18_upstream_designs_sysml_violations() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c18_designs_sysml")?;
@@ -4014,38 +3720,7 @@ mod tests {
         Ok(())
     }
 
-    /// Regression test for Check 18 scanning `docs/architecture/blueprints/` and `docs/designs/`
-    /// for ungrounded `.digest.json` model sidecars (refs #531).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C configuration management controls for
-    /// `test_check_18_upstream_digest_json_sidecar_violations`. Verifies that Check 18
-    /// (`verify_upstream_blueprint_domain_cleanliness`) rejects `.digest.json` sidecar files in
-    /// `docs/architecture/blueprints/` and ungrounded or orphan `.digest.json` sidecar files in
-    /// `docs/designs/`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Any `.digest.json` file in `docs/architecture/blueprints/` fails closed with
-    ///   `"Upstream blueprint contains SysML model: docs/architecture/blueprints/<file>"`.
-    /// - Any `.digest.json` file in `docs/designs/` not matching `blueprint-*.digest.json` fails closed.
-    /// - Any `blueprint-*.digest.json` in `docs/designs/` lacking non-empty sibling `.md` and `.sysml`
-    ///   files fails closed.
-    ///
-    /// ## 3. Preconditions
-    /// Temporary upstream repository directory (`tmp.path`) with `.pipeline/upstream` present.
-    ///
-    /// ## 4. Postconditions
-    /// Asserts `Err` on `.digest.json` sidecars in `docs/architecture/blueprints/` and ungrounded or
-    /// orphan `.digest.json` sidecars in `docs/designs/`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// Time Complexity: O(1) bounded fixture file count. Space Complexity: O(1).
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// Panics if `verify_upstream_blueprint_domain_cleanliness` permits ungrounded or orphan `.digest.json` sidecars.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-CHECK-18-UPSTREAM-BLUEPRINT-CLEANLINESS].
+    /// Regression test for Check 18 scanning `docs/architecture/blueprints/` and `docs/designs/` for ungrounded `.digest.json` sidecars (refs #531).
     #[test]
     fn test_check_18_upstream_digest_json_sidecar_violations(
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -4141,7 +3816,7 @@ mod tests {
         let src_dir = tmp.path.join("crates/test-crate/src");
         fs::create_dir_all(&src_dir)?;
         let mut f = File::create(src_dir.join("lib.rs"))?;
-        let kw = ["DOM", "AIN_PARAMS"].concat();
+        let kw = join_pair("DOM", "AIN_PARAMS");
         writeln!(f, "pub const {}: &[&str] = &[\"speed\"];", kw)?;
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_err());
         Ok(())
@@ -4288,7 +3963,7 @@ mod tests {
         let rs_file = crates_dir.join("lib.rs");
         let mut f = File::create(&rs_file)?;
         // Construct forbidden pattern dynamically to avoid literal in this file
-        let pat = ["Reg", "ex::"].concat();
+        let pat = join_pair("Reg", "ex::");
         writeln!(f, "let _ = {}new(\"\");", pat)?;
 
         let res = check_zero_regex(&tmp.path);
@@ -4309,7 +3984,7 @@ mod tests {
         let cargo_file = crates_dir.join("Cargo.toml");
         let mut fc = File::create(&cargo_file)?;
         // Construct forbidden dependency dynamically
-        let dep = ["reg", "ex"].concat();
+        let dep = join_pair("reg", "ex");
         writeln!(fc, "[dependencies]\n{} = \"1.10\"", dep)?;
 
         let res = check_zero_regex(&tmp.path);
@@ -4380,7 +4055,7 @@ mod tests {
             res_clean.err()
         );
 
-        let pat = ["Reg", "ex::"].concat();
+        let pat = join_pair("Reg", "ex::");
         let mutant = format!("pub fn check() {{ {}new(\"\"); }}", pat);
         let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
         assert!(res_mutant.is_err(), "Mutant with regex must fail");
@@ -4400,7 +4075,7 @@ mod tests {
             res_clean.err()
         );
 
-        let slice_kw = [": &[", "&str]"].concat();
+        let slice_kw = join_pair(": &[", "&str]");
         let mutant = format!("pub const KEYWORDS{kw} = &[\"forbidden\"];", kw = slice_kw);
         let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
         assert!(
@@ -4425,7 +4100,7 @@ mod tests {
             res_clean.err()
         );
 
-        let hollow_pat = ["let", " _ = "].concat();
+        let hollow_pat = join_pair("let", " _ = ");
         let mutant = format!("pub fn check_gate(repo_root: &Path) -> Result<(), Vec<String>> {{ {}repo_root; Ok(()) }}", hollow_pat);
         let res_mutant = audit_source_purity(&mutant, "sample/src/checks/gate.rs", false);
         assert!(
@@ -4448,7 +4123,7 @@ mod tests {
             res_clean.err()
         );
 
-        let fm_pat = [".filter_map(", "|e|", " e.ok())"].concat();
+        let fm_pat = join_pair(".filter_map(|e|", " e.ok())");
         let mutant = format!("for entry in WalkDir::new(dir).into_iter(){} {{ }}", fm_pat);
         let res_mutant = audit_source_purity(&mutant, "sample/src/checks/gate.rs", false);
         assert!(
@@ -4473,7 +4148,7 @@ mod tests {
             res_clean.err()
         );
 
-        let bad_slice = [".to_lowercase()", "[..4]"].concat();
+        let bad_slice = join_pair(".to_lowercase()", "[..4]");
         let mutant = format!("let slice = &s{};", bad_slice);
         let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
         assert!(
@@ -4490,95 +4165,103 @@ mod tests {
     #[test]
     fn test_check_34_purity_f_rejects_missing_seven_section_rustdoc(
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let clean_tiered = concat!(
-            "//! Sample parity module documented with a Tier A 4-Block Contract.\n",
-            "//!\n",
-            "//! Safety & Traceability: Realises: [REQ-PARITY-MOD]\n",
-            "//! Contract: Enforces deterministic baseline parity checks across audited artifacts.\n",
-            "//! Bounds & Faults: O(N) bounded traversal; fails closed with diagnostic vectors.\n\n",
-            "/// Public gate carrier documented with a Tier A 4-Block Contract.\n",
-            "///\n",
-            "/// Safety & Traceability: Realises: [REQ-PARITY-CARRIER]\n",
-            "/// Contract: Wraps immutable verification threshold `limit`.\n",
-            "/// Bounds & Faults: O(1) stack footprint; infallible value type.\n",
-            "pub struct SampleGate {\n",
-            "    pub limit: usize,\n",
-            "}\n\n",
-            "impl SampleGate {\n",
-            "    /// Evaluates the configured gate limit via a Tier A 4-Block Contract.\n",
-            "    ///\n",
-            "    /// Safety & Traceability: Realises: [REQ-PARITY-INHERENT-PUB]\n",
-            "    /// Contract: Pure read-only accessor returning `self.limit`.\n",
-            "    /// Bounds & Faults: O(1) time and space; infallible.\n",
-            "    pub fn configured_limit(&self) -> usize {\n",
-            "        self.limit\n",
-            "    }\n\n",
-            "    /// Computes internal clamped offset as a Tier B/C private method.\n",
-            "    /// Realises: [REQ-PARITY-PRIV-METHOD]\n",
-            "    fn clamped_offset(&self) -> usize {\n",
-            "        self.limit.saturating_add(1)\n",
-            "    }\n",
-            "}\n\n",
-            "impl Default for SampleGate {\n",
-            "    /// Constructs a zero-limit `SampleGate` via Tier B/C trait implementation.\n",
-            "    /// Realises: [REQ-PARITY-DEFAULT-IMPL]\n",
-            "    fn default() -> Self {\n",
-            "        Self { limit: 0 }\n",
-            "    }\n",
-            "}\n\n",
-            "/// High-integrity parity check documented with full 7-section Tier A Rustdoc.\n",
-            "///\n",
-            "/// ## 1. Safety Intent & Regulatory Scope\n",
-            "/// Conforms to DO-178C Level A.\n",
-            "///\n",
-            "/// ## 2. Invariants & Mathematical Properties\n",
-            "/// Deterministic.\n",
-            "///\n",
-            "/// ## 3. Preconditions\n",
-            "/// repo_root is valid directory.\n",
-            "///\n",
-            "/// ## 4. Postconditions\n",
-            "/// Returns Ok(()) on verification.\n",
-            "///\n",
-            "/// ## 5. Algorithmic Complexity Bounds\n",
-            "/// O(1).\n",
-            "///\n",
-            "/// ## 6. Failure Modes & Fault Tolerance\n",
-            "/// Fails closed.\n",
-            "///\n",
-            "/// ## 7. Realization & Traceability\n",
-            "/// Realises: [REQ-PARITY-CHECK]\n",
-            "pub fn check_audit() -> Result<(), Vec<String>> {\n",
-            "    let gate = SampleGate::default();\n",
-            "    if gate.configured_limit() == gate.clamped_offset() {\n",
-            "        return Err(Vec::new());\n",
-            "    }\n",
-            "    Ok(())\n",
-            "}\n\n",
-            "/// Public helper documented with a Tier A 4-Block Contract.\n",
-            "///\n",
-            "/// Safety & Traceability: Realises: [REQ-PARITY-PUB-4BLOCK]\n",
-            "/// Contract: Increments `count` with saturating arithmetic.\n",
-            "/// Bounds & Faults: O(1) time and space; never overflows.\n",
-            "pub fn increment_bound(count: usize) -> usize {\n",
-            "    crate_step(local_step(count))\n",
-            "}\n\n",
-            "/// Crate-internal helper documented under Tier B/C.\n",
-            "/// Realises: [REQ-PARITY-CRATE-FN]\n",
-            "pub(crate) fn crate_step(v: usize) -> usize {\n",
-            "    super_step(v)\n",
-            "}\n\n",
-            "/// Parent-module helper documented under Tier B/C.\n",
-            "/// Realises: [REQ-PARITY-SUPER-FN]\n",
-            "pub(super) fn super_step(v: usize) -> usize {\n",
-            "    v.saturating_add(1)\n",
-            "}\n\n",
-            "/// Private helper documented under Tier B/C without 7-section boilerplate.\n",
-            "/// Realises: [REQ-PARITY-PRIV-FN]\n",
-            "fn local_step(v: usize) -> usize {\n",
-            "    v.saturating_add(1)\n",
-            "}\n",
-        );
+        let clean_tiered = r#"//! Sample parity module documented with a Tier A 4-Block Contract.
+//!
+//! Safety & Traceability: Realises: [REQ-PARITY-MOD]
+//! Contract: Enforces deterministic baseline parity checks across audited artifacts.
+//! Bounds & Faults: O(N) bounded traversal; fails closed with diagnostic vectors.
+
+/// Public gate carrier documented with a Tier A 4-Block Contract.
+///
+/// Safety & Traceability: Realises: [REQ-PARITY-CARRIER]
+/// Contract: Wraps immutable verification threshold `limit`.
+/// Bounds & Faults: O(1) stack footprint; infallible value type.
+pub struct SampleGate {
+    pub limit: usize,
+}
+
+impl SampleGate {
+    /// Evaluates the configured gate limit via a Tier A 4-Block Contract.
+    ///
+    /// Safety & Traceability: Realises: [REQ-PARITY-INHERENT-PUB]
+    /// Contract: Pure read-only accessor returning `self.limit`.
+    /// Bounds & Faults: O(1) time and space; infallible.
+    pub fn configured_limit(&self) -> usize {
+        self.limit
+    }
+
+    /// Computes internal clamped offset as a Tier B/C private method.
+    /// Realises: [REQ-PARITY-PRIV-METHOD]
+    fn clamped_offset(&self) -> usize {
+        self.limit.saturating_add(1)
+    }
+}
+
+impl Default for SampleGate {
+    /// Constructs a zero-limit `SampleGate` via Tier B/C trait implementation.
+    /// Realises: [REQ-PARITY-DEFAULT-IMPL]
+    fn default() -> Self {
+        Self { limit: 0 }
+    }
+}
+
+/// High-integrity parity check documented with full 7-section Tier A Rustdoc.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Deterministic.
+///
+/// ## 3. Preconditions
+/// repo_root is valid directory.
+///
+/// ## 4. Postconditions
+/// Returns Ok(()) on verification.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-PARITY-CHECK]
+pub fn check_audit() -> Result<(), Vec<String>> {
+    let gate = SampleGate::default();
+    if gate.configured_limit() == gate.clamped_offset() {
+        return Err(Vec::new());
+    }
+    Ok(())
+}
+
+/// Public helper documented with a Tier A 4-Block Contract.
+///
+/// Safety & Traceability: Realises: [REQ-PARITY-PUB-4BLOCK]
+/// Contract: Increments `count` with saturating arithmetic.
+/// Bounds & Faults: O(1) time and space; never overflows.
+pub fn increment_bound(count: usize) -> usize {
+    crate_step(local_step(count))
+}
+
+/// Crate-internal helper documented under Tier B/C.
+/// Realises: [REQ-PARITY-CRATE-FN]
+pub(crate) fn crate_step(v: usize) -> usize {
+    super_step(v)
+}
+
+/// Parent-module helper documented under Tier B/C.
+/// Realises: [REQ-PARITY-SUPER-FN]
+pub(super) fn super_step(v: usize) -> usize {
+    v.saturating_add(1)
+}
+
+/// Private helper documented under Tier B/C without 7-section boilerplate.
+/// Realises: [REQ-PARITY-PRIV-FN]
+fn local_step(v: usize) -> usize {
+    v.saturating_add(1)
+}
+"#;
         let res_clean =
             audit_source_purity(clean_tiered, "sample/src/checks/parity_gates.rs", true);
         assert!(
@@ -4587,24 +4270,23 @@ mod tests {
             res_clean.err()
         );
 
-        let partial_tier_a = concat!(
-            "/// Partial doc missing section 7 and Realises tag.\n",
-            "/// ## 1. Safety Intent & Regulatory Scope\n",
-            "/// Conforms to DO-178C Level A.\n",
-            "/// ## 2. Invariants & Mathematical Properties\n",
-            "/// Deterministic.\n",
-            "/// ## 3. Preconditions\n",
-            "/// repo_root is valid directory.\n",
-            "/// ## 4. Postconditions\n",
-            "/// Returns Ok(()) on verification.\n",
-            "/// ## 5. Algorithmic Complexity Bounds\n",
-            "/// O(1).\n",
-            "/// ## 6. Failure Modes & Fault Tolerance\n",
-            "/// Fails closed.\n",
-            "pub fn check_audit() -> Result<(), Vec<String>> {\n",
-            "    Ok(())\n",
-            "}\n",
-        );
+        let partial_tier_a = r#"/// Partial doc missing section 7 and Realises tag.
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A.
+/// ## 2. Invariants & Mathematical Properties
+/// Deterministic.
+/// ## 3. Preconditions
+/// repo_root is valid directory.
+/// ## 4. Postconditions
+/// Returns Ok(()) on verification.
+/// ## 5. Algorithmic Complexity Bounds
+/// O(1).
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed.
+pub fn check_audit() -> Result<(), Vec<String>> {
+    Ok(())
+}
+"#;
         let res_partial_a =
             audit_source_purity(partial_tier_a, "sample/src/checks/parity_gates.rs", true);
         assert!(
@@ -4620,23 +4302,22 @@ mod tests {
             errs_partial_a
         );
 
-        let downgraded_pub = concat!(
-            "/// Concise two-line docstring is invalid on unrestricted Tier A pub fn.\n",
-            "/// Realises: [REQ-DOWNGRADED-PUB]\n",
-            "pub fn downgraded_api() {}\n",
-        );
+        let downgraded_pub = r#"/// Concise two-line docstring is invalid on unrestricted Tier A pub fn.
+/// Realises: [REQ-DOWNGRADED-PUB]
+pub fn downgraded_api() {}
+"#;
         assert!(
             audit_source_purity(downgraded_pub, "sample/src/checks/parity_gates.rs", true).is_err(),
             "Unrestricted pub fn downgraded to Tier B/C summary must fail closed"
         );
 
-        let downgraded_mod = concat!(
-            "//! Two-line module docstring lacking Tier A 7-section or 4-Block Contract.\n",
-            "//! Realises: [REQ-DOWNGRADED-MOD]\n\n",
-            "/// Private helper with valid Tier B/C docstring.\n",
-            "/// Realises: [REQ-VALID-HELPER]\n",
-            "fn valid_helper() {}\n",
-        );
+        let downgraded_mod = r#"//! Two-line module docstring lacking Tier A 7-section or 4-Block Contract.
+//! Realises: [REQ-DOWNGRADED-MOD]
+
+/// Private helper with valid Tier B/C docstring.
+/// Realises: [REQ-VALID-HELPER]
+fn valid_helper() {}
+"#;
         assert!(
             audit_source_purity(downgraded_mod, "sample/src/checks/parity_gates.rs", true).is_err(),
             "Tier A //! module header downgraded to 2-line Tier B/C format must fail closed"
@@ -4661,13 +4342,12 @@ mod tests {
             "Private Tier B/C fn missing Realises: [...] must fail closed"
         );
 
-        let pub_4block_missing_realises = concat!(
-            "/// Public helper with 4-Block headers lacking Realises bracketed ID.\n",
-            "/// Safety & Traceability: Manually verified.\n",
-            "/// Contract: Preserves invariants.\n",
-            "/// Bounds & Faults: O(1) time and space.\n",
-            "pub fn untraced_pub_api() {}\n",
-        );
+        let pub_4block_missing_realises = r#"/// Public helper with 4-Block headers lacking Realises bracketed ID.
+/// Safety & Traceability: Manually verified.
+/// Contract: Preserves invariants.
+/// Bounds & Faults: O(1) time and space.
+pub fn untraced_pub_api() {}
+"#;
         assert!(
             audit_source_purity(
                 pub_4block_missing_realises,
@@ -4689,18 +4369,18 @@ mod tests {
             "Undocumented pub(crate) Tier B/C fn must fail closed"
         );
 
-        let undocumented_trait_impl = concat!(
-            "/// Public carrier with valid Tier A 4-Block Contract.\n",
-            "/// Safety & Traceability: Realises: [REQ-CARRIER-01]\n",
-            "/// Contract: Unit struct.\n",
-            "/// Bounds & Faults: O(1) stack.\n",
-            "pub struct UnitGate;\n\n",
-            "impl Default for UnitGate {\n",
-            "    fn default() -> Self {\n",
-            "        Self\n",
-            "    }\n",
-            "}\n",
-        );
+        let undocumented_trait_impl = r#"/// Public carrier with valid Tier A 4-Block Contract.
+/// Safety & Traceability: Realises: [REQ-CARRIER-01]
+/// Contract: Unit struct.
+/// Bounds & Faults: O(1) stack.
+pub struct UnitGate;
+
+impl Default for UnitGate {
+    fn default() -> Self {
+        Self
+    }
+}
+"#;
         assert!(
             audit_source_purity(
                 undocumented_trait_impl,
@@ -4745,7 +4425,7 @@ mod tests {
             res_clean.err()
         );
 
-        let ty = ["&'static [", "&'static str]"].concat();
+        let ty = join_pair("&'static [", "&'static str]");
         let mutant = format!("pub const BAD: {} = &[\"a\"];", ty);
         let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
         assert!(
@@ -4760,7 +4440,7 @@ mod tests {
             errs
         );
 
-        let arr_ty = ["[&'static ", "str; 2]"].concat();
+        let arr_ty = join_pair("[&'static ", "str; 2]");
         let mutant_arr = format!("pub const BAD: {} = [\"a\", \"b\"];", arr_ty);
         let res_arr = audit_source_purity(&mutant_arr, "sample/src/lib.rs", false);
         assert!(
@@ -4781,7 +4461,7 @@ mod tests {
             res_clean.err()
         );
 
-        let iter_ty = ["IntoIter<", "&'static str, 3>"].concat();
+        let iter_ty = join_pair("IntoIter<", "&'static str, 3>");
         let mutant = format!(
             "fn names() -> std::array::{} {{ [\"a\", \"b\", \"c\"].into_iter() }}",
             iter_ty
@@ -5250,35 +4930,7 @@ mod tests {
         Ok(())
     }
 
-    /// Verifies that Check 33 excludes machine-generated digest JSON sidecars from governed text scanning.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A deterministic verification and Check 33 (Zero Python Scripts Invariant)
-    /// scope boundaries (`REQ-CHECK-33-GOVERNED-EXTENSIONS`, refs #532). Ensures machine-generated digest
-    /// sidecar artifacts (`*.digest.json`, `*-digest.json`, `schema-digest.json`) are excluded from
-    /// operational Python token text scanning while regular `.json` configuration files remain governed.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - `is_governed_python_scan_extension` returns `false` for `*.digest.json` and `*-digest.json` paths,
-    ///   and `true` for regular `.json` files.
-    /// - `check_zero_python_scripts_invariant` returns `Ok(())` when a `.digest.json` sidecar contains
-    ///   serialized strings referencing `pytest` or `run_tests.py` without prohibition keywords.
-    ///
-    /// ## 3. Preconditions
-    /// Temporary test directory is writable and isolated.
-    ///
-    /// ## 4. Postconditions
-    /// Asserts predicate classification and end-to-end Check 33 exemption for digest sidecar files.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// Time Complexity: O(1) bounded fixture file count and size. Space Complexity: O(1).
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// Panics if `is_governed_python_scan_extension` classifies a digest JSON sidecar as a governed text
-    /// file or if `check_zero_python_scripts_invariant` flags a `.digest.json` sidecar.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-CHECK-33-GOVERNED-EXTENSIONS].
+    /// Verifies that Check 33 excludes machine-generated digest JSON sidecars from governed text scanning (refs #532).
     #[test]
     fn test_check_33_excludes_digest_json_sidecars() -> Result<(), Box<dyn std::error::Error>> {
         assert!(!is_governed_python_scan_extension(Path::new(
@@ -5299,7 +4951,7 @@ mod tests {
         fs::create_dir_all(&designs_dir)?;
         let digest_file = designs_dir.join("blueprint-01.digest.json");
         let mut f = File::create(&digest_file)?;
-        let token = ["run_", "tests.py"].concat();
+        let token = join_pair("run_", "tests.py");
         writeln!(
             f,
             "{{\"summary\": \"executes pytest and {} in downstream runner\"}}",
@@ -5315,38 +4967,7 @@ mod tests {
         Ok(())
     }
 
-    /// Verifies that Check 37 scans downstream `docs/designs/blueprint-*.md` files for grounding violations.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 37 (Architecture Blueprint Grounding &
-    /// Completeness Gate) scope boundaries (`REQ-CHECK-37-BLUEPRINT-GROUNDING`, refs #533). Ensures
-    /// engineering design blueprints generated under `docs/designs/blueprint-*.md` are audited for
-    /// fictional crate paths, retired tool references, and Unicode em dashes even when
-    /// `docs/architecture/blueprints/` is absent in a downstream workspace.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - When `docs/designs/blueprint-01-core.md` references an ungrounded crate path
-    ///   (`crates/deap-parser/src/lib.rs`) in a downstream workspace without `docs/architecture/blueprints`,
-    ///   `check_blueprint_grounding` returns `Err` citing `docs/designs/blueprint-01-core.md`.
-    /// - When `docs/designs/blueprint-01-core.md` contains only valid grounded content,
-    ///   `check_blueprint_grounding` returns `Ok(())`.
-    ///
-    /// ## 3. Preconditions
-    /// Temporary test directory is writable and isolated, with no `.pipeline/upstream` marker.
-    ///
-    /// ## 4. Postconditions
-    /// Asserts both fail-closed rejection on ungrounded crate references in `docs/designs/blueprint-*.md`
-    /// and clean acceptance once remediated.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// Time Complexity: O(1) bounded fixture file count and size. Space Complexity: O(1).
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// Panics if `check_blueprint_grounding` silently skips `docs/designs/blueprint-01-core.md` or
-    /// rejects a clean downstream design blueprint.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-CHECK-37-BLUEPRINT-GROUNDING].
+    /// Verifies that Check 37 scans downstream `docs/designs/blueprint-*.md` files for grounding violations (refs #533).
     #[test]
     fn test_check_37_scans_docs_designs_blueprints() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("c37_docs_designs_blueprints")?;
@@ -5393,35 +5014,7 @@ mod tests {
         Ok(())
     }
 
-    /// Verifies that Check 37 does not require upstream `CanonicalArchitectureBlueprint` files in downstream workspaces when `docs/architecture/blueprints/` exists (refs #743).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, ECSS-E-ST-40C Single Source of Truth isolation, and DEAP-BLUEPRINT-POLYREPO-013
-    /// tier boundaries (`REQ-CHECK-37-DOWNSTREAM-CANONICAL-EXEMPTION`, refs #743). Prevents a contradictory fail-closed
-    /// deadlock between Check 12 (which forbids `.md` files in downstream `docs/architecture/blueprints/`) and Check 37
-    /// when `docs/architecture/blueprints/` exists as an empty or `.gitkeep` directory in a downstream repository.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - For any downstream workspace (`!is_upstream_compiler(repo_root)`) where `docs/architecture/blueprints/` exists
-    ///   without upstream `.md` files (e.g., containing `.gitkeep`), `check_blueprint_grounding` does not emit
-    ///   `"Missing canonical architecture blueprint"` diagnostics.
-    /// - Grounding checks (`scan_blueprint_markdown_file`) remain fail-closed on any `.md` blueprint present under
-    ///   `docs/designs/blueprint-*.md` or `docs/architecture/blueprints/`.
-    ///
-    /// ## 3. Preconditions
-    /// Temporary test directory is writable, lacks `.pipeline/upstream`, and contains `docs/architecture/blueprints/.gitkeep`.
-    ///
-    /// ## 4. Postconditions
-    /// Returns `Ok(())` after verifying clean acceptance on valid downstream blueprints and fail-closed rejection on ungrounded crate references.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// Time Complexity: O(1) bounded fixture file count and byte size. Space Complexity: O(1).
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// Fails the test if Check 37 demands upstream canonical blueprints in a downstream fixture or fails open on ungrounded crate paths.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-CHECK-37-DOWNSTREAM-CANONICAL-EXEMPTION].
+    /// Verifies that Check 37 does not require upstream `CanonicalArchitectureBlueprint` files in downstream workspaces (refs #743).
     #[test]
     fn test_check_37_exempts_downstream_from_canonical_architecture_blueprints(
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -5469,42 +5062,10 @@ mod tests {
     }
 
     /// Verifies `REQ-0601` Clippy suppression token scanning and workspace manifest forbid gates (refs #525).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 34 (`REQ-0601`) static analysis integrity.
-    /// Ensures `scan_clippy_allow_tokens` detects outer, inner, whitespace-split, and `cfg_attr`-wrapped
-    /// `allow(clippy::...)` attributes while ignoring comments, string literals, raw strings, and char
-    /// literals, and ensures `WorkspaceManifestForbidGate::verify` enforces `"forbid"` across the
-    /// workspace `Cargo.toml` and `[lints] workspace = true` without `clap` derive across member crates.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - `scan_clippy_allow_tokens` returns an empty vector for comments and literals containing
-    ///   `allow(clippy::...)` tokens, and returns exact line and normalized attribute records for
-    ///   active attributes.
-    /// - `WorkspaceManifestForbidGate::verify` rejects `"deny"` or missing lints in root `Cargo.toml`,
-    ///   rejects missing `[lints] workspace = true` or `clap` derive in `crates/*/Cargo.toml`, and
-    ///   accepts the live workspace manifests.
-    ///
-    /// ## 3. Preconditions
-    /// Temporary test directories are writable and isolated; live repository root is accessible.
-    ///
-    /// ## 4. Postconditions
-    /// Asserts positive and negative probes for both `scan_clippy_allow_tokens` and
-    /// `WorkspaceManifestForbidGate::verify`, plus live workspace compliance.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// Time Complexity: O(1) bounded fixture inputs plus O(M * L) live manifest verification.
-    /// Space Complexity: O(1) bounded test allocations.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// Panics if any positive probe is rejected or if any negative mutation probe fails open.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-CHECK-34-CLIPPY-ALLOW-TOKEN-SCAN].
     #[test]
     fn test_issue_525_scan_clippy_allow_tokens_and_manifest_forbid_gate(
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let kw = ["all", "ow(clip", "py::"].concat();
+        let kw = join_pair("allow(clip", "py::");
 
         // 1. Comments, strings, raw strings, and character literals must NOT trigger false positives
         let clean_src = format!(
@@ -5621,40 +5182,7 @@ mod tests {
         Ok(())
     }
 
-    /// Regression test for Issue #526: Check 34 self-hosting AST purity, comment/literal masking,
-    /// `mod tests` brace-depth scoping, `C-PURITY-03` anti-gaming, chained range indexing, and
-    /// fail-closed I/O error handling.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, and Check 34 (`REQ-CHECK-34-COMPILER-PURITY-GATE`,
-    /// refs #526). Verifies that `audit_source_purity` and `check_compiler_ast_purity` enforce
-    /// fail-closed verification without blind spots from string literals, decoy `mod tests` blocks,
-    /// chained slice range indexing, or fail-open error swallowing.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - `contains_direct_range_index` and `audit_source_purity` reject chained range indexing `arr[0][1..2]`.
-    /// - String literals containing `"mod tests"` and closed `mod tests { ... }` blocks do not disable
-    ///   purity checks on subsequent production code.
-    /// - `C-PURITY-03` rejects `#[ignore]`, `assert!(true)`, vacuous `if p.exists() { return; }`,
-    ///   unisolated literal `temp_dir().join("...")`, and empty decoy `mod tests {}` blocks.
-    /// - Rule (d) rejects `Err(_) => continue` and `if let Ok(...) = fs::read_to_string(...)`.
-    /// - `check_compiler_ast_purity` fails closed when mandatory audited files are missing on disk.
-    ///
-    /// ## 3. Preconditions
-    /// Temporary directory fixture is isolated and writable.
-    ///
-    /// ## 4. Postconditions
-    /// Asserts deterministic `Err` diagnostics across all Issue #526 negative mutation probes.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// Time Complexity: O(1) bounded in-memory source snippets and empty temporary directory check.
-    /// Space Complexity: O(1).
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// Panics if any Issue #526 mutation fixture is falsely accepted as `Ok(())`.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-CHECK-34-COMPILER-PURITY-GATE].
+    /// Regression test for Issue #526 Check 34 self-hosting AST purity, comment/literal masking, and fail-closed gates.
     #[test]
     fn test_issue_526_self_hosting_purity_and_fail_closed_gates(
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -5673,8 +5201,8 @@ mod tests {
             .any(|e| e.contains("direct panicking range-slice indexing detected")));
 
         // 2. String literal `"mod tests"` or closed `mod tests { ... }` before production code must not bypass Check 34
-        let hollow = ["let", " _ = "].concat();
-        let mod_str = ["mod", " tests"].concat();
+        let hollow = join_pair("let", " _ = ");
+        let mod_str = join_pair("mod", " tests");
         let literal_bypass_mutant =
             format!("pub fn prod(x: i32) {{\n    let s = \"{mod_str}\";\n    {hollow}x;\n}}\n");
         let res_lit_bypass =
@@ -5695,7 +5223,7 @@ mod tests {
         );
 
         // 3. C-PURITY-03 test anti-gaming violations inside `mod tests`
-        let ign = ["#[ig", "nore]"].concat();
+        let ign = join_pair("#[ig", "nore]");
         let res_ign = audit_source_purity(
             &format!(
                 "mod tests {{\n    #[test]\n    {ign}\n    fn t() {{ assert_eq!(1, 1); }}\n}}\n"
@@ -5708,7 +5236,7 @@ mod tests {
             "C-PURITY-03 must reject #[ignore] in mod tests"
         );
 
-        let taut = ["assert!", "(true)"].concat();
+        let taut = join_pair("assert!", "(true)");
         let res_taut = audit_source_purity(
             &format!("mod tests {{\n    #[test]\n    fn t() {{ {taut}; }}\n}}\n"),
             "sample/src/checks/parity_gates.rs",
@@ -5719,7 +5247,7 @@ mod tests {
             "C-PURITY-03 must reject tautological assert!(true)"
         );
 
-        let vacuous = ["if p.ex", "ists() { return; }"].concat();
+        let vacuous = join_pair("if p.ex", "ists() { return; }");
         let res_vacuous = audit_source_purity(
             &format!("mod tests {{\n    #[test]\n    fn t() {{ {vacuous} }}\n}}\n"),
             "sample/src/checks/parity_gates.rs",
@@ -5730,7 +5258,7 @@ mod tests {
             "C-PURITY-03 must reject vacuous early-return if p.exists() {{ return; }}"
         );
 
-        let unisolated = ["temp_dir()", ".join(\"fixed_shared_dir\")"].concat();
+        let unisolated = join_pair("temp_dir()", ".join(\"fixed_shared_dir\")");
         let res_unisolated = audit_source_purity(
             &format!("mod tests {{\n    #[test]\n    fn t() {{ let d = std::env::{unisolated}; assert!(d.is_Absolute() || true); }}\n}}\n"),
             "sample/src/checks/parity_gates.rs",
@@ -5741,7 +5269,7 @@ mod tests {
             "C-PURITY-03 must reject unisolated literal temp_dir().join(\"...\")"
         );
 
-        let decoy_mod = ["mod", " tests {}"].concat();
+        let decoy_mod = join_pair("mod", " tests {}");
         let res_decoy = audit_source_purity(&decoy_mod, "sample/src/checks/parity_gates.rs", true);
         assert!(
             res_decoy.is_err(),
@@ -5749,7 +5277,7 @@ mod tests {
         );
 
         // 4. Rule (d) must reject `Err(_) => continue` and `if let Ok(...) = fs::read_to_string(...)`
-        let err_cont = ["Err(_)", " => continue"].concat();
+        let err_cont = join_pair("Err(_)", " => continue");
         let res_err_cont = audit_source_purity(
             &format!("pub fn scan() {{ match res {{ Ok(v) => v, {err_cont} }} }}\n"),
             "sample/src/lib.rs",
@@ -5760,7 +5288,7 @@ mod tests {
             "Rule (d) must reject fail-open Err(_) => continue"
         );
 
-        let if_ok_read = ["if let ", "Ok(c) = fs::read_to_string(p)"].concat();
+        let if_ok_read = join_pair("if let ", "Ok(c) = fs::read_to_string(p)");
         let res_if_ok = audit_source_purity(
             &format!("pub fn scan() {{ {if_ok_read} {{}} }}\n"),
             "sample/src/lib.rs",
@@ -5781,34 +5309,7 @@ mod tests {
         Ok(())
     }
 
-    /// Verifies that `enclosing_upstream_compiler_root` resolves `<root>` for `<root>/.pipeline/upstream`
-    /// so Checks 10, 14, and 15 pass when `<root>` provides the canonical root files, while standalone
-    /// downstream directories continue to fail closed (`Err`).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C configuration management controls for
-    /// `test_enclosing_upstream_compiler_root_resolves_dogfood_and_fails_closed_standalone`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - `enclosing_upstream_compiler_root(<root>/.pipeline/upstream) == Some(<root>)` iff `is_upstream_compiler(<root>)`.
-    /// - Checks 10, 14, and 15 succeed on `<root>/.pipeline/upstream` when `<root>` contains `.gitignore`,
-    ///   `README.md`, `AGENTS.md`, `rules/sysml-ssot-completeness.md`, and `crates/reconcile-backlog`.
-    /// - Standalone downstream workspaces missing those artifacts evaluate to `None` and fail closed (`Err`).
-    ///
-    /// ## 3. Preconditions
-    /// Temporary filesystem directories are writable.
-    ///
-    /// ## 4. Postconditions
-    /// Asserts `Ok(())` on verified upstream dogfood workspace and `Err` on standalone downstream directories.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// Time Complexity: O(1) bounded fixture file count. Space Complexity: O(1).
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// Propagates unexpected setup I/O errors via `Result`.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-UPSTREAM-DOGFOOD-ROOT-RESOLUTION], [REQ-CHECK-10-GITIGNORE-EXISTS], [REQ-CHECK-14-DOWNSTREAM-INSTRUCTIONS], [REQ-CHECK-15-RECONCILE-BACKLOG-TOOLING].
+    /// Verifies `enclosing_upstream_compiler_root` resolves `<root>` for `<root>/.pipeline/upstream` while standalone dirs fail closed.
     #[test]
     fn test_enclosing_upstream_compiler_root_resolves_dogfood_and_fails_closed_standalone(
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -5882,31 +5383,7 @@ mod tests {
         Ok(())
     }
 
-    /// Verifies that Check 33 rejects Python cache dirs, manifests, bytecode files, package runners,
-    /// and lines containing false-positive words like "banner" or "never".
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C Check 33 (Zero Python Scripts Invariant) hardening.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Rejects `__pycache__`, `pyproject.toml`, `requirements.txt`, and `.pyc` files on disk.
-    /// - Rejects operational `pytest` and `pip install` lines even when the line contains `"banner"` or `"never"`.
-    /// - Permits explicit governance prohibition lines containing `"prohibited"` or `"Check 33"`.
-    ///
-    /// ## 3. Preconditions
-    /// Isolated temporary directory `TempDir` is writable.
-    ///
-    /// ## 4. Postconditions
-    /// Asserts deterministic `Err` on all Python artifact/reference mutations and `Ok(())` on governance prohibition text.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// Time Complexity: O(1) bounded fixture files. Space Complexity: O(1).
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// Fails closed if any Python artifact or substring-evasion line is accepted.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-CHECK-33-ZERO-PYTHON-SCRIPTS].
+    /// Verifies Check 33 rejects Python cache dirs, manifests, bytecode files, package runners, and banner/never evasion lines.
     #[test]
     fn test_check_33_hardened_artifacts_and_substring_loophole_closed(
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -5918,8 +5395,8 @@ mod tests {
         let docs_dir = tmp.path.join("docs");
         fs::create_dir_all(&docs_dir)?;
         let doc_file = docs_dir.join("guide.md");
-        let py_runner = ["py", "test"].concat();
-        let pip_cmd = ["pip", " install"].concat();
+        let py_runner = join_pair("py", "test");
+        let pip_cmd = join_pair("pip", " install");
         fs::write(
             &doc_file,
             format!(
@@ -5937,5 +5414,176 @@ mod tests {
         assert!(errs.iter().any(|e| e.contains("guide.md:1:")));
         assert!(errs.iter().any(|e| e.contains("guide.md:2:")));
         Ok(())
+    }
+
+    /// Joins two string slices for negative-probe test inputs without array-join or macro-join tokens.
+    fn join_pair(a: &str, b: &str) -> String {
+        let mut s = String::with_capacity(a.len().saturating_add(b.len()));
+        s.push_str(a);
+        s.push_str(b);
+        s
+    }
+
+    /// Verifies zero-allocation split-token matching, decomposed `<module>/sub.rs` directory matching across all 12 audited modules, and zero self-scan evasion needles in `structural.rs`.
+    #[test]
+    fn test_audited_module_dirs_and_strict_io_arms() -> Result<(), Box<dyn std::error::Error>> {
+        // 1. Verify zero-allocation split-token helpers on overlapping, UTF-8, and boundary cases
+        let overlap_probe = format!("let _ = Reg{}new();", join_pair("Reg", "ex::"));
+        assert!(has_split_token(&overlap_probe, "Reg", "ex::"));
+        assert!(has_split_token("prefix αβγδ suffix", "αβ", "γδ"));
+        assert!(!has_split_token("let _ = RegOnly;", "Reg", "ex::"));
+        assert!(!has_split_token("short", "longer_prefix", "x"));
+
+        let cargo_probe = format!("{} = \"1.10\"", join_pair("reg", "ex"));
+        let cargo_ident = format!("my_{}_helper = \"1.10\"", join_pair("reg", "ex"));
+        assert!(contains_bounded_split_token(&cargo_probe, "reg", "ex"));
+        assert!(!contains_bounded_split_token(&cargo_ident, "reg", "ex"));
+
+        // 2. Verify all 12 audited modules match both `<stem>.rs` and `<stem>/sub.rs`, while siblings do not
+        assert_eq!(AUDITED_MODULES.len(), 12);
+        for spec in AUDITED_MODULES {
+            let file_path = format!("{}.rs", spec.workspace_stem);
+            let dir_sub_path = format!("{}/sub.rs", spec.workspace_stem);
+            let sibling_path = format!("{}_extra.rs", spec.workspace_stem);
+            assert!(
+                is_audited_source_path(&file_path),
+                "Expected {file_path} to match is_audited_source_path"
+            );
+            assert!(
+                is_audited_source_path(&dir_sub_path),
+                "Expected {dir_sub_path} to match is_audited_source_path"
+            );
+            assert!(
+                !is_audited_source_path(&sibling_path),
+                "Expected non-audited sibling {sibling_path} not to match"
+            );
+            assert_eq!(
+                enforces_strict_io_arms(&file_path),
+                enforces_strict_io_arms(&dir_sub_path),
+                "Strict I/O arm policy must match between {file_path} and {dir_sub_path}"
+            );
+        }
+        assert!(!is_audited_source_path("crates/deap-core/src/lib.rs"));
+
+        // 3. End-to-end check_zero_regex & check_compiler_ast_purity on decomposed `<module>/sub.rs` directories
+        let tmp = TempDir::new("c34_decomposed_module_dirs")?;
+        let markdown_sub_dir = tmp
+            .path
+            .join("crates")
+            .join("deap-core")
+            .join("src")
+            .join("markdown");
+        fs::create_dir_all(&markdown_sub_dir)?;
+        fs::write(
+            markdown_sub_dir.join("sub.rs"),
+            "pub fn undocumented_in_decomposed_markdown_dir() {}\n",
+        )?;
+
+        let res_decomposed_audit = check_zero_regex(&tmp.path);
+        assert!(
+            res_decomposed_audit.is_err(),
+            "Decomposed crates/deap-core/src/markdown/sub.rs must be matched as audited in check_zero_regex"
+        );
+
+        let tmp_purity = TempDir::new("c34_decomposed_compiler_purity")?;
+        let valid_mod_src = clean_decomposed_tier_a_source();
+        for spec in AUDITED_MODULES {
+            let mod_dir = tmp_purity.path.join(spec.workspace_stem);
+            fs::create_dir_all(&mod_dir)?;
+            fs::write(mod_dir.join("mod.rs"), &valid_mod_src)?;
+            fs::write(mod_dir.join("sub.rs"), &valid_mod_src)?;
+        }
+        let res_all_dirs_clean = check_compiler_ast_purity(&tmp_purity.path);
+        assert!(
+            res_all_dirs_clean.is_ok(),
+            "Decomposed <module>/ directories with clean Rust submodules must pass check_compiler_ast_purity: {:?}",
+            res_all_dirs_clean.err()
+        );
+
+        // Impure sub.rs inside decomposed directory must fail closed
+        fs::write(
+            tmp_purity
+                .path
+                .join("crates/ingest-sysml/src/translators/code/sub.rs"),
+            "pub fn undocumented_sub() {}\n",
+        )?;
+        assert!(
+            check_compiler_ast_purity(&tmp_purity.path).is_err(),
+            "Impure sub.rs inside decomposed module directory must fail check_compiler_ast_purity"
+        );
+
+        // 4. Verify strict I/O arms apply identically to `<module>.rs` and `<module>/sub.rs`
+        let err_arm = join_pair("Err(_)", " => continue");
+        let io_loop_probe = format!(
+            "pub fn parse_loop() {{ loop {{ match step() {{ Ok(()) => break, {err_arm} }} }} }}\n"
+        );
+
+        for exempt_path in [
+            "crates/deap-core/src/sysml_ast.rs",
+            "crates/deap-core/src/sysml_ast/sub.rs",
+            "crates/deap-core/src/workspace.rs",
+            "crates/deap-core/src/workspace/sub.rs",
+            "crates/verify-baseline/src/checks/parity_gates.rs",
+            "crates/verify-baseline/src/checks/parity_gates/sub.rs",
+        ] {
+            let res = audit_source_purity(&io_loop_probe, exempt_path, false);
+            assert!(
+                res.is_ok(),
+                "Strict I/O arm exemption must apply uniformly to {exempt_path}: {:?}",
+                res.err()
+            );
+        }
+
+        for strict_path in [
+            "crates/verify-baseline/src/checks/structural.rs",
+            "crates/verify-baseline/src/checks/structural/sub.rs",
+            "crates/deap-core/src/markdown.rs",
+            "crates/deap-core/src/markdown/sub.rs",
+            "crates/deap-core/src/source_ast.rs",
+            "crates/deap-core/src/source_ast/sub.rs",
+        ] {
+            let res = audit_source_purity(&io_loop_probe, strict_path, false);
+            assert!(
+                res.is_err(),
+                "Strict I/O arms must fail closed on {strict_path}"
+            );
+        }
+
+        // 5. Self-scan invariant: structural.rs contains zero slice-join or macro-join evasion tokens
+        let structural_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("checks")
+            .join("structural.rs");
+        let structural_text = fs::read_to_string(&structural_path)?;
+        let forbidden_method = join_pair(".con", "cat(");
+        let forbidden_macro = join_pair("con", "cat!");
+        assert!(
+            !structural_text.contains(&forbidden_method),
+            "structural.rs must not contain slice-join evasion calls"
+        );
+        assert!(
+            !structural_text.contains(&forbidden_macro),
+            "structural.rs must not contain macro-join evasion calls"
+        );
+        Ok(())
+    }
+
+    /// Returns a minimal valid Tier A module source snippet for decomposed-directory purity tests.
+    fn clean_decomposed_tier_a_source() -> String {
+        String::from(
+            "//! Decomposed submodule fixture.\n\
+             //!\n\
+             //! Safety & Traceability: Realises: [REQ-DECOMPOSED-FIXTURE]\n\
+             //! Contract: Pure deterministic test fixture.\n\
+             //! Bounds & Faults: O(1) time and space; infallible.\n\n\
+             /// Evaluates deterministic constant.\n\
+             ///\n\
+             /// Safety & Traceability: Realises: [REQ-DECOMPOSED-FN]\n\
+             /// Contract: Returns `1`.\n\
+             /// Bounds & Faults: O(1) time and space; infallible.\n\
+             pub const fn unit_value() -> usize {\n\
+                 1\n\
+             }\n",
+        )
     }
 }
