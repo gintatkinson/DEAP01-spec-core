@@ -816,7 +816,7 @@ pub fn cache_ingested_sysml_model(
     sysml_source: &str,
 ) -> Result<(deap_core::sysml_ast::SysmlModel, bool), String> {
     let cache = deap_core::sysml_ast::IncrementalAstCache::new(repo_root);
-    cache.load_or_parse(sysml_source)
+    cache.load_or_parse(sysml_source).map_err(String::from)
 }
 
 #[cfg(test)]

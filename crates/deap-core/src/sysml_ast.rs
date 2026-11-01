@@ -32,6 +32,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
 
+use crate::error::CoreError;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -7148,13 +7149,15 @@ impl SysmlModel {
         &self,
         target_package: &str,
         max_tokens: usize,
-    ) -> Result<AstSlice, String> {
+    ) -> Result<AstSlice, CoreError> {
         let target = target_package.trim();
         if target.is_empty() {
-            return Err("target_package must not be empty".to_string());
+            return Err(CoreError::validation("target_package must not be empty"));
         }
         if max_tokens == 0 {
-            return Err("max_tokens must be greater than zero".to_string());
+            return Err(CoreError::validation(
+                "max_tokens must be greater than zero",
+            ));
         }
 
         let pkg_matches = self
@@ -7177,10 +7180,10 @@ impl SysmlModel {
         };
 
         if !pkg_matches && matched_parts.is_empty() {
-            return Err(format!(
+            return Err(CoreError::validation(format!(
                 "No package or part matching '{}' found in SysmlModel",
                 target
-            ));
+            )));
         }
 
         let mut ports: Vec<PortDef> = Vec::new();
@@ -7307,16 +7310,20 @@ impl SysmlModel {
             estimated_tokens: 0,
         };
 
-        let json_bytes = serde_json::to_vec(&slice)
-            .map_err(|e| format!("Failed to serialize AstSlice for token estimation: {}", e))?;
+        let json_bytes = serde_json::to_vec(&slice).map_err(|e| {
+            CoreError::validation(format!(
+                "Failed to serialize AstSlice for token estimation: {}",
+                e
+            ))
+        })?;
         let estimated_tokens = json_bytes.len().saturating_add(3) / 4;
         slice.estimated_tokens = estimated_tokens;
 
         if estimated_tokens > max_tokens {
-            return Err(format!(
+            return Err(CoreError::validation(format!(
                 "AstSlice for '{}' requires {} estimated tokens, exceeding max_tokens budget of {}",
                 target, estimated_tokens, max_tokens
-            ));
+            )));
         }
 
         Ok(slice)
@@ -7479,43 +7486,47 @@ impl IncrementalAstCache {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-AST-CACHE-LOAD-OR-PARSE]
-    pub fn load_or_parse(&self, sysml_source: &str) -> Result<(SysmlModel, bool), String> {
+    pub fn load_or_parse(&self, sysml_source: &str) -> Result<(SysmlModel, bool), CoreError> {
         let digest = Self::compute_digest(sysml_source);
         let cache_path = self.cache_dir.join(format!("{}.json", digest));
         if cache_path.is_file() {
             let cached_text = std::fs::read_to_string(&cache_path).map_err(|e| {
-                format!(
+                CoreError::io(format!(
                     "Failed to read cached AST file '{}': {}",
                     cache_path.display(),
                     e
-                )
+                ))
             })?;
             let model: SysmlModel = serde_json::from_str(&cached_text).map_err(|e| {
-                format!(
+                CoreError::validation(format!(
                     "Failed to deserialize cached AST file '{}': {}",
                     cache_path.display(),
                     e
-                )
+                ))
             })?;
             return Ok((model, true));
         }
 
         let model = parse_sysml_model(sysml_source);
         std::fs::create_dir_all(&self.cache_dir).map_err(|e| {
-            format!(
+            CoreError::io(format!(
                 "Failed to create AST cache directory '{}': {}",
                 self.cache_dir.display(),
                 e
-            )
+            ))
         })?;
-        let serialized = serde_json::to_string_pretty(&model)
-            .map_err(|e| format!("Failed to serialize SysmlModel for AST cache: {}", e))?;
+        let serialized = serde_json::to_string_pretty(&model).map_err(|e| {
+            CoreError::validation(format!(
+                "Failed to serialize SysmlModel for AST cache: {}",
+                e
+            ))
+        })?;
         std::fs::write(&cache_path, serialized).map_err(|e| {
-            format!(
+            CoreError::io(format!(
                 "Failed to write cached AST file '{}': {}",
                 cache_path.display(),
                 e
-            )
+            ))
         })?;
         Ok((model, false))
     }
@@ -7808,35 +7819,38 @@ impl AstPersistenceEngine {
         &self,
         model_id: &str,
         model: &SysmlModel,
-    ) -> Result<std::path::PathBuf, String> {
+    ) -> Result<std::path::PathBuf, CoreError> {
         let clean_id = model_id.trim();
         if clean_id.is_empty()
             || clean_id.contains("..")
             || clean_id.contains('/')
             || clean_id.contains('\\')
         {
-            return Err(format!("Invalid model_id '{}' for persistence", model_id));
+            return Err(CoreError::validation(format!(
+                "Invalid model_id '{}' for persistence",
+                model_id
+            )));
         }
         std::fs::create_dir_all(&self.storage_root).map_err(|e| {
-            format!(
+            CoreError::io(format!(
                 "Failed to create persistence root '{}': {}",
                 self.storage_root.display(),
                 e
-            )
+            ))
         })?;
         let target_path = self.storage_root.join(format!("{}.json", clean_id));
         let json_payload = serde_json::to_string_pretty(model).map_err(|e| {
-            format!(
+            CoreError::validation(format!(
                 "Failed to serialize SysmlModel '{}' for persistence: {}",
                 clean_id, e
-            )
+            ))
         })?;
         std::fs::write(&target_path, json_payload).map_err(|e| {
-            format!(
+            CoreError::io(format!(
                 "Failed to write persisted model '{}': {}",
                 target_path.display(),
                 e
-            )
+            ))
         })?;
         Ok(target_path)
     }
@@ -7855,43 +7869,46 @@ impl AstPersistenceEngine {
     /// - `model_id: &str` refers to a model previously written via `persist_model`.
     ///
     /// ## 4. Postconditions
-    /// - Returns `Ok(SysmlModel)` on valid file read and JSON deserialization, or `Err(String)` otherwise.
+    /// - Returns `Ok(SysmlModel)` on valid file read and JSON deserialization, or `Err(CoreError)` otherwise.
     ///
     /// ## 5. Algorithmic Complexity Bounds
     /// - Time Complexity: $O(N)$ where $N$ is the byte length of `<model_id>.json`.
     /// - Space Complexity: $O(N)$ for the loaded `SysmlModel`.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Fails closed with `Err(String)` when the file is missing, unreadable, or malformed JSON.
+    /// - Interface: Fails closed with `Err(CoreError)` when the file is missing, unreadable, or malformed JSON.
     /// - State: Read-only filesystem operation.
     /// - Action: Zero panics or silent error suppression.
     /// - Resource: Bounded by persisted file size.
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-AST-LOAD-MODEL]
-    pub fn load_model(&self, model_id: &str) -> Result<SysmlModel, String> {
+    pub fn load_model(&self, model_id: &str) -> Result<SysmlModel, CoreError> {
         let clean_id = model_id.trim();
         if clean_id.is_empty()
             || clean_id.contains("..")
             || clean_id.contains('/')
             || clean_id.contains('\\')
         {
-            return Err(format!("Invalid model_id '{}' for load_model", model_id));
+            return Err(CoreError::validation(format!(
+                "Invalid model_id '{}' for load_model",
+                model_id
+            )));
         }
         let target_path = self.storage_root.join(format!("{}.json", clean_id));
         let json_payload = std::fs::read_to_string(&target_path).map_err(|e| {
-            format!(
+            CoreError::io(format!(
                 "Failed to read persisted model '{}': {}",
                 target_path.display(),
                 e
-            )
+            ))
         })?;
         serde_json::from_str(&json_payload).map_err(|e| {
-            format!(
+            CoreError::validation(format!(
                 "Failed to deserialize persisted model '{}': {}",
                 target_path.display(),
                 e
-            )
+            ))
         })
     }
 }
@@ -8053,9 +8070,13 @@ impl CotAuditLog {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-AST-COT-AUDIT-LOG-JSON]
-    pub fn to_json_pretty(&self) -> Result<String, String> {
-        serde_json::to_string_pretty(self)
-            .map_err(|e| format!("Failed to serialize CotAuditLog to pretty JSON: {}", e))
+    pub fn to_json_pretty(&self) -> Result<String, CoreError> {
+        serde_json::to_string_pretty(self).map_err(|e| {
+            CoreError::validation(format!(
+                "Failed to serialize CotAuditLog to pretty JSON: {}",
+                e
+            ))
+        })
     }
 }
 

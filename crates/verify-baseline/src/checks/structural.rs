@@ -93,9 +93,9 @@ pub fn check_gitignore_exists(repo_root: &Path) -> Result<(), String> {
         Ok(()) => Ok(()),
         Err(err) => {
             if let Some(parent_repo) = enclosing_upstream_compiler_root(repo_root) {
-                core_check_gitignore_exists(&parent_repo)
+                core_check_gitignore_exists(&parent_repo).map_err(String::from)
             } else {
-                Err(err)
+                Err(err.into_string())
             }
         }
     }

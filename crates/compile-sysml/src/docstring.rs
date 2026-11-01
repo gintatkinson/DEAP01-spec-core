@@ -599,7 +599,7 @@ pub fn run_extract_source(
 ) -> Result<PackageDef, (DocstringExitCode, String)> {
     let pkg_name = deap_core::source_ast::resolve_source_package_name(source_dir, None);
     let pkg = ingest_source_directory(source_dir, SourceLanguage::Auto, &pkg_name)
-        .map_err(|e| (DocstringExitCode::Error, e))?;
+        .map_err(|e| (DocstringExitCode::Error, e.into_string()))?;
     let sysml_text = to_sysml(&pkg);
 
     if !dry_run {
@@ -1440,7 +1440,7 @@ pub fn inject_rust_file_docstrings(
     force: bool,
 ) -> Result<(String, usize), DocstringError> {
     validate_source_syntax_for_language(source, file_rel, SourceLanguage::Rust)
-        .map_err(DocstringError::Parse)?;
+        .map_err(|e| DocstringError::Parse(e.into_string()))?;
 
     let raw_lines: Vec<&str> = source.lines().collect();
     let mut state = RustInjectorState::new(raw_lines.len(), file_rel, schema_model, force);
@@ -1754,7 +1754,7 @@ pub fn inject_dart_file_docstrings(
     force: bool,
 ) -> Result<(String, usize), DocstringError> {
     validate_source_syntax_for_language(source, file_rel, SourceLanguage::Dart)
-        .map_err(DocstringError::Parse)?;
+        .map_err(|e| DocstringError::Parse(e.into_string()))?;
 
     let raw_lines: Vec<&str> = source.lines().collect();
     let mut state = DartInjectorState::new(raw_lines.len(), file_rel, schema_model, force);

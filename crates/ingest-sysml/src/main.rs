@@ -530,7 +530,7 @@ pub fn run_ingestion_with_code(args: CliArgs) -> Result<(), (IngestExitCode, Str
             ));
         }
         let lang = SourceLanguage::from_flag(&args.language)
-            .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
+            .map_err(|e| (IngestExitCode::ParseOrIoError, e.into_string()))?;
         let pkg_name = resolve_ingested_package_name(source_path, args.package.as_deref());
         pkg = CodeTranslator::with_language(lang)
             .translate_directory(source_path, &pkg_name)
@@ -588,7 +588,7 @@ pub fn run_ingestion_with_code(args: CliArgs) -> Result<(), (IngestExitCode, Str
     } else if args.format.eq_ignore_ascii_case("code") {
         let target_path = args.schema.clone().unwrap_or_else(|| PathBuf::from("src"));
         let lang = SourceLanguage::from_flag(&args.language)
-            .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
+            .map_err(|e| (IngestExitCode::ParseOrIoError, e.into_string()))?;
         let pkg_name = resolve_ingested_package_name(&target_path, args.package.as_deref());
         pkg = CodeTranslator::with_language(lang)
             .translate_directory(&target_path, &pkg_name)
@@ -703,7 +703,7 @@ pub fn run_ingestion_with_code(args: CliArgs) -> Result<(), (IngestExitCode, Str
                 .unwrap_or("Model");
 
             let lang = SourceLanguage::from_flag(&args.language)
-                .map_err(|e| (IngestExitCode::ParseOrIoError, e))?;
+                .map_err(|e| (IngestExitCode::ParseOrIoError, e.into_string()))?;
             pkg = match fmt.as_str() {
                 "sysml" => parse_sysml(&content).map_err(|e| {
                     (

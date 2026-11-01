@@ -18,8 +18,8 @@
 //!
 //! ## 4. Postconditions
 //! - Exposes a cohesive, strongly-typed public surface unifying `diagnostics`,
-//!   `markdown`, `rules`, `sysml_ast`, and `workspace` modules without side effects
-//!   on module load.
+//!   `error`, `markdown`, `rules`, `source_ast`, `sysml_ast`, and `workspace`
+//!   modules without side effects on module load.
 //!
 //! ## 5. Algorithmic Complexity Bounds
 //! - Time Complexity: $O(1)$ crate namespace re-export resolution at compile time;
@@ -36,6 +36,7 @@
 
 pub mod diagnostics;
 pub mod digest;
+pub mod error;
 pub mod markdown;
 pub mod rules;
 pub mod source_ast;
@@ -44,6 +45,7 @@ pub mod workspace;
 
 pub use diagnostics::{DefectDossier, Diagnostic, DiagnosticSeverity, WhyEntry};
 pub use digest::{compute_sha256, compute_sha256_bytes};
+pub use error::{CoreError, CoreResult};
 pub use markdown::{
     check_latex_katex_syntax, check_mermaid_syntax, strip_code_and_glfm, strip_fenced_code_blocks,
     strip_glfm_inline_math, strip_inline_code, ALLOWED_ALIGNMENT_ENVS, VALID_MERMAID_HEADERS,
@@ -86,42 +88,8 @@ pub use workspace::{
 
 #[cfg(test)]
 mod tests {
-    /// Verifies that `crates/deap-core/src/lib.rs` carries all 7 mandatory regulatory rustdoc sections.
-    ///
-    /// # Summary
-    /// Executes compile-time rustdoc header verification for `crates/deap-core/src/lib.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// # Safety
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_deap_core_lib_7_section_rustdoc` in `crates/deap-core/src/lib.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `test_deap_core_lib_7_section_rustdoc` (declaration #1) within `DEAP-CORE-LIB`.
-    ///
-    /// ## 3. Preconditions
-    /// # Parameters
-    /// - No runtime parameters; inspects embedded `lib.rs` module comments.
-    ///
-    /// ## 4. Postconditions
-    /// # Returns
-    /// - Returns `Result<(), String>` (`Ok(())`) after verifying presence of sections 1 through 7, `Realises: [`, empty `ComponentMethodTable` extraction, and `contains_direct_range_slice` crate-level re-exports.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N) bounded over `lib.rs` line count in `test_deap_core_lib_7_section_rustdoc`.
-    /// - Space Complexity: O(N) bounded auxiliary memory for `test_deap_core_lib_7_section_rustdoc`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// # Errors
-    /// - Returns `Err(String)` if any of the 7 module-level rustdoc sections or `Realises: [` tag is omitted, if `extract_component_method_table(&[])` is non-empty, or if `contains_direct_range_slice` misclassifies range vs string-literal inputs.
-    /// # Panics
-    /// - Never panics; all checks return fallible `Result<(), String>` errors.
-    /// - Interface: Validates boundary inputs and types for `test_deap_core_lib_7_section_rustdoc` (`Result<(), String>`).
-    /// - State: Maintains consistent state invariants across `test_deap_core_lib_7_section_rustdoc` without partial mutation on error.
-    /// - Action: Executes `test_deap_core_lib_7_section_rustdoc` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `test_deap_core_lib_7_section_rustdoc` (`DEAP-CORE-LIB`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-0601, REQ-DEAP-CORE-LIB-7-SECTION-RUSTDOC] | SysML v2: TestCaseDef(test_deap_core_lib_7_section_rustdoc)
+    /// Verifies that `crates/deap-core/src/lib.rs` carries all 7 crate-root rustdoc sections and re-exports `CoreError`.
+    /// Realises: [REQ-0601], [REQ-DEAP-CORE-LIB-7-SECTION-RUSTDOC]
     #[test]
     fn test_deap_core_lib_7_section_rustdoc() -> Result<(), String> {
         let source = include_str!("lib.rs");

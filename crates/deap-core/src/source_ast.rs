@@ -35,6 +35,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-FEAT-42-SOURCE-AST], [DO-330-TQL-4-SOURCE-AST]
 
+use crate::error::CoreError;
 use crate::sysml_ast::{
     ActionDef, AttributeDef, ConstraintDef, PackageDef, PartDef, PortDef, RequirementDef, StateDef,
 };
@@ -110,16 +111,16 @@ impl SourceLanguage {
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-FEAT-42-SOURCE-LANGUAGE-FROM-FLAG]
-    pub fn from_flag(flag: &str) -> Result<Self, String> {
+    pub fn from_flag(flag: &str) -> Result<Self, CoreError> {
         let normalized = flag.trim().to_ascii_lowercase();
         match normalized.as_str() {
             "auto" | "" => Ok(Self::Auto),
             "rust" | "rs" => Ok(Self::Rust),
             "dart" => Ok(Self::Dart),
-            other => Err(format!(
+            other => Err(CoreError::validation(format!(
                 "Unsupported source language '{}'. Expected one of: auto, rust, dart.",
                 other
-            )),
+            ))),
         }
     }
 
@@ -494,7 +495,7 @@ pub struct SourceAstItem {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-VALIDATE-SOURCE-SYNTAX]
-pub fn validate_source_syntax(source: &str, file_label: &str) -> Result<(), String> {
+pub fn validate_source_syntax(source: &str, file_label: &str) -> Result<(), CoreError> {
     let lang = SourceLanguage::detect_from_extension(Path::new(file_label))
         .unwrap_or(SourceLanguage::Rust);
     validate_source_syntax_for_language(source, file_label, lang)
@@ -987,7 +988,7 @@ pub fn validate_source_syntax_for_language(
     source: &str,
     file_label: &str,
     lang: SourceLanguage,
-) -> Result<(), String> {
+) -> Result<(), CoreError> {
     let bytes = source.as_bytes();
     let mut idx: usize = 0;
     let mut line: usize = 1;
@@ -1030,10 +1031,10 @@ pub fn validate_source_syntax_for_language(
             }
             if b == b'\n' {
                 if quote == b'\'' && !is_triple {
-                    return Err(format!(
+                    return Err(CoreError::syntax(format!(
                         "{}:{}:{}: syntax error: unclosed single-quoted string at line {}, column {}",
                         file_label, open_line, open_col, open_line, open_col
-                    ));
+                    )));
                 }
                 line = line.saturating_add(1);
                 col = 1;
@@ -1095,10 +1096,10 @@ pub fn validate_source_syntax_for_language(
                 idx = idx.saturating_add(1);
             }
             if depth != 0 {
-                return Err(format!(
+                return Err(CoreError::syntax(format!(
                     "{}:{}:{}: syntax error: unclosed block comment starting at line {}, column {}",
                     file_label, open_line, open_col, open_line, open_col
-                ));
+                )));
             }
             continue;
         }
@@ -1141,10 +1142,10 @@ pub fn validate_source_syntax_for_language(
                     idx = idx.saturating_add(1);
                 }
                 if !closed {
-                    return Err(format!(
+                    return Err(CoreError::syntax(format!(
                         "{}:{}:{}: syntax error: unclosed raw string literal at line {}, column {}",
                         file_label, open_line, open_col, open_line, open_col
-                    ));
+                    )));
                 }
                 continue;
             }
@@ -1212,7 +1213,7 @@ pub fn validate_source_syntax_for_language(
                     }
                 }
                 Some((open_b, open_line, open_col)) => {
-                    return Err(format!(
+                    return Err(CoreError::syntax(format!(
                         "{}:{}:{}: syntax error: unexpected closing '{}' at line {}, column {} (mismatched with '{}' opened at line {}, column {})",
                         file_label,
                         line,
@@ -1223,10 +1224,10 @@ pub fn validate_source_syntax_for_language(
                         char::from(open_b),
                         open_line,
                         open_col
-                    ));
+                    )));
                 }
                 None => {
-                    return Err(format!(
+                    return Err(CoreError::syntax(format!(
                         "{}:{}:{}: syntax error: unexpected closing '{}' at line {}, column {} with no matching opening delimiter",
                         file_label,
                         line,
@@ -1234,7 +1235,7 @@ pub fn validate_source_syntax_for_language(
                         char::from(b),
                         line,
                         col
-                    ));
+                    )));
                 }
             }
         }
@@ -1251,14 +1252,14 @@ pub fn validate_source_syntax_for_language(
         } else {
             "string literal"
         };
-        return Err(format!(
+        return Err(CoreError::syntax(format!(
             "{}:{}:{}: syntax error: unclosed {} at line {}, column {}",
             file_label, open_line, open_col, kind_label, open_line, open_col
-        ));
+        )));
     }
 
     if let Some((open_b, open_line, open_col)) = stack.pop() {
-        return Err(format!(
+        return Err(CoreError::syntax(format!(
             "{}:{}:{}: syntax error: unclosed delimiter '{}' opened at line {}, column {}",
             file_label,
             open_line,
@@ -1266,7 +1267,7 @@ pub fn validate_source_syntax_for_language(
             char::from(open_b),
             open_line,
             open_col
-        ));
+        )));
     }
 
     Ok(())
@@ -1304,7 +1305,10 @@ pub fn validate_source_syntax_for_language(
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-PARSE-RUST-AST]
-pub fn parse_rust_source_ast(source: &str, file_label: &str) -> Result<Vec<SourceAstItem>, String> {
+pub fn parse_rust_source_ast(
+    source: &str,
+    file_label: &str,
+) -> Result<Vec<SourceAstItem>, CoreError> {
     validate_source_syntax_for_language(source, file_label, SourceLanguage::Rust)?;
 
     let mut items: Vec<SourceAstItem> = Vec::new();
@@ -1637,7 +1641,10 @@ pub fn parse_rust_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-PARSE-DART-AST]
-pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<SourceAstItem>, String> {
+pub fn parse_dart_source_ast(
+    source: &str,
+    file_label: &str,
+) -> Result<Vec<SourceAstItem>, CoreError> {
     validate_source_syntax_for_language(source, file_label, SourceLanguage::Dart)?;
 
     let raw_lines: Vec<&str> = source.lines().collect();
@@ -2226,31 +2233,31 @@ pub fn ingest_source_directory(
     source_dir: &Path,
     language: SourceLanguage,
     package_name: &str,
-) -> Result<PackageDef, String> {
+) -> Result<PackageDef, CoreError> {
     if !source_dir.exists() {
-        return Err(format!(
+        return Err(CoreError::io(format!(
             "Source path '{}' does not exist",
             source_dir.display()
-        ));
+        )));
     }
 
     let files = discover_source_files(source_dir, language)?;
     if files.is_empty() {
-        return Err(format!(
+        return Err(CoreError::validation(format!(
             "No eligible '{}' source files (.rs / .dart) found in '{}'",
             language.label(),
             source_dir.display()
-        ));
+        )));
     }
 
     let mut all_items: Vec<SourceAstItem> = Vec::new();
     for file_path in &files {
         let content = fs::read_to_string(file_path).map_err(|e| {
-            format!(
+            CoreError::io(format!(
                 "Failed to read source file '{}': {}",
                 file_path.display(),
                 e
-            )
+            ))
         })?;
         let file_label = file_path.display().to_string();
         let file_lang = match language {
@@ -2310,7 +2317,7 @@ pub fn ingest_source_directory(
 pub fn discover_source_files(
     root: &Path,
     language: SourceLanguage,
-) -> Result<Vec<PathBuf>, String> {
+) -> Result<Vec<PathBuf>, CoreError> {
     if root.is_file() {
         return Ok(vec![root.to_path_buf()]);
     }
@@ -2348,8 +2355,13 @@ pub fn discover_source_files(
             }
         })
     {
-        let entry = entry_res
-            .map_err(|e| format!("Directory walk error under '{}': {}", root.display(), e))?;
+        let entry = entry_res.map_err(|e| {
+            CoreError::io(format!(
+                "Directory walk error under '{}': {}",
+                root.display(),
+                e
+            ))
+        })?;
         if !entry.file_type().is_file() {
             continue;
         }

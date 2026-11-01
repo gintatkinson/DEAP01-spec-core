@@ -35,6 +35,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-WS-MODULE], [DO-330-TQL-4-WORKSPACE] | SysML v2: part def WorkspaceInspector
 
+use crate::error::CoreError;
 use crate::rules::{EXCLUDED_DIRS, MASTER_BLUEPRINTS};
 use std::fs;
 use std::path::Path;
@@ -96,22 +97,22 @@ pub fn is_upstream_compiler(repo_root: &Path) -> bool {
 /// - Space Complexity: O(|repo_root|) for the joined path and formatted error string on failure.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Returns a strongly typed `Result<(), String>` diagnostic.
+/// - Interface: Returns a strongly typed `Result<(), CoreError>` diagnostic.
 /// - State: Read-only filesystem metadata inspection; zero side effects.
 /// - Action: Fails closed with `Err` if `.gitignore` is absent, a broken symlink, or a directory; never panics.
 /// - Resource: Minimal stack and single short-lived `PathBuf` allocation.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [Workspace/check_gitignore_exists] | [REQ-WS-C10] | SysML v2: part def WorkspaceInspector
-pub fn check_gitignore_exists(repo_root: &Path) -> Result<(), String> {
+pub fn check_gitignore_exists(repo_root: &Path) -> Result<(), CoreError> {
     let gitignore = repo_root.join(".gitignore");
     if gitignore.is_file() {
         Ok(())
     } else {
-        Err(format!(
+        Err(CoreError::workspace(format!(
             "Check 10 failed: .gitignore missing in repository root '{}'.",
             repo_root.display()
-        ))
+        )))
     }
 }
 

@@ -401,7 +401,7 @@ impl CodeTranslator {
         source_dir: &Path,
         package_name: &str,
     ) -> Result<PackageDef, String> {
-        ingest_source_directory(source_dir, self.language, package_name)
+        ingest_source_directory(source_dir, self.language, package_name).map_err(String::from)
     }
 }
 
