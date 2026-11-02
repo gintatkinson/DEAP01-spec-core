@@ -5,26 +5,26 @@
 //!
 //! Realises: [REQ-SYSML-INGEST-TABLE]
 
+use deap_core::markdown_ast::parse_markdown_ast;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// SysML v2 reserved keywords that must not be used as bare identifiers in AST generation.
 /// Realises: [REQ-INGEST-SYSML-TABLE-RESERVED-KEYWORDS]
 pub const RESERVED_SYSML_KEYWORDS: &[&str] = &[
-    "package", "part", "def", "port", "attribute", "action", "flow", "item", "connect",
-    "connection", "interface", "doc", "assert", "constraint", "state", "requirement", "use",
-    "case", "test", "in", "out", "inout", "import", "public", "private", "alias", "perform",
-    "subsystem", "first", "then", "step", "entry", "exit", "do", "transition", "assume",
-    "require", "verify", "satisfy", "text",
+    "package", "part", "def", "port", "attribute", "action", "flow", "item", "connect", "connection",
+    "interface", "doc", "assert", "constraint", "state", "requirement", "use", "case", "test", "in",
+    "out", "inout", "import", "public", "private", "alias", "perform", "subsystem", "first", "then",
+    "step", "entry", "exit", "do", "transition", "assume", "require", "verify", "satisfy", "text",
 ];
 
 /// Keywords identifying structural or functional section headers that are not component names.
 /// Realises: [REQ-INGEST-SYSML-TABLE-NON-COMPONENT-KEYWORDS]
 pub const NON_COMPONENT_SECTION_KEYWORDS: &[&str] = &[
-    "bill of materials", "bom", "components", "parts", "subsystems", "interfaces", "ports",
-    "signals", "signal interface", "interconnects", "parameters", "parametric limits", "limits",
-    "constraints", "invariants", "assertions", "requirements", "specifications", "overview",
-    "introduction", "scope", "architecture", "notes", "glossary", "definitions", "summary",
-    "system interfaces", "system parameters", "system limits", "system constraints",
+    "bill of materials", "bom", "components", "parts", "subsystems", "interfaces", "ports", "signals",
+    "signal interface", "interconnects", "parameters", "parametric limits", "limits", "constraints",
+    "invariants", "assertions", "requirements", "specifications", "overview", "introduction", "scope",
+    "architecture", "notes", "glossary", "definitions", "summary", "system interfaces",
+    "system parameters", "system limits", "system constraints",
 ];
 
 /// Authoritative provenance column header names recognized during tabular extraction.
@@ -62,19 +62,13 @@ pub fn sanitize_identifier(text: &str, default_name: &str) -> String {
         return default_name.to_string();
     }
     let stripped = strip_bracketed_content(text);
-    let clean_cand = if !stripped.is_empty() {
-        stripped
-    } else {
-        text.to_string()
-    };
+    let clean_cand = if stripped.is_empty() { text } else { &stripped };
     let formatted: String = clean_cand
         .chars()
         .map(|c| if matches!(c, '*' | '`' | '_' | '#') { ' ' } else { c })
         .collect();
-    let mut clean = formatted
-        .trim()
-        .replace(|c: char| !c.is_ascii_alphanumeric() && c != '_', "_");
-    clean = collapse_underscores(&clean).trim_matches('_').to_string();
+    let clean_raw = formatted.trim().replace(|c: char| !c.is_ascii_alphanumeric() && c != '_', "_");
+    let mut clean = collapse_underscores(&clean_raw).trim_matches('_').to_string();
     if clean.is_empty() {
         return default_name.to_string();
     }
@@ -90,8 +84,7 @@ pub fn sanitize_identifier(text: &str, default_name: &str) -> String {
 /// Strips parenthesized, bracketed, or braced content from `text`.
 /// Realises: [REQ-INGEST-SYSML-TABLE-STRIP-BRACKETED-CONTENT]
 fn strip_bracketed_content(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
+    let (mut out, mut chars) = (String::with_capacity(text.len()), text.chars().peekable());
     while let Some(c) = chars.next() {
         if matches!(c, '(' | '[' | '{') {
             for inner in chars.by_ref() {
@@ -109,18 +102,12 @@ fn strip_bracketed_content(text: &str) -> String {
 /// Collapses consecutive underscore characters into a single underscore.
 /// Realises: [REQ-INGEST-SYSML-TABLE-COLLAPSE-UNDERSCORES]
 fn collapse_underscores(s: &str) -> String {
-    let mut res = String::with_capacity(s.len());
-    let mut prev_under = false;
+    let (mut res, mut prev_under) = (String::with_capacity(s.len()), false);
     for c in s.chars() {
-        if c == '_' {
-            if !prev_under {
-                res.push('_');
-                prev_under = true;
-            }
-        } else {
+        if c != '_' || !prev_under {
             res.push(c);
-            prev_under = false;
         }
+        prev_under = c == '_';
     }
     res
 }
@@ -128,13 +115,11 @@ fn collapse_underscores(s: &str) -> String {
 /// Extracts measurement physical units enclosed in parentheses or brackets.
 /// Realises: [REQ-SYSML-INGEST-TABLE/extract_unit_from_header_or_val]
 pub fn extract_unit_from_header_or_val(header_or_val: &str) -> (String, String) {
-    let mut unit = String::new();
-    let mut cleaned = String::with_capacity(header_or_val.len());
+    let (mut unit, mut cleaned) = (String::new(), String::with_capacity(header_or_val.len()));
     let mut chars = header_or_val.chars().peekable();
     while let Some(c) = chars.next() {
         if c == '(' || c == '[' {
-            let mut inner = String::new();
-            let mut closed = false;
+            let (mut inner, mut closed) = (String::new(), false);
             for next_c in chars.by_ref() {
                 if next_c == ')' || next_c == ']' {
                     closed = true;
@@ -142,15 +127,12 @@ pub fn extract_unit_from_header_or_val(header_or_val: &str) -> (String, String) 
                 }
                 inner.push(next_c);
             }
-            if closed && unit.is_empty() {
-                let is_valid_unit = !inner.is_empty()
-                    && inner.chars().all(|ch| {
-                        ch.is_ascii_alphanumeric()
-                            || matches!(ch, '_' | '/' | '°' | '^' | '%' | '-')
-                    });
-                if is_valid_unit {
-                    unit = inner.trim().to_string();
-                }
+            if closed
+                && unit.is_empty()
+                && !inner.is_empty()
+                && inner.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '/' | '°' | '^' | '%' | '-'))
+            {
+                unit = inner.trim().to_string();
             }
         } else {
             cleaned.push(c);
@@ -163,8 +145,7 @@ pub fn extract_unit_from_header_or_val(header_or_val: &str) -> (String, String) 
 /// Realises: [REQ-SYSML-INGEST-TABLE/normalize_col]
 pub fn normalize_col(name: &str) -> String {
     let (cleaned, _) = extract_unit_from_header_or_val(name);
-    let mut clean = String::with_capacity(cleaned.len());
-    let mut prev_under = false;
+    let (mut clean, mut prev_under) = (String::with_capacity(cleaned.len()), false);
     for c in cleaned.chars() {
         let lower = c.to_ascii_lowercase();
         if lower.is_ascii_alphanumeric() {
@@ -178,67 +159,27 @@ pub fn normalize_col(name: &str) -> String {
     clean.trim_matches('_').to_string()
 }
 
+/// Replaces inline `<br>` / `<br/>` HTML line-break tags with spaces prior to CommonMark AST parsing.
+/// Realises: [REQ-INGEST-SYSML-TABLE-STRIP-HTML-TAGS]
+fn replace_br_tags_with_space(input: &str) -> String {
+    ["<br/>", "<br />", "<br>", "<BR/>", "<BR />", "<BR>"]
+        .into_iter()
+        .fold(input.to_string(), |acc, pat| acc.replace(pat, " "))
+}
+
 /// Strips Markdown hyperlinks, HTML tags, and inline formatting from a table cell value.
 /// Realises: [REQ-SYSML-INGEST-TABLE/clean_cell_value]
 pub fn clean_cell_value(val: &str) -> String {
-    if val.is_empty() {
+    let trimmed = val.trim();
+    if trimmed.is_empty() {
         return String::new();
     }
-    let step1 = strip_markdown_links(val);
-    strip_html_tags(&step1).trim().to_string()
-}
-
-/// Strips Markdown `[label](url)` link syntax while retaining `label`.
-/// Realises: [REQ-INGEST-SYSML-TABLE-STRIP-MARKDOWN-LINKS]
-fn strip_markdown_links(val: &str) -> String {
-    let mut out = String::with_capacity(val.len());
-    let mut rest = val;
-    while let Some(start_bracket) = rest.find('[') {
-        out.push_str(&rest[..start_bracket]);
-        let after_start = &rest[start_bracket + 1..];
-        if let Some(end_bracket) = after_start.find(']') {
-            let visible_text = &after_start[..end_bracket];
-            let after_end_bracket = &after_start[end_bracket + 1..];
-            if after_end_bracket.starts_with('(') {
-                if let Some(end_paren) = after_end_bracket.find(')') {
-                    out.push_str(visible_text);
-                    rest = &after_end_bracket[end_paren + 1..];
-                    continue;
-                }
-            }
-        }
-        out.push('[');
-        rest = after_start;
-    }
-    out.push_str(rest);
-    out
-}
-
-/// Strips inline HTML tags while replacing `<br>` / `<br/>` tags with single spaces.
-/// Realises: [REQ-INGEST-SYSML-TABLE-STRIP-HTML-TAGS]
-fn strip_html_tags(val: &str) -> String {
-    let mut out = String::with_capacity(val.len());
-    let mut rest = val;
-    while let Some(start_tag) = rest.find('<') {
-        out.push_str(&rest[..start_tag]);
-        let after_start = &rest[start_tag + 1..];
-        if let Some(end_tag) = after_start.find('>') {
-            let lower = after_start[..end_tag].trim().to_ascii_lowercase();
-            if lower == "br"
-                || lower.starts_with("br ")
-                || lower.starts_with("br/")
-                || lower == "br/"
-            {
-                out.push(' ');
-            }
-            rest = &after_start[end_tag + 1..];
-        } else {
-            out.push('<');
-            rest = after_start;
-        }
-    }
-    out.push_str(rest);
-    out
+    let normalized = replace_br_tags_with_space(trimmed);
+    parse_markdown_ast(&format!("| {normalized} |\n| --- |\n"))
+        .tables
+        .first()
+        .and_then(|t| t.headers.first())
+        .map_or_else(|| normalized.trim().to_string(), |c| c.trim().to_string())
 }
 
 /// Parses a scalar string into numeric float, unit, and optional signed integer representation.
@@ -246,9 +187,8 @@ fn strip_html_tags(val: &str) -> String {
 pub fn parse_numeric_with_unit(raw_val: &str) -> (Option<f64>, Option<String>, Option<i64>) {
     let clean: String = raw_val.chars().filter(|&c| c != '*' && c != '`').collect();
     let clean = clean.trim();
-    if (clean.starts_with("0x") || clean.starts_with("0X")) && clean.len() > 2 {
-        let hex_str = &clean[2..];
-        if hex_str.chars().all(|c| c.is_ascii_hexdigit()) {
+    if let Some(hex_str) = clean.strip_prefix("0x").or_else(|| clean.strip_prefix("0X")) {
+        if !hex_str.is_empty() && hex_str.chars().all(|c| c.is_ascii_hexdigit()) {
             if let Ok(val_int) = i64::from_str_radix(hex_str, 16) {
                 return (Some(val_int as f64), Some(String::new()), Some(val_int));
             }
@@ -271,11 +211,7 @@ pub fn parse_numeric_with_unit(raw_val: &str) -> (Option<f64>, Option<String>, O
 /// Realises: [REQ-INGEST-SYSML-TABLE-SPLIT-NUMBER-AND-UNIT]
 fn split_number_and_unit(s: &str) -> Option<(&str, &str)> {
     let bytes = s.as_bytes();
-    if bytes.is_empty() {
-        return None;
-    }
-    let mut idx = usize::from(matches!(bytes.first(), Some(b'+' | b'-')));
-    let mut has_digits = false;
+    let (mut idx, mut has_digits) = (usize::from(matches!(bytes.first(), Some(b'+' | b'-'))), false);
     while bytes.get(idx).is_some_and(u8::is_ascii_digit) {
         has_digits = true;
         idx += 1;
@@ -287,10 +223,7 @@ fn split_number_and_unit(s: &str) -> Option<(&str, &str)> {
             has_dec = true;
             idx += 1;
         }
-        if !has_digits && !has_dec {
-            return None;
-        }
-        has_digits = true;
+        has_digits = has_digits || has_dec;
     }
     if !has_digits {
         return None;
@@ -307,8 +240,7 @@ fn split_number_and_unit(s: &str) -> Option<(&str, &str)> {
             idx = exp_start;
         }
     }
-    let num_part = s.get(..idx)?;
-    let rest = s.get(idx..)?.trim_start();
+    let (num_part, rest) = (s.get(..idx)?, s.get(idx..)?.trim_start());
     rest.chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '/' | '°' | '^' | '%' | '-'))
         .then_some((num_part, rest))
@@ -317,14 +249,10 @@ fn split_number_and_unit(s: &str) -> Option<(&str, &str)> {
 /// Parses range bounds string e.g. `[0.0, 100.0]`, `-20.0 to 60.0`, `18.0 .. 25.2`.
 /// Realises: [REQ-SYSML-INGEST-TABLE/parse_range_bounds]
 pub fn parse_range_bounds(range_text: &str) -> (Option<f64>, Option<f64>) {
-    let clean: String = range_text
-        .chars()
-        .filter(|&c| !matches!(c, '*' | '`' | '[' | ']' | '(' | ')'))
-        .collect();
+    let clean: String = range_text.chars().filter(|&c| !matches!(c, '*' | '`' | '[' | ']' | '(' | ')')).collect();
     let parts = split_range_parts(clean.trim());
     if let (Some(&p0), Some(&p1)) = (parts.first(), parts.get(1)) {
-        if let (Some(v1), Some(v2)) = (parse_numeric_with_unit(p0).0, parse_numeric_with_unit(p1).0)
-        {
+        if let (Some(v1), Some(v2)) = (parse_numeric_with_unit(p0).0, parse_numeric_with_unit(p1).0) {
             return (Some(v1.min(v2)), Some(v1.max(v2)));
         }
     }
@@ -334,30 +262,17 @@ pub fn parse_range_bounds(range_text: &str) -> (Option<f64>, Option<f64>) {
 /// Splits a range string across `,`, `:`, `..`, or `to` delimiters.
 /// Realises: [REQ-INGEST-SYSML-TABLE-SPLIT-RANGE-PARTS]
 fn split_range_parts(s: &str) -> Vec<&str> {
-    let mut parts = Vec::new();
-    let (mut start, mut i, s_bytes) = (0, 0, s.as_bytes());
+    let (mut parts, mut start, mut i, s_bytes) = (Vec::new(), 0, 0, s.as_bytes());
     while i < s.len() {
-        let cur = s_bytes.get(i).copied();
-        let rest = s.get(i..).unwrap_or("");
-        if matches!(cur, Some(b',' | b':')) {
+        let (cur, rest) = (s_bytes.get(i).copied(), s.get(i..).unwrap_or(""));
+        let is_to = rest.starts_with("to")
+            && (i == 0 || s_bytes.get(i.saturating_sub(1)).is_some_and(u8::is_ascii_whitespace))
+            && (i + 2 == s.len() || s_bytes.get(i + 2).is_some_and(u8::is_ascii_whitespace));
+        if matches!(cur, Some(b',' | b':')) || rest.starts_with("..") || is_to {
             if let Some(seg) = s.get(start..i) {
                 parts.push(seg.trim());
             }
-            i += 1;
-            start = i;
-        } else if rest.starts_with("..")
-            || (rest.starts_with("to")
-                && (i == 0
-                    || s_bytes
-                        .get(i.saturating_sub(1))
-                        .is_some_and(u8::is_ascii_whitespace))
-                && (i + 2 == s.len()
-                    || s_bytes.get(i + 2).is_some_and(u8::is_ascii_whitespace)))
-        {
-            if let Some(seg) = s.get(start..i) {
-                parts.push(seg.trim());
-            }
-            i += 2;
+            i += if matches!(cur, Some(b',' | b':')) { 1 } else { 2 };
             start = i;
         } else {
             i += 1;
@@ -372,14 +287,12 @@ fn split_range_parts(s: &str) -> Vec<&str> {
 /// Extracts authoritative provenance citation from a row dictionary.
 /// Realises: [REQ-SYSML-INGEST-TABLE/extract_provenance_citation]
 pub fn extract_provenance_citation(row: &BTreeMap<String, String>, headers: &[String]) -> String {
-    for h in headers {
-        if PROVENANCE_COLUMNS.contains(&h.as_str()) {
-            if let Some(val) = row.get(h).map(|v| v.trim()).filter(|v| !v.is_empty()) {
-                return val.to_string();
-            }
-        }
-    }
-    String::new()
+    headers
+        .iter()
+        .filter(|h| PROVENANCE_COLUMNS.contains(&h.as_str()))
+        .find_map(|h| row.get(h).map(|v| v.trim()).filter(|v| !v.is_empty()))
+        .unwrap_or_default()
+        .to_string()
 }
 
 /// Composes a grounded SysML v2 documentation string preserving description, unit, and OEM citation.
@@ -402,189 +315,85 @@ pub fn compose_grounded_doc(description: &str, citation: &str, unit: &str) -> St
 /// Realises: [REQ-SYSML-INGEST-TABLE/classify_table]
 pub fn classify_table(headers: &[String]) -> TableType {
     let h_set: BTreeSet<&str> = headers.iter().map(String::as_str).collect();
-    let has_bom_name = [
-        "component", "component_name", "part", "part_name", "subsystem", "item", "module",
-        "assembly", "lru",
-    ]
-    .iter()
-    .any(|k| h_set.contains(k));
-    let has_bom_attr = [
-        "part_number", "pn", "sku", "mass", "weight", "power", "qty", "quantity", "cost",
-    ]
-    .iter()
-    .any(|k| h_set.contains(k));
-    if (has_bom_name && has_bom_attr)
-        || (has_bom_name
-            && headers.len() >= 3
-            && !["direction", "dir", "port", "signal"]
-                .iter()
-                .any(|h| h_set.contains(h)))
-    {
+    let has_any = |keys: &[&str]| keys.iter().any(|k| h_set.contains(k));
+    let has_bom_name = has_any(&["component", "component_name", "part", "part_name", "subsystem", "item", "module", "assembly", "lru"]);
+    let has_bom_attr = has_any(&["part_number", "pn", "sku", "mass", "weight", "power", "qty", "quantity", "cost"]);
+    if (has_bom_name && has_bom_attr) || (has_bom_name && headers.len() >= 3 && !has_any(&["direction", "dir", "port", "signal"])) {
         return TableType::Bom;
     }
-    let has_port_name = [
-        "port", "port_name", "signal", "signal_name", "signal_id", "interface", "interface_name",
-        "flow",
-    ]
-    .iter()
-    .any(|k| h_set.contains(k));
-    let has_dir = ["direction", "dir", "flow_direction"]
-        .iter()
-        .any(|k| h_set.contains(k));
-    let has_type = ["type", "data_type", "payload", "rate", "protocol"]
-        .iter()
-        .any(|k| h_set.contains(k));
-    if has_port_name
-        || (has_dir && has_type)
+    let has_port = has_any(&["port", "port_name", "signal", "signal_name", "signal_id", "interface", "interface_name", "flow"]);
+    if has_port
+        || (has_any(&["direction", "dir", "flow_direction"]) && has_any(&["type", "data_type", "payload", "rate", "protocol"]))
         || (h_set.contains("source_port") && h_set.contains("target_port"))
         || (h_set.contains("source") && h_set.contains("target"))
     {
         return TableType::Ports;
     }
-    let has_constraint = [
-        "min", "max", "lower_bound", "upper_bound", "range", "valid_range", "limit", "bound",
-        "bounds", "tolerance", "constraint", "assertion",
-    ]
-    .iter()
-    .any(|k| h_set.contains(k));
-    let has_param = ["parameter", "param", "property", "metric", "variable", "name"]
-        .iter()
-        .any(|k| h_set.contains(k));
-    if has_constraint && (has_param || headers.len() >= 2) {
+    let has_constraint = has_any(&["min", "max", "lower_bound", "upper_bound", "range", "valid_range", "limit", "bound", "bounds", "tolerance", "constraint", "assertion"]);
+    if has_constraint && (has_any(&["parameter", "param", "property", "metric", "variable", "name"]) || headers.len() >= 2) {
         return TableType::Constraints;
     }
     if let Some(first) = headers.first().filter(|_| (2..=3).contains(&headers.len())) {
-        if ["property", "parameter", "attribute", "key", "field", "name"]
-            .iter()
-            .any(|k| first.contains(k))
-        {
+        if ["property", "parameter", "attribute", "key", "field", "name"].iter().any(|k| first.contains(k)) {
             return TableType::Properties;
         }
     }
     TableType::Generic
 }
 
+/// Normalizes input lines into a GFM table-ready Markdown buffer.
+/// Realises: [REQ-SYSML-INGEST-TABLE/parse_markdown_tables]
+fn prepare_table_markdown(lines: &[&str]) -> String {
+    let (mut buf, mut in_tbl) = (String::new(), false);
+    for (i, &raw) in lines.iter().enumerate() {
+        let trimmed = raw.trim();
+        let next_is_delim = lines.get(i + 1).copied().is_some_and(|nl| {
+            let t = nl.trim();
+            t.contains('|') && t.trim_matches('|').split('|').all(is_table_delimiter_cell)
+        });
+        if trimmed.contains('|') && next_is_delim && !in_tbl {
+            if !buf.is_empty() && !buf.ends_with("\n\n") {
+                buf.push('\n');
+            }
+            in_tbl = true;
+        } else if !trimmed.contains('|') {
+            in_tbl = false;
+        }
+        buf.push_str(if in_tbl { trimmed } else { raw });
+        buf.push('\n');
+    }
+    buf
+}
+
 /// Parses lines of Markdown text into a sequence of structured [`MarkdownTable`] instances.
 /// Realises: [REQ-SYSML-INGEST-TABLE/parse_markdown_tables]
 pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
-    let mut tables = Vec::with_capacity(
-        deap_core::markdown_ast::parse_markdown_ast(&lines.join("\n"))
-            .tables
-            .len(),
-    );
-    let mut in_table = false;
-    let (mut raw_headers, mut norm_headers, mut units, mut rows) =
-        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
-    let mut flush_table = |in_tbl: &mut bool,
-                           raw_h: &mut Vec<String>,
-                           norm_h: &mut Vec<String>,
-                           u: &mut Vec<String>,
-                           r: &mut Vec<BTreeMap<String, String>>| {
-        if *in_tbl && !raw_h.is_empty() && !r.is_empty() {
-            tables.push(MarkdownTable {
-                raw_headers: raw_h.clone(),
-                normalized_headers: norm_h.clone(),
-                units: u.clone(),
-                rows: r.clone(),
-            });
+    let markdown = replace_br_tags_with_space(&prepare_table_markdown(lines));
+    let ast = parse_markdown_ast(&markdown);
+    let mut tables = Vec::with_capacity(ast.tables.len());
+    for tbl in ast.tables {
+        if tbl.headers.is_empty() || tbl.rows.is_empty() {
+            continue;
         }
-        *in_tbl = false;
-        raw_h.clear();
-        norm_h.clear();
-        u.clear();
-        r.clear();
-    };
-    let (mut i, n) = (0, lines.len());
-    while i < n {
-        let line = lines.get(i).copied().unwrap_or("").trim();
-        if line.contains('|') {
-            let cells: Vec<String> = line
-                .trim_matches('|')
-                .split('|')
-                .map(|c| c.trim().to_string())
-                .collect();
-            let is_delimiter =
-                !cells.is_empty() && cells.iter().all(|c| is_table_delimiter_cell(c));
-            if is_delimiter && !in_table {
-                if i > 0 {
-                    let prev_line = lines.get(i - 1).copied().unwrap_or("").trim();
-                    if prev_line.contains('|') {
-                        let prev_cells: Vec<String> = prev_line
-                            .trim_matches('|')
-                            .split('|')
-                            .map(|c| c.trim().to_string())
-                            .collect();
-                        raw_headers = prev_cells.clone();
-                        norm_headers = prev_cells.iter().map(|c| normalize_col(c)).collect();
-                        units = prev_cells
-                            .iter()
-                            .map(|c| extract_unit_from_header_or_val(c).1)
-                            .collect();
-                        in_table = true;
-                        i += 1;
-                        continue;
-                    }
-                }
-            } else if is_delimiter && in_table {
-                i += 1;
+        let raw_headers = tbl.headers;
+        let normalized_headers: Vec<String> = raw_headers.iter().map(|c| normalize_col(c)).collect();
+        let units: Vec<String> = raw_headers.iter().map(|c| extract_unit_from_header_or_val(c).1).collect();
+        let mut rows = Vec::with_capacity(tbl.rows.len());
+        for raw_row in tbl.rows {
+            if raw_row.is_empty() || raw_row.iter().all(|c| is_table_delimiter_cell(c)) {
                 continue;
-            } else if in_table {
-                let mut row_dict = BTreeMap::new();
-                for (idx, norm_col) in norm_headers.iter().enumerate() {
-                    let val = cells
-                        .get(idx)
-                        .map(|c| clean_cell_value(c))
-                        .unwrap_or_default();
-                    row_dict.insert(norm_col.clone(), val);
-                }
-                rows.push(row_dict);
-                i += 1;
-                continue;
-            } else if let Some(raw_next) = lines.get(i + 1).copied().filter(|nl| nl.contains('|')) {
-                let next_cells: Vec<String> = raw_next
-                    .trim()
-                    .trim_matches('|')
-                    .split('|')
-                    .map(|c| c.trim().to_string())
-                    .collect();
-                if !next_cells.is_empty() && next_cells.iter().all(|c| is_table_delimiter_cell(c))
-                {
-                    flush_table(
-                        &mut in_table,
-                        &mut raw_headers,
-                        &mut norm_headers,
-                        &mut units,
-                        &mut rows,
-                    );
-                    raw_headers = cells.clone();
-                    norm_headers = cells.iter().map(|c| normalize_col(c)).collect();
-                    units = cells
-                        .iter()
-                        .map(|c| extract_unit_from_header_or_val(c).1)
-                        .collect();
-                    in_table = true;
-                    i += 2;
-                    continue;
-                }
             }
-        } else if in_table {
-            flush_table(
-                &mut in_table,
-                &mut raw_headers,
-                &mut norm_headers,
-                &mut units,
-                &mut rows,
-            );
+            let row_dict = normalized_headers
+                .iter()
+                .enumerate()
+                .map(|(idx, col)| (col.clone(), raw_row.get(idx).map(|c| clean_cell_value(c)).unwrap_or_default()))
+                .collect();
+            rows.push(row_dict);
         }
-        i += 1;
+        if !rows.is_empty() {
+            tables.push(MarkdownTable { raw_headers, normalized_headers, units, rows });
+        }
     }
-    flush_table(
-        &mut in_table,
-        &mut raw_headers,
-        &mut norm_headers,
-        &mut units,
-        &mut rows,
-    );
     tables
 }
 
@@ -623,21 +432,13 @@ mod tests {
     }
 
     #[test]
-    fn test_clean_cell_value() {
+    fn test_clean_cell_numeric_and_range() {
         assert_eq!(clean_cell_value("[Standard 101](https://example.com)"), "Standard 101");
         assert_eq!(clean_cell_value("Line 1<br/>Line 2"), "Line 1 Line 2");
         assert_eq!(clean_cell_value("<b>Bold</b> text"), "Bold text");
-    }
-
-    #[test]
-    fn test_parse_numeric_with_unit() {
         assert_eq!(parse_numeric_with_unit("1800.0 kg"), (Some(1800.0), Some("kg".to_string()), None));
         assert_eq!(parse_numeric_with_unit("42"), (Some(42.0), Some(String::new()), Some(42)));
         assert_eq!(parse_numeric_with_unit("0x1A").2, Some(26));
-    }
-
-    #[test]
-    fn test_parse_range_bounds() {
         assert_eq!(parse_range_bounds("[0.0, 100.0]"), (Some(0.0), Some(100.0)));
         assert_eq!(parse_range_bounds("-20.0 to 60.0"), (Some(-20.0), Some(60.0)));
         assert_eq!(parse_range_bounds("18.0 .. 25.2"), (Some(18.0), Some(25.2)));
