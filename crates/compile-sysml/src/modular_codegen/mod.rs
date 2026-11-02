@@ -34,7 +34,11 @@ pub mod emitters;
 #[rustfmt::skip]
 pub mod generated;
 pub mod lowering;
-pub use crate::syn_codegen::{format_and_verify_rust_module_ast, synthesize_typed_domain_struct_tokens, SynCodegenFixedPointReceipt};
+pub use crate::syn_codegen::{
+    format_and_verify_rust_module_ast, synthesize_prettyplease_unit,
+    synthesize_typed_domain_struct_tokens, verify_stage_fixed_point, StageTreeDigestManifest,
+    SynCodegenFixedPointReceipt,
+};
 
 /// Projects self-hosted Stage-1 `ModularityBoundsSpec` thresholds into runtime `ModularityBounds`.
 ///

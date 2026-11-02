@@ -36,6 +36,7 @@ pub mod docstring;
 pub mod docstring_cst;
 pub mod driver;
 pub mod flutter_codegen;
+pub mod formal_harnesses;
 pub mod lexer;
 pub mod modular_codegen;
 pub mod parser;
@@ -58,7 +59,10 @@ pub use lexer::token::{Span, Token, TokenKind};
 pub use parser::expressions::{parse_expression, BinaryOp, Expr, ExpressionParser, UnaryOp};
 pub use parser::grammar::{discover_sysml_files, merge_package_defs, parse_sysml_directory, parse_sysml_tree, ParseError, SysmlParser};
 pub use syn_codegen::{
-    format_and_verify_rust_module_ast, synthesize_typed_domain_struct_tokens, SynCodegenFixedPointReceipt};
+    format_and_verify_rust_module_ast, synthesize_prettyplease_unit,
+    synthesize_typed_domain_struct_tokens, verify_stage_fixed_point, StageTreeDigestManifest,
+    SynCodegenFixedPointReceipt,
+};
 pub use semantic::digest::{
     compute_file_manifest, count_structural_elements, generate_digest, write_atomic,
     write_digest_atomic, FileDigestEntry, SchemaDigest,
