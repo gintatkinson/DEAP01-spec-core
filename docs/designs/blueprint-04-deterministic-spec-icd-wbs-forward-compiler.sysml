@@ -4,16 +4,16 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
     attribute Requirement_ID : String = "REQ-0604";
     attribute Title : String = "Deterministic Specification, ICD, and WBS Forward Compiler Blueprint";
     attribute Status : String = "Approved";
-    attribute Target_Crates : String = "crates/compile-sysml, crates/reconcile-backlog, crates/ingest-sysml, crates/assemble-conops, crates/verify-baseline";
+    attribute Target_Crates : String = "crates/deap-core, crates/compile-sysml, crates/reconcile-backlog, crates/ingest-sysml, crates/assemble-conops, crates/verify-baseline";
     attribute Tracked_Issues : String = "#497, #506, #507";
     attribute Generation_Mode : String = "subagent";
-    attribute Specification_Source : String = "crates/compile-sysml/src/sync/forward/mod.rs:1585-2078 / #507";
-    doc /* `CmarkTable`, `FrontmatterDoc`, `ChecklistDoc`, `SpecSuiteBundle`, `IcdDocumentPair`, `WbsExportBundle`, and `ConopsUnitDoc` with `camino::Utf8PathBuf` paths and `toml_edit::DocumentMut`. */
-    attribute Layer_1_Domain_State_Data_Model : String = "Lossless Markdown AST, typed frontmatter DOM, and `salsa` query models";
-    doc /* `parse_markdown_tables`, `parse_frontmatter_metadata`, `emit_lossless_markdown`, `project_agile_spec_suite`, `compile_logical_icd_matrix`, `synthesize_mil_std_881e_wbs`, and `reconcile_markdown_backlog` with fail-closed diagnostics (`E0100..E0400`). */
-    attribute Layer_2_Logic_State_Management : String = "pulldown-cmark` event extraction, `salsa` derived projection queries, and comment-safe reconciliation";
-    doc /* `compile-sysml`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`, and `verify-baseline check-blueprint` CLI actuators emitting deterministic specs, ICDs, WBS exports, and `.digest.json` receipts. */
-    attribute Layer_3_Presentation_Actuator_Interface_Binding : String = "Forward compiler CLI actuators, CommonMark file serialization, and baseline quality gates";
+    attribute Specification_Source : String = "crates/compile-sysml/src/lib.rs:1-60 / #507";
+    doc /* `CmarkTable`, `FrontmatterDoc`, `ChecklistDoc`, `SpecSuiteBundle`, `IcdDocumentPair`, `WbsExportBundle`, and `ConopsUnitDoc` with `camino::Utf8PathBuf` paths and `toml_edit::DocumentMut` (`< 380` exec SLOC per submodule). */
+    attribute Layer_1_Domain_State_Data_Model : String = "Lossless Markdown AST, typed frontmatter DOM, and `salsa` query models across `deap-core` and `ingest-sysml` crates";
+    doc /* `parse_markdown_tables`, `parse_frontmatter_metadata`, `emit_lossless_markdown`, `project_agile_spec_suite`, `compile_logical_icd_matrix`, `synthesize_mil_std_881e_wbs`, `assemble_conops_master`, and `reconcile_markdown_backlog` with fail-closed diagnostics (`E0100..E0400`, `< 380` exec SLOC per submodule). */
+    attribute Layer_2_Logic_State_Management : String = "Event-driven `pulldown-cmark` extraction, `salsa` derived Spec/ICD/WBS/ConOps projection queries, and comment-safe reconciliation across `compile-sysml`, `reconcile-backlog`, and `assemble-conops` crates";
+    doc /* `compile-sysml`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`, and `verify-baseline check-blueprint` CLI actuators emitting deterministic specs, ICDs, ConOps master documents, WBS exports, and `.digest.json` receipts (`< 380` exec SLOC per submodule). */
+    attribute Layer_3_Presentation_Actuator_Interface_Binding : String = "Forward compiler CLI actuators, CommonMark file serialization, and baseline quality gates across all 6 crates including `verify-baseline` runner";
     doc /* project_agile_spec_suite(db, root_pkg) */
     action def project_agile_spec_suite;
     doc /* Evaluate salsa query_agile_specs(root_pkg) */

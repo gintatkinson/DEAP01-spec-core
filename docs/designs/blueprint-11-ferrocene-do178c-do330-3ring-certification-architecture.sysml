@@ -7,7 +7,7 @@ package BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage
     attribute Target_Crates : String = "crates/deap-core, crates/compile-sysml, crates/verify-baseline";
     attribute Tracked_Issues : String = "#742";
     attribute Generation_Mode : String = "subagent";
-    attribute Specification_Source : String = "docs/architecture/blueprints/DEAP_MULTI_TOOLCHAIN_SYNTHESIS_ARCHITECTURE.md:1-30";
+    attribute Specification_Source : String = "Cargo.toml:1-34 / #742";
     doc /* [unit: `versions`] */
     attribute max_toolchain_version_drift : Real;
     doc /* [unit: `files`] */
@@ -71,7 +71,7 @@ package BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage
     doc /* UUIDv5:  | Complexity: Class P | Standard: IEEE 29148-2018 / RFC 2119 | Diagnostics: E0100 */
     requirement def REQ_0611_BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C {
         id = "REQ-0611";
-        text = "FerroceneThreeRingCertificationArchitecture (**REQ-0611** / BP-11 / DEAP-BP-DET-11, UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430cb, Class P linear AST, ELF symbol-table, and LLVM coverage-profile verification complexity, governed by RTCA DO-178C DAL-A through DAL-E, RTCA DO-330 TQL-1 and TQL-5, RTCA";
+        text = "FerroceneThreeRingCertificationArchitecture (**REQ-0611** / BP-11 / DEAP-BP-DET-11, UUIDv5: 6ba7b810-9dad-11d1-80b4-00c04fd430cb, Class P linear AST, ELF symbol-table, and LLVM coverage-profile verification complexity, governed by RTCA DO-178C DAL-A through DAL-E, RTCA DO-330 TQL-1 and TQL-5, RTCA";
         attribute uuidv5 : String = "";
         attribute complexity_class : String = "Class P";
         attribute governing_standard : String = "IEEE 29148-2018 / RFC 2119";

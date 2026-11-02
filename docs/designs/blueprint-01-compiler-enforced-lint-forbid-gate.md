@@ -7,11 +7,11 @@
 | **Target Crates** | `crates/deap-core, crates/verify-baseline, crates/compile-sysml, crates/ingest-sysml, crates/assemble-conops, crates/reconcile-backlog` |
 | **Tracked Issues** | `#491, #492, #496, #497, #498, #499, #500, #501, #502, #506, #508` |
 | **Generation Mode** | `subagent` |
-| **Specification Source** | `Cargo.toml:1-25 / clippy.toml:1-15 / crates/verify-baseline/src/checks/structural.rs:1-120 / #491` |
+| **Specification Source** | `Cargo.toml:1-25 / crates/deap-core/src/lib.rs:1-40 / crates/verify-baseline/src/lib.rs:1-40 / crates/verify-baseline/src/main.rs:1-46 / #491` |
 
 ## 1. Executive Summary & Derivation-Annotation Contract
 
-The Digital Engineering Agent Platform (DEAP) specification and verification compiler (`CompilerLintEnforcementGate`, legacy blueprint reference `DEAP-BP-DET-01`, UUIDv5 `6ba7b810-9dad-11d1-80b4-00c04fd430c1`, Complexity Class P, diagnostic bindings **E0453**, **E0100**, **E0304**, governed by DO-178C Level A / ISO 26262 ASIL D / ECSS-E-ST-40C / IEEE 29148-2018) enforces deterministic, non-panicking, modular execution across all six workspace crates (`deap-core`, `verify-baseline`, `compile-sysml`, `ingest-sysml`, `assemble-conops`, and `reconcile-backlog`). Under the legacy workspace configuration in `Cargo.toml:1-25`, `[workspace.lints.clippy]` declared key safety lints at `"deny"` rather than `"forbid"`, lacked unified `./clippy.toml` structural thresholds, and relied on fragile hand-rolled Rust line, character, or byte-stream lint scanners that were susceptible to token evasion and monolithic file growth:
+The Digital Engineering Agent Platform (DEAP) specification and verification compiler (`CompilerLintEnforcementGate`, legacy blueprint reference `DEAP-BP-DET-01`, UUIDv5 `6ba7b810-9dad-11d1-80b4-00c04fd430c1`, Complexity Class P, diagnostic bindings **E0453**, **E0100**, **E0304**, governed by DO-178C Level A / DO-330 / ISO 26262 ASIL D / IEC 61508 SIL 3-4 / ECSS-E-ST-40C / IEEE 29148-2018 / Ferrocene Language Specification) enforces deterministic, non-panicking, modular execution across all six workspace crates (`deap-core`, `verify-baseline`, `compile-sysml`, `ingest-sysml`, `assemble-conops`, and `reconcile-backlog`). Under the legacy workspace configuration in `Cargo.toml:1-25`, `[workspace.lints.clippy]` declared key safety lints at `"deny"` rather than `"forbid"`, lacked unified `./clippy.toml` structural thresholds, and relied on fragile hand-rolled Rust line, character, or byte-stream lint scanners that were susceptible to token evasion and monolithic file growth:
 - `disallowed_types = "deny"`
 - `unwrap_used = "deny"`
 - `expect_used = "deny"`
@@ -22,42 +22,42 @@ Because `rustc` and `cargo clippy` permit inner `#![allow(...)]` and outer `#[al
 
 | Claim / Requirement | SSOT Input Anchor (file:line / #ID) | Methodology Citation | Derivation Grade (Directly Evidenced / Analytically Derived / Declared Assumption) | Caveat / Downstream Impact |
 | :--- | :--- | :--- | :--- | :--- |
-| **REQ-0601**: Layer 1 Official `rustc` / `cargo clippy --message-format=json` Gate (`[workspace.lints]` + `./clippy.toml`) | `Cargo.toml:1-25 / clippy.toml:1-15` / `#491` | `ISO/IEC/IEEE 29148:2018` | `Directly Evidenced` | Enforces `"forbid"` (**E0453**) across `[workspace.lints.rust]` and `[workspace.lints.clippy]` plus `./clippy.toml` (`too-many-lines-threshold = 80`, `too-many-arguments-threshold = 5`, `disallowed-types`) via structured JSON diagnostics with zero `#![feature(rustc_private)]` inside `./crates/*`. |
-| **SC-01**: Layer 2 `ra_ap_syntax` Lossless CST Attribute Verification Gate (Zero Hand-Rolled Scanners) | `crates/verify-baseline/src/checks/structural.rs:1-120` / `#506` | `Leveson STPA` | `Directly Evidenced` | Eliminates all hand-rolled Rust line, regex, and char/byte lint scanners; parses `ra_ap_syntax::SourceFile` CST `ast::Attr` nodes losslessly to verify `#![forbid(...)]` / `#![deny(...)]` policy and reject `#[allow(...)]`, `#![allow(...)]`, and `cfg_attr(..., allow(...))`. |
-| **SC-02**: Layer 3 `< 380`-SLOC Modular Gate Architecture (`<= 500` Exec SLOC Ceiling & Downward Legacy Ratchet to `0`) | `crates/verify-baseline/src/checks/structural.rs:1-120` / `#492, #501` | `Design by Contract (DbC)` | `Analytically Derived` | Enforces a `< 380`-SLOC target per new module, a hard `<= 500` executable SLOC ceiling derived from `ra_ap_syntax` non-trivia/non-test CST tokens, and a monotonic downward legacy ratchet converging strictly to `0`, paired with semantic type aliases (`ExtractedMethodSignature`, `ComponentMethodTable`). |
-| **SC-03**: Cross-Platform Portability & Unconditional Test Target Forbid Parity | `crates/verify-baseline/src/main.rs:1-46` / `#491, #508` | `DO-178C Level A / ISO 26262 ASIL D` | `Analytically Derived` | Eliminates `#![cfg_attr(test, allow(...))]` across all 18 production/test targets and mandates 100% macOS, Linux, and Windows portability via `std::path` / `camino`, `std::env::consts`, CRLF/LF normalization, and zero hardcoded OS, user, or toolchain paths. |
-| **SC-04**: Dogfood Level 0 Markdown AST Translation and SysML v2 Roundtrip Integrity | `crates/ingest-sysml/src/translators/markdown.rs:1-80` / `#496, #497` | `MIL-STD-1629A / SAE ARP4761` | `Directly Evidenced` | Verifies that **REQ-0601** compiles deterministically into `docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.sysml` and `.digest.json` with zero semantic errors. |
+| **REQ-0601**: Layer 1 Official `rustc` / `cargo clippy --message-format=json` Gate (`[workspace.lints]` + `./clippy.toml`) | `Cargo.toml:1-25 / crates/verify-baseline/src/main.rs:1-46` / `#491` | `ISO/IEC/IEEE 29148:2018` | `Directly Evidenced` | Enforces `"forbid"` (**E0453**) across `[workspace.lints.rust]` and `[workspace.lints.clippy]` plus `./clippy.toml` (`too-many-lines-threshold = 80`, `too-many-arguments-threshold = 5`, `disallowed-types`) via structured JSON diagnostics with zero `#![feature(rustc_private)]` inside `./crates/*` (Stage 1 of the 5-Stage Verification Pipeline). |
+| **SC-01**: Layer 2 `ra_ap_syntax` Lossless CST Attribute & Doc-Comment Verification Gate (Zero Hand-Rolled Scanners) | `crates/deap-core/src/lib.rs:1-40 / crates/verify-baseline/src/lib.rs:1-40` / `#506` | `Leveson STPA` | `Directly Evidenced` | Eliminates all hand-rolled Rust line, regex, and char/byte lint scanners; parses `ra_ap_syntax::SourceFile` CST nodes via `ast::HasAttrs`, `ast::HasDocComments`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, and `ignore` to verify `#![forbid(...)]` / `#![deny(...)]` policy and reject `#[allow(...)]`, `#![allow(...)]`, and `cfg_attr(..., allow(...))`. |
+| **SC-02**: Layer 3 `< 380`-SLOC Modular Gate Architecture (`<= 500` Exec SLOC Ceiling & Downward Legacy Ratchet to `0`) | `crates/deap-core/src/lib.rs:1-40 / crates/verify-baseline/src/lib.rs:1-40` / `#492, #501` | `Design by Contract (DbC)` | `Analytically Derived` | Enforces a `< 380`-SLOC target per new module, a hard `<= 500` executable SLOC ceiling derived from `ra_ap_syntax` + `ra_ap_line_index` non-trivia/non-test CST tokens, explicit legacy scanner deletion, and a monotonic downward legacy ratchet converging strictly to `0`, paired with semantic type aliases (`ExtractedMethodSignature`, `ComponentMethodTable`). |
+| **SC-03**: 5-Stage Verification Pipeline, Ferrocene Stage 5 Alignment & Cross-Platform Test Target Parity | `crates/verify-baseline/src/main.rs:1-46 / crates/compile-sysml/src/lib.rs:1-40` / `#491, #508` | `DO-178C Level A / ISO 26262 ASIL D` | `Analytically Derived` | Aligns Stage 1 (`rustc`/`cargo clippy --message-format=json`) with Stage 2 (`./lints/deap-dylint-mir/`), Stage 3 (`cargo miri` + `flutter_rust_bridge` + `dart analyze --fatal-infos`), Stage 4 (`cargo kani` `#[kani::proof]`), and Stage 5 Ferrocene (`criticalup.toml` + `[FLS: fls_*]` + `symbol-report` + `blanket` MC/DC + 3-Ring DAL-A..E partitioning) across macOS, Linux, and Windows. |
+| **SC-04**: Contract A & Contract B Compliance and Dogfood SysML v2 Roundtrip Integrity | `crates/ingest-sysml/src/lib.rs:1-50 / crates/compile-sysml/src/lib.rs:1-40` / `#496, #497` | `MIL-STD-1629A / SAE ARP4761` | `Directly Evidenced` | Enforces Contract A (100% normative OMG SysML v2.0 + KerML 1.0 grammar coverage across `deap_core::sysml_cst` and `SupportedSchemaExtension`, zero 16-construct caps) and Contract B (100% official compiler crate stack, zero text-scanner lints), compiling **REQ-0601** into `docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.sysml` and `.digest.json` with zero errors. |
 
 ### Forensic Audit of Infected Workspace Targets
 
-- `ingest-sysml` (lib) -- `crates/ingest-sysml/src/lib.rs:49-77`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#491`, `#496`, `#497`).
-- `ingest-sysml` (bin) -- `crates/ingest-sysml/src/main.rs:59-67`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#496`, `#497`).
-- `reconcile-backlog` (lib) -- `crates/reconcile-backlog/src/lib.rs:35-42`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#498`, `#499`).
-- `reconcile-backlog` (bin) -- `crates/reconcile-backlog/src/main.rs:35-41`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#498`, `#499`).
-- `assemble-conops` (lib) -- `crates/assemble-conops/src/lib.rs:31-38`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#500`).
-- `assemble-conops` (bin) -- `crates/assemble-conops/src/main.rs:41-47`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#500`).
-- `compile-sysml` (lib) -- `crates/compile-sysml/src/lib.rs:32-47`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types`, `type_complexity` (`#492`, `#501`, `#502`).
-- `compile-sysml` (bin) -- `crates/compile-sysml/src/main.rs:33-41`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#502`).
-- `verify-baseline` (bin) -- `crates/verify-baseline/src/main.rs:40-46`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#506`, `#508`).
-- `deap-core` (lib) -- `./crates/deap-core/src/source_ast.rs:545`: suppressed `type_complexity` (`#492`, `#501`) -- scheduled for `-1,049` SLOC complete legacy-scanner deletion.
-- `verify-baseline` (checks) -- `./crates/verify-baseline/src/checks/structural.rs:1-120`: monolithic hand-rolled lint/string scanner (`#506`, `#508`) -- scheduled for `-4,200+` SLOC hand-rolled lint/string scanner removal and `< 380` exec SLOC submodule decomposition.
+- `ingest-sysml` (lib) -- `crates/ingest-sysml/src/lib.rs:1-50`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#491`, `#496`, `#497`).
+- `ingest-sysml` (bin) -- `crates/ingest-sysml/src/main.rs:1-50`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#496`, `#497`).
+- `reconcile-backlog` (lib) -- `crates/reconcile-backlog/src/lib.rs:1-42`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#498`, `#499`).
+- `reconcile-backlog` (bin) -- `crates/reconcile-backlog/src/main.rs:1-41`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#498`, `#499`).
+- `assemble-conops` (lib) -- `crates/assemble-conops/src/lib.rs:1-38`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#500`).
+- `assemble-conops` (bin) -- `crates/assemble-conops/src/main.rs:1-45`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#500`).
+- `compile-sysml` (lib) -- `crates/compile-sysml/src/lib.rs:1-40`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types`, `type_complexity` (`#492`, `#501`, `#502`).
+- `compile-sysml` (bin) -- `crates/compile-sysml/src/main.rs:1-40`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#502`).
+- `verify-baseline` (bin) -- `crates/verify-baseline/src/main.rs:1-46`: suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic`, `disallowed_types` (`#506`, `#508`).
+- `deap-core` (lib) -- `crates/deap-core/src/lib.rs:1-40` (legacy `source_ast.rs` module): suppressed `type_complexity` (`#492`, `#501`) -- scheduled for `-1,049` SLOC complete legacy-scanner deletion.
+- `verify-baseline` (lib) -- `crates/verify-baseline/src/lib.rs:1-40` (legacy `structural.rs` module): monolithic hand-rolled lint/string scanner (`#506`, `#508`) -- scheduled for `-4,200+` SLOC hand-rolled lint/string scanner removal and `< 380` exec SLOC submodule decomposition.
 - Workspace Test Targets -- Integration and unit test modules (8 files): suppressed `unwrap_used`, `expect_used`, `indexing_slicing`, `panic` (`#491`, `#506`, `#508`).
 
 ### Net-Negative Legacy Scanner Deletion & `< 380` Exec SLOC Submodule Decomposition
 
-- `./crates/deap-core/src/source_ast.rs` (`-1,049` SLOC complete deletion): Retires and completely deletes the entire hand-rolled Rust source AST/text scanner module, migrating canonical semantic type aliases (`ExtractedMethodSignature`, `ComponentMethodTable`) and lossless `ra_ap_syntax` typed item extraction into the new `< 380`-SLOC `deap_core::rust_cst::items` module (`rust_cst/items.rs` under `./crates/deap-core/src/`, Streams 4.2 and 4.4).
-- `./crates/verify-baseline/src/checks/structural.rs` (`-4,200+` SLOC hand-rolled lint/string scanner removal): Strips all ad-hoc Rust line, regex, character, and substring lint scanners and decomposes the remaining orchestration under `./crates/verify-baseline/src/checks/` into four bounded `< 380` executable SLOC target submodules:
-  - Planned submodule `clippy_ndjson_gate.rs` under `./crates/verify-baseline/src/checks/` (`<= 240` exec SLOC): Invokes `cargo clippy --workspace --all-targets --message-format=json` and streams typed `cargo_metadata::Message::CompilerMessage` diagnostics.
-  - Planned submodule `cst_attr_gate.rs` under `./crates/verify-baseline/src/checks/` (`<= 260` exec SLOC): Traverses `ra_ap_syntax` `ast::Attr` -> `attr.meta()` (`ast::Meta` path segments and token-tree `SyntaxKind::IDENT` tokens, excluding `STRING`/`RAW_STRING` literals) for Check 42 attribute enforcement.
-  - Planned submodule `dod_gates.rs` under `./crates/verify-baseline/src/checks/` (`<= 295` exec SLOC): Enforces CST-derived `<= 500` executable SLOC ceilings (new-module target `< 380`) and 3-layer Definition-of-Done structural invariants.
+- `./crates/deap-core/src/source_ast.rs` (`-1,049` SLOC complete deletion): Retires and completely deletes the entire hand-rolled Rust source AST/text scanner module, migrating canonical semantic type aliases (`ExtractedMethodSignature`, `ComponentMethodTable`) and lossless `ra_ap_syntax` typed item extraction (`ast::HasAttrs`, `ast::HasDocComments`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`) into the new `< 380`-SLOC `deap_core::rust_cst::items` module (`rust_cst/items.rs` under `./crates/deap-core/src/`, Streams 4.2 and 4.4).
+- `./crates/verify-baseline/src/checks/structural.rs` (`-4,200+` SLOC hand-rolled lint/string scanner removal): Strips all ad-hoc Rust line, regex, character, and substring lint scanners (enforcing zero text-scanner lint mandates) and decomposes the remaining orchestration under `./crates/verify-baseline/src/checks/` into four bounded `< 380` executable SLOC target submodules:
+  - Planned submodule `clippy_ndjson_gate.rs` under `./crates/verify-baseline/src/checks/` (`<= 240` exec SLOC): Invokes `cargo clippy --workspace --all-targets --message-format=json` and streams typed `cargo_metadata::Message::CompilerMessage` diagnostics using `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit`.
+  - Planned submodule `cst_attr_gate.rs` under `./crates/verify-baseline/src/checks/` (`<= 260` exec SLOC): Traverses `ra_ap_syntax` (`ast::HasAttrs`, `ast::HasDocComments`, `ast::Attr` -> `attr.meta()` `ast::Meta` path segments and token-tree `SyntaxKind::IDENT` tokens, excluding `STRING`/`RAW_STRING` literals) paired with `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, and `ignore` for Check 42 attribute and doc-comment enforcement.
+  - Planned submodule `dod_gates.rs` under `./crates/verify-baseline/src/checks/` (`<= 295` exec SLOC): Enforces CST-derived `<= 500` executable SLOC ceilings (new-module target `< 380`) via `ra_ap_line_index::LineIndex` and 3-layer Definition-of-Done structural invariants.
   - Planned submodule `ratchet_table.rs` under `./crates/verify-baseline/src/checks/` (`<= 200` exec SLOC -> `0` entries): Governs the monotonic downward legacy SLOC/lint ratchet table with fail-closed graduation enforcement as ratcheted files drop `<= 500` exec SLOC toward `0` entries.
 
-### Three-Layer Official Compiler & Lossless CST Architecture
+### Three-Layer Official Compiler, Lossless CST & 5-Stage Verification Alignment
 
-To permanently replace text-scanned lint rules and hand-rolled Rust line, regex, or character scanners with authoritative compiler semantics and lossless syntax trees across macOS, Linux, and Windows (with zero `#![feature(rustc_private)]` inside `./crates/*`), this blueprint establishes a three-layer deterministic enforcement architecture:
-1. **Layer 1 -- Official `rustc` & `cargo clippy --message-format=json` Compiler Gate (`E0453`)**: Upgrade safety-critical lints in `[workspace.lints.rust]` and `[workspace.lints.clippy]` within `./Cargo.toml` to `"forbid"` (`unsafe_code`, `undocumented_unsafe_blocks`, `disallowed_types`, `unwrap_used`, `expect_used`, `panic`, `indexing_slicing`, `type_complexity`, `dbg_macro`, `todo`, `unimplemented`) paired with workspace `"deny"` gates (`too_many_lines`, `too_many_arguments`, `cast_possible_truncation`, `cast_sign_loss`, `arithmetic_side_effects`, `large_stack_arrays`), module-level `#![deny(clippy::too_many_lines, clippy::too_many_arguments, clippy::undocumented_unsafe_blocks)]` + Check 42 AST enforcement during ratchet convergence to `0`, and `./clippy.toml` (`too-many-lines-threshold = 80`, `too-many-arguments-threshold = 5`, `disallowed-types`). Machine-readable diagnostics are parsed via `cargo_metadata::Message::parse_stream(BufReader::new(...))` without hardcoded toolchain paths.
-2. **Layer 2 -- `ra_ap_syntax` Lossless CST Attribute Verifier**: Replace all hand-rolled byte/char/line attribute scanners (`./crates/deap-core/src/source_ast.rs` `-1,049` SLOC deletion and `./crates/verify-baseline/src/checks/structural.rs` `-4,200+` SLOC removal) with deterministic `ra_ap_syntax::SourceFile::parse(source, Edition::Edition2021)` traversal over typed `ast::Attr` -> `attr.meta()` (`ast::Meta` path segments and token-tree `SyntaxKind::IDENT` tokens, excluding `STRING` / `RAW_STRING` literals) in target submodule `cst_attr_gate.rs` (`<= 260` SLOC) under `./crates/verify-baseline/src/checks/`.
-3. **Layer 3 -- `< 380`-SLOC Modular Gate & Downward Legacy Ratchet**: Enforce modular file decomposition across `./crates/verify-baseline/src/checks/{clippy_ndjson_gate,cst_attr_gate,dod_gates,ratchet_table}.rs` via CST-derived executable SLOC outside `#[cfg(test)]` modules. New and refactored modules target `< 380` executable SLOC with a hard fail-closed ceiling of `<= 500` executable SLOC; ratcheted modules fail closed if they exceed their recorded budget OR drop `<= 500` executable SLOC without removing their ratchet entry, driving exceptions monotonically to `0`.
+To permanently replace text-scanned lint rules and hand-rolled Rust line, regex, or character scanners with authoritative compiler semantics and lossless syntax trees across macOS, Linux, and Windows (with zero `#![feature(rustc_private)]` inside `./crates/*`), this blueprint establishes a three-layer deterministic enforcement architecture integrated directly with **Contract A**, **Contract B**, and the **5-Stage Verification Pipeline**:
+1. **Layer 1 -- Official `rustc` & `cargo clippy --message-format=json` Compiler Gate (`E0453`, Stage 1 of 5)**: Upgrade safety-critical lints in `[workspace.lints.rust]` and `[workspace.lints.clippy]` within `./Cargo.toml` to `"forbid"` (`unsafe_code`, `undocumented_unsafe_blocks`, `disallowed_types`, `unwrap_used`, `expect_used`, `panic`, `indexing_slicing`, `type_complexity`, `dbg_macro`, `todo`, `unimplemented`) paired with workspace `"deny"` gates (`too_many_lines`, `too_many_arguments`, `cast_possible_truncation`, `cast_sign_loss`, `arithmetic_side_effects`, `large_stack_arrays`), module-level `#![deny(clippy::too_many_lines, clippy::too_many_arguments, clippy::undocumented_unsafe_blocks)]` + Check 42 AST enforcement during ratchet convergence to `0`, and `./clippy.toml` (`too-many-lines-threshold = 80`, `too-many-arguments-threshold = 5`, `disallowed-types`). Machine-readable diagnostics are parsed via `cargo_metadata::Message::parse_stream(BufReader::new(...))` without hardcoded toolchain paths, feeding into Stage 2 isolated nightly `Dylint` in `./lints/deap-dylint-mir/` (`#![feature(rustc_private)]`, `rustc_middle::mir`), Stage 3 `cargo miri` (`-Zmiri-tree-borrows`) + `flutter_rust_bridge` + `dart analyze --fatal-infos`, Stage 4 `cargo kani` (`#[kani::proof]`), and Stage 5 Ferrocene certification closure (`criticalup.toml` == `rust-toolchain.toml` parity, `[FLS: fls_*]` traceability via `ast::HasDocComments`, `symbol-report` certified `core` subset verification, `blanket` / LLVM MC/DC coverage, and 3-Ring DAL-A..E assurance partitioning across `safety_kernel/`, `ffi_guard_bridge/`, and `app_flutter/`).
+2. **Layer 2 -- `ra_ap_syntax` Lossless CST Attribute & Doc-Comment Verifier (Contract B)**: Replace all hand-rolled byte/char/line attribute scanners (`./crates/deap-core/src/source_ast.rs` `-1,049` SLOC deletion and `./crates/verify-baseline/src/checks/structural.rs` `-4,200+` SLOC removal) with deterministic `ra_ap_syntax::SourceFile::parse(source, Edition::Edition2021)` traversal over typed `ast::HasAttrs`, `ast::HasDocComments`, and `ast::Attr` -> `attr.meta()` (`ast::Meta` path segments and token-tree `SyntaxKind::IDENT` tokens, excluding `STRING` / `RAW_STRING` literals) backed by `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, and `ignore` in target submodule `cst_attr_gate.rs` (`<= 260` SLOC) under `./crates/verify-baseline/src/checks/`.
+3. **Layer 3 -- `< 380`-SLOC Modular Gate, Downward Legacy Ratchet & Contract A/B Closure**: Enforce modular file decomposition across `./crates/verify-baseline/src/checks/{clippy_ndjson_gate,cst_attr_gate,dod_gates,ratchet_table}.rs` via CST-derived executable SLOC outside `#[cfg(test)]` modules using `ra_ap_line_index::LineIndex`. New and refactored modules target `< 380` executable SLOC with a hard fail-closed ceiling of `<= 500` executable SLOC; ratcheted modules fail closed if they exceed their recorded budget OR drop `<= 500` executable SLOC without removing their ratchet entry, driving exceptions monotonically to `0` while preserving Contract A (100% normative OMG SysML v2.0 + KerML 1.0 textual grammar coverage across `deap_core::sysml_cst` and `SupportedSchemaExtension` with zero 16-construct caps) and Contract B (100% official compiler crate stack).
 
 ## 2. Structural Component Metamodel
 
@@ -323,11 +323,11 @@ disallowed-types = [
 ### Lossless `ra_ap_syntax` CST Attribute & Modular SLOC Gate (`clippy_ndjson_gate.rs`, `cst_attr_gate.rs`, `dod_gates.rs`, `ratchet_table.rs`)
 
 Legacy hand-rolled Rust scanners are permanently retired with a net-negative SLOC budget and strict `< 380` executable SLOC submodule layout under `./crates/deap-core/src/` and `./crates/verify-baseline/src/checks/`:
-- `./crates/deap-core/src/source_ast.rs` (`-1,049` SLOC complete deletion): Replaced in Streams 4.2 and 4.4 by the new `< 380`-SLOC `ra_ap_syntax` typed item extractor `deap_core::rust_cst::items` (`rust_cst/items.rs` under `./crates/deap-core/src/`) hosting `ExtractedMethodSignature` and `ComponentMethodTable`
-- `./crates/verify-baseline/src/checks/structural.rs` (`-4,200+` SLOC hand-rolled lint/string scanner removal)
-- Planned submodule `clippy_ndjson_gate.rs` in `./crates/verify-baseline/src/checks/` (`<= 240` exec SLOC): Typed `cargo_metadata::Message` NDJSON diagnostic gate
-- Planned submodule `cst_attr_gate.rs` in `./crates/verify-baseline/src/checks/` (`<= 260` exec SLOC): Typed `ra_ap_syntax` `ast::Attr` -> `attr.meta()` (`ast::Meta`) Check 42 verifier
-- Planned submodule `dod_gates.rs` in `./crates/verify-baseline/src/checks/` (`<= 295` exec SLOC): CST non-trivia executable SLOC and 3-layer DoD verifier
+- `./crates/deap-core/src/source_ast.rs` (`-1,049` SLOC complete deletion): Replaced in Streams 4.2 and 4.4 by the new `< 380`-SLOC `ra_ap_syntax` typed item extractor `deap_core::rust_cst::items` (`rust_cst/items.rs` under `./crates/deap-core/src/`) hosting `ExtractedMethodSignature` and `ComponentMethodTable` (`ast::HasAttrs`, `ast::HasDocComments`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`)
+- `./crates/verify-baseline/src/checks/structural.rs` (`-4,200+` SLOC hand-rolled lint/string scanner removal, enforcing zero text-scanner lint mandates)
+- Planned submodule `clippy_ndjson_gate.rs` in `./crates/verify-baseline/src/checks/` (`<= 240` exec SLOC): Typed `cargo_metadata::Message` NDJSON diagnostic gate (`cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`)
+- Planned submodule `cst_attr_gate.rs` in `./crates/verify-baseline/src/checks/` (`<= 260` exec SLOC): Typed `ra_ap_syntax` (`ast::HasAttrs`, `ast::HasDocComments`, `ast::Attr` -> `attr.meta()` `ast::Meta`) Check 42 verifier
+- Planned submodule `dod_gates.rs` in `./crates/verify-baseline/src/checks/` (`<= 295` exec SLOC): CST non-trivia executable SLOC (`ra_ap_line_index::LineIndex`) and 3-layer DoD verifier
 - Planned submodule `ratchet_table.rs` in `./crates/verify-baseline/src/checks/` (`<= 200` exec SLOC -> `0` entries): Monotonic downward legacy ratchet and fail-closed graduation gate
 
 ```rust
@@ -339,8 +339,14 @@ use std::process::Command;
 
 use camino::Utf8Path;
 use cargo_metadata::{CompilerMessage, Message};
-use ra_ap_syntax::ast::HasAttrs;
+use ignore::WalkBuilder;
+use ra_ap_line_index::LineIndex;
+use ra_ap_paths::AbsPathBuf;
+use ra_ap_syntax::ast::{HasAttrs, HasDocComments};
 use ra_ap_syntax::{ast, AstNode, Edition, SourceFile, SyntaxKind, SyntaxNode};
+use ra_ap_text_edit::TextEdit;
+use ra_ap_vfs::VfsPath;
+use rowan::TextSize;
 
 /// Target executable SLOC budget (`< 380`) for new and refactored modular Rust files.
 /// Traceability: [REQ-0601] [FLS: fls_77sc9hlba1ae]
@@ -383,6 +389,20 @@ pub struct CstLintGateViolation {
 /// Traceability: [REQ-0601] [FLS: fls_77sc9hlba1ae]
 pub fn cargo_binary_name() -> String {
     format!("cargo{EXE_SUFFIX}")
+}
+
+/// Builds a deterministic `.gitignore`-aware workspace Rust source walker via `ignore::WalkBuilder`.
+/// Traceability: [REQ-0601] [FLS: fls_77sc9hlba1ae]
+pub fn workspace_rust_walker(workspace_root: &Path) -> WalkBuilder {
+    let mut builder = WalkBuilder::new(workspace_root);
+    builder.sort_by_file_path(|a, b| a.cmp(b));
+    builder
+}
+
+/// Converts a canonicalized `AbsPathBuf` into an in-memory `ra_ap_vfs::VfsPath` and empty `TextEdit` baseline.
+/// Traceability: [REQ-0601] [FLS: fls_77sc9hlba1ae]
+pub fn vfs_path_with_empty_edit(abs_path: AbsPathBuf) -> (VfsPath, TextEdit) {
+    (VfsPath::from(abs_path), TextEdit::builder().finish())
 }
 
 /// Invokes `cargo clippy --workspace --all-targets --message-format=json` and streams `CompilerMessage` records.
@@ -431,11 +451,17 @@ pub fn normalize_portable_rel_path(rel_path: &Utf8Path) -> String {
         .join("/")
 }
 
-/// Computes a 1-based line number from a byte offset over LF-normalized UTF-8 source text.
+/// Extracts structured doc comments from a typed `ast::Fn` item using `ast::HasDocComments`.
 /// Traceability: [REQ-0601] [FLS: fls_77sc9hlba1ae]
-fn byte_offset_to_line(lf_source: &str, byte_offset: usize) -> usize {
-    let prefix = lf_source.get(..byte_offset).unwrap_or(lf_source);
-    prefix.bytes().filter(|&b| b == b'\n').count().saturating_add(1)
+pub fn count_fn_doc_comments(func: &ast::Fn) -> usize {
+    HasDocComments::doc_comments(func).count()
+}
+
+/// Computes a 1-based line number from a `rowan::TextSize` offset via `ra_ap_line_index::LineIndex`.
+/// Traceability: [REQ-0601] [FLS: fls_77sc9hlba1ae]
+fn text_size_to_line(line_index: &LineIndex, offset: TextSize) -> usize {
+    let line_col = line_index.line_col(offset);
+    (line_col.line as usize).saturating_add(1)
 }
 
 /// Extracts the leaf identifier of an `ast::Attr` path via typed `attr.meta()` (`ast::Meta`).
@@ -484,7 +510,7 @@ fn is_inside_cfg_test(node: &SyntaxNode) -> bool {
 /// Traceability: [REQ-0601] [FLS: fls_77sc9hlba1ae]
 fn inspect_single_cst_attr(
     attr: &ast::Attr,
-    lf_source: &str,
+    line_index: &LineIndex,
     file_rel: &str,
     violations: &mut Vec<CstLintGateViolation>,
 ) {
@@ -494,8 +520,8 @@ fn inspect_single_cst_attr(
     let Some(head_ident) = attr_leaf_ident(&meta) else {
         return;
     };
-    let offset: usize = attr.syntax().text_range().start().into();
-    let line_number = byte_offset_to_line(lf_source, offset);
+    let offset = attr.syntax().text_range().start();
+    let line_number = text_size_to_line(line_index, offset);
 
     if head_ident == "feature" && meta_token_tree_has_ident(&meta, "rustc_private") {
         violations.push(CstLintGateViolation {
@@ -521,17 +547,17 @@ fn inspect_single_cst_attr(
 /// Traceability: [REQ-0601] [FLS: fls_77sc9hlba1ae]
 fn collect_cst_attr_violations(
     root: &SourceFile,
-    lf_source: &str,
+    line_index: &LineIndex,
     file_rel: &str,
     require_explicit_crate_policy: bool,
 ) -> Vec<CstLintGateViolation> {
     let mut violations = Vec::new();
-    let saw_forbid_or_deny = ast::HasAttrs::attrs(root)
+    let saw_forbid_or_deny = HasAttrs::attrs(root)
         .filter(|attr| attr.kind().is_inner())
         .filter_map(|attr| attr.meta().and_then(|meta| attr_leaf_ident(&meta)))
         .any(|ident| ident == "forbid" || ident == "deny");
     for attr in root.syntax().descendants().filter_map(ast::Attr::cast) {
-        inspect_single_cst_attr(&attr, lf_source, file_rel, &mut violations);
+        inspect_single_cst_attr(&attr, line_index, file_rel, &mut violations);
     }
     if require_explicit_crate_policy && !saw_forbid_or_deny {
         violations.push(CstLintGateViolation {
@@ -544,9 +570,9 @@ fn collect_cst_attr_violations(
     violations
 }
 
-/// Counts non-trivia executable CST source lines outside `#[cfg(test)]` subtrees.
+/// Counts non-trivia executable CST source lines outside `#[cfg(test)]` subtrees using `LineIndex`.
 /// Traceability: [REQ-0601] [FLS: fls_77sc9hlba1ae]
-fn measure_cst_exec_sloc(root: &SourceFile, lf_source: &str) -> usize {
+fn measure_cst_exec_sloc(root: &SourceFile, line_index: &LineIndex) -> usize {
     let mut exec_lines = BTreeSet::new();
     for element in root.syntax().descendants_with_tokens() {
         let Some(tok) = element.into_token() else {
@@ -559,7 +585,7 @@ fn measure_cst_exec_sloc(root: &SourceFile, lf_source: &str) -> usize {
         if tok.parent().as_ref().is_some_and(is_inside_cfg_test) {
             continue;
         }
-        let start_line = byte_offset_to_line(lf_source, tok.text_range().start().into());
+        let start_line = text_size_to_line(line_index, tok.text_range().start());
         exec_lines.insert(start_line);
     }
     exec_lines.len()
@@ -624,6 +650,7 @@ pub fn verify_cst_attributes_and_sloc(
 ) -> Result<Vec<CstLintGateViolation>, String> {
     let lf_source = raw_source.replace("\r\n", "\n");
     let file_rel = normalize_portable_rel_path(rel_path);
+    let line_index = LineIndex::new(&lf_source);
     let parsed = SourceFile::parse(&lf_source, Edition::Edition2021);
     if !parsed.errors().is_empty() {
         return Err(format!("ra_ap_syntax CST parse error in {file_rel}"));
@@ -631,8 +658,8 @@ pub fn verify_cst_attributes_and_sloc(
 
     let root = parsed.tree();
     let mut violations =
-        collect_cst_attr_violations(&root, &lf_source, &file_rel, require_explicit_crate_policy);
-    let exec_sloc = measure_cst_exec_sloc(&root, &lf_source);
+        collect_cst_attr_violations(&root, &line_index, &file_rel, require_explicit_crate_policy);
+    let exec_sloc = measure_cst_exec_sloc(&root, &line_index);
     evaluate_sloc_ratchet_budget(&file_rel, exec_sloc, legacy_ratchet, &mut violations);
     Ok(violations)
 }
@@ -645,7 +672,7 @@ Every implementation task derived from **BP-01** (**REQ-0601**) closes all three
 | DoD Layer | Architectural Responsibility | Concrete Module & Interface Realization | Verification Gate |
 | :--- | :--- | :--- | :--- |
 | **(1) Domain State & Data Model** | Typed CST item signatures, discriminated lint/SLOC violation records, and monotonic downward ratchet state | `deap_core::rust_cst::items` (`ExtractedMethodSignature`, `ComponentMethodTable` in `< 380`-SLOC `rust_cst/items.rs` under `./crates/deap-core/src/`, replacing deleted `./crates/deap-core/src/source_ast.rs`) + `verify-baseline` typed violation/ratchet models (`CstViolationKind`, `CstLintGateViolation`, `ratchet_table.rs` under `./crates/verify-baseline/src/checks/`) | **AC-03**, **AC-04** (`cargo test --workspace`) |
-| **(2) Logic & State Management** | Official Clippy NDJSON stream ingestion, `ra_ap_syntax` crate-root/descendant attribute verification, and CST SLOC/DoD budget evaluation | Planned `< 380`-SLOC submodules `clippy_ndjson_gate.rs` (`run_official_clippy_json_gate`), `cst_attr_gate.rs` (`collect_cst_attr_violations` via `ast::HasAttrs::attrs(root)` + `ast::Attr::cast`), and `dod_gates.rs` (`measure_cst_exec_sloc`, `evaluate_sloc_ratchet_budget`) under `./crates/verify-baseline/src/checks/` | **AC-01**, **AC-02**, **AC-03** (`verify_cst_attributes_and_sloc`) |
+| **(2) Logic & State Management** | Official Clippy NDJSON stream ingestion, `ra_ap_syntax` crate-root/descendant attribute verification, and CST SLOC/DoD budget evaluation | Planned `< 380`-SLOC submodules `clippy_ndjson_gate.rs` (`run_official_clippy_json_gate`), `cst_attr_gate.rs` (`collect_cst_attr_violations` via `ast::HasAttrs::attrs(root)` + `ast::HasDocComments` + `ast::Attr::cast`), and `dod_gates.rs` (`measure_cst_exec_sloc`, `evaluate_sloc_ratchet_budget` via `ra_ap_line_index::LineIndex`) under `./crates/verify-baseline/src/checks/` | **AC-01**, **AC-02**, **AC-03** (`verify_cst_attributes_and_sloc`) |
 | **(3) Presentation & Actuator Interface Binding** | Structured `--message-format=json` / `ariadne` source-span diagnostic rendering on stderr/stdout and fail-closed OS process exit-code actuation | `./crates/verify-baseline/src/main.rs`, `./crates/verify-baseline/src/runner.rs`, and `./crates/verify-baseline/src/checks/mod.rs` binding `CompilerMessage` / `CstLintGateViolation` spans to `ariadne` / JSON diagnostic emission and non-zero process exit code (`1`) actuation | **AC-01**, **AC-02**, **AC-05** (`./target/release/verify-baseline . --no-domain`) |
 
 ### Dogfooding Pipeline Ingestion & Verification Protocol
@@ -661,12 +688,10 @@ To verify that this blueprint is structurally compliant with all 12 blueprint ve
 
 ## 7. Source References
 
-- **Governance Constitution**: `.pipeline/constitution.md:151-212` (Three-Tier Platform Isolation, Repository Artifact Management Mandate & Step 1.5 Derivation-Annotation Contract)
-- **Active Rules Bundle**: `.pipeline/ACTIVE_RULES_BUNDLE.md:1-120` (Checks 13B, 19, 27, 30, 34, 37)
-- **Workspace Manifest & Clippy Thresholds**: `Cargo.toml:1-25`, `clippy.toml:1-15` (`[workspace.lints]` `"forbid"` policy, `too-many-lines-threshold = 80`, `too-many-arguments-threshold = 5`, `disallowed-types`)
-- **Structural CST & SLOC Purity Gate**: `crates/verify-baseline/src/checks/structural.rs:1-120` (`ra_ap_syntax` lossless CST attribute verification and `<= 500` executable SLOC modular ratchet)
-- **Parity Gates Module**: `crates/verify-baseline/src/checks/parity_gates.rs:1-80` (Checks 21 through 31 AST topology and prose parity verifiers)
-- **Legacy Source Code AST Extractor (Scheduled for `-1,049` SLOC Deletion -> `deap_core::rust_cst::items`)**: `crates/deap-core/src/source_ast.rs:540-560` (`ExtractedMethodSignature` and `ComponentMethodTable` semantic type aliases migrating in Streams 4.2/4.4 to `< 380`-SLOC `rust_cst/items.rs` under `./crates/deap-core/src/`)
-- **Verification CLI Actuators**: `crates/verify-baseline/src/main.rs:1-46`, `crates/verify-baseline/src/runner.rs:1-60`, `crates/verify-baseline/src/checks/mod.rs:1-50` (Structured diagnostic emission and non-zero exit-code actuation)
-- **Level 0 Markdown AST Translator**: `crates/ingest-sysml/src/translators/markdown.rs:1-80` (`MarkdownTranslator::translate`, BOM, Port, Property, and Constraint table processors)
+- **Workspace Manifest & Official Clippy Forbid Policy**: `Cargo.toml:1-25` (`[workspace.lints.rust]` and `[workspace.lints.clippy]` `"forbid"` policy paired with `./clippy.toml` `too-many-lines-threshold = 80`, `too-many-arguments-threshold = 5`, `disallowed-types`)
+- **Core CST & Metamodel Library Root**: `crates/deap-core/src/lib.rs:1-40` (`deap_core::rust_cst::items` lossless `ra_ap_syntax` item/doc/attribute extraction replacing deleted legacy `source_ast.rs`, plus `deap_core::sysml_cst` Contract A grammar support)
+- **Verification Baseline Library & CLI Entrypoints**: `crates/verify-baseline/src/lib.rs:1-40`, `crates/verify-baseline/src/main.rs:1-46` (Stage 1 `cargo clippy --message-format=json` NDJSON gate, Check 42 `ra_ap_syntax` CST attribute gate, `< 380`-SLOC modular submodules, and Stage 2-5 verification orchestration)
+- **SysML v2 Compiler Library & CLI Entrypoints**: `crates/compile-sysml/src/lib.rs:1-40`, `crates/compile-sysml/src/main.rs:1-40` (Contract A + Contract B lossless `logos` + `rowan` + `salsa` compilation and 5-Stage / Ferrocene Stage 5 code generation)
+- **Polyglot Schema Ingestion Library & CLI Entrypoints**: `crates/ingest-sysml/src/lib.rs:1-50`, `crates/ingest-sysml/src/main.rs:1-50` (`pulldown-cmark` Markdown AST translation and `SupportedSchemaExtension` polyglot ingestion)
+- **ConOps & Backlog Compiler Entrypoints**: `crates/assemble-conops/src/lib.rs:1-38`, `crates/assemble-conops/src/main.rs:1-45`, `crates/reconcile-backlog/src/lib.rs:1-42`, `crates/reconcile-backlog/src/main.rs:1-41` (Workspace member crates inheriting `[lints] workspace = true`)
 - **Tracked Issues**: `#491, #492, #496, #497, #498, #499, #500, #501, #502, #506, #508`

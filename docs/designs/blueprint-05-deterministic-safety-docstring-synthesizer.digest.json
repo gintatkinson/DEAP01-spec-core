@@ -154,25 +154,25 @@
     {
       "name": "Check36CstCompletenessVerifier",
       "node_type": "Part",
-      "doc": "Check 36 gate in `verify_baseline::checks::docstring_cst_gate` auditing 100% item coverage and bit-for-bit idempotency",
+      "doc": "Check 36 gate in `< 380`-SLOC `verify_baseline::checks::docstring_cst_gate` auditing 100% item coverage, legacy scanner retirement, and bit-for-bit idempotency under Contract A and Contract B",
       "allocated_activities": []
     },
     {
       "name": "DocstringTierEnforcementGate",
       "node_type": "Part",
-      "doc": "Verifier in `verify_baseline::checks::docstring_tier_rules` enforcing Tier-A actuator restriction and `<= 4`-line Tier-B/C ceiling",
+      "doc": "Verifier in `< 380`-SLOC `verify_baseline::checks::docstring_tier_rules` enforcing explicit `[DOC-TIER: A]` actuator restriction and `<= 4`-line Tier-B/C `[REQ-*]` / `[FLS: fls_*]` ceiling under Contract B",
       "allocated_activities": []
     },
     {
       "name": "LosslessCstDocstringScanner",
       "node_type": "Part",
-      "doc": "Canonical CST traversal engine in `deap_core::rust_cst::doc_edit` inspecting `ast::HasDocComments` and `ast::HasAttrs`",
+      "doc": "Canonical `< 380`-SLOC CST traversal engine in `deap_core::rust_cst::doc_edit` inspecting `ra_ap_syntax::ast::{HasDocComments, HasAttrs}`, `rowan::TextRange`, `ra_ap_vfs`, `ra_ap_paths`, `camino`, and `ignore` under Contract A",
       "allocated_activities": []
     },
     {
       "name": "TieredDocstringSurgicalSynthesizer",
       "node_type": "Part",
-      "doc": "Forward docstring injector in `compile_sysml::docstring_cst` executing `ra_ap_text_edit` plans with `--compact-tier-bc`",
+      "doc": "Forward `< 380`-SLOC docstring injector in `compile_sysml::docstring_cst` executing `ra_ap_text_edit` and `ra_ap_line_index` surgical plans with `--compact-tier-bc` under Contract A and Contract B",
       "allocated_activities": []
     },
     {

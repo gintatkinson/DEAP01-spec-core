@@ -157,7 +157,7 @@
     {
       "name": "CargoManifestAstLoader",
       "node_type": "Part",
-      "doc": "`deap_core::cargo_manifest_ast` (`< 380` exec SLOC) loading workspace packages, `toml_edit` lint tables, `cargo-util-schemas` manifests, `cargo-platform` targets, and `cargo-lock` dependency graphs",
+      "doc": "`deap_core::cargo_manifest_ast` (`< 380` exec SLOC) loading workspace packages, `toml_edit` lint tables, `cargo-util-schemas` manifests, `cargo-platform` targets, `cargo-lock` dependency graphs, and `ra_ap_vfs`/`ra_ap_paths`/`camino`/`ignore` file sets",
       "allocated_activities": []
     },
     {
@@ -169,19 +169,19 @@
     {
       "name": "Check34AstPurityAndAntiGamingGate",
       "node_type": "Part",
-      "doc": "Total typed `ra_ap_syntax` violations for panicking `IndexExpr`, `.unwrap()`, `.expect()`, `panic!`, or `#![feature(rustc_private)]` [unit: count]",
+      "doc": "Total typed `ra_ap_syntax` and `rowan` violations for panicking `IndexExpr`, `.unwrap()`, `.expect()`, `panic!`, or `#![feature(rustc_private)]` [unit: count]",
       "allocated_activities": []
     },
     {
       "name": "CstPurityAndAntiGamingGate",
       "node_type": "Part",
-      "doc": "`verify_baseline::checks::cst_purity_gate` (`< 380` exec SLOC) traversing `ast::{SourceFile, Fn, IndexExpr, CallExpr, MethodCallExpr, MacroCall}` with `LineIndex` span resolution",
+      "doc": "`verify_baseline::checks::cst_purity_gate` (`< 380` exec SLOC) traversing `ast::{SourceFile, Fn, IndexExpr, CallExpr, MethodCallExpr, MacroCall}` with `rowan`, `ra_ap_line_index::LineIndex`, and `ra_ap_text_edit::TextEdit`",
       "allocated_activities": []
     },
     {
       "name": "IoFailClosedGate",
       "node_type": "Part",
-      "doc": "`verify_baseline::checks::io_fail_closed_gate` (`< 380` exec SLOC) traversing `ast::{MatchExpr, MatchArmList, MatchArm, Pat, WildcardPat, IdentPat, MethodCallExpr, TryExpr}` to reject silent error swallowing",
+      "doc": "`verify_baseline::checks::io_fail_closed_gate` (`< 380` exec SLOC) traversing `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}` and `ast::{MatchArm, Pat, WildcardPat, IdentPat}` to reject silent error swallowing",
       "allocated_activities": []
     }
   ],

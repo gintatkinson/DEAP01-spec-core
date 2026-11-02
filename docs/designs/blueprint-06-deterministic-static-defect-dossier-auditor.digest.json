@@ -61,13 +61,13 @@
     "Target_Crates",
     "Title",
     "Tracked_Issues",
-    "UC_AC_01_Static_Five_Pillar_Typed_AST_Defect_Detection",
-    "UC_AC_02_Stage_2_Dynamic_Dylint_MIR_Analysis_Integration",
+    "UC_AC_01_Contract_A_Static_Five_Pillar_Typed_AST_Defect_Detection",
+    "UC_AC_02_Contract_B_Stage_2_Dynamic_Dylint_MIR_Analysis_Integration",
     "UC_AC_03_Isolated_Dart_CST_Extraction",
-    "UC_AC_04_Deterministic_Seven_Section_Dossier_Synthesis_via_pulldown_cmark_to_cmark",
+    "UC_AC_04_Fail_Closed_Deterministic_Seven_Section_Dossier_Synthesis_via_pulldown_cmark_to_cmark",
     "UC_AC_05_Idempotent_Local_and_Remote_SSOT_Deduplication",
     "UC_AC_06_Closed_Loop_GitHub_SSOT_Publishing_and_Byte_Parity_Verification",
-    "UC_AC_07_Net_Negative_Scanner_Retirement_and_Dogfood_Blueprint_Gate_Conformance",
+    "UC_AC_07_Contract_A_Contract_B_Net_Negative_source_ast_rs_Deletion_and_380_SLOC_Submodule_Gate_Conformance",
     "activePillarCount",
     "audit_dart_cst",
     "audit_rust_cst",
@@ -181,16 +181,16 @@
   "operational_scenarios": [
     {
       "id": "SCN-01",
-      "name": "UC_AC_01_Static_Five_Pillar_Typed_AST_Defect_Detection",
+      "name": "UC_AC_01_Contract_A_Static_Five_Pillar_Typed_AST_Defect_Detection",
       "actor": "",
-      "objective": "\"Static Five Pillar Typed AST Defect Detection\"",
+      "objective": "\"Contract A Static Five Pillar Typed AST Defect Detection\"",
       "steps": []
     },
     {
       "id": "SCN-02",
-      "name": "UC_AC_02_Stage_2_Dynamic_Dylint_MIR_Analysis_Integration",
+      "name": "UC_AC_02_Contract_B_Stage_2_Dynamic_Dylint_MIR_Analysis_Integration",
       "actor": "",
-      "objective": "\"Stage 2 Dynamic Dylint MIR Analysis Integration\"",
+      "objective": "\"Contract B Stage 2 Dynamic Dylint MIR Analysis Integration\"",
       "steps": []
     },
     {
@@ -202,9 +202,9 @@
     },
     {
       "id": "SCN-04",
-      "name": "UC_AC_04_Deterministic_Seven_Section_Dossier_Synthesis_via_pulldown_cmark_to_cmark",
+      "name": "UC_AC_04_Fail_Closed_Deterministic_Seven_Section_Dossier_Synthesis_via_pulldown_cmark_to_cmark",
       "actor": "",
-      "objective": "\"Deterministic Seven Section Dossier Synthesis via pulldown cmark to cmark\"",
+      "objective": "\"Fail Closed Deterministic Seven Section Dossier Synthesis via pulldown cmark to cmark\"",
       "steps": []
     },
     {
@@ -223,9 +223,9 @@
     },
     {
       "id": "SCN-07",
-      "name": "UC_AC_07_Net_Negative_Scanner_Retirement_and_Dogfood_Blueprint_Gate_Conformance",
+      "name": "UC_AC_07_Contract_A_Contract_B_Net_Negative_source_ast_rs_Deletion_and_380_SLOC_Submodule_Gate_Conformance",
       "actor": "",
-      "objective": "\"Net Negative Scanner Retirement and Dogfood Blueprint Gate Conformance\"",
+      "objective": "\"Contract A Contract B Net Negative source ast rs Deletion and 380 SLOC Submodule Gate Conformance\"",
       "steps": []
     }
   ],

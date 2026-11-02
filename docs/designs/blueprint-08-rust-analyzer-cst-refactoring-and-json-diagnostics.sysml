@@ -7,30 +7,34 @@ package BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON
     attribute Target_Crates : String = "crates/deap-core, crates/compile-sysml, crates/verify-baseline, crates/ingest-sysml, crates/assemble-conops, crates/reconcile-backlog";
     attribute Tracked_Issues : String = "#742";
     attribute Generation_Mode : String = "subagent";
-    attribute Specification_Source : String = "crates/deap-core/src/source_ast.rs:1-80";
-    doc /* `ra_ap_vfs` and `camino::Utf8Path` cross-platform virtual file system with CRLF/LF normalization. */
+    attribute Specification_Source : String = "crates/deap-core/src/lib.rs:1-40";
+    doc /* `ra_ap_vfs`, `ra_ap_paths`, `camino::Utf8Path`, and `ignore::WalkBuilder` virtual file system with CRLF/LF normalization. */
     attribute crates_deap_core_src_rust_cst_vfs_rs : String = "**New `< 380` SLOC**";
-    doc /* Lossless Red/Green CST parser wrapping `ra_ap_syntax::SourceFile` with zero syntax-tree text-contains scans. */
+    doc /* Lossless Red/Green CST parser wrapping `ra_ap_syntax::SourceFile`, `rowan`, and `ra_ap_line_index::LineIndex`. */
     attribute crates_deap_core_src_rust_cst_parse_rs : String = "**New `< 380` SLOC**";
     doc /* Deterministic `BTreeMap`-ordered AST item inventory and DEAP v2.0 metrics extraction. */
     attribute crates_deap_core_src_rust_cst_items_rs : String = "**New `< 380` SLOC**";
-    doc /* Atomic module partitioner with CST byte-span splicing and Check-37 blueprint path updates. */
+    doc /* Atomic `ra_ap_text_edit` module partitioner with `pulldown-cmark` and `pulldown-cmark-to-cmark` Check-37 blueprint path updates. */
     attribute crates_deap_core_src_rust_cst_extract_module_rs : String = "**New `< 380` SLOC**";
-    doc /* Lossless `DocTier` classifier and 2-line docblock compactor (`--compact-tier-bc`). */
+    doc /* Lossless `DocTier` classifier and `ra_ap_text_edit` 2-line docblock compactor (`--compact-tier-bc`). */
     attribute crates_deap_core_src_rust_cst_doc_edit_rs : String = "**New `< 380` SLOC**";
-    doc /* Single-line `rustc`-compatible NDJSON diagnostic emitter and `MachineApplicable` fix engine. */
+    doc /* Single-line `rustc`-compatible NDJSON diagnostic emitter and `ra_ap_text_edit` `MachineApplicable` fix engine. */
     attribute crates_deap_core_src_rust_cst_diagnostics_ndjson_rs : String = "**New `< 380` SLOC**";
-    doc /* Completely deleted and superseded by typed `rust_cst` modules. */
-    attribute crates_deap_core_src_source_ast_rs : String = "**Complete Deletion `-1,049` SLOC**";
-    doc /* Replaced by `deap_core::rust_cst::doc_edit` CST docblock operations. */
+    doc /* Official Cargo manifest and lockfile verifier built on `cargo-lock`, `cargo_metadata`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit`. */
+    attribute crates_deap_core_src_rust_cst_manifest_lock_rs : String = "**New `< 380` SLOC**";
+    doc /* Completely deleted (`-7,558` physical LOC / `-1,049` residual scanner SLOC) and superseded by typed `rust_cst` modules. */
+    attribute crates_deap_core_src_source_ast_rs : String = "**Complete Deletion `-7,558` LOC**";
+    doc /* Retires 5,631-LOC hand-rolled docstring scanner in favor of `deap_core::rust_cst::doc_edit` CST docblock operations. */
     attribute crates_compile_sysml_src_docstring_rs : String = "**Net Deletion `-4,900+` SLOC**";
-    doc /* Migrated from hand-rolled line scanners to `DocTier` AST metrics. */
+    doc /* Retires 3,751-LOC hand-rolled line scanner in favor of `DocTier` CST metrics. */
     attribute crates_verify_baseline_src_checks_docstring_gate_rs : String = "**Net Deletion `-3,300+` SLOC**";
-    doc /* Migrated from regex/token heuristics to exact `ra_ap_syntax` item traversal. */
+    doc /* Retires 3,214-LOC hand-rolled 5-pillar AST scanner in favor of `ra_ap_syntax` CST metrics and `DEAP-E*` NDJSON diagnostics. */
+    attribute crates_verify_baseline_src_audit_code_rs : String = "**Net Deletion `-2,800+` SLOC**";
+    doc /* Migrated from token/line heuristics to exact `ra_ap_syntax` and `pulldown-cmark` AST traversal. */
     attribute crates_verify_baseline_src_checks_structural_rs : String = "**Net Deletion `-4,200+` SLOC**";
-    doc /* Migrated workspace directory traversal to `camino` + `ignore` + `ra_ap_vfs`. */
+    doc /* Migrated manifest and workspace directory traversal to `cargo-lock`, `cargo_metadata`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, `camino`, `ignore`, and `ra_ap_vfs`. */
     attribute crates_deap_core_src_workspace_rs : String = "**Net Deletion `-620+` SLOC**";
-    doc /* Downward ratchet converges strictly to `0` scanner exemptions across all crates. */
+    doc /* Downward ratchet converges strictly to `0` scanner exemptions across all 6 workspace crates (`<= 500` SLOC ceiling). */
     attribute crates_verify_baseline_src_ratchet_table_rs : String = "**Ratchet Convergence to `0`**";
     doc /* [unit: `SLOC`] */
     attribute max_fn_exec_sloc : Real;

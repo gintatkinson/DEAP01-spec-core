@@ -59,7 +59,7 @@
     "UC_AC_04_Stage_3_Deterministic_flutter_rust_bridge_FFI_Synthesis_with_Fail_Closed_ICD_Boundary_Guards",
     "UC_AC_05_Stage_3_Miri_Tree_Borrows_Abstract_Machine_Undefined_Behavior_Rejection_on_FFI_and_Ring_Buffer_Bridges",
     "UC_AC_06_Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification",
-    "UC_AC_07_Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate",
+    "UC_AC_07_Stage_5_Cross_Platform_Dynamic_PATH_Discovery_380_SLOC_Submodules_Legacy_Scanner_Deletion_and_Contract_A_Contract_B_Gate",
     "cbmc_proof_receipt_out",
     "clippy_ndjson_out",
     "default_kani_unwind_bound",
@@ -206,9 +206,9 @@
     },
     {
       "id": "SCN-07",
-      "name": "UC_AC_07_Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate",
+      "name": "UC_AC_07_Stage_5_Cross_Platform_Dynamic_PATH_Discovery_380_SLOC_Submodules_Legacy_Scanner_Deletion_and_Contract_A_Contract_B_Gate",
       "actor": "",
-      "objective": "\"Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate\"",
+      "objective": "\"Stage 5 Cross Platform Dynamic PATH Discovery 380 SLOC Submodules Legacy Scanner Deletion and Contract A Contract B Gate\"",
       "steps": []
     }
   ],
@@ -234,7 +234,7 @@
     {
       "name": "MultiStageVerificationOrchestrator",
       "node_type": "Part",
-      "doc": "Ordered verification stage count (`Stage 1 Clippy` -> `Stage 2 Dylint MIR` -> `Stage 3 FRB + Miri` -> `Stage 4 Kani CBMC`). [unit: stages]",
+      "doc": "Ordered 5-stage verification pipeline count (`Stage 1 Clippy` -> `Stage 2 Excluded Dylint MIR` -> `Stage 3 FRB + Miri` -> `Stage 4 Kani CBMC` -> `Stage 5 Dynamic PATH & CST`). [unit: stages]",
       "allocated_activities": []
     },
     {

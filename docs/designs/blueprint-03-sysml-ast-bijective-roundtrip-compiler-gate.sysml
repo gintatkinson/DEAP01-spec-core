@@ -7,13 +7,13 @@ package BP_03_SysML_v2_Lossless_Red_Green_CST_Salsa_Incremental_Query_DB_and_Bij
     attribute Target_Crates : String = "crates/compile-sysml, crates/deap-core, crates/ingest-sysml, crates/verify-baseline";
     attribute Tracked_Issues : String = "#493, #495, #496, #497, #504, #505, #509";
     attribute Generation_Mode : String = "subagent";
-    attribute Specification_Source : String = "crates/compile-sysml/src/parser/grammar/mod.rs:182-335 / crates/deap-core/src/sysml_ast/mod.rs:1-400 / #493";
-    doc /* `SysmlSyntaxKind`, `SysmlLanguage`, `CstParseOutput`, `SysmlHirPackage`, `SourceInput`, and `BijectiveDigestReceipt` in `deap_core::sysml_cst` and `compile_sysml::salsa_db` with `camino::Utf8PathBuf` paths andpinned `rowan`. */
-    attribute Layer_1_Domain_State_Data_Model : String = "Lossless Red/Green CST, typed HIR, and incremental query inputs";
-    doc /* `normalize_line_endings`, `parse_sysml_cst`, `lower_sysml_hir`, `emit_canonical_sysml`, and `compute_bijective_digest` enforcing fail-closed `E0100..E0400` diagnostics and cross-platform SHA-256 digest invariance. */
-    attribute Layer_2_Logic_State_Management : String = "Deterministic `logos` + `rowan` parsing, `salsa` memoized lowering, and Stage-1 == Stage-2 bijective verification";
-    doc /* `compile-sysml`, `ingest-sysml`, and `verify-baseline check-blueprint` CLI actuators emitting deterministic diagnostics, canonical `.sysml` models, and `.digest.json` receipts (`ra_ap_syntax`, `deap_core::dart_cst`, `serde_json`, `logos`+`rowan` IDL/YANG). */
-    attribute Layer_3_Presentation_Actuator_Interface_Binding : String = "CLI compiler gate output, persisted `.sysml` / `.digest.json` artifacts, and polyglot ingestion CLI actuators";
+    attribute Specification_Source : String = "Cargo.toml:1-90 / crates/deap-core/src/lib.rs:1-40 / crates/compile-sysml/src/lib.rs:1-40 / #493";
+    doc /* `SysmlSyntaxKind` (all 6 OMG SysML v2.0 + KerML 1.0 clauses), `SysmlLanguage`, `CstParseOutput`, `SysmlHirPackage`, `SafetyMetadataKind`, `StdlibNamespace`, `SourceInput`, and `BijectiveDigestReceipt` in `deap_core::sysml_cst` and `compile_sysml::salsa_db` with `camino::Utf8PathBuf` paths and pinned `rowan`. */
+    attribute Layer_1_Domain_State_Data_Model : String = "Full 6-clause lossless Red/Green CST, typed HIR, `ISQ`/`SI`/`ScalarValues` stdlib env, and incremental query inputs";
+    doc /* `normalize_line_endings`, `parse_sysml_cst`, `lower_sysml_hir`, `resolve_stdlib_and_metadata`, `emit_canonical_sysml`, `render_ariadne_diagnostic`, and `compute_bijective_digest` enforcing fail-closed `E0100..E0400` diagnostics and cross-platform SHA-256 digest invariance. */
+    attribute Layer_2_Logic_State_Management : String = "Deterministic `logos` + `rowan` 6-clause parsing, `salsa` memoized lowering, `ariadne` diagnostics, and Stage-1 == Stage-2 bijective verification";
+    doc /* `compile-sysml`, `ingest-sysml`, and `verify-baseline check-blueprint` CLI actuators emitting deterministic `ariadne` diagnostics, canonical `.sysml` models, and `.digest.json` receipts (`ra_ap_syntax`, `deap_core::dart_cst`, `serde_json`, `logos`+`rowan` IDL/YANG). */
+    attribute Layer_3_Presentation_Actuator_Interface_Binding : String = "CLI compiler gate output, `ariadne` terminal diagnostics, persisted `.sysml` / `.digest.json` artifacts, and polyglot ingestion CLI actuators";
     doc /* [unit: `bytes`] */
     attribute span_offset_drift_bytes : Real;
     doc /* [unit: `branches`] */
@@ -60,22 +60,22 @@ package BP_03_SysML_v2_Lossless_Red_Green_CST_Salsa_Incremental_Query_DB_and_Bij
         attribute complexity_class : String = "Class P";
         attribute governing_standard : String = "IEEE 29148-2018 / RFC 2119";
         attribute diagnostic_codes : String = "E0100";
-        attribute ac_01_lossless_logos_rowan_red_green_cst_construction_pinned_rowan_parity : String = "- **Given**: A SysML v2 model containing doc / * ... * / blocks, line comments, reference/optionality sigils (&, ?), lifetimes ('a), qualified paths (::), and mixed CRLF/LF line endings (#495). - **When**: normalize_line_endings and parse_sysml_cst execute via logos::Logos and rowan::GreenNodeBuilder (with workspace rowan pinned identically to ra_ap_syntax's rowan). - **Then**: The resulting SyntaxNode<SysmlLanguage> preserves 100% of trivia, doc comments, and exact UTF-8 byte spans (span_offset_drift_bytes == 0) with zero pre-lexer string rewriting.";
-        attribute ac_02_fail_closed_typed_cst_lowering_without_silent_skips_or_text_heuristics : String = "- **Given**: A SysML v2 declaration block (port, action, requirement, state, connection, use case, item, hazard, risk, test case, capability, interaction) containing composite generic types, anonymous transitions (first S1 accept trig if grd do eff then S2;), nested sub_states, or an invalid inner token (#504, #496, #509). - **When**: lower_sysml_hir traverses typed rowan::ast::AstNode wrappers over the Red/Green CST. - **Then**: Valid declarations lower losslessly preserving name: None on unnamed transitions and recursive sub_states, zero .syntax().text().contains(...) calls exist, and any.";
-        attribute ac_03_demand_driven_salsa_incremental_query_memoization_cross_platform_sha_256_parity : String = "- **Given**: Identical SysML v2 models ingested from LF (macOS/Linux) and CRLF (Windows) files via camino::Utf8Path into compile_sysml::salsa_db::SourceInput, or a model with a simulated Stage-2 field mutation (#493, #497, #505). - **When**: compute_bijective_digest evaluates parse_sysml_cst -> lower_sysml_hir -> emit_canonical_sysml -> Stage-2 re-parse and lowering. - **Then**: Unchanged SourceInput revisions reuse memoized salsa query outputs, LF and CRLF inputs produce bit-identical BijectiveDigestReceipt SHA-256 hex digests with Stage-1 == Stage-2 (roundtrip_ast_mismatch_count == 0), and.";
-        attribute ac_04_cohesive_polyglot_typed_cst_ast_ingestion_legacy_scanner_retirement : String = "- **Given**: Polyglot engineering inputs across Rust (*.rs), Dart (*.dart), OpenAPI / JSON-Schema (*.json), OMG IDL (*.idl), and IETF YANG (*.yang), alongside legacy scanner deletion targets in ./crates/deap-core/src/sysml_ast/mod.rs (-2,400+ SLOC) and ./crates/ingest-sysml/src/translators/{code,idl,yang,openapi}.rs (-1,800+ SLOC). - **When**: ingest-sysml and validate_polyglot_frontend bind each input format to its canonical typed parser frontend. - **Then**: Rust parses via ra_ap_syntax, Dart via deap_core::dart_cst (logos + rowan), JSON-Schema/OpenAPI via typed serde_json ASTs, and.";
-        attribute ac_05_dogfood_blueprint_to_sysml_verification_12_gate_closure : String = "- **Given**: This blueprint document ./docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md (**REQ-0603**). - **When**: ./target/release/verify-baseline check-blueprint ./docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md and ./target/release/verify-baseline . --no-domain are executed. - **Then**: All 12 mechanical blueprint verification gates pass (12/12), docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.sysml and .digest.json are deterministically persisted, and workspace baseline verification exits with status code 0.";
-        doc /* \begin{aligned} \forall s \in \mathcal{L}_{\text{raw}}: \quad \text{text}(P_{\text{cst}}(N_{\text{LF}}(s))) &= N_{\text{LF}}(s) \\ \forall s \in \mathcal{L}_{\text{raw}}, \quad \mathcal{H}_1 = L_{\text{hir}}(P_{\text{cst}}(N_{\text{LF}}(s))), \quad \mathcal{H}_2 &= L_{\text{hir}}(P_{\text{cst}}(E_{\text{sysml}}(\mathcal{H}_1))) \implies \mathcal{H}_1 = \mathcal{H}_2 \\ D_{256}(E_{\text{sysml}}(\mathcal{H}_1)) &= D_{256}(E_{\text{sysml}}(\mathcal{H}_2)) \\ \Delta_{\text{span}}(t_k) &= \text{byte\_offset}_{\text{rowan}}(t_k) - \text{byte\_offset}_{\text{LF}}(t_k) = 0 \\ T_{\text{salsa\_incremental}}(\Delta N, N) &= O(\Delta N), \qquad T_{\text{cold}}(N) = O(N) \end{aligned} */
-        constraint def Invariant_REQ_0603_Formal_Lossless_CST_Salsa_Memoization_Bijective_Digest_Invariants;
+        attribute ac_01_full_6_clause_normative_omg_sysml_v2_0_kerml_1_0_bnf_grammar_cst_construction_pinned_rowan_parity : String = "- **Given**: A SysML v2.0 and KerML 1.0 model exercising all 6 normative clauses -- Clause 1 (package, library package, import, alias, doc / * ... * /, metadata def), Clause 2 (part def, attribute def, item def, port def with ~ conjugation, connection def, interface def, allocation def, flow def, occurrence def, enum def), Clause 3 (action def, perform, send, accept, state def, transition, interaction def), Clause 4 (calc def, constraint def, assert constraint, requirement def, satisfy, subject, actor, stakeholder, concern def), Clause 5 (use case def, analysis case def, verification case.";
+        attribute ac_02_safety_metadata_extensions_backward_compatible_grammar_aliases_fail_closed_lowering : String = "- **Given**: A SysML v2.0 model containing standard metadata def and #hazard, #risk, #capability, #rt_loop, #dal, #fls prefix usages alongside backward-compatible hazard def, risk def, capability def, and test case def blocks, anonymous transitions (first S1 accept trig if grd do eff then S2;), nested sub_states, or an invalid inner token (#504, #496, #509). - **When**: lower_sysml_hir and resolve_stdlib_and_metadata traverse typed rowan::ast::AstNode wrappers over the Red/Green CST. - **Then**: Both #keyword metadata usages and backward-compatible hazard def/risk def/capability def/test case.";
+        attribute ac_03_demand_driven_salsa_incremental_query_memoization_ariadne_diagnostics_cross_platform_stage_1_stage_2_sha_256_parity : String = "- **Given**: Identical 6-clause SysML v2.0 / KerML 1.0 models referencing ISQ, SI, and ScalarValues ingested from LF (macOS/Linux) and CRLF (Windows) files via camino::Utf8Path into compile_sysml::salsa_db::SourceInput, or a model with a simulated Stage-2 field mutation (#493, #497, #505). - **When**: compute_bijective_digest evaluates parse_sysml_cst -> lower_sysml_hir -> resolve_stdlib_and_metadata -> emit_canonical_sysml -> Stage-2 re-parse and lowering. - **Then**: Unchanged SourceInput revisions reuse memoized salsa query outputs, LF and CRLF inputs produce bit-identical.";
+        attribute ac_04_cohesive_polyglot_typed_cst_ast_ingestion_380_sloc_submodule_gate_legacy_scanner_retirement : String = "- **Given**: Polyglot engineering inputs across Rust (*.rs), Dart (*.dart), OpenAPI / JSON-Schema (*.json), OMG IDL (*.idl), and IETF YANG (*.yang), alongside legacy scanner deletion targets across deap-core (-2,400+ SLOC), compile-sysml (-1,950+ SLOC), and ingest-sysml (-1,800+ SLOC). - **When**: ingest-sysml and validate_polyglot_frontend bind each input format to its canonical typed parser frontend. - **Then**: Rust parses via ra_ap_syntax, Dart via deap_core::dart_cst (logos + rowan), JSON-Schema/OpenAPI via typed serde_json ASTs, and IDL/YANG via logos + rowan CSTs, with zero hand-rolled.";
+        attribute ac_05_dogfood_blueprint_to_sysml_verification_pre_built_binary_compatibility_12_gate_closure : String = "- **Given**: This blueprint document ./docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md (**REQ-0603**) with deletion-proof file:line anchors (Cargo.toml, crates/ * /src/lib.rs, crates/ * /src/main.rs) and pre-built binary compatible Section 2/3/5 metamodel tables. - **When**: ./target/release/verify-baseline check-blueprint ./docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md is executed. - **Then**: All 12 mechanical blueprint verification gates pass (12/12), docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.sysml and.";
+        doc /* \begin{aligned} \mathcal{G}_{\text{ContractA}} &= \bigcup_{c=1}^{6} \mathcal{G}_{\text{Clause } c}, \qquad \forall p \in \mathcal{G}_{\text{ContractA}}: \quad L_{\text{hir}}(P_{\text{cst}}(p)) \in \mathcal{H} \\ \forall s \in \mathcal{L}_{\text{raw}}: \quad \text{text}(P_{\text{cst}}(N_{\text{LF}}(s))) &= N_{\text{LF}}(s) \\ \forall s \in \mathcal{L}_{\text{raw}}, \quad \mathcal{H}_1 = L_{\text{hir}}(P_{\text{cst}}(N_{\text{LF}}(s))), \quad \mathcal{H}_2 &= L_{\text{hir}}(P_{\text{cst}}(E_{\text{sysml}}(\mathcal{H}_1))) \implies \mathcal{H}_1 = \mathcal{H}_2 \\ D_{256}(E_{\text{sysml}}(\mathcal{H}_1)) &= D_{256}(E_{\text{sysml}}(\mathcal{H}_2)) \\ \Delta_{\text{span}}(t_k) &= \text{byte\_offset}_{\text{rowan}}(t_k) - \text{byte\_offset}_{\text{LF}}(t_k) = 0 \\ \forall m \in \mathcal{M}_{\text{cst}} \cup \mathcal{M}_{\text{salsa}}: \quad \text{SLOC}_{\text{exec}}(m) &< 380, \qquad T_{\text{salsa\_incremental}}(\Delta N, N) = O(\Delta N) \end{aligned} */
+        constraint def Invariant_REQ_0603_Formal_6_Clause_Grammar_Completeness_Lossless_CST_Salsa_Memoization_Bijective_Digest_Invariants;
         doc /* \begin{aligned} \text{AdmissibleCompile}(s) &\iff \Delta_{\text{span}} = 0 \land N_{\text{skip}} = 0 \land N_{\text{dropped}} = 0 \land (\mathcal{H}_1 = \mathcal{H}_2) \land \bigl(D_{256}(E_{\text{sysml}}(\mathcal{H}_1)) = D_{256}(E_{\text{sysml}}(\mathcal{H}_2))\bigr) \end{aligned} */
         constraint def Invariant_REQ_0603_SC_03;
-        require Invariant_REQ_0603_Formal_Lossless_CST_Salsa_Memoization_Bijective_Digest_Invariants;
+        require Invariant_REQ_0603_Formal_6_Clause_Grammar_Completeness_Lossless_CST_Salsa_Memoization_Bijective_Digest_Invariants;
         require Invariant_REQ_0603_SC_03;
-        verify by AC_01_Lossless_logos_rowan_Red_Green_CST_Construction_Pinned_rowan_Parity;
-        verify by AC_02_Fail_Closed_Typed_CST_Lowering_Without_Silent_Skips_or_Text_Heuristics;
-        verify by AC_03_Demand_Driven_salsa_Incremental_Query_Memoization_Cross_Platform_SHA_256_Parity;
-        verify by AC_04_Cohesive_Polyglot_Typed_CST_AST_Ingestion_Legacy_Scanner_Retirement;
-        verify by AC_05_Dogfood_Blueprint_to_SysML_Verification_12_Gate_Closure;
+        verify by AC_01_Full_6_Clause_Normative_OMG_SysML_v2_0_KerML_1_0_BNF_Grammar_CST_Construction_Pinned_rowan_Parity;
+        verify by AC_02_Safety_Metadata_Extensions_Backward_Compatible_Grammar_Aliases_Fail_Closed_Lowering;
+        verify by AC_03_Demand_Driven_salsa_Incremental_Query_Memoization_ariadne_Diagnostics_Cross_Platform_Stage_1_Stage_2_SHA_256_Parity;
+        verify by AC_04_Cohesive_Polyglot_Typed_CST_AST_Ingestion_380_SLOC_Submodule_Gate_Legacy_Scanner_Retirement;
+        verify by AC_05_Dogfood_Blueprint_to_SysML_Verification_Pre_Built_Binary_Compatibility_12_Gate_Closure;
         satisfy by BijectiveSha256GateVerifier;
     }
     doc /* Extracted from Mermaid stateDiagram specification. */
@@ -105,30 +105,30 @@ package BP_03_SysML_v2_Lossless_Red_Green_CST_Salsa_Incremental_Query_DB_and_Bij
         transition RejectedE0400_to_Terminal first RejectedE0400 then Terminal;
         transition VerifiedBijectiveDigest_to_Terminal first VerifiedBijectiveDigest then Terminal;
     }
-    doc /* - **Given**: A SysML v2 model containing doc / * ... * / blocks, line comments, reference/optionality sigils (&, ?), lifetimes ('a), qualified paths (::), and mixed CRLF/LF line endings (#495). - **When**: normalize_line_endings and parse_sysml_cst execute via logos::Logos and rowan::GreenNodeBuilder (with workspace rowan pinned identically to ra_ap_syntax's rowan). - **Then**: The resulting SyntaxNode<SysmlLanguage> preserves 100% of trivia, doc comments, and exact UTF-8 byte spans (span_offset_drift_bytes == 0) with zero pre-lexer string rewriting. */
-    use case def UC_AC_01_Lossless_logos_rowan_Red_Green_CST_Construction_Pinned_rowan_Parity {
+    doc /* - **Given**: A SysML v2.0 and KerML 1.0 model exercising all 6 normative clauses -- Clause 1 (package, library package, import, alias, doc / * ... * /, metadata def), Clause 2 (part def, attribute def, item def, port def with ~ conjugation, connection def, interface def, allocation def, flow def, occurrence def, enum def), Clause 3 (action def, perform, send, accept, state def, transition, interaction def), Clause 4 (calc def, constraint def, assert constraint, requirement def, satisfy, subject, actor, stakeholder, concern def), Clause 5 (use case def, analysis case def, verification case. */
+    use case def UC_AC_01_Full_6_Clause_Normative_OMG_SysML_v2_0_KerML_1_0_BNF_Grammar_CST_Construction_Pinned_rowan_Parity {
         subject BijectiveSha256GateVerifier;
-        objective "Lossless logos rowan Red Green CST Construction Pinned rowan Parity";
+        objective "Full 6 Clause Normative OMG SysML v2 0 KerML 1 0 BNF Grammar CST Construction Pinned rowan Parity";
     }
-    doc /* - **Given**: A SysML v2 declaration block (port, action, requirement, state, connection, use case, item, hazard, risk, test case, capability, interaction) containing composite generic types, anonymous transitions (first S1 accept trig if grd do eff then S2;), nested sub_states, or an invalid inner token (#504, #496, #509). - **When**: lower_sysml_hir traverses typed rowan::ast::AstNode wrappers over the Red/Green CST. - **Then**: Valid declarations lower losslessly preserving name: None on unnamed transitions and recursive sub_states, zero .syntax().text().contains(...) calls exist, and any. */
-    use case def UC_AC_02_Fail_Closed_Typed_CST_Lowering_Without_Silent_Skips_or_Text_Heuristics {
+    doc /* - **Given**: A SysML v2.0 model containing standard metadata def and #hazard, #risk, #capability, #rt_loop, #dal, #fls prefix usages alongside backward-compatible hazard def, risk def, capability def, and test case def blocks, anonymous transitions (first S1 accept trig if grd do eff then S2;), nested sub_states, or an invalid inner token (#504, #496, #509). - **When**: lower_sysml_hir and resolve_stdlib_and_metadata traverse typed rowan::ast::AstNode wrappers over the Red/Green CST. - **Then**: Both #keyword metadata usages and backward-compatible hazard def/risk def/capability def/test case. */
+    use case def UC_AC_02_Safety_Metadata_Extensions_Backward_Compatible_Grammar_Aliases_Fail_Closed_Lowering {
         subject BijectiveSha256GateVerifier;
-        objective "Fail Closed Typed CST Lowering Without Silent Skips or Text Heuristics";
+        objective "Safety Metadata Extensions Backward Compatible Grammar Aliases Fail Closed Lowering";
     }
-    doc /* - **Given**: Identical SysML v2 models ingested from LF (macOS/Linux) and CRLF (Windows) files via camino::Utf8Path into compile_sysml::salsa_db::SourceInput, or a model with a simulated Stage-2 field mutation (#493, #497, #505). - **When**: compute_bijective_digest evaluates parse_sysml_cst -> lower_sysml_hir -> emit_canonical_sysml -> Stage-2 re-parse and lowering. - **Then**: Unchanged SourceInput revisions reuse memoized salsa query outputs, LF and CRLF inputs produce bit-identical BijectiveDigestReceipt SHA-256 hex digests with Stage-1 == Stage-2 (roundtrip_ast_mismatch_count == 0), and. */
-    use case def UC_AC_03_Demand_Driven_salsa_Incremental_Query_Memoization_Cross_Platform_SHA_256_Parity {
+    doc /* - **Given**: Identical 6-clause SysML v2.0 / KerML 1.0 models referencing ISQ, SI, and ScalarValues ingested from LF (macOS/Linux) and CRLF (Windows) files via camino::Utf8Path into compile_sysml::salsa_db::SourceInput, or a model with a simulated Stage-2 field mutation (#493, #497, #505). - **When**: compute_bijective_digest evaluates parse_sysml_cst -> lower_sysml_hir -> resolve_stdlib_and_metadata -> emit_canonical_sysml -> Stage-2 re-parse and lowering. - **Then**: Unchanged SourceInput revisions reuse memoized salsa query outputs, LF and CRLF inputs produce bit-identical. */
+    use case def UC_AC_03_Demand_Driven_salsa_Incremental_Query_Memoization_ariadne_Diagnostics_Cross_Platform_Stage_1_Stage_2_SHA_256_Parity {
         subject BijectiveSha256GateVerifier;
-        objective "Demand Driven salsa Incremental Query Memoization Cross Platform SHA 256 Parity";
+        objective "Demand Driven salsa Incremental Query Memoization ariadne Diagnostics Cross Platform Stage 1 Stage 2 SHA 256 Parity";
     }
-    doc /* - **Given**: Polyglot engineering inputs across Rust (*.rs), Dart (*.dart), OpenAPI / JSON-Schema (*.json), OMG IDL (*.idl), and IETF YANG (*.yang), alongside legacy scanner deletion targets in ./crates/deap-core/src/sysml_ast/mod.rs (-2,400+ SLOC) and ./crates/ingest-sysml/src/translators/{code,idl,yang,openapi}.rs (-1,800+ SLOC). - **When**: ingest-sysml and validate_polyglot_frontend bind each input format to its canonical typed parser frontend. - **Then**: Rust parses via ra_ap_syntax, Dart via deap_core::dart_cst (logos + rowan), JSON-Schema/OpenAPI via typed serde_json ASTs, and. */
-    use case def UC_AC_04_Cohesive_Polyglot_Typed_CST_AST_Ingestion_Legacy_Scanner_Retirement {
+    doc /* - **Given**: Polyglot engineering inputs across Rust (*.rs), Dart (*.dart), OpenAPI / JSON-Schema (*.json), OMG IDL (*.idl), and IETF YANG (*.yang), alongside legacy scanner deletion targets across deap-core (-2,400+ SLOC), compile-sysml (-1,950+ SLOC), and ingest-sysml (-1,800+ SLOC). - **When**: ingest-sysml and validate_polyglot_frontend bind each input format to its canonical typed parser frontend. - **Then**: Rust parses via ra_ap_syntax, Dart via deap_core::dart_cst (logos + rowan), JSON-Schema/OpenAPI via typed serde_json ASTs, and IDL/YANG via logos + rowan CSTs, with zero hand-rolled. */
+    use case def UC_AC_04_Cohesive_Polyglot_Typed_CST_AST_Ingestion_380_SLOC_Submodule_Gate_Legacy_Scanner_Retirement {
         subject BijectiveSha256GateVerifier;
-        objective "Cohesive Polyglot Typed CST AST Ingestion Legacy Scanner Retirement";
+        objective "Cohesive Polyglot Typed CST AST Ingestion 380 SLOC Submodule Gate Legacy Scanner Retirement";
     }
-    doc /* - **Given**: This blueprint document ./docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md (**REQ-0603**). - **When**: ./target/release/verify-baseline check-blueprint ./docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md and ./target/release/verify-baseline . --no-domain are executed. - **Then**: All 12 mechanical blueprint verification gates pass (12/12), docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.sysml and .digest.json are deterministically persisted, and workspace baseline verification exits with status code 0. */
-    use case def UC_AC_05_Dogfood_Blueprint_to_SysML_Verification_12_Gate_Closure {
+    doc /* - **Given**: This blueprint document ./docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md (**REQ-0603**) with deletion-proof file:line anchors (Cargo.toml, crates/ * /src/lib.rs, crates/ * /src/main.rs) and pre-built binary compatible Section 2/3/5 metamodel tables. - **When**: ./target/release/verify-baseline check-blueprint ./docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md is executed. - **Then**: All 12 mechanical blueprint verification gates pass (12/12), docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.sysml and. */
+    use case def UC_AC_05_Dogfood_Blueprint_to_SysML_Verification_Pre_Built_Binary_Compatibility_12_Gate_Closure {
         subject BijectiveSha256GateVerifier;
-        objective "Dogfood Blueprint to SysML Verification 12 Gate Closure";
+        objective "Dogfood Blueprint to SysML Verification Pre Built Binary Compatibility 12 Gate Closure";
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_03_SysML_v2_Lossless_Red_Green_CST_Salsa_Incremental_Query_DB_and_Bijective_Roundtrip_Compiler_Gate_Blueprint_SequenceInteraction {
@@ -153,12 +153,12 @@ package BP_03_SysML_v2_Lossless_Red_Green_CST_Salsa_Incremental_Query_DB_and_Bij
         message reply_DeterministicSha256HexDigest from Gate to DB;
         message reply_Ok from DB to CLI;
     }
-    doc /* Cross-platform CRLF-normalized Stage-1 == Stage-2 HIR equality and SHA-256 semantic digest gate */
+    doc /* Cross-platform CRLF-normalized Stage-1 == Stage-2 HIR equality, `ariadne` diagnostic renderer, and SHA-256 semantic digest gate */
     part def BijectiveSha256GateVerifier {
         attribute quantity : Integer = 1;
         attribute type : String = "Subcomponent";
     }
-    doc /* `logos::Logos` lexer and `rowan::GreenNodeBuilder` lossless Red/Green CST builder preserving trivia, doc comments, and exact spans */
+    doc /* Uncapped 6-clause `logos::Logos` lexer and `rowan::GreenNodeBuilder` lossless Red/Green CST builder preserving trivia, metadata tags, doc comments, and exact spans */
     part def LogosRowanSysmlCstFrontend {
         attribute quantity : Integer = 1;
         attribute type : String = "Subcomponent";
@@ -168,31 +168,31 @@ package BP_03_SysML_v2_Lossless_Red_Green_CST_Salsa_Incremental_Query_DB_and_Bij
         attribute quantity : Integer = 1;
         attribute type : String = "Subcomponent";
     }
-    doc /* Demand-driven `salsa` query engine memoizing `parse_sysml_cst`, `lower_sysml_hir`, `emit_canonical_sysml`, and `compute_bijective_digest` */
+    doc /* Demand-driven `salsa` query engine memoizing `parse_sysml_cst`, `lower_sysml_hir`, `resolve_stdlib_and_metadata`, `emit_canonical_sysml`, and `compute_bijective_digest` */
     part def SalsaIncrementalQueryDb {
         attribute quantity : Integer = 1;
         attribute type : String = "Subcomponent";
     }
-    doc /* Cumulative byte-offset drift between normalized source bytes and `rowan` GreenNode token spans [unit: bytes] */
+    doc /* Cumulative byte-offset drift between normalized source bytes, `rowan` GreenNode token spans, and `ariadne` labels [unit: bytes] */
     part def SysmlBijectiveRoundtripCompilerGate {
         attribute span_offset_drift_bytes : Integer = 0;
-        doc /* Count of silent token-skip fallback branches during CST parsing and typed HIR lowering [unit: branches] */
+        doc /* Count of silent token-skip fallback branches during 6-clause CST parsing and typed HIR lowering [unit: branches] */
         attribute silent_skip_branch_count : Integer = 0;
-        doc /* Count of HIR semantic fields or docstrings omitted during `emit_canonical_sysml` printing [unit: fields] */
+        doc /* Count of 6-clause HIR semantic fields, metadata tags, or docstrings omitted during `emit_canonical_sysml` printing [unit: fields] */
         attribute dropped_ast_field_count : Integer = 0;
         doc /* Count of HIR or canonical CST nodes differing between Stage-1 and Stage-2 bijective compilation [unit: nodes] */
         attribute roundtrip_ast_mismatch_count : Integer = 0;
-        doc /* Ingests UTF-8 SysML v2 or polyglot CST-lowered source via `camino::Utf8Path` with CRLF-to-LF normalization [protocol: SalsaSourceInput] */
+        doc /* Ingests UTF-8 SysML v2.0 / KerML 1.0 or polyglot CST-lowered source via `camino::Utf8Path` with CRLF-to-LF normalization [protocol: SalsaSourceInput] */
         port in RawSysmlSourceInputPort : String {
             flow in RawSysmlSourceInputPort_flow : String;
         }
-        doc /* Streams immutable `rowan` Red/Green CST trees (`SyntaxNode~SysmlLanguage~`) across `salsa` query stages [protocol: RowanGreenNode] */
+        doc /* Streams immutable 6-clause `rowan` Red/Green CST trees (`SyntaxNode~SysmlLanguage~`) across `salsa` query stages [protocol: RowanGreenNode] */
         port inout LosslessRedGreenCstPort : String;
-        doc /* Emits canonical LF-normalized SysML v2 text synthesized by `emit_canonical_sysml` [protocol: CanonicalSysmlV2] */
+        doc /* Emits canonical LF-normalized SysML v2.0 / KerML 1.0 text synthesized by `emit_canonical_sysml` [protocol: CanonicalSysmlV2] */
         port out SerializedSysmlOutputPort : String {
             flow out SerializedSysmlOutputPort_flow : String;
         }
-        doc /* Emits SHA-256 `BijectiveDigestReceipt` or fail-closed `E0100..E0400` structural diff diagnostics [protocol: StructuredDiagnostic] */
+        doc /* Emits SHA-256 `BijectiveDigestReceipt` or fail-closed `ariadne` `E0100..E0400` structural diff diagnostics [protocol: StructuredDiagnostic] */
         port out BijectiveDiffDiagnosticPort : String {
             flow out BijectiveDiffDiagnosticPort_flow : String;
         }

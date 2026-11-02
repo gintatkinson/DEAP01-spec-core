@@ -7,19 +7,7 @@ package BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint {
     attribute Target_Crates : String = "crates/compile-sysml, crates/deap-core";
     attribute Tracked_Issues : String = "#742, #733, #739, #740, #741";
     attribute Generation_Mode : String = "subagent";
-    attribute Specification_Source : String = ".pipeline/upstream/schema/modular_codegen.sysml:1-120";
-    doc /* Removes legacy string-concatenation / `writeln!` Rust code emission templates. */
-    attribute crates_compile_sysml_src_driver_rs : String = "**Delete `-450+` SLOC**";
-    doc /* Decomposes monolithic string-template Flutter/Dart and bridge emitters into bounded submodules. */
-    attribute crates_compile_sysml_src_flutter_codegen_rs : String = "**Delete `-650+` SLOC**";
-    doc /* `proc-macro2` + `quote::quote!` typed AST token synthesis for models, ports, and state machines. */
-    attribute compile_sysml_codegen_ast_token_builder : String = "**New `< 380` exec SLOC**";
-    doc /* `syn::parse2::` grammar validation and `prettyplease::unparse` canonical LF formatting. */
-    attribute compile_sysml_codegen_ast_pretty_emitter : String = "**New `< 380` exec SLOC**";
-    doc /* `ra_ap_syntax` lossless parse-clean AST checks and Stage-1 == Stage-2 SHA-256 fixed-point verification. */
-    attribute compile_sysml_codegen_ast_fixed_point_gate : String = "**New `< 380` exec SLOC**";
-    doc /* Typed `ra_ap_syntax` AST item extraction and modular code-movement partitioner. */
-    attribute deap_core_rust_cst_extract_module : String = "**New `< 380` exec SLOC**";
+    attribute Specification_Source : String = "crates/compile-sysml/src/lib.rs:1-40";
     doc /* [unit: `LOC`] */
     attribute max_file_lines : Real;
     doc /* [unit: `items`] */
@@ -30,6 +18,8 @@ package BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint {
     attribute stage_fixed_point_mismatch_files : Real;
     doc /* [unit: `count`] */
     attribute runtime_llm_subagent_count : Real;
+    doc /* [unit: `LOC`] */
+    attribute submodule_max_exec_sloc : Real;
     doc /* verify_dag_and_layers(node_layers, edges) */
     action def verify_dag_and_layers;
     doc /* partition_and_hoist(pkg) */
@@ -66,25 +56,29 @@ package BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint {
     assert constraint C_MOD_05 {
         runtime_llm_subagent_count >= 0 and runtime_llm_subagent_count <= 0;
     }
+    doc /* [unit: `LOC`] */
+    assert constraint C_MOD_06 {
+        submodule_max_exec_sloc >= 1 and submodule_max_exec_sloc <= 380;
+    }
     doc /* UUIDv5:  | Complexity: Class P | Standard: IEEE 29148-2018 / RFC 2119 | Diagnostics: E0100 */
     requirement def REQ_0607_BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint {
         id = "REQ-0607";
-        text = "SelfHostingModularCodegenCompiler (**REQ-0607** / BP-07 / DEAP-BP-DET-07, UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c7, Class P linear Kahn DAG and AST traversal complexity, governed by DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C) eliminates monolithic single-file code";
+        text = "SelfHostingModularCodegenCompiler (**REQ-0607** / BP-07 / DEAP-BP-DET-07, UUIDv5: 6ba7b810-9dad-11d1-80b4-00c04fd430c7, Class P linear Kahn DAG and AST traversal complexity, governed by DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C) eliminates monolithic single-file code";
         attribute uuidv5 : String = "";
         attribute complexity_class : String = "Class P";
         attribute governing_standard : String = "IEEE 29148-2018 / RFC 2119";
         attribute diagnostic_codes : String = "E0100";
         attribute ac_01_fail_closed_rejection_on_directed_dependency_cycles_and_upward_layer_imports : String = "- **Given**: A SysML v2 PackageDef fixture containing either a directed dependency cycle across packages/classifiers or a @Layer(Domain) classifier referencing a @Layer(Presentation) or @Layer(Application) classifier. - **When**: compile-sysml --emit-modular-rust <OUT_DIR> --schema <FIXTURE> is executed. - **Then**: TopologicalLayerDagVerifier aborts transactionally with exit code 1, emits structured diagnostic E0702 (cycle) or E0703 (illegal upward layer dependency), and leaves <OUT_DIR> with zero generated files written.";
-        attribute ac_02_four_level_deterministic_lowering_with_typed_syn_file_ast_and_prettyplease_formatting : String = "- **Given**: A valid multi-package SysML v2 model containing nested PackageDef hierarchies, multi-facet PartDef components, a 40-step ActionDef sequence, a 30-transition StateDef state machine, and a 25-clause ConstraintDef boolean Expr tree. - **When**: compile-sysml --emit-modular-rust <OUT_DIR> --schema <FIXTURE> compiles and lowers the model across Levels 1 through 4 via proc-macro2 + quote::quote! + syn::parse2::<syn::File> and prettyplease::unparse. - **Then**: Compilation succeeds with exit code 0, emitting hierarchical mod.rs barrels, facet submodules (model, invariants, ports, fsm,.";
-        attribute ac_03_metacircular_self_hosting_stage_1_to_stage_2_sha_256_fixed_point_identity : String = "- **Given**: The authoritative self-hosting compiler schema .pipeline/upstream/schema/modular_codegen.sysml and the committed Stage-1 tree under crates/compile-sysml/src/modular_codegen/generated/ verified parse-clean by ra_ap_syntax and wired into compile-sysml. - **When**: The Stage-1-linked compile-sysml binary re-compiles .pipeline/upstream/schema/modular_codegen.sysml into an isolated Stage-2 temporary directory and compares GeneratedTreeManifest SHA-256 digests. - **Then**: SHA-256(Stage 1) == SHA-256(Stage 2) holds across 100% of relative paths and file contents (**C-MOD-04**.";
-        attribute ac_04_modular_multi_file_flutter_contract_emission_and_monolith_barrel_decomposition : String = "- **Given**: A multi-package SysML v2 schema compiled via compile-sysml --emit-flutter-contracts <APP_DIR> --schema <FIXTURE> and the Rust workspace source file crates/compile-sysml/src/flutter_codegen.rs. - **When**: Modular Flutter contract generation executes and workspace modularity tests inspect both the emitted Dart tree and crates/compile-sysml/src/. - **Then**: Per-package and per-classifier .g.dart units (models/generated/<pkg>/<part>_view.g.dart, data/generated/ffi/ *.g.dart, data/generated/dto/<pkg>/<dto>_dto.g.dart, data/seeds/generated/ *.g.dart, test/generated/support/ *.g.dart).";
-        attribute ac_05_zero_string_concatenation_codegen_do_178c_seven_section_docstring_and_clippy_forbid_compliance : String = "- **Given**: All hand-authored modules under crates/compile-sysml/src/modular_codegen/ ** and all Stage-1 generated Rust modules under crates/compile-sysml/src/modular_codegen/generated/ **. - **When**: cargo clippy --workspace --all-targets -- -D warnings and ./target/release/verify-baseline audit-code --path crates/compile-sysml/src/modular_codegen --dry-run are executed. - **Then**: Both verification gates exit 0 with zero Clippy forbid violations, zero Check 34 violation tokens, zero Check 19 hardcoded domain concepts, zero legacy string-concatenation / format! code emitters, and 100%.";
-        attribute ac_06_dogfood_sysml_v2_blueprint_ingestion_and_twelve_gate_closed_loop_conformance : String = "- **Given**: This engineering blueprint at docs/designs/blueprint-07-self-hosting-modular-codegen-compiler.md. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-07-self-hosting-modular-codegen-compiler.md is executed. - **Then**: All 12 blueprint verification gates pass with exit code 0, deterministically synthesizing docs/designs/blueprint-07-self-hosting-modular-codegen-compiler.sysml and .digest.json via roundtrip SysML v2 compilation and verifying closed-loop GitHub SSOT parity.";
+        attribute ac_02_contract_a_contract_b_four_level_lowering_with_typed_syn_file_ast_prettyplease_formatting_and_380_sloc_submodules : String = "- **Given**: A valid multi-package SysML v2 model containing nested PackageDef hierarchies, multi-facet PartDef components, a 40-step ActionDef sequence, a 30-transition StateDef state machine, and a 25-clause ConstraintDef boolean Expr tree. - **When**: compile-sysml --emit-modular-rust <OUT_DIR> --schema <FIXTURE> compiles and lowers the model across Levels 1 through 4 via proc-macro2 + quote::quote! + syn::parse2::<syn::File> and prettyplease::unparse. - **Then**: Compilation succeeds with exit code 0, emitting hierarchical mod.rs barrels, facet submodules (model, invariants, ports, fsm,.";
+        attribute ac_03_contract_a_metacircular_self_hosting_stage_1_to_stage_2_sha_256_fixed_point_identity : String = "- **Given**: The authoritative self-hosting compiler schema and the committed Stage-1 tree under crates/compile-sysml/src/modular_codegen/generated/ verified parse-clean by ra_ap_syntax and wired into compile-sysml. - **When**: The Stage-1-linked compile-sysml binary re-compiles the self-hosting schema into an isolated Stage-2 temporary directory and compares GeneratedTreeManifest SHA-256 digests. - **Then**: SHA-256(Stage 1) == SHA-256(Stage 2) holds across 100% of relative paths and file contents (**C-MOD-04** stage_fixed_point_mismatch_files == 0), whereas any injected perturbation.";
+        attribute ac_04_modular_multi_file_flutter_contract_emission_and_legacy_monolith_deletion : String = "- **Given**: A multi-package SysML v2 schema compiled via compile-sysml --emit-flutter-contracts <APP_DIR> --schema <FIXTURE> and the crates/compile-sysml/src/lib.rs module hierarchy. - **When**: Modular Flutter contract generation executes and workspace modularity tests inspect both the emitted Dart tree and crates/compile-sysml/src/. - **Then**: Per-package and per-classifier .g.dart units (models/generated/<pkg>/<part>_view.g.dart, data/generated/ffi/ *.g.dart, data/generated/dto/<pkg>/<dto>_dto.g.dart, data/seeds/generated/ *.g.dart, test/generated/support/ *.g.dart) are emitted alongside.";
+        attribute ac_05_zero_hand_rolled_scanner_string_concatenation_codegen_do_178c_seven_section_docstring_and_clippy_forbid_compliance : String = "- **Given**: All hand-authored < 380-SLOC modules under crates/compile-sysml/src/modular_codegen/ ** and crates/deap-core/src/ **, plus all Stage-1 generated Rust modules under crates/compile-sysml/src/modular_codegen/generated/ **. - **When**: cargo clippy --workspace --all-targets -- -D warnings and ./target/release/verify-baseline audit-code --path crates/compile-sysml/src/modular_codegen --dry-run are executed. - **Then**: Both verification gates exit 0 with zero Clippy forbid violations, zero Check 34 violation tokens, zero Check 19 hardcoded domain concepts, zero legacy hand-rolled.";
+        attribute ac_06_pre_built_binary_compatibility_guard_and_twelve_gate_closed_loop_blueprint_conformance : String = "- **Given**: This engineering blueprint at docs/designs/blueprint-07-self-hosting-modular-codegen-compiler.md with all .sysml constructs restricted to the token/grammar subset accepted by ./target/release/verify-baseline and all file:line anchors citing stable workspace files (Cargo.toml, crates/ * /src/lib.rs, crates/ * /src/main.rs). - **When**: ./target/release/verify-baseline check-blueprint ./docs/designs/blueprint-07-self-hosting-modular-codegen-compiler.md is executed. - **Then**: All 12 blueprint verification gates pass with exit code 0, deterministically synthesizing.";
         doc /* \begin{aligned} \text{Acyclic}(G) &\iff \exists \pi : V \to \{1, \dots, \lvert V \rvert\}, \quad \forall (u, v) \in E, \quad \pi(u) < \pi(v) \\ \text{LayerMonotonic}(G) &\iff \forall (u, v) \in E, \quad \text{tier}(u) \ge \text{tier}(v) \end{aligned} */
         constraint def Invariant_REQ_0607_SC_02;
-        doc /* \begin{aligned} \forall u \in \mathcal{U}, \quad \text{LOC}(u) &\le L_{\max} = 400 \land \text{Items}(u) \le K_{\max} = 12 \\ \forall f \in \text{Funcs}(u), \quad v(G_f) &= \lvert E_f \rvert - \lvert V_f \rvert + 2 \le C_{\max} = 8 \end{aligned} */
+        doc /* \begin{aligned} \forall m \in \mathcal{M}_{\text{sub}}, \quad \text{SLOC}_{\text{exec}}(m) &< S_{\max} = 380 \\ \forall u \in \mathcal{U}, \quad \text{LOC}(u) &\le L_{\max} = 400 \land \text{Items}(u) \le K_{\max} = 12 \\ \forall f \in \text{Funcs}(u), \quad v(G_f) &= \lvert E_f \rvert - \lvert V_f \rvert + 2 \le C_{\max} = 8 \end{aligned} */
         constraint def Invariant_REQ_0607_SC_01;
-        doc /* \begin{aligned} \forall u \in \mathcal{U}, \quad \text{syn::parse2}(\text{tokens}(u)) &\in \mathcal{L}(\text{syn::File}) \\ \text{Content}(u) &= \text{normalize\_lf}(\text{prettyplease::unparse}(\text{syn::parse2}(\text{tokens}(u)))) \end{aligned} */
+        doc /* \begin{aligned} \forall u \in \mathcal{U}, \quad \text{syn::parse2}(\text{tokens}(u)) &\in \mathcal{L}(\text{syn::File}) \\ \text{Content}(u) &= \text{normalize\_lf}(\text{prettyplease::unparse}(\text{syn::parse2}(\text{tokens}(u)))) \\ \text{SLOC}_{\text{legacy\_scanner\_codegen}} &= 0 \end{aligned} */
         constraint def Invariant_REQ_0607_SC_04;
         doc /* \begin{aligned} T_{\text{codegen}}(V, E, B) &= O(\lvert V \rvert + \lvert E \rvert + \lvert B \rvert) \\ S_{\text{codegen}}(V, E, B) &= O(\lvert V \rvert + \lvert E \rvert + \lvert B \rvert) \end{aligned} */
         constraint def Invariant_REQ_0607_REQ_0607;
@@ -96,11 +90,11 @@ package BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint {
         require Invariant_REQ_0607_REQ_0607;
         require Invariant_REQ_0607_SC_03;
         verify by AC_01_Fail_Closed_Rejection_on_Directed_Dependency_Cycles_and_Upward_Layer_Imports;
-        verify by AC_02_Four_Level_Deterministic_Lowering_with_Typed_syn_File_AST_and_prettyplease_Formatting;
-        verify by AC_03_Metacircular_Self_Hosting_Stage_1_to_Stage_2_SHA_256_Fixed_Point_Identity;
-        verify by AC_04_Modular_Multi_File_Flutter_Contract_Emission_and_Monolith_Barrel_Decomposition;
-        verify by AC_05_Zero_String_Concatenation_Codegen_DO_178C_Seven_Section_Docstring_and_Clippy_Forbid_Compliance;
-        verify by AC_06_Dogfood_SysML_v2_Blueprint_Ingestion_and_Twelve_Gate_Closed_Loop_Conformance;
+        verify by AC_02_Contract_A_Contract_B_Four_Level_Lowering_with_Typed_syn_File_AST_prettyplease_Formatting_and_380_SLOC_Submodules;
+        verify by AC_03_Contract_A_Metacircular_Self_Hosting_Stage_1_to_Stage_2_SHA_256_Fixed_Point_Identity;
+        verify by AC_04_Modular_Multi_File_Flutter_Contract_Emission_and_Legacy_Monolith_Deletion;
+        verify by AC_05_Zero_Hand_Rolled_Scanner_String_Concatenation_Codegen_DO_178C_Seven_Section_Docstring_and_Clippy_Forbid_Compliance;
+        verify by AC_06_Pre_Built_Binary_Compatibility_Guard_and_Twelve_Gate_Closed_Loop_Blueprint_Conformance;
         satisfy by FourLevelAstPartitionerAndHoister;
     }
     doc /* Extracted from Mermaid stateDiagram specification. */
@@ -135,29 +129,29 @@ package BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint {
         objective "Fail Closed Rejection on Directed Dependency Cycles and Upward Layer Imports";
     }
     doc /* - **Given**: A valid multi-package SysML v2 model containing nested PackageDef hierarchies, multi-facet PartDef components, a 40-step ActionDef sequence, a 30-transition StateDef state machine, and a 25-clause ConstraintDef boolean Expr tree. - **When**: compile-sysml --emit-modular-rust <OUT_DIR> --schema <FIXTURE> compiles and lowers the model across Levels 1 through 4 via proc-macro2 + quote::quote! + syn::parse2::<syn::File> and prettyplease::unparse. - **Then**: Compilation succeeds with exit code 0, emitting hierarchical mod.rs barrels, facet submodules (model, invariants, ports, fsm,. */
-    use case def UC_AC_02_Four_Level_Deterministic_Lowering_with_Typed_syn_File_AST_and_prettyplease_Formatting {
+    use case def UC_AC_02_Contract_A_Contract_B_Four_Level_Lowering_with_Typed_syn_File_AST_prettyplease_Formatting_and_380_SLOC_Submodules {
         subject FourLevelAstPartitionerAndHoister;
-        objective "Four Level Deterministic Lowering with Typed syn File AST and prettyplease Formatting";
+        objective "Contract A Contract B Four Level Lowering with Typed syn File AST prettyplease Formatting and 380 SLOC Submodules";
     }
-    doc /* - **Given**: The authoritative self-hosting compiler schema .pipeline/upstream/schema/modular_codegen.sysml and the committed Stage-1 tree under crates/compile-sysml/src/modular_codegen/generated/ verified parse-clean by ra_ap_syntax and wired into compile-sysml. - **When**: The Stage-1-linked compile-sysml binary re-compiles .pipeline/upstream/schema/modular_codegen.sysml into an isolated Stage-2 temporary directory and compares GeneratedTreeManifest SHA-256 digests. - **Then**: SHA-256(Stage 1) == SHA-256(Stage 2) holds across 100% of relative paths and file contents (**C-MOD-04**. */
-    use case def UC_AC_03_Metacircular_Self_Hosting_Stage_1_to_Stage_2_SHA_256_Fixed_Point_Identity {
+    doc /* - **Given**: The authoritative self-hosting compiler schema and the committed Stage-1 tree under crates/compile-sysml/src/modular_codegen/generated/ verified parse-clean by ra_ap_syntax and wired into compile-sysml. - **When**: The Stage-1-linked compile-sysml binary re-compiles the self-hosting schema into an isolated Stage-2 temporary directory and compares GeneratedTreeManifest SHA-256 digests. - **Then**: SHA-256(Stage 1) == SHA-256(Stage 2) holds across 100% of relative paths and file contents (**C-MOD-04** stage_fixed_point_mismatch_files == 0), whereas any injected perturbation. */
+    use case def UC_AC_03_Contract_A_Metacircular_Self_Hosting_Stage_1_to_Stage_2_SHA_256_Fixed_Point_Identity {
         subject FourLevelAstPartitionerAndHoister;
-        objective "Metacircular Self Hosting Stage 1 to Stage 2 SHA 256 Fixed Point Identity";
+        objective "Contract A Metacircular Self Hosting Stage 1 to Stage 2 SHA 256 Fixed Point Identity";
     }
-    doc /* - **Given**: A multi-package SysML v2 schema compiled via compile-sysml --emit-flutter-contracts <APP_DIR> --schema <FIXTURE> and the Rust workspace source file crates/compile-sysml/src/flutter_codegen.rs. - **When**: Modular Flutter contract generation executes and workspace modularity tests inspect both the emitted Dart tree and crates/compile-sysml/src/. - **Then**: Per-package and per-classifier .g.dart units (models/generated/<pkg>/<part>_view.g.dart, data/generated/ffi/ *.g.dart, data/generated/dto/<pkg>/<dto>_dto.g.dart, data/seeds/generated/ *.g.dart, test/generated/support/ *.g.dart). */
-    use case def UC_AC_04_Modular_Multi_File_Flutter_Contract_Emission_and_Monolith_Barrel_Decomposition {
+    doc /* - **Given**: A multi-package SysML v2 schema compiled via compile-sysml --emit-flutter-contracts <APP_DIR> --schema <FIXTURE> and the crates/compile-sysml/src/lib.rs module hierarchy. - **When**: Modular Flutter contract generation executes and workspace modularity tests inspect both the emitted Dart tree and crates/compile-sysml/src/. - **Then**: Per-package and per-classifier .g.dart units (models/generated/<pkg>/<part>_view.g.dart, data/generated/ffi/ *.g.dart, data/generated/dto/<pkg>/<dto>_dto.g.dart, data/seeds/generated/ *.g.dart, test/generated/support/ *.g.dart) are emitted alongside. */
+    use case def UC_AC_04_Modular_Multi_File_Flutter_Contract_Emission_and_Legacy_Monolith_Deletion {
         subject FourLevelAstPartitionerAndHoister;
-        objective "Modular Multi File Flutter Contract Emission and Monolith Barrel Decomposition";
+        objective "Modular Multi File Flutter Contract Emission and Legacy Monolith Deletion";
     }
-    doc /* - **Given**: All hand-authored modules under crates/compile-sysml/src/modular_codegen/ ** and all Stage-1 generated Rust modules under crates/compile-sysml/src/modular_codegen/generated/ **. - **When**: cargo clippy --workspace --all-targets -- -D warnings and ./target/release/verify-baseline audit-code --path crates/compile-sysml/src/modular_codegen --dry-run are executed. - **Then**: Both verification gates exit 0 with zero Clippy forbid violations, zero Check 34 violation tokens, zero Check 19 hardcoded domain concepts, zero legacy string-concatenation / format! code emitters, and 100%. */
-    use case def UC_AC_05_Zero_String_Concatenation_Codegen_DO_178C_Seven_Section_Docstring_and_Clippy_Forbid_Compliance {
+    doc /* - **Given**: All hand-authored < 380-SLOC modules under crates/compile-sysml/src/modular_codegen/ ** and crates/deap-core/src/ **, plus all Stage-1 generated Rust modules under crates/compile-sysml/src/modular_codegen/generated/ **. - **When**: cargo clippy --workspace --all-targets -- -D warnings and ./target/release/verify-baseline audit-code --path crates/compile-sysml/src/modular_codegen --dry-run are executed. - **Then**: Both verification gates exit 0 with zero Clippy forbid violations, zero Check 34 violation tokens, zero Check 19 hardcoded domain concepts, zero legacy hand-rolled. */
+    use case def UC_AC_05_Zero_Hand_Rolled_Scanner_String_Concatenation_Codegen_DO_178C_Seven_Section_Docstring_and_Clippy_Forbid_Compliance {
         subject FourLevelAstPartitionerAndHoister;
-        objective "Zero String Concatenation Codegen DO 178C Seven Section Docstring and Clippy Forbid Compliance";
+        objective "Zero Hand Rolled Scanner String Concatenation Codegen DO 178C Seven Section Docstring and Clippy Forbid Compliance";
     }
-    doc /* - **Given**: This engineering blueprint at docs/designs/blueprint-07-self-hosting-modular-codegen-compiler.md. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-07-self-hosting-modular-codegen-compiler.md is executed. - **Then**: All 12 blueprint verification gates pass with exit code 0, deterministically synthesizing docs/designs/blueprint-07-self-hosting-modular-codegen-compiler.sysml and .digest.json via roundtrip SysML v2 compilation and verifying closed-loop GitHub SSOT parity. */
-    use case def UC_AC_06_Dogfood_SysML_v2_Blueprint_Ingestion_and_Twelve_Gate_Closed_Loop_Conformance {
+    doc /* - **Given**: This engineering blueprint at docs/designs/blueprint-07-self-hosting-modular-codegen-compiler.md with all .sysml constructs restricted to the token/grammar subset accepted by ./target/release/verify-baseline and all file:line anchors citing stable workspace files (Cargo.toml, crates/ * /src/lib.rs, crates/ * /src/main.rs). - **When**: ./target/release/verify-baseline check-blueprint ./docs/designs/blueprint-07-self-hosting-modular-codegen-compiler.md is executed. - **Then**: All 12 blueprint verification gates pass with exit code 0, deterministically synthesizing. */
+    use case def UC_AC_06_Pre_Built_Binary_Compatibility_Guard_and_Twelve_Gate_Closed_Loop_Blueprint_Conformance {
         subject FourLevelAstPartitionerAndHoister;
-        objective "Dogfood SysML v2 Blueprint Ingestion and Twelve Gate Closed Loop Conformance";
+        objective "Pre Built Binary Compatibility Guard and Twelve Gate Closed Loop Blueprint Conformance";
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint_SequenceInteraction {
@@ -220,10 +214,12 @@ package BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint {
         attribute canonical_prettyplease_format : Boolean = true;
         doc /* Verifies ra_ap_syntax lossless parse-clean AST and Stage-1 == Stage-2 SHA-256 fixed-point equality. [unit: flag] */
         attribute fixed_point_sha256_verification : Boolean = true;
-        doc /* Net-negative legacy string-concatenation emitter deletion target in compile-sysml. [unit: LOC] */
+        doc /* Net-negative legacy hand-rolled scanner and string-concatenation emitter deletion target in compile-sysml. [unit: LOC] */
         attribute legacy_string_codegen_deleted_sloc : Integer = 1100;
-        doc /* Strict execution SLOC ceiling per modular codegen submodule. [unit: LOC] */
+        doc /* Strict execution SLOC ceiling per modular codegen and CST extraction submodule under Contract B. [unit: LOC] */
         attribute submodule_max_exec_sloc : Integer = 380;
+        doc /* Enforces Contract A typed AST fixed-point synthesis and Contract B submodule and binary compatibility bounds. [unit: flag] */
+        attribute contract_a_b_enforced : Boolean = true;
         doc /* Receives lowered `ModuleGraph` targeted for `--emit-modular-rust`. [protocol: LoweredModuleGraph] */
         port in rust_module_graph_in : String {
             flow in rust_module_graph_in_flow : String;

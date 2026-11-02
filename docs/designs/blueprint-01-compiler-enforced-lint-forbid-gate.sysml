@@ -7,7 +7,7 @@ package BP_01_Compiler_Enforced_Forbid_Lint_Gate_Lossless_CST_Attribute_Verifica
     attribute Target_Crates : String = "crates/deap-core, crates/verify-baseline, crates/compile-sysml, crates/ingest-sysml, crates/assemble-conops, crates/reconcile-backlog";
     attribute Tracked_Issues : String = "#491, #492, #496, #497, #498, #499, #500, #501, #502, #506, #508";
     attribute Generation_Mode : String = "subagent";
-    attribute Specification_Source : String = "Cargo.toml:1-25 / clippy.toml:1-15 / crates/verify-baseline/src/checks/structural.rs:1-120 / #491";
+    attribute Specification_Source : String = "Cargo.toml:1-25 / crates/deap-core/src/lib.rs:1-40 / crates/verify-baseline/src/lib.rs:1-40 / crates/verify-baseline/src/main.rs:1-46 / #491";
     doc /* Invoke cargo clippy --workspace --all-targets --message-format=json */
     action def InvokeCargoClippyWorkspaceAllTargets;
     doc /* Load [workspace.lints] forbid table and clippy.toml (80 lines, 5 args, disallowed-types) */

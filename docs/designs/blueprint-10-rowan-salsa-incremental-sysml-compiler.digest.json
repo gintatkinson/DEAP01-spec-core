@@ -54,13 +54,13 @@
     "Title",
     "Tracked_Issues",
     "TypedPolyglotIngestionFrontend",
-    "UC_AC_01_Lossless_logos_and_rowan_Concrete_Syntax_Tree_Full_Fidelity_Roundtrip_and_Cross_Platform_CRLF_Normalization",
+    "UC_AC_01_Contract_A_Full_Normative_OMG_SysML_v2_0_and_KerML_1_0_Lossless_logos_and_rowan_CST_Roundtrip",
     "UC_AC_02_Resilient_Error_Recovery_Parsing_MAX_AST_DEPTH_Guard_and_Deterministic_Ariadne_Byte_Span_Diagnostics",
     "UC_AC_03_Formatting_Preserving_Bidirectional_CST_Splicing_Across_Forward_and_Reverse_Sync",
     "UC_AC_04_Salsa_Early_Cutoff_Durability_Preventing_Downstream_Recomputations_on_Trivia_Edits",
-    "UC_AC_05_Fail_Closed_Salsa_Cycle_Detection_and_Net_Negative_Legacy_Scanner_Retirement",
-    "UC_AC_06_Cohesive_Typed_Polyglot_CST_AST_Lowering_with_Zero_rustc_private_and_Exact_Byte_Span_Diagnostics",
-    "UC_AC_07_Twelve_Gate_Blueprint_Verification_and_Baseline_Cleanliness_Gate_Conformance",
+    "UC_AC_05_Fail_Closed_Salsa_Cycle_Detection_Submodule_SLOC_Ceiling_and_Net_Negative_Legacy_Scanner_Retirement",
+    "UC_AC_06_Contract_B_Cohesive_Typed_Polyglot_CST_AST_Lowering_with_Zero_rustc_private_and_Exact_Byte_Span_Diagnostics",
+    "UC_AC_07_Twelve_Gate_Blueprint_Verification_and_Pre_Built_Binary_Baseline_Conformance",
     "apply_formatting_preserving_splices",
     "atomic_disjoint_splice",
     "cycle_recovery_fail_closed",
@@ -158,9 +158,9 @@
   "operational_scenarios": [
     {
       "id": "SCN-01",
-      "name": "UC_AC_01_Lossless_logos_and_rowan_Concrete_Syntax_Tree_Full_Fidelity_Roundtrip_and_Cross_Platform_CRLF_Normalization",
+      "name": "UC_AC_01_Contract_A_Full_Normative_OMG_SysML_v2_0_and_KerML_1_0_Lossless_logos_and_rowan_CST_Roundtrip",
       "actor": "",
-      "objective": "\"Lossless logos and rowan Concrete Syntax Tree Full Fidelity Roundtrip and Cross Platform CRLF Normalization\"",
+      "objective": "\"Contract A Full Normative OMG SysML v2 0 and KerML 1 0 Lossless logos and rowan CST Roundtrip\"",
       "steps": []
     },
     {
@@ -186,23 +186,23 @@
     },
     {
       "id": "SCN-05",
-      "name": "UC_AC_05_Fail_Closed_Salsa_Cycle_Detection_and_Net_Negative_Legacy_Scanner_Retirement",
+      "name": "UC_AC_05_Fail_Closed_Salsa_Cycle_Detection_Submodule_SLOC_Ceiling_and_Net_Negative_Legacy_Scanner_Retirement",
       "actor": "",
-      "objective": "\"Fail Closed Salsa Cycle Detection and Net Negative Legacy Scanner Retirement\"",
+      "objective": "\"Fail Closed Salsa Cycle Detection Submodule SLOC Ceiling and Net Negative Legacy Scanner Retirement\"",
       "steps": []
     },
     {
       "id": "SCN-06",
-      "name": "UC_AC_06_Cohesive_Typed_Polyglot_CST_AST_Lowering_with_Zero_rustc_private_and_Exact_Byte_Span_Diagnostics",
+      "name": "UC_AC_06_Contract_B_Cohesive_Typed_Polyglot_CST_AST_Lowering_with_Zero_rustc_private_and_Exact_Byte_Span_Diagnostics",
       "actor": "",
-      "objective": "\"Cohesive Typed Polyglot CST AST Lowering with Zero rustc private and Exact Byte Span Diagnostics\"",
+      "objective": "\"Contract B Cohesive Typed Polyglot CST AST Lowering with Zero rustc private and Exact Byte Span Diagnostics\"",
       "steps": []
     },
     {
       "id": "SCN-07",
-      "name": "UC_AC_07_Twelve_Gate_Blueprint_Verification_and_Baseline_Cleanliness_Gate_Conformance",
+      "name": "UC_AC_07_Twelve_Gate_Blueprint_Verification_and_Pre_Built_Binary_Baseline_Conformance",
       "actor": "",
-      "objective": "\"Twelve Gate Blueprint Verification and Baseline Cleanliness Gate Conformance\"",
+      "objective": "\"Twelve Gate Blueprint Verification and Pre Built Binary Baseline Conformance\"",
       "steps": []
     }
   ],
@@ -216,7 +216,7 @@
     {
       "name": "LogosRowanSysmlCstEngine",
       "node_type": "Part",
-      "doc": "Hard structural nesting ceiling across nested `package`, `part`, `port`, `action`, `state`, and expression CST blocks in `deap_core::sysml_cst::parser`. [unit: levels]",
+      "doc": "Hard structural nesting ceiling across all normative OMG SysML v2.0 and KerML 1.0 declaration, usage, behavioral, and expression CST blocks in `deap_core::sysml_cst::parser` (Contract A, zero 16-construct caps). [unit: levels]",
       "allocated_activities": []
     },
     {
@@ -228,7 +228,7 @@
     {
       "name": "TypedPolyglotIngestionFrontend",
       "node_type": "Part",
-      "doc": "Count of typed CST/AST frontends in `ingest_sysml::polyglot_cst` (`ra_ap_syntax` Rust, `deap_core::dart_cst` Dart, typed `serde_json` OpenAPI/JSON-Schema, `logos`+`rowan` OMG IDL, IETF YANG, Markdown). [unit: frontends]",
+      "doc": "Count of Contract B typed CST/AST frontends (`ra_ap_syntax` Rust, `deap_core::dart_cst` Dart, typed `serde_json` OpenAPI/JSON-Schema, `logos`+`rowan` OMG IDL and IETF YANG in `ingest_sysml::cst::idl_cst` and `ingest_sysml::cst::yang_cst`, and Markdown in `ingest_sysml::cst::markdown_cst`). [unit: frontends]",
       "allocated_activities": []
     }
   ],

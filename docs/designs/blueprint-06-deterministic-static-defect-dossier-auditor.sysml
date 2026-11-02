@@ -7,21 +7,21 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
     attribute Target_Crates : String = "crates/verify-baseline, crates/deap-core";
     attribute Tracked_Issues : String = "#465, #466, #467, #468";
     attribute Generation_Mode : String = "subagent";
-    attribute Specification_Source : String = "crates/verify-baseline/src/defect_dossier.rs:1-2276";
-    doc /* `0` subagents (100% native Rust binary execution) */
-    attribute Subagent_Dispatches : String = "5 to 10 LLM subagents per audit wave";
-    doc /* `ra_ap_syntax` typed AST + `logos`/`rowan` Dart CST */
-    attribute Source_Parsing_Engine : String = "LLM token window / hand-rolled line scanners";
-    doc /* Stage-2 `cargo-dylint` driver reading `rustc_middle::mir::Body` */
-    attribute Semantic_MIR_Analysis : String = "Heuristic prompt interpretation (hallucination-prone)";
-    doc /* Structured AST emission via `pulldown-cmark-to-cmark` */
-    attribute Dossier_Construction : String = "Manual LLM markdown drafting";
-    doc /* Deterministic Check 13B-compliant `sequenceDiagram` / `classDiagram` builder */
-    attribute Mermaid_Diagram_Synthesis : String = "Hand-authored Mermaid (error-prone)";
-    doc /* In-process `defect_dossier::validate_defect_dossier` (12 checks) */
-    attribute Schema_Validation_Gate : String = "External subprocess retry loop";
-    doc /* `< 1.0 s` local scan and synthesis (`O(N)` linear complexity) */
-    attribute End_to_End_Execution_Time : String = "180 s to 600 s per module wave";
+    attribute Specification_Source : String = "crates/verify-baseline/src/main.rs:1-40";
+    doc /* 5 to 10 LLM subagents per audit wave */
+    attribute Subagent_Dispatches : String = "Zero subagents (100% native Rust binary execution)";
+    doc /* LLM token window / hand-rolled line scanners */
+    attribute Source_Parsing_Engine : String = "Typed `ra_ap_syntax` AST and `logos`/`rowan` `deap_core::dart_cst` engine";
+    doc /* Heuristic prompt interpretation (hallucination-prone) */
+    attribute Semantic_MIR_Analysis : String = "Stage-2 `cargo-dylint` driver (`./lints/deap-dylint-mir/`) reading `rustc_middle::mir::Body` (`TyCtxt`)";
+    doc /* Manual LLM markdown drafting */
+    attribute Dossier_Construction : String = "Structured AST emission via `pulldown-cmark-to-cmark` CommonMark serializer";
+    doc /* Hand-authored Mermaid (error-prone) */
+    attribute Mermaid_Diagram_Synthesis : String = "Deterministic Check 13B-compliant `sequenceDiagram` / `classDiagram` builder";
+    doc /* External subprocess retry loop */
+    attribute Schema_Validation_Gate : String = "In-process `defect_dossier::validate_defect_dossier` (12 checks)";
+    doc /* 180 s to 600 s per module wave */
+    attribute End_to_End_Execution_Time : String = "Sub-second (`< 1.0 s`) local scan and synthesis (`O(N)` linear complexity)";
     doc /* [unit: `count`] */
     attribute auditor_subagent_count : Real;
     doc /* [unit: `checks`] */
@@ -77,31 +77,31 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
     doc /* UUIDv5:  | Complexity: Class P | Standard: IEEE 29148-2018 / RFC 2119 | Diagnostics: E0100 */
     requirement def REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint {
         id = "REQ-0606";
-        text = "The DeterministicStaticDefectAuditor subsystem (**REQ-0606** / BP-06 / DEAP-BP-DET-06, deterministic UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c6, complexity class Class P linear single-pass syntax tree and MIR traversal, governed by DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and";
+        text = "The DeterministicStaticDefectAuditor subsystem (**REQ-0606** / BP-06 / DEAP-BP-DET-06, UUIDv5: 6ba7b810-9dad-11d1-80b4-00c04fd430c6, complexity class Class P linear single-pass syntax tree and MIR traversal, governed by DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C) SHALL";
         attribute uuidv5 : String = "";
         attribute complexity_class : String = "Class P";
         attribute governing_standard : String = "IEEE 29148-2018 / RFC 2119";
         attribute diagnostic_codes : String = "E0100";
-        attribute ac_01_static_five_pillar_typed_ast_defect_detection : String = "Diagnostic: E0601).";
-        attribute ac_02_stage_2_dynamic_dylint_mir_analysis_integration : String = "Diagnostic: E0602).";
-        attribute ac_03_isolated_dart_cst_extraction : String = "Diagnostic: E0603).";
-        attribute ac_04_deterministic_seven_section_dossier_synthesis_via_pulldown_cmark_to_cmark : String = "Diagnostic: E0604).";
-        attribute ac_05_idempotent_local_and_remote_ssot_deduplication : String = "Diagnostic: E0605).";
-        attribute ac_06_closed_loop_github_ssot_publishing_and_byte_parity_verification : String = "Diagnostic: E0606).";
-        attribute ac_07_net_negative_scanner_retirement_and_dogfood_blueprint_gate_conformance : String = "- **Given**: This blueprint specification at docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md --dry-run is executed. - **Then**: All 12 blueprint verification gates pass, verifying complete retirement of hand-rolled scanners (legacy_scanner_sloc_target == -2399), modular submodule layout (max_module_exec_sloc <= 380), and bijective roundtrip SysML v2 metamodel lowering with exit code 0.";
+        attribute ac_01_contract_a_static_five_pillar_typed_ast_defect_detection : String = "- **Given**: A target Rust source file containing representative defects across the 5 pillars (unchecked as casts in Memory Safety E0601, unbounded cache mutations in Resource Lifecycle E0602, TOCTOU file checks in Concurrency E0603, 0-assertion tests in Test Integrity E0604, or missing Realises: tags in Semantic Traceability E0605). - **When**: ./target/release/verify-baseline audit-code --path <PATH> --dry-run is executed. - **Then**: CstPillarAuditor deterministically parses the syntax tree using ra_ap_syntax under Contract A, rejects any .syntax().text().contains(...) or regex fallback.";
+        attribute ac_02_contract_b_stage_2_dynamic_dylint_mir_analysis_integration : String = "- **Given**: A workspace crate targeted for semantic audit where Stage-2 MIR rules are enabled. - **When**: DylintMirBridge::run_stage2_mir_analysis executes against the out-of-tree dynamic driver in ./lints/deap-dylint-mir/ resolved via camino::Utf8Path and std::env::consts. - **Then**: The bridge receives structured NDJSON receipts capturing rustc_middle::mir::Body and rustc_middle::ty::TyCtxt borrow and dataflow diagnostics across all 5 pillars without adding #![feature(rustc_private)] to core crates with diagnostic code E0602.";
+        attribute ac_03_isolated_dart_cst_extraction : String = "- **Given**: A Flutter or Dart source file with unclosed stream controllers or asynchronous setState() calls. - **When**: DartCstExtractionEngine::audit_dart_cst parses the source text using logos lexical tokens and rowan lossless syntax trees. - **Then**: The isolated < 380-SLOC deap_core::dart_cst engine emits line-exact AuditFinding records without contaminating core Rust AST data models with diagnostic code E0603.";
+        attribute ac_04_fail_closed_deterministic_seven_section_dossier_synthesis_via_pulldown_cmark_to_cmark : String = "- **Given**: An AuditFinding emitted by CST or MIR audit stages with Critical or Important severity, or a malformed candidate missing required headers or containing Mermaid semicolons. - **When**: synthesize_defect_dossier_markdown(&finding) constructs the .pipeline/defects/DEFECT-<SLUG>.md artifact and validates it through validate_defect_dossier. - **Then**: Valid CommonMark AST output populates all 7 canonical sections and ## Audit Source with Check 13B-compliant Mermaid diagrams (dossier_schema_check_count == 12), whereas any malformed dossier fails closed and is rejected with a non-zero.";
+        attribute ac_05_idempotent_local_and_remote_ssot_deduplication : String = "- **Given**: A workspace where .pipeline/defects/DEFECT-<SLUG>.md and its corresponding GitHub issue already exist for a specific (FILE_LOCATION, AuditPillar) tuple. - **When**: ./target/release/verify-baseline audit-code --path <PATH> --publish is re-run on unchanged source trees. - **Then**: The auditor detects existing artifacts, skips duplicate file or issue creation, and exits cleanly with code 0 and diagnostic code E0605.";
+        attribute ac_06_closed_loop_github_ssot_publishing_and_byte_parity_verification : String = "- **Given**: A newly synthesized .pipeline/defects/DEFECT-<SLUG>.md dossier and --publish flag. - **When**: ClosedLoopDefectPublisherGate invokes defect_dossier::run_check_defect. - **Then**: The verifier creates or edits the issue via gh issue, queries gh issue view <ID> --json title,body,url, verifies that closed_loop_mismatch_bytes == 0 after CRLF normalization, fails closed on any remote byte mismatch, and prints [CLOSED-LOOP VERIFIED] with diagnostic code E0606.";
+        attribute ac_07_contract_a_contract_b_net_negative_source_ast_rs_deletion_and_380_sloc_submodule_gate_conformance : String = "- **Given**: This blueprint specification at docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md --dry-run is executed. - **Then**: All 12 blueprint verification gates pass, verifying complete deletion of crates/deap-core/src/source_ast.rs and hand-rolled scanners (legacy_scanner_sloc_target == -2399), modular < 380-SLOC submodule layout (max_module_exec_sloc <= 380), Contract A and Contract B compliance, and bijective roundtrip SysML v2.";
         doc /* \begin{aligned} \text{AuditorSoundness} &\iff (N_{\text{subagents}} = 0) \land (N_{\text{checks}} = 12) \land (N_{\text{pillars}} = 5) \land (\Delta_{\text{SSOT}} = 0) \land (\Delta_{\text{legacy}} = -2399) \\ \text{GatePass}(D) &\iff \prod_{m=1}^{12} C_m(D) = 1 \end{aligned} */
         constraint def Invariant_REQ_0606_SC_01;
         doc /* \begin{aligned} T_{\text{audit}}(N, V, K) &= O(N + V + K) \\ S_{\text{audit}}(N, V, K) &= O(N + V + K) \\ \Delta_{\text{SSOT}}(D_{\text{local}}, D_{\text{remote}}) &= \lVert \text{norm}_{\text{LF}}(D_{\text{local}}) - \text{norm}_{\text{LF}}(D_{\text{remote}}) \rVert_{1} = 0 \end{aligned} */
         constraint def Invariant_REQ_0606_SC_02;
         require Invariant_REQ_0606_SC_01;
         require Invariant_REQ_0606_SC_02;
-        verify by AC_01_Static_Five_Pillar_Typed_AST_Defect_Detection;
-        verify by AC_02_Stage_2_Dynamic_Dylint_MIR_Analysis_Integration;
+        verify by AC_01_Contract_A_Static_Five_Pillar_Typed_AST_Defect_Detection;
+        verify by AC_02_Contract_B_Stage_2_Dynamic_Dylint_MIR_Analysis_Integration;
         verify by AC_03_Isolated_Dart_CST_Extraction;
-        verify by AC_04_Deterministic_Seven_Section_Dossier_Synthesis_via_pulldown_cmark_to_cmark;
+        verify by AC_04_Fail_Closed_Deterministic_Seven_Section_Dossier_Synthesis_via_pulldown_cmark_to_cmark;
         verify by AC_05_Idempotent_Local_and_Remote_SSOT_Deduplication;
         verify by AC_06_Closed_Loop_GitHub_SSOT_Publishing_and_Byte_Parity_Verification;
-        verify by AC_07_Net_Negative_Scanner_Retirement_and_Dogfood_Blueprint_Gate_Conformance;
+        verify by AC_07_Contract_A_Contract_B_Net_Negative_source_ast_rs_Deletion_and_380_SLOC_Submodule_Gate_Conformance;
         satisfy by ClosedLoopDefectPublisherGate;
     }
     doc /* Extracted from Mermaid stateDiagram specification. */
@@ -135,40 +135,40 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
         transition Rejected_to_Terminal first Rejected then Terminal;
         transition Verified_to_Terminal first Verified then Terminal;
     }
-    doc /* Diagnostic: E0601). */
-    use case def UC_AC_01_Static_Five_Pillar_Typed_AST_Defect_Detection {
+    doc /* - **Given**: A target Rust source file containing representative defects across the 5 pillars (unchecked as casts in Memory Safety E0601, unbounded cache mutations in Resource Lifecycle E0602, TOCTOU file checks in Concurrency E0603, 0-assertion tests in Test Integrity E0604, or missing Realises: tags in Semantic Traceability E0605). - **When**: ./target/release/verify-baseline audit-code --path <PATH> --dry-run is executed. - **Then**: CstPillarAuditor deterministically parses the syntax tree using ra_ap_syntax under Contract A, rejects any .syntax().text().contains(...) or regex fallback. */
+    use case def UC_AC_01_Contract_A_Static_Five_Pillar_Typed_AST_Defect_Detection {
         subject ClosedLoopDefectPublisherGate;
-        objective "Static Five Pillar Typed AST Defect Detection";
+        objective "Contract A Static Five Pillar Typed AST Defect Detection";
     }
-    doc /* Diagnostic: E0602). */
-    use case def UC_AC_02_Stage_2_Dynamic_Dylint_MIR_Analysis_Integration {
+    doc /* - **Given**: A workspace crate targeted for semantic audit where Stage-2 MIR rules are enabled. - **When**: DylintMirBridge::run_stage2_mir_analysis executes against the out-of-tree dynamic driver in ./lints/deap-dylint-mir/ resolved via camino::Utf8Path and std::env::consts. - **Then**: The bridge receives structured NDJSON receipts capturing rustc_middle::mir::Body and rustc_middle::ty::TyCtxt borrow and dataflow diagnostics across all 5 pillars without adding #![feature(rustc_private)] to core crates with diagnostic code E0602. */
+    use case def UC_AC_02_Contract_B_Stage_2_Dynamic_Dylint_MIR_Analysis_Integration {
         subject ClosedLoopDefectPublisherGate;
-        objective "Stage 2 Dynamic Dylint MIR Analysis Integration";
+        objective "Contract B Stage 2 Dynamic Dylint MIR Analysis Integration";
     }
-    doc /* Diagnostic: E0603). */
+    doc /* - **Given**: A Flutter or Dart source file with unclosed stream controllers or asynchronous setState() calls. - **When**: DartCstExtractionEngine::audit_dart_cst parses the source text using logos lexical tokens and rowan lossless syntax trees. - **Then**: The isolated < 380-SLOC deap_core::dart_cst engine emits line-exact AuditFinding records without contaminating core Rust AST data models with diagnostic code E0603. */
     use case def UC_AC_03_Isolated_Dart_CST_Extraction {
         subject ClosedLoopDefectPublisherGate;
         objective "Isolated Dart CST Extraction";
     }
-    doc /* Diagnostic: E0604). */
-    use case def UC_AC_04_Deterministic_Seven_Section_Dossier_Synthesis_via_pulldown_cmark_to_cmark {
+    doc /* - **Given**: An AuditFinding emitted by CST or MIR audit stages with Critical or Important severity, or a malformed candidate missing required headers or containing Mermaid semicolons. - **When**: synthesize_defect_dossier_markdown(&finding) constructs the .pipeline/defects/DEFECT-<SLUG>.md artifact and validates it through validate_defect_dossier. - **Then**: Valid CommonMark AST output populates all 7 canonical sections and ## Audit Source with Check 13B-compliant Mermaid diagrams (dossier_schema_check_count == 12), whereas any malformed dossier fails closed and is rejected with a non-zero. */
+    use case def UC_AC_04_Fail_Closed_Deterministic_Seven_Section_Dossier_Synthesis_via_pulldown_cmark_to_cmark {
         subject ClosedLoopDefectPublisherGate;
-        objective "Deterministic Seven Section Dossier Synthesis via pulldown cmark to cmark";
+        objective "Fail Closed Deterministic Seven Section Dossier Synthesis via pulldown cmark to cmark";
     }
-    doc /* Diagnostic: E0605). */
+    doc /* - **Given**: A workspace where .pipeline/defects/DEFECT-<SLUG>.md and its corresponding GitHub issue already exist for a specific (FILE_LOCATION, AuditPillar) tuple. - **When**: ./target/release/verify-baseline audit-code --path <PATH> --publish is re-run on unchanged source trees. - **Then**: The auditor detects existing artifacts, skips duplicate file or issue creation, and exits cleanly with code 0 and diagnostic code E0605. */
     use case def UC_AC_05_Idempotent_Local_and_Remote_SSOT_Deduplication {
         subject ClosedLoopDefectPublisherGate;
         objective "Idempotent Local and Remote SSOT Deduplication";
     }
-    doc /* Diagnostic: E0606). */
+    doc /* - **Given**: A newly synthesized .pipeline/defects/DEFECT-<SLUG>.md dossier and --publish flag. - **When**: ClosedLoopDefectPublisherGate invokes defect_dossier::run_check_defect. - **Then**: The verifier creates or edits the issue via gh issue, queries gh issue view <ID> --json title,body,url, verifies that closed_loop_mismatch_bytes == 0 after CRLF normalization, fails closed on any remote byte mismatch, and prints [CLOSED-LOOP VERIFIED] with diagnostic code E0606. */
     use case def UC_AC_06_Closed_Loop_GitHub_SSOT_Publishing_and_Byte_Parity_Verification {
         subject ClosedLoopDefectPublisherGate;
         objective "Closed Loop GitHub SSOT Publishing and Byte Parity Verification";
     }
-    doc /* - **Given**: This blueprint specification at docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md --dry-run is executed. - **Then**: All 12 blueprint verification gates pass, verifying complete retirement of hand-rolled scanners (legacy_scanner_sloc_target == -2399), modular submodule layout (max_module_exec_sloc <= 380), and bijective roundtrip SysML v2 metamodel lowering with exit code 0. */
-    use case def UC_AC_07_Net_Negative_Scanner_Retirement_and_Dogfood_Blueprint_Gate_Conformance {
+    doc /* - **Given**: This blueprint specification at docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md --dry-run is executed. - **Then**: All 12 blueprint verification gates pass, verifying complete deletion of crates/deap-core/src/source_ast.rs and hand-rolled scanners (legacy_scanner_sloc_target == -2399), modular < 380-SLOC submodule layout (max_module_exec_sloc <= 380), Contract A and Contract B compliance, and bijective roundtrip SysML v2. */
+    use case def UC_AC_07_Contract_A_Contract_B_Net_Negative_source_ast_rs_Deletion_and_380_SLOC_Submodule_Gate_Conformance {
         subject ClosedLoopDefectPublisherGate;
-        objective "Net Negative Scanner Retirement and Dogfood Blueprint Gate Conformance";
+        objective "Contract A Contract B Net Negative source ast rs Deletion and 380 SLOC Submodule Gate Conformance";
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_SequenceInteraction {

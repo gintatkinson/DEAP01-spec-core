@@ -83,8 +83,8 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
         attribute ac_03_stage_2_compile_time_mir_requirement_binding_verification_against_active_sysml_digests : String = "- **Given**: Rust items annotated with #[realises(\"REQ-0609\")] or /// Realises: [REQ-0609] verified against an active .digest.json compiled from .sysml, plus a negative fixture referencing a non-existent or retired identifier REQ-9999. - **When**: IsolatedDylintMirAllocationGate cross-checks extracted HIR/MIR DefId requirement bindings against the active SysML requirement digest inventory. - **Then**: Valid REQ-0609 bindings pass cleanly, whereas the dangling REQ-9999 annotation fails closed with non-zero exit status and single-line JSON diagnostic DEAP-E0902.";
         attribute ac_04_stage_3_deterministic_flutter_rust_bridge_ffi_synthesis_with_fail_closed_icd_boundary_guards : String = "- **Given**: A SysML v2 package and ICD_01 / ICD_02 specification declaring port def and item flow signals with numeric [min..max] bounds and admissible state def operational modes, lowered by crates/compile-sysml/src/modular_codegen/. - **When**: compile-sysml synthesizes the #![forbid(unsafe_code)] pure domain crate, the isolated flutter_rust_bridge FFI boundary facade, and the Dart DTO/binding modules, and executes inbound FFI boundary tests alongside dart analyze --fatal-infos. - **Then**: Pure domain modules contain #![forbid(unsafe_code)], synthesized Dart bindings pass dart analyze.";
         attribute ac_05_stage_3_miri_tree_borrows_abstract_machine_undefined_behavior_rejection_on_ffi_and_ring_buffer_bridges : String = "- **Given**: An isolated Stage-3 FFI marshaling and lock-free SPSC ring-buffer bridge module containing documented // SAFETY: blocks, paired with a negative mutation probe introducing a Tree Borrows pointer-aliasing violation or uninitialized byte read. - **When**: FrbIcdBridgeAndMiriUbGate executes cargo +nightly miri test with MIRIFLAGS=\"-Zmiri-tree-borrows\". - **Then**: The compliant FFI/ring-buffer bridge passes Miri with 0 undefined-behavior findings (**C-VER-04**) and 0 leaked allocations, whereas the mutated aliasing/uninitialized probe fails closed with a non-zero exit code and.";
-        attribute ac_06_stage_4_deterministic_kani_cbmc_proof_synthesis_and_stpa_unsafe_control_action_falsification : String = "- **Given**: SysML constraint def invariants, port def [min..max] intervals, state def transition tables, and STPA **UCA-01** / **SC-01** safety constraints lowered into #[cfg(kani)] modules via syn + quote + prettyplease across deap-core, compile-sysml, and a generated downstream crate, plus a negative mutation weakening an overflow check or STPA state guard. - **When**: KaniCbmcProofSynthesizer emits the #[kani::proof] + #[kani::unwind(N)] harnesses (kani::any() + kani::assume(...) + assert!(...)) and executes cargo kani. - **Then**: Emitted #[cfg(kani)] source files are byte-deterministic.";
-        attribute ac_07_cross_platform_toolchain_discovery_modular_submodule_layout_and_fail_closed_qualification_gate : String = "- **Given**: docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md specifying dynamic cross-platform driver probing across macOS, Linux, and Windows (std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}, camino::Utf8Path), modular submodules under < 380 SLOC (**C-VER-07**), and the --require-formal-toolchains qualification flag, evaluated in an environment where a required driver is absent versus present. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md and.";
+        attribute ac_06_stage_4_deterministic_kani_cbmc_proof_synthesis_and_stpa_unsafe_control_action_falsification : String = "- **Given**: SysML constraint def invariants, port def [min..max] intervals, state def transition tables, and STPA **UCA-01** / **SC-01** safety constraints lowered into #[cfg(kani)] modules via syn + proc-macro2 + quote + prettyplease across deap-core, compile-sysml, and a generated downstream crate, plus a negative mutation weakening an overflow check or STPA state guard. - **When**: KaniCbmcProofSynthesizer emits the #[kani::proof] + #[kani::unwind(N)] harnesses (kani::any() + kani::assume(...) + assert!(...)) and executes cargo kani. - **Then**: Emitted #[cfg(kani)] source files are.";
+        attribute ac_07_stage_5_cross_platform_dynamic_path_discovery_380_sloc_submodules_legacy_scanner_deletion_and_contract_a_contract_b_gate : String = "- **Given**: docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md specifying dynamic runtime PATH driver discovery across macOS, Linux, and Windows (std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}, camino::Utf8Path), modular submodules under < 380 SLOC (**C-VER-07**), explicit deletion of legacy hand-rolled scanners, Contract A + Contract B compliance, and the --require-formal-toolchains qualification flag. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md and.";
         doc /* \begin{aligned} \text{Stage1Pass}(\mathcal{W}) &\iff \forall C \in \mathcal{W}, \quad \forall \ell \in \mathcal{L}_{\text{deny}}, \quad \text{Violations}_{\ell}(C) = \emptyset \land \text{Types}(C) \cap \mathcal{T}_{\text{banned}} = \emptyset \\ \forall f \in \text{Fns}(\mathcal{W}), \quad \text{Lines}_{\text{HIR}}(f) &\le 80 \land \lvert \text{Args}_{\text{HIR}}(f) \rvert \le 5 \land \text{BoolParams}_{\text{HIR}}(f) \le 3 \end{aligned} */
         constraint def Invariant_REQ_0609_SC_01;
         doc /* \begin{aligned} \text{ZeroRtHeap}(G_{\text{MIR}}) &\iff \forall f_{\text{rt}} \in V_{\text{rt\_loop}}, \quad \mathcal{R}^*(f_{\text{rt}}) \cap \mathcal{A}_{\text{heap}} = \emptyset \\ \text{TraceableMIR}(V_{\text{def}}, \mathcal{Q}_{\text{sysml}}) &\iff \forall d \in V_{\text{def}}, \quad \text{Realises}(d) \neq \emptyset \implies \text{Realises}(d) \subseteq \mathcal{Q}_{\text{sysml}} \end{aligned} */
@@ -106,7 +106,7 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
         verify by AC_04_Stage_3_Deterministic_flutter_rust_bridge_FFI_Synthesis_with_Fail_Closed_ICD_Boundary_Guards;
         verify by AC_05_Stage_3_Miri_Tree_Borrows_Abstract_Machine_Undefined_Behavior_Rejection_on_FFI_and_Ring_Buffer_Bridges;
         verify by AC_06_Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification;
-        verify by AC_07_Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate;
+        verify by AC_07_Stage_5_Cross_Platform_Dynamic_PATH_Discovery_380_SLOC_Submodules_Legacy_Scanner_Deletion_and_Contract_A_Contract_B_Gate;
         satisfy by FrbIcdBridgeAndMiriUbGate;
     }
     doc /* Extracted from Mermaid stateDiagram specification. */
@@ -159,15 +159,15 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
         subject FrbIcdBridgeAndMiriUbGate;
         objective "Stage 3 Miri Tree Borrows Abstract Machine Undefined Behavior Rejection on FFI and Ring Buffer Bridges";
     }
-    doc /* - **Given**: SysML constraint def invariants, port def [min..max] intervals, state def transition tables, and STPA **UCA-01** / **SC-01** safety constraints lowered into #[cfg(kani)] modules via syn + quote + prettyplease across deap-core, compile-sysml, and a generated downstream crate, plus a negative mutation weakening an overflow check or STPA state guard. - **When**: KaniCbmcProofSynthesizer emits the #[kani::proof] + #[kani::unwind(N)] harnesses (kani::any() + kani::assume(...) + assert!(...)) and executes cargo kani. - **Then**: Emitted #[cfg(kani)] source files are byte-deterministic. */
+    doc /* - **Given**: SysML constraint def invariants, port def [min..max] intervals, state def transition tables, and STPA **UCA-01** / **SC-01** safety constraints lowered into #[cfg(kani)] modules via syn + proc-macro2 + quote + prettyplease across deap-core, compile-sysml, and a generated downstream crate, plus a negative mutation weakening an overflow check or STPA state guard. - **When**: KaniCbmcProofSynthesizer emits the #[kani::proof] + #[kani::unwind(N)] harnesses (kani::any() + kani::assume(...) + assert!(...)) and executes cargo kani. - **Then**: Emitted #[cfg(kani)] source files are. */
     use case def UC_AC_06_Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification {
         subject FrbIcdBridgeAndMiriUbGate;
         objective "Stage 4 Deterministic Kani CBMC Proof Synthesis and STPA Unsafe Control Action Falsification";
     }
-    doc /* - **Given**: docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md specifying dynamic cross-platform driver probing across macOS, Linux, and Windows (std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}, camino::Utf8Path), modular submodules under < 380 SLOC (**C-VER-07**), and the --require-formal-toolchains qualification flag, evaluated in an environment where a required driver is absent versus present. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md and. */
-    use case def UC_AC_07_Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate {
+    doc /* - **Given**: docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md specifying dynamic runtime PATH driver discovery across macOS, Linux, and Windows (std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}, camino::Utf8Path), modular submodules under < 380 SLOC (**C-VER-07**), explicit deletion of legacy hand-rolled scanners, Contract A + Contract B compliance, and the --require-formal-toolchains qualification flag. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md and. */
+    use case def UC_AC_07_Stage_5_Cross_Platform_Dynamic_PATH_Discovery_380_SLOC_Submodules_Legacy_Scanner_Deletion_and_Contract_A_Contract_B_Gate {
         subject FrbIcdBridgeAndMiriUbGate;
-        objective "Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate";
+        objective "Stage 5 Cross Platform Dynamic PATH Discovery 380 SLOC Submodules Legacy Scanner Deletion and Contract A Contract B Gate";
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction {
@@ -216,7 +216,7 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
         attribute max_rt_heap_allocations : Integer = 0;
         doc /* Permitted dangling `#[realises("REQ-*")]` or doc-contract requirement identifiers absent from compiled `.sysml` digests. [unit: links] */
         attribute max_unverified_req_links : Integer = 0;
-        doc /* Isolates `rustc_lint` and `rustc_middle::mir` plugin manifest from stable workspace `Cargo.toml`. [unit: flag] */
+        doc /* Isolates `./lints/deap-dylint-mir/` `rustc_lint` and `rustc_middle::mir` plugin manifest from stable workspace `Cargo.toml`. [unit: flag] */
         attribute isolated_nightly_workspace : Boolean = true;
         doc /* Pinned nightly `rustc_private` toolchain channel executing the standalone Dylint MIR analysis library. [unit: toolchain] */
         attribute plugin_toolchain_channel : String = "nightly-pinned";
@@ -234,7 +234,7 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
         attribute max_kani_counterexamples : Integer = 0;
         doc /* Deterministic loop unwinding ceiling emitted into `#[kani::unwind(N)]` when AST loops carry finite static bounds. [unit: iterations] */
         attribute default_kani_unwind_bound : Integer = 16;
-        doc /* Emits `#[cfg(kani)]` proof modules via `syn` + `quote` + `prettyplease` without raw string-template concatenation. [unit: flag] */
+        doc /* Emits `#[cfg(kani)]` `#[kani::proof]` modules via `syn` + `proc-macro2` + `quote` + `prettyplease` without string templates. [unit: flag] */
         attribute structured_prettyplease_codegen : Boolean = true;
         doc /* Receives SysML `constraint def`, `port def` `[min..max]` ranges, `state def` transitions, and STPA `UCA-*`/`SC-*` specs. [protocol: SysmlConstraintStateStpaIr] */
         port in sysml_safety_ast_in : String {
@@ -249,18 +249,18 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
             flow out cbmc_proof_receipt_out_flow : String;
         }
     }
-    doc /* Ordered verification stage count (`Stage 1 Clippy` -> `Stage 2 Dylint MIR` -> `Stage 3 FRB + Miri` -> `Stage 4 Kani CBMC`). [unit: stages] */
+    doc /* Ordered 5-stage verification pipeline count (`Stage 1 Clippy` -> `Stage 2 Excluded Dylint MIR` -> `Stage 3 FRB + Miri` -> `Stage 4 Kani CBMC` -> `Stage 5 Dynamic PATH & CST`). [unit: stages] */
     part def MultiStageVerificationOrchestrator {
-        attribute verification_stage_count : Integer = 4;
+        attribute verification_stage_count : Integer = 5;
         doc /* Halts downstream stage promotion whenever any preceding verification stage exits non-zero. [unit: flag] */
         attribute fail_closed_short_circuit : Boolean = true;
         doc /* Mandates live execution of discovered drivers and fails closed if any driver is absent during qualification CI. [unit: flag] */
         attribute require_formal_toolchains : Boolean = false;
-        doc /* Receives upstream or downstream target workspace verification commands in `verify-baseline` and `compile-sysml`. [protocol: VerificationGateCommand] */
+        doc /* Receives upstream (Contract A) or downstream (Contract B) target workspace verification commands in `verify-baseline` and `compile-sysml`. [protocol: VerificationGateCommand] */
         port in gate_invocation_in : String {
             flow in gate_invocation_in_flow : String;
         }
-        doc /* Emits consolidated single-line NDJSON diagnostics (`DEAP-E0900`..`DEAP-E0905`) and final 4-stage verification receipt. [protocol: RustcCompilerMessageNdjson] */
+        doc /* Emits consolidated single-line NDJSON diagnostics (`DEAP-E0900`..`DEAP-E0905`) and final 5-stage verification receipt. [protocol: RustcCompilerMessageNdjson] */
         port out unified_gate_ndjson_out : String {
             flow out unified_gate_ndjson_out_flow : String;
         }
