@@ -32,8 +32,10 @@ use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 fn mask_byte_ranges(content: &str, ranges: &[Range<usize>]) -> String {
     let mut out = String::with_capacity(content.len());
     let mut range_idx = 0;
+    let mut byte_idx = 0;
 
-    for (byte_idx, ch) in content.char_indices() {
+    for ch in content.chars() {
+        let ch_len = ch.len_utf8();
         while range_idx < ranges.len()
             && ranges.get(range_idx).is_some_and(|r| byte_idx >= r.end)
         {
@@ -49,12 +51,13 @@ fn mask_byte_ranges(content: &str, ranges: &[Range<usize>]) -> String {
         } else {
             out.push(ch);
         }
+        byte_idx += ch_len;
     }
 
     out
 }
 
-/// Removes fenced code blocks (` ```...``` ` and `~~~...~~~`), replacing non-newline characters
+/// [DOC-TIER: A] Removes fenced code blocks (` ```...``` ` and `~~~...~~~`), replacing non-newline characters
 /// with ASCII spaces so downstream line and column offsets remain invariant.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -103,7 +106,7 @@ pub fn strip_fenced_code_blocks(content: &str) -> String {
     mask_byte_ranges(content, &code_ranges)
 }
 
-/// Removes GitLab Flavored Markdown (GLFM) inline math spans (`$`...`$` or `$``...``$`),
+/// [DOC-TIER: A] Removes GitLab Flavored Markdown (GLFM) inline math spans (`$`...`$` or `$``...``$`),
 /// replacing non-newline characters with spaces so adjacent `$` signs cannot coalesce into false `$$` tokens.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -148,7 +151,7 @@ pub fn strip_glfm_inline_math(content: &str) -> String {
     mask_byte_ranges(content, &glfm_ranges)
 }
 
-/// Removes CommonMark inline code spans delimited by matching backtick runs of length $k \ge 1$,
+/// [DOC-TIER: A] Removes CommonMark inline code spans delimited by matching backtick runs of length $k \ge 1$,
 /// replacing non-newline characters with ASCII spaces.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -184,7 +187,7 @@ pub fn strip_inline_code(content: &str) -> String {
     mask_byte_ranges(content, &code_ranges)
 }
 
-/// Sequentially strips fenced code blocks, GLFM inline math (`$`...`$` ), and standard inline code
+/// [DOC-TIER: A] Sequentially strips fenced code blocks, GLFM inline math (`$`...`$` ), and standard inline code
 /// spans so only active markdown prose and display/inline LaTeX math remain.
 ///
 /// ## 1. Safety Intent & Regulatory Scope

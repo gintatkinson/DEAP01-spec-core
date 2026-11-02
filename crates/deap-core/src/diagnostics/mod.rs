@@ -32,12 +32,17 @@
 
 pub mod dossier;
 pub mod item;
+pub mod ndjson;
 pub mod severity;
 
 pub use dossier::{DefectDossier, WhyEntry};
 pub use item::{
     render_diagnostic_multispan_with_ariadne, render_diagnostic_with_ariadne, Diagnostic,
     DiagnosticItem,
+};
+pub use ndjson::{
+    emit_cli_ndjson_stream, format_ndjson_line, resolve_utf8_span, Applicability,
+    RustcCompilerMessageEnvelope, RustcDiagnosticSpan,
 };
 pub use severity::DiagnosticSeverity;
 

@@ -32,66 +32,116 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-DEAP-CORE-DIGEST], [DO-330-TQL-4-DIGEST]
 
-/// Computes a FIPS 180-4 compliant 32-byte SHA-256 digest without panicking or unwrapping.
+/// SHA-256 round constant table defined by NIST FIPS 180-4.
+/// Realises: [REQ-DEAP-CORE-DIGEST-COMPUTE-SHA256-BYTES]
+const SHA256_K: [u32; 64] = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
+    0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
+    0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
+    0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+    0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
+    0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+    0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
+    0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
+    0xc67178f2,
+];
+
+/// Processes a single 64-byte message block and updates the SHA-256 state registers.
+/// Realises: [REQ-DEAP-CORE-DIGEST-COMPUTE-SHA256-BYTES]
+fn process_sha256_chunk(chunk: &[u8; 64], state: &mut [u32; 8]) {
+    let mut w = [0u32; 64];
+    for (slot, part) in w.iter_mut().zip(chunk.as_chunks::<4>().0) {
+        *slot = u32::from_be_bytes(*part);
+    }
+    for i in 16..64 {
+        let (w15, w2, w16, w7) =
+            match (w.get(i - 15), w.get(i - 2), w.get(i - 16), w.get(i - 7)) {
+                (Some(&w15), Some(&w2), Some(&w16), Some(&w7)) => (w15, w2, w16, w7),
+                _ => continue,
+            };
+        let s0 = w15.rotate_right(7) ^ w15.rotate_right(18) ^ (w15 >> 3);
+        let s1 = w2.rotate_right(17) ^ w2.rotate_right(19) ^ (w2 >> 10);
+        if let Some(slot) = w.get_mut(i) {
+            *slot = w16.wrapping_add(s0).wrapping_add(w7).wrapping_add(s1);
+        }
+    }
+
+    let mut a = state[0];
+    let mut b = state[1];
+    let mut c = state[2];
+    let mut d = state[3];
+    let mut e = state[4];
+    let mut f = state[5];
+    let mut g = state[6];
+    let mut hh = state[7];
+
+    for (&k, &wi) in SHA256_K.iter().zip(w.iter()) {
+        let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+        let ch = (e & f) ^ ((!e) & g);
+        let temp1 = hh
+            .wrapping_add(s1)
+            .wrapping_add(ch)
+            .wrapping_add(k)
+            .wrapping_add(wi);
+        let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+        let maj = (a & b) ^ (a & c) ^ (b & c);
+        let temp2 = s0.wrapping_add(maj);
+
+        hh = g;
+        g = f;
+        f = e;
+        e = d.wrapping_add(temp1);
+        d = c;
+        c = b;
+        b = a;
+        a = temp1.wrapping_add(temp2);
+    }
+
+    state[0] = state[0].wrapping_add(a);
+    state[1] = state[1].wrapping_add(b);
+    state[2] = state[2].wrapping_add(c);
+    state[3] = state[3].wrapping_add(d);
+    state[4] = state[4].wrapping_add(e);
+    state[5] = state[5].wrapping_add(f);
+    state[6] = state[6].wrapping_add(g);
+    state[7] = state[7].wrapping_add(hh);
+}
+
+/// Computes raw 32-byte SHA-256 digest from an arbitrary byte slice.
 ///
 /// # Summary
-/// Deterministic software implementation of the FIPS 180-4 SHA-256 block compression function for `compute_sha256_bytes`.
+/// Computes raw 32-byte SHA-256 digest from an arbitrary byte slice.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// # Safety
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `compute_sha256_bytes` in `crates/deap-core/src/digest.rs`. Operates in 100% safe Rust with zero `unsafe` blocks.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `compute_sha256_bytes` (declaration #1) within `DEAP-CORE-DIGEST`.
-/// - Total function over arbitrary byte slices `&[u8]` with zero unwrap calls, zero expect calls, and zero unchecked slice indexing.
+/// - Conforms to NIST FIPS 180-4 standard specification for SHA-256.
+/// - Produces identical 32-byte hash digests for equivalent byte payloads across all host architectures.
 ///
 /// ## 3. Preconditions
-/// # Parameters
-/// - `bytes: &[u8]` must satisfy domain and type-safety constraints prior to invoking `compute_sha256_bytes`.
+/// - `bytes` must be a valid, readable byte slice in process memory.
 ///
 /// ## 4. Postconditions
-/// # Returns
-/// - Returns `[u8; 32]` from `compute_sha256_bytes` with deterministic post-execution state.
+/// - Returns a 32-byte array containing the big-endian SHA-256 hash digest.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(bytes)) bounded over input/member dimension of `compute_sha256_bytes`.
-/// - Space Complexity: O(N(bytes)) bounded auxiliary memory for `compute_sha256_bytes`.
+/// - Time Complexity: O(N) where N is the length of `bytes`.
+/// - Space Complexity: O(N) heap allocation for message padding.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// # Errors
-/// - Infallible total computation; never returns an error.
-/// # Panics
-/// - Zero panics: all slice and schedule accesses use fixed-size chunks (`as_chunks`) or checked `.get` / `.get_mut` accessors and wrapping arithmetic.
-/// - Interface: Validates boundary inputs and types for `compute_sha256_bytes` (`[u8; 32]`).
-/// - State: Maintains consistent state invariants across `compute_sha256_bytes` without partial mutation on error.
-/// - Action: Executes `compute_sha256_bytes` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `compute_sha256_bytes` (`DEAP-CORE-DIGEST`).
+/// - Memory: Allocation failure on extremely large payloads causes standard process panic.
 ///
 /// ## 7. Realization & Traceability
 /// # Realises
 /// Realises: [REQ-DEAP-CORE-DIGEST-COMPUTE-SHA256-BYTES] | SysML v2: ActionDef(compute_sha256_bytes)
 pub fn compute_sha256_bytes(bytes: &[u8]) -> [u8; 32] {
-    const K: [u32; 64] = [
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
-        0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
-        0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
-        0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
-        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
-        0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
-        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
-        0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
-        0xc67178f2,
+    let mut state: [u32; 8] = [
+        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+        0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
     ];
-
-    let mut h0: u32 = 0x6a09e667;
-    let mut h1: u32 = 0xbb67ae85;
-    let mut h2: u32 = 0x3c6ef372;
-    let mut h3: u32 = 0xa54ff53a;
-    let mut h4: u32 = 0x510e527f;
-    let mut h5: u32 = 0x9b05688c;
-    let mut h6: u32 = 0x1f83d9ab;
-    let mut h7: u32 = 0x5be0cd19;
 
     let bit_len = (bytes.len() as u64).wrapping_mul(8);
     let mut msg = bytes.to_vec();
@@ -102,65 +152,9 @@ pub fn compute_sha256_bytes(bytes: &[u8]) -> [u8; 32] {
     msg.extend_from_slice(&bit_len.to_be_bytes());
 
     for chunk in msg.as_chunks::<64>().0 {
-        let mut w = [0u32; 64];
-        for (slot, part) in w.iter_mut().zip(chunk.as_chunks::<4>().0) {
-            *slot = u32::from_be_bytes(*part);
-        }
-        for i in 16..64 {
-            let (w15, w2, w16, w7) =
-                match (w.get(i - 15), w.get(i - 2), w.get(i - 16), w.get(i - 7)) {
-                    (Some(&w15), Some(&w2), Some(&w16), Some(&w7)) => (w15, w2, w16, w7),
-                    _ => continue,
-                };
-            let s0 = w15.rotate_right(7) ^ w15.rotate_right(18) ^ (w15 >> 3);
-            let s1 = w2.rotate_right(17) ^ w2.rotate_right(19) ^ (w2 >> 10);
-            if let Some(slot) = w.get_mut(i) {
-                *slot = w16.wrapping_add(s0).wrapping_add(w7).wrapping_add(s1);
-            }
-        }
-
-        let mut a = h0;
-        let mut b = h1;
-        let mut c = h2;
-        let mut d = h3;
-        let mut e = h4;
-        let mut f = h5;
-        let mut g = h6;
-        let mut hh = h7;
-
-        for (&k, &wi) in K.iter().zip(w.iter()) {
-            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let ch = (e & f) ^ ((!e) & g);
-            let temp1 = hh
-                .wrapping_add(s1)
-                .wrapping_add(ch)
-                .wrapping_add(k)
-                .wrapping_add(wi);
-            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
-            let maj = (a & b) ^ (a & c) ^ (b & c);
-            let temp2 = s0.wrapping_add(maj);
-
-            hh = g;
-            g = f;
-            f = e;
-            e = d.wrapping_add(temp1);
-            d = c;
-            c = b;
-            b = a;
-            a = temp1.wrapping_add(temp2);
-        }
-
-        h0 = h0.wrapping_add(a);
-        h1 = h1.wrapping_add(b);
-        h2 = h2.wrapping_add(c);
-        h3 = h3.wrapping_add(d);
-        h4 = h4.wrapping_add(e);
-        h5 = h5.wrapping_add(f);
-        h6 = h6.wrapping_add(g);
-        h7 = h7.wrapping_add(hh);
+        process_sha256_chunk(chunk, &mut state);
     }
 
-    let state: [u32; 8] = [h0, h1, h2, h3, h4, h5, h6, h7];
     let mut out = [0u8; 32];
     for (dest, word) in out.as_chunks_mut::<4>().0.iter_mut().zip(state.iter()) {
         *dest = word.to_be_bytes();

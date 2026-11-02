@@ -63,7 +63,7 @@ pub use identifiers::{
 pub use interactions::{InteractionDef, UseCaseDef};
 pub use interfaces_and_items::{parse_attribute_defs, parse_part_defs, InterfaceDef};
 pub use package_model::{AstSlice, ImportDef, PackageDef, SysmlModel};
-pub use parser::{parse_sysml, parse_sysml_model, strip_sysml_comments};
+pub use parser::{lower_to_hir_db, parse_sysml, parse_sysml_model, strip_sysml_comments};
 pub use parts_and_ports::{
     CapabilityDef, FieldDescriptor, ItemDef, OperationDef, PartDef, PortDef,
     SupportedExtensionsCatalog, SupportedSchemaExtension, TypeDescriptor,
@@ -83,4 +83,8 @@ pub use states::{parse_state_defs, StateDef, TransitionDef};
 pub use test_cases::{parse_test_case_defs, TestCaseDef};
 
 #[cfg(test)]
+mod sysml_ast_schema_tests;
+#[cfg(test)]
 mod sysml_ast_tests;
+#[cfg(test)]
+mod sysml_ast_unit_tests;

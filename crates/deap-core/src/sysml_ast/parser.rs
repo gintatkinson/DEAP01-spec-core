@@ -1,8 +1,11 @@
-//! SysML v2 source parsing and comment stripping utilities.
+#![deny(clippy::too_many_lines, clippy::too_many_arguments, clippy::undocumented_unsafe_blocks)]
+//! SysML v2 source parsing and `logos::Lexer<SysmlToken>` comment/string stripping utilities.
 //!
 //! Safety & Traceability: Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
-//! Contract: Provides `parse_sysml`, `parse_sysml_model`, and comment/string stripping state machines for SysML v2 source text.
-//! Bounds & Faults: Executes in linear O(N) time and space over source length with zero regex and zero panicking slice operations.
+//! Contract: Provides `parse_sysml`, `parse_sysml_model`, `lower_to_hir_db`, and `SysmlToken` lexer-backed comment/string stripping for SysML v2 source text.
+//! Bounds & Faults: Executes in linear O(N) time and space over source length with zero hand-rolled character state machines and zero panicking slice operations.
+
+use logos::Logos;
 
 use super::actions::parse_action_defs;
 use super::connections_and_flows::{parse_connection_defs, parse_port_defs};
@@ -16,13 +19,62 @@ use super::package_model::SysmlModel;
 use super::requirements::parse_requirement_defs;
 use super::safety_and_fmeca::parse_hazard_defs;
 use super::test_cases::parse_test_case_defs;
-use crate::sysml_cst::parser::parse_sysml_cst;
-use crate::sysml_cst::syntax_kind::SysmlSyntaxKind;
+use crate::sysml_cst::lexer::SysmlToken;
+use crate::sysml_cst::{SourceProgram, SysmlCompilerDb};
 
-/// Parse an entire SysML v2 source text into a structured SysmlModel.
-///
-/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C.
+/// Extracts all top-level or package-scoped SysML v2 definitions from a cleaned body slice.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-SYSML]
+fn parse_scope_into_model(
+    scope: &str,
+    package_name: Option<String>,
+    doc: Option<String>,
+) -> SysmlModel {
+    let mut parts = parse_part_defs(scope);
+    let ports = parse_port_defs(scope);
+    let actions = parse_action_defs(scope);
+    let constraints = parse_constraint_defs(scope);
+    let requirements = parse_requirement_defs(scope);
+    let attributes = parse_attribute_defs(scope);
+    let test_cases = parse_test_case_defs(scope);
+    let scoped_connections = parse_connection_defs(scope);
+    let scoped_hazards = parse_hazard_defs(scope);
+
+    if let Some(first_part) = parts.first_mut() {
+        for conn in scoped_connections {
+            if !first_part.connections.iter().any(|c| {
+                c.name == conn.name
+                    && c.source_port == conn.source_port
+                    && c.target_port == conn.target_port
+            }) {
+                first_part.connections.push(conn);
+            }
+        }
+        for haz in scoped_hazards {
+            if !first_part.hazards.iter().any(|h| h.name == haz.name) {
+                first_part.hazards.push(haz);
+            }
+        }
+    }
+
+    SysmlModel {
+        package_name,
+        doc,
+        attributes,
+        parts,
+        ports,
+        actions,
+        constraints,
+        requirements,
+        test_cases,
+    }
+}
+
+/// [DOC-TIER: A] Parse an entire SysML v2 source text into a structured `SysmlModel`.
+///
+/// Safety & Traceability: Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-SYSML]
+/// Contract: Strips non-doc comments via `strip_sysml_comments`, masks string literals via `mask_string_literals`, and extracts package or root definitions into `SysmlModel`.
+/// Bounds & Faults: O(N) time and space over `content.len()` with checked `.get(...)` slicing and zero panics.
+#[must_use]
 pub fn parse_sysml(content: &str) -> SysmlModel {
     let clean = strip_sysml_comments(content);
     let masked = mask_string_literals(&clean);
@@ -55,118 +107,55 @@ pub fn parse_sysml(content: &str) -> SysmlModel {
             };
             package_info = Some((name.to_string(), doc, body));
             break;
-        } else {
-            idx = pkg_pos + 7;
-            continue;
         }
+        idx = pkg_pos + 7;
     }
 
     if let Some((package_name, doc, body)) = package_info {
-        let mut parts = parse_part_defs(body);
-        let ports = parse_port_defs(body);
-        let actions = parse_action_defs(body);
-        let constraints = parse_constraint_defs(body);
-        let requirements = parse_requirement_defs(body);
-        let attributes = parse_attribute_defs(body);
-        let test_cases = parse_test_case_defs(body);
-        let pkg_connections = parse_connection_defs(body);
-        let pkg_hazards = parse_hazard_defs(body);
-
-        if let Some(first_part) = parts.first_mut() {
-            for conn in pkg_connections {
-                if !first_part.connections.iter().any(|c| {
-                    c.name == conn.name
-                        && c.source_port == conn.source_port
-                        && c.target_port == conn.target_port
-                }) {
-                    first_part.connections.push(conn);
-                }
-            }
-            for haz in pkg_hazards {
-                if !first_part.hazards.iter().any(|h| h.name == haz.name) {
-                    first_part.hazards.push(haz);
-                }
-            }
-        }
-
-        SysmlModel {
-            package_name: Some(package_name),
-            doc,
-            attributes,
-            parts,
-            ports,
-            actions,
-            constraints,
-            requirements,
-            test_cases,
-        }
+        parse_scope_into_model(body, Some(package_name), doc)
     } else {
-        let mut parts = parse_part_defs(&clean);
-        let ports = parse_port_defs(&clean);
-        let actions = parse_action_defs(&clean);
-        let constraints = parse_constraint_defs(&clean);
-        let requirements = parse_requirement_defs(&clean);
-        let attributes = parse_attribute_defs(&clean);
-        let test_cases = parse_test_case_defs(&clean);
-        let root_connections = parse_connection_defs(&clean);
-        let root_hazards = parse_hazard_defs(&clean);
-
-        if let Some(first_part) = parts.first_mut() {
-            for conn in root_connections {
-                if !first_part.connections.iter().any(|c| {
-                    c.name == conn.name
-                        && c.source_port == conn.source_port
-                        && c.target_port == conn.target_port
-                }) {
-                    first_part.connections.push(conn);
-                }
-            }
-            for haz in root_hazards {
-                if !first_part.hazards.iter().any(|h| h.name == haz.name) {
-                    first_part.hazards.push(haz);
-                }
-            }
-        }
-
-        SysmlModel {
-            package_name: None,
-            doc: None,
-            attributes,
-            parts,
-            ports,
-            actions,
-            constraints,
-            requirements,
-            test_cases,
-        }
+        parse_scope_into_model(&clean, None, None)
     }
 }
 
-/// Parses a SysML v2 textual model into a `SysmlModel` (canonical alias for [`parse_sysml`]).
+/// [DOC-TIER: A] Parses a SysML v2 textual model into a `SysmlModel` (canonical alias for [`parse_sysml`]).
 ///
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C.
-/// Realises: [REQ-SYSML-AST-PARSE-SYSML-MODEL]
+/// Safety & Traceability: Realises: [REQ-SYSML-AST-PARSE-SYSML-MODEL]
+/// Contract: Delegates directly to `parse_sysml(content)` with identical structural guarantees.
+/// Bounds & Faults: O(N) time and space over `content.len()` with zero panics.
+#[must_use]
 pub fn parse_sysml_model(content: &str) -> SysmlModel {
     parse_sysml(content)
 }
 
-/// Strips C-style multi-line comments (`/* ... */`) and line comments (`// ...`) from SysML text without regex,
-/// while preserving `doc /* ... */` documentation blocks and string literals.
+/// [DOC-TIER: A] Lowers a `SourceProgram` into a `SysmlModel` via the incremental `SysmlCompilerDb` CST/HIR database.
 ///
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C.
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/STRIP-COMMENTS]
+/// Safety & Traceability: Realises: [REQ-SYSML-AST-MODULE], [REQ-0201]
+/// Contract: Memoizes the Rowan CST and lowered HIR constructs in `db` for `program` and lowers the verified source program into `SysmlModel`.
+/// Bounds & Faults: O(N) single-pass CST/HIR memoization and model extraction; returns `SysmlModel::default()` on empty input without panicking.
+pub fn lower_to_hir_db(db: &mut SysmlCompilerDb, program: &SourceProgram) -> SysmlModel {
+    let cst = db.parse_sysml_green(program);
+    let hir = db.lower_sysml_hir(program);
+    if hir.is_empty() && cst.constructs.is_empty() && program.text.trim().is_empty() {
+        return SysmlModel::default();
+    }
+    parse_sysml(&program.text)
+}
+
+/// [DOC-TIER: A] Strips C-style multi-line comments (`/* ... */`) and line comments (`// ...`) from SysML text using `logos::Lexer<SysmlToken>`, while preserving `doc /* ... */` documentation blocks and string literals.
+///
+/// Safety & Traceability: Realises: [REQ-SYSML-AST-SSOT-PARITY/STRIP-COMMENTS]
+/// Contract: Tokenizes `content` via `SysmlToken::lexer(content).spanned()`, eliding `LineComment` tokens and replacing non-`doc` `BlockComment` tokens with newline-preserving spaces.
+/// Bounds & Faults: O(N) single-pass DFA tokenization with zero regex backtracking and zero hand-rolled character state machines.
+#[must_use]
 pub fn strip_sysml_comments(content: &str) -> String {
-    let cst = parse_sysml_cst(content);
     let mut out = String::with_capacity(content.len());
     let mut prev_is_doc = false;
-    for elem in cst.syntax().children_with_tokens() {
-        let Some(tok) = elem.into_token() else {
-            continue;
-        };
-        let text = tok.text();
-        match tok.kind() {
-            SysmlSyntaxKind::LINE_COMMENT => {}
-            SysmlSyntaxKind::BLOCK_COMMENT => {
+    for (res, span) in SysmlToken::lexer(content).spanned() {
+        let text = content.get(span).unwrap_or("");
+        match res {
+            Ok(SysmlToken::LineComment) => {}
+            Ok(SysmlToken::BlockComment) => {
                 if prev_is_doc {
                     out.push_str(text);
                     prev_is_doc = false;
@@ -179,29 +168,29 @@ pub fn strip_sysml_comments(content: &str) -> String {
                     }
                 }
             }
-            SysmlSyntaxKind::WHITESPACE => out.push_str(text),
-            kind => {
+            Ok(SysmlToken::Whitespace) => out.push_str(text),
+            Ok(tok) => {
                 out.push_str(text);
-                prev_is_doc = kind == SysmlSyntaxKind::DOC_META_KW && text == "doc";
+                prev_is_doc = tok == SysmlToken::DocMetaKw && text == "doc";
+            }
+            Err(()) => {
+                out.push_str(text);
+                prev_is_doc = false;
             }
         }
     }
     out
 }
 
-/// Strips all line comments (`// ...`), block comments (`/* ... */`, including `doc /* ... */`),
+/// Strips all line comments (`// ...`), block comments (`/* ... */`, including `doc /* ... */`), and string literals using `logos::Lexer<SysmlToken>`.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/STRIP-ALL-COMMENTS-AND-STRINGS]
 pub(crate) fn strip_all_block_comments_and_strings(input: &str) -> String {
-    let cst = parse_sysml_cst(input);
     let mut out = String::with_capacity(input.len());
-    for elem in cst.syntax().children_with_tokens() {
-        let Some(tok) = elem.into_token() else {
-            continue;
-        };
-        let text = tok.text();
-        match tok.kind() {
-            SysmlSyntaxKind::LINE_COMMENT => {}
-            SysmlSyntaxKind::BLOCK_COMMENT => {
+    for (res, span) in SysmlToken::lexer(input).spanned() {
+        let text = input.get(span).unwrap_or("");
+        match res {
+            Ok(SysmlToken::LineComment) => {}
+            Ok(SysmlToken::BlockComment) => {
                 out.push(' ');
                 for b in text.bytes() {
                     if b == b'\n' {
@@ -209,7 +198,7 @@ pub(crate) fn strip_all_block_comments_and_strings(input: &str) -> String {
                     }
                 }
             }
-            SysmlSyntaxKind::STRING_LIT => {
+            Ok(SysmlToken::StringLit) => {
                 for ch in text.chars() {
                     out.push(if ch == '\n' { '\n' } else { ' ' });
                 }

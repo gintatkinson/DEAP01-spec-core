@@ -23,19 +23,13 @@ use std::collections::BTreeMap;
 pub struct PortDef {
     pub name: String,
     pub type_name: String,
-    #[serde(default = "default_direction_inout")]
-    pub direction: String,
-    #[serde(default)]
-    pub is_conjugated: bool,
+    #[serde(default = "default_direction_inout")] pub direction: String,
+    #[serde(default)] pub is_conjugated: bool,
     pub doc: Option<String>,
-    #[serde(default = "default_port_category")]
-    pub port_category: String,
-    #[serde(default)]
-    pub protocol_family: String,
-    #[serde(default)]
-    pub electrical_attributes: BTreeMap<String, String>,
-    #[serde(default)]
-    pub item_flows: Vec<FlowDef>,
+    #[serde(default = "default_port_category")] pub port_category: String,
+    #[serde(default)] pub protocol_family: String,
+    #[serde(default)] pub electrical_attributes: BTreeMap<String, String>,
+    #[serde(default)] pub item_flows: Vec<FlowDef>,
 }
 
 /// Represents a typed operation signature declared on a SysML v2 structural part.
@@ -46,14 +40,11 @@ pub struct PortDef {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct OperationDef {
     pub name: String,
-    #[serde(default = "default_direction_inout")]
-    pub direction: String,
-    #[serde(default)]
-    pub param_type: String,
+    #[serde(default = "default_direction_inout")] pub direction: String,
+    #[serde(default)] pub param_type: String,
     pub return_type: Option<String>,
     pub doc: Option<String>,
-    #[serde(default)]
-    pub parameters: Vec<AttributeDef>,
+    #[serde(default)] pub parameters: Vec<AttributeDef>,
 }
 
 /// Represents a subsystem capability specification attached to a SysML v2 package or part.
@@ -79,8 +70,7 @@ pub struct CapabilityDef {
 pub struct ItemDef {
     pub name: String,
     pub doc: Option<String>,
-    #[serde(default)]
-    pub attributes: Vec<AttributeDef>,
+    #[serde(default)] pub attributes: Vec<AttributeDef>,
 }
 
 /// Represents a structural `part def` block (`is_def == true`) or `part` usage (`is_def == false`) in SysML v2.
@@ -92,51 +82,29 @@ pub struct ItemDef {
 pub struct PartDef {
     pub name: String,
     pub doc: Option<String>,
-    #[serde(default = "default_true")]
-    pub is_def: bool,
+    #[serde(default = "default_true")] pub is_def: bool,
     pub type_name: Option<String>,
-    #[serde(default)]
-    pub attributes: Vec<AttributeDef>,
-    #[serde(default)]
-    pub ports: Vec<PortDef>,
-    #[serde(default)]
-    pub actions: Vec<ActionDef>,
-    #[serde(default)]
-    pub constraints: Vec<ConstraintDef>,
-    #[serde(default)]
-    pub requirements: Vec<RequirementDef>,
-    #[serde(default)]
-    pub satisfied_requirements: Vec<String>,
-    #[serde(default)]
-    pub parts: Vec<PartDef>,
-    #[serde(default)]
-    pub operations: Vec<OperationDef>,
-    #[serde(default)]
-    pub capabilities: Vec<CapabilityDef>,
-    #[serde(default)]
-    pub interactions: Vec<InteractionDef>,
-    #[serde(default)]
-    pub test_cases: Vec<TestCaseDef>,
-    #[serde(default)]
-    pub states: Vec<StateDef>,
-    #[serde(default)]
-    pub use_cases: Vec<UseCaseDef>,
-    #[serde(default)]
-    pub item_defs: Vec<ItemDef>,
-    #[serde(default)]
-    pub hazards: Vec<HazardDef>,
-    #[serde(default)]
-    pub risks: Vec<RiskDef>,
-    #[serde(default)]
-    pub connections: Vec<ConnectionDef>,
-    #[serde(default)]
-    pub calcs: Vec<CalcDef>,
-    #[serde(default)]
-    pub triggers_hazards: Vec<String>,
-    #[serde(default)]
-    pub safety_realises: Vec<String>,
-    #[serde(default)]
-    pub layer: Option<String>,
+    #[serde(default)] pub attributes: Vec<AttributeDef>,
+    #[serde(default)] pub ports: Vec<PortDef>,
+    #[serde(default)] pub actions: Vec<ActionDef>,
+    #[serde(default)] pub constraints: Vec<ConstraintDef>,
+    #[serde(default)] pub requirements: Vec<RequirementDef>,
+    #[serde(default)] pub satisfied_requirements: Vec<String>,
+    #[serde(default)] pub parts: Vec<PartDef>,
+    #[serde(default)] pub operations: Vec<OperationDef>,
+    #[serde(default)] pub capabilities: Vec<CapabilityDef>,
+    #[serde(default)] pub interactions: Vec<InteractionDef>,
+    #[serde(default)] pub test_cases: Vec<TestCaseDef>,
+    #[serde(default)] pub states: Vec<StateDef>,
+    #[serde(default)] pub use_cases: Vec<UseCaseDef>,
+    #[serde(default)] pub item_defs: Vec<ItemDef>,
+    #[serde(default)] pub hazards: Vec<HazardDef>,
+    #[serde(default)] pub risks: Vec<RiskDef>,
+    #[serde(default)] pub connections: Vec<ConnectionDef>,
+    #[serde(default)] pub calcs: Vec<CalcDef>,
+    #[serde(default)] pub triggers_hazards: Vec<String>,
+    #[serde(default)] pub safety_realises: Vec<String>,
+    #[serde(default)] pub layer: Option<String>,
 }
 
 impl Default for PartDef {
@@ -144,31 +112,14 @@ impl Default for PartDef {
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PART-DEF-DEFAULT]
     fn default() -> Self {
         Self {
-            name: String::new(),
-            doc: None,
-            is_def: true,
-            type_name: None,
-            attributes: Vec::new(),
-            ports: Vec::new(),
-            actions: Vec::new(),
-            constraints: Vec::new(),
-            requirements: Vec::new(),
-            satisfied_requirements: Vec::new(),
-            parts: Vec::new(),
-            operations: Vec::new(),
-            capabilities: Vec::new(),
-            interactions: Vec::new(),
-            test_cases: Vec::new(),
-            states: Vec::new(),
-            use_cases: Vec::new(),
-            item_defs: Vec::new(),
-            hazards: Vec::new(),
-            risks: Vec::new(),
-            connections: Vec::new(),
-            calcs: Vec::new(),
-            triggers_hazards: Vec::new(),
-            safety_realises: Vec::new(),
-            layer: None,
+            name: String::new(), doc: None, is_def: true, type_name: None,
+            attributes: Vec::new(), ports: Vec::new(), actions: Vec::new(),
+            constraints: Vec::new(), requirements: Vec::new(), satisfied_requirements: Vec::new(),
+            parts: Vec::new(), operations: Vec::new(), capabilities: Vec::new(),
+            interactions: Vec::new(), test_cases: Vec::new(), states: Vec::new(),
+            use_cases: Vec::new(), item_defs: Vec::new(), hazards: Vec::new(),
+            risks: Vec::new(), connections: Vec::new(), calcs: Vec::new(),
+            triggers_hazards: Vec::new(), safety_realises: Vec::new(), layer: None,
         }
     }
 }
@@ -231,12 +182,10 @@ impl TypeDescriptor {
             .attributes
             .iter()
             .map(|attr| {
-                let (mut si_unit, mut range_bounds) =
-                    if let Some(default_val) = attr.default_value.as_deref() {
-                        extract_si_unit_and_bounds(default_val)
-                    } else {
-                        (None, None)
-                    };
+                let (mut si_unit, mut range_bounds) = attr
+                    .default_value
+                    .as_deref()
+                    .map_or((None, None), extract_si_unit_and_bounds);
                 if si_unit.is_none() && range_bounds.is_none() {
                     if let Some(ref doc_str) = attr.doc {
                         let (doc_unit, doc_bounds) = extract_si_unit_and_bounds(doc_str);
@@ -252,7 +201,6 @@ impl TypeDescriptor {
                 }
             })
             .collect();
-
         Self {
             type_name: part.name.clone(),
             package_name: package_name.to_string(),
@@ -270,25 +218,15 @@ impl TypeDescriptor {
 /// Bounds & Faults: Copyable fieldless enum with exhaustive compile-time suffix projection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SupportedSchemaExtension {
-    /// SysML v2 textual notation (`.sysml`).
     Sysml,
-    /// Structural YAML, long form (`.yaml`).
     Yaml,
-    /// Structural YAML, short form (`.yml`).
     Yml,
-    /// Structural JSON (`.json`).
     Json,
-    /// Protocol Buffers interface definition (`.proto`).
     Proto,
-    /// OMG Interface Definition Language (`.idl`).
     Idl,
-    /// AUTOSAR XML (`.arxml`).
     Arxml,
-    /// Markdown architecture tables, short form (`.md`).
     Md,
-    /// Markdown architecture tables, long form (`.markdown`).
     Markdown,
-    /// IETF RFC 6020 / RFC 7950 YANG data modeling language (`.yang`).
     Yang,
 }
 
@@ -296,16 +234,8 @@ impl SupportedSchemaExtension {
     /// Canonical declaration-ordered table of all 10 supported schema file extensions.
     /// Realises: [REQ-SYSML-AST-MOD-SUPPORTEDSCHEMAEXTENSION-ALL]
     pub const ALL: &'static [Self] = &[
-        Self::Sysml,
-        Self::Yaml,
-        Self::Yml,
-        Self::Json,
-        Self::Proto,
-        Self::Idl,
-        Self::Arxml,
-        Self::Md,
-        Self::Markdown,
-        Self::Yang,
+        Self::Sysml, Self::Yaml, Self::Yml, Self::Json, Self::Proto,
+        Self::Idl, Self::Arxml, Self::Md, Self::Markdown, Self::Yang,
     ];
 
     /// Projects a schema extension variant onto its dot-prefixed lowercase file suffix.
@@ -355,16 +285,7 @@ impl SupportedExtensionsCatalog {
     pub fn contains(&self, ext: &&str) -> bool {
         matches!(
             *ext,
-            ".sysml"
-                | ".yaml"
-                | ".yml"
-                | ".json"
-                | ".proto"
-                | ".idl"
-                | ".arxml"
-                | ".md"
-                | ".markdown"
-                | ".yang"
+            ".sysml" | ".yaml" | ".yml" | ".json" | ".proto" | ".idl" | ".arxml" | ".md" | ".markdown" | ".yang"
         )
     }
 
@@ -390,84 +311,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn part_def_find_part_mut_traverses_deep_hierarchy_iteratively(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut current = PartDef {
-            name: "LeafActuator_128".to_string(),
-            ..Default::default()
-        };
+    fn part_def_find_part_mut_traverses_deep_hierarchy_iteratively() -> Result<(), Box<dyn std::error::Error>> {
+        let mut current = PartDef { name: "LeafActuator_128".to_string(), ..Default::default() };
         for depth in (0..128_usize).rev() {
-            let sibling = PartDef {
-                name: format!("Sibling_{depth}"),
-                ..Default::default()
-            };
-            current = PartDef {
-                name: format!("Chain_{depth}"),
-                parts: vec![sibling, current],
-                ..Default::default()
-            };
+            let sibling = PartDef { name: format!("Sibling_{depth}"), ..Default::default() };
+            current = PartDef { name: format!("Chain_{depth}"), parts: vec![sibling, current], ..Default::default() };
         }
-
-        assert!(current.is_def);
-        assert!(current.find_part_mut("NonExistentNode").is_none());
-
-        let found_sibling = current
-            .find_part_mut("Sibling_64")
-            .ok_or("missing Sibling_64")?;
-        found_sibling.layer = Some("Control".to_string());
-
-        let found_leaf = current
-            .find_part_mut("LeafActuator_128")
-            .ok_or("missing LeafActuator_128")?;
-        found_leaf.doc = Some("Deep leaf reached without call-stack recursion".to_string());
-
-        assert_eq!(
-            current
-                .find_part_mut("Sibling_64")
-                .and_then(|p| p.layer.as_deref()),
-            Some("Control")
-        );
-        assert_eq!(
-            current
-                .find_part_mut("LeafActuator_128")
-                .and_then(|p| p.doc.as_deref()),
-            Some("Deep leaf reached without call-stack recursion")
-        );
+        assert!(current.is_def && current.find_part_mut("NonExistentNode").is_none());
+        current.find_part_mut("Sibling_64").ok_or("missing Sibling_64")?.layer = Some("Control".to_string());
+        current.find_part_mut("LeafActuator_128").ok_or("missing LeafActuator_128")?.doc = Some("Deep leaf reached without call-stack recursion".to_string());
+        assert_eq!(current.find_part_mut("Sibling_64").and_then(|p| p.layer.as_deref()), Some("Control"));
+        assert_eq!(current.find_part_mut("LeafActuator_128").and_then(|p| p.doc.as_deref()), Some("Deep leaf reached without call-stack recursion"));
         Ok(())
     }
 
     #[test]
-    fn type_descriptor_extracts_units_from_default_or_doc_fallback(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn type_descriptor_extracts_units_from_default_or_doc_fallback() -> Result<(), Box<dyn std::error::Error>> {
         let part = PartDef {
             name: "ThermalRegulator".to_string(),
             layer: Some("Plant".to_string()),
             satisfied_requirements: vec!["REQ-THERM-01".to_string()],
             attributes: vec![
-                AttributeDef {
-                    name: "maxTemp".to_string(),
-                    type_name: "Real".to_string(),
-                    default_value: Some("85.0 [K] [0.0..120.0]".to_string()),
-                    doc: None,
-                },
-                AttributeDef {
-                    name: "plainFlag".to_string(),
-                    type_name: "Boolean".to_string(),
-                    default_value: None,
-                    doc: None,
-                },
+                AttributeDef { name: "maxTemp".to_string(), type_name: "Real".to_string(), default_value: Some("85.0 [K] [0.0..120.0]".to_string()), doc: None },
+                AttributeDef { name: "plainFlag".to_string(), type_name: "Boolean".to_string(), default_value: None, doc: None },
             ],
             ..Default::default()
         };
         let desc = TypeDescriptor::from_part_def("ThermalPkg", &part);
-        assert_eq!(desc.type_name, "ThermalRegulator");
-        assert_eq!(desc.package_name, "ThermalPkg");
-        assert_eq!(desc.layer.as_deref(), Some("Plant"));
-        assert_eq!(desc.fields.len(), 2);
+        assert_eq!((desc.type_name.as_str(), desc.package_name.as_str(), desc.layer.as_deref(), desc.fields.len()), ("ThermalRegulator", "ThermalPkg", Some("Plant"), 2));
         let second = desc.fields.get(1).ok_or("missing second field")?;
-        assert_eq!(second.name, "plainFlag");
-        assert!(second.si_unit.is_none());
-        assert!(second.range_bounds.is_none());
+        assert!(second.name == "plainFlag" && second.si_unit.is_none() && second.range_bounds.is_none());
         Ok(())
     }
 
@@ -479,9 +352,6 @@ mod tests {
         for ext in &collected {
             assert!(catalog.contains(ext));
         }
-        assert!(!catalog.contains(&".SYSML"));
-        assert!(!catalog.contains(&"sysml"));
-        assert!(!catalog.contains(&""));
-        assert!(!catalog.contains(&".toml"));
+        assert!(!catalog.contains(&".SYSML") && !catalog.contains(&"sysml") && !catalog.contains(&"") && !catalog.contains(&".toml"));
     }
 }

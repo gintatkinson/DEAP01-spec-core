@@ -9,7 +9,7 @@ pub use deap_core::workspace::ratchet_table::{
 };
 
 /// Hard upper bound on `LEGACY_RATCHET_MAX_LINES.len()` so the ratchet table can never grow (`[REQ-0601]`, `[REQ-0608]`).
-pub const MAX_LEGACY_RATCHET_ENTRIES: usize = 206;
+pub const MAX_LEGACY_RATCHET_ENTRIES: usize = 164;
 
 /// Compile-time invariant enforcing that `LEGACY_RATCHET_MAX_LINES` never increases in length.
 const _: () = assert!(LEGACY_RATCHET_MAX_LINES.len() <= MAX_LEGACY_RATCHET_ENTRIES);

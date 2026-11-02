@@ -25,19 +25,13 @@ fn is_negative_literal(val: &str) -> bool {
 /// Checks whether a lowercase token is a leading SysML v2 modifier keyword stripped from negated labels.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/NEGATED-LABEL-NORMALIZATION]
 fn is_negated_label_keyword(word: &str) -> bool {
-    matches!(
-        word,
-        "attribute" | "ref" | "readonly" | "derived" | "constant" | "in" | "out" | "inout" | "def"
-    )
+    matches!(word, "attribute" | "ref" | "readonly" | "derived" | "constant" | "in" | "out" | "inout" | "def")
 }
 
 /// Checks whether a lowercase word is a structural component qualifier in `no <component> <qualifier>` prose.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/NEGATED-PROSE-PHRASES]
 fn is_prose_component_qualifier(word: &str) -> bool {
-    matches!(
-        word,
-        "system" | "subsystem" | "unit" | "module" | "device" | "installed" | "present"
-    )
+    matches!(word, "system" | "subsystem" | "unit" | "module" | "device" | "installed" | "present")
 }
 
 /// Strips one trailing component presence qualifier suffix (`subsystem` before `system`) when `>= 3` stem bytes remain.
@@ -55,10 +49,7 @@ fn strip_component_qualifier_suffix(stem: &str) -> Option<&str> {
 /// Normalizes a string to its ASCII-lowercased alphanumeric characters.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/COMPONENT-MATCHES]
 fn alnum_lower(text: &str) -> String {
-    text.chars()
-        .filter(|c| c.is_alphanumeric())
-        .collect::<String>()
-        .to_ascii_lowercase()
+    text.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_ascii_lowercase()
 }
 
 /// Checks whether a stripped stem names a scalar or metrology quantity (`time`, `rate`, `count`, etc.).
@@ -121,49 +112,32 @@ fn parse_single_hazard(clean: &str, masked: &str, haz_pos: usize) -> Option<(Haz
     let doc_before = extract_doc_comment_before(clean, haz_pos);
     let mut curr = haz_pos.saturating_add(6);
     curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
-    if !masked
-        .get(curr..)
-        .is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3))
-    {
+    if !masked.get(curr..).is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3)) {
         return None;
     }
     curr = curr.saturating_add(3);
     curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
-
     let rem_ident = masked.get(curr..).unwrap_or("");
-    let name_len = rem_ident
-        .bytes()
-        .take_while(|&b| is_ident_char(b) || b == b'-')
-        .count();
+    let name_len = rem_ident.bytes().take_while(|&b| is_ident_char(b) || b == b'-').count();
     let name = rem_ident.get(..name_len).unwrap_or("");
     if name.is_empty() {
         return None;
     }
     curr = curr.saturating_add(name_len);
     curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
-
     let rem_body = masked.get(curr..).unwrap_or("");
     let (body_opt, next_idx) = if rem_body.starts_with('{') {
         let close_pos = find_matching_brace(clean, curr)?;
-        (
-            clean.get(curr.saturating_add(1)..close_pos),
-            close_pos.saturating_add(1),
-        )
+        (clean.get(curr.saturating_add(1)..close_pos), close_pos.saturating_add(1))
     } else if rem_body.starts_with(';') {
         (None, curr.saturating_add(1))
     } else {
         return None;
     };
-
     let doc = doc_before.or_else(|| body_opt.and_then(extract_inline_doc_block));
     let severity = body_opt.map_or(1, parse_hazard_severity);
     Some((
-        HazardDef {
-            name: name.to_string(),
-            doc,
-            severity,
-            ..HazardDef::default()
-        },
+        HazardDef { name: name.to_string(), doc, severity, ..HazardDef::default() },
         next_idx,
     ))
 }
@@ -177,7 +151,6 @@ pub fn parse_hazard_defs(content: &str) -> Vec<HazardDef> {
     let masked = mask_string_literals(&clean);
     let mut hazards = Vec::new();
     let mut skip_until: usize = 0;
-
     for (res, span) in SysmlToken::lexer(&masked).spanned() {
         if span.start < skip_until || res.is_err() || masked.get(span.clone()) != Some("hazard") {
             continue;
@@ -196,14 +169,8 @@ fn contains_word(haystack: &str, needle: &str) -> bool {
     let (h, n) = (haystack.to_lowercase(), needle.to_lowercase());
     !n.is_empty()
         && h.match_indices(&n).any(|(pos, _)| {
-            let before_ok = h
-                .get(..pos)
-                .and_then(|s| s.chars().next_back())
-                .is_none_or(|c| !c.is_alphanumeric());
-            let after_ok = h
-                .get(pos.saturating_add(n.len())..)
-                .and_then(|s| s.chars().next())
-                .is_none_or(|c| !c.is_alphanumeric());
+            let before_ok = h.get(..pos).and_then(|s| s.chars().next_back()).is_none_or(|c| !c.is_alphanumeric());
+            let after_ok = h.get(pos.saturating_add(n.len())..).and_then(|s| s.chars().next()).is_none_or(|c| !c.is_alphanumeric());
             before_ok && after_ok
         })
 }
@@ -218,21 +185,15 @@ pub fn component_matches(table_comp: &str, ast_part_name: &str) -> bool {
     if tc.eq_ignore_ascii_case(pn) {
         return true;
     }
-
     let tc_clean = alnum_lower(tc);
     let pn_clean = alnum_lower(pn);
-    (!tc_clean.is_empty() && tc_clean == pn_clean)
-        || contains_word(tc, pn)
-        || contains_word(pn, tc)
+    (!tc_clean.is_empty() && tc_clean == pn_clean) || contains_word(tc, pn) || contains_word(pn, tc)
 }
 
 /// Checks whether the right-hand side of an assignment or prose label evaluates to a negative presence token.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-NEGATED-COMPONENTS]
 fn is_negative_rhs_value(rhs: &str) -> bool {
-    let val = rhs
-        .trim()
-        .trim_matches([';', '}', '{', ',', ')', '(', '.'])
-        .trim();
+    let val = rhs.trim().trim_matches([';', '}', '{', ',', ')', '(', '.']).trim();
     is_negative_literal(val)
 }
 
@@ -249,9 +210,7 @@ fn extract_exists_negation_stem(lower: &str) -> Option<String> {
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-NEGATED-COMPONENTS]
 fn extract_clause_negation_stem(clause: &str) -> Option<String> {
     let clause = clause.trim();
-    let (lhs, rhs) = [":=", "==", "=", ":"]
-        .into_iter()
-        .find_map(|sep| clause.split_once(sep))?;
+    let (lhs, rhs) = [":=", "==", "=", ":"].into_iter().find_map(|sep| clause.split_once(sep))?;
     if !is_negative_rhs_value(&rhs.to_ascii_lowercase()) {
         return None;
     }
@@ -266,7 +225,6 @@ fn extract_clause_negation_stem(clause: &str) -> Option<String> {
 /// Bounds & Faults: Executes in O(N log K) time over input byte length N and distinct stems K backed by `BTreeSet`; never panics on arbitrary UTF-8 input.
 pub fn extract_negated_components(content: &str) -> Vec<String> {
     let mut negated = BTreeSet::new();
-
     for attr in parse_attribute_defs(content) {
         if attr
             .default_value
@@ -279,7 +237,6 @@ pub fn extract_negated_components(content: &str) -> Vec<String> {
             }
         }
     }
-
     for line in content.lines() {
         let comment_pos = SysmlToken::lexer(line)
             .spanned()
@@ -296,7 +253,6 @@ pub fn extract_negated_components(content: &str) -> Vec<String> {
         }
         negated.extend(extract_no_phrase_stems(&lower));
     }
-
     negated.into_iter().collect()
 }
 
@@ -308,17 +264,10 @@ fn normalize_negated_label(lhs: &str) -> String {
     let head = head.rsplit('.').next().unwrap_or(head);
     let words: Vec<String> = head
         .split_whitespace()
-        .map(|w| {
-            w.chars()
-                .filter(|c| c.is_alphanumeric() || *c == '_')
-                .collect::<String>()
-        })
+        .map(|w| w.chars().filter(|c| c.is_alphanumeric() || *c == '_').collect::<String>())
         .filter(|w| !w.is_empty() && !w.chars().all(|c| c.is_ascii_digit()))
         .collect();
-    let start = words
-        .iter()
-        .take_while(|w| is_negated_label_keyword(&w.to_ascii_lowercase()))
-        .count();
+    let start = words.iter().take_while(|w| is_negated_label_keyword(&w.to_ascii_lowercase())).count();
     let label_words = words.get(start..).unwrap_or(&[]);
     if label_words.is_empty() || label_words.len() > 4 {
         String::new()
@@ -330,10 +279,7 @@ fn normalize_negated_label(lhs: &str) -> String {
 /// Extracts component stems from qualified prose negations of the form `no <component> <qualifier>`.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/NEGATED-PROSE-PHRASES]
 fn extract_no_phrase_stems(lower: &str) -> Vec<String> {
-    let words: Vec<&str> = lower
-        .split(|c: char| !c.is_alphanumeric() && c != '_')
-        .filter(|w| !w.is_empty())
-        .collect();
+    let words: Vec<&str> = lower.split(|c: char| !c.is_alphanumeric() && c != '_').filter(|w| !w.is_empty()).collect();
     let mut stems = Vec::new();
     for (i, _) in words.iter().enumerate().filter(|(_, w)| **w == "no") {
         let mut comp = String::new();
@@ -369,10 +315,7 @@ pub(super) fn extract_negated_key_stem(key: &str) -> String {
     let mut qualified = false;
     let raw = key.trim_start_matches(|c: char| !c.is_alphanumeric());
     let has_boundary = raw.get(..3).is_some_and(|p| p.eq_ignore_ascii_case("has"))
-        && raw
-            .get(3..)
-            .and_then(|r| r.chars().next())
-            .is_some_and(|c| c == '_' || c.is_ascii_uppercase());
+        && raw.get(3..).and_then(|r| r.chars().next()).is_some_and(|c| c == '_' || c.is_ascii_uppercase());
     if has_boundary {
         if let Some(rest) = clean.strip_prefix("has").filter(|rest| rest.len() >= 3) {
             stem = rest;
@@ -403,9 +346,7 @@ pub fn is_component_negated(comp: &str, content: &str) -> bool {
 pub(super) fn component_matches_negated_stems(comp: &str, stems: &[String]) -> bool {
     let comp_clean = alnum_lower(comp);
     !comp_clean.is_empty()
-        && stems
-            .iter()
-            .any(|neg_stem| comp_clean.contains(neg_stem.as_str()) || component_matches(comp, neg_stem))
+        && stems.iter().any(|neg_stem| comp_clean.contains(neg_stem.as_str()) || component_matches(comp, neg_stem))
 }
 
 #[cfg(test)]
@@ -413,45 +354,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_hazard_defs_extracts_severity_docs_and_skips_malformed(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let src = r#"
-            /* Ignore hazard def H-COMMENT; */
-            attribute msg : String = "hazard def H-STRING;";
-            doc /* Preceding hazard doc for H-01 */
-            hazard def H-01 { severity = 4; }
-            hazard def H-02 {
-                doc /* Inline hazard doc with UTF-8 Ω */
-                severity = 2;
-            }
-            hazard def H-03;
-            hazard MissingDefKeyword { severity = 3; }
-            hazard def ;
-            hazard def H-UNCLOSED { severity = 5;
-            hazard def H-NO-TERM
-        "#;
-
+    fn parse_hazard_defs_extracts_severity_docs_and_skips_malformed() -> Result<(), Box<dyn std::error::Error>> {
+        let src = "/* Ignore hazard def H-COMMENT; */\nattribute msg : String = \"hazard def H-STRING;\";\ndoc /* Preceding hazard doc for H-01 */\nhazard def H-01 { severity = 4; }\nhazard def H-02 {\n    doc /* Inline hazard doc with UTF-8 \u{03a9} */\n    severity = 2;\n}\nhazard def H-03;\nhazard MissingDefKeyword { severity = 3; }\nhazard def ;\nhazard def H-UNCLOSED { severity = 5;\nhazard def H-NO-TERM";
         let hazards = parse_hazard_defs(src);
         assert_eq!(hazards.len(), 3);
-
         let h0 = hazards.first().ok_or("missing H-01")?;
         assert_eq!((h0.name.as_str(), h0.doc.as_deref(), h0.severity), ("H-01", Some("Preceding hazard doc for H-01"), 4));
-
         let h1 = hazards.get(1).ok_or("missing H-02")?;
-        assert_eq!((h1.name.as_str(), h1.doc.as_deref(), h1.severity), ("H-02", Some("Inline hazard doc with UTF-8 Ω"), 2));
-
+        assert_eq!((h1.name.as_str(), h1.doc.as_deref(), h1.severity), ("H-02", Some("Inline hazard doc with UTF-8 \u{03a9}"), 2));
         let h2 = hazards.get(2).ok_or("missing H-03")?;
         assert_eq!((h2.name.as_str(), h2.doc.as_deref(), h2.severity), ("H-03", None, 1));
         Ok(())
     }
 
     #[test]
-    fn hazard_and_risk_serde_defaults_and_utf8_component_matching() -> Result<(), serde_json::Error>
-    {
+    fn hazard_and_risk_serde_defaults_and_utf8_component_matching() -> Result<(), serde_json::Error> {
         let haz: HazardDef = serde_json::from_str(r#"{"name":"H-10"}"#)?;
         let risk: RiskDef = serde_json::from_str(r#"{"name":"R-10","hazard_ref":"H-10"}"#)?;
         assert_eq!((haz.severity, risk.severity, risk.hazard_ref.as_deref()), (1, 1, Some("H-10")));
-        assert!(component_matches("Ω Sensor Module", "Sensor") && component_matches("Sensor", "Ω Sensor Module"));
+        assert!(component_matches("\u{03a9} Sensor Module", "Sensor") && component_matches("Sensor", "\u{03a9} Sensor Module"));
         assert!(!component_matches("---", "Sensor"));
         Ok(())
     }

@@ -5,7 +5,10 @@
 //! Bounds & Faults: All package and part hierarchy traversals use explicit iterative worklist stacks in O(V + E) time with zero unbounded call-stack recursion or panics.
 
 use super::{
-    component_matches_negated_stems, extract_negated_components, extract_negated_key_stem, ActionDef, AttributeDef, CalcDef, CapabilityDef, ConnectionDef, ConstraintDef, HazardDef, InteractionDef, InterfaceDef, ItemDef, OperationDef, PartDef, PortDef, RequirementDef, RiskDef, StateDef, TestCaseDef, UseCaseDef,
+    component_matches_negated_stems, extract_negated_components, extract_negated_key_stem,
+    ActionDef, AttributeDef, CalcDef, CapabilityDef, ConnectionDef, ConstraintDef, HazardDef,
+    InteractionDef, InterfaceDef, ItemDef, OperationDef, PartDef, PortDef, RequirementDef, RiskDef,
+    StateDef, TestCaseDef, UseCaseDef,
 };
 use crate::SysmlToken;
 use logos::Logos;
@@ -33,46 +36,26 @@ pub struct PackageDef {
     pub name: String,
     pub doc: Option<String>,
     pub parent_package: Option<String>,
-    #[serde(default)]
-    pub imports: Vec<ImportDef>,
-    #[serde(default)]
-    pub packages: Vec<PackageDef>,
-    #[serde(default)]
-    pub part_defs: Vec<PartDef>,
-    #[serde(default)]
-    pub port_defs: Vec<PortDef>,
-    #[serde(default)]
-    pub attribute_defs: Vec<AttributeDef>,
-    #[serde(default)]
-    pub action_defs: Vec<ActionDef>,
-    #[serde(default)]
-    pub operation_defs: Vec<OperationDef>,
-    #[serde(default)]
-    pub capability_defs: Vec<CapabilityDef>,
-    #[serde(default)]
-    pub interaction_defs: Vec<InteractionDef>,
-    #[serde(default)]
-    pub constraint_defs: Vec<ConstraintDef>,
-    #[serde(default)]
-    pub test_case_defs: Vec<TestCaseDef>,
-    #[serde(default)]
-    pub requirement_defs: Vec<RequirementDef>,
-    #[serde(default)]
-    pub satisfied_requirements: Vec<String>,
-    #[serde(default)]
-    pub state_defs: Vec<StateDef>,
-    #[serde(default)]
-    pub use_case_defs: Vec<UseCaseDef>,
-    #[serde(default)]
-    pub item_defs: Vec<ItemDef>,
-    #[serde(default)]
-    pub hazard_defs: Vec<HazardDef>,
-    #[serde(default)]
-    pub risk_defs: Vec<RiskDef>,
-    #[serde(default)]
-    pub connection_defs: Vec<ConnectionDef>,
-    #[serde(default)]
-    pub calc_defs: Vec<CalcDef>,
+    #[serde(default)] pub imports: Vec<ImportDef>,
+    #[serde(default)] pub packages: Vec<PackageDef>,
+    #[serde(default)] pub part_defs: Vec<PartDef>,
+    #[serde(default)] pub port_defs: Vec<PortDef>,
+    #[serde(default)] pub attribute_defs: Vec<AttributeDef>,
+    #[serde(default)] pub action_defs: Vec<ActionDef>,
+    #[serde(default)] pub operation_defs: Vec<OperationDef>,
+    #[serde(default)] pub capability_defs: Vec<CapabilityDef>,
+    #[serde(default)] pub interaction_defs: Vec<InteractionDef>,
+    #[serde(default)] pub constraint_defs: Vec<ConstraintDef>,
+    #[serde(default)] pub test_case_defs: Vec<TestCaseDef>,
+    #[serde(default)] pub requirement_defs: Vec<RequirementDef>,
+    #[serde(default)] pub satisfied_requirements: Vec<String>,
+    #[serde(default)] pub state_defs: Vec<StateDef>,
+    #[serde(default)] pub use_case_defs: Vec<UseCaseDef>,
+    #[serde(default)] pub item_defs: Vec<ItemDef>,
+    #[serde(default)] pub hazard_defs: Vec<HazardDef>,
+    #[serde(default)] pub risk_defs: Vec<RiskDef>,
+    #[serde(default)] pub connection_defs: Vec<ConnectionDef>,
+    #[serde(default)] pub calc_defs: Vec<CalcDef>,
 }
 
 impl PackageDef {
@@ -309,16 +292,10 @@ fn collect_parts_preorder(roots: &[PartDef]) -> Vec<&PartDef> {
 /// Bounds & Faults: Convertible losslessly to and from a single-level `PackageDef` in O(1) collection-move time.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SysmlModel {
-    pub package_name: Option<String>,
-    pub doc: Option<String>,
-    pub attributes: Vec<AttributeDef>,
-    pub parts: Vec<PartDef>,
-    pub ports: Vec<PortDef>,
-    pub actions: Vec<ActionDef>,
-    pub constraints: Vec<ConstraintDef>,
-    pub requirements: Vec<RequirementDef>,
-    #[serde(default)]
-    pub test_cases: Vec<TestCaseDef>,
+    pub package_name: Option<String>, pub doc: Option<String>,
+    pub attributes: Vec<AttributeDef>, pub parts: Vec<PartDef>, pub ports: Vec<PortDef>,
+    pub actions: Vec<ActionDef>, pub constraints: Vec<ConstraintDef>, pub requirements: Vec<RequirementDef>,
+    #[serde(default)] pub test_cases: Vec<TestCaseDef>,
 }
 
 impl From<PackageDef> for SysmlModel {
@@ -326,15 +303,9 @@ impl From<PackageDef> for SysmlModel {
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/SYSML-MODEL-FROM-PACKAGE]
     fn from(pkg: PackageDef) -> Self {
         Self {
-            package_name: Some(pkg.name),
-            doc: pkg.doc,
-            attributes: pkg.attribute_defs,
-            parts: pkg.part_defs,
-            ports: pkg.port_defs,
-            actions: pkg.action_defs,
-            constraints: pkg.constraint_defs,
-            requirements: pkg.requirement_defs,
-            test_cases: pkg.test_case_defs,
+            package_name: Some(pkg.name), doc: pkg.doc, attributes: pkg.attribute_defs,
+            parts: pkg.part_defs, ports: pkg.port_defs, actions: pkg.action_defs,
+            constraints: pkg.constraint_defs, requirements: pkg.requirement_defs, test_cases: pkg.test_case_defs,
         }
     }
 }
@@ -344,15 +315,9 @@ impl From<SysmlModel> for PackageDef {
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PACKAGE-FROM-SYSML-MODEL]
     fn from(m: SysmlModel) -> Self {
         Self {
-            name: m.package_name.unwrap_or_else(|| "SysML_Model".to_string()),
-            doc: m.doc,
-            part_defs: m.parts,
-            port_defs: m.ports,
-            attribute_defs: m.attributes,
-            action_defs: m.actions,
-            constraint_defs: m.constraints,
-            test_case_defs: m.test_cases,
-            requirement_defs: m.requirements,
+            name: m.package_name.unwrap_or_else(|| "SysML_Model".to_string()), doc: m.doc,
+            part_defs: m.parts, port_defs: m.ports, attribute_defs: m.attributes, action_defs: m.actions,
+            constraint_defs: m.constraints, test_case_defs: m.test_cases, requirement_defs: m.requirements,
             ..Self::default()
         }
     }
@@ -364,14 +329,9 @@ impl From<SysmlModel> for PackageDef {
 /// Bounds & Faults: Serialized size and `estimated_tokens` are bounded by the caller's `max_tokens` budget in `SysmlModel::slice_package_subsystem`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AstSlice {
-    pub target_package: String,
-    pub packages: Vec<PackageDef>,
-    pub parts: Vec<PartDef>,
-    pub ports: Vec<PortDef>,
-    pub interfaces: Vec<InterfaceDef>,
-    pub requirements: Vec<RequirementDef>,
-    pub hazards: Vec<HazardDef>,
-    pub estimated_tokens: usize,
+    pub target_package: String, pub packages: Vec<PackageDef>, pub parts: Vec<PartDef>,
+    pub ports: Vec<PortDef>, pub interfaces: Vec<InterfaceDef>, pub requirements: Vec<RequirementDef>,
+    pub hazards: Vec<HazardDef>, pub estimated_tokens: usize,
 }
 
 #[cfg(test)]
@@ -380,37 +340,19 @@ mod tests {
 
     #[test]
     fn package_def_iterative_queries_preserve_preorder_across_deep_tree() -> Result<(), Box<dyn std::error::Error>> {
-        let mk_part = |name: &str, is_def: bool, port: &str, parts: Vec<PartDef>| PartDef {
-            name: name.to_string(),
-            is_def,
-            ports: vec![PortDef { name: port.to_string(), ..Default::default() }],
-            parts,
-            ..Default::default()
-        };
+        let mk_part = |name: &str, is_def: bool, port: &str, parts: Vec<PartDef>| PartDef { name: name.to_string(), is_def, ports: vec![PortDef { name: port.to_string(), ..Default::default() }], parts, ..Default::default() };
         let leaf = mk_part("sensorUsage", false, "nested_port_leaf", Vec::new());
         let subdef = mk_part("NestedSubDef", true, "nested_port_def", vec![leaf]);
-        let mut current_pkg = PackageDef {
-            name: "Pkg_128".to_string(),
-            part_defs: vec![mk_part("TopPart_128", true, "top_port", vec![subdef])],
-            ..Default::default()
-        };
+        let mut current_pkg = PackageDef { name: "Pkg_128".to_string(), part_defs: vec![mk_part("TopPart_128", true, "top_port", vec![subdef])], ..Default::default() };
         for depth in (0..128_usize).rev() {
             let sibling = PackageDef { name: format!("SiblingPkg_{depth}"), ..Default::default() };
             current_pkg = PackageDef { name: format!("Pkg_{depth}"), packages: vec![sibling, current_pkg], ..Default::default() };
         }
-
         let all_pkgs = current_pkg.get_all_packages();
-        assert_eq!(all_pkgs.len(), 257);
-        assert_eq!(all_pkgs.first().map(|p| p.name.as_str()), Some("Pkg_0"));
-        assert_eq!(all_pkgs.get(1).map(|p| p.name.as_str()), Some("SiblingPkg_0"));
-        assert_eq!(all_pkgs.last().map(|p| p.name.as_str()), Some("Pkg_128"));
-
-        let all_parts = current_pkg.get_all_parts();
-        assert_eq!(all_parts.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), vec!["TopPart_128", "NestedSubDef"]);
-
+        assert_eq!((all_pkgs.len(), all_pkgs.first().map(|p| p.name.as_str()), all_pkgs.get(1).map(|p| p.name.as_str()), all_pkgs.last().map(|p| p.name.as_str())), (257, Some("Pkg_0"), Some("SiblingPkg_0"), Some("Pkg_128")));
+        assert_eq!(current_pkg.get_all_parts().iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), vec!["TopPart_128", "NestedSubDef"]);
         let nested_ports = current_pkg.get_nested_ports();
         assert!(nested_ports.contains("nested_port_def") && nested_ports.contains("nested_port_leaf") && !nested_ports.contains("top_port"));
-
         current_pkg.find_part_mut("sensorUsage").ok_or("missing sensorUsage")?.doc = Some("Updated in place".to_string());
         assert!(current_pkg.find_part_mut("UnknownPart").is_none());
         Ok(())

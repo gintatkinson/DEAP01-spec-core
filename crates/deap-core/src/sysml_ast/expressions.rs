@@ -21,15 +21,11 @@ use serde::{Deserialize, Serialize};
 pub struct ConstraintDef {
     pub name: String,
     pub expression: String,
-    #[serde(default)]
-    pub parameters: Vec<String>,
-    #[serde(default)]
-    pub is_assertion: bool,
+    #[serde(default)] pub parameters: Vec<String>,
+    #[serde(default)] pub is_assertion: bool,
     pub doc: Option<String>,
-    #[serde(default)]
-    pub pre_conditions: Vec<String>,
-    #[serde(default)]
-    pub post_conditions: Vec<String>,
+    #[serde(default)] pub pre_conditions: Vec<String>,
+    #[serde(default)] pub post_conditions: Vec<String>,
 }
 
 /// Represents a pure mathematical calculation or function definition in SysML v2 / KerML.
@@ -40,26 +36,16 @@ pub struct ConstraintDef {
 pub struct CalcDef {
     pub name: String,
     pub doc: Option<String>,
-    #[serde(default)]
-    pub in_params: Vec<AttributeDef>,
-    #[serde(default)]
-    pub return_type: Option<String>,
-    #[serde(default)]
-    pub expression: Option<String>,
+    #[serde(default)] pub in_params: Vec<AttributeDef>,
+    #[serde(default)] pub return_type: Option<String>,
+    #[serde(default)] pub expression: Option<String>,
 }
 
 /// Parses `[def] <name> [(...)]` starting at `after_kw`, returning `(name, optional_paren_slice, post_ws_offset)`.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-EXPRESSION-PARAMS]
-fn parse_decl_header_with_parens<'a>(
-    clean: &'a str,
-    masked: &'a str,
-    after_kw: usize,
-) -> Option<(&'a str, Option<&'a str>, usize)> {
+fn parse_decl_header_with_parens<'a>(clean: &'a str, masked: &'a str, after_kw: usize) -> Option<(&'a str, Option<&'a str>, usize)> {
     let mut curr = after_kw.saturating_add(skip_ws(masked.get(after_kw..).unwrap_or("")));
-    if masked
-        .get(curr..)
-        .is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3))
-    {
+    if masked.get(curr..).is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3)) {
         curr = curr.saturating_add(3);
         curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
     }
@@ -69,7 +55,6 @@ fn parse_decl_header_with_parens<'a>(
     }
     curr = curr.saturating_add(name_len);
     curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
-
     if !masked.get(curr..).is_some_and(|s| s.starts_with('(')) {
         return Some((name, None, curr));
     }
@@ -87,57 +72,27 @@ fn parse_decl_header_with_parens<'a>(
 fn detect_assert_prefix(masked: &str, c_pos: usize) -> (bool, usize) {
     let before_c = masked.get(..c_pos).unwrap_or("").trim_end();
     let assert_start = before_c.len().saturating_sub(6);
-    if before_c.ends_with("assert") && is_word_boundary_before(before_c, assert_start) {
-        (true, assert_start)
-    } else {
-        (false, c_pos)
-    }
+    if before_c.ends_with("assert") && is_word_boundary_before(before_c, assert_start) { (true, assert_start) } else { (false, c_pos) }
 }
 
 /// Parses a single `[assert] constraint [def] <name> [(...)] ({ ... } | ;)` declaration beginning at `c_pos`.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-CONSTRAINT-DEFS]
-fn parse_single_constraint(
-    clean: &str,
-    masked: &str,
-    c_pos: usize,
-) -> Option<(ConstraintDef, usize)> {
+fn parse_single_constraint(clean: &str, masked: &str, c_pos: usize) -> Option<(ConstraintDef, usize)> {
     let (is_assertion, doc_end) = detect_assert_prefix(masked, c_pos);
     let doc = extract_doc_comment_before(clean, doc_end);
-    let (name, paren_opt, curr) =
-        parse_decl_header_with_parens(clean, masked, c_pos.saturating_add(10))?;
-    let parameters = paren_opt
-        .into_iter()
-        .flat_map(|s| s.split(','))
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .collect();
-
+    let (name, paren_opt, curr) = parse_decl_header_with_parens(clean, masked, c_pos.saturating_add(10))?;
+    let parameters = paren_opt.into_iter().flat_map(|s| s.split(',')).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect();
     let rem_body = masked.get(curr..).unwrap_or("");
     let (expression, next_idx) = if rem_body.starts_with('{') {
         let close_pos = find_matching_brace(clean, curr)?;
         let expr_str = clean.get(curr.saturating_add(1)..close_pos).unwrap_or("");
-        (
-            expr_str.trim().trim_end_matches(';').trim().to_string(),
-            close_pos.saturating_add(1),
-        )
+        (expr_str.trim().trim_end_matches(';').trim().to_string(), close_pos.saturating_add(1))
     } else if rem_body.starts_with(';') {
         (String::new(), curr.saturating_add(1))
     } else {
         return None;
     };
-
-    Some((
-        ConstraintDef {
-            name: name.to_string(),
-            expression,
-            parameters,
-            is_assertion,
-            doc,
-            ..Default::default()
-        },
-        next_idx,
-    ))
+    Some((ConstraintDef { name: name.to_string(), expression, parameters, is_assertion, doc, ..Default::default() }, next_idx))
 }
 
 /// Parses parametric `ConstraintDef` definitions and `assert constraint` clauses from SysML v2 source text.
@@ -151,8 +106,7 @@ pub fn parse_constraint_defs(content: &str) -> Vec<ConstraintDef> {
     let mut skip_until: usize = 0;
 
     for (res, span) in SysmlToken::lexer(&masked).spanned() {
-        if span.start < skip_until || res.is_err() || masked.get(span.clone()) != Some("constraint")
-        {
+        if span.start < skip_until || res.is_err() || masked.get(span.clone()) != Some("constraint") {
             continue;
         }
         if let Some((constraint, next_idx)) = parse_single_constraint(&clean, &masked, span.start) {
@@ -299,21 +253,17 @@ fn parse_single_calc(clean: &str, masked: &str, calc_pos: usize) -> Option<(Calc
         .flat_map(|s| s.split(','))
         .filter_map(parse_calc_param)
         .collect();
-
     let (mut return_type, curr) = parse_optional_signature_return_type(masked, curr);
     let rem_body = masked.get(curr..).unwrap_or("");
     let (body, next_idx) = if rem_body.starts_with('{') {
         let close_pos = find_matching_brace(clean, curr);
-        let body_slice = close_pos
-            .and_then(|cp| clean.get(curr.saturating_add(1)..cp))
-            .unwrap_or("");
+        let body_slice = close_pos.and_then(|cp| clean.get(curr.saturating_add(1)..cp)).unwrap_or("");
         (Some(body_slice), close_pos.unwrap_or(curr).saturating_add(1))
     } else if rem_body.starts_with(';') {
         (None, curr.saturating_add(1))
     } else {
         return None;
     };
-
     let expression = body.and_then(|b| parse_calc_body(b, &mut in_params, &mut return_type));
     Some((
         CalcDef {
@@ -336,7 +286,6 @@ pub fn parse_calc_defs(content: &str) -> Vec<CalcDef> {
     let masked = mask_string_literals(&clean);
     let mut calcs = Vec::new();
     let mut skip_until: usize = 0;
-
     for (res, span) in SysmlToken::lexer(&masked).spanned() {
         if span.start < skip_until || res.is_err() || masked.get(span.clone()) != Some("calc") {
             continue;
@@ -355,94 +304,33 @@ mod tests {
 
     #[test]
     fn constraint_and_calc_def_serde_roundtrip() -> Result<(), serde_json::Error> {
-        let constraint = ConstraintDef {
-            name: "EnvelopeLimit".to_string(),
-            expression: "airspeed <= 350.0".to_string(),
-            parameters: vec!["airspeed : Real".to_string()],
-            is_assertion: true,
-            doc: Some("Enforces Vne limit.".to_string()),
-            pre_conditions: vec!["sensorValid == true".to_string()],
-            post_conditions: vec!["latchArmed == false".to_string()],
-        };
-        let c_json = serde_json::to_string(&constraint)?;
-        assert_eq!(serde_json::from_str::<ConstraintDef>(&c_json)?, constraint);
-
+        let constraint = ConstraintDef { name: "EnvelopeLimit".to_string(), expression: "airspeed <= 350.0".to_string(), parameters: vec!["airspeed : Real".to_string()], is_assertion: true, doc: Some("Enforces Vne limit.".to_string()), pre_conditions: vec!["sensorValid == true".to_string()], post_conditions: vec!["latchArmed == false".to_string()] };
+        assert_eq!(serde_json::from_str::<ConstraintDef>(&serde_json::to_string(&constraint)?)?, constraint);
         let calc_min: CalcDef = serde_json::from_str(r#"{"name":"ComputeLift","doc":null}"#)?;
-        assert_eq!(calc_min.name, "ComputeLift");
-        assert!(calc_min.in_params.is_empty() && calc_min.return_type.is_none() && calc_min.expression.is_none());
+        assert!(calc_min.name == "ComputeLift" && calc_min.in_params.is_empty() && calc_min.return_type.is_none() && calc_min.expression.is_none());
         Ok(())
     }
 
     #[test]
-    fn parse_constraint_defs_extracts_assertions_docs_and_skips_malformed(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let src = r#"
-            /* Ignore constraint def CommentedOut { x > 0; } and UTF-8 Δv */
-            attribute note : String = "constraint def FakeInString { a == b; }";
-            doc /* Formal rate bound */
-            constraint def RateBound(omega : Real, maxOmega : Real) { omega <= maxOmega; }
-            doc /* Asserted safety invariant */
-            assert constraint ThermalMarginInvariant { tempK < 390.0; }
-            assert constraint SemicolonAssertion;
-            constraint def ;
-            constraint BrokenParen(x : Real;
-            constraint NoTerminator
-            constraint UnclosedBrace { x > 0;
-        "#;
-
+    fn parse_constraint_defs_extracts_assertions_docs_and_skips_malformed() -> Result<(), Box<dyn std::error::Error>> {
+        let src = "/* Ignore constraint def CommentedOut { x > 0; } and UTF-8 Δv */\nattribute note : String = \"constraint def FakeInString { a == b; }\";\ndoc /* Formal rate bound */\nconstraint def RateBound(omega : Real, maxOmega : Real) { omega <= maxOmega; }\ndoc /* Asserted safety invariant */\nassert constraint ThermalMarginInvariant { tempK < 390.0; }\nassert constraint SemicolonAssertion;\nconstraint def ;\nconstraint BrokenParen(x : Real;\nconstraint NoTerminator\nconstraint UnclosedBrace { x > 0;";
         let parsed = parse_constraint_defs(src);
-        assert_eq!(parsed.len(), 3);
-
-        let c0 = parsed.first().ok_or("missing RateBound")?;
-        assert_eq!((c0.name.as_str(), c0.is_assertion, c0.doc.as_deref()), ("RateBound", false, Some("Formal rate bound")));
-        assert_eq!(c0.parameters, vec!["omega : Real", "maxOmega : Real"]);
-        assert_eq!(c0.expression, "omega <= maxOmega");
-
-        let c1 = parsed.get(1).ok_or("missing ThermalMarginInvariant")?;
+        let (c0, c1, c2) = (parsed.first().ok_or("c0")?, parsed.get(1).ok_or("c1")?, parsed.get(2).ok_or("c2")?);
+        assert_eq!((parsed.len(), c0.name.as_str(), c0.is_assertion, c0.doc.as_deref(), c0.parameters.as_slice(), c0.expression.as_str()), (3, "RateBound", false, Some("Formal rate bound"), &["omega : Real".to_string(), "maxOmega : Real".to_string()][..], "omega <= maxOmega"));
         assert_eq!((c1.name.as_str(), c1.is_assertion, c1.doc.as_deref(), c1.expression.as_str()), ("ThermalMarginInvariant", true, Some("Asserted safety invariant"), "tempK < 390.0"));
-
-        let c2 = parsed.get(2).ok_or("missing SemicolonAssertion")?;
         assert!(c2.name == "SemicolonAssertion" && c2.is_assertion && c2.expression.is_empty());
         Ok(())
     }
 
     #[test]
-    fn parse_calc_defs_extracts_signature_and_body_variants_and_skips_malformed(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let src = r#"
-            /* Ignore calc def CommentedCalc; and UTF-8 ρ */
-            attribute note : String = "calc def FakeCalcInString;";
-            doc /* Dynamic pressure calculation */
-            calc def DynamicPressure(in attribute rho : ScalarValues::Real = 1.225, v = 80.0) : ScalarValues::Real {
-                return 0.5 * rho * v * v;
-            }
-            calc def BodyReturnTypeCalc {
-                in x : Real;
-                attribute gain : Real;
-                return type Real;
-                x * gain;
-            }
-            calc StubCalc;
-            calc def ;
-            calc UnclosedParen(in x : Real;
-            calc MissingTerminator
-        "#;
-
+    fn parse_calc_defs_extracts_signature_and_body_variants_and_skips_malformed() -> Result<(), Box<dyn std::error::Error>> {
+        let src = "/* Ignore calc def CommentedCalc; and UTF-8 ρ */\nattribute note : String = \"calc def FakeCalcInString;\";\ndoc /* Dynamic pressure calculation */\ncalc def DynamicPressure(in attribute rho : ScalarValues::Real = 1.225, v = 80.0) : ScalarValues::Real {\n    return 0.5 * rho * v * v;\n}\ncalc def BodyReturnTypeCalc {\n    in x : Real;\n    attribute gain : Real;\n    return type Real;\n    x * gain;\n}\ncalc StubCalc;\ncalc def ;\ncalc UnclosedParen(in x : Real;\ncalc MissingTerminator";
         let calcs = parse_calc_defs(src);
-        assert_eq!(calcs.len(), 3);
-
-        let dp = calcs.first().ok_or("missing DynamicPressure")?;
-        assert_eq!((dp.name.as_str(), dp.doc.as_deref(), dp.return_type.as_deref(), dp.expression.as_deref()), ("DynamicPressure", Some("Dynamic pressure calculation"), Some("ScalarValues::Real"), Some("0.5 * rho * v * v")));
-        assert_eq!(dp.in_params.len(), 2);
-        let p0 = dp.in_params.first().ok_or("missing rho")?;
-        assert_eq!((p0.name.as_str(), p0.type_name.as_str(), p0.default_value.as_deref()), ("rho", "ScalarValues::Real", Some("1.225")));
-        let p1 = dp.in_params.get(1).ok_or("missing v")?;
-        assert_eq!((p1.name.as_str(), p1.type_name.as_str(), p1.default_value.as_deref()), ("v", "ScalarValues::Real", Some("80.0")));
-
-        let br = calcs.get(1).ok_or("missing BodyReturnTypeCalc")?;
+        let (dp, br, stub) = (calcs.first().ok_or("dp")?, calcs.get(1).ok_or("br")?, calcs.get(2).ok_or("stub")?);
+        let (p0, p1) = (dp.in_params.first().ok_or("p0")?, dp.in_params.get(1).ok_or("p1")?);
+        assert_eq!((calcs.len(), dp.name.as_str(), dp.doc.as_deref(), dp.return_type.as_deref(), dp.expression.as_deref()), (3, "DynamicPressure", Some("Dynamic pressure calculation"), Some("ScalarValues::Real"), Some("0.5 * rho * v * v")));
+        assert_eq!((p0.name.as_str(), p0.type_name.as_str(), p0.default_value.as_deref(), p1.name.as_str(), p1.type_name.as_str(), p1.default_value.as_deref()), ("rho", "ScalarValues::Real", Some("1.225"), "v", "ScalarValues::Real", Some("80.0")));
         assert_eq!((br.name.as_str(), br.in_params.len(), br.return_type.as_deref(), br.expression.as_deref()), ("BodyReturnTypeCalc", 2, Some("Real"), Some("x * gain")));
-
-        let stub = calcs.get(2).ok_or("missing StubCalc")?;
         assert!(stub.name == "StubCalc" && stub.in_params.is_empty() && stub.return_type.is_none() && stub.expression.is_none());
         Ok(())
     }

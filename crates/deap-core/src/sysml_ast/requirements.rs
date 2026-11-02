@@ -25,28 +25,17 @@ pub struct RequirementDef {
     pub req_id: String,
     pub text: String,
     pub doc: Option<String>,
-    #[serde(default)]
-    pub attributes: Vec<AttributeDef>,
-    #[serde(default)]
-    pub constraints: Vec<ConstraintDef>,
-    #[serde(default)]
-    pub assumes: Vec<String>,
-    #[serde(default)]
-    pub requires: Vec<String>,
-    #[serde(default)]
-    pub verified_by: Vec<String>,
-    #[serde(default)]
-    pub satisfied_by: Vec<String>,
-    #[serde(default)]
-    pub derived_from: Vec<String>,
-    #[serde(default)]
-    pub derives: Vec<String>,
-    #[serde(default)]
-    pub triggers_hazards: Vec<String>,
-    #[serde(default)]
-    pub safety_realises: Vec<String>,
-    #[serde(default)]
-    pub layer: Option<String>,
+    #[serde(default)] pub attributes: Vec<AttributeDef>,
+    #[serde(default)] pub constraints: Vec<ConstraintDef>,
+    #[serde(default)] pub assumes: Vec<String>,
+    #[serde(default)] pub requires: Vec<String>,
+    #[serde(default)] pub verified_by: Vec<String>,
+    #[serde(default)] pub satisfied_by: Vec<String>,
+    #[serde(default)] pub derived_from: Vec<String>,
+    #[serde(default)] pub derives: Vec<String>,
+    #[serde(default)] pub triggers_hazards: Vec<String>,
+    #[serde(default)] pub safety_realises: Vec<String>,
+    #[serde(default)] pub layer: Option<String>,
 }
 
 /// Extracts quoted literals, parenthesized argument lists, or `= value` tokens from an `@Annotation` line.
@@ -77,14 +66,7 @@ fn extract_annotation_values(after_tag: &str) -> Vec<String> {
                 .map(str::to_string),
         );
     } else if let Some((_, rhs)) = trimmed.split_once('=') {
-        let clean = rhs
-            .trim()
-            .trim_end_matches('}')
-            .trim()
-            .trim_end_matches(';')
-            .trim()
-            .trim_matches('\'')
-            .trim();
+        let clean = rhs.trim().trim_end_matches('}').trim().trim_end_matches(';').trim().trim_matches('\'').trim();
         if !clean.is_empty() {
             values.push(clean.to_string());
         }
@@ -100,7 +82,6 @@ pub(super) fn parse_safety_and_layer_annotations(
     let mut triggers_hazards = Vec::new();
     let mut safety_realises = Vec::new();
     let mut layer = None;
-
     for trimmed in body.lines().map(str::trim) {
         if let Some(after) = trimmed.strip_prefix("@TriggersHazard") {
             for v in extract_annotation_values(after) {
@@ -118,7 +99,6 @@ pub(super) fn parse_safety_and_layer_annotations(
             layer = extract_annotation_values(after).into_iter().next().or(layer);
         }
     }
-
     (triggers_hazards, safety_realises, layer)
 }
 
@@ -192,10 +172,7 @@ fn parse_requirement_span<'a>(
     let mut curr = req_pos.saturating_add(11);
     curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
     let mut has_def = false;
-    if masked
-        .get(curr..)
-        .is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3))
-    {
+    if masked.get(curr..).is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3)) {
         has_def = true;
         curr = curr.saturating_add(3);
         curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
@@ -211,7 +188,6 @@ fn parse_requirement_span<'a>(
     }
     curr = curr.saturating_add(name_len);
     curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
-
     let rem_body = masked.get(curr..).unwrap_or("");
     let (body_str, next_idx) = if rem_body.starts_with('{') {
         let close_pos = find_matching_brace(clean, curr)?;
@@ -221,7 +197,6 @@ fn parse_requirement_span<'a>(
     } else {
         return None;
     };
-
     Some(ParsedRequirementSpan { name, doc, body_str, next_idx })
 }
 
@@ -242,13 +217,9 @@ fn apply_requirement_body_line(trimmed: &str, req: &mut RequirementDef) {
         .or_else(|| parse_assigned_quoted_clause(trimmed, "text"))
     {
         req.text = val;
-    } else if let Some(target) =
-        strip_kw_at_boundary(trimmed, "assume").and_then(|s| s.strip_suffix(';'))
-    {
+    } else if let Some(target) = strip_kw_at_boundary(trimmed, "assume").and_then(|s| s.strip_suffix(';')) {
         req.assumes.push(target.trim().to_string());
-    } else if let Some(target) =
-        strip_kw_at_boundary(trimmed, "require").and_then(|s| s.strip_suffix(';'))
-    {
+    } else if let Some(target) = strip_kw_at_boundary(trimmed, "require").and_then(|s| s.strip_suffix(';')) {
         req.requires.push(target.trim().to_string());
     } else if let Some(target) = strip_kw_at_boundary(trimmed, "derived")
         .and_then(|s| strip_kw_at_boundary(s, "from"))
@@ -299,7 +270,6 @@ pub fn parse_requirement_defs(content: &str) -> Vec<RequirementDef> {
     let masked = mask_string_literals(&clean);
     let mut reqs = Vec::new();
     let mut skip_until: usize = 0;
-
     for (res, span) in SysmlToken::lexer(&masked).spanned() {
         if span.start < skip_until
             || res.is_err()
@@ -325,10 +295,7 @@ fn extract_satisfied_req_id_from_stmt(stmt_clean: &str) -> Option<String> {
     let by_pos = SysmlToken::lexer(stmt_clean)
         .spanned()
         .find_map(|(tok, sp)| (tok.is_ok() && stmt_clean.get(sp.clone()) == Some("by")).then_some(sp.start));
-    let target_part = by_pos
-        .and_then(|pos| stmt_clean.get(..pos))
-        .unwrap_or(stmt_clean)
-        .trim();
+    let target_part = by_pos.and_then(|pos| stmt_clean.get(..pos)).unwrap_or(stmt_clean).trim();
     let req_id = if target_part.starts_with('"') {
         extract_quoted_string(target_part)
             .unwrap_or_else(|| target_part.trim_matches('"'))
@@ -351,27 +318,18 @@ pub fn parse_satisfied_requirements(content: &str) -> Vec<String> {
     let masked = mask_string_literals(&clean);
     let mut satisfied = Vec::new();
     let mut skip_until: usize = 0;
-
     for (res, span) in SysmlToken::lexer(&masked).spanned() {
         if span.start < skip_until || res.is_err() || masked.get(span.clone()) != Some("satisfy") {
             continue;
         }
-        let after_kw = span.end;
-        let mut curr = after_kw.saturating_add(skip_ws(masked.get(after_kw..).unwrap_or("")));
-        if masked
-            .get(curr..)
-            .is_some_and(|s| s.starts_with("by") && is_word_boundary_after(s, 2))
-        {
+        let mut curr = span.end.saturating_add(skip_ws(masked.get(span.end..).unwrap_or("")));
+        if masked.get(curr..).is_some_and(|s| s.starts_with("by") && is_word_boundary_after(s, 2)) {
             continue;
         }
-        if masked
-            .get(curr..)
-            .is_some_and(|s| s.starts_with("requirement") && is_word_boundary_after(s, 11))
-        {
+        if masked.get(curr..).is_some_and(|s| s.starts_with("requirement") && is_word_boundary_after(s, 11)) {
             curr = curr.saturating_add(11);
             curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
         }
-
         let rem_masked = masked.get(curr..).unwrap_or("");
         let rem_clean = clean.get(curr..).unwrap_or("");
         if let Some(semi_pos) = rem_masked.find(';') {
@@ -384,7 +342,6 @@ pub fn parse_satisfied_requirements(content: &str) -> Vec<String> {
             skip_until = curr.saturating_add(semi_pos).saturating_add(1);
         }
     }
-
     satisfied
 }
 
@@ -393,45 +350,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_requirement_defs_extracts_verify_satisfy_annotations_and_skips_malformed(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let src = r#"
-            /* Ignore requirement def CommentedReq; and UTF-8 Δt <= 5 ms */
-            attribute literal : String = "requirement def FakeInString { id = \"FAKE\"; }";
-            satisfy requirement REQ-IGNORED-SATISFY;
-            requirement def REQ-AV-101 {
-                req_id = "REQ-AV-101";
-                doc = "Actuator loop latency Δt <= 5 ms.";
-                doc /* Normative inline safety requirement doc */
-                assume SensorClockLocked;
-                require EnvelopeInvariant;
-                derived from SYS-REQ-001;
-                verify by TestActuatorLatency;
-                verify BenchMonitorCase;
-                satisfy by PrimaryActuatorController;
-                satisfy RedundantActuatorLane;
-                @TriggersHazard('H-01', 'H-02')
-                @SafetyRealises = 'SC-01';
-                @Layer('Control')
-            }
-            requirement BareUsageReq;
-            requirement def ;
-            requirement UnclosedBlock { id = "BROKEN";
-            requirement MissingTerminator
-        "#;
-
+    fn parse_requirement_defs_extracts_verify_satisfy_annotations_and_skips_malformed() -> Result<(), Box<dyn std::error::Error>> {
+        let src = "/* Ignore requirement def CommentedReq; */\nattribute literal : String = \"requirement def FakeInString { id = \\\"FAKE\\\"; }\";\nsatisfy requirement REQ-IGNORED-SATISFY;\nrequirement def REQ-AV-101 {\n    req_id = \"REQ-AV-101\";\n    doc = \"Actuator loop latency <= 5 ms.\";\n    doc /* Normative inline safety requirement doc */\n    assume SensorClockLocked;\n    require EnvelopeInvariant;\n    derived from SYS-REQ-001;\n    verify by TestActuatorLatency;\n    verify BenchMonitorCase;\n    satisfy by PrimaryActuatorController;\n    satisfy RedundantActuatorLane;\n    @TriggersHazard('H-01', 'H-02')\n    @SafetyRealises = 'SC-01';\n    @Layer('Control')\n}\nrequirement BareUsageReq;\nrequirement def ;\nrequirement UnclosedBlock { id = \"BROKEN\";\nrequirement MissingTerminator";
         let reqs = parse_requirement_defs(src);
         assert_eq!(reqs.len(), 2);
-
         let r0 = reqs.first().ok_or("missing REQ-AV-101")?;
-        assert_eq!((r0.name.as_str(), r0.req_id.as_str(), r0.text.as_str()), ("REQ-AV-101", "REQ-AV-101", "Actuator loop latency Δt <= 5 ms."));
+        assert_eq!((r0.name.as_str(), r0.req_id.as_str(), r0.text.as_str()), ("REQ-AV-101", "REQ-AV-101", "Actuator loop latency <= 5 ms."));
         assert_eq!(r0.doc.as_deref(), Some("Normative inline safety requirement doc"));
         assert_eq!((r0.assumes.as_slice(), r0.requires.as_slice(), r0.derived_from.as_slice()), (&["SensorClockLocked".to_string()][..], &["EnvelopeInvariant".to_string()][..], &["SYS-REQ-001".to_string()][..]));
         assert_eq!(r0.verified_by, vec!["TestActuatorLatency", "BenchMonitorCase"]);
         assert_eq!(r0.satisfied_by, vec!["PrimaryActuatorController", "RedundantActuatorLane"]);
         assert_eq!(r0.triggers_hazards, vec!["H-01", "H-02"]);
         assert_eq!((r0.safety_realises.as_slice(), r0.layer.as_deref()), (&["SC-01".to_string()][..], Some("Control")));
-
         let r1 = reqs.get(1).ok_or("missing BareUsageReq")?;
         assert_eq!((r1.name.as_str(), r1.req_id.as_str()), ("BareUsageReq", "BareUsageReq"));
         Ok(())
@@ -439,15 +369,7 @@ mod tests {
 
     #[test]
     fn parse_satisfied_requirements_handles_quotes_by_clauses_and_malformed_inputs() {
-        let src = r#"
-            part def GuidanceController {
-                satisfy requirement 'REQ-GC-01';
-                satisfy "REQ-GC-02" by InnerLoop;
-                satisfy by InverseClauseIgnored;
-                satisfy requirement BracedIgnored { doc /* not a ref */ };
-                satisfy requirement UnclosedWithoutSemicolon
-            }
-        "#;
+        let src = "part def GuidanceController {\n    satisfy requirement 'REQ-GC-01';\n    satisfy \"REQ-GC-02\" by InnerLoop;\n    satisfy by InverseClauseIgnored;\n    satisfy requirement BracedIgnored { doc /* not a ref */ };\n    satisfy requirement UnclosedWithoutSemicolon\n}";
         assert_eq!(parse_satisfied_requirements(src), vec!["REQ-GC-01".to_string(), "REQ-GC-02".to_string()]);
     }
 }

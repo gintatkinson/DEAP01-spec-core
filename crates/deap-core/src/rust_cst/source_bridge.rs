@@ -25,16 +25,12 @@
 
 use std::path::Path;
 
-use logos::Logos;
-
-use crate::dart_cst::{DartItemKind, DartToken};
 pub use super::source_bridge_helpers::*;
 pub use super::source_bridge_rust::{
     classify_rust_item_ast, classify_rust_item_line_ast, classify_rust_item_with_tier_ast,
-    contains_direct_range_slice, extract_component_method_table, parse_dart_source_ast,
+    contains_direct_range_slice, parse_dart_source_ast,
     parse_rust_source_ast, parse_rust_source_file_ast, parse_source_file_ast,
-    validate_source_syntax, validate_source_syntax_for_language, ComponentMethodTable,
-    ExtractedMethodSignature,
+    validate_source_syntax, validate_source_syntax_for_language,
 };
 
 /// Supported source languages for CST/AST governance analysis. Realises: [REQ-0201]
@@ -244,139 +240,52 @@ impl ParsedSourceFileAst {
     }
 }
 
-/// Extracts Dart class `extends` parent type and field declarations from class lines. Realises: [REQ-0201]
-fn extract_dart_class_metadata(lines: &[&str], start_line: usize, end_line: usize) -> (Option<String>, Vec<SourceField>) {
-    let header = lines.get(start_line.saturating_sub(1)).copied().unwrap_or("");
-    let parent_type = header
-        .split_once(" extends ")
-        .map(|(_, after)| after.split('{').next().unwrap_or(after).trim().to_string())
-        .filter(|s| !s.is_empty());
-    let mut fields = Vec::new();
-    for raw in lines.get(start_line..end_line.saturating_sub(1)).unwrap_or(&[]) {
-        let t = raw.trim();
-        if !t.ends_with(';') || t.starts_with("//") || t.starts_with("return ") || t.contains('(') || t.contains('=') {
-            continue;
-        }
-        let body = t
-            .trim_end_matches(';')
-            .trim_start_matches("static ")
-            .trim_start_matches("late ")
-            .trim_start_matches("final ")
-            .trim_start_matches("const ")
-            .trim();
-        let parts: Vec<&str> = body.split_whitespace().collect();
-        if parts.len() >= 2 {
-            let name = (*parts.last().unwrap_or(&"")).to_string();
-            let type_name = parts.get(..parts.len().saturating_sub(1)).unwrap_or(&[]).join(" ");
-            let is_callback_or_port = type_name.contains("Callback")
-                || type_name.starts_with("ValueChanged")
-                || type_name.starts_with("ValueSetter")
-                || type_name.starts_with("ValueGetter")
-                || type_name.contains("Function");
-            fields.push(SourceField { name, type_name, is_callback_or_port, doc: None });
-        }
-    }
-    (parent_type, fields)
+/// Extracted callable method signature representation. Realises: [REQ-0201]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractedMethodSignature {
+    /// Identifier name. Realises: [REQ-0201]
+    pub name: String,
+    /// Parameter signatures. Realises: [REQ-0201]
+    pub params: Vec<SourceParam>,
+    /// Return type if declared. Realises: [REQ-0201]
+    pub return_type: Option<String>,
 }
 
-/// Parses Dart source into a normalized `ParsedSourceFileAst` via `dart_cst`. Realises: [REQ-0201]
-#[must_use]
-pub fn parse_dart_source_file_ast(source: &str) -> ParsedSourceFileAst {
-    let lines: Vec<&str> = source.lines().collect();
-    let items = crate::dart_cst::parse_dart_items(source)
-        .into_iter()
-        .map(|d| {
-            let kind = match d.kind {
-                DartItemKind::Class => SourceItemKind::Class,
-                DartItemKind::Enum => SourceItemKind::Enum,
-                DartItemKind::TypeAlias => SourceItemKind::Typedef,
-                DartItemKind::Mixin => SourceItemKind::Mixin,
-                DartItemKind::Extension => SourceItemKind::Extension,
-                DartItemKind::Function => SourceItemKind::Function,
-                DartItemKind::Const => SourceItemKind::Const,
-            };
-            let (doc_lines, has_doc) = extract_item_doc_block_ast(&lines, d.start_line.saturating_sub(1));
-            let satisfied_requirements = extract_realises_ids_from_doc_lines(&doc_lines);
-            let (parent_type, fields) = if kind == SourceItemKind::Class {
-                extract_dart_class_metadata(&lines, d.start_line, d.end_line)
-            } else {
-                (None, Vec::new())
-            };
-            SourceAstItem {
-                kind,
-                name: d.name,
-                line: d.start_line,
-                line_no: d.start_line,
-                end_line: d.end_line,
-                doc_lines,
-                has_doc,
-                is_test_annotated: false,
-                is_inside_test_block: false,
-                is_trait_impl_member: false,
-                owner_name: None,
-                parent_type,
-                fields,
-                params: Vec::new(),
-                return_type: None,
-                satisfied_requirements,
-                invariants: Vec::new(),
-                states: Vec::new(),
-            }
-        })
-        .collect();
-    let mut code_line_mask = Vec::with_capacity(lines.len());
-    let mut brace_depths = Vec::with_capacity(lines.len());
-    let mut running_braces = 0usize;
-    for &line in &lines {
-        brace_depths.push(running_braces);
-        let mut has_code = false;
-        for (tok, span) in DartToken::lexer(line).spanned() {
-            if !matches!(tok, Ok(DartToken::Trivia | DartToken::DocComment)) {
-                has_code = true;
-            }
-            if tok == Ok(DartToken::Punct) {
-                match line.get(span).unwrap_or("") {
-                    "{" => running_braces += 1,
-                    "}" => running_braces = running_braces.saturating_sub(1),
-                    _ => {}
-                }
-            }
-        }
-        code_line_mask.push(has_code);
-    }
-    ParsedSourceFileAst { language: SourceLanguage::Dart, items, code_line_mask, brace_depths }
+/// Extracted component method table. Realises: [REQ-0201]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ComponentMethodTable {
+    /// Inherent and trait methods keyed by method name. Realises: [REQ-0201]
+    pub methods: std::collections::BTreeMap<String, ExtractedMethodSignature>,
 }
 
-/// Classifies a single Dart top-level snippet using `dart_cst`. Realises: [REQ-0201]
-#[must_use]
-pub fn classify_dart_top_level_ast(trimmed: &str) -> Option<(SourceItemKind, String, Option<String>)> {
-    let t = trimmed.trim();
-    if t.starts_with("import ") || t.starts_with("export ") || t.starts_with("part ") || t.starts_with("library ")
-        || t.starts_with("const ") || t.starts_with("var ") || t.starts_with("late ")
-        || (t.starts_with("final ") && !t.contains("class ") && !t.contains("mixin "))
-    {
-        return None;
+impl ComponentMethodTable {
+    /// Returns true if empty. Realises: [REQ-0201]
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.methods.is_empty()
     }
-    if let Some(getter_name) = extract_dart_getter_ident(t) {
-        return Some((SourceItemKind::Function, getter_name, None));
-    }
-    let open_parens = t.matches('(').count();
-    let close_parens = t.matches(')').count();
-    let mut probe = t.to_string();
-    if open_parens > close_parens {
-        probe.push_str(&")".repeat(open_parens - close_parens));
-        probe.push_str(" {}");
-    } else if probe.ends_with('{') {
-        probe.push('}');
-    } else if !probe.ends_with('}') && !probe.ends_with(';') {
-        probe.push_str(" {}");
-    }
-    parse_dart_source_file_ast(&probe)
-        .items
-        .into_iter()
-        .find(|i| i.kind != SourceItemKind::Const)
-        .map(|i| (i.kind, i.name, i.parent_type))
 }
+
+/// Extracts a method table from parsed source AST items. Realises: [REQ-0201]
+#[must_use]
+pub fn extract_component_method_table(items: &[SourceAstItem]) -> ComponentMethodTable {
+    let mut methods = std::collections::BTreeMap::new();
+    for item in items {
+        if item.kind.is_callable() {
+            methods.insert(
+                item.name.clone(),
+                ExtractedMethodSignature {
+                    name: item.name.clone(),
+                    params: item.params.clone(),
+                    return_type: item.return_type.clone(),
+                },
+            );
+        }
+    }
+    ComponentMethodTable { methods }
+}
+
+pub use super::source_bridge_dart::*;
 
 /// Extracts contiguous `///` doc comments preceding `item_line_idx`. Realises: [REQ-0201]
 #[must_use]

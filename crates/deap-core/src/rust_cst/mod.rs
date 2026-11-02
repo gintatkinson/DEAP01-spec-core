@@ -36,6 +36,7 @@ pub mod kani_proofs;
 pub mod metrics;
 pub mod parse;
 pub mod source_bridge;
+pub mod source_bridge_dart;
 pub mod source_bridge_helpers;
 pub mod source_bridge_rust;
 pub mod thresholds;

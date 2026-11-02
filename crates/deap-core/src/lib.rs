@@ -48,7 +48,10 @@ pub mod sysml_ast;
 pub mod sysml_cst;
 pub mod workspace;
 
-pub use diagnostics::{DefectDossier, Diagnostic, DiagnosticSeverity, WhyEntry};
+pub use diagnostics::{
+    emit_cli_ndjson_stream, format_ndjson_line, resolve_utf8_span, Applicability, DefectDossier,
+    Diagnostic, DiagnosticSeverity, RustcCompilerMessageEnvelope, RustcDiagnosticSpan, WhyEntry,
+};
 pub use digest::{compute_sha256, compute_sha256_bytes};
 pub use error::{CoreError, CoreResult};
 pub use markdown::{
@@ -90,15 +93,15 @@ pub use source_ast::{
     SourceLanguage, SourceParam,
 };
 pub use sysml_ast::{
-    component_matches, extract_negated_components, is_component_negated, parse_action_defs,
-    parse_attribute_defs, parse_calc_defs, parse_connection_defs, parse_constraint_defs,
-    parse_hazard_defs, parse_part_defs, parse_port_defs, parse_requirement_defs,
-    parse_satisfied_requirements, parse_state_defs, parse_sysml, parse_sysml_model, ActionDef,
-    AstPersistenceEngine, AstSlice, AttributeDef, CalcDef, CapabilityDef, ConnectionDef,
-    ConstraintDef, CotAuditLog, CotAuditRecord, FieldDescriptor, FlowDef, HazardDef, ImportDef,
-    IncrementalAstCache, InteractionDef, InterfaceDef, ItemDef, OperationDef, PackageDef, PartDef,
-    PortDef, RequirementDef, RiskDef, StateDef, SysmlModel, TestCaseDef, TransitionDef,
-    TypeDescriptor, UnifiedSchemaModelExtractor, UseCaseDef,
+    component_matches, extract_negated_components, is_component_negated, lower_to_hir_db,
+    parse_action_defs, parse_attribute_defs, parse_calc_defs, parse_connection_defs,
+    parse_constraint_defs, parse_hazard_defs, parse_part_defs, parse_port_defs,
+    parse_requirement_defs, parse_satisfied_requirements, parse_state_defs, parse_sysml,
+    parse_sysml_model, ActionDef, AstPersistenceEngine, AstSlice, AttributeDef, CalcDef,
+    CapabilityDef, ConnectionDef, ConstraintDef, CotAuditLog, CotAuditRecord, FieldDescriptor,
+    FlowDef, HazardDef, ImportDef, IncrementalAstCache, InteractionDef, InterfaceDef, ItemDef,
+    OperationDef, PackageDef, PartDef, PortDef, RequirementDef, RiskDef, StateDef, SysmlModel,
+    TestCaseDef, TransitionDef, TypeDescriptor, UnifiedSchemaModelExtractor, UseCaseDef,
 };
 pub use sysml_cst::{
     classify_keyword_kind, compute_canonical_digest, lower_sysml_hir, parse_sysml_cst,

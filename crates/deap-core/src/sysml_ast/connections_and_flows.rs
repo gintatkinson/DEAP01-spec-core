@@ -27,22 +27,16 @@ pub struct ConnectionDef {
     pub source_part: Option<String>,
     pub target_part: Option<String>,
     pub doc: Option<String>,
-    #[serde(default = "default_one")]
-    pub severity: i32,
+    #[serde(default = "default_one")] pub severity: i32,
     pub item_flow_ref: Option<String>,
     pub protocol: Option<String>,
     pub latency_ms: Option<f64>,
-    #[serde(default)]
-    pub is_flow: bool,
+    #[serde(default)] pub is_flow: bool,
 }
 
 /// Extracts either a brace-delimited `{ ... }` connection body or an inline `connect ...;` clause starting at `curr`.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-CONNECTION-DEFS]
-fn extract_connection_body<'a>(
-    clean: &'a str,
-    masked: &str,
-    curr: usize,
-) -> Option<(&'a str, usize)> {
+fn extract_connection_body<'a>(clean: &'a str, masked: &str, curr: usize) -> Option<(&'a str, usize)> {
     let rem_conn = masked.get(curr..)?;
     if rem_conn.starts_with('{') {
         let close_pos = find_matching_brace(clean, curr)?;
@@ -59,28 +53,15 @@ fn extract_connection_body<'a>(
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-CONNECTION-DEFS]
 fn extract_connection_endpoints(body: &str) -> (String, String) {
     for line in body.lines() {
-        let mut iter = SysmlToken::lexer(line)
-            .spanned()
-            .filter(|(t, _)| !matches!(t, Ok(SysmlToken::Whitespace)));
-        let Some((_, first_sp)) = iter.next() else {
-            continue;
-        };
+        let mut iter = SysmlToken::lexer(line).spanned().filter(|(t, _)| !matches!(t, Ok(SysmlToken::Whitespace)));
+        let Some((_, first_sp)) = iter.next() else { continue };
         let after_start = match line.get(first_sp.clone()) {
             Some("connect") => Some(first_sp.end),
-            Some("flow") => iter
-                .next()
-                .filter(|(_, sp)| line.get(sp.clone()) == Some("from"))
-                .map(|(_, sp)| sp.end),
+            Some("flow") => iter.next().filter(|(_, sp)| line.get(sp.clone()) == Some("from")).map(|(_, sp)| sp.end),
             _ => None,
         };
-        if let Some((raw_src, raw_tgt)) = after_start
-            .and_then(|pos| line.get(pos..))
-            .and_then(|s| s.split_once(" to "))
-        {
-            return (
-                raw_src.trim().to_string(),
-                raw_tgt.trim().trim_end_matches(';').trim().to_string(),
-            );
+        if let Some((raw_src, raw_tgt)) = after_start.and_then(|pos| line.get(pos..)).and_then(|s| s.split_once(" to ")) {
+            return (raw_src.trim().to_string(), raw_tgt.trim().trim_end_matches(';').trim().to_string());
         }
     }
     (String::new(), String::new())
@@ -106,39 +87,25 @@ pub fn parse_connection_defs(content: &str) -> Vec<ConnectionDef> {
         }
         let is_flow = kw == "flow";
         let mut curr = span.end.saturating_add(skip_ws(masked.get(span.end..).unwrap_or("")));
-        if is_flow
-            && masked
-                .get(curr..)
-                .is_some_and(|s| s.starts_with("from") && is_word_boundary_after(s, 4))
-        {
+        if is_flow && masked.get(curr..).is_some_and(|s| s.starts_with("from") && is_word_boundary_after(s, 4)) {
             continue;
         }
-
         let doc = extract_doc_comment_before(&clean, span.start);
-        if masked
-            .get(curr..)
-            .is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3))
-        {
+        if masked.get(curr..).is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3)) {
             curr = curr.saturating_add(3);
             curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
         }
-
         let (name, name_len) = extract_ident(masked.get(curr..).unwrap_or(""));
         if name.is_empty() {
             continue;
         }
         curr = curr.saturating_add(name_len);
         curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
-
-        let Some((body, next_idx)) = extract_connection_body(&clean, &masked, curr) else {
-            continue;
-        };
+        let Some((body, next_idx)) = extract_connection_body(&clean, &masked, curr) else { continue };
         skip_until = next_idx;
-
         let (source_port, target_port) = extract_connection_endpoints(body);
         let source_part = source_port.split_once('.').map(|(p, _)| p.to_string());
         let target_part = target_port.split_once('.').map(|(p, _)| p.to_string());
-
         conns.push(ConnectionDef {
             name: name.to_string(),
             source_port,
@@ -161,11 +128,9 @@ fn parse_port_flow_line(line: &str) -> Option<FlowDef> {
     if trimmed.is_empty() || (trimmed.starts_with("attribute") && is_word_boundary_after(trimmed, 9)) {
         return None;
     }
-
     let mut rest = trimmed;
     let mut direction = None;
     let mut saw_flow_kw = false;
-
     if rest.starts_with("flow") && is_word_boundary_after(rest, 4) {
         saw_flow_kw = true;
         rest = rest.get(4..).unwrap_or("").trim_start();
@@ -184,7 +149,6 @@ fn parse_port_flow_line(line: &str) -> Option<FlowDef> {
     if !saw_flow_kw && direction.is_none() {
         return None;
     }
-
     let (name, name_len) = extract_ident(rest);
     if name.is_empty() {
         return None;
@@ -198,7 +162,6 @@ fn parse_port_flow_line(line: &str) -> Option<FlowDef> {
         .filter(|t| !t.is_empty())
         .unwrap_or("Item")
         .to_string();
-
     Some(FlowDef {
         name: name.to_string(),
         direction: direction.unwrap_or_else(|| "out".to_string()),
@@ -252,7 +215,6 @@ fn parse_port_type_annotation(masked: &str, start: usize) -> (Option<String>, bo
     let mut type_name = None;
     let mut conj2 = false;
     let rem_type = masked.get(curr..).unwrap_or("");
-
     if rem_type.starts_with(":>") || rem_type.starts_with(':') {
         curr = curr.saturating_add(if rem_type.starts_with(":>") { 2 } else { 1 });
         curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
@@ -280,7 +242,6 @@ fn parse_port_body_members(
     let mut port_category = default_port_category();
     let mut electrical_attributes = BTreeMap::new();
     let mut item_flows = Vec::new();
-
     if let Some(port_body) = port_body_opt {
         for attr in parse_attribute_defs(port_body) {
             let val = attr.default_value.as_deref().unwrap_or("").trim().trim_matches('"').to_string();
@@ -295,7 +256,6 @@ fn parse_port_body_members(
         }
         item_flows.extend(port_body.lines().filter_map(parse_port_flow_line));
     }
-
     (protocol_family, port_category, electrical_attributes, item_flows)
 }
 
@@ -332,39 +292,27 @@ pub fn parse_port_defs(content: &str) -> Vec<PortDef> {
         if span.start < skip_until || res.is_err() || masked.get(span.clone()) != Some("port") {
             continue;
         }
-        let port_pos = span.start;
-        let after_port = span.end;
-        let (dir1, doc_end) = extract_leading_port_direction(&masked, port_pos);
+        let (dir1, doc_end) = extract_leading_port_direction(&masked, span.start);
         let doc = extract_doc_comment_before(&clean, doc_end);
-
-        let curr = after_port.saturating_add(skip_ws(masked.get(after_port..).unwrap_or("")));
+        let curr = span.end.saturating_add(skip_ws(masked.get(span.end..).unwrap_or("")));
         let (dir2, mut curr) = consume_optional_direction_and_def(&masked, curr);
-
         let mut conj1 = false;
         if masked.get(curr..).is_some_and(|s| s.starts_with('~')) {
             conj1 = true;
             curr = curr.saturating_add(1);
             curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
         }
-
         let (name, name_len) = extract_ident(masked.get(curr..).unwrap_or(""));
         if name.is_empty() {
             continue;
         }
         curr = curr.saturating_add(name_len);
         curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
-
         let (type_name, conj2, curr) = parse_port_type_annotation(&masked, curr);
-        let Some((port_body_opt, next_idx)) =
-            extract_port_terminator_or_body(&clean, &masked, curr)
-        else {
-            continue;
-        };
+        let Some((port_body_opt, next_idx)) = extract_port_terminator_or_body(&clean, &masked, curr) else { continue };
         skip_until = next_idx;
-
         let (protocol_family, port_category, electrical_attributes, item_flows) =
             parse_port_body_members(port_body_opt);
-
         ports.push(PortDef {
             name: name.to_string(),
             type_name: type_name.unwrap_or_else(|| name.to_string()),
@@ -385,72 +333,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_connection_defs_extracts_connections_flows_and_owner_parts(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let src = r#"
-            doc /* Redundant avionics bus link */
-            connection def SensorToController {
-                connect sensor.out_port to ctrl.in_port;
-            }
-            connection inline_bus connect nav_out to guidance_in;
-            flow def TelemetryStream {
-                flow from recorder.tx_port to downlink.rx_port;
-            }
-            flow from orphan_src to orphan_tgt;
-            connection broken_unclosed {
-        "#;
-
+    fn parse_connection_defs_extracts_connections_flows_and_owner_parts() -> Result<(), Box<dyn std::error::Error>> {
+        let src = "doc /* Redundant avionics bus link */\nconnection def SensorToController {\n    connect sensor.out_port to ctrl.in_port;\n}\nconnection inline_bus connect nav_out to guidance_in;\nflow def TelemetryStream {\n    flow from recorder.tx_port to downlink.rx_port;\n}\nflow from orphan_src to orphan_tgt;\nconnection broken_unclosed {";
         let conns = parse_connection_defs(src);
-        assert_eq!(conns.len(), 3);
-
-        let c0 = conns.first().ok_or("missing SensorToController")?;
-        assert_eq!((c0.name.as_str(), c0.doc.as_deref()), ("SensorToController", Some("Redundant avionics bus link")));
-        assert_eq!((c0.source_port.as_str(), c0.target_port.as_str()), ("sensor.out_port", "ctrl.in_port"));
-        assert_eq!((c0.source_part.as_deref(), c0.target_part.as_deref()), (Some("sensor"), Some("ctrl")));
-        assert!(!c0.is_flow && c0.severity == 1);
-
-        let c1 = conns.get(1).ok_or("missing inline_bus")?;
-        assert_eq!((c1.name.as_str(), c1.source_port.as_str(), c1.target_port.as_str()), ("inline_bus", "nav_out", "guidance_in"));
-        assert!(c1.source_part.is_none() && c1.target_part.is_none() && !c1.is_flow);
-
-        let c2 = conns.get(2).ok_or("missing TelemetryStream")?;
-        assert_eq!((c2.name.as_str(), c2.source_port.as_str(), c2.target_port.as_str()), ("TelemetryStream", "recorder.tx_port", "downlink.rx_port"));
-        assert_eq!((c2.source_part.as_deref(), c2.target_part.as_deref(), c2.is_flow), (Some("recorder"), Some("downlink"), true));
+        let (c0, c1, c2) = (conns.first().ok_or("c0")?, conns.get(1).ok_or("c1")?, conns.get(2).ok_or("c2")?);
+        assert_eq!((conns.len(), c0.name.as_str(), c0.doc.as_deref(), c0.source_port.as_str(), c0.target_port.as_str(), c0.source_part.as_deref(), c0.target_part.as_deref(), c0.is_flow, c0.severity), (3, "SensorToController", Some("Redundant avionics bus link"), "sensor.out_port", "ctrl.in_port", Some("sensor"), Some("ctrl"), false, 1));
+        assert_eq!((c1.name.as_str(), c1.source_port.as_str(), c1.target_port.as_str(), c1.source_part.is_none() && c1.target_part.is_none() && !c1.is_flow), ("inline_bus", "nav_out", "guidance_in", true));
+        assert_eq!((c2.name.as_str(), c2.source_port.as_str(), c2.target_port.as_str(), c2.source_part.as_deref(), c2.target_part.as_deref(), c2.is_flow), ("TelemetryStream", "recorder.tx_port", "downlink.rx_port", Some("recorder"), Some("downlink"), true));
         Ok(())
     }
 
     #[test]
-    fn parse_port_defs_extracts_conjugation_attributes_and_item_flows(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let src = r#"
-            doc /* Primary ARINC 429 receiver port */
-            in port rx_bus : ~Arinc429Port {
-                attribute protocol_family : String = "ARINC-429";
-                attribute port_category : String = "AvionicsBus";
-                attribute impedance_ohm : Real = 75.0;
-                in item nav_frame : NavPacket;
-                flow out ack_signal : AckPulse;
-                inout status_word;
-            }
-            port ~conj_inline;
-            port unclosed_port : BrokenType {
-        "#;
-
+    fn parse_port_defs_extracts_conjugation_attributes_and_item_flows() -> Result<(), Box<dyn std::error::Error>> {
+        let src = "doc /* Primary ARINC 429 receiver port */\nin port rx_bus : ~Arinc429Port {\n    attribute protocol_family : String = \"ARINC-429\";\n    attribute port_category : String = \"AvionicsBus\";\n    attribute impedance_ohm : Real = 75.0;\n    in item nav_frame : NavPacket;\n    flow out ack_signal : AckPulse;\n    inout status_word;\n}\nport ~conj_inline;\nport unclosed_port : BrokenType {";
         let ports = parse_port_defs(src);
-        assert_eq!(ports.len(), 2);
-
-        let p0 = ports.first().ok_or("missing rx_bus")?;
-        assert_eq!((p0.name.as_str(), p0.type_name.as_str(), p0.direction.as_str(), p0.is_conjugated), ("rx_bus", "Arinc429Port", "in", true));
-        assert_eq!((p0.doc.as_deref(), p0.protocol_family.as_str(), p0.port_category.as_str()), (Some("Primary ARINC 429 receiver port"), "ARINC-429", "AvionicsBus"));
+        let (p0, p1) = (ports.first().ok_or("p0")?, ports.get(1).ok_or("p1")?);
+        assert_eq!((ports.len(), p0.name.as_str(), p0.type_name.as_str(), p0.direction.as_str(), p0.is_conjugated, p0.doc.as_deref(), p0.protocol_family.as_str(), p0.port_category.as_str()), (2, "rx_bus", "Arinc429Port", "in", true, Some("Primary ARINC 429 receiver port"), "ARINC-429", "AvionicsBus"));
         assert_eq!(p0.electrical_attributes.get("impedance_ohm").map(String::as_str), Some("75.0"));
-        let flows: Vec<(&str, &str, &str)> = p0
-            .item_flows
-            .iter()
-            .map(|f| (f.name.as_str(), f.direction.as_str(), f.item_type.as_str()))
-            .collect();
+        let flows: Vec<(&str, &str, &str)> = p0.item_flows.iter().map(|f| (f.name.as_str(), f.direction.as_str(), f.item_type.as_str())).collect();
         assert_eq!(flows, vec![("nav_frame", "in", "NavPacket"), ("ack_signal", "out", "AckPulse"), ("status_word", "inout", "Item")]);
-
-        let p1 = ports.get(1).ok_or("missing conj_inline")?;
         assert_eq!((p1.name.as_str(), p1.type_name.as_str(), p1.direction.as_str(), p1.is_conjugated), ("conj_inline", "conj_inline", "inout", true));
         Ok(())
     }

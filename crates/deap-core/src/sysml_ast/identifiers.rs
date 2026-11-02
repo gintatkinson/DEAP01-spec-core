@@ -8,8 +8,6 @@ use logos::Logos;
 use serde::{Deserialize, Serialize};
 
 use crate::sysml_cst::lexer::SysmlToken;
-use crate::sysml_cst::parser::parse_sysml_cst;
-use crate::sysml_cst::syntax_kind::{token_to_syntax_kind, SysmlSyntaxKind};
 
 /// Returns `true` as the default boolean definition flag for SysML v2 AST nodes.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/DEFAULT-TRUE]
@@ -250,22 +248,15 @@ pub fn find_matching_brace(s: &str, open_pos: usize) -> Option<usize> {
 ///
 /// Safety & Traceability: Realises: [REQ-SYSML-AST-SSOT-PARITY/MASK-STRING-LITERALS]
 /// Contract: Guarantees `mask_string_literals(s).len() == s.len()` and preserves every newline byte position so keyword indices in the masked buffer align 1:1 with `s`.
-/// Bounds & Faults: O(N) time and O(N) space over `s.len()` using `parse_sysml_cst` Rowan token spans with zero panics on unclosed quotes or comments.
+/// Bounds & Faults: O(N) time and O(N) space over `s.len()` using `logos::Lexer<SysmlToken>` token spans with zero panics on unclosed quotes or comments.
 pub fn mask_string_literals(s: &str) -> String {
-    let cst = parse_sysml_cst(s);
     let mut out = s.as_bytes().to_vec();
-    for elem in cst.syntax().children_with_tokens() {
-        let Some(tok) = elem.into_token() else {
-            continue;
-        };
-        let range = tok.text_range();
-        let start: usize = range.start().into();
-        let end: usize = range.end().into();
-        let mask_range = match tok.kind() {
-            SysmlSyntaxKind::STRING_LIT => start.saturating_add(1)..end.saturating_sub(1),
-            SysmlSyntaxKind::LINE_COMMENT | SysmlSyntaxKind::BLOCK_COMMENT => start..end,
-            kind if kind == token_to_syntax_kind(SysmlToken::Error) && tok.text().starts_with('"') => {
-                for b in out.get_mut(start.saturating_add(1)..).into_iter().flatten() {
+    for (res, span) in SysmlToken::lexer(s).spanned() {
+        let mask_range = match res {
+            Ok(SysmlToken::StringLit) => span.start.saturating_add(1)..span.end.saturating_sub(1),
+            Ok(SysmlToken::LineComment | SysmlToken::BlockComment) => span,
+            Err(()) if s.get(span.clone()).is_some_and(|t| t.starts_with('"')) => {
+                for b in out.get_mut(span.start.saturating_add(1)..).into_iter().flatten() {
                     if *b != b'\n' {
                         *b = b' ';
                     }

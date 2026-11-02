@@ -26,6 +26,7 @@
 
 mod tests {
     use crate::rust_cst::*;
+    use crate::rust_cst::source_bridge::*;
 use std::collections::{BTreeMap, BTreeSet};
 
 fn make_fixture_snapshot() -> LockManifestSnapshot {
@@ -215,4 +216,22 @@ pub fn string_err() -> Result<(), String> {
     assert!(!ariadne_lines.is_empty());
     Ok(())
 }
+
+    #[test]
+    fn test_parse_rust_source_ast_and_dispatch() {
+        let src = "/// Doc line\npub fn compute(x: i32) -> i32 {\n    x + 1\n}\n";
+        let ast = parse_source_file_ast(std::path::Path::new("lib.rs"), src);
+        assert!(ast.is_some());
+        let parsed = parse_rust_source_file_ast(src);
+        assert_eq!(parsed.items.first().map(|i| (i.kind, i.has_doc)), Some((SourceItemKind::Function, true)));
+        assert_eq!(parsed.code_line_mask, vec![false, true, true, true]);
+    }
+
+    #[test]
+    fn test_classify_rust_item_visibility_and_kinds() {
+        assert_eq!(classify_rust_item_ast("pub fn alpha()"), Some((SourceItemKind::Function, "alpha".to_string())));
+        assert_eq!(classify_rust_item_ast("fn hidden()"), None);
+        assert_eq!(classify_rust_item_with_tier_ast("fn hidden()", true), Some((SourceItemKind::Function, "hidden".to_string())));
+        assert_eq!(classify_rust_item_with_tier_ast("pub fn test_case()", true), None);
+    }
 }

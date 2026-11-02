@@ -22,7 +22,6 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-0201], [REQ-0608]
 
-use std::collections::BTreeMap;
 use std::path::Path;
 
 use ra_ap_syntax::ast::{self, AstNode, HasName, HasVisibility};
@@ -35,50 +34,9 @@ use crate::rust_cst::source_bridge::{
     SourceLanguage, SourceParam,
 };
 
-/// Extracted callable method signature representation. Realises: [REQ-0201]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExtractedMethodSignature {
-    /// Identifier name. Realises: [REQ-0201]
-    pub name: String,
-    /// Parameter signatures. Realises: [REQ-0201]
-    pub params: Vec<SourceParam>,
-    /// Return type if declared. Realises: [REQ-0201]
-    pub return_type: Option<String>,
-}
-
-/// Extracted component method table. Realises: [REQ-0201]
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct ComponentMethodTable {
-    /// Inherent and trait methods keyed by method name. Realises: [REQ-0201]
-    pub methods: BTreeMap<String, ExtractedMethodSignature>,
-}
-
-impl ComponentMethodTable {
-    /// Returns true if empty. Realises: [REQ-0201]
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.methods.is_empty()
-    }
-}
-
-/// Extracts a method table from parsed source AST items. Realises: [REQ-0201]
-#[must_use]
-pub fn extract_component_method_table(items: &[SourceAstItem]) -> ComponentMethodTable {
-    let mut methods = BTreeMap::new();
-    for item in items {
-        if item.kind.is_callable() {
-            methods.insert(
-                item.name.clone(),
-                ExtractedMethodSignature {
-                    name: item.name.clone(),
-                    params: item.params.clone(),
-                    return_type: item.return_type.clone(),
-                },
-            );
-        }
-    }
-    ComponentMethodTable { methods }
-}
+pub use crate::rust_cst::source_bridge::{
+    ComponentMethodTable, ExtractedMethodSignature, extract_component_method_table,
+};
 
 /// Parses Rust source text into a normalized `ParsedSourceFileAst` via `ra_ap_syntax`. Realises: [REQ-0201]
 #[must_use]
@@ -405,27 +363,4 @@ pub fn parse_rust_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
 pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<SourceAstItem>, crate::error::CoreError> {
     validate_source_syntax_for_language(source, file_label, SourceLanguage::Dart)?;
     Ok(parse_dart_source_file_ast(source).items)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_rust_source_ast_and_dispatch() {
-        let src = "/// Doc line\npub fn compute(x: i32) -> i32 {\n    x + 1\n}\n";
-        let ast = parse_source_file_ast(Path::new("lib.rs"), src);
-        assert!(ast.is_some());
-        let parsed = parse_rust_source_file_ast(src);
-        assert_eq!(parsed.items.first().map(|i| (i.kind, i.has_doc)), Some((SourceItemKind::Function, true)));
-        assert_eq!(parsed.code_line_mask, vec![false, true, true, true]);
-    }
-
-    #[test]
-    fn test_classify_rust_item_visibility_and_kinds() {
-        assert_eq!(classify_rust_item_ast("pub fn alpha()"), Some((SourceItemKind::Function, "alpha".to_string())));
-        assert_eq!(classify_rust_item_ast("fn hidden()"), None);
-        assert_eq!(classify_rust_item_with_tier_ast("fn hidden()", true), Some((SourceItemKind::Function, "hidden".to_string())));
-        assert_eq!(classify_rust_item_with_tier_ast("pub fn test_case()", true), None);
-    }
 }

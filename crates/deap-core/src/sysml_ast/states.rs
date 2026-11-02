@@ -293,75 +293,59 @@ mod tests {
 
     /// Verifies `parse_state_defs` across `entry`/`do`/`exit` hooks, `first ... then ...` transitions, shorthand transitions, and malformed blocks.
     #[test]
-    fn parse_state_defs_extracts_hooks_transitions_and_skips_malformed(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn parse_state_defs_extracts_hooks_transitions_and_skips_malformed() -> Result<(), Box<dyn std::error::Error>> {
         let src = r#"
             doc /* Flight mode supervisor state machine */
             state def FlightModeSupervisor {
                 entry InitSupervisor;
                 do RunModeVote;
                 exit SafeLatchActuators;
-
                 state Standby;
                 state Armed;
                 state Active;
-
                 transition first Standby accept arm_cmd then Armed;
                 transition engage_flow first Armed accept takeoff_trigger then Active;
                 transition Active_to_Standby_on_disarm_cmd;
                 transition EmergencyReset;
             }
-
-            // Malformed declarations must be skipped without panicking
             state def ;
             state BrokenNoTerminator
             state BrokenUnclosed {
         "#;
-
         let states = parse_state_defs(src);
         assert_eq!(states.len(), 1);
         let sup = states.first().ok_or("missing FlightModeSupervisor")?;
         assert_eq!(sup.name, "FlightModeSupervisor");
-        assert_eq!(
-            sup.doc.as_deref(),
-            Some("Flight mode supervisor state machine")
-        );
+        assert_eq!(sup.doc.as_deref(), Some("Flight mode supervisor state machine"));
         assert_eq!(sup.entry_action.as_deref(), Some("InitSupervisor"));
         assert_eq!(sup.do_action.as_deref(), Some("RunModeVote"));
         assert_eq!(sup.exit_action.as_deref(), Some("SafeLatchActuators"));
         assert_eq!(sup.sub_states.len(), 3);
-
         assert_eq!(sup.transitions.len(), 4);
         let t0 = sup.transitions.first().ok_or("missing t0")?;
         assert!(t0.name.is_none());
         assert_eq!(t0.source.as_deref(), Some("Standby"));
         assert_eq!(t0.trigger.as_deref(), Some("arm_cmd"));
         assert_eq!(t0.target.as_deref(), Some("Armed"));
-
         let t1 = sup.transitions.get(1).ok_or("missing t1")?;
         assert_eq!(t1.name.as_deref(), Some("engage_flow"));
         assert_eq!(t1.source.as_deref(), Some("Armed"));
         assert_eq!(t1.trigger.as_deref(), Some("takeoff_trigger"));
         assert_eq!(t1.target.as_deref(), Some("Active"));
-
         let t2 = sup.transitions.get(2).ok_or("missing t2")?;
         assert_eq!(t2.name.as_deref(), Some("Active_to_Standby_on_disarm_cmd"));
         assert_eq!(t2.source.as_deref(), Some("Active"));
         assert_eq!(t2.target.as_deref(), Some("Standby"));
         assert_eq!(t2.trigger.as_deref(), Some("disarm_cmd"));
-
         let t3 = sup.transitions.get(3).ok_or("missing t3")?;
         assert_eq!(t3.name.as_deref(), Some("EmergencyReset"));
-        assert!(t3.source.is_none());
-        assert!(t3.target.is_none());
-        assert!(t3.trigger.is_none());
+        assert!(t3.source.is_none() && t3.target.is_none() && t3.trigger.is_none());
         Ok(())
     }
 
     /// Verifies `parse_state_defs` parses up to `MAX_AST_DEPTH` (64) and stops cleanly at `MAX_AST_DEPTH + 1` (65) and deep inputs.
     #[test]
-    fn parse_state_defs_enforces_max_ast_depth_and_plus_one_bounds(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn parse_state_defs_enforces_max_ast_depth_and_plus_one_bounds() -> Result<(), Box<dyn std::error::Error>> {
         let mut nested_sysml = format!("state Leaf_{};", MAX_AST_DEPTH.saturating_add(1));
         for level in (0..=MAX_AST_DEPTH).rev() {
             nested_sysml = format!("state def StateNode_{level} {{ {nested_sysml} }}");
@@ -371,23 +355,15 @@ mod tests {
         for expected_level in 0..=MAX_AST_DEPTH {
             assert_eq!(cursor.name, format!("StateNode_{expected_level}"));
             if expected_level < MAX_AST_DEPTH {
-                cursor = cursor
-                    .sub_states
-                    .first()
-                    .ok_or("missing sub_state within MAX_AST_DEPTH")?;
+                cursor = cursor.sub_states.first().ok_or("missing sub_state within MAX_AST_DEPTH")?;
             }
         }
-        assert!(
-            cursor.sub_states.is_empty(),
-            "Sub-state at depth MAX_AST_DEPTH + 1 must be truncated cleanly without panicking"
-        );
-
+        assert!(cursor.sub_states.is_empty(), "Sub-state at depth MAX_AST_DEPTH + 1 must be truncated cleanly");
         let mut very_deep = String::from("state DeepLeaf;");
         for level in (0..160_usize).rev() {
             very_deep = format!("state def DeepState_{level} {{ {very_deep} }}");
         }
-        let deep_parsed = parse_state_defs(&very_deep);
-        assert_eq!(deep_parsed.len(), 1);
+        assert_eq!(parse_state_defs(&very_deep).len(), 1);
         Ok(())
     }
 }

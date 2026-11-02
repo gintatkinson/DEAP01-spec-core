@@ -44,7 +44,6 @@ fn parse_attribute_type_and_value(
     let mut curr = start;
     let mut type_name = "String".to_string();
     let mut has_type = false;
-
     let rem_colon = masked.get(curr..).unwrap_or("");
     if rem_colon.starts_with(':') && !rem_colon.starts_with(":=") {
         curr = curr.saturating_add(1);
@@ -58,7 +57,6 @@ fn parse_attribute_type_and_value(
         curr = curr.saturating_add(type_len);
         curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
     }
-
     let rem_assign = masked.get(curr..).unwrap_or("");
     if rem_assign.starts_with(":=") || rem_assign.starts_with('=') {
         let op_len = if rem_assign.starts_with(":=") { 2 } else { 1 };
@@ -85,10 +83,7 @@ fn parse_single_attribute_after_keyword(
     let doc = extract_doc_comment_before(clean, kw_pos);
     let mut curr = kw_pos.saturating_add(9);
     curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
-    if masked
-        .get(curr..)
-        .is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3))
-    {
+    if masked.get(curr..).is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3)) {
         curr = curr.saturating_add(3);
         curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
     }
@@ -98,7 +93,6 @@ fn parse_single_attribute_after_keyword(
     }
     curr = curr.saturating_add(name_len);
     curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
-
     let (type_name, default_value, next_idx) = parse_attribute_type_and_value(clean, masked, curr)?;
     Some((
         AttributeDef {
@@ -120,15 +114,11 @@ pub fn parse_attribute_defs(content: &str) -> Vec<AttributeDef> {
     let masked = mask_string_literals(&clean);
     let mut attrs = Vec::new();
     let mut skip_until: usize = 0;
-
     for (res, span) in SysmlToken::lexer(&masked).spanned() {
-        if span.start < skip_until || res.is_err() || masked.get(span.clone()) != Some("attribute")
-        {
+        if span.start < skip_until || res.is_err() || masked.get(span.clone()) != Some("attribute") {
             continue;
         }
-        if let Some((attr, next_idx)) =
-            parse_single_attribute_after_keyword(&clean, &masked, span.start)
-        {
+        if let Some((attr, next_idx)) = parse_single_attribute_after_keyword(&clean, &masked, span.start) {
             attrs.push(attr);
             skip_until = next_idx;
         }
@@ -174,7 +164,6 @@ fn mask_nested_blocks(body: &str, mode: NestedBlockMaskMode) -> String {
     let masked = mask_string_literals(body);
     let mut out = body.as_bytes().to_vec();
     let mut skip_until: usize = 0;
-
     for (res, span) in SysmlToken::lexer(&masked).spanned() {
         if span.start < skip_until || res.is_err() {
             continue;
@@ -222,24 +211,18 @@ fn parse_part_header_and_body<'a>(
     let doc = extract_doc_comment_before(clean, part_pos);
     let mut curr = part_pos.saturating_add(4);
     curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
-
     let mut is_def = false;
-    if masked
-        .get(curr..)
-        .is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3))
-    {
+    if masked.get(curr..).is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3)) {
         is_def = true;
         curr = curr.saturating_add(3);
         curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
     }
-
     let (name, name_len) = extract_ident(masked.get(curr..).unwrap_or(""));
     if name.is_empty() {
         return None;
     }
     curr = curr.saturating_add(name_len);
     curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
-
     let mut type_name = None;
     let rem_colon = masked.get(curr..).unwrap_or("");
     if rem_colon.starts_with(":>") || rem_colon.starts_with(':') {
@@ -253,29 +236,17 @@ fn parse_part_header_and_body<'a>(
             curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
         }
     }
-
     let rem_body = masked.get(curr..).unwrap_or("");
     let (body, next_idx) = if rem_body.starts_with('{') {
         let close_pos = find_matching_brace(clean, curr);
-        let inner = close_pos
-            .and_then(|cp| clean.get(curr.saturating_add(1)..cp))
-            .unwrap_or("");
-        let next = close_pos.unwrap_or(curr).saturating_add(1);
-        (inner, next)
+        let inner = close_pos.and_then(|cp| clean.get(curr.saturating_add(1)..cp)).unwrap_or("");
+        (inner, close_pos.unwrap_or(curr).saturating_add(1))
     } else if rem_body.starts_with(';') {
         ("", curr.saturating_add(1))
     } else {
         return None;
     };
-
-    Some(ParsedPartHeader {
-        name,
-        doc,
-        is_def,
-        type_name,
-        body,
-        next_idx,
-    })
+    Some(ParsedPartHeader { name, doc, is_def, type_name, body, next_idx })
 }
 
 /// Populates a `PartDef` and its shallow and depth-bounded nested members from a `ParsedPartHeader`.
@@ -283,34 +254,16 @@ fn parse_part_header_and_body<'a>(
 fn build_part_def_from_header(header: ParsedPartHeader<'_>, depth: usize) -> PartDef {
     let shallow_body = mask_nested_blocks(header.body, NestedBlockMaskMode::PartAndRequirement);
     let attr_body = mask_nested_blocks(&shallow_body, NestedBlockMaskMode::PortOnly);
-    let (triggers_hazards, safety_realises, layer) =
-        parse_safety_and_layer_annotations(&shallow_body);
-    let nested_parts = if header.body.is_empty() {
-        Vec::new()
-    } else {
-        parse_part_defs_at_depth(header.body, depth.saturating_add(1))
-    };
-
+    let (triggers_hazards, safety_realises, layer) = parse_safety_and_layer_annotations(&shallow_body);
+    let nested_parts = if header.body.is_empty() { Vec::new() } else { parse_part_defs_at_depth(header.body, depth.saturating_add(1)) };
     PartDef {
-        name: header.name.to_string(),
-        doc: header.doc,
-        is_def: header.is_def,
-        type_name: header.type_name,
-        attributes: parse_attribute_defs(&attr_body),
-        ports: parse_port_defs(&shallow_body),
-        actions: parse_action_defs(&shallow_body),
-        constraints: parse_constraint_defs(&shallow_body),
-        requirements: parse_requirement_defs(header.body),
-        satisfied_requirements: parse_satisfied_requirements(&shallow_body),
-        parts: nested_parts,
-        states: parse_state_defs(&shallow_body),
-        hazards: parse_hazard_defs(&shallow_body),
-        connections: parse_connection_defs(&shallow_body),
-        calcs: parse_calc_defs(&shallow_body),
-        triggers_hazards,
-        safety_realises,
-        layer,
-        ..PartDef::default()
+        name: header.name.to_string(), doc: header.doc, is_def: header.is_def, type_name: header.type_name,
+        attributes: parse_attribute_defs(&attr_body), ports: parse_port_defs(&shallow_body),
+        actions: parse_action_defs(&shallow_body), constraints: parse_constraint_defs(&shallow_body),
+        requirements: parse_requirement_defs(header.body), satisfied_requirements: parse_satisfied_requirements(&shallow_body),
+        parts: nested_parts, states: parse_state_defs(&shallow_body), hazards: parse_hazard_defs(&shallow_body),
+        connections: parse_connection_defs(&shallow_body), calcs: parse_calc_defs(&shallow_body),
+        triggers_hazards, safety_realises, layer, ..PartDef::default()
     }
 }
 
@@ -324,7 +277,6 @@ fn parse_part_defs_at_depth(content: &str, depth: usize) -> Vec<PartDef> {
     let masked = mask_string_literals(&clean);
     let mut parts = Vec::new();
     let mut skip_until: usize = 0;
-
     for (res, span) in SysmlToken::lexer(&masked).spanned() {
         if span.start < skip_until || res.is_err() || masked.get(span.clone()) != Some("part") {
             continue;
@@ -351,71 +303,31 @@ mod tests {
 
     #[test]
     fn interface_def_roundtrips_json_with_optional_doc() -> Result<(), serde_json::Error> {
-        let iface = InterfaceDef {
-            name: "NavToFlightCtrl".to_string(),
-            source_port: "nav.state_out".to_string(),
-            target_port: "fcu.state_in".to_string(),
-            doc: Some("Deterministic state bus".to_string()),
-        };
-        let encoded = serde_json::to_string(&iface)?;
-        assert_eq!(serde_json::from_str::<InterfaceDef>(&encoded)?, iface);
-
-        let minimal: InterfaceDef =
-            serde_json::from_str(r#"{"name":"Bus","source_port":"a","target_port":"b"}"#)?;
+        let iface = InterfaceDef { name: "NavToFlightCtrl".to_string(), source_port: "nav.state_out".to_string(), target_port: "fcu.state_in".to_string(), doc: Some("Deterministic state bus".to_string()) };
+        assert_eq!(serde_json::from_str::<InterfaceDef>(&serde_json::to_string(&iface)?)?, iface);
+        let minimal: InterfaceDef = serde_json::from_str(r#"{"name":"Bus","source_port":"a","target_port":"b"}"#)?;
         assert!(minimal.doc.is_none());
         Ok(())
     }
 
     #[test]
-    fn parse_attribute_defs_handles_typed_assigned_and_malformed_variants(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let src = r#"
-            doc /* Nominal bus voltage */
-            attribute def BusVoltage : ScalarValues::Real = 28.0;
-            attribute cycleCount := 100;
-            attribute statusLabel : String;
-            attribute bareUntyped;
-            attribute missingColonType : = 5;
-        "#;
+    fn parse_attribute_defs_handles_typed_assigned_and_malformed_variants() -> Result<(), Box<dyn std::error::Error>> {
+        let src = "doc /* Nominal bus voltage */\nattribute def BusVoltage : ScalarValues::Real = 28.0;\nattribute cycleCount := 100;\nattribute statusLabel : String;\nattribute bareUntyped;\nattribute missingColonType : = 5;";
         let attrs = parse_attribute_defs(src);
-        assert_eq!(attrs.len(), 3);
-
-        let a0 = attrs.first().ok_or("missing BusVoltage")?;
-        assert_eq!((a0.name.as_str(), a0.type_name.as_str()), ("BusVoltage", "ScalarValues::Real"));
-        assert_eq!(a0.default_value.as_deref(), Some("28.0"));
-        assert_eq!(a0.doc.as_deref(), Some("Nominal bus voltage"));
-
-        let a1 = attrs.get(1).ok_or("missing cycleCount")?;
-        assert_eq!((a1.name.as_str(), a1.type_name.as_str(), a1.default_value.as_deref()), ("cycleCount", "String", Some("100")));
-
-        let a2 = attrs.get(2).ok_or("missing statusLabel")?;
-        assert_eq!((a2.name.as_str(), a2.type_name.as_str(), a2.default_value.as_deref()), ("statusLabel", "String", None));
+        let (a0, a1, a2) = (attrs.first().ok_or("a0")?, attrs.get(1).ok_or("a1")?, attrs.get(2).ok_or("a2")?);
+        assert_eq!((attrs.len(), a0.name.as_str(), a0.type_name.as_str(), a0.default_value.as_deref(), a0.doc.as_deref()), (3, "BusVoltage", "ScalarValues::Real", Some("28.0"), Some("Nominal bus voltage")));
+        assert_eq!((a1.name.as_str(), a1.type_name.as_str(), a1.default_value.as_deref(), a2.name.as_str(), a2.type_name.as_str(), a2.default_value.as_deref()), ("cycleCount", "String", Some("100"), "statusLabel", "String", None));
         Ok(())
     }
 
     #[test]
-    fn parse_part_defs_isolates_nested_port_and_subpart_attributes(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let src = r#"
-            part def FlightComputer {
-                attribute parentRateHz : Real = 200.0;
-                in port sensor_in : SensorPort {
-                    attribute protocol_family : String = "SPI";
-                    attribute portInternalGain : Real = 1.5;
-                }
-                part watchdog : WatchdogTimer {
-                    attribute childTimeoutMs : Integer = 25;
-                }
-            }
-        "#;
+    fn parse_part_defs_isolates_nested_port_and_subpart_attributes() -> Result<(), Box<dyn std::error::Error>> {
+        let src = "part def FlightComputer {\n    attribute parentRateHz : Real = 200.0;\n    in port sensor_in : SensorPort {\n        attribute protocol_family : String = \"SPI\";\n        attribute portInternalGain : Real = 1.5;\n    }\n    part watchdog : WatchdogTimer {\n        attribute childTimeoutMs : Integer = 25;\n    }\n}";
         let parts = parse_part_defs(src);
-        assert_eq!(parts.len(), 1);
         let parent = parts.first().ok_or("missing FlightComputer")?;
-        assert_eq!(parent.attributes.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(), vec!["parentRateHz"]);
-        assert_eq!(parent.ports.len(), 1);
         let child = parent.parts.first().ok_or("missing watchdog")?;
-        assert_eq!((child.name.as_str(), child.is_def, child.type_name.as_deref()), ("watchdog", false, Some("WatchdogTimer")));
-        assert_eq!(child.attributes.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(), vec!["childTimeoutMs"]);
+        assert_eq!((parts.len(), parent.attributes.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(), parent.ports.len()), (1, vec!["parentRateHz"], 1));
+        assert_eq!((child.name.as_str(), child.is_def, child.type_name.as_deref(), child.attributes.iter().map(|a| a.name.as_str()).collect::<Vec<_>>()), ("watchdog", false, Some("WatchdogTimer"), vec!["childTimeoutMs"]));
         Ok(())
     }
 
@@ -434,7 +346,6 @@ mod tests {
             }
         }
         assert!(cursor.parts.is_empty());
-
         let mut very_deep = String::from("part DeepLeaf;");
         for level in (0..160_usize).rev() {
             very_deep = format!("part def Deep_{level} {{ {very_deep} }}");
