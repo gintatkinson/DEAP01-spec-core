@@ -233,19 +233,19 @@
     {
       "name": "ClosedLoopDefectPublisherGate",
       "node_type": "Part",
-      "doc": "Enforces all 12 `validate_defect_dossier` checks prior to persistence or publication. [unit: checks]",
+      "doc": "Enforces all 12 validate_defect_dossier checks prior to persistence or publication. [unit: checks]",
       "allocated_activities": []
     },
     {
       "name": "CstPillarAuditor",
       "node_type": "Part",
-      "doc": "Count of active static AST evaluators (`E0601` through `E0605`). [unit: pillars]",
+      "doc": "Count of active static AST evaluators (E0601 through E0605). [unit: pillars]",
       "allocated_activities": []
     },
     {
       "name": "DartCstExtractionEngine",
       "node_type": "Part",
-      "doc": "Hard upper bound on executable lines of code in `deap_core::dart_cst`. [unit: SLOC]",
+      "doc": "Hard upper bound on executable lines of code in deap_core::dart_cst. [unit: SLOC]",
       "allocated_activities": []
     },
     {
@@ -257,7 +257,7 @@
     {
       "name": "DossierEmitter",
       "node_type": "Part",
-      "doc": "Enforces all 7 canonical `DossierSection` headers plus the `## Audit Source` footer. [unit: sections]",
+      "doc": "Enforces all 7 canonical DossierSection headers plus the ## Audit Source footer. [unit: sections]",
       "allocated_activities": []
     },
     {

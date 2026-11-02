@@ -35,3 +35,4 @@ app_flutter_release.zip
 .venv/
 venv/
 /target/
+lints/*/target/
