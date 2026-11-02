@@ -10,8 +10,12 @@ workspace = true
 
 [dependencies]
 deap-core = { path = "../deap-core" }
+ariadne = { workspace = true }
+camino = { workspace = true }
 clap = { version = "4.4", features = ["derive"] }
-pulldown-cmark = "0.13"
+pulldown-cmark = { workspace = true }
+pulldown-cmark-to-cmark = { workspace = true }
+ra_ap_syntax = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 walkdir = "2.4"

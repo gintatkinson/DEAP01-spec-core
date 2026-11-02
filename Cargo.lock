@@ -90,10 +90,14 @@ dependencies = [
 name = "assemble-conops"
 version = "0.1.0"
 dependencies = [
+ "ariadne",
+ "camino",
  "chrono",
  "clap",
  "deap-core",
  "pulldown-cmark",
+ "pulldown-cmark-to-cmark",
+ "ra_ap_syntax",
  "serde",
  "serde_json",
  "walkdir",
@@ -763,7 +767,10 @@ dependencies = [
  "clap",
  "compile-sysml",
  "deap-core",
+ "logos",
+ "ra_ap_syntax",
  "rayon",
+ "rowan",
  "serde",
  "serde_json",
  "walkdir",
@@ -1246,10 +1253,14 @@ dependencies = [
 name = "reconcile-backlog"
 version = "0.1.0"
 dependencies = [
+ "ariadne",
+ "camino",
  "chrono",
  "clap",
  "deap-core",
  "pulldown-cmark",
+ "pulldown-cmark-to-cmark",
+ "ra_ap_syntax",
  "serde",
  "serde_json",
  "walkdir",
@@ -1730,6 +1741,7 @@ dependencies = [
 name = "verify-baseline"
 version = "0.1.0"
 dependencies = [
+ "ariadne",
  "camino",
  "chrono",
  "clap",
@@ -1739,6 +1751,7 @@ dependencies = [
  "line-index",
  "proc-macro2",
  "pulldown-cmark",
+ "pulldown-cmark-to-cmark",
  "ra_ap_syntax",
  "ra_ap_text_edit",
  "rayon",

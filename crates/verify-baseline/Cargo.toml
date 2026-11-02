@@ -8,6 +8,7 @@ autotests = false
 deap-core = { path = "../deap-core" }
 ingest-sysml = { path = "../ingest-sysml" }
 compile-sysml = { path = "../compile-sysml" }
+ariadne = { workspace = true }
 camino = { workspace = true }
 ra_ap_line_index = { workspace = true }
 ra_ap_syntax = { workspace = true }
@@ -17,7 +18,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 walkdir = "2.4"
 chrono = "0.4"
-pulldown-cmark = "0.13"
+pulldown-cmark = { workspace = true }
+pulldown-cmark-to-cmark = { workspace = true }
 rayon = "1.12"
 proc-macro2 = { version = "1.0", features = ["span-locations"] }
 syn = { version = "2.0", features = ["full", "visit"] }

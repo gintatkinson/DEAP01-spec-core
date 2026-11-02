@@ -1,0 +1,5 @@
+# Standard Rust Toolchain Pinning Manifest (Stage 1-4 Development & Verification Baseline)
+# Realises: [BP-11], [REQ-1101]
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy", "llvm-tools-preview"]

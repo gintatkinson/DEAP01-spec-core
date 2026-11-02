@@ -1,0 +1,14 @@
+# Ferrocene Qualified Rust Compiler Toolchain Manifest (ISO 26262 ASIL-D / IEC 61508 SIL-4 / DO-178C / DO-330 TQL-1)
+# Realises: [BP-11], [REQ-1101], [REQ-1102]
+manifest_version = 1
+
+[products.ferrocene]
+release = "stable-25.05.0"
+packages = [
+    "rustc",
+    "rust-std",
+    "cargo",
+    "clippy",
+    "rustfmt",
+    "llvm-tools",
+]

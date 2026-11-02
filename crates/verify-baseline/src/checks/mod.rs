@@ -37,6 +37,9 @@ pub mod dod_gates;
 #[cfg(test)]
 mod dod_gates_tests;
 pub mod domain_cleanliness_gate;
+pub mod formal_stage2_dylint;
+pub mod formal_stage3_4_miri_kani;
+pub mod formal_stage5_ferrocene;
 pub mod math_katex;
 pub mod mermaid;
 pub mod parity_gates;

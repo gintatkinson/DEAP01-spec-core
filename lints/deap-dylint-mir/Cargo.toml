@@ -2,7 +2,15 @@
 name = "deap-dylint-mir"
 version = "0.1.0"
 edition = "2021"
-description = "Isolated Stage-2 Nightly Dylint MIR gatekeeper plugin (BP-09 / FEAT-51)"
+description = "Isolated Stage-2 Nightly Dylint MIR gatekeeper plugin (BP-09 / REQ-0901 / REQ-0902)"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+rustc_private_driver = []
+
+[package.metadata.rust-analyzer]
+rustc_private = true
+
