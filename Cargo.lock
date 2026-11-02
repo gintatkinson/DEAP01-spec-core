@@ -307,10 +307,14 @@ dependencies = [
  "clap",
  "deap-core",
  "line-index",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
  "ra_ap_syntax",
  "ra_ap_text_edit",
  "serde",
  "serde_json",
+ "syn 2.0.119",
  "walkdir",
 ]
 

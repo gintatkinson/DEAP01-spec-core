@@ -34,6 +34,7 @@ pub mod emitters;
 #[rustfmt::skip]
 pub mod generated;
 pub mod lowering;
+pub use crate::syn_codegen::{format_and_verify_rust_module_ast, synthesize_typed_domain_struct_tokens, SynCodegenFixedPointReceipt};
 
 /// Projects self-hosted Stage-1 `ModularityBoundsSpec` thresholds into runtime `ModularityBounds`.
 ///
@@ -68,8 +69,7 @@ pub fn self_hosted_modularity_bounds() -> domain::ModularityBounds {
     let canonical = domain::ModularityBounds::canonical();
     domain::ModularityBounds {
         max_file_lines: usize::try_from(spec.max_file_lines).unwrap_or(canonical.max_file_lines),
-        max_items_per_file: usize::try_from(spec.max_items_per_file)
-            .unwrap_or(canonical.max_items_per_file),
+        max_items_per_file: usize::try_from(spec.max_items_per_file).unwrap_or(canonical.max_items_per_file),
         max_cyclomatic_complexity: usize::try_from(spec.max_cyclomatic_complexity)
             .unwrap_or(canonical.max_cyclomatic_complexity),
         max_action_steps_per_stage: usize::try_from(spec.max_action_steps_per_stage)

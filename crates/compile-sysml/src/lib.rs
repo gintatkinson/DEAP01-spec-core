@@ -42,6 +42,7 @@ pub mod parser;
 #[allow(clippy::needless_lifetimes)]
 pub mod semantic;
 pub mod stpa;
+pub mod syn_codegen;
 pub mod sync;
 
 pub use cli::*;
@@ -55,10 +56,9 @@ pub use flutter_codegen::{emit_flutter_contracts, FlutterCodegenError, FlutterCo
 pub use lexer::scanner::Scanner;
 pub use lexer::token::{Span, Token, TokenKind};
 pub use parser::expressions::{parse_expression, BinaryOp, Expr, ExpressionParser, UnaryOp};
-pub use parser::grammar::{
-    discover_sysml_files, merge_package_defs, parse_sysml_directory, parse_sysml_tree, ParseError,
-    SysmlParser,
-};
+pub use parser::grammar::{discover_sysml_files, merge_package_defs, parse_sysml_directory, parse_sysml_tree, ParseError, SysmlParser};
+pub use syn_codegen::{
+    format_and_verify_rust_module_ast, synthesize_typed_domain_struct_tokens, SynCodegenFixedPointReceipt};
 pub use semantic::digest::{
     compute_file_manifest, count_structural_elements, generate_digest, write_atomic,
     write_digest_atomic, FileDigestEntry, SchemaDigest,
