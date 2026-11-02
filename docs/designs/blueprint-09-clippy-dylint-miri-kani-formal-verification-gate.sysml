@@ -20,18 +20,24 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
     attribute max_kani_counterexamples : Real;
     doc /* [unit: `iterations`] */
     attribute default_kani_unwind_bound : Real;
-    doc /* runStableClippyGate(workspacePath) */
-    action def runStableClippyGate;
-    doc /* verifyMirAllocationsAndReqs(digestPath) */
-    action def verifyMirAllocationsAndReqs;
-    doc /* synthesizeFrbIcdFacade(icdSchemaPath) */
-    action def synthesizeFrbIcdFacade;
-    doc /* runMiriAndDartGate(bridgeCratePath) */
-    action def runMiriAndDartGate;
-    doc /* synthesizeKaniProofModule(safetyAstIr) */
-    action def synthesizeKaniProofModule;
-    doc /* runKaniCbmcProofs(targetCratePath) */
-    action def runKaniCbmcProofs;
+    doc /* [unit: `SLOC`] */
+    attribute max_module_exec_sloc : Real;
+    doc /* [unit: `probes`] */
+    attribute min_toolchain_discovery_probes : Real;
+    doc /* probe_formal_toolchain(config) */
+    action def probe_formal_toolchain;
+    doc /* verify_clippy_policy(policy, manifest_lints) */
+    action def verify_clippy_policy;
+    doc /* evaluate_stage2_dylint_mir(input) */
+    action def evaluate_stage2_dylint_mir;
+    doc /* verify_in_process_cst_syntax(module_path, max_exec_sloc) */
+    action def verify_in_process_cst_syntax;
+    doc /* guard_inbound_frb_f64(spec, raw_value, active_fsm_state) */
+    action def guard_inbound_frb_f64;
+    doc /* validate_kani_harness_spec(spec) */
+    action def validate_kani_harness_spec;
+    doc /* evaluate_four_stage_gatekeeper(receipts) */
+    action def evaluate_four_stage_gatekeeper;
     doc /* [unit: `lines`] */
     assert constraint C_VER_01 {
         too_many_lines_threshold >= 1 and too_many_lines_threshold <= 80;
@@ -56,6 +62,14 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
     assert constraint C_VER_06 {
         default_kani_unwind_bound >= 1 and default_kani_unwind_bound <= 64;
     }
+    doc /* [unit: `SLOC`] */
+    assert constraint C_VER_07 {
+        max_module_exec_sloc >= 1 and max_module_exec_sloc <= 380;
+    }
+    doc /* [unit: `probes`] */
+    assert constraint C_VER_08 {
+        min_toolchain_discovery_probes >= 1 and min_toolchain_discovery_probes <= 3;
+    }
     doc /* UUIDv5:  | Complexity: Class P | Standard: IEEE 29148-2018 / RFC 2119 | Diagnostics: E0100 */
     requirement def REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
         id = "REQ-0609";
@@ -70,7 +84,7 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
         attribute ac_04_stage_3_deterministic_flutter_rust_bridge_ffi_synthesis_with_fail_closed_icd_boundary_guards : String = "- **Given**: A SysML v2 package and ICD_01 / ICD_02 specification declaring port def and item flow signals with numeric [min..max] bounds and admissible state def operational modes, lowered by crates/compile-sysml/src/modular_codegen/. - **When**: compile-sysml synthesizes the #![forbid(unsafe_code)] pure domain crate, the isolated flutter_rust_bridge FFI boundary facade, and the Dart DTO/binding modules, and executes inbound FFI boundary tests alongside dart analyze --fatal-infos. - **Then**: Pure domain modules contain #![forbid(unsafe_code)], synthesized Dart bindings pass dart analyze.";
         attribute ac_05_stage_3_miri_tree_borrows_abstract_machine_undefined_behavior_rejection_on_ffi_and_ring_buffer_bridges : String = "- **Given**: An isolated Stage-3 FFI marshaling and lock-free SPSC ring-buffer bridge module containing documented // SAFETY: blocks, paired with a negative mutation probe introducing a Tree Borrows pointer-aliasing violation or uninitialized byte read. - **When**: FrbIcdBridgeAndMiriUbGate executes cargo +nightly miri test with MIRIFLAGS=\"-Zmiri-tree-borrows\". - **Then**: The compliant FFI/ring-buffer bridge passes Miri with 0 undefined-behavior findings (**C-VER-04**) and 0 leaked allocations, whereas the mutated aliasing/uninitialized probe fails closed with a non-zero exit code and.";
         attribute ac_06_stage_4_deterministic_kani_cbmc_proof_synthesis_and_stpa_unsafe_control_action_falsification : String = "- **Given**: SysML constraint def invariants, port def [min..max] intervals, state def transition tables, and STPA **UCA-01** / **SC-01** safety constraints lowered into #[cfg(kani)] modules via syn + quote + prettyplease across deap-core, compile-sysml, and a generated downstream crate, plus a negative mutation weakening an overflow check or STPA state guard. - **When**: KaniCbmcProofSynthesizer emits the #[kani::proof] + #[kani::unwind(N)] harnesses (kani::any() + kani::assume(...) + assert!(...)) and executes cargo kani. - **Then**: Emitted #[cfg(kani)] source files are byte-deterministic.";
-        attribute ac_07_fail_closed_four_stage_orchestration_and_twelve_gate_blueprint_bijective_sysml_persistence : String = "- **Given**: docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md specifying all 4 stages across deap-core, compile-sysml, and verify-baseline. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md and ./target/release/compile-sysml execute over the blueprint and emitted .sysml metamodel. - **Then**: All 12 mechanical blueprint verification gates pass with exit code 0, bijective SysML v2 roundtrip parity holds with zero semantic errors, and.";
+        attribute ac_07_cross_platform_toolchain_discovery_modular_submodule_layout_and_fail_closed_qualification_gate : String = "- **Given**: docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md specifying dynamic cross-platform driver probing across macOS, Linux, and Windows (std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}, camino::Utf8Path), modular submodules under < 380 SLOC (**C-VER-07**), and the --require-formal-toolchains qualification flag, evaluated in an environment where a required driver is absent versus present. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md and.";
         doc /* \begin{aligned} \text{Stage1Pass}(\mathcal{W}) &\iff \forall C \in \mathcal{W}, \quad \forall \ell \in \mathcal{L}_{\text{deny}}, \quad \text{Violations}_{\ell}(C) = \emptyset \land \text{Types}(C) \cap \mathcal{T}_{\text{banned}} = \emptyset \\ \forall f \in \text{Fns}(\mathcal{W}), \quad \text{Lines}_{\text{HIR}}(f) &\le 80 \land \lvert \text{Args}_{\text{HIR}}(f) \rvert \le 5 \land \text{BoolParams}_{\text{HIR}}(f) \le 3 \end{aligned} */
         constraint def Invariant_REQ_0609_SC_01;
         doc /* \begin{aligned} \text{ZeroRtHeap}(G_{\text{MIR}}) &\iff \forall f_{\text{rt}} \in V_{\text{rt\_loop}}, \quad \mathcal{R}^*(f_{\text{rt}}) \cap \mathcal{A}_{\text{heap}} = \emptyset \\ \text{TraceableMIR}(V_{\text{def}}, \mathcal{Q}_{\text{sysml}}) &\iff \forall d \in V_{\text{def}}, \quad \text{Realises}(d) \neq \emptyset \implies \text{Realises}(d) \subseteq \mathcal{Q}_{\text{sysml}} \end{aligned} */
@@ -79,22 +93,26 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
         constraint def Invariant_REQ_0609_SC_03;
         doc /* \begin{aligned} \text{VC}_f(x) &\equiv \text{Pre}_{\text{sysml}}(x) \implies \Big( \neg \text{Panic}_N(f, x) \land \neg \text{ArithOverflow}_N(f, x) \land \neg \text{OutOfBounds}_N(f, x) \\ &\land \text{Post}_{\text{sysml}}(x, f(x)) \land \bigwedge_{j=1}^{m} \neg \text{UCA}_j(x, f(x)) \Big) \\ \text{Stage4Pass}(f, N) &\iff \text{SAT}\big(\exists x \in \Sigma_{\text{CBMC}}, \quad \neg \text{VC}_f(x)\big) = \text{UNSAT} \end{aligned} */
         constraint def Invariant_REQ_0609_SC_04;
+        doc /* \begin{aligned} \text{ToolchainPass}(\mathcal{D}, Q_{\text{ci}}) &\iff \big( Q_{\text{ci}} \implies \forall d \in \mathcal{D}, \quad \text{Discovered}(d) = \text{true} \big) \\ &\land \forall m \in \mathcal{M}_{\text{formal}}, \quad \text{ExecSLOC}(m) \le 380 \land \text{SyntaxErrors}(m) = 0 \end{aligned} */
+        constraint def Invariant_REQ_0609_SC_05;
         require Invariant_REQ_0609_SC_01;
         require Invariant_REQ_0609_SC_02;
         require Invariant_REQ_0609_SC_03;
         require Invariant_REQ_0609_SC_04;
+        require Invariant_REQ_0609_SC_05;
         verify by AC_01_Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement;
         verify by AC_02_Stage_2_Isolated_Nightly_Dylint_MIR_Zero_Allocation_Proof_on_Real_Time_Control_Loops;
         verify by AC_03_Stage_2_Compile_Time_MIR_Requirement_Binding_Verification_Against_Active_SysML_Digests;
         verify by AC_04_Stage_3_Deterministic_flutter_rust_bridge_FFI_Synthesis_with_Fail_Closed_ICD_Boundary_Guards;
         verify by AC_05_Stage_3_Miri_Tree_Borrows_Abstract_Machine_Undefined_Behavior_Rejection_on_FFI_and_Ring_Buffer_Bridges;
         verify by AC_06_Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification;
-        verify by AC_07_Fail_Closed_Four_Stage_Orchestration_and_Twelve_Gate_Blueprint_Bijective_SysML_Persistence;
+        verify by AC_07_Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate;
         satisfy by FrbIcdBridgeAndMiriUbGate;
     }
     doc /* Extracted from Mermaid stateDiagram specification. */
     state def BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_LifecycleState {
         state Idle;
+        state ProbingFormalDrivers;
         state RunningStage1Clippy;
         state FailedClosedJsonDiagnostic;
         state RunningStage2DylintMir;
@@ -102,7 +120,9 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
         state RunningStage4KaniCbmc;
         state VerifiedAllFourStages;
         transition Initial_to_Idle first Initial then Idle;
-        transition Idle_to_RunningStage1Clippy_on_runAllVerificationStages first Idle accept runAllVerificationStages then RunningStage1Clippy;
+        transition Idle_to_ProbingFormalDrivers_on_probe_formal_toolchain first Idle accept probe_formal_toolchain then ProbingFormalDrivers;
+        transition ProbingFormalDrivers_to_RunningStage1Clippy_on_toolchainsDiscoveredOrPermitted first ProbingFormalDrivers accept toolchainsDiscoveredOrPermitted then RunningStage1Clippy;
+        transition ProbingFormalDrivers_to_FailedClosedJsonDiagnostic_on_rejectMissingToolchainInQualification first ProbingFormalDrivers accept rejectMissingToolchainInQualification then FailedClosedJsonDiagnostic;
         transition RunningStage1Clippy_to_FailedClosedJsonDiagnostic_on_rejectStage1ClippyViolation first RunningStage1Clippy accept rejectStage1ClippyViolation then FailedClosedJsonDiagnostic;
         transition RunningStage1Clippy_to_RunningStage2DylintMir_on_stage1TotalFunctionsVerified first RunningStage1Clippy accept stage1TotalFunctionsVerified then RunningStage2DylintMir;
         transition RunningStage2DylintMir_to_FailedClosedJsonDiagnostic_on_rejectMirHeapAllocOrDanglingReq first RunningStage2DylintMir accept rejectMirHeapAllocOrDanglingReq then FailedClosedJsonDiagnostic;
@@ -144,10 +164,10 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
         subject FrbIcdBridgeAndMiriUbGate;
         objective "Stage 4 Deterministic Kani CBMC Proof Synthesis and STPA Unsafe Control Action Falsification";
     }
-    doc /* - **Given**: docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md specifying all 4 stages across deap-core, compile-sysml, and verify-baseline. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md and ./target/release/compile-sysml execute over the blueprint and emitted .sysml metamodel. - **Then**: All 12 mechanical blueprint verification gates pass with exit code 0, bijective SysML v2 roundtrip parity holds with zero semantic errors, and. */
-    use case def UC_AC_07_Fail_Closed_Four_Stage_Orchestration_and_Twelve_Gate_Blueprint_Bijective_SysML_Persistence {
+    doc /* - **Given**: docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md specifying dynamic cross-platform driver probing across macOS, Linux, and Windows (std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}, camino::Utf8Path), modular submodules under < 380 SLOC (**C-VER-07**), and the --require-formal-toolchains qualification flag, evaluated in an environment where a required driver is absent versus present. - **When**: ./target/release/verify-baseline check-blueprint docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md and. */
+    use case def UC_AC_07_Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate {
         subject FrbIcdBridgeAndMiriUbGate;
-        objective "Fail Closed Four Stage Orchestration and Twelve Gate Blueprint Bijective SysML Persistence";
+        objective "Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate";
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction {
@@ -156,18 +176,18 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
         lifeline IsolatedDylintMirAllocationGate : IsolatedDylintMirAllocationGate;
         lifeline FrbIcdBridgeAndMiriUbGate : FrbIcdBridgeAndMiriUbGate;
         lifeline KaniCbmcProofSynthesizer : KaniCbmcProofSynthesizer;
-        message runStableClippyGate from MultiStageVerificationOrchestrator to StableClippyTotalFunctionGate;
+        message probe_formal_toolchain from MultiStageVerificationOrchestrator to MultiStageVerificationOrchestrator;
+        message verify_clippy_policy from MultiStageVerificationOrchestrator to StableClippyTotalFunctionGate;
         message reply_StageGateReceipt from StableClippyTotalFunctionGate to MultiStageVerificationOrchestrator;
-        message verifyMirAllocationsAndReqs from MultiStageVerificationOrchestrator to IsolatedDylintMirAllocationGate;
+        message evaluate_stage2_dylint_mir from MultiStageVerificationOrchestrator to IsolatedDylintMirAllocationGate;
         message reply_StageGateReceipt from IsolatedDylintMirAllocationGate to MultiStageVerificationOrchestrator;
-        message synthesizeFrbIcdFacade from MultiStageVerificationOrchestrator to FrbIcdBridgeAndMiriUbGate;
-        message reply_FrbSynthesisReceipt from FrbIcdBridgeAndMiriUbGate to MultiStageVerificationOrchestrator;
-        message runMiriAndDartGate from MultiStageVerificationOrchestrator to FrbIcdBridgeAndMiriUbGate;
-        message reply_StageGateReceipt from FrbIcdBridgeAndMiriUbGate to MultiStageVerificationOrchestrator;
-        message synthesizeKaniProofModule from MultiStageVerificationOrchestrator to KaniCbmcProofSynthesizer;
-        message reply_PrettypleaseKaniRustUnit from KaniCbmcProofSynthesizer to MultiStageVerificationOrchestrator;
-        message runKaniCbmcProofs from MultiStageVerificationOrchestrator to KaniCbmcProofSynthesizer;
+        message verify_in_process_cst_syntax from MultiStageVerificationOrchestrator to IsolatedDylintMirAllocationGate;
+        message reply_InProcessCstReceipt from IsolatedDylintMirAllocationGate to MultiStageVerificationOrchestrator;
+        message guard_inbound_frb_f64 from MultiStageVerificationOrchestrator to FrbIcdBridgeAndMiriUbGate;
+        message reply_f64 from FrbIcdBridgeAndMiriUbGate to MultiStageVerificationOrchestrator;
+        message validate_kani_harness_spec from MultiStageVerificationOrchestrator to KaniCbmcProofSynthesizer;
         message reply_StageGateReceipt from KaniCbmcProofSynthesizer to MultiStageVerificationOrchestrator;
+        message evaluate_four_stage_gatekeeper from MultiStageVerificationOrchestrator to MultiStageVerificationOrchestrator;
     }
     doc /* Permitted Rust Abstract Machine undefined-behavior findings under `cargo +nightly miri test` with Tree Borrows. [unit: violations] */
     part def FrbIcdBridgeAndMiriUbGate {
@@ -234,6 +254,8 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
         attribute verification_stage_count : Integer = 4;
         doc /* Halts downstream stage promotion whenever any preceding verification stage exits non-zero. [unit: flag] */
         attribute fail_closed_short_circuit : Boolean = true;
+        doc /* Mandates live execution of discovered drivers and fails closed if any driver is absent during qualification CI. [unit: flag] */
+        attribute require_formal_toolchains : Boolean = false;
         doc /* Receives upstream or downstream target workspace verification commands in `verify-baseline` and `compile-sysml`. [protocol: VerificationGateCommand] */
         port in gate_invocation_in : String {
             flow in gate_invocation_in_flow : String;
