@@ -35,14 +35,19 @@ graph TD
 - Check 34 executes audit_fail_closed_io_patterns (C-PURITY-02).
 
 ## 4. Main Success Scenario
-1. Check 34 executes audit_fail_closed_io_patterns (C-PURITY-02).
-2. The verifier fails closed, flags every fail-open error-swallowing site with its exact line number, and terminates with a non-zero exit code.
+1. `VerifyBaselineCLI` invokes `check_compiler_ast_purity` on `Check34AstPurityAndAntiGamingGate`, feeding workspace Rust CST streams through `WorkspaceRustCstPort`.
+2. `Check34AstPurityAndAntiGamingGate` invokes `mask_literals_and_comments` via `deap_core_rust_cst` (`ra_ap_syntax`, `syn`, and `rowan`) to strip comments and string literals before structural inspection.
+3. `FailClosedIoAstVerifier` executes `audit_fail_closed_io_patterns` (constraint `C-PURITY-02`) across all non-test source lines in `crates/*/src/**/*.rs`.
+4. `FailClosedIoAstVerifier` detects fail-open error-swallowing patterns including `.into_iter().flatten()`, `.filter_map(Result::ok)`, `fs::read_to_string(...).unwrap_or_default()`, or `let _ = fs::remove_dir_all(...)`, incrementing `fail_open_io_site_count`.
+5. `Check34AstPurityAndAntiGamingGate` emits sorted file-and-line `ariadne` / `miette` diagnostics via `PurityViolationDiagnosticPort`, writes `1` to `Check34GateStatusPort`, and terminates fail-closed with exit code 1.
 
 ## 5. Alternate and Exception Flows
-- Precondition guard failure in `AntiGamingTestBodyAuditor`:
-  - `AntiGamingTestBodyAuditor` rejects the `Fail Closed Filesystem and Walk Dir Enforcement` request without partial state mutation and reports diagnostic status to `VerifyBaselineCLI`.
-- Invariant violation while enforcing `Fail Closed Filesystem and WalkDir Enforcement`:
-  - `AntiGamingTestBodyAuditor` aborts `Fail Closed Filesystem and Walk Dir Enforcement` execution, preserves prior verified state, and notifies `VerifyBaselineCLI`.
+- 3a. Directory traversal or filesystem metadata error while enumerating `crates/*/src/**/*.rs`:
+  - `FailClosedIoAstVerifier` propagates `Result::Err` immediately without `.filter_map(Result::ok)` suppression, emits a `miette` diagnostic on `PurityViolationDiagnosticPort`, and exits fail-closed with code 1.
+- 4a. Unparseable Rust token stream encountered on `WorkspaceRustCstPort`:
+  - `deap_core_rust_cst` reports a syntax diagnostic via `ra_ap_syntax` and `ariadne`, aborting `audit_fail_closed_io_patterns` with exit code 1.
+- 5a. Invariant violation under `Invariant_REQ_0602_SC_01` (`fail_open_io_site_count > 0`):
+  - `Check34AstPurityAndAntiGamingGate` aborts execution without partial state mutation, preserves prior verified state, and returns fail-closed status code 1 to `VerifyBaselineCLI`.
 
 ## 6. Postconditions
 - The verifier fails closed, flags every fail-open error-swallowing site with its exact line number, and terminates with a non-zero exit code.

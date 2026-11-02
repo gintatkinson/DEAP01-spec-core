@@ -35,14 +35,19 @@ graph TD
 - resolve_schema_context is invoked during compile-sysml --inject-safety-docstrings.
 
 ## 4. Main Success Scenario
-1. resolve_schema_context is invoked during compile-sysml --inject-safety-docstrings.
-2. PrimaryController resolves REQ-PC-001 and ThermalLimit, NestedSubunit resolves REQ-NS-002 via collect_all_parts, and both SecondaryMonitor::primary_controller and.
+1. `Compiler_CLI_CI_Pipeline` invokes `RunCompileSysmlInjectSafetyDocstrings` (`compile-sysml --inject-safety-docstrings`), transitioning `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState` to `ScopedSchemaContextResolver_State`.
+2. `ScopedSchemaContextResolver` parses the SysML v2 `PackageDef` hierarchy via `logos` and `rowan` and extracts Rust/Dart CST declaration items (`owner_name`, method names, parameters) via `ParseSourceCstViaRustAndDartCst` (`ra_ap_syntax` and `syn`).
+3. `ScopedSchemaContextResolver` executes `ResolveSchemaContextViaCollectAll` (`collect_all_parts`) to traverse top-level and nested `PartDef.parts` trees recursively without `.first()` fallback pollution.
+4. `ScopedSchemaContextResolver` binds `PrimaryController` to `REQ-PC-001` and `ThermalLimit`, resolves nested `NestedSubunit` to `REQ-NS-002` via `collect_all_parts`, and isolates `SecondaryMonitor::primary_controller` and `unmapped_helper` via `owner_name` scoping.
+5. `ScopedSchemaContextResolver` routes the resolved context across `BP_05_ContextToDocstringGeneratorConnection` (`resolved_context_out` to `SevenSectionDocstringGenerator.schema_context_in`) and transitions to `SevenSectionDocstringGenerator_State`.
 
 ## 5. Alternate and Exception Flows
-- Precondition guard failure in `Check36AstCompletenessVerifier`:
-  - `Check36AstCompletenessVerifier` rejects the `Strict Schema Context Resolution and Recursive Part Traversal` request without partial state mutation and reports diagnostic status to `Compiler_CLI_CI_Pipeline`.
-- Invariant violation while enforcing `Strict Schema Context Resolution and Recursive Part Traversal`:
-  - `Check36AstCompletenessVerifier` aborts `Strict Schema Context Resolution and Recursive Part Traversal` execution, preserves prior verified state, and notifies `Compiler_CLI_CI_Pipeline`.
+- 3a. Ambiguous or cyclic nested `PartDef.parts` hierarchy encountered during `ResolveSchemaContextViaCollectAll`:
+  - `ScopedSchemaContextResolver` returns `Result::Err` with a structured `ariadne` / `miette` diagnostic (`E0100`) and terminates fail-closed with exit code 1.
+- 4a. Unmapped declaration attempts to inherit an unrelated component's requirement via `.first()` fallback:
+  - `ScopedSchemaContextResolver` rejects the cross-owner fallback binding, preserves strict `owner_name` isolation, and emits a deterministic `miette` diagnostic with exit code 1.
+- 5a. Invariant violation under `Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lexical_scanning_schema_context_resolution_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds`:
+  - `Check36AstCompletenessVerifier` aborts execution without partial state mutation, preserves prior verified state, and notifies `Compiler_CLI_CI_Pipeline` with fail-closed exit status 1.
 
 ## 6. Postconditions
 - PrimaryController resolves REQ-PC-001 and ThermalLimit, NestedSubunit resolves REQ-NS-002 via collect_all_parts, and both SecondaryMonitor::primary_controller and.
@@ -50,7 +55,7 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#721** | User Story | [User Story 32: Scan Source Lines Via Rust Dart Lex State And](../user-stories/US-32-ScanSourceLinesViaRustDartLexStateAnd.md) |
+| **#721** | User Story | [User Story 32: Parse Source Cst Via Rust And Dart Cst](../user-stories/US-32-ParseSourceCstViaRustAndDartCst.md) |
 | **#678** | Feature | [Feature 21: [BP 05 Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint] Check36AstCompletenessVerifier](../features/FEAT-21-Check36AstCompletenessVerifier.md) |
 
 ## Source References

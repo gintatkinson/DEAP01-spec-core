@@ -35,14 +35,19 @@ graph TD
 - ./target/release/verify-baseline check-blueprint docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md --dry-run is executed.
 
 ## 4. Main Success Scenario
-1. ./target/release/verify-baseline check-blueprint docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md --dry-run is executed.
-2. verify-baseline check-blueprint passes all 12 mechanical gates, extracts SysmlBijectiveRoundtripCompilerGate with all 4 BOM parts, 4 interface ports, 4 attributes, 4 parametric constraints (C-RT-01..C-RT-04), and REQ_0603 requirement definitions, persists.
+1. `Compiler_CLI_Caller` executes `./target/release/verify-baseline check-blueprint docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md --dry-run` using `pulldown-cmark` Markdown AST inspection.
+2. `SysmlBijectiveRoundtripCompilerGate` validates all 12 mechanical blueprint verification gates for `REQ-0603`, including KaTeX complexity/bijectivity invariants (`Invariant_REQ_0603_Formal_Bijectivity_Complexity_Invariants`, `Invariant_REQ_0603_SC_04`), Mermaid state/sequence diagrams, and 5-column STPA/FMECA tables.
+3. `Compiler_CLI_Caller` invokes `ingest-sysml` on `docs/designs/blueprint-03-sysml-ast-bijective-roundtrip-compiler-gate.md`, which tokenizes and parses the extracted SysML v2 blocks via `NativeSigilAndLifetimeLexer` (`scan_all`) and `FailClosedRecursiveDescentParser` (`parse_package_or_file`) using `logos` and `rowan`.
+4. `BijectiveSysmlSerializer` and `CompilerRoundtripVerificationGate` execute `ast_orig_to_sysml` and `verify_bijective_ast_roundtrip` to verify that `SysmlBijectiveRoundtripCompilerGate`, all 4 BOM subcomponents, 4 interface ports, 4 attributes, and `REQ_0603` roundtrip with `roundtrip_ast_mismatch_count == 0`.
+5. `SysmlBijectiveRoundtripCompilerGate` persists the verified SysML v2 package via `SerializedSysmlOutputPort` and exits with code 0.
 
 ## 5. Alternate and Exception Flows
-- Precondition guard failure in `BijectiveSysmlSerializer`:
-  - `BijectiveSysmlSerializer` rejects the `Dogfood Markdown to SysML Ingestion and Baseline Verification` request without partial state mutation and reports diagnostic status to `Compiler_CLI_Caller`.
-- Invariant violation while enforcing `Dogfood Markdown to SysML Ingestion and Baseline Verification`:
-  - `BijectiveSysmlSerializer` aborts `Dogfood Markdown to SysML Ingestion and Baseline Verification` execution, preserves prior verified state, and notifies `Compiler_CLI_Caller`.
+- 3a. Blueprint Markdown fails any of the 12 mechanical verification gates in `check-blueprint`:
+  - `verify-baseline` returns `Result::Err`, emits an `ariadne` / `miette` structural diagnostic on `BijectiveDiffDiagnosticPort`, and exits fail-closed with code 1.
+- 4a. Bijective roundtrip mismatch (`roundtrip_ast_mismatch_count > 0`) during blueprint SysML v2 ingestion:
+  - `CompilerRoundtripVerificationGate` transitions to `RejectedE0400`, emits diagnostic code `E0400` on `BijectiveDiffDiagnosticPort`, and aborts persistence with exit code 1.
+- 5a. Invariant violation while enforcing `Invariant_REQ_0603_SC_04`:
+  - `BijectiveSysmlSerializer` aborts execution without partial state mutation, preserves prior verified state, and notifies `Compiler_CLI_Caller` with fail-closed exit code 1.
 
 ## 6. Postconditions
 - verify-baseline check-blueprint passes all 12 mechanical gates, extracts SysmlBijectiveRoundtripCompilerGate with all 4 BOM parts, 4 interface ports, 4 attributes, 4 parametric constraints (C-RT-01..C-RT-04), and REQ_0603 requirement definitions, persists.

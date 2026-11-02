@@ -26,10 +26,11 @@ As a `Compiler_CLI_CI_Pipeline`, I want to invoke `ResolveSchemaContextViaCollec
 - Behavioral execution contract: invokes `ResolveSchemaContextViaCollectAll()` on `ScopedSchemaContextResolver` with atomic precondition verification.
 - State transition management: `Check36AstCompletenessVerifier_State -> ScopedSchemaContextResolver_State` (trigger `RunCompileSysmlInjectSafetyDocstrings`).
 - Formal constraints and requirements enforced: `REQ-0605 (REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint)`.
+- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/compile-sysml/src/safety_docstrings/`, `crates/deap-core/src/rust_cst/`, `crates/deap-core/src/dart_cst/`) while retiring legacy line-oriented docblock injectors (`-800+` SLOC).
 
 ### Layer 3: Presentation & Actuator Interface Binding
 - Component interface endpoints: binds `ScopedSchemaContextResolver` command ingress and completion notification egress channels.
-- Interaction binding (`BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction`): routes `ResolveSchemaContextViaCollectAll` invocation from `Compiler_CLI_CI_Pipeline` to `ScopedSchemaContextResolver` and returns `ScanSourceLinesViaRustDartLexStateAnd`.
+- Interaction binding (`BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction`): routes `ResolveSchemaContextViaCollectAll` invocation from `Compiler_CLI_CI_Pipeline` to `ScopedSchemaContextResolver` and returns `ParseSourceCstViaRustAndDartCst`.
 - Diagnostic fault surface: reports deterministic rejection diagnostics to `Compiler_CLI_CI_Pipeline` across the declared interface boundary when guard or invariant checks fail.
 
 ## UML Sequence Diagram
@@ -42,7 +43,7 @@ sequenceDiagram
     participant ScopedSchemaContextResolver
     Compiler_CLI_CI_Pipeline->>Check36AstCompletenessVerifier: ResolveSchemaContextViaCollectAll()
     Check36AstCompletenessVerifier->>ScopedSchemaContextResolver: ResolveSchemaContextViaCollectAll()
-    ScopedSchemaContextResolver-->>Check36AstCompletenessVerifier: ScanSourceLinesViaRustDartLexStateAnd
+    ScopedSchemaContextResolver-->>Check36AstCompletenessVerifier: ParseSourceCstViaRustAndDartCst
     Check36AstCompletenessVerifier-->>Compiler_CLI_CI_Pipeline: StatusReport
 ```
 
@@ -50,7 +51,7 @@ sequenceDiagram
 - [ ] AC-US-33-01: Given `ScopedSchemaContextResolver` is in declared state `Check36AstCompletenessVerifier_State` with domain state attributes (`quantity: Integer`, `type: String`), When `Compiler_CLI_CI_Pipeline` invokes `ResolveSchemaContextViaCollectAll` on `ScopedSchemaContextResolver`, Then `ScopedSchemaContextResolver` validates and binds the request against `ScopedSchemaContextResolver` domain state (`quantity: Integer`, `type: String`) and transitions to `ScopedSchemaContextResolver_State`.
 - [ ] AC-US-33-02: Given `ScopedSchemaContextResolver` active state management during `ResolveSchemaContextViaCollectAll`, When `ScopedSchemaContextResolver` evaluates formal constraint `Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lexical_scanning_schema_context_resolution_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds`, Then `ScopedSchemaContextResolver` verifies constraint satisfaction before committing state updates.
 - [ ] AC-US-33-03: Given `ScopedSchemaContextResolver` requirement allocation for `ResolveSchemaContextViaCollectAll`, When `ScopedSchemaContextResolver` verifies formal requirement `REQ-0605 (REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint)`, Then `ScopedSchemaContextResolver` confirms normative requirement satisfaction across execution.
-- [ ] AC-US-33-04: Given `ScopedSchemaContextResolver` interface binding for `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction`, When `ScopedSchemaContextResolver` completes `ResolveSchemaContextViaCollectAll`, Then `ScopedSchemaContextResolver` delivers `ScanSourceLinesViaRustDartLexStateAnd` to `Compiler_CLI_CI_Pipeline`.
+- [ ] AC-US-33-04: Given `ScopedSchemaContextResolver` interface binding for `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction`, When `ScopedSchemaContextResolver` completes `ResolveSchemaContextViaCollectAll`, Then `ScopedSchemaContextResolver` delivers `ParseSourceCstViaRustAndDartCst` to `Compiler_CLI_CI_Pipeline`.
 - [ ] AC-US-33-05: Given violated formal constraint `Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lexical_scanning_schema_context_resolution_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds`, When `Compiler_CLI_CI_Pipeline` invokes `ResolveSchemaContextViaCollectAll` on `ScopedSchemaContextResolver`, Then `ScopedSchemaContextResolver` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic fault diagnostic across the interface binding.
 
 ## Required Features

@@ -38,7 +38,7 @@ Subsystem package for BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_T
 - [ ] #574 - [User Story 11: audit ssot symbol deduplication](../user-stories/US-11-audit_ssot_symbol_deduplication.md)
 
 ## 3. Architecture
-Classifiers: `AntiGamingTestBodyAuditor`; `Check34AstPurityAndAntiGamingGate` (ports: `in WorkspaceSourceAstPort : String`, `in TestFunctionAstStreamPort : String`, `out PurityViolationDiagnosticPort : String`, `out Check34GateStatusPort : Integer`); `FailClosedIoAstVerifier`; `RangeSliceAstDetector`; `SsotSymbolDeduplicationGate`.
+Classifiers: `AntiGamingTestBodyAuditor`; `Check34AstPurityAndAntiGamingGate` (ports: `in WorkspaceRustCstPort : String`, `in TestFunctionAstStreamPort : String`, `out PurityViolationDiagnosticPort : String`, `out Check34GateStatusPort : Integer`); `FailClosedIoAstVerifier`; `RangeSliceAstDetector`; `SsotSymbolDeduplicationGate`.
 
 ## 4. Operational Considerations
 Lifecycle state machines: `BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint_LifecycleState` (Initial -> AntiGamingTestBodyAuditor_State; AntiGamingTestBodyAuditor_State -> Check34AstPurityAndAntiGamingGate_State on check_compiler_ast_purity; Check34AstPurityAndAntiGamingGate_State -> FailClosedIoAstVerifier_State on mask_literals_and_comments; FailClosedIoAstVerifier_State -> Terminal). Operational actions: `check_compiler_ast_purity`, `mask_literals_and_comments`, `contains_direct_range_slice`, `audit_fail_closed_io_patterns`, `audit_test_integrity_and_anti_gaming`, `audit_ssot_symbol_deduplication`. Interaction sequences: `BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint_SequenceInteraction`.
@@ -61,7 +61,7 @@ classDiagram
         +String type
     }
     class Check34AstPurityAndAntiGamingGate {
-        +String WorkspaceSourceAstPort (in)
+        +String WorkspaceRustCstPort (in)
         +String TestFunctionAstStreamPort (in)
         +String PurityViolationDiagnosticPort (out)
         +Integer Check34GateStatusPort (out)

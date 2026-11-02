@@ -35,14 +35,19 @@ graph TD
 - ./target/release/verify-baseline . --no-domain executes Check 34 (C-PURITY-01).
 
 ## 4. Main Success Scenario
-1. ./target/release/verify-baseline . --no-domain executes Check 34 (C-PURITY-01).
-2. contains_direct_range_slice detects the bracketed .. operator regardless of variable name, emits a file-and-line diagnostic instructing the caller to use .get(..), and exits fail-closed with code 1.
+1. `VerifyBaselineCLI` invokes `check_compiler_ast_purity` on `Check34AstPurityAndAntiGamingGate`, streaming non-test workspace Rust source files through `WorkspaceRustCstPort`.
+2. `Check34AstPurityAndAntiGamingGate` invokes `mask_literals_and_comments` via `deap_core_rust_cst` (`ra_ap_syntax`, `logos`, and `rowan`) to blank out string literals, raw strings, character literals, and comments while preserving line numbering.
+3. `RangeSliceAstDetector` executes `contains_direct_range_slice` across each masked source line to inspect bracketed expressions for `..` or `..=` range operators outside `.get(..)` and `.get_mut(..)` calls.
+4. `RangeSliceAstDetector` detects a direct range-slice indexing expression (`expr[a..b]`, `expr[..idx]`, `expr[start..]`, or `expr[..=end]`) and increments `direct_range_slice_count`.
+5. `Check34AstPurityAndAntiGamingGate` emits a sorted file-and-line `ariadne` / `miette` diagnostic on `PurityViolationDiagnosticPort` instructing the caller to use fallible `.get(..)`, outputs `1` on `Check34GateStatusPort`, and exits fail-closed with code 1.
 
 ## 5. Alternate and Exception Flows
-- Precondition guard failure in `AntiGamingTestBodyAuditor`:
-  - `AntiGamingTestBodyAuditor` rejects the `General Direct Range Slice Indexing Rejection` request without partial state mutation and reports diagnostic status to `VerifyBaselineCLI`.
-- Invariant violation while enforcing `General Direct Range Slice Indexing Rejection`:
-  - `AntiGamingTestBodyAuditor` aborts `General Direct Range Slice Indexing Rejection` execution, preserves prior verified state, and notifies `VerifyBaselineCLI`.
+- 3a. Source file read or UTF-8 decoding failure on `WorkspaceRustCstPort`:
+  - `Check34AstPurityAndAntiGamingGate` propagates `Result::Err` without silent error swallowing, emits a `miette` I/O diagnostic on `PurityViolationDiagnosticPort`, and exits fail-closed with code 1.
+- 4a. Unterminated string literal or block comment encountered during `mask_literals_and_comments`:
+  - `deap_core_rust_cst` returns a deterministic lexical error via `Result<T, E>` and `ariadne`, halting `Check34AstPurityAndAntiGamingGate` with exit code 1.
+- 5a. Invariant violation under `Invariant_REQ_0602_SC_01` (`direct_range_slice_count > 0`):
+  - `AntiGamingTestBodyAuditor` and `Check34AstPurityAndAntiGamingGate` abort verification without partial state mutation, preserve prior verified state, and return fail-closed exit status 1 to `VerifyBaselineCLI`.
 
 ## 6. Postconditions
 - contains_direct_range_slice detects the bracketed .. operator regardless of variable name, emits a file-and-line diagnostic instructing the caller to use .get(..), and exits fail-closed with code 1.

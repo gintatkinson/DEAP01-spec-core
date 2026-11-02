@@ -26,6 +26,7 @@ As a `Compiler_CLI_Caller`, I want to invoke `AssertAstOrigEqualsAstReparsed()` 
 - Behavioral execution contract: invokes `AssertAstOrigEqualsAstReparsed()` on `NativeSigilAndLifetimeLexer` with atomic precondition verification.
 - State transition management: `LexicalScanning -> RecursiveDescentParsing` (trigger `zeroDriftTokenStream`).
 - Formal constraints and requirements enforced: `REQ-0603 (REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint)`.
+- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/deap-core/src/sysml_cst/` and `crates/compile-sysml/src/roundtrip/`) while retiring legacy hand-rolled recursive-descent parser monoliths (`-2,400+` SLOC).
 
 ### Layer 3: Presentation & Actuator Interface Binding
 - Component interface endpoints: binds `NativeSigilAndLifetimeLexer` command ingress and completion notification egress channels.

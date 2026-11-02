@@ -26,6 +26,7 @@ As a `Operator_Or_CI_Runner`, I want to invoke `SynthesizeMilStd881eTreeAnd()` o
 - Behavioral execution contract: invokes `SynthesizeMilStd881eTreeAnd()` on `BidirectionalBacklogReconciler` with atomic precondition verification.
 - State transition management: `AstLoaded -> ForwardProjected` (trigger `forwardSyncSpecs`).
 - Formal constraints and requirements enforced: `REQ-0604 (REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint)`.
+- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/compile-sysml/src/forward_sync/`, `crates/compile-sysml/src/icd_wbs/`, `crates/reconcile-backlog/src/table_cst/`) while retiring monolithic markdown/table string emitters (`-1,100+` SLOC).
 
 ### Layer 3: Presentation & Actuator Interface Binding
 - Component port bindings on `BidirectionalBacklogReconciler`: `specDocsInOutPort: String (inout)`, `subpackageSyncOutPort: String (out)`.

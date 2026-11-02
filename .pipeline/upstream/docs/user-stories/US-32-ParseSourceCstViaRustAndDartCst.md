@@ -1,0 +1,66 @@
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #721 |
+| **Title** | User Story 32: Parse Source Cst Via Rust And Dart Cst |
+| **Type** | user-story |
+| **Parent Epic** | [EPIC-05-BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint](../epics/EPIC-05-BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint.md) |
+| **SysML Interaction** | `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction` |
+| **SysML Test Case** | `Test_ScanSourceLinesViaRustDartLexStateAnd` |
+| **Generation Mode** | subagent |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
+
+# User Story 32: Parse Source Cst Via Rust And Dart Cst
+
+## User Story
+
+As a `Compiler_CLI_CI_Pipeline`, I want to invoke `ParseSourceCstViaRustAndDartCst()` on `ScopedSchemaContextResolver`, so that Parse source CST via deap_core::rust_cst and deap_core::dart_cst.
+
+## Architectural Realization (3-Layer Definition of Done)
+
+### Layer 1: Domain State & Data Model
+- Domain state attributes on `ScopedSchemaContextResolver`: `quantity: Integer`, `type: String`.
+- Action `ParseSourceCstViaRustAndDartCst` invocation message envelope bound to `ScopedSchemaContextResolver` typed domain schema.
+- Declared lifecycle state model: `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState`, `Check36AstCompletenessVerifier_State`, `ScopedSchemaContextResolver_State`, `SevenSectionDocstringGenerator_State`.
+
+### Layer 2: Logic & State Management
+- Behavioral execution contract: invokes `ParseSourceCstViaRustAndDartCst()` on `ScopedSchemaContextResolver` with atomic precondition verification.
+- State transition management: `ScopedSchemaContextResolver_State -> SevenSectionDocstringGenerator_State` (trigger `ParseSourceCstViaRustAndDartCst`).
+- Formal constraints and requirements enforced: `REQ-0605 (REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint)`.
+- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/compile-sysml/src/safety_docstrings/`, `crates/deap-core/src/rust_cst/`, `crates/deap-core/src/dart_cst/`) while retiring legacy line-oriented docblock injectors (`-800+` SLOC).
+
+### Layer 3: Presentation & Actuator Interface Binding
+- Component interface endpoints: binds `ScopedSchemaContextResolver` command ingress and completion notification egress channels.
+- Interaction binding (`BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction`): routes `ParseSourceCstViaRustAndDartCst` invocation from `Compiler_CLI_CI_Pipeline` to `ScopedSchemaContextResolver` and returns `ParseSourceCstViaRustAndDartCst`.
+- Diagnostic fault surface: reports deterministic rejection diagnostics to `Compiler_CLI_CI_Pipeline` across the declared interface boundary when guard or invariant checks fail.
+
+## UML Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Compiler_CLI_CI_Pipeline
+    participant Check36AstCompletenessVerifier
+    participant ScopedSchemaContextResolver
+    Compiler_CLI_CI_Pipeline->>Check36AstCompletenessVerifier: ParseSourceCstViaRustAndDartCst()
+    Check36AstCompletenessVerifier->>ScopedSchemaContextResolver: ParseSourceCstViaRustAndDartCst()
+    ScopedSchemaContextResolver-->>Check36AstCompletenessVerifier: ParseSourceCstViaRustAndDartCst
+    Check36AstCompletenessVerifier-->>Compiler_CLI_CI_Pipeline: StatusReport
+```
+
+## Acceptance Criteria (BDD)
+- [ ] AC-US-32-01: Given `ScopedSchemaContextResolver` is in declared state `ScopedSchemaContextResolver_State` with domain state attributes (`quantity: Integer`, `type: String`), When `Compiler_CLI_CI_Pipeline` invokes `ParseSourceCstViaRustAndDartCst` on `ScopedSchemaContextResolver`, Then `ScopedSchemaContextResolver` validates and binds the request against `ScopedSchemaContextResolver` domain state (`quantity: Integer`, `type: String`) and transitions to `SevenSectionDocstringGenerator_State`.
+- [ ] AC-US-32-02: Given `ScopedSchemaContextResolver` active state management during `ParseSourceCstViaRustAndDartCst`, When `ScopedSchemaContextResolver` evaluates formal constraint `Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lexical_scanning_schema_context_resolution_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds`, Then `ScopedSchemaContextResolver` verifies constraint satisfaction before committing state updates.
+- [ ] AC-US-32-03: Given `ScopedSchemaContextResolver` requirement allocation for `ParseSourceCstViaRustAndDartCst`, When `ScopedSchemaContextResolver` verifies formal requirement `REQ-0605 (REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint)`, Then `ScopedSchemaContextResolver` confirms normative requirement satisfaction across execution.
+- [ ] AC-US-32-04: Given `ScopedSchemaContextResolver` interface binding for `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction`, When `ScopedSchemaContextResolver` completes `ParseSourceCstViaRustAndDartCst`, Then `ScopedSchemaContextResolver` delivers `ParseSourceCstViaRustAndDartCst` to `Compiler_CLI_CI_Pipeline`.
+- [ ] AC-US-32-05: Given violated formal constraint `Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lexical_scanning_schema_context_resolution_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds`, When `Compiler_CLI_CI_Pipeline` invokes `ParseSourceCstViaRustAndDartCst` on `ScopedSchemaContextResolver`, Then `ScopedSchemaContextResolver` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic fault diagnostic across the interface binding.
+
+## Required Features
+- [ ] #678 - [Feature 21: [BP 05 Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint] Check36AstCompletenessVerifier](../features/FEAT-21-Check36AstCompletenessVerifier.md)
+- [ ] #676 - [Feature 22: [BP 05 Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint] ScopedSchemaContextResolver](../features/FEAT-22-ScopedSchemaContextResolver.md)
+
+## Source References
+Operational concept definitions and system sequence interaction models:
+- System Architecture Model: `schema/model.sysml`
+- Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
+
+Authoritative user story flows and interaction lifelines derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 29148.

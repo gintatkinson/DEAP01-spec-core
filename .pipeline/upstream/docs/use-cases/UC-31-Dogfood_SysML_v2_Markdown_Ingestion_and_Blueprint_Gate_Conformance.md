@@ -35,14 +35,19 @@ graph TD
 - ./target/release/verify-baseline check-blueprint docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md --dry-run is executed.
 
 ## 4. Main Success Scenario
-1. ./target/release/verify-baseline check-blueprint docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md --dry-run is executed.
-2. All 12 blueprint verification gates pass, DeterministicStaticDefectAuditor and its component metamodel are lowered into docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.sysml and .digest.json with bijective roundtrip parity, and the command exits with code 0.
+1. `Operator_Or_CI_Pipeline` executes `./target/release/verify-baseline check-blueprint docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.md --dry-run` using `pulldown-cmark` to parse the 8-part blueprint AST.
+2. `ClosedLoopDefectPublisherGate` validates all 12 mechanical blueprint verification gates for `REQ-0606`, including KaTeX invariants (`Invariant_REQ_0606_SC_01`, `Invariant_REQ_0606_SC_02`), Mermaid state and sequence diagrams, and 5-column STPA/FMECA tables.
+3. `Operator_Or_CI_Pipeline` invokes `ingest-sysml` using `logos` and `rowan` to lower `DeterministicStaticDefectAuditor`, `ClosedLoopDefectPublisherGate`, `DeterministicDossierSynthesizer`, `FivePillarStaticAstAnalyzer`, and `MermaidUmlDiagramGenerator` into canonical SysML v2.
+4. `ingest-sysml` emits `docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.sysml` and `.digest.json` and verifies bijective roundtrip parity (`roundtrip_ast_mismatch_count == 0`).
+5. `ClosedLoopDefectPublisherGate` confirms 100% schema conformance with `schema/model.sysml` and exits with code 0.
 
 ## 5. Alternate and Exception Flows
-- Precondition guard failure in `ClosedLoopDefectPublisherGate`:
-  - `ClosedLoopDefectPublisherGate` rejects the `Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance` request without partial state mutation and reports diagnostic status to `Operator_Or_CI_Pipeline`.
-- Invariant violation while enforcing `Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance`:
-  - `ClosedLoopDefectPublisherGate` aborts `Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance` execution, preserves prior verified state, and notifies `Operator_Or_CI_Pipeline`.
+- 3a. Blueprint Markdown fails any of the 12 mechanical verification gates in `check-blueprint`:
+  - `verify-baseline` returns `Result::Err`, emits an `ariadne` / `miette` structural diagnostic, and terminates fail-closed with exit code 1.
+- 4a. Bijective SysML v2 roundtrip mismatch or unresolved port/part reference during `ingest-sysml`:
+  - `ingest-sysml` aborts emission via `Result<T, E>`, preserves prior verified `.sysml` and `.digest.json` state, and exits fail-closed with code 1.
+- 5a. Invariant violation under `Invariant_REQ_0606_SC_01` or `Invariant_REQ_0606_SC_02`:
+  - `ClosedLoopDefectPublisherGate` aborts execution without partial state mutation, preserves prior verified state, and returns fail-closed status code 1 to `Operator_Or_CI_Pipeline`.
 
 ## 6. Postconditions
 - All 12 blueprint verification gates pass, DeterministicStaticDefectAuditor and its component metamodel are lowered into docs/designs/blueprint-06-deterministic-static-defect-dossier-auditor.sysml and .digest.json with bijective roundtrip parity, and the command exits with code 0.

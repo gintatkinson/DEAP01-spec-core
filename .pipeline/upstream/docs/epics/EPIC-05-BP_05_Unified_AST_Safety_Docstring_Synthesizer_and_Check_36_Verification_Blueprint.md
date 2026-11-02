@@ -17,7 +17,7 @@ Subsystem package for BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_3
 - [ ] #678 - [Feature 21: [BP 05 Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint] Check36AstCompletenessVerifier](../features/FEAT-21-Check36AstCompletenessVerifier.md)
 - [ ] #676 - [Feature 22: [BP 05 Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint] ScopedSchemaContextResolver](../features/FEAT-22-ScopedSchemaContextResolver.md)
 - [ ] #677 - [Feature 23: [BP 05 Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint] SevenSectionDocstringGenerator](../features/FEAT-23-SevenSectionDocstringGenerator.md)
-- [ ] #675 - [Feature 24: [BP 05 Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint] UnifiedRustDartLexicalScanner](../features/FEAT-24-UnifiedRustDartLexicalScanner.md)
+- [ ] #675 - [Feature 24: [BP 05 Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint] UnifiedRustDartCstParser](../features/FEAT-24-UnifiedRustDartCstParser.md)
 - [ ] #679 - [Feature 25: [BP 05 Unified AST Safety Docstring Synthesizer and Check 36 Verification Blueprint] UnifiedSafetyDocstringSynthesizer](../features/FEAT-25-UnifiedSafetyDocstringSynthesizer.md)
 
 ### Associated Use Cases & User Stories
@@ -31,17 +31,17 @@ Subsystem package for BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_3
 
 #### Associated User Stories
 - [ ] #720 - [User Story 31: Run Compile Sysml Inject Safety Docstrings](../user-stories/US-31-RunCompileSysmlInjectSafetyDocstrings.md)
-- [ ] #721 - [User Story 32: Scan Source Lines Via Rust Dart Lex State And](../user-stories/US-32-ScanSourceLinesViaRustDartLexStateAnd.md)
+- [ ] #721 - [User Story 32: Parse Source Cst Via Rust And Dart Cst](../user-stories/US-32-ParseSourceCstViaRustAndDartCst.md)
 - [ ] #722 - [User Story 33: Resolve Schema Context Via Collect All](../user-stories/US-33-ResolveSchemaContextViaCollectAll.md)
 - [ ] #723 - [User Story 34: Run Verify Baseline No Domain](../user-stories/US-34-RunVerifyBaselineNoDomain.md)
 - [ ] #724 - [User Story 35: Tokenize Rs And Dart Files Using](../user-stories/US-35-TokenizeRsAndDartFilesUsing.md)
 - [ ] #725 - [User Story 36: Run Ingest Sysml Schema Blueprint05](../user-stories/US-36-RunIngestSysmlSchemaBlueprint05.md)
 
 ## 3. Architecture
-Classifiers: `Check36AstCompletenessVerifier`; `ScopedSchemaContextResolver`; `SevenSectionDocstringGenerator`; `UnifiedRustDartLexicalScanner`; `UnifiedSafetyDocstringSynthesizer`.
+Classifiers: `Check36AstCompletenessVerifier`; `ScopedSchemaContextResolver`; `SevenSectionDocstringGenerator`; `UnifiedRustDartCstParser`; `UnifiedSafetyDocstringSynthesizer`.
 
 ## 4. Operational Considerations
-Lifecycle state machines: `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState` (Initial -> Check36AstCompletenessVerifier_State; Check36AstCompletenessVerifier_State -> ScopedSchemaContextResolver_State on RunCompileSysmlInjectSafetyDocstrings; ScopedSchemaContextResolver_State -> SevenSectionDocstringGenerator_State on ScanSourceLinesViaRustDartLexStateAnd; SevenSectionDocstringGenerator_State -> Terminal). Operational actions: `RunCompileSysmlInjectSafetyDocstrings`, `ScanSourceLinesViaRustDartLexStateAnd`, `ResolveSchemaContextViaCollectAll`, `RunVerifyBaselineNoDomain`, `TokenizeRsAndDartFilesUsing`, `RunIngestSysmlSchemaBlueprint05`. Interaction sequences: `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction`.
+Lifecycle state machines: `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState` (Initial -> Check36AstCompletenessVerifier_State; Check36AstCompletenessVerifier_State -> ScopedSchemaContextResolver_State on RunCompileSysmlInjectSafetyDocstrings; ScopedSchemaContextResolver_State -> SevenSectionDocstringGenerator_State on ParseSourceCstViaRustAndDartCst; SevenSectionDocstringGenerator_State -> Terminal). Operational actions: `RunCompileSysmlInjectSafetyDocstrings`, `ParseSourceCstViaRustAndDartCst`, `ResolveSchemaContextViaCollectAll`, `RunVerifyBaselineNoDomain`, `TokenizeRsAndDartFilesUsing`, `RunIngestSysmlSchemaBlueprint05`. Interaction sequences: `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction`.
 
 ## 5. Security & Governance
 Allocated requirements: `REQ-0605 (REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint)`. Enforced invariant constraints: `Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lexical_scanning_schema_context_resolution_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds`.
@@ -68,14 +68,14 @@ classDiagram
         +Integer quantity
         +String type
     }
-    class UnifiedRustDartLexicalScanner {
+    class UnifiedRustDartCstParser {
         +Integer quantity
         +String type
     }
     class UnifiedSafetyDocstringSynthesizer
     Check36AstCompletenessVerifier --> ScopedSchemaContextResolver : coordinates
     Check36AstCompletenessVerifier --> SevenSectionDocstringGenerator : coordinates
-    Check36AstCompletenessVerifier --> UnifiedRustDartLexicalScanner : coordinates
+    Check36AstCompletenessVerifier --> UnifiedRustDartCstParser : coordinates
     Check36AstCompletenessVerifier --> UnifiedSafetyDocstringSynthesizer : coordinates
 ```
 
@@ -85,6 +85,6 @@ classDiagram
 stateDiagram-v2
     [*] --> Check36AstCompletenessVerifier_State
     Check36AstCompletenessVerifier_State --> ScopedSchemaContextResolver_State : RunCompileSysmlInjectSafetyDocstrings
-    ScopedSchemaContextResolver_State --> SevenSectionDocstringGenerator_State : ScanSourceLinesViaRustDartLexStateAnd
+    ScopedSchemaContextResolver_State --> SevenSectionDocstringGenerator_State : ParseSourceCstViaRustAndDartCst
     SevenSectionDocstringGenerator_State --> [*]
 ```

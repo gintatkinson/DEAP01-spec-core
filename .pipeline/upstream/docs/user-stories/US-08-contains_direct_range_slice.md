@@ -26,9 +26,10 @@ As a `VerifyBaselineCLI`, I want to invoke `contains_direct_range_slice()` on `C
 - Behavioral execution contract: invokes `contains_direct_range_slice()` on `Check34AstPurityAndAntiGamingGate` with atomic precondition verification.
 - State transition management: `AntiGamingTestBodyAuditor_State -> Check34AstPurityAndAntiGamingGate_State` (trigger `check_compiler_ast_purity`).
 - Formal constraints and requirements enforced: `REQ-0602 (REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint)`.
+- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/verify-baseline/src/ast_purity/` and `crates/deap-core/src/rust_cst/`) while retiring ad-hoc string/slice checks and ratcheting Check 34 violation ceilings to zero.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-- Component port bindings on `Check34AstPurityAndAntiGamingGate`: `WorkspaceSourceAstPort: String (in)`, `TestFunctionAstStreamPort: String (in)`, `PurityViolationDiagnosticPort: String (out)`, `Check34GateStatusPort: Integer (out)`.
+- Component port bindings on `Check34AstPurityAndAntiGamingGate`: `WorkspaceRustCstPort: String (in)`, `TestFunctionAstStreamPort: String (in)`, `PurityViolationDiagnosticPort: String (out)`, `Check34GateStatusPort: Integer (out)`.
 - Interaction binding (`BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint_SequenceInteraction`): routes `contains_direct_range_slice` invocation from `VerifyBaselineCLI` to `Check34AstPurityAndAntiGamingGate` and returns `mask_literals_and_comments`.
 - Diagnostic fault surface: reports deterministic rejection diagnostics to `VerifyBaselineCLI` across the declared interface boundary when guard or invariant checks fail.
 
@@ -51,7 +52,7 @@ sequenceDiagram
 - [ ] AC-US-08-02: Given `Check34AstPurityAndAntiGamingGate` active state management during `contains_direct_range_slice`, When `Check34AstPurityAndAntiGamingGate` evaluates formal constraint `Invariant_REQ_0602_SC_01`, Then `Check34AstPurityAndAntiGamingGate` verifies constraint satisfaction before committing state updates.
 - [ ] AC-US-08-03: Given `Check34AstPurityAndAntiGamingGate` active state management during `contains_direct_range_slice`, When `Check34AstPurityAndAntiGamingGate` evaluates formal constraint `Invariant_REQ_0602_SC_02`, Then `Check34AstPurityAndAntiGamingGate` verifies constraint satisfaction before committing state updates.
 - [ ] AC-US-08-04: Given `Check34AstPurityAndAntiGamingGate` requirement allocation for `contains_direct_range_slice`, When `Check34AstPurityAndAntiGamingGate` verifies formal requirement `REQ-0602 (REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint)`, Then `Check34AstPurityAndAntiGamingGate` confirms normative requirement satisfaction across execution.
-- [ ] AC-US-08-05: Given `Check34AstPurityAndAntiGamingGate` ingress port binding (`WorkspaceSourceAstPort: String`, `TestFunctionAstStreamPort: String`), When `Check34AstPurityAndAntiGamingGate` completes `contains_direct_range_slice`, Then `Check34AstPurityAndAntiGamingGate` delivers `mask_literals_and_comments` across egress port (`PurityViolationDiagnosticPort: String`, `Check34GateStatusPort: Integer`) to `VerifyBaselineCLI`.
+- [ ] AC-US-08-05: Given `Check34AstPurityAndAntiGamingGate` ingress port binding (`WorkspaceRustCstPort: String`, `TestFunctionAstStreamPort: String`), When `Check34AstPurityAndAntiGamingGate` completes `contains_direct_range_slice`, Then `Check34AstPurityAndAntiGamingGate` delivers `mask_literals_and_comments` across egress port (`PurityViolationDiagnosticPort: String`, `Check34GateStatusPort: Integer`) to `VerifyBaselineCLI`.
 - [ ] AC-US-08-06: Given violated formal constraint `Invariant_REQ_0602_SC_01`, When `VerifyBaselineCLI` invokes `contains_direct_range_slice` on `Check34AstPurityAndAntiGamingGate`, Then `Check34AstPurityAndAntiGamingGate` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic fault diagnostic across the interface binding.
 
 ## Required Features

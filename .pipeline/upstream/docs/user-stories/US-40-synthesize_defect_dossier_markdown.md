@@ -20,16 +20,17 @@ As a `Operator_Or_CI_Pipeline`, I want to invoke `synthesize_defect_dossier_mark
 ### Layer 1: Domain State & Data Model
 - Domain state attributes on `DeterministicDossierSynthesizer`: `mandatorySectionCount: Integer`, `whysChainDepth: Integer`.
 - Action `synthesize_defect_dossier_markdown` invocation message envelope bound to `DeterministicDossierSynthesizer` typed domain schema.
-- Declared lifecycle state model: `BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_LifecycleState`, `Idle`, `IngestingSourceAst`, `EvaluatingFivePillars`, `SynthesizingDossier`, `Verified`, `Validating12Gates`, `Rejected`, `DeduplicatingSsot`, `PublishingClosedLoop`.
+- Declared lifecycle state model: `BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_LifecycleState`, `Idle`, `IngestingRustAndDartCst`, `EvaluatingFivePillars`, `SynthesizingDossier`, `Verified`, `Validating12Gates`, `Rejected`, `DeduplicatingSsot`, `PublishingClosedLoop`.
 
 ### Layer 2: Logic & State Management
 - Behavioral execution contract: invokes `synthesize_defect_dossier_markdown()` on `DeterministicDossierSynthesizer` with atomic precondition verification.
 - State transition management: `SynthesizingDossier -> Validating12Gates` (trigger `synthesize_defect_dossier_markdown`).
 - Formal constraints and requirements enforced: `REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`.
+- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/verify-baseline/src/defect_auditor/` and `crates/verify-baseline/src/defect_dossier/`) while retiring ad-hoc regex/substring defect detectors and reducing Check 34 ratchet ceilings.
 
 ### Layer 3: Presentation & Actuator Interface Binding
 - Component port bindings on `DeterministicDossierSynthesizer`: `findingInPort: String (in)`, `dossierMarkdownOutPort: String (out)`.
-- Interaction binding (`BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_SequenceInteraction`): routes `synthesize_defect_dossier_markdown` invocation from `Operator_Or_CI_Pipeline` to `DeterministicDossierSynthesizer` and returns `ParseRustSourceAstAndParse`.
+- Interaction binding (`BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_SequenceInteraction`): routes `synthesize_defect_dossier_markdown` invocation from `Operator_Or_CI_Pipeline` to `DeterministicDossierSynthesizer` and returns `ParseRustCstAndParseDartCst`.
 - Diagnostic fault surface: reports deterministic rejection diagnostics to `Operator_Or_CI_Pipeline` across the declared interface boundary when guard or invariant checks fail.
 
 ## UML Sequence Diagram
@@ -42,7 +43,7 @@ sequenceDiagram
     participant DeterministicDossierSynthesizer
     Operator_Or_CI_Pipeline->>ClosedLoopDefectPublisherGate: synthesize_defect_dossier_markdown()
     ClosedLoopDefectPublisherGate->>DeterministicDossierSynthesizer: synthesize_defect_dossier_markdown()
-    DeterministicDossierSynthesizer-->>ClosedLoopDefectPublisherGate: ParseRustSourceAstAndParse
+    DeterministicDossierSynthesizer-->>ClosedLoopDefectPublisherGate: ParseRustCstAndParseDartCst
     ClosedLoopDefectPublisherGate-->>Operator_Or_CI_Pipeline: StatusReport
 ```
 
@@ -51,7 +52,7 @@ sequenceDiagram
 - [ ] AC-US-40-02: Given `DeterministicDossierSynthesizer` active state management during `synthesize_defect_dossier_markdown`, When `DeterministicDossierSynthesizer` evaluates formal constraint `Invariant_REQ_0606_SC_01`, Then `DeterministicDossierSynthesizer` verifies constraint satisfaction before committing state updates.
 - [ ] AC-US-40-03: Given `DeterministicDossierSynthesizer` active state management during `synthesize_defect_dossier_markdown`, When `DeterministicDossierSynthesizer` evaluates formal constraint `Invariant_REQ_0606_SC_02`, Then `DeterministicDossierSynthesizer` verifies constraint satisfaction before committing state updates.
 - [ ] AC-US-40-04: Given `DeterministicDossierSynthesizer` requirement allocation for `synthesize_defect_dossier_markdown`, When `DeterministicDossierSynthesizer` verifies formal requirement `REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`, Then `DeterministicDossierSynthesizer` confirms normative requirement satisfaction across execution.
-- [ ] AC-US-40-05: Given `DeterministicDossierSynthesizer` ingress port binding (`findingInPort: String`), When `DeterministicDossierSynthesizer` completes `synthesize_defect_dossier_markdown`, Then `DeterministicDossierSynthesizer` delivers `ParseRustSourceAstAndParse` across egress port (`dossierMarkdownOutPort: String`) to `Operator_Or_CI_Pipeline`.
+- [ ] AC-US-40-05: Given `DeterministicDossierSynthesizer` ingress port binding (`findingInPort: String`), When `DeterministicDossierSynthesizer` completes `synthesize_defect_dossier_markdown`, Then `DeterministicDossierSynthesizer` delivers `ParseRustCstAndParseDartCst` across egress port (`dossierMarkdownOutPort: String`) to `Operator_Or_CI_Pipeline`.
 - [ ] AC-US-40-06: Given violated formal constraint `Invariant_REQ_0606_SC_01`, When `Operator_Or_CI_Pipeline` invokes `synthesize_defect_dossier_markdown` on `DeterministicDossierSynthesizer`, Then `DeterministicDossierSynthesizer` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic fault diagnostic across the interface binding.
 
 ## Required Features

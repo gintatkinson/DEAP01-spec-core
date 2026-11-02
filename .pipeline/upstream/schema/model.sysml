@@ -2,6 +2,10 @@ doc /* Consolidated System Architecture */
 
 doc /* Subsystem package for BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint */
 package BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint {
+    port def BP_01_ForbidLintPortDef {
+        flow in manifest_in : String;
+        flow out verdict_out : Boolean;
+    }
     doc /* Execute cargo clippy --workspace --all-targets */
     action def ExecuteCargoClippyWorkspaceAllTargets;
     doc /* Read [workspace.lints.clippy] forbid table */
@@ -59,6 +63,9 @@ package BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Archit
         transition ViolationRecorded_to_ScanningSource_on_continueLinearScan first ViolationRecorded accept continueLinearScan then ScanningSource;
         transition ScanningSource_to_Terminal_on_endOfStream first ScanningSource accept endOfStream then Terminal;
     }
+    connection def BP_01_ManifestToForbidGateConnection {
+        connect WorkspaceManifestForbidGate.status_out to CompilerLintEnforcementGate.CargoManifestInputPort;
+    }
     doc /* - **Given**: [workspace.lints.clippy] in root Cargo.toml configures unwrap_used = \"forbid\", expect_used = \"forbid\", panic = \"forbid\", indexing_slicing = \"forbid\", disallowed_types = \"forbid\", and type_complexity = \"forbid\". - **When**: Any production or test module in crates/ introduces #![allow(clippy::unwrap_used)] or #[allow(clippy::indexing_slicing)]. - **Then**: cargo check --workspace --all-targets and cargo clippy --workspace --all-targets fail closed with non-zero exit status and emit error[E0453]: allow(clippy::...) overruled by outer forbid(clippy::...). */
     use case def UC_AC_01_Rustc_E0453_Hard_Rejection_of_Inner_and_Outer_Clippy_Allow_Attributes {
         subject CompilerLintEnforcementGate;
@@ -84,6 +91,27 @@ package BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Archit
         subject CompilerLintEnforcementGate;
         objective "Dogfood Ingestion and SysML v2 Compilation of REQ 0601";
     }
+    test case def TC_REQ_0601_Forbid_Lint_Gate {
+        verify requirement REQ_0601;
+    }
+    test case def TC_REQ_0601_Blueprint_Conformance {
+        verify requirement REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint;
+    }
+    test case def Test_ExecuteCargoClippyWorkspaceAllTargets {
+        verify requirement REQ_0601;
+    }
+    test case def Test_ReadWorkspaceLintsClippyForbidTable {
+        verify requirement REQ_0601;
+    }
+    test case def Test_ExecuteVerifyBaselineNoDomain {
+        verify requirement REQ_0601;
+    }
+    test case def Test_RunScanClippyAllowTokensOn {
+        verify requirement REQ_0601;
+    }
+    test case def Test_ExecuteIngestSysmlSchemaBlueprint01 {
+        verify requirement REQ_0601;
+    }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_SequenceInteraction {
         lifeline Eng : Compiler_Engineer_CI;
@@ -101,8 +129,8 @@ package BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Archit
         message ExecuteIngestSysmlSchemaBlueprint01 from Eng to Ingest;
         message reply_EmitCanonicalSysMLV2AstAnd from Ingest to Eng;
     }
+    doc /* Configures `clippy::unwrap_used = "forbid"` across the workspace [unit: flag] */
     part def CompilerLintEnforcementGate {
-        doc /* Configures `clippy::unwrap_used = "forbid"` across the workspace [unit: flag] */
         attribute forbid_unwrap_used : Boolean = true;
         doc /* Configures `clippy::expect_used = "forbid"` across the workspace [unit: flag] */
         attribute forbid_expect_used : Boolean = true;
@@ -169,23 +197,14 @@ package BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Archit
         port in cmd_in : String;
         port out status_out : String;
     }
-    port def BP_01_ForbidLintPortDef {
-        flow in manifest_in : String;
-        flow out verdict_out : Boolean;
-    }
-    connection def BP_01_ManifestToForbidGateConnection {
-        connect WorkspaceManifestForbidGate.status_out to CompilerLintEnforcementGate.CargoManifestInputPort;
-    }
-    test case def TC_REQ_0601_Forbid_Lint_Gate {
-        verify requirement REQ_0601;
-    }
-    test case def TC_REQ_0601_Blueprint_Conformance {
-        verify requirement REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint;
-    }
 }
 
 doc /* Subsystem package for BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint */
 package BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint {
+    port def BP_02_PurityDiagnosticPortDef {
+        flow in cst_stream_in : String;
+        flow out purity_status_out : Integer;
+    }
     doc /* check_compiler_ast_purity(repo_root) */
     action def check_compiler_ast_purity;
     doc /* mask_literals_and_comments(source) */
@@ -235,6 +254,9 @@ package BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Bluep
         transition Check34AstPurityAndAntiGamingGate_State_to_FailClosedIoAstVerifier_State_on_mask_literals_and_comments first Check34AstPurityAndAntiGamingGate_State accept mask_literals_and_comments then FailClosedIoAstVerifier_State;
         transition FailClosedIoAstVerifier_State_to_Terminal first FailClosedIoAstVerifier_State then Terminal;
     }
+    connection def BP_02_AuditorToPurityGateConnection {
+        connect AntiGamingTestBodyAuditor.audit_ast_out to Check34AstPurityAndAntiGamingGate.TestFunctionAstStreamPort;
+    }
     doc /* - **Given**: Any audited Rust source file in crates/ containing a direct range-slice indexing expression (&s[a..b], &rest[..idx], &buf[start..], or &items[..=end]) outside string literals and comments. - **When**: ./target/release/verify-baseline . --no-domain executes Check 34 (C-PURITY-01). - **Then**: contains_direct_range_slice detects the bracketed .. operator regardless of variable name, emits a file-and-line diagnostic instructing the caller to use .get(..), and exits fail-closed with code 1. */
     use case def UC_AC_01_General_Direct_Range_Slice_Indexing_Rejection {
         subject AntiGamingTestBodyAuditor;
@@ -260,6 +282,30 @@ package BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Bluep
         subject AntiGamingTestBodyAuditor;
         objective "Deterministic Dogfood Ingestion into Canonical SysML v2";
     }
+    test case def TC_REQ_0602_Check34_Purity_Gate {
+        verify requirement REQ_0602;
+    }
+    test case def TC_REQ_0602_Blueprint_Conformance {
+        verify requirement REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint;
+    }
+    test case def Test_check_compiler_ast_purity {
+        verify requirement REQ_0602;
+    }
+    test case def Test_mask_literals_and_comments {
+        verify requirement REQ_0602;
+    }
+    test case def Test_contains_direct_range_slice {
+        verify requirement REQ_0602;
+    }
+    test case def Test_audit_fail_closed_io_patterns {
+        verify requirement REQ_0602;
+    }
+    test case def Test_audit_test_integrity_and_anti_gaming {
+        verify requirement REQ_0602;
+    }
+    test case def Test_audit_ssot_symbol_deduplication {
+        verify requirement REQ_0602;
+    }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint_SequenceInteraction {
         lifeline Runner : VerifyBaselineCLI;
@@ -284,8 +330,8 @@ package BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Bluep
         attribute type : String = "Subcomponent";
         port out audit_ast_out : String;
     }
+    doc /* Total detected panicking direct range-slice indexing expressions (`expr[a..b]`) across audited workspace modules [unit: count] */
     part def Check34AstPurityAndAntiGamingGate {
-        doc /* Total detected panicking direct range-slice indexing expressions (`expr[a..b]`) across audited workspace modules [unit: count] */
         attribute direct_range_slice_count : Integer = 0;
         doc /* Total detected fail-open filesystem or directory traversal error-swallowing call sites across workspace crates [unit: count] */
         attribute fail_open_io_site_count : Integer = 0;
@@ -335,23 +381,14 @@ package BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Bluep
         attribute quantity : Integer = 1;
         attribute type : String = "Subcomponent";
     }
-    port def BP_02_PurityDiagnosticPortDef {
-        flow in cst_stream_in : String;
-        flow out purity_status_out : Integer;
-    }
-    connection def BP_02_AuditorToPurityGateConnection {
-        connect AntiGamingTestBodyAuditor.audit_ast_out to Check34AstPurityAndAntiGamingGate.TestFunctionAstStreamPort;
-    }
-    test case def TC_REQ_0602_Check34_Purity_Gate {
-        verify requirement REQ_0602;
-    }
-    test case def TC_REQ_0602_Blueprint_Conformance {
-        verify requirement REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint;
-    }
 }
 
 doc /* Subsystem package for BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint */
 package BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint {
+    port def BP_03_BijectiveRoundtripPortDef {
+        flow in raw_sysml_in : String;
+        flow out canonical_sysml_out : String;
+    }
     doc /* scan_all(raw_sysml_source) */
     action def scan_all;
     doc /* parse_package_or_file(tokens) */
@@ -416,6 +453,9 @@ package BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blue
         transition RejectedE0400_to_Terminal first RejectedE0400 then Terminal;
         transition VerifiedBijectiveAst_to_Terminal first VerifiedBijectiveAst then Terminal;
     }
+    connection def BP_03_SerializerToRoundtripGateConnection {
+        connect BijectiveSysmlSerializer.serialized_sysml_out to SysmlBijectiveRoundtripCompilerGate.RawSysmlSourceInputPort;
+    }
     doc /* - **Given**: A SysML v2 model containing reference type sigils (&), optionality sigils (?), lifetime annotations ('a), qualified paths (::), and logical && expressions (#495). - **When**: logos_lexer::scan_all tokenizes the raw source buffer without invoking normalize_type_sigils. - **Then**: The lexer emits TokenKind::Ampersand, TokenKind::Question, TokenKind::Lifetime, TokenKind::DoubleColon, and TokenKind::AmpAmp with exact 1:1 byte and column offsets (span_offset_drift_bytes == 0). */
     use case def UC_AC_01_Native_Lexer_Sigil_and_Lifetime_Tokenization {
         subject BijectiveSysmlSerializer;
@@ -440,6 +480,30 @@ package BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blue
     use case def UC_AC_05_Dogfood_Markdown_to_SysML_Ingestion_and_Baseline_Verification {
         subject BijectiveSysmlSerializer;
         objective "Dogfood Markdown to SysML Ingestion and Baseline Verification";
+    }
+    test case def TC_REQ_0603_Bijective_Roundtrip_Gate {
+        verify requirement REQ_0603;
+    }
+    test case def TC_REQ_0603_Blueprint_Conformance {
+        verify requirement REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint;
+    }
+    test case def Test_scan_all {
+        verify requirement REQ_0603;
+    }
+    test case def Test_parse_package_or_file {
+        verify requirement REQ_0603;
+    }
+    test case def Test_ParseTypeExprAndParseTransition {
+        verify requirement REQ_0603;
+    }
+    test case def Test_verify_bijective_ast_roundtrip {
+        verify requirement REQ_0603;
+    }
+    test case def Test_ast_orig_to_sysml {
+        verify requirement REQ_0603;
+    }
+    test case def Test_AssertAstOrigEqualsAstReparsed {
+        verify requirement REQ_0603;
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_SequenceInteraction {
@@ -484,8 +548,8 @@ package BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blue
         attribute quantity : Integer = 1;
         attribute type : String = "Subcomponent";
     }
+    doc /* Cumulative byte-offset drift between raw source character positions and emitted token spans [unit: bytes] */
     part def SysmlBijectiveRoundtripCompilerGate {
-        doc /* Cumulative byte-offset drift between raw source character positions and emitted token spans [unit: bytes] */
         attribute span_offset_drift_bytes : Integer = 0;
         doc /* Count of `skip_until_semi_or_brace` silent erasure fallback branches in inner block parsers [unit: branches] */
         attribute silent_skip_branch_count : Integer = 0;
@@ -516,23 +580,14 @@ package BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blue
             flow out BijectiveDiffDiagnosticPort_flow : String;
         }
     }
-    port def BP_03_BijectiveRoundtripPortDef {
-        flow in raw_sysml_in : String;
-        flow out canonical_sysml_out : String;
-    }
-    connection def BP_03_SerializerToRoundtripGateConnection {
-        connect BijectiveSysmlSerializer.serialized_sysml_out to SysmlBijectiveRoundtripCompilerGate.RawSysmlSourceInputPort;
-    }
-    test case def TC_REQ_0603_Bijective_Roundtrip_Gate {
-        verify requirement REQ_0603;
-    }
-    test case def TC_REQ_0603_Blueprint_Conformance {
-        verify requirement REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint;
-    }
 }
 
 doc /* Subsystem package for BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint */
 package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint {
+    port def BP_04_ForwardProjectionPortDef {
+        flow in sysml_ast_in : String;
+        flow out markdown_spec_out : String;
+    }
     doc /* compile-sysml --forward-sync docs */
     action def CompileSysmlForwardSyncDocs;
     doc /* Resolve Parent Epic by pkg_name == ConOps */
@@ -607,6 +662,9 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
         transition Rejected_to_Terminal first Rejected then Terminal;
         transition VerifiedRoundtrip_to_Terminal first VerifiedRoundtrip then Terminal;
     }
+    connection def BP_04_ReconcilerToForwardCompilerConnection {
+        connect BidirectionalBacklogReconciler.subpackageSyncOutPort to DeterministicSpecIcdWbsForwardCompiler.SysmlPackageAstInputPort;
+    }
     doc /* Diagnostic: E0100). */
     use case def UC_AC_01_Deterministic_Multi_Story_Use_Case_and_ConOps_Parent_Epic_Projection {
         subject AgileSpecForwardProjector;
@@ -631,6 +689,51 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
     use case def UC_AC_05_Fail_Closed_Subpackage_Scoped_Reverse_Sync_and_Dogfood_Blueprint_Ingestion_Parity {
         subject AgileSpecForwardProjector;
         objective "Fail Closed Subpackage Scoped Reverse Sync and Dogfood Blueprint Ingestion Parity";
+    }
+    test case def TC_REQ_0604_Forward_Sync_Icd_Wbs {
+        verify requirement REQ_0604;
+    }
+    test case def TC_REQ_0604_Blueprint_Conformance {
+        verify requirement REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint;
+    }
+    test case def Test_CompileSysmlForwardSyncDocs {
+        verify requirement REQ_0604;
+    }
+    test case def Test_ResolveParentEpicByPkgName {
+        verify requirement REQ_0604;
+    }
+    test case def Test_BindAllPackageStoriesToUse {
+        verify requirement REQ_0604;
+    }
+    test case def Test_EmitSymmetricActionDefSignaturesAndE1 {
+        verify requirement REQ_0604;
+    }
+    test case def Test_CompileSysmlEmitIcdDocsInterfaces {
+        verify requirement REQ_0604;
+    }
+    test case def Test_ProjectNxNConnectionDefMatrixAndFlowDef {
+        verify requirement REQ_0604;
+    }
+    test case def Test_CompileSysmlEmitWbsDocsManagement {
+        verify requirement REQ_0604;
+    }
+    test case def Test_SynthesizeMilStd881eTreeAnd {
+        verify requirement REQ_0604;
+    }
+    test case def Test_ReconcileBacklogReconcileDocsDirDocs {
+        verify requirement REQ_0604;
+    }
+    test case def Test_ParseCommonMarkTablesWithInHtml {
+        verify requirement REQ_0604;
+    }
+    test case def Test_ReconcileChecklistsWithParentInclusiveEpic {
+        verify requirement REQ_0604;
+    }
+    test case def Test_CompileSysmlReverseSyncDocs {
+        verify requirement REQ_0604;
+    }
+    test case def Test_MergeExtractedEntitiesIntoOwningSubpackages {
+        verify requirement REQ_0604;
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_SequenceInteraction {
@@ -659,8 +762,8 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
         message MergeExtractedEntitiesIntoOwningSubpackages from Rev to Rev;
         message reply_BitIdenticalSysMLV2AstAnd from Rev to CLI;
     }
+    doc /* Maximum deterministic execution bound for `--forward-sync` across all package subtrees. [unit: ms] */
     part def AgileSpecForwardProjector {
-        doc /* Maximum deterministic execution bound for `--forward-sync` across all package subtrees. [unit: ms] */
         attribute maxForwardLatencyMs : Integer = 25;
         doc /* Enforces symmetric `in` and `out` `ActionDef` parameter emission across Mermaid and Markdown bullets. [unit: flag] */
         attribute preserveTypedActionParams : Boolean = true;
@@ -677,8 +780,8 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
             flow out specMarkdownOutPort_flow : String;
         }
     }
+    doc /* Tracks multi-line `in_html_comment` state to prevent commented example tables from spoofing frontmatter issue IDs. [unit: flag] */
     part def BidirectionalBacklogReconciler {
-        doc /* Tracks multi-line `in_html_comment` state to prevent commented example tables from spoofing frontmatter issue IDs. [unit: flag] */
         attribute trackHtmlCommentState : Boolean = true;
         doc /* Computes parent-inclusive Epic count so child-only slices never trigger single-epic wildcard matching. [unit: flag] */
         attribute parentInclusiveEpics : Boolean = true;
@@ -693,8 +796,8 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
             flow out subpackageSyncOutPort_flow : String;
         }
     }
+    doc /* Total number of generative LLM subagents invoked during specification, ICD, and WBS forward compilation (`C-FWD-01 == 0`). [unit: count] */
     part def DeterministicSpecIcdWbsForwardCompiler {
-        doc /* Total number of generative LLM subagents invoked during specification, ICD, and WBS forward compilation (`C-FWD-01 == 0`). [unit: count] */
         attribute llm_subagent_invocation_count : Integer = 0;
         doc /* Percentage of declared SysML v2 AST packages, parts, ports, flows, interactions, and use cases projected into specifications (`C-FWD-02 == 100.0`). [unit: percent] */
         attribute ast_node_coverage_percent : Real = 100;
@@ -727,8 +830,8 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
             flow out WbsEnterpriseExportPort_flow : String;
         }
     }
+    doc /* Maximum deterministic execution bound for `--emit-icd` interface matrix and signal dictionary compilation. [unit: ms] */
     part def LogicalIcdMatrixCompiler {
-        doc /* Maximum deterministic execution bound for `--emit-icd` interface matrix and signal dictionary compilation. [unit: ms] */
         attribute maxIcdLatencyMs : Integer = 10;
         doc /* Orders all `PartDef` matrix axes and `ConnectionDef` channels via `BTreeMap` deterministic traversal. [unit: flag] */
         attribute lexicographicalSort : Boolean = true;
@@ -745,8 +848,8 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
             flow out icdMarkdownOutPort_flow : String;
         }
     }
+    doc /* Canonical 4-level MIL-STD-881E decomposition depth (System, Subsystem, Work Package, Deliverable Task). [unit: levels] */
     part def MilStd881eWbsExporter {
-        doc /* Canonical 4-level MIL-STD-881E decomposition depth (System, Subsystem, Work Package, Deliverable Task). [unit: levels] */
         attribute wbsHierarchyDepth : Integer = 4;
         doc /* Maximum deterministic execution bound for `--emit-wbs` Markdown and CSV/JSON export generation. [unit: ms] */
         attribute maxWbsLatencyMs : Integer = 15;
@@ -763,23 +866,14 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
             flow out wbsArtifactsOutPort_flow : String;
         }
     }
-    port def BP_04_ForwardProjectionPortDef {
-        flow in sysml_ast_in : String;
-        flow out markdown_spec_out : String;
-    }
-    connection def BP_04_ReconcilerToForwardCompilerConnection {
-        connect BidirectionalBacklogReconciler.subpackageSyncOutPort to DeterministicSpecIcdWbsForwardCompiler.SysmlPackageAstInputPort;
-    }
-    test case def TC_REQ_0604_Forward_Sync_Icd_Wbs {
-        verify requirement REQ_0604;
-    }
-    test case def TC_REQ_0604_Blueprint_Conformance {
-        verify requirement REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint;
-    }
 }
 
 doc /* Subsystem package for BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint */
 package BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint {
+    port def BP_05_SafetyDocstringPortDef {
+        flow in source_cst_in : String;
+        flow out docstring_verdict_out : Boolean;
+    }
     doc /* Run compile-sysml --inject-safety-docstrings <DIR> */
     action def RunCompileSysmlInjectSafetyDocstrings;
     doc /* Parse source CST via deap_core::rust_cst and deap_core::dart_cst */
@@ -825,6 +919,9 @@ package BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification
         transition ScopedSchemaContextResolver_State_to_SevenSectionDocstringGenerator_State_on_ParseSourceCstViaRustAndDartCst first ScopedSchemaContextResolver_State accept ParseSourceCstViaRustAndDartCst then SevenSectionDocstringGenerator_State;
         transition SevenSectionDocstringGenerator_State_to_Terminal first SevenSectionDocstringGenerator_State then Terminal;
     }
+    connection def BP_05_ContextToDocstringGeneratorConnection {
+        connect ScopedSchemaContextResolver.resolved_context_out to SevenSectionDocstringGenerator.schema_context_in;
+    }
     doc /* - **Given**: .rs and .dart source files containing nested / * outer / * inner * / * / block comments, hashed raw strings r#\"...\"# and r##\"...\"##, Rust string literals containing \"{\", Dart interpolated strings \"value: {map['key']}\" containing nested quotes and comments, multi-byte UTF-8 character literals '↑', and multiple short lifetimes fn foo<'a, 'b>(x: &'a str, y: &'b str) within 10 bytes. - **When**: deap_core::rust_cst / deap_core::dart_cst, compile-sysml --inject-safety-docstrings, and verify-baseline Check 36 scan the files. - **Then**: All three crates execute the single unified. */
     use case def UC_AC_01_Unified_Rust_and_Dart_Lexical_State_Machine_Without_Magic_Offsets {
         subject Check36AstCompletenessVerifier;
@@ -849,6 +946,30 @@ package BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification
     use case def UC_AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0605 {
         subject Check36AstCompletenessVerifier;
         objective "Dogfood Ingestion and SysML v2 Compilation of REQ 0605";
+    }
+    test case def TC_REQ_0605_Safety_Docstring_Synthesizer {
+        verify requirement REQ_0605;
+    }
+    test case def TC_REQ_0605_Blueprint_Conformance {
+        verify requirement REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint;
+    }
+    test case def Test_RunCompileSysmlInjectSafetyDocstrings {
+        verify requirement REQ_0605;
+    }
+    test case def Test_ScanSourceLinesViaRustDartLexStateAnd {
+        verify requirement REQ_0605;
+    }
+    test case def Test_ResolveSchemaContextViaCollectAll {
+        verify requirement REQ_0605;
+    }
+    test case def Test_RunVerifyBaselineNoDomain {
+        verify requirement REQ_0605;
+    }
+    test case def Test_TokenizeRsAndDartFilesUsing {
+        verify requirement REQ_0605;
+    }
+    test case def Test_RunIngestSysmlSchemaBlueprint05 {
+        verify requirement REQ_0605;
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction {
@@ -893,23 +1014,14 @@ package BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification
     }
     part def UnifiedSafetyDocstringSynthesizer {
     }
-    port def BP_05_SafetyDocstringPortDef {
-        flow in source_cst_in : String;
-        flow out docstring_verdict_out : Boolean;
-    }
-    connection def BP_05_ContextToDocstringGeneratorConnection {
-        connect ScopedSchemaContextResolver.resolved_context_out to SevenSectionDocstringGenerator.schema_context_in;
-    }
-    test case def TC_REQ_0605_Safety_Docstring_Synthesizer {
-        verify requirement REQ_0605;
-    }
-    test case def TC_REQ_0605_Blueprint_Conformance {
-        verify requirement REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint;
-    }
 }
 
 doc /* Subsystem package for BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint */
 package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint {
+    port def BP_06_DefectDossierPortDef {
+        flow in audit_finding_in : String;
+        flow out verified_dossier_out : String;
+    }
     doc /* verify-baseline audit-code --path crates/ --publish */
     action def VerifyBaselineAuditCodePathCrates;
     doc /* parse_rust_deap_core::rust_cst / deap_core::dart_cst and parse_dart_deap_core::rust_cst / deap_core::dart_cst */
@@ -980,6 +1092,9 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
         transition Rejected_to_Terminal first Rejected then Terminal;
         transition Verified_to_Terminal first Verified then Terminal;
     }
+    connection def BP_06_DossierToPublisherGateConnection {
+        connect DeterministicDossierSynthesizer.dossierMarkdownOutPort to ClosedLoopDefectPublisherGate.dossierCandidateInPort;
+    }
     doc /* Diagnostic: E0601). */
     use case def UC_AC_01_Static_Five_Pillar_AST_Defect_Detection {
         subject ClosedLoopDefectPublisherGate;
@@ -1010,6 +1125,36 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
         subject ClosedLoopDefectPublisherGate;
         objective "Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance";
     }
+    test case def TC_REQ_0606_Static_Defect_Auditor {
+        verify requirement REQ_0606;
+    }
+    test case def TC_REQ_0606_Blueprint_Conformance {
+        verify requirement REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint;
+    }
+    test case def Test_VerifyBaselineAuditCodePathCrates {
+        verify requirement REQ_0606;
+    }
+    test case def Test_ParseRustCstAndParseDartCst {
+        verify requirement REQ_0606;
+    }
+    test case def Test_EvaluateSourceFilePillarsAcross5 {
+        verify requirement REQ_0606;
+    }
+    test case def Test_synthesize_defect_dossier_markdown {
+        verify requirement REQ_0606;
+    }
+    test case def Test_run_check_defect {
+        verify requirement REQ_0606;
+    }
+    test case def Test_Execute12CheckValidateDefectDossier {
+        verify requirement REQ_0606;
+    }
+    test case def Test_GhIssueCreateOrGhIssue {
+        verify requirement REQ_0606;
+    }
+    test case def Test_GhIssueViewJsonTitleBody {
+        verify requirement REQ_0606;
+    }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_SequenceInteraction {
         lifeline User : Operator_Or_CI_Pipeline;
@@ -1035,8 +1180,8 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
         message reply_ClosedLoopVerifiedReceipt from Gate to CLI;
         message reply_ExitCode0WithVerifiedIssue from CLI to User;
     }
+    doc /* Enforces all 12 `validate_defect_dossier` checks prior to persistence or publication. [unit: checks] */
     part def ClosedLoopDefectPublisherGate {
-        doc /* Enforces all 12 `validate_defect_dossier` checks prior to persistence or publication. [unit: checks] */
         attribute schemaGateCount : Integer = 12;
         doc /* Requires zero byte discrepancy between local `.pipeline/defects/` file and remote GitHub issue body. [unit: flag] */
         attribute requireByteParity : Boolean = true;
@@ -1053,8 +1198,8 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
             flow out verifiedReceiptOutPort_flow : String;
         }
     }
+    doc /* Enforces all 7 canonical `DossierSection` headers plus the `## Audit Source` footer. [unit: sections] */
     part def DeterministicDossierSynthesizer {
-        doc /* Enforces all 7 canonical `DossierSection` headers plus the `## Audit Source` footer. [unit: sections] */
         attribute mandatorySectionCount : Integer = 7;
         doc /* Enforces 5 numbered causal `Why ...? Because ...` root-cause steps in Section 2. [unit: steps] */
         attribute whysChainDepth : Integer = 5;
@@ -1071,8 +1216,8 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
             flow out dossierMarkdownOutPort_flow : String;
         }
     }
+    doc /* Number of LLM subagents dispatched during static code auditing and defect dossier generation. [unit: count] */
     part def DeterministicStaticDefectAuditor {
-        doc /* Number of LLM subagents dispatched during static code auditing and defect dossier generation. [unit: count] */
         attribute auditor_subagent_count : Integer = 0;
         doc /* Number of deterministic structural, lexical, and Mermaid validation checks enforced per synthesized dossier. [unit: checks] */
         attribute dossier_schema_check_count : Integer = 12;
@@ -1105,8 +1250,8 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
             flow out ClosedLoopTrackerPublishPort_flow : String;
         }
     }
+    doc /* Count of active static AST evaluators (`E0601` through `E0605`). [unit: pillars] */
     part def FivePillarStaticAstAnalyzer {
-        doc /* Count of active static AST evaluators (`E0601` through `E0605`). [unit: pillars] */
         attribute activePillarCount : Integer = 5;
         doc /* Enforces linear token-stream and `rust_cst` item slice traversal without regular expressions. [unit: flag] */
         attribute zeroRegexMode : Boolean = true;
@@ -1123,8 +1268,8 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
             flow out findingStreamOutPort_flow : String;
         }
     }
+    doc /* Guarantees zero semicolons and quoted special tokens inside Section 4 Mermaid blocks. [unit: flag] */
     part def MermaidUmlDiagramGenerator {
-        doc /* Guarantees zero semicolons and quoted special tokens inside Section 4 Mermaid blocks. [unit: flag] */
         attribute forbidSemicolons : Boolean = true;
         doc /* Enforces Rules E1 through E5 across synthesized `sequenceDiagram` and `classDiagram` blocks. [unit: flag] */
         attribute check13bCompliant : Boolean = true;
@@ -1141,20 +1286,8 @@ package BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synt
             flow out mermaidBlockOutPort_flow : String;
         }
     }
-    port def BP_06_DefectDossierPortDef {
-        flow in audit_finding_in : String;
-        flow out verified_dossier_out : String;
-    }
-    connection def BP_06_DossierToPublisherGateConnection {
-        connect DeterministicDossierSynthesizer.dossierMarkdownOutPort to ClosedLoopDefectPublisherGate.dossierCandidateInPort;
-    }
-    test case def TC_REQ_0606_Static_Defect_Auditor {
-        verify requirement REQ_0606;
-    }
-    test case def TC_REQ_0606_Blueprint_Conformance {
-        verify requirement REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint;
-    }
 }
+
 doc /* Subsystem package for BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint */
 package BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint {
     attribute Blueprint_ID : String = "BP-07";
@@ -1187,6 +1320,10 @@ package BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint {
     attribute stage_fixed_point_mismatch_files : Real;
     doc /* [unit: `count`] */
     attribute runtime_llm_subagent_count : Real;
+    port def BP_07_ModularCodegenPortDef {
+        flow in module_graph_in : String;
+        flow out tree_manifest_out : String;
+    }
     doc /* verify_dag_and_layers(node_layers, edges) */
     action def verify_dag_and_layers;
     doc /* partition_and_hoist(pkg) */
@@ -1286,6 +1423,9 @@ package BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint {
         transition RejectedFailClosed_to_Terminal first RejectedFailClosed then Terminal;
         transition VerifiedFixedPoint_to_Terminal first VerifiedFixedPoint then Terminal;
     }
+    connection def BP_07_PartitionerToRustEmitterConnection {
+        connect FourLevelAstPartitionerAndHoister.module_graph_out to ModularRustMultiFileEmitter.rust_module_graph_in;
+    }
     doc /* - **Given**: A SysML v2 PackageDef fixture containing either a directed dependency cycle across packages/classifiers or a @Layer(Domain) classifier referencing a @Layer(Presentation) or @Layer(Application) classifier. - **When**: compile-sysml --emit-modular-rust <OUT_DIR> --schema <FIXTURE> is executed. - **Then**: TopologicalLayerDagVerifier aborts transactionally with exit code 1, emits structured diagnostic E0702 (cycle) or E0703 (illegal upward layer dependency), and leaves <OUT_DIR> with zero generated files written. */
     use case def UC_AC_01_Fail_Closed_Rejection_on_Directed_Dependency_Cycles_and_Upward_Layer_Imports {
         subject FourLevelAstPartitionerAndHoister;
@@ -1315,6 +1455,36 @@ package BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint {
     use case def UC_AC_06_Dogfood_SysML_v2_Blueprint_Ingestion_and_Twelve_Gate_Closed_Loop_Conformance {
         subject FourLevelAstPartitionerAndHoister;
         objective "Dogfood SysML v2 Blueprint Ingestion and Twelve Gate Closed Loop Conformance";
+    }
+    test case def TC_REQ_0607_Self_Hosting_Modular_Codegen {
+        verify requirement REQ_0607;
+    }
+    test case def TC_REQ_0607_Blueprint_Conformance {
+        verify requirement REQ_0607_BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint;
+    }
+    test case def Test_verify_dag_and_layers {
+        verify requirement REQ_0607;
+    }
+    test case def Test_partition_and_hoist {
+        verify requirement REQ_0607;
+    }
+    test case def Test_synthesize_module_tokens {
+        verify requirement REQ_0607;
+    }
+    test case def Test_build_syn_file {
+        verify requirement REQ_0607;
+    }
+    test case def Test_format_pretty_syn_file {
+        verify requirement REQ_0607;
+    }
+    test case def Test_emit_modular_rust_tree {
+        verify requirement REQ_0607;
+    }
+    test case def Test_emit_modular_flutter_tree {
+        verify requirement REQ_0607;
+    }
+    test case def Test_verify_fixed_point_digest {
+        verify requirement REQ_0607;
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint_SequenceInteraction {
@@ -1436,19 +1606,6 @@ package BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint {
             flow out topological_order_out_flow : String;
         }
     }
-    port def BP_07_ModularCodegenPortDef {
-        flow in module_graph_in : String;
-        flow out tree_manifest_out : String;
-    }
-    connection def BP_07_PartitionerToRustEmitterConnection {
-        connect FourLevelAstPartitionerAndHoister.module_graph_out to ModularRustMultiFileEmitter.rust_module_graph_in;
-    }
-    test case def TC_REQ_0607_Self_Hosting_Modular_Codegen {
-        verify requirement REQ_0607;
-    }
-    test case def TC_REQ_0607_Blueprint_Conformance {
-        verify requirement REQ_0607_BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint;
-    }
 }
 
 doc /* Subsystem package for BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics */
@@ -1497,6 +1654,10 @@ package BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON
     attribute runtime_llm_token_count : Real;
     doc /* [unit: `lines`] */
     attribute tier_bc_max_doc_lines : Real;
+    port def BP_08_LosslessRustCstPortDef {
+        flow in rust_cst_in : String;
+        flow out ndjson_diag_out : String;
+    }
     doc /* verify_offline_locked_build(lock_path) */
     action def verify_offline_locked_build;
     doc /* list_rust_items(path) */
@@ -1594,6 +1755,9 @@ package BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON
         transition EmittingJsonDiagnostics_to_Terminal first EmittingJsonDiagnostics then Terminal;
         transition VerifiedClean_to_Terminal first VerifiedClean then Terminal;
     }
+    connection def BP_08_CodemodToDiagnosticEmitterConnection {
+        connect ZeroTokenRustSpanCodemodEngine.codemod_error_out to UnifiedRustcJsonDiagnosticEmitter.finding_in;
+    }
     doc /* - **Given**: A Rust .rs fixture containing outer/inner docblocks, inline and block comments, raw strings containing braces, #[rt_loop] and #[cfg(test)] modules, methods taking &self and &mut self, a function with let mut flag: bool = false, a 4-clause compound boolean predicate, a pub fn returning Result<usize, String>, and a pub(crate) fn helper (plus a second fixture with an incomplete trailing expression). - **When**: LosslessRustCstAnalyzer parses both fixtures into ra_ap_syntax + rowan Red/Green syntax trees and computes DEAP v2.0 metrics and DocTier classifications. - **Then**: Root. */
     use case def UC_AC_01_Lossless_Red_Green_CST_Roundtrip_and_Exact_DEAP_v2_0_AST_Metrics_Extraction {
         subject AirGappedCargoLockGovernor;
@@ -1628,6 +1792,30 @@ package BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON
     use case def UC_AC_07_Air_Gapped_Offline_Cargo_Lock_Reproducibility_and_Twelve_Gate_Blueprint_Conformance {
         subject AirGappedCargoLockGovernor;
         objective "Air Gapped Offline Cargo Lock Reproducibility and Twelve Gate Blueprint Conformance";
+    }
+    test case def TC_REQ_0608_Lossless_Rust_Cst_Codemod {
+        verify requirement REQ_0608;
+    }
+    test case def TC_REQ_0608_Blueprint_Conformance {
+        verify requirement REQ_0608_BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics;
+    }
+    test case def Test_verify_offline_locked_build {
+        verify requirement REQ_0608;
+    }
+    test case def Test_list_rust_items {
+        verify requirement REQ_0608;
+    }
+    test case def Test_extract_rust_module {
+        verify requirement REQ_0608;
+    }
+    test case def Test_verify_stage_fixed_point {
+        verify requirement REQ_0608;
+    }
+    test case def Test_format_ndjson_line {
+        verify requirement REQ_0608;
+    }
+    test case def Test_analyze_metrics {
+        verify requirement REQ_0608;
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics_SequenceInteraction {
@@ -1743,19 +1931,6 @@ package BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON
             flow out codemod_error_out_flow : String;
         }
     }
-    port def BP_08_LosslessRustCstPortDef {
-        flow in rust_cst_in : String;
-        flow out ndjson_diag_out : String;
-    }
-    connection def BP_08_CodemodToDiagnosticEmitterConnection {
-        connect ZeroTokenRustSpanCodemodEngine.codemod_error_out to UnifiedRustcJsonDiagnosticEmitter.finding_in;
-    }
-    test case def TC_REQ_0608_Lossless_Rust_Cst_Codemod {
-        verify requirement REQ_0608;
-    }
-    test case def TC_REQ_0608_Blueprint_Conformance {
-        verify requirement REQ_0608_BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics;
-    }
 }
 
 doc /* Subsystem package for BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper */
@@ -1784,6 +1959,10 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
     attribute max_module_exec_sloc : Real;
     doc /* [unit: `probes`] */
     attribute min_toolchain_discovery_probes : Real;
+    port def BP_09_FormalVerificationPortDef {
+        flow in verification_ir_in : String;
+        flow out verification_receipt_out : String;
+    }
     doc /* probe_formal_toolchain(config) */
     action def probe_formal_toolchain;
     doc /* verify_clippy_policy(policy, manifest_lints) */
@@ -1894,6 +2073,9 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
         transition FailedClosedJsonDiagnostic_to_Terminal first FailedClosedJsonDiagnostic then Terminal;
         transition VerifiedAllFourStages_to_Terminal first VerifiedAllFourStages then Terminal;
     }
+    connection def BP_09_ClippyToOrchestratorConnection {
+        connect StableClippyTotalFunctionGate.clippy_ndjson_out to MultiStageVerificationOrchestrator.gate_invocation_in;
+    }
     doc /* - **Given**: An upstream or generated downstream Rust workspace configured with [workspace.lints.clippy] enforcing all 14 total-function, arithmetic, cast, unsafe-doc, and complexity denials plus root clippy.toml (too-many-lines-threshold = 80, too-many-arguments-threshold = 5, and disallowed-types banning non-deterministic HashMap / HashSet and backtracking pattern-matching types), alongside a negative fixture containing unchecked + arithmetic, direct slice indexing, an 81-line function, a 6-argument function, or std::collections::HashMap. - **When**: StableClippyTotalFunctionGate executes. */
     use case def UC_AC_01_Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement {
         subject FrbIcdBridgeAndMiriUbGate;
@@ -1928,6 +2110,33 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
     use case def UC_AC_07_Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate {
         subject FrbIcdBridgeAndMiriUbGate;
         objective "Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate";
+    }
+    test case def TC_REQ_0609_Multi_Stage_Formal_Gatekeeper {
+        verify requirement REQ_0609;
+    }
+    test case def TC_REQ_0609_Blueprint_Conformance {
+        verify requirement REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper;
+    }
+    test case def Test_probe_formal_toolchain {
+        verify requirement REQ_0609;
+    }
+    test case def Test_verify_clippy_policy {
+        verify requirement REQ_0609;
+    }
+    test case def Test_evaluate_stage2_dylint_mir {
+        verify requirement REQ_0609;
+    }
+    test case def Test_verify_in_process_cst_syntax {
+        verify requirement REQ_0609;
+    }
+    test case def Test_guard_inbound_frb_f64 {
+        verify requirement REQ_0609;
+    }
+    test case def Test_validate_kani_harness_spec {
+        verify requirement REQ_0609;
+    }
+    test case def Test_evaluate_four_stage_gatekeeper {
+        verify requirement REQ_0609;
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction {
@@ -1974,7 +2183,7 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
     doc /* Permitted transitive heap allocation or dynamic drop-deallocation terminators reachable from any `#[rt_loop]` function. [unit: allocs] */
     part def IsolatedDylintMirAllocationGate {
         attribute max_rt_heap_allocations : Integer = 0;
-        doc /* Permitted dangling `#[realises("REQ-*")]` or doc-contract requirement identifiers absent from compiled `.sysml` digests. [unit: links] */
+        doc /* Permitted dangling `outer realises("REQ-*")` or doc-contract requirement identifiers absent from compiled `.sysml` digests. [unit: links] */
         attribute max_unverified_req_links : Integer = 0;
         doc /* Isolates `rustc_lint` and `rustc_middle::mir` plugin manifest from stable workspace `Cargo.toml`. [unit: flag] */
         attribute isolated_nightly_workspace : Boolean = true;
@@ -1992,9 +2201,9 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
     doc /* Permitted reachable CBMC property failures (panics, overflows, div-by-zero, OOB, or STPA `UCA-*` breaches). [unit: counterexamples] */
     part def KaniCbmcProofSynthesizer {
         attribute max_kani_counterexamples : Integer = 0;
-        doc /* Deterministic loop unwinding ceiling emitted into `#[kani::unwind(N)]` when AST loops carry finite static bounds. [unit: iterations] */
+        doc /* Deterministic loop unwinding ceiling emitted into `outer kani::unwind(N)` when AST loops carry finite static bounds. [unit: iterations] */
         attribute default_kani_unwind_bound : Integer = 16;
-        doc /* Emits `#[cfg(kani)]` proof modules via `syn` + `quote` + `prettyplease` without raw string-template concatenation. [unit: flag] */
+        doc /* Emits `outer cfg(kani)` proof modules via `syn` + `quote` + `prettyplease` without raw string-template concatenation. [unit: flag] */
         attribute structured_prettyplease_codegen : Boolean = true;
         doc /* Receives SysML `constraint def`, `port def` `[min..max]` ranges, `state def` transitions, and STPA `UCA-*`/`SC-*` specs. [protocol: SysmlConstraintStateStpaIr] */
         port in sysml_safety_ast_in : String {
@@ -2047,19 +2256,6 @@ package BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper {
             flow out clippy_ndjson_out_flow : String;
         }
     }
-    port def BP_09_FormalVerificationPortDef {
-        flow in verification_ir_in : String;
-        flow out verification_receipt_out : String;
-    }
-    connection def BP_09_ClippyToOrchestratorConnection {
-        connect StableClippyTotalFunctionGate.clippy_ndjson_out to MultiStageVerificationOrchestrator.gate_invocation_in;
-    }
-    test case def TC_REQ_0609_Multi_Stage_Formal_Gatekeeper {
-        verify requirement REQ_0609;
-    }
-    test case def TC_REQ_0609_Blueprint_Conformance {
-        verify requirement REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper;
-    }
 }
 
 doc /* Subsystem package for BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine */
@@ -2092,6 +2288,10 @@ package BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine {
     attribute polyglot_frontend_count : Real;
     doc /* [unit: `crates`] */
     attribute rustc_private_feature_count : Real;
+    port def BP_10_IncrementalCstPortDef {
+        flow in source_buffer_in : String;
+        flow out green_cst_out : String;
+    }
     doc /* resolve_polyglot_backend(format) */
     action def resolve_polyglot_backend;
     doc /* normalize_line_endings(raw) */
@@ -2200,6 +2400,9 @@ package BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine {
         transition EmittingAriadneAndJsonDiagnostics_to_Terminal first EmittingAriadneAndJsonDiagnostics then Terminal;
         transition VerifiedIncrementalClean_to_Terminal first VerifiedIncrementalClean then Terminal;
     }
+    connection def BP_10_PolyglotToSalsaDbConnection {
+        connect TypedPolyglotIngestionFrontend.lowered_hir_out to SalsaIncrementalCompilerDatabase.source_revision_in;
+    }
     doc /* - **Given**: A .sysml fixture encoded with both LF and CRLF line endings containing nested package, part def, port def, action def, state def, transition, requirement def, and constraint def blocks interleaved with inline // comments, multi-line / * ... * / architect notes, doc / * ... * / specifications, @Safety and @Layer stereotypes, and custom vertical whitespace alignment. - **When**: deap_core::sysml_cst normalizes CRLF to LF via normalize_line_endings, lexes the buffer via logos, and constructs the SysmlLanguage Red/Green CST via rowan::GreenNodeBuilder (rowan pinned identically to. */
     use case def UC_AC_01_Lossless_logos_and_rowan_Concrete_Syntax_Tree_Full_Fidelity_Roundtrip_and_Cross_Platform_CRLF_Normalization {
         subject FormattingPreservingSyncSplicer;
@@ -2234,6 +2437,33 @@ package BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine {
     use case def UC_AC_07_Twelve_Gate_Blueprint_Verification_and_Baseline_Cleanliness_Gate_Conformance {
         subject FormattingPreservingSyncSplicer;
         objective "Twelve Gate Blueprint Verification and Baseline Cleanliness Gate Conformance";
+    }
+    test case def TC_REQ_0610_Incremental_Sysml_Engine {
+        verify requirement REQ_0610;
+    }
+    test case def TC_REQ_0610_Blueprint_Conformance {
+        verify requirement REQ_0610_BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine;
+    }
+    test case def Test_resolve_polyglot_backend {
+        verify requirement REQ_0610;
+    }
+    test case def Test_normalize_line_endings {
+        verify requirement REQ_0610;
+    }
+    test case def Test_parse_lossless_sysml_cst {
+        verify requirement REQ_0610;
+    }
+    test case def Test_verify_lossless_cst_invariants {
+        verify requirement REQ_0610;
+    }
+    test case def Test_evaluate_hir_early_cutoff {
+        verify requirement REQ_0610;
+    }
+    test case def Test_apply_formatting_preserving_splices {
+        verify requirement REQ_0610;
+    }
+    test case def Test_render_ariadne_diagnostic {
+        verify requirement REQ_0610;
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine_SequenceInteraction {
@@ -2338,19 +2568,6 @@ package BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine {
             flow out ingest_diag_out_flow : String;
         }
     }
-    port def BP_10_IncrementalCstPortDef {
-        flow in source_buffer_in : String;
-        flow out green_cst_out : String;
-    }
-    connection def BP_10_PolyglotToSalsaDbConnection {
-        connect TypedPolyglotIngestionFrontend.lowered_hir_out to SalsaIncrementalCompilerDatabase.source_revision_in;
-    }
-    test case def TC_REQ_0610_Incremental_Sysml_Engine {
-        verify requirement REQ_0610;
-    }
-    test case def TC_REQ_0610_Blueprint_Conformance {
-        verify requirement REQ_0610_BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine;
-    }
 }
 
 doc /* Subsystem package for BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture */
@@ -2379,6 +2596,10 @@ package BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage
     attribute max_module_exec_sloc : Real;
     doc /* [unit: `probes`] */
     attribute min_toolchain_discovery_probes : Real;
+    port def BP_11_FerroceneAssurancePortDef {
+        flow in assurance_ast_in : String;
+        flow out table_a7_receipt_out : String;
+    }
     doc /* probe_criticalup_toolchain(config) */
     action def probe_criticalup_toolchain;
     doc /* verify_dual_toolchain_parity(spec) */
@@ -2493,6 +2714,9 @@ package BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage
         transition RejectedFailClosed_to_Terminal first RejectedFailClosed then Terminal;
         transition CertifiedPackageReady_to_Terminal first CertifiedPackageReady then Terminal;
     }
+    connection def BP_11_PartitionToFlsTraceabilityConnection {
+        connect ThreeRingAssurancePartitionCompiler.partitioned_workspace_out to FlsParagraphTraceabilitySynthesizer.lowered_module_graph_in;
+    }
     doc /* - **Given**: A workspace containing paired criticalup.toml (ferrocene-stable pinned to an exact qualified release and target triple set) and rust-toolchain.toml (pinned to the matching upstream rustc semantic version and target set) parsed via toml_edit and cargo-platform, alongside a negative fixture where rust-toolchain.toml drifts by one minor version or omits a qualified target triple. - **When**: DualModeFerroceneToolchainGate executes probe_criticalup_toolchain and verify_dual_toolchain_parity, evaluating Stage-1 versus Stage-2 self-hosted modular codegen SHA-256 digests (E0705) under. */
     use case def UC_AC_01_Dual_Mode_criticalup_toml_and_rust_toolchain_toml_Parity_Cross_Platform_Discovery_and_DO_330_Fixed_Point_Qualification {
         subject CertifiedCoreSubsetAndCoverageGate;
@@ -2527,6 +2751,30 @@ package BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage
     use case def UC_AC_07_Cross_Platform_Execution_Submodule_Layout_Conformance_and_Twelve_Gate_Blueprint_Verification_Gate {
         subject CertifiedCoreSubsetAndCoverageGate;
         objective "Cross Platform Execution Submodule Layout Conformance and Twelve Gate Blueprint Verification Gate";
+    }
+    test case def TC_REQ_0611_Ferrocene_Three_Ring_Certification {
+        verify requirement REQ_0611;
+    }
+    test case def TC_REQ_0611_Blueprint_Conformance {
+        verify requirement REQ_0611_BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C;
+    }
+    test case def Test_probe_criticalup_toolchain {
+        verify requirement REQ_0611;
+    }
+    test case def Test_verify_dual_toolchain_parity {
+        verify requirement REQ_0611;
+    }
+    test case def Test_synthesize_three_ring_workspace {
+        verify requirement REQ_0611;
+    }
+    test case def Test_verify_fls_traceability_chain {
+        verify requirement REQ_0611;
+    }
+    test case def Test_verify_certified_core_and_table_a7_coverage {
+        verify requirement REQ_0611;
+    }
+    test case def Test_verify_three_ring_edge_and_monitor_readback {
+        verify requirement REQ_0611;
     }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture_SequenceInteraction {
@@ -2632,18 +2880,5 @@ package BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage
         port out partition_diag_out : String {
             flow out partition_diag_out_flow : String;
         }
-    }
-    port def BP_11_FerroceneAssurancePortDef {
-        flow in assurance_ast_in : String;
-        flow out table_a7_receipt_out : String;
-    }
-    connection def BP_11_PartitionToFlsTraceabilityConnection {
-        connect ThreeRingAssurancePartitionCompiler.partitioned_workspace_out to FlsParagraphTraceabilitySynthesizer.lowered_module_graph_in;
-    }
-    test case def TC_REQ_0611_Ferrocene_Three_Ring_Certification {
-        verify requirement REQ_0611;
-    }
-    test case def TC_REQ_0611_Blueprint_Conformance {
-        verify requirement REQ_0611_BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C;
     }
 }

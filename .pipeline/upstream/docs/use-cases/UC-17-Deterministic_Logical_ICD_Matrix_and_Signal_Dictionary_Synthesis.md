@@ -38,12 +38,19 @@ graph TD
 - Deterministic Logical ICD Matrix and Signal Dictionary Synthesis
 
 ## 4. Main Success Scenario
-1. `Operator_Or_CI_Runner` invokes `Deterministic Logical ICD Matrix and Signal Dictionary Synthesis` on `AgileSpecForwardProjector` targeting objective `Deterministic Logical ICD Matrix and Signal Dictionary Synthesis`.
-2. `AgileSpecForwardProjector` verifies boundary preconditions and evaluates `Deterministic Logical ICD Matrix and Signal Dictionary Synthesis` invariants (guarding `Diagnostic: E0200`).
-3. `AgileSpecForwardProjector` records verified `Deterministic Logical ICD Matrix and Signal Dictionary Synthesis` outcome and returns status to `Operator_Or_CI_Runner`.
+1. `Operator_Or_CI_Runner` invokes `CompileSysmlEmitIcdDocsInterfaces` (`compile-sysml --emit-icd docs/interfaces`) on `DeterministicSpecIcdWbsForwardCompiler`, routing `PartDef`, `PortDef`, `ConnectionDef`, `FlowDef`, and `ItemDef` AST nodes to `LogicalIcdMatrixCompiler` via `interconnectAstInPort`.
+2. `LogicalIcdMatrixCompiler` orders all component axes and connection channels deterministically using `BTreeMap` traversal (`lexicographicalSort = true`) within `maxIcdLatencyMs`.
+3. `LogicalIcdMatrixCompiler` executes `ProjectNxNConnectionDefMatrixAndFlowDef` to construct the N-by-N system interconnect matrix in `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and the typed signal dictionary in `ICD_02_MASTER_SIGNAL_DICTIONARY.md`.
+4. `LogicalIcdMatrixCompiler` validates the generated CommonMark tables and Mermaid topology diagrams via `pulldown-cmark` to ensure `mermaid_e1_e5_violation_count == 0` and 100% port/flow coverage (`ast_node_coverage_percent == 100`).
+5. `LogicalIcdMatrixCompiler` transitions `BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_LifecycleState` to `IcdSynthesized`, writes `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md` atomically via `icdMarkdownOutPort` and `IcdMatrixArtifactPort`, and returns `Result::Ok` to `Operator_Or_CI_Runner`.
 
 ## 5. Alternate and Exception Flows
-- Diagnostic: E0200
+- 3a. Dangling `ConnectionDef` endpoint or undeclared `PortDef` / `FlowDef` reference in `schema/model.sysml` (`Diagnostic: E0200`):
+  - `LogicalIcdMatrixCompiler` transitions to `Rejected`, emits diagnostic `E0200` via `ariadne` / `miette`, and terminates fail-closed with exit code 1 without modifying `docs/interfaces/`.
+- 4a. Atomic filesystem write failure on `icdMarkdownOutPort` or `IcdMatrixArtifactPort`:
+  - `LogicalIcdMatrixCompiler` propagates `Result::Err`, preserves prior verified ICD artifacts, and exits fail-closed with code 1.
+- 5a. Invariant violation under `Invariant_REQ_0604_SC_01` or `Invariant_REQ_0604_SC_02`:
+  - `AgileSpecForwardProjector` and `LogicalIcdMatrixCompiler` abort synthesis, preserve prior verified state, and notify `Operator_Or_CI_Runner` with fail-closed exit status 1.
 
 ## 6. Postconditions
 - `AgileSpecForwardProjector` satisfies declared objective `Deterministic Logical ICD Matrix and Signal Dictionary Synthesis` with all subsystem invariants intact.

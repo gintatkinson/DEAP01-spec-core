@@ -35,14 +35,19 @@ graph TD
 - ./target/release/verify-baseline check-blueprint docs/designs/blueprint-02-check34-ast-purity-and-anti-gaming-gate.md --dry-run and ./target/release/ingest-sysml are executed.
 
 ## 4. Main Success Scenario
-1. ./target/release/verify-baseline check-blueprint docs/designs/blueprint-02-check34-ast-purity-and-anti-gaming-gate.md --dry-run and ./target/release/ingest-sysml are executed.
-2. The blueprint verifier passes all 12 mechanical gates, extracts Check34AstPurityAndAntiGamingGate, its subcomponents, 4 typed ports, 5 state attributes, 5 formal constraints (C-PURITY-01 through C-PURITY-05), and 5 BDD acceptance criteria into valid SysML v2, and exits with code 0.
+1. `VerifyBaselineCLI` executes `./target/release/verify-baseline check-blueprint docs/designs/blueprint-02-check34-ast-purity-and-anti-gaming-gate.md --dry-run` using `pulldown-cmark` to parse the Markdown AST.
+2. `Check34AstPurityAndAntiGamingGate` validates all 12 mechanical blueprint verification gates, confirming well-formed KaTeX `aligned` equations (`Invariant_REQ_0602_SC_01`, `Invariant_REQ_0602_SC_02`), Mermaid diagrams, and 5-column STPA/FMECA tables.
+3. `VerifyBaselineCLI` invokes `./target/release/ingest-sysml --schema docs/designs/blueprint-02-check34-ast-purity-and-anti-gaming-gate.md --format markdown` using `logos` and `rowan` token-stream parsing.
+4. `ingest-sysml` extracts `REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint`, `Check34AstPurityAndAntiGamingGate`, `AntiGamingTestBodyAuditor`, `FailClosedIoAstVerifier`, `RangeSliceAstDetector`, `SsotSymbolDeduplicationGate`, 4 typed ports (`WorkspaceRustCstPort`, `TestFunctionAstStreamPort`, `PurityViolationDiagnosticPort`, `Check34GateStatusPort`), 5 state attributes, and 5 BDD acceptance criteria into canonical SysML v2.
+5. `Check34AstPurityAndAntiGamingGate` verifies bijective roundtrip consistency with `schema/model.sysml`, emits `0` on `Check34GateStatusPort`, and exits with code 0.
 
 ## 5. Alternate and Exception Flows
-- Precondition guard failure in `AntiGamingTestBodyAuditor`:
-  - `AntiGamingTestBodyAuditor` rejects the `Deterministic Dogfood Ingestion into Canonical SysML v2` request without partial state mutation and reports diagnostic status to `VerifyBaselineCLI`.
-- Invariant violation while enforcing `Deterministic Dogfood Ingestion into Canonical SysML v2`:
-  - `AntiGamingTestBodyAuditor` aborts `Deterministic Dogfood Ingestion into Canonical SysML v2` execution, preserves prior verified state, and notifies `VerifyBaselineCLI`.
+- 3a. Blueprint Markdown fails a mechanical gate in `check-blueprint`:
+  - `VerifyBaselineCLI` returns `Result::Err`, emits an `ariadne` / `miette` structural diagnostic on `PurityViolationDiagnosticPort`, and exits fail-closed with code 1.
+- 4a. Port type mismatch or unresolved subcomponent reference during `ingest-sysml` synthesis:
+  - `ingest-sysml` aborts SysML v2 emission via `Result<T, E>`, preserves prior verified `schema/model.sysml` state, and reports a deterministic `miette` error with exit code 1.
+- 5a. Invariant violation while enforcing `Invariant_REQ_0602_SC_02` complexity or roundtrip bounds:
+  - `AntiGamingTestBodyAuditor` aborts execution without partial state mutation, preserves prior verified state, and notifies `VerifyBaselineCLI` with fail-closed exit status 1.
 
 ## 6. Postconditions
 - The blueprint verifier passes all 12 mechanical gates, extracts Check34AstPurityAndAntiGamingGate, its subcomponents, 4 typed ports, 5 state attributes, 5 formal constraints (C-PURITY-01 through C-PURITY-05), and 5 BDD acceptance criteria into valid SysML v2, and exits with code 0.

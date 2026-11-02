@@ -38,12 +38,19 @@ graph TD
 - Closed Loop GitHub SSOT Publishing and Byte Parity Verification
 
 ## 4. Main Success Scenario
-1. `Operator_Or_CI_Pipeline` invokes `Closed Loop GitHub SSOT Publishing and Byte Parity Verification` on `ClosedLoopDefectPublisherGate` targeting objective `Closed Loop GitHub SSOT Publishing and Byte Parity Verification`.
-2. `ClosedLoopDefectPublisherGate` verifies boundary preconditions and evaluates `Closed Loop GitHub SSOT Publishing and Byte Parity Verification` invariants (guarding `Diagnostic: E0604`).
-3. `ClosedLoopDefectPublisherGate` records verified `Closed Loop GitHub SSOT Publishing and Byte Parity Verification` outcome and returns status to `Operator_Or_CI_Pipeline`.
+1. `ClosedLoopDefectPublisherGate` enters `PublishingClosedLoop` after a validated 7-section dossier is persisted via `DefectDossierArtifactPort`.
+2. `ClosedLoopDefectPublisherGate` invokes `GhIssueCreateOrGhIssue` (`gh issue create` or `gh issue edit --body-file`) across `ClosedLoopTrackerPublishPort` to publish the local dossier to `GitHub_SSOT_Tracker`.
+3. `ClosedLoopDefectPublisherGate` invokes `GhIssueViewJsonTitleBody` (`gh issue view --json title,body,url`) via `GitHubIssueSsotQueryPort` to retrieve the live remote GitHub issue payload.
+4. `ClosedLoopDefectPublisherGate` normalizes CRLF to LF across both payloads and verifies `requireByteParity = true` (`closed_loop_mismatch_bytes == 0`) under `Invariant_REQ_0606_SC_02`.
+5. `ClosedLoopDefectPublisherGate` transitions to `Verified` on `closed_loop_mismatch_bytes_0`, emits the verified GitHub issue URL on `verifiedReceiptOutPort`, and returns exit code 0 to `Operator_Or_CI_Pipeline`.
 
 ## 5. Alternate and Exception Flows
-- Diagnostic: E0604
+- 3a. `gh issue create`, `gh issue edit`, or `gh issue view` subprocess fails or times out (`Diagnostic: E0604`):
+  - `ClosedLoopDefectPublisherGate` transitions to `Rejected`, emits diagnostic `E0604` via `ariadne` / `miette`, and terminates fail-closed with exit code 1.
+- 4a. Non-zero byte discrepancy (`closed_loop_mismatch_bytes > 0`) between local dossier and remote GitHub issue body:
+  - `ClosedLoopDefectPublisherGate` transitions to `Rejected` on `remote_payload_mismatch`, emits a byte-diff `miette` diagnostic (`E0604`), and exits fail-closed with code 1.
+- 5a. Invariant violation under `Invariant_REQ_0606_SC_01` or `Invariant_REQ_0606_SC_02`:
+  - `ClosedLoopDefectPublisherGate` aborts execution without emitting a receipt on `verifiedReceiptOutPort`, preserves prior verified state, and exits fail-closed with code 1.
 
 ## 6. Postconditions
 - `ClosedLoopDefectPublisherGate` satisfies declared objective `Closed Loop GitHub SSOT Publishing and Byte Parity Verification` with all subsystem invariants intact.

@@ -26,9 +26,10 @@ As a `VerifyBaselineCLI`, I want to invoke `audit_fail_closed_io_patterns()` on 
 - Behavioral execution contract: invokes `audit_fail_closed_io_patterns()` on `Check34AstPurityAndAntiGamingGate` with atomic precondition verification.
 - State transition management: `AntiGamingTestBodyAuditor_State -> Check34AstPurityAndAntiGamingGate_State` (trigger `check_compiler_ast_purity`).
 - Formal constraints and requirements enforced: `REQ-0602 (REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint)`.
+- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/verify-baseline/src/ast_purity/` and `crates/deap-core/src/rust_cst/`) while retiring ad-hoc string/slice checks and ratcheting Check 34 violation ceilings to zero.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-- Component port bindings on `Check34AstPurityAndAntiGamingGate`: `WorkspaceSourceAstPort: String (in)`, `TestFunctionAstStreamPort: String (in)`, `PurityViolationDiagnosticPort: String (out)`, `Check34GateStatusPort: Integer (out)`.
+- Component port bindings on `Check34AstPurityAndAntiGamingGate`: `WorkspaceRustCstPort: String (in)`, `TestFunctionAstStreamPort: String (in)`, `PurityViolationDiagnosticPort: String (out)`, `Check34GateStatusPort: Integer (out)`.
 - Interaction binding (`BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint_SequenceInteraction`): routes `audit_fail_closed_io_patterns` invocation from `VerifyBaselineCLI` to `Check34AstPurityAndAntiGamingGate` and returns `mask_literals_and_comments`.
 - Diagnostic fault surface: reports deterministic rejection diagnostics to `VerifyBaselineCLI` across the declared interface boundary when guard or invariant checks fail.
 
@@ -51,7 +52,7 @@ sequenceDiagram
 - [ ] AC-US-09-02: Given `Check34AstPurityAndAntiGamingGate` active state management during `audit_fail_closed_io_patterns`, When `Check34AstPurityAndAntiGamingGate` evaluates formal constraint `Invariant_REQ_0602_SC_01`, Then `Check34AstPurityAndAntiGamingGate` verifies constraint satisfaction before committing state updates.
 - [ ] AC-US-09-03: Given `Check34AstPurityAndAntiGamingGate` active state management during `audit_fail_closed_io_patterns`, When `Check34AstPurityAndAntiGamingGate` evaluates formal constraint `Invariant_REQ_0602_SC_02`, Then `Check34AstPurityAndAntiGamingGate` verifies constraint satisfaction before committing state updates.
 - [ ] AC-US-09-04: Given `Check34AstPurityAndAntiGamingGate` requirement allocation for `audit_fail_closed_io_patterns`, When `Check34AstPurityAndAntiGamingGate` verifies formal requirement `REQ-0602 (REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint)`, Then `Check34AstPurityAndAntiGamingGate` confirms normative requirement satisfaction across execution.
-- [ ] AC-US-09-05: Given `Check34AstPurityAndAntiGamingGate` ingress port binding (`WorkspaceSourceAstPort: String`, `TestFunctionAstStreamPort: String`), When `Check34AstPurityAndAntiGamingGate` completes `audit_fail_closed_io_patterns`, Then `Check34AstPurityAndAntiGamingGate` delivers `mask_literals_and_comments` across egress port (`PurityViolationDiagnosticPort: String`, `Check34GateStatusPort: Integer`) to `VerifyBaselineCLI`.
+- [ ] AC-US-09-05: Given `Check34AstPurityAndAntiGamingGate` ingress port binding (`WorkspaceRustCstPort: String`, `TestFunctionAstStreamPort: String`), When `Check34AstPurityAndAntiGamingGate` completes `audit_fail_closed_io_patterns`, Then `Check34AstPurityAndAntiGamingGate` delivers `mask_literals_and_comments` across egress port (`PurityViolationDiagnosticPort: String`, `Check34GateStatusPort: Integer`) to `VerifyBaselineCLI`.
 - [ ] AC-US-09-06: Given violated formal constraint `Invariant_REQ_0602_SC_01`, When `VerifyBaselineCLI` invokes `audit_fail_closed_io_patterns` on `Check34AstPurityAndAntiGamingGate`, Then `Check34AstPurityAndAntiGamingGate` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic fault diagnostic across the interface binding.
 
 ## Required Features

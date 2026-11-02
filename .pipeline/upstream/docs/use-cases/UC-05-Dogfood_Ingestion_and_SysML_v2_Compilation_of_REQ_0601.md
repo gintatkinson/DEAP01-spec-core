@@ -35,14 +35,19 @@ graph TD
 - ./target/release/verify-baseline check-blueprint docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --dry-run is executed.
 
 ## 4. Main Success Scenario
-1. ./target/release/verify-baseline check-blueprint docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --dry-run is executed.
-2. All 12 mechanical blueprint verification gates pass, and the translator synthesizes REQ-0601, CompilerLintEnforcementGate, its interface ports, state attributes, formal constraints (C-LINT-01..C-LINT-03), and AC-01..AC-05 into docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.sysml and.
+1. `Compiler_Engineer_CI` invokes `./target/release/verify-baseline check-blueprint docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --dry-run` using `pulldown-cmark` AST parsing to validate the 8-part blueprint structure.
+2. `CompilerLintEnforcementGate` verifies all 12 mechanical blueprint verification gates, including `REQ-0601` traceability, KaTeX math blocks, Mermaid state/sequence diagrams, and 5-column STPA/FMECA tables.
+3. `Compiler_Engineer_CI` invokes `ExecuteIngestSysmlSchemaBlueprint01` (`./target/release/ingest-sysml --schema docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --format markdown`) to extract SysML v2 AST nodes via `logos` and `rowan`.
+4. `ingest_sysml` synthesizes `REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint`, `CompilerLintEnforcementGate`, `WorkspaceManifestForbidGate`, `ClippyAttributeCstParser`, `CrateRootAttributeSanitizer`, `TestTargetLintEnforcer`, `CargoManifestInputPort`, `RustSourceTokenStreamPort`, `CompilerDiagnosticOutputPort`, `BaselineGateVerdictPort`, and formal constraints `Invariant_REQ_0601_C_LINT_03` and `Invariant_REQ_0601_FormalInvariant`.
+5. `CompilerLintEnforcementGate` verifies bijective SysML v2 compilation into `schema/model.sysml` and emits `true` on `BaselineGateVerdictPort` with exit code 0.
 
 ## 5. Alternate and Exception Flows
-- Precondition guard failure in `CompilerLintEnforcementGate`:
-  - `CompilerLintEnforcementGate` rejects the `Dogfood Ingestion and SysML v2 Compilation of REQ 0601` request without partial state mutation and reports diagnostic status to `Compiler_Engineer_CI`.
-- Invariant violation while enforcing `Dogfood Ingestion and SysML v2 Compilation of REQ 0601`:
-  - `CompilerLintEnforcementGate` aborts `Dogfood Ingestion and SysML v2 Compilation of REQ 0601` execution, preserves prior verified state, and notifies `Compiler_Engineer_CI`.
+- 3a. Blueprint Markdown fails any of the 12 mechanical verification gates in `check-blueprint`:
+  - `verify_baseline` returns `Result::Err`, emits an `ariadne` / `miette` structural diagnostic on `CompilerDiagnosticOutputPort`, and exits fail-closed with code 1 without modifying `.sysml` artifacts.
+- 4a. Duplicate or unresolved SysML v2 identifier encountered during `ExecuteIngestSysmlSchemaBlueprint01`:
+  - `ingest_sysml` aborts AST synthesis via `Result<T, E>`, preserves prior verified `schema/model.sysml` state, and emits a deterministic `miette` diagnostic with exit code 1.
+- 5a. Invariant violation while enforcing `Invariant_REQ_0601_FormalInvariant`:
+  - `CompilerLintEnforcementGate` halts compilation, sets `BaselineGateVerdictPort` to `false`, notifies `Compiler_Engineer_CI`, and exits fail-closed with status code 1.
 
 ## 6. Postconditions
 - All 12 mechanical blueprint verification gates pass, and the translator synthesizes REQ-0601, CompilerLintEnforcementGate, its interface ports, state attributes, formal constraints (C-LINT-01..C-LINT-03), and AC-01..AC-05 into docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.sysml and.

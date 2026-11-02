@@ -35,14 +35,19 @@ graph TD
 - parse_state_decl and the MBD .sfx synthesizer execute.
 
 ## 4. Main Success Scenario
-1. parse_state_decl and the MBD .sfx synthesizer execute.
-2. Transitions are parsed directly from the token stream without fabricating {s}_to_{t} names (name: None preserved when unnamed), sub-state doc blocks attach to their target StateDef or TransitionDef, and MBD .sfx synthesis recursively emits transitions across all nesting depths.
+1. `Compiler_CLI_Caller` invokes `parse_package_or_file` on `FailClosedRecursiveDescentParser` with a hierarchical `state def` token stream supplied via `TokenStreamChannelPort`.
+2. `FailClosedRecursiveDescentParser` executes `ParseTypeExprAndParseTransition` (`parse_state_decl` and `parse_transition_decl_tokens`) using `logos` and `rowan` token-stream combinators.
+3. `FailClosedRecursiveDescentParser` parses anonymous and named transition statements (`first S1 accept trig if grd do eff then S2;`) directly from the token stream while preserving `name: None` when unnamed and attaching `doc` blocks to their target `StateDef` or `TransitionDef`.
+4. `FailClosedRecursiveDescentParser` recursively traverses nested composite `sub_states` and their inner transitions without dropping AST fields (`dropped_ast_field_count == 0`).
+5. `BijectiveSysmlSerializer` and the MBD `.sfx` synthesizer emit canonical SysML v2 and recursive statechart transitions across all nesting depths via `SerializedSysmlOutputPort`.
 
 ## 5. Alternate and Exception Flows
-- Precondition guard failure in `BijectiveSysmlSerializer`:
-  - `BijectiveSysmlSerializer` rejects the `Token Stream State Transition Parsing and Recursive MBD Synthesis` request without partial state mutation and reports diagnostic status to `Compiler_CLI_Caller`.
-- Invariant violation while enforcing `Token Stream State Transition Parsing and Recursive MBD Synthesis`:
-  - `BijectiveSysmlSerializer` aborts `Token Stream State Transition Parsing and Recursive MBD Synthesis` execution, preserves prior verified state, and notifies `Compiler_CLI_Caller`.
+- 3a. Malformed transition clause (`first`, `accept`, `if`, `do`, or `then` missing target state) in `parse_transition_decl_tokens`:
+  - `FailClosedRecursiveDescentParser` transitions to `RejectedE0200`, emits an `ariadne` / `miette` syntax diagnostic (`E0200`) on `BijectiveDiffDiagnosticPort`, and exits fail-closed with code 1.
+- 4a. Unattached or orphaned `doc` comment inside a nested `state def` block:
+  - `FailClosedRecursiveDescentParser` returns `Result::Err(ParseError)` via `BijectiveDiffDiagnosticPort` rather than silently discarding documentation nodes, terminating fail-closed with exit code 1.
+- 5a. Invariant violation under `Invariant_REQ_0603_Formal_Bijectivity_Complexity_Invariants`:
+  - `BijectiveSysmlSerializer` aborts `.sfx` and SysML v2 synthesis without partial state mutation, preserves prior verified state, and returns fail-closed status code 1 to `Compiler_CLI_Caller`.
 
 ## 6. Postconditions
 - Transitions are parsed directly from the token stream without fabricating {s}_to_{t} names (name: None preserved when unnamed), sub-state doc blocks attach to their target StateDef or TransitionDef, and MBD .sfx synthesis recursively emits transitions across all nesting depths.

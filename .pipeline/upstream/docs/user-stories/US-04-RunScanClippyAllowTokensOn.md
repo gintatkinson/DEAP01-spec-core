@@ -26,6 +26,7 @@ As a `Compiler_Engineer_CI`, I want to invoke `RunScanClippyAllowTokensOn()` on 
 - Behavioral execution contract: invokes `RunScanClippyAllowTokensOn()` on `WorkspaceManifestForbidGate` with atomic precondition verification.
 - State transition management: `ScanningSource -> SkippingLineComment` (trigger `slashSlashDetected`).
 - Formal constraints and requirements enforced: `REQ-0601 (REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint)`.
+- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/verify-baseline/src/clippy_forbid/` and `crates/deap-core/src/rust_cst/`) while retiring hand-rolled attribute line-parsers and reducing Check 34 ratchet ceilings.
 
 ### Layer 3: Presentation & Actuator Interface Binding
 - Component port bindings on `WorkspaceManifestForbidGate`: `cmd_in: String (in)`, `status_out: String (out)`.

@@ -29,20 +29,25 @@ graph TD
 - `Compiler_Engineer_CI`
 
 ## 2. Preconditions
-- Unit test modules (#[cfg(test)] mod tests) and integration test files (crates/ * /tests/ *.rs) across all six workspace crates.
+- Unit test modules (cfg(test) mod tests) and integration test files (crates/ * /tests/ *.rs) across all six workspace crates.
 
 ## 3. Trigger
 - cargo test --workspace and ./target/release/verify-baseline . --no-domain are executed.
 
 ## 4. Main Success Scenario
-1. cargo test --workspace and ./target/release/verify-baseline . --no-domain are executed.
-2. Zero #![cfg_attr(test, allow(...))] exemptions exist, all test assertions use fallible Result return signatures or pattern matching instead of .unwrap(), .expect(), or direct slice indexing, and all workspace tests pass.
+1. `Compiler_Engineer_CI` invokes `ExecuteCargoClippyWorkspaceAllTargets` and `ExecuteVerifyBaselineNoDomain` on `CompilerLintEnforcementGate` across all six workspace crates enumerated via `cargo_metadata`.
+2. `TestTargetLintEnforcer` inspects all unit test modules (`cfg(test) mod tests`) and integration test targets (`crates/*/tests/*.rs`) streamed over `RustSourceTokenStreamPort` using `ra_ap_syntax` and `syn`.
+3. `ClippyAttributeCstParser` executes `RunScanClippyAllowTokensOn` to verify that zero `cfg_attr(test, allow(...))` conditional lint exemptions exist in any crate root or test module.
+4. `CompilerLintEnforcementGate` verifies via `rustc` and `clippy` that all test assertions use fallible `Result<T, E>` return signatures or pattern matching instead of `.unwrap()`, `.expect()`, or direct slice indexing.
+5. `cargo test --workspace` and `./target/release/verify-baseline . --no-domain` complete with zero `E0453` or Check 34 violations and emit `true` on `BaselineGateVerdictPort` with exit code 0.
 
 ## 5. Alternate and Exception Flows
-- Precondition guard failure in `CompilerLintEnforcementGate`:
-  - `CompilerLintEnforcementGate` rejects the `Unconditional Test Target Enforcement Without Conditional Exemption` request without partial state mutation and reports diagnostic status to `Compiler_Engineer_CI`.
-- Invariant violation while enforcing `Unconditional Test Target Enforcement Without Conditional Exemption`:
-  - `CompilerLintEnforcementGate` aborts `Unconditional Test Target Enforcement Without Conditional Exemption` execution, preserves prior verified state, and notifies `Compiler_Engineer_CI`.
+- 3a. Conditional `cfg_attr(test, allow(clippy::...))` exemption detected in a test module:
+  - `TestTargetLintEnforcer` transitions to `ViolationRecorded`, emits an `ariadne` / `miette` span diagnostic via `CompilerDiagnosticOutputPort`, and terminates fail-closed with exit code 1.
+- 4a. Test target invokes `.unwrap()`, `.expect()`, or direct slice indexing under `forbid` lint rules:
+  - `cargo clippy --workspace --all-targets` rejects the test target via `Result::Err` and `CompilerDiagnosticOutputPort` diagnostic output, halting test execution with non-zero exit code 1.
+- 5a. Invariant violation while enforcing `Invariant_REQ_0601_FormalInvariant` in `CompilerLintEnforcementGate`:
+  - `CompilerLintEnforcementGate` aborts execution without partial state mutation, preserves prior verified state, emits a deterministic `miette` diagnostic to `Compiler_Engineer_CI`, and exits fail-closed with code 1.
 
 ## 6. Postconditions
 - Zero #![cfg_attr(test, allow(...))] exemptions exist, all test assertions use fallible Result return signatures or pattern matching instead of .unwrap(), .expect(), or direct slice indexing, and all workspace tests pass.

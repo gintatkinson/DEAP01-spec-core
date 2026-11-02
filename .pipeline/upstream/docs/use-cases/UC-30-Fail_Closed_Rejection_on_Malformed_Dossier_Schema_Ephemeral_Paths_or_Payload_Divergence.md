@@ -38,12 +38,19 @@ graph TD
 - Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence
 
 ## 4. Main Success Scenario
-1. `Operator_Or_CI_Pipeline` invokes `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence` on `ClosedLoopDefectPublisherGate` targeting objective `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence`.
-2. `ClosedLoopDefectPublisherGate` verifies boundary preconditions and evaluates `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence` invariants (guarding `Diagnostic: E0605`).
-3. `ClosedLoopDefectPublisherGate` records verified `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence` outcome and returns status to `Operator_Or_CI_Pipeline`.
+1. `Operator_Or_CI_Pipeline` invokes `run_check_defect` (`./target/release/verify-baseline check-defect`) on `ClosedLoopDefectPublisherGate` with a candidate dossier payload supplied on `dossierCandidateInPort`.
+2. `ClosedLoopDefectPublisherGate` transitions to `Validating12Gates` and executes `Execute12CheckValidateDefectDossier` (`schemaGateCount = 12`, `dossier_schema_check_count = 12`) using `pulldown-cmark` AST validation.
+3. `ClosedLoopDefectPublisherGate` inspects the candidate dossier for ephemeral `/tmp/` or machine-specific paths, missing `DossierSection` headers, shallow `Why ...? Because ...` chains (`whysChainDepth < 5`), unquoted Mermaid labels, or Unicode em dashes.
+4. Upon detecting a schema violation, ephemeral path, or remote GitHub body divergence (`closed_loop_mismatch_bytes > 0` bytes), `ClosedLoopDefectPublisherGate` transitions to `Rejected` (`Diagnostic: E0605`).
+5. `ClosedLoopDefectPublisherGate` emits a structured `ariadne` / `miette` diagnostic identifying the failed check among the 12 gates, blocks publication on `ClosedLoopTrackerPublishPort`, and exits fail-closed with code 1.
 
 ## 5. Alternate and Exception Flows
-- Diagnostic: E0605
+- 3a. Candidate dossier contains hardcoded host or `/tmp/` ephemeral paths (`Diagnostic: E0605`):
+  - `ClosedLoopDefectPublisherGate` transitions to `Rejected` on `schema_or_Mermaid_check_violation`, emits diagnostic `E0605` via `miette`, and terminates fail-closed with exit code 1.
+- 4a. Candidate dossier fails any of the 12 structural or Mermaid E1-E5 checks in `validate_defect_dossier`:
+  - `ClosedLoopDefectPublisherGate` returns `Result::Err` without writing to `DefectDossierArtifactPort` and exits fail-closed with code 1.
+- 5a. Remote GitHub issue body diverges from local `.pipeline/defects/` file after LF normalization (`closed_loop_mismatch_bytes != 0`):
+  - `ClosedLoopDefectPublisherGate` transitions to `Rejected` on `remote_payload_mismatch`, preserves prior verified state, and exits fail-closed with status code 1.
 
 ## 6. Postconditions
 - `ClosedLoopDefectPublisherGate` satisfies declared objective `Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence` with all subsystem invariants intact.

@@ -38,12 +38,19 @@ graph TD
 - Idempotent Local and Remote SSOT Deduplication
 
 ## 4. Main Success Scenario
-1. `Operator_Or_CI_Pipeline` invokes `Idempotent Local and Remote SSOT Deduplication` on `ClosedLoopDefectPublisherGate` targeting objective `Idempotent Local and Remote SSOT Deduplication`.
-2. `ClosedLoopDefectPublisherGate` verifies boundary preconditions and evaluates `Idempotent Local and Remote SSOT Deduplication` invariants (guarding `Diagnostic: E0603`).
-3. `ClosedLoopDefectPublisherGate` records verified `Idempotent Local and Remote SSOT Deduplication` outcome and returns status to `Operator_Or_CI_Pipeline`.
+1. `ClosedLoopDefectPublisherGate` receives a candidate 7-section dossier on `dossierCandidateInPort` and executes `run_check_defect` and `Execute12CheckValidateDefectDossier` (`schemaGateCount = 12`).
+2. Upon passing all 12 validation checks (`all_12_checks_passed`), `BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_LifecycleState` transitions from `Validating12Gates` to `DeduplicatingSsot`.
+3. `DeterministicStaticDefectAuditor` queries existing local `.pipeline/defects/*.md` records and live GitHub issue metadata via `GitHubIssueSsotQueryPort` using `pulldown-cmark` table extraction and normalized signature matching.
+4. If an identical finding signature already exists locally and remotely, `DeterministicStaticDefectAuditor` transitions to `Verified` on `existing_finding_skipped` without creating duplicate files or duplicate GitHub issues.
+5. If the finding is new, `DeterministicStaticDefectAuditor` writes the validated dossier atomically via `DefectDossierArtifactPort` (`new_finding_persisted_to_pipeline_defects`) and transitions to `PublishingClosedLoop`.
 
 ## 5. Alternate and Exception Flows
-- Diagnostic: E0603
+- 3a. Local `.pipeline/defects/` directory or GitHub SSOT query fails during `DeduplicatingSsot` (`Diagnostic: E0603`):
+  - `DeterministicStaticDefectAuditor` transitions to `Rejected`, emits diagnostic `E0603` via `ariadne` / `miette`, and terminates fail-closed with exit code 1.
+- 4a. Duplicate local defect files with conflicting finding signatures detected:
+  - `ClosedLoopDefectPublisherGate` returns `Result::Err`, aborts publication without mutating remote GitHub issues, and exits fail-closed with code 1.
+- 5a. Invariant violation under `Invariant_REQ_0606_SC_01` or `Invariant_REQ_0606_SC_02`:
+  - `ClosedLoopDefectPublisherGate` aborts execution, preserves prior verified state, and notifies `Operator_Or_CI_Pipeline` with fail-closed exit status 1.
 
 ## 6. Postconditions
 - `ClosedLoopDefectPublisherGate` satisfies declared objective `Idempotent Local and Remote SSOT Deduplication` with all subsystem invariants intact.

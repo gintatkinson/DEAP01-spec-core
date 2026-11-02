@@ -35,14 +35,19 @@ graph TD
 - SysmlParser parses the declaration block.
 
 ## 4. Main Success Scenario
-1. SysmlParser parses the declaration block.
-2. Valid composite types are preserved verbatim via parse_type_expr() and any unrecognized statement fails closed and is rejected with Err(ParseError) reporting diagnostic code E0200 (silent_skip_branch_count == 0).
+1. `Compiler_CLI_Caller` invokes `parse_package_or_file` on `FailClosedRecursiveDescentParser`, streaming span-exact tokens from `NativeSigilAndLifetimeLexer` across `TokenStreamChannelPort`.
+2. `FailClosedRecursiveDescentParser` enters `RecursiveDescentParsing` and dispatches inner declaration block parsers across all 12 SysML v2 block kinds (`port`, `action`, `requirement`, `state`, `connection`, `use case`, `item`, `hazard`, `risk`, `test case`, `capability`, `interaction`) using `logos` and `rowan`.
+3. `FailClosedRecursiveDescentParser` invokes `ParseTypeExprAndParseTransition` (`parse_type_expr`) to parse composite generic, reference, lifetime, and slice parameter types verbatim into typed AST nodes.
+4. `FailClosedRecursiveDescentParser` enforces `silent_skip_branch_count == 0` so zero `skip_until_semi_or_brace` silent-erasure branches execute during inner block parsing.
+5. For valid composite types, `FailClosedRecursiveDescentParser` constructs the canonical `PackageDef` AST and transitions to `CanonicalSerialization`; for any unrecognized inner statement, it transitions to `RejectedE0200` and emits `Err(ParseError)` with diagnostic code `E0200` via `BijectiveDiffDiagnosticPort`.
 
 ## 5. Alternate and Exception Flows
-- Precondition guard failure in `BijectiveSysmlSerializer`:
-  - `BijectiveSysmlSerializer` rejects the `Fail Closed Inner Block and Composite Type Parsing` request without partial state mutation and reports diagnostic status to `Compiler_CLI_Caller`.
-- Invariant violation while enforcing `Fail Closed Inner Block and Composite Type Parsing`:
-  - `BijectiveSysmlSerializer` aborts `Fail Closed Inner Block and Composite Type Parsing` execution, preserves prior verified state, and notifies `Compiler_CLI_Caller`.
+- 3a. Unrecognized inner block token or malformed statement encountered during `parse_package_or_file`:
+  - `FailClosedRecursiveDescentParser` transitions to `RejectedE0200` on `unexpectedInnerBlockToken`, emits an `ariadne` / `miette` `E0200` diagnostic on `BijectiveDiffDiagnosticPort`, and exits fail-closed with code 1.
+- 4a. Unbalanced angle brackets or invalid lifetime sigil in `ParseTypeExprAndParseTransition`:
+  - `FailClosedRecursiveDescentParser` returns `Result::Err(ParseError)` without silent skip recovery, preserves prior verified state, and terminates fail-closed with exit code 1.
+- 5a. Invariant violation while enforcing `Invariant_REQ_0603_SC_04` (`silent_skip_branch_count > 0`):
+  - `BijectiveSysmlSerializer` and `SysmlBijectiveRoundtripCompilerGate` abort compilation, emit a structured diagnostic to `Compiler_CLI_Caller`, and exit with non-zero status code 1.
 
 ## 6. Postconditions
 - Valid composite types are preserved verbatim via parse_type_expr() and any unrecognized statement fails closed and is rejected with Err(ParseError) reporting diagnostic code E0200 (silent_skip_branch_count == 0).

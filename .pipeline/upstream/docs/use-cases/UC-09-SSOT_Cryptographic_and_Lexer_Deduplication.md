@@ -29,20 +29,25 @@ graph TD
 - `VerifyBaselineCLI`
 
 ## 2. Preconditions
-- A Rust source file outside crates/deap-core/src/digest.rs that defines SHA-256 round constant 0x428a2f98 or a file outside crates/deap-core/src/source_ast.rs that defines a duplicate Rust source tokenizer.
+- A Rust source file outside crates/deap-core/src/digest.rs that defines SHA-256 round constant 0x428a2f98 or a file outside crates/deap-core/src/deap_core::rust_cst / deap_core::dart_cst.rs that defines a duplicate Rust source tokenizer.
 
 ## 3. Trigger
 - Check 34 executes audit_ssot_symbol_deduplication (C-PURITY-04 and C-PURITY-05).
 
 ## 4. Main Success Scenario
-1. Check 34 executes audit_ssot_symbol_deduplication (C-PURITY-04 and C-PURITY-05).
-2. The gate reports an SSOT duplication violation and exits fail-closed with a non-zero status code.
+1. `VerifyBaselineCLI` invokes `check_compiler_ast_purity` on `Check34AstPurityAndAntiGamingGate` to audit all workspace Rust modules via `WorkspaceRustCstPort`.
+2. `Check34AstPurityAndAntiGamingGate` invokes `mask_literals_and_comments` via `deap_core_rust_cst` (`ra_ap_syntax`, `logos`, and `rowan`) and delegates SSOT symbol verification to `SsotSymbolDeduplicationGate`.
+3. `SsotSymbolDeduplicationGate` executes `audit_ssot_symbol_deduplication` (constraints `C-PURITY-04` and `C-PURITY-05`) across every workspace relative path and masked token stream.
+4. `SsotSymbolDeduplicationGate` detects SHA-256 round constant `0x428a2f98` outside `crates/deap-core/src/digest.rs` (`duplicate_sha256_impl_count > 0`) or a duplicate Rust lexical state machine outside `crates/deap-core/src/rust_cst.rs` (`duplicate_lexer_impl_count > 0`).
+5. `Check34AstPurityAndAntiGamingGate` emits a sorted SSOT duplication diagnostic via `ariadne` / `miette` on `PurityViolationDiagnosticPort`, sets `Check34GateStatusPort` to `1`, and exits fail-closed with status code 1.
 
 ## 5. Alternate and Exception Flows
-- Precondition guard failure in `AntiGamingTestBodyAuditor`:
-  - `AntiGamingTestBodyAuditor` rejects the `SSOT Cryptographic and Lexer Deduplication` request without partial state mutation and reports diagnostic status to `VerifyBaselineCLI`.
-- Invariant violation while enforcing `SSOT Cryptographic and Lexer Deduplication`:
-  - `AntiGamingTestBodyAuditor` aborts `SSOT Cryptographic and Lexer Deduplication` execution, preserves prior verified state, and notifies `VerifyBaselineCLI`.
+- 3a. Unreadable source file or path canonicalization failure during workspace walk:
+  - `SsotSymbolDeduplicationGate` propagates `Result::Err`, emits a `miette` filesystem diagnostic on `PurityViolationDiagnosticPort`, and exits fail-closed with code 1.
+- 4a. Unauthorized hand-rolled parser or lexer state machine detected in a downstream crate:
+  - `SsotSymbolDeduplicationGate` increments `duplicate_lexer_impl_count`, reports the offending module path and line number via `ariadne`, and halts verification with exit code 1.
+- 5a. Invariant violation under `Invariant_REQ_0602_SC_01` (`duplicate_sha256_impl_count + duplicate_lexer_impl_count > 0`):
+  - `Check34AstPurityAndAntiGamingGate` aborts execution without partial state mutation, preserves prior verified state, and returns fail-closed exit code 1 to `VerifyBaselineCLI`.
 
 ## 6. Postconditions
 - The gate reports an SSOT duplication violation and exits fail-closed with a non-zero status code.

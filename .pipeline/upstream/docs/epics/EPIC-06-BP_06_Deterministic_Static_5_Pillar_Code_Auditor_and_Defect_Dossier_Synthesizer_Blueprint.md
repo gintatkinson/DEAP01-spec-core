@@ -32,7 +32,7 @@ Subsystem package for BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defec
 
 #### Associated User Stories
 - [ ] #726 - [User Story 37: Verify Baseline Audit Code Path Crates](../user-stories/US-37-VerifyBaselineAuditCodePathCrates.md)
-- [ ] #727 - [User Story 38: Parse Rust Source Ast And Parse](../user-stories/US-38-ParseRustSourceAstAndParse.md)
+- [ ] #727 - [User Story 38: Parse Rust Cst And Parse Dart Cst](../user-stories/US-38-ParseRustCstAndParseDartCst.md)
 - [ ] #728 - [User Story 39: Evaluate Source File Pillars Across5](../user-stories/US-39-EvaluateSourceFilePillarsAcross5.md)
 - [ ] #615 - [User Story 40: synthesize defect dossier markdown](../user-stories/US-40-synthesize_defect_dossier_markdown.md)
 - [ ] #617 - [User Story 41: run check defect](../user-stories/US-41-run_check_defect.md)
@@ -41,10 +41,10 @@ Subsystem package for BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defec
 - [ ] #731 - [User Story 44: Gh Issue View Json Title Body](../user-stories/US-44-GhIssueViewJsonTitleBody.md)
 
 ## 3. Architecture
-Classifiers: `ClosedLoopDefectPublisherGate` (ports: `in dossierCandidateInPort : String`, `out verifiedReceiptOutPort : String`); `DeterministicDossierSynthesizer` (ports: `in findingInPort : String`, `out dossierMarkdownOutPort : String`); `DeterministicStaticDefectAuditor` (ports: `in TargetSourceAstInputPort : String`, `in GitHubIssueSsotQueryPort : String`, `out DefectDossierArtifactPort : String`, `out ClosedLoopTrackerPublishPort : String`); `FivePillarStaticAstAnalyzer` (ports: `in astStreamInPort : String`, `out findingStreamOutPort : String`); `MermaidUmlDiagramGenerator` (ports: `in umlSpecInPort : String`, `out mermaidBlockOutPort : String`).
+Classifiers: `ClosedLoopDefectPublisherGate` (ports: `in dossierCandidateInPort : String`, `out verifiedReceiptOutPort : String`); `DeterministicDossierSynthesizer` (ports: `in findingInPort : String`, `out dossierMarkdownOutPort : String`); `DeterministicStaticDefectAuditor` (ports: `in TargetRustCstInputPort : String`, `in GitHubIssueSsotQueryPort : String`, `out DefectDossierArtifactPort : String`, `out ClosedLoopTrackerPublishPort : String`); `FivePillarStaticAstAnalyzer` (ports: `in astStreamInPort : String`, `out findingStreamOutPort : String`); `MermaidUmlDiagramGenerator` (ports: `in umlSpecInPort : String`, `out mermaidBlockOutPort : String`).
 
 ## 4. Operational Considerations
-Lifecycle state machines: `BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_LifecycleState` (Initial -> Idle; Idle -> IngestingSourceAst on verify_baseline_audit_code_path; IngestingSourceAst -> EvaluatingFivePillars on SourceAstItem_slice_parsed; EvaluatingFivePillars -> SynthesizingDossier on AuditFinding_emitted; EvaluatingFivePillars -> Verified on zero_findings_detected; SynthesizingDossier -> Validating12Gates on synthesize_defect_dossier_markdown; Validating12Gates -> Rejected on schema_or_Mermaid_check_violation; Validating12Gates -> DeduplicatingSsot on all_12_checks_passed; DeduplicatingSsot -> Verified on existing_finding_skipped; DeduplicatingSsot -> PublishingClosedLoop on new_finding_persisted_to_pipeline_defects; PublishingClosedLoop -> Verified on closed_loop_mismatch_bytes_0; PublishingClosedLoop -> Rejected on remote_payload_mismatch; Rejected -> Terminal; Verified -> Terminal). Operational actions: `VerifyBaselineAuditCodePathCrates`, `ParseRustSourceAstAndParse`, `EvaluateSourceFilePillarsAcross5`, `synthesize_defect_dossier_markdown`, `run_check_defect`, `Execute12CheckValidateDefectDossier`, `GhIssueCreateOrGhIssue`, `GhIssueViewJsonTitleBody`. Interaction sequences: `BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_SequenceInteraction`.
+Lifecycle state machines: `BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_LifecycleState` (Initial -> Idle; Idle -> IngestingRustAndDartCst on verify_baseline_audit_code_path; IngestingRustAndDartCst -> EvaluatingFivePillars on RustCstItem_slice_parsed; EvaluatingFivePillars -> SynthesizingDossier on AuditFinding_emitted; EvaluatingFivePillars -> Verified on zero_findings_detected; SynthesizingDossier -> Validating12Gates on synthesize_defect_dossier_markdown; Validating12Gates -> Rejected on schema_or_Mermaid_check_violation; Validating12Gates -> DeduplicatingSsot on all_12_checks_passed; DeduplicatingSsot -> Verified on existing_finding_skipped; DeduplicatingSsot -> PublishingClosedLoop on new_finding_persisted_to_pipeline_defects; PublishingClosedLoop -> Verified on closed_loop_mismatch_bytes_0; PublishingClosedLoop -> Rejected on remote_payload_mismatch; Rejected -> Terminal; Verified -> Terminal). Operational actions: `VerifyBaselineAuditCodePathCrates`, `ParseRustCstAndParseDartCst`, `EvaluateSourceFilePillarsAcross5`, `synthesize_defect_dossier_markdown`, `run_check_defect`, `Execute12CheckValidateDefectDossier`, `GhIssueCreateOrGhIssue`, `GhIssueViewJsonTitleBody`. Interaction sequences: `BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_SequenceInteraction`.
 
 ## 5. Security & Governance
 Allocated requirements: `REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`. Enforced invariant constraints: `Invariant_REQ_0606_SC_01`, `Invariant_REQ_0606_SC_02`.
@@ -72,7 +72,7 @@ classDiagram
         +Integer whysChainDepth
     }
     class DeterministicStaticDefectAuditor {
-        +String TargetSourceAstInputPort (in)
+        +String TargetRustCstInputPort (in)
         +String GitHubIssueSsotQueryPort (in)
         +String DefectDossierArtifactPort (out)
         +String ClosedLoopTrackerPublishPort (out)
@@ -104,8 +104,8 @@ classDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> IngestingSourceAst : verify_baseline_audit_code_path
-    IngestingSourceAst --> EvaluatingFivePillars : SourceAstItem_slice_parsed
+    Idle --> IngestingRustAndDartCst : verify_baseline_audit_code_path
+    IngestingRustAndDartCst --> EvaluatingFivePillars : RustCstItem_slice_parsed
     EvaluatingFivePillars --> SynthesizingDossier : AuditFinding_emitted
     EvaluatingFivePillars --> Verified : zero_findings_detected
     SynthesizingDossier --> Validating12Gates : synthesize_defect_dossier_markdown

@@ -48,7 +48,7 @@ classDiagram
     "zeroRegexMode": {
       "type": "boolean",
       "x-sysml-type": "Boolean",
-      "description": "Enforces linear token-stream and `SourceAstItem` slice traversal without regular expressions. [unit: flag]",
+      "description": "Enforces linear token-stream and `rust_cst` item slice traversal without regular expressions. [unit: flag]",
       "default": true
     },
     "astStreamInPort": {

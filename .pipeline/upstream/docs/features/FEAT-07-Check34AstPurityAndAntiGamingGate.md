@@ -16,7 +16,7 @@
 ```mermaid
 classDiagram
     class Check34AstPurityAndAntiGamingGate {
-        +String WorkspaceSourceAstPort (in)
+        +String WorkspaceRustCstPort (in)
         +String TestFunctionAstStreamPort (in)
         +String PurityViolationDiagnosticPort (out)
         +Integer Check34GateStatusPort (out)
@@ -59,7 +59,7 @@ classDiagram
     "vacuous_test_count": {
       "type": "integer",
       "x-sysml-type": "Integer",
-      "description": "Total `#[test]` functions exhibiting zero assertions, `mem::size_of` dummy checks, conditional `.exists()` skips, or shared temp paths [unit: count]",
+      "description": "Total Rust `test`-annotated functions exhibiting zero assertions, `mem::size_of` dummy checks, conditional `.exists()` skips, or shared temp paths [unit: count]",
       "default": 0
     },
     "duplicate_sha256_impl_count": {
@@ -71,10 +71,10 @@ classDiagram
     "duplicate_lexer_impl_count": {
       "type": "integer",
       "x-sysml-type": "Integer",
-      "description": "Total duplicate Rust source lexical state machines defined outside `crates/deap-core/src/source_ast.rs` [unit: count]",
+      "description": "Total duplicate Rust source lexical state machines defined outside `crates/deap-core/src/deap_core::rust_cst / deap_core::dart_cst.rs` [unit: count]",
       "default": 0
     },
-    "WorkspaceSourceAstPort": {
+    "WorkspaceRustCstPort": {
       "type": "object",
       "properties": {
         "direction": { "type": "string", "const": "in" },
@@ -110,7 +110,7 @@ classDiagram
   "required": [
     "part",
     "status",
-    "WorkspaceSourceAstPort",
+    "WorkspaceRustCstPort",
     "TestFunctionAstStreamPort",
     "PurityViolationDiagnosticPort",
     "Check34GateStatusPort"
@@ -129,13 +129,13 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `vacuous_test_count` | `Integer` | Default `0` |
 | Attribute | `duplicate_sha256_impl_count` | `Integer` | Default `0` |
 | Attribute | `duplicate_lexer_impl_count` | `Integer` | Default `0` |
-| Port | `WorkspaceSourceAstPort` | `in String` | Boundary interface contract |
+| Port | `WorkspaceRustCstPort` | `in String` | Boundary interface contract |
 | Port | `TestFunctionAstStreamPort` | `in String` | Boundary interface contract |
 | Port | `PurityViolationDiagnosticPort` | `out String` | Boundary interface contract |
 | Port | `Check34GateStatusPort` | `out Integer` | Boundary interface contract |
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `Check34AstPurityAndAntiGamingGate` organize no nested subparts declared in schema paired with boundary ports `in WorkspaceSourceAstPort : String`, `in TestFunctionAstStreamPort : String`, `out PurityViolationDiagnosticPort : String`, `out Check34GateStatusPort : Integer`.
+Structural composition and boundary topology for classifier `Check34AstPurityAndAntiGamingGate` organize no nested subparts declared in schema paired with boundary ports `in WorkspaceRustCstPort : String`, `in TestFunctionAstStreamPort : String`, `out PurityViolationDiagnosticPort : String`, `out Check34GateStatusPort : Integer`.
 
 ### 4. Interactive Flow & States
 Operational lifecycle events and discrete state transitions for Check34AstPurityAndAntiGamingGate.
@@ -147,7 +147,7 @@ Classifier `Check34AstPurityAndAntiGamingGate` encapsulates typed domain state a
 Classifier `Check34AstPurityAndAntiGamingGate` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `Check34AstPurityAndAntiGamingGate` binds external and behavioral interfaces across port `in WorkspaceSourceAstPort : String`, port `in TestFunctionAstStreamPort : String`, port `out PurityViolationDiagnosticPort : String`, port `out Check34GateStatusPort : Integer`.
+Classifier `Check34AstPurityAndAntiGamingGate` binds external and behavioral interfaces across port `in WorkspaceRustCstPort : String`, port `in TestFunctionAstStreamPort : String`, port `out PurityViolationDiagnosticPort : String`, port `out Check34GateStatusPort : Integer`.
 
 ### Associated Use Cases & User Stories
 
@@ -165,8 +165,8 @@ Classifier `Check34AstPurityAndAntiGamingGate` binds external and behavioral int
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `Check34AstPurityAndAntiGamingGate` initialization inputs for `direct_range_slice_count` (`Integer`), `fail_open_io_site_count` (`Integer`), `vacuous_test_count` (`Integer`), `duplicate_sha256_impl_count` (`Integer`), `duplicate_lexer_impl_count` (`Integer`) (no additional constraints specified in schema), When `Check34AstPurityAndAntiGamingGate` commits typed domain state, Then declared state attributes hold verified values.
 - [ ] AC-02: Given malformed or out-of-domain input values for `direct_range_slice_count` (`Integer`), `fail_open_io_site_count` (`Integer`), `vacuous_test_count` (`Integer`), `duplicate_sha256_impl_count` (`Integer`), `duplicate_lexer_impl_count` (`Integer`), When `Check34AstPurityAndAntiGamingGate` validates incoming state updates, Then `Check34AstPurityAndAntiGamingGate` rejects the invalid state update and emits a diagnostic via diagnostic port `PurityViolationDiagnosticPort`.
-- [ ] AC-03: Given nominal signal arrival across `WorkspaceSourceAstPort` (`in String`), `TestFunctionAstStreamPort` (`in String`), `PurityViolationDiagnosticPort` (`out String`), `Check34GateStatusPort` (`out Integer`), When `Check34AstPurityAndAntiGamingGate` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
-- [ ] AC-04: Given an invalid or unrecognized interface frame across `WorkspaceSourceAstPort` (`in String`), `TestFunctionAstStreamPort` (`in String`), `PurityViolationDiagnosticPort` (`out String`), `Check34GateStatusPort` (`out Integer`), When `Check34AstPurityAndAntiGamingGate` boundary validation executes, Then `Check34AstPurityAndAntiGamingGate` refuses the malformed frame via diagnostic port `PurityViolationDiagnosticPort` and preserves prior verified state.
+- [ ] AC-03: Given nominal signal arrival across `WorkspaceRustCstPort` (`in String`), `TestFunctionAstStreamPort` (`in String`), `PurityViolationDiagnosticPort` (`out String`), `Check34GateStatusPort` (`out Integer`), When `Check34AstPurityAndAntiGamingGate` processes the declared interface transaction, Then output state conforms to the structural classifier contract.
+- [ ] AC-04: Given an invalid or unrecognized interface frame across `WorkspaceRustCstPort` (`in String`), `TestFunctionAstStreamPort` (`in String`), `PurityViolationDiagnosticPort` (`out String`), `Check34GateStatusPort` (`out Integer`), When `Check34AstPurityAndAntiGamingGate` boundary validation executes, Then `Check34AstPurityAndAntiGamingGate` refuses the malformed frame via diagnostic port `PurityViolationDiagnosticPort` and preserves prior verified state.
 
 ## Source References
 Formal component specifications and normative systems engineering requirements:
