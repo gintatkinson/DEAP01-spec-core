@@ -120,25 +120,21 @@ pub const LEGACY_RATCHET_MAX_LINES: &[(&str, usize)] = &[
     ("./crates/compile-sysml/tests/reproducer_tests.rs", 3804),
     ("./crates/compile-sysml/tests/self_hosting_bootstrap.rs", 563),
     ("./crates/compile-sysml/tests/upstream_projection_acceptance_test.rs", 466),
-    ("./crates/deap-core/src/diagnostics.rs", 645),
     ("./crates/deap-core/src/digest.rs", 361),
     ("./crates/deap-core/src/error.rs", 232),
-    ("./crates/deap-core/src/markdown.rs", 1253),
-    ("./crates/deap-core/src/rules.rs", 1349),
-    ("./crates/deap-core/src/source_ast.rs", 6074),
-    ("./crates/deap-core/src/source_ast_tests.rs", 1522),
     ("./crates/deap-core/src/sysml_ast/actions.rs", 359),
     ("./crates/deap-core/src/sysml_ast/connections_and_flows.rs", 577),
     ("./crates/deap-core/src/sysml_ast/expressions.rs", 576),
     ("./crates/deap-core/src/sysml_ast/identifiers.rs", 520),
     ("./crates/deap-core/src/sysml_ast/interactions.rs", 128),
     ("./crates/deap-core/src/sysml_ast/interfaces_and_items.rs", 581),
-    ("./crates/deap-core/src/sysml_ast/mod.rs", 3401),
+    ("./crates/deap-core/src/sysml_ast/mod.rs", 1873),
     ("./crates/deap-core/src/sysml_ast/package_model.rs", 621),
     ("./crates/deap-core/src/sysml_ast/parts_and_ports.rs", 487),
     ("./crates/deap-core/src/sysml_ast/requirements.rs", 545),
     ("./crates/deap-core/src/sysml_ast/safety_and_fmeca.rs", 557),
     ("./crates/deap-core/src/sysml_ast/states.rs", 393),
+    ("./crates/deap-core/src/sysml_ast/sysml_ast_tests.rs", 1535),
     ("./crates/ingest-sysml/src/detectors.rs", 1279),
     ("./crates/ingest-sysml/src/digest.rs", 843),
     ("./crates/ingest-sysml/src/lib.rs", 1084),
@@ -193,6 +189,23 @@ pub const LEGACY_RATCHET_MAX_LINES: &[(&str, usize)] = &[
     ("./crates/verify-baseline/tests/defect_dossier_tests.rs", 1129),
 ];
 
+/// Indicates that zero new unratcheted `> 500`-line modules are permitted in the workspace (`[REQ-0601]`, `[REQ-0801]`).
+pub const ZERO_NEW_RATCHET_ENFORCED: bool = true;
+
+/// Counts entries in [`LEGACY_RATCHET_MAX_LINES`] whose line ceiling exceeds `500` (`[REQ-0601]`, `[REQ-0801]`).
+#[must_use]
+pub const fn active_greater_than_500_ratchet_count() -> usize {
+    let mut rest = LEGACY_RATCHET_MAX_LINES;
+    let mut count = 0;
+    while let Some((&(_, ceiling), tail)) = rest.split_first() {
+        if ceiling > 500 {
+            count += 1;
+        }
+        rest = tail;
+    }
+    count
+}
+
 /// Returns the maximum allowed line count for `rel_path` via `O(log N)` binary search.
 /// Normalizes Windows `\` separators and bare `crates/...` prefixes (`[REQ-0601]`, `[REQ-0608]`).
 #[must_use]
@@ -217,7 +230,10 @@ pub fn lookup_ratchet_ceiling(rel_path: &str) -> Option<usize> {
 /// Unit tests verifying ratchet ordering, key prefixing, and on-disk line parity (`[REQ-0601]`, `[REQ-0608]`).
 #[cfg(test)]
 mod tests {
-    use super::{lookup_ratchet_ceiling, LEGACY_RATCHET_MAX_LINES};
+    use super::{
+        active_greater_than_500_ratchet_count, lookup_ratchet_ceiling, LEGACY_RATCHET_MAX_LINES,
+        ZERO_NEW_RATCHET_ENFORCED,
+    };
     use std::fs;
     use std::path::{Path, PathBuf};
     use walkdir::WalkDir;
@@ -281,8 +297,8 @@ mod tests {
     /// Verifies cross-platform path separator normalization and non-ratcheted misses (`[REQ-0601]`).
     #[test]
     fn lookup_ratchet_ceiling_handles_normalization_and_misses() -> Result<(), String> {
-        if lookup_ratchet_ceiling(".\\crates\\deap-core\\src\\source_ast.rs") != Some(6074)
-            || lookup_ratchet_ceiling("crates/deap-core/src/source_ast.rs") != Some(6074)
+        if lookup_ratchet_ceiling(".\\crates\\compile-sysml\\tests\\reproducer_tests.rs") != Some(3804)
+            || lookup_ratchet_ceiling("crates/compile-sysml/tests/reproducer_tests.rs") != Some(3804)
         {
             return Err(String::from("path normalization lookup failed"));
         }
@@ -291,6 +307,10 @@ mod tests {
             || lookup_ratchet_ceiling("").is_some()
         {
             return Err(String::from("unexpected ceiling hit for non-ratcheted path"));
+        }
+        let expected_gt_500 = LEGACY_RATCHET_MAX_LINES.iter().filter(|&&(_, c)| c > 500).count();
+        if !ZERO_NEW_RATCHET_ENFORCED || active_greater_than_500_ratchet_count() != expected_gt_500 {
+            return Err(String::from("active_greater_than_500_ratchet_count invariant failed"));
         }
         Ok(())
     }
