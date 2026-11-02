@@ -26,6 +26,7 @@
 
 use super::alignment::ALLOWED_ALIGNMENT_ENVS;
 use super::sanitization::strip_code_and_glfm;
+use pulldown_cmark::{Event, Options, Parser};
 
 /// Validates LaTeX / KaTeX rendering syntax across markdown content.
 ///
@@ -54,37 +55,46 @@ pub fn check_latex_katex_syntax(content: &str, file_rel_path: &str) -> Vec<Strin
     let mut errors = Vec::new();
     let cleaned = strip_code_and_glfm(content);
 
-    let Some(parts) = validate_delimiters(&cleaned, file_rel_path, &mut errors) else {
+    let delimiter_count = cleaned.matches("$$").count();
+    if !delimiter_count.is_multiple_of(2) {
+        errors.push(format!(
+            "Unbalanced $$ display math delimiters in {} (found {} delimiters).",
+            file_rel_path, delimiter_count
+        ));
         return errors;
-    };
+    }
 
     validate_aligned_pairs(&cleaned, file_rel_path, &mut errors);
 
-    for i in (1..parts.len()).step_by(2) {
-        if let Some(&block) = parts.get(i) {
-            validate_single_math_block(block, file_rel_path, &mut errors);
+    let parser = Parser::new_ext(&cleaned, Options::all() | Options::ENABLE_MATH);
+    let mut math_spans = Vec::new();
+
+    for (event, range) in parser.into_offset_iter() {
+        match event {
+            Event::DisplayMath(math) | Event::InlineMath(math) => {
+                math_spans.push((math.to_string(), range));
+            }
+            _ => {}
         }
     }
 
-    errors
-}
-
-fn validate_delimiters<'a>(
-    cleaned: &'a str,
-    file_rel_path: &str,
-    errors: &mut Vec<String>,
-) -> Option<Vec<&'a str>> {
-    let parts: Vec<&'a str> = cleaned.split("$$").collect();
-    if !(parts.len() - 1).is_multiple_of(2) {
-        errors.push(format!(
-            "Unbalanced $$ display math delimiters in {} (found {} delimiters).",
-            file_rel_path,
-            parts.len() - 1
-        ));
-        None
-    } else {
-        Some(parts)
+    if math_spans.is_empty() && delimiter_count > 0 {
+        let indices: Vec<usize> = cleaned.match_indices("$$").map(|(i, _)| i).collect();
+        let (chunks, _) = indices.as_chunks::<2>();
+        for &[open_idx, close_idx] in chunks {
+            let start = open_idx + 2;
+            let end = close_idx;
+            if let Some(block) = cleaned.get(start..end) {
+                math_spans.push((block.to_string(), start..end));
+            }
+        }
     }
+
+    for (block, _) in &math_spans {
+        validate_single_math_block(block, file_rel_path, &mut errors);
+    }
+
+    errors
 }
 
 fn validate_aligned_pairs(cleaned: &str, file_rel_path: &str, errors: &mut Vec<String>) {

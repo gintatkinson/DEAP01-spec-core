@@ -136,51 +136,38 @@ fn strip_mermaid_arrows(line: &str) -> String {
 /// Realises: [REQ-MD-MERMAID]
 pub fn check_mermaid_syntax(content: &str, file_rel_path: &str) -> Vec<String> {
     let mut errors = Vec::new();
-    let lines: Vec<&str> = content.split_inclusive('\n').collect();
-    let n = lines.len();
-    let mut i = 0;
+    let ast = crate::markdown::ast::parse_markdown_ast(content);
 
-    while i < n {
-        let Some(&line) = lines.get(i) else {
-            break;
-        };
-        let trimmed = line.trim();
-        let is_mermaid_open = if trimmed.starts_with("```") {
-            let backticks = trimmed.chars().take_while(|&c| c == '`').count();
-            backticks >= 3 && trimmed.get(backticks..).unwrap_or("").trim() == "mermaid"
-        } else {
-            false
-        };
-
-        if is_mermaid_open {
-            let start_line = i + 1;
-            let mut body: Vec<(usize, &str)> = Vec::new();
-            i += 1;
-            let mut closed = false;
-
-            while i < n {
-                let Some(&inner) = lines.get(i) else {
-                    break;
-                };
-                let inner_trimmed = inner.trim();
-                if inner_trimmed.starts_with("```") {
-                    closed = true;
-                    break;
-                }
-                body.push((i + 1, inner));
-                i += 1;
-            }
-
-            if !closed {
-                errors.push(format!(
-                    "{}:{}: unclosed ```mermaid fence. Every diagram must be closed with a matching ``` fence on its own line.",
-                    file_rel_path, start_line
-                ));
-            } else {
-                validate_mermaid_block(&body, file_rel_path, start_line, &mut errors);
-            }
+    for block in &ast.code_blocks {
+        if block.info != "mermaid" {
+            continue;
         }
-        i += 1;
+
+        let start_line = content
+            .get(..block.start_offset)
+            .map_or(1, |prefix| prefix.split('\n').count());
+
+        let raw_block = content
+            .get(block.start_offset..block.end_offset)
+            .unwrap_or("");
+        let last_line = raw_block.lines().last().unwrap_or("").trim();
+        let is_closed = (last_line.starts_with("```") || last_line.starts_with("~~~"))
+            && raw_block.lines().count() > 1;
+
+        if !is_closed {
+            errors.push(format!(
+                "{}:{}: unclosed ```mermaid fence. Every diagram must be closed with a matching ``` fence on its own line.",
+                file_rel_path, start_line
+            ));
+            continue;
+        }
+
+        let mut body: Vec<(usize, &str)> = Vec::new();
+        for (idx, line) in block.code.split_inclusive('\n').enumerate() {
+            body.push((start_line + 1 + idx, line));
+        }
+
+        validate_mermaid_block(&body, file_rel_path, start_line, &mut errors);
     }
 
     errors

@@ -35,7 +35,10 @@ pub mod item;
 pub mod severity;
 
 pub use dossier::{DefectDossier, WhyEntry};
-pub use item::Diagnostic;
+pub use item::{
+    render_diagnostic_multispan_with_ariadne, render_diagnostic_with_ariadne, Diagnostic,
+    DiagnosticItem,
+};
 pub use severity::DiagnosticSeverity;
 
 #[cfg(test)]

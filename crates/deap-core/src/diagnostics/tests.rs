@@ -59,7 +59,7 @@ fn test_defect_dossier_markdown_and_json_synthesis() -> Result<(), Box<dyn std::
 }
 
 #[test]
-fn test_diagnostics_source_purity_and_7_section_rustdoc() {
+fn test_diagnostics_module_docstrings() {
     let sources = [
         include_str!("mod.rs"),
         include_str!("severity.rs"),
@@ -67,14 +67,15 @@ fn test_diagnostics_source_purity_and_7_section_rustdoc() {
         include_str!("dossier.rs"),
     ];
 
-    let s1 = "## 1. Safety Intent & Regulatory Scope";
-    let s2 = "## 2. Invariants & Mathematical Properties";
-    let s3 = "## 3. Preconditions";
-    let s4 = "## 4. Postconditions";
-    let s5 = "## 5. Algorithmic Complexity Bounds";
-    let s6 = "## 6. Failure Modes & Fault Tolerance";
-    let s7 = "## 7. Realization & Traceability";
-    let mandatory_sections = [s1, s2, s3, s4, s5, s6, s7];
+    let mandatory_sections = [
+        "## 1. Safety Intent & Regulatory Scope",
+        "## 2. Invariants & Mathematical Properties",
+        "## 3. Preconditions",
+        "## 4. Postconditions",
+        "## 5. Algorithmic Complexity Bounds",
+        "## 6. Failure Modes & Fault Tolerance",
+        "## 7. Realization & Traceability",
+    ];
 
     let mod_doc: String = sources[0]
         .lines()
@@ -88,73 +89,142 @@ fn test_diagnostics_source_purity_and_7_section_rustdoc() {
             section
         );
     }
+}
 
+fn check_file_source_purity(file_idx: usize, source: &str) {
     let pat_regex_colons = ["Reg", "ex::"].concat();
     let pat_inline_regex = ["reg", "ex::"].concat();
     let needle_slice_str = ["&[", "&str]"].concat();
     let needle_let_blank = ["let", " _ = "].concat();
 
-    let mut fn_count = 0usize;
+    let prod = source.split("#[cfg(test)]").next().unwrap_or(source);
+    for (idx, raw_line) in prod.lines().enumerate() {
+        let line_no = idx + 1;
+        let trimmed = raw_line.trim();
+        if trimmed.starts_with("//!") || trimmed.starts_with("///") {
+            continue;
+        }
+        let code = trimmed.split("//").next().unwrap_or(trimmed).trim();
+        if code.is_empty() {
+            continue;
+        }
+        assert!(
+            !code.contains(&pat_regex_colons) && !code.contains(&pat_inline_regex),
+            "File {file_idx} Line {line_no}: regex usage detected"
+        );
+        assert!(
+            !code.contains(&needle_slice_str),
+            "File {file_idx} Line {line_no}: static string-slice array detected"
+        );
+        assert!(
+            !code.contains(&needle_let_blank),
+            "File {file_idx} Line {line_no}: hollow gate stub detected"
+        );
+    }
+}
 
-    for (file_idx, source) in sources.iter().enumerate() {
-        let prod = source.split("#[cfg(test)]").next().unwrap_or(source);
-        let mut current_doc = Vec::new();
+fn check_file_7_section_rustdoc(
+    file_idx: usize,
+    source: &str,
+    mandatory_sections: &[&str],
+    fn_count: &mut usize,
+) {
+    let prod = source.split("#[cfg(test)]").next().unwrap_or(source);
+    let mut current_doc = Vec::new();
 
-        for (idx, raw_line) in prod.lines().enumerate() {
-            let line_no = idx + 1;
-            let trimmed = raw_line.trim();
-            if trimmed.starts_with("//!") || trimmed.starts_with("///") {
-                current_doc.push(trimmed.to_string());
-                continue;
+    for (idx, raw_line) in prod.lines().enumerate() {
+        let line_no = idx + 1;
+        let trimmed = raw_line.trim();
+        if trimmed.starts_with("//!") || trimmed.starts_with("///") {
+            current_doc.push(trimmed.to_string());
+            continue;
+        }
+        let code = trimmed.split("//").next().unwrap_or(trimmed).trim();
+        if code.is_empty() {
+            continue;
+        }
+        let is_fn = code.starts_with("pub fn ")
+            || code.starts_with("fn ")
+            || code.starts_with("pub const fn ")
+            || code.starts_with("pub(crate) fn ");
+        if is_fn {
+            *fn_count += 1;
+            let doc_block = current_doc.join("\n");
+            for section in mandatory_sections {
+                assert!(
+                    doc_block.contains(section),
+                    "File {file_idx} Line {line_no}: function missing section {section}"
+                );
             }
-            let code = trimmed.split("//").next().unwrap_or(trimmed).trim();
-            if code.is_empty() {
-                continue;
-            }
-            assert!(
-                !code.contains(&pat_regex_colons) && !code.contains(&pat_inline_regex),
-                "File {} Line {}: regex usage detected",
-                file_idx,
-                line_no
-            );
-            assert!(
-                !code.contains(&needle_slice_str),
-                "File {} Line {}: static string-slice array detected",
-                file_idx,
-                line_no
-            );
-            assert!(
-                !code.contains(&needle_let_blank),
-                "File {} Line {}: hollow gate stub detected",
-                file_idx,
-                line_no
-            );
-
-            if code.starts_with("pub fn ")
-                || code.starts_with("fn ")
-                || code.starts_with("pub const fn ")
-                || code.starts_with("pub(crate) fn ")
-            {
-                fn_count += 1;
-                let doc_block = current_doc.join("\n");
-                for section in mandatory_sections {
-                    assert!(
-                        doc_block.contains(section),
-                        "File {} Line {}: function missing section {}",
-                        file_idx,
-                        line_no,
-                        section
-                    );
-                }
-                current_doc.clear();
-            } else if !code.starts_with("#[") {
-                current_doc.clear();
-            }
+            current_doc.clear();
+        } else if !code.starts_with("#[") {
+            current_doc.clear();
         }
     }
+}
 
+#[test]
+fn test_diagnostics_source_purity() {
+    let sources = [
+        include_str!("mod.rs"),
+        include_str!("severity.rs"),
+        include_str!("item.rs"),
+        include_str!("dossier.rs"),
+    ];
+    for (file_idx, source) in sources.iter().enumerate() {
+        check_file_source_purity(file_idx, source);
+    }
+}
+
+#[test]
+fn test_diagnostics_7_section_rustdoc() {
+    let sources = [
+        include_str!("mod.rs"),
+        include_str!("severity.rs"),
+        include_str!("item.rs"),
+        include_str!("dossier.rs"),
+    ];
+    let mandatory_sections = [
+        "## 1. Safety Intent & Regulatory Scope",
+        "## 2. Invariants & Mathematical Properties",
+        "## 3. Preconditions",
+        "## 4. Postconditions",
+        "## 5. Algorithmic Complexity Bounds",
+        "## 6. Failure Modes & Fault Tolerance",
+        "## 7. Realization & Traceability",
+    ];
+    let mut fn_count = 0usize;
+    for (file_idx, source) in sources.iter().enumerate() {
+        check_file_7_section_rustdoc(file_idx, source, &mandatory_sections, &mut fn_count);
+    }
     assert_eq!(
-        fn_count, 7,
-        "Expected exactly 7 documented functions across diagnostics module files"
+        fn_count, 9,
+        "Expected exactly 9 documented functions across diagnostics module files"
     );
+}
+
+#[test]
+fn test_render_diagnostic_with_ariadne_multispan_color_and_note() {
+    let diag = Diagnostic::new(DiagnosticSeverity::Error, "E0301", "Power invariant violation")
+        .with_location("schema/REQ-0099.md", 44, 1);
+    let src = "Interface_Gamma across e through f;\npower = e * f;\n";
+    let rendered = render_diagnostic_with_ariadne(&diag, "schema/REQ-0099.md", src, 0..15);
+    assert!(rendered.contains("E0301"));
+    assert!(rendered.contains("Power invariant violation"));
+    assert!(rendered.contains("severity: Error"));
+
+    let spans = vec![
+        (0..15, "primary violation".to_string(), ariadne::Color::Red),
+        (36..49, "dependent power expr".to_string(), ariadne::Color::Yellow),
+    ];
+    let multispan = render_diagnostic_multispan_with_ariadne(
+        &diag,
+        "schema/REQ-0099.md",
+        src,
+        &spans,
+        Some("DO-178C Level A invariant violated"),
+    );
+    assert!(multispan.contains("primary violation"));
+    assert!(multispan.contains("dependent power expr"));
+    assert!(multispan.contains("DO-178C Level A invariant violated"));
 }

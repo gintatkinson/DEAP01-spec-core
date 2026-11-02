@@ -23,6 +23,8 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-MD-MODULE], [DO-330-TQL-4-MARKDOWN].
 
+use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+
 /// Removes fenced code blocks (` ```...``` ` and `~~~...~~~`), replacing non-newline characters
 /// with ASCII spaces so downstream line and column offsets remain invariant.
 ///
@@ -49,52 +51,52 @@
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-MD-FENCES]
 pub fn strip_fenced_code_blocks(content: &str) -> String {
+    let mut code_ranges = Vec::new();
+    let mut current_block_start = None;
+
+    for (event, range) in Parser::new_ext(content, Options::all()).into_offset_iter() {
+        match event {
+            Event::Start(Tag::CodeBlock(_)) => {
+                current_block_start = Some(range.start);
+            }
+            Event::End(TagEnd::CodeBlock) => {
+                if let Some(start) = current_block_start.take() {
+                    code_ranges.push(start..range.end);
+                }
+            }
+            _ => {}
+        }
+    }
+    if let Some(start) = current_block_start {
+        code_ranges.push(start..content.len());
+    }
+
     let mut out = String::with_capacity(content.len());
-    let mut in_fence = false;
-    let mut fence_char = ' ';
-    let mut fence_len = 0;
+    let mut range_idx = 0;
 
-    for line in content.split_inclusive('\n') {
-        let trimmed = line.trim_start();
-        if !in_fence {
-            if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-                let Some(ch) = trimmed.chars().next() else {
-                    continue;
-                };
-                let len = trimmed.chars().take_while(|&c| c == ch).count();
-                in_fence = true;
-                fence_char = ch;
-                fence_len = len;
-                push_blanked_line(&mut out, line);
-                continue;
-            }
-            out.push_str(line);
-        } else {
-            let is_closing = if trimmed.starts_with(fence_char) {
-                let len = trimmed.chars().take_while(|&c| c == fence_char).count();
-                len >= fence_len && trimmed.get(len..).unwrap_or("").trim().is_empty()
+    for (byte_idx, ch) in content.char_indices() {
+        while range_idx < code_ranges.len()
+            && code_ranges.get(range_idx).is_some_and(|r| byte_idx >= r.end)
+        {
+            range_idx += 1;
+        }
+
+        let in_code = code_ranges
+            .get(range_idx)
+            .is_some_and(|r| byte_idx >= r.start && byte_idx < r.end);
+
+        if in_code {
+            if ch == '\n' || ch == '\r' {
+                out.push(ch);
             } else {
-                false
-            };
-
-            push_blanked_line(&mut out, line);
-
-            if is_closing {
-                in_fence = false;
+                out.push(' ');
             }
-        }
-    }
-    out
-}
-
-fn push_blanked_line(out: &mut String, line: &str) {
-    for c in line.chars() {
-        if c == '\n' || c == '\r' {
-            out.push(c);
         } else {
-            out.push(' ');
+            out.push(ch);
         }
     }
+
+    out
 }
 
 /// Removes GitLab Flavored Markdown (GLFM) inline math spans (`$`...`$` or `$``...``$`),
