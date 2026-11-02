@@ -30,8 +30,8 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-COMPILER-SYSML-LIB], [DO-330-TQL-4-LIB]
 #![cfg_attr(test, allow(clippy::field_reassign_with_default))]
-
 pub mod cli;
+pub mod cst_cli;
 pub mod docstring;
 pub mod driver;
 pub mod flutter_codegen;

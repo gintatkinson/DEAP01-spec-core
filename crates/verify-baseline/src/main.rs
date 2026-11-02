@@ -79,31 +79,23 @@ use verify_baseline::setup_hooks::{self, SetupHooksArgs};
 #[derive(Debug)]
 struct Cli {
     command: Option<Subcommands>,
-
     /// Target destination directory or repository root (defaults to current directory)
     destination: String,
 
     /// Skip domain type compatibility validation and build/test commands
     no_domain: bool,
-
     /// Enforce strict baseline conformance (reject pending or missing specifications)
     strict: bool,
-
     /// Gracefully allow missing specifications if in downstream customer mode
     allow_missing_specs: bool,
-
     /// Target execution platform profile (e.g. flutter, react)
     target: Option<String>,
-
     /// Optional path to write output report or defect dossier
     output: Option<String>,
-
     /// Run only the specification quality and coverage audit suite
     spec_only: bool,
-
     /// Audit only a specific markdown file
     only: Option<String>,
-
     /// Filter to run a specific audit gate
     gate: Option<String>,
 }
@@ -696,6 +688,14 @@ fn resolve_audit_workspace_root(target_path: &Path) -> PathBuf {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-VERIFY-BASELINE-MAIN]
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(res) = verify_baseline::ndjson_cli::try_run_ndjson_cli(&args) {
+        if let Err(e) = res {
+            eprintln!("{e}");
+            process::exit(1);
+        }
+        return;
+    }
     let cli = Cli::parse();
 
     if let Some(cmd) = cli.command {

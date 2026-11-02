@@ -1,4 +1,4 @@
-//! deap-core: Shared library crate across DEAP pipeline utilities.
+//! deap-core: Shared library crate across DEAP pipeline utilities. [DOC-TIER: A]
 //!
 //! ## 1. Safety Intent & Regulatory Scope
 //! Provides the core foundational library of deterministic AST parsers, diagnostic
@@ -39,6 +39,7 @@ pub mod digest;
 pub mod error;
 pub mod markdown;
 pub mod rules;
+pub mod rust_cst;
 pub mod source_ast;
 pub mod sysml_ast;
 pub mod workspace;

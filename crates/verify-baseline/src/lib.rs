@@ -37,6 +37,7 @@ pub mod check_secrets;
 pub mod checks;
 pub mod commit_msg;
 pub mod defect_dossier;
+pub mod ndjson_cli;
 pub mod output_integrity;
 pub mod runner;
 pub mod setup_hooks;

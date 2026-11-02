@@ -791,6 +791,7 @@ impl Cli {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-COMPILER-SYSML-CLI-PARSE], [DO-330-TQL-4-CLI]
     pub fn parse() -> Self {
+        crate::cst_cli::handle_cst_cli_if_present();
         let matches = Self::build_command().get_matches();
         Self::from_matches(&matches)
     }
@@ -1022,7 +1023,6 @@ mod tests {
                 dry_run: true,
             })
         );
-
         let conflicting = Cli::try_parse_from([
             "compile-sysml",
             "--emit-modular-rust",
