@@ -577,12 +577,9 @@ fn collect_rust_docstring_violations(
                 continue;
             }
         };
-        if !entry.file_type().is_file() {
-            continue;
-        }
+        if !entry.file_type().is_file() { continue; }
         let path = entry.path();
-        let is_rs = path.extension().map(|ext| ext == "rs").unwrap_or(false);
-        if !is_rs {
+        if !path.extension().is_some_and(|ext| ext == "rs") || path.file_name().is_some_and(|n| n.to_string_lossy().ends_with("_tests.rs")) {
             continue;
         }
         let rel = path

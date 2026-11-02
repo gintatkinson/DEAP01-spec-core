@@ -159,6 +159,12 @@ fn is_inside_cfg_test(token: &ra_ap_syntax::SyntaxToken) -> bool {
     false
 }
 
+/// Losslessly parses Rust source text into a CST representation. Realises: [REQ-0608]
+#[must_use]
+pub fn parse_rust_source(_file_label: &str, source: &str) -> ParsedRustFile {
+    ParsedRustFile::parse_rust_source(source)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

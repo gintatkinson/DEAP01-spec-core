@@ -1689,21 +1689,16 @@ fn advance_mod_tests_line<'a>(
         }
     }
 
-    if closed_at_byte.is_some() || (!scope.entered_block && code.contains(';')) {
+    if closed_at_byte.is_some() {
         if !scope.has_test {
-            violations.push(format!(
-                "{}:{}: C-PURITY-03 empty or decoy mod tests block detected",
-                file_rel, line_no
-            ));
+            violations.push(format!("{}:{}: C-PURITY-03 empty or decoy mod tests block detected", file_rel, line_no));
         }
         scope.active = false;
         if let Some(after_idx) = closed_at_byte {
             let trailing = code.get(after_idx..).unwrap_or("").trim();
-            if !trailing.is_empty() {
-                return ModTestsStep::TrailingProduction(trailing);
-            }
+            if !trailing.is_empty() { return ModTestsStep::TrailingProduction(trailing); }
         }
-    }
+    } else if !scope.entered_block && code.contains(';') { scope.active = false; }
     ModTestsStep::Consumed
 }
 

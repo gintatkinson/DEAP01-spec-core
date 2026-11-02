@@ -34,6 +34,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-DEAP-CORE-LIB], [DO-330-TQL-4-CORE-LIB]
 
+pub mod dart_cst;
 pub mod diagnostics;
 pub mod digest;
 pub mod error;

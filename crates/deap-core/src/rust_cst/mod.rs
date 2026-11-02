@@ -30,6 +30,8 @@ pub mod doc_edit;
 pub mod extract_module;
 pub mod items;
 pub mod parse;
+pub mod source_bridge;
+pub mod source_bridge_rust;
 pub mod vfs;
 
 pub use diagnostics_ndjson::{

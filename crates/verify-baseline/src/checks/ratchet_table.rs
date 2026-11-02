@@ -125,7 +125,8 @@ pub const LEGACY_RATCHET_MAX_LINES: &[(&str, usize)] = &[
     ("./crates/deap-core/src/error.rs", 232),
     ("./crates/deap-core/src/markdown.rs", 1561),
     ("./crates/deap-core/src/rules.rs", 1349),
-    ("./crates/deap-core/src/source_ast.rs", 7558),
+    ("./crates/deap-core/src/source_ast.rs", 6074),
+    ("./crates/deap-core/src/source_ast_tests.rs", 1522),
     ("./crates/deap-core/src/sysml_ast/actions.rs", 359),
     ("./crates/deap-core/src/sysml_ast/connections_and_flows.rs", 577),
     ("./crates/deap-core/src/sysml_ast/expressions.rs", 576),
@@ -162,13 +163,13 @@ pub const LEGACY_RATCHET_MAX_LINES: &[(&str, usize)] = &[
     ("./crates/verify-baseline/src/blueprint_gate.rs", 4815),
     ("./crates/verify-baseline/src/check_secrets.rs", 297),
     ("./crates/verify-baseline/src/checks/codebase.rs", 2350),
-    ("./crates/verify-baseline/src/checks/docstring_gate.rs", 3606),
+    ("./crates/verify-baseline/src/checks/docstring_gate.rs", 3603),
     ("./crates/verify-baseline/src/checks/domain_cleanliness_gate.rs", 959),
     ("./crates/verify-baseline/src/checks/math_katex.rs", 206),
     ("./crates/verify-baseline/src/checks/mermaid.rs", 206),
     ("./crates/verify-baseline/src/checks/parity_gates.rs", 7416),
     ("./crates/verify-baseline/src/checks/safety_stpa.rs", 2055),
-    ("./crates/verify-baseline/src/checks/structural.rs", 5588),
+    ("./crates/verify-baseline/src/checks/structural.rs", 5583),
     ("./crates/verify-baseline/src/checks/wbs_integrity.rs", 407),
     ("./crates/verify-baseline/src/commit_msg.rs", 1043),
     ("./crates/verify-baseline/src/defect_dossier.rs", 2465),
@@ -280,8 +281,8 @@ mod tests {
     /// Verifies cross-platform path separator normalization and non-ratcheted misses (`[REQ-0601]`).
     #[test]
     fn lookup_ratchet_ceiling_handles_normalization_and_misses() -> Result<(), String> {
-        if lookup_ratchet_ceiling(".\\crates\\deap-core\\src\\source_ast.rs") != Some(7558)
-            || lookup_ratchet_ceiling("crates/deap-core/src/source_ast.rs") != Some(7558)
+        if lookup_ratchet_ceiling(".\\crates\\deap-core\\src\\source_ast.rs") != Some(6074)
+            || lookup_ratchet_ceiling("crates/deap-core/src/source_ast.rs") != Some(6074)
         {
             return Err(String::from("path normalization lookup failed"));
         }
