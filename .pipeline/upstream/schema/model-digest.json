@@ -1,20 +1,20 @@
 {
-  "sha256": "fa2836feff751f35893abd45789163d11cb8ab4551e595dbdbb7c4a26d9eb2d7",
-  "total_lines": 2884,
+  "sha256": "e2596df3b4d37bde55840f26040f916f1738e96edd005cb8e58e4835b234e377",
+  "total_lines": 2896,
   "node_counts": {
     "action_defs": 78,
-    "attribute_defs": 253,
+    "attribute_defs": 255,
     "calc_defs": 0,
     "capability_defs": 0,
     "connection_defs": 11,
-    "constraint_defs": 34,
+    "constraint_defs": 35,
     "containers": 53,
     "groupings": 0,
     "hazard_defs": 0,
     "identities": 0,
     "interaction_defs": 11,
     "item_defs": 0,
-    "leaves": 253,
+    "leaves": 255,
     "lists": 78,
     "operation_defs": 0,
     "packages": 12,
@@ -23,7 +23,7 @@
     "requirement_defs": 11,
     "risk_defs": 0,
     "state_defs": 11,
-    "test_case_defs": 100,
+    "test_case_defs": 101,
     "typedefs": 0,
     "use_case_defs": 65
   },
@@ -119,6 +119,7 @@
     "C_MOD_03",
     "C_MOD_04",
     "C_MOD_05",
+    "C_MOD_06",
     "C_VER_01",
     "C_VER_02",
     "C_VER_03",
@@ -269,6 +270,7 @@
     "Test_MergeExtractedEntitiesIntoOwningSubpackages",
     "Test_ParseCommonMarkTablesWithInHtml",
     "Test_ParseRustCstAndParseDartCst",
+    "Test_ParseSourceCstViaRustAndDartCst",
     "Test_ParseTypeExprAndParseTransition",
     "Test_ProjectNxNConnectionDefMatrixAndFlowDef",
     "Test_ReadWorkspaceLintsClippyForbidTable",
@@ -449,6 +451,7 @@
     "crates_deap_core_src_rust_cst_doc_edit_rs",
     "crates_deap_core_src_rust_cst_extract_module_rs",
     "crates_deap_core_src_rust_cst_items_rs",
+    "crates_deap_core_src_rust_cst_manifest_lock_rs",
     "crates_deap_core_src_rust_cst_mod_rs",
     "crates_deap_core_src_rust_cst_parse_rs",
     "crates_deap_core_src_rust_cst_vfs_rs",
@@ -688,7 +691,7 @@
     {
       "id": "OA-01",
       "name": "ExecuteCargoClippyWorkspaceAllTargets",
-      "doc": "Execute cargo clippy --workspace --all-targets",
+      "doc": "Execute cargo clippy --workspace --all-targets --message-format=json across all workspace crates",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -696,7 +699,7 @@
     {
       "id": "OA-02",
       "name": "ReadWorkspaceLintsClippyForbidTable",
-      "doc": "Read [workspace.lints.clippy] forbid table",
+      "doc": "Parse and verify [workspace.lints.clippy] forbid table via toml_edit, cargo_metadata, cargo-lock, cargo-util-schemas, and cargo-platform",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -704,7 +707,7 @@
     {
       "id": "OA-03",
       "name": "ExecuteVerifyBaselineNoDomain",
-      "doc": "Execute verify-baseline . --no-domain",
+      "doc": "Execute verify-baseline . --no-domain with lossless ra_ap_syntax CST and cargo clippy JSON enforcement",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -712,7 +715,7 @@
     {
       "id": "OA-04",
       "name": "RunScanClippyAllowTokensOn",
-      "doc": "Run scan_clippy_allow_tokens on all crates/ ** / *.rs",
+      "doc": "Audit #[allow(clippy::...)] and #![cfg_attr(..., allow(clippy::...))] attributes across crates/ via ra_ap_syntax ast::Attr and ast::HasAttrs CST nodes",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -720,7 +723,7 @@
     {
       "id": "OA-05",
       "name": "ExecuteIngestSysmlSchemaBlueprint01",
-      "doc": "Execute ingest-sysml --schema blueprint-01 --format markdown",
+      "doc": "Execute ingest-sysml --schema blueprint-01 --format markdown via pulldown-cmark and logos+rowan SysML v2 CST",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -728,7 +731,7 @@
     {
       "id": "OA-06",
       "name": "check_compiler_ast_purity",
-      "doc": "check_compiler_ast_purity(repo_root)",
+      "doc": "Execute check_compiler_ast_purity(repo_root) across crates/ via ra_ap_syntax, ra_ap_vfs, ra_ap_paths, ra_ap_line_index, rowan, camino, and ignore",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -736,7 +739,7 @@
     {
       "id": "OA-07",
       "name": "mask_literals_and_comments",
-      "doc": "mask_literals_and_comments(source)",
+      "doc": "Partition trivia, string literals, and comments losslessly via ra_ap_syntax::SourceFile::parse and rowan Red/Green CST tokens",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -744,7 +747,7 @@
     {
       "id": "OA-08",
       "name": "contains_direct_range_slice",
-      "doc": "contains_direct_range_slice(code_line)",
+      "doc": "Inspect typed ra_ap_syntax ast::IndexExpr CST nodes for direct range-slice indexing operands outside .get(..) calls",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -752,7 +755,7 @@
     {
       "id": "OA-09",
       "name": "audit_fail_closed_io_patterns",
-      "doc": "audit_fail_closed_io_patterns(code_line)",
+      "doc": "Audit fail-closed I/O patterns via typed ra_ap_syntax ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr} CST nodes",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -760,7 +763,7 @@
     {
       "id": "OA-10",
       "name": "audit_test_integrity_and_anti_gaming",
-      "doc": "audit_test_integrity_and_anti_gaming(test_fn)",
+      "doc": "Audit #[test] function bodies via typed ra_ap_syntax ast::{Fn, MacroCall, CallExpr} CST nodes for assertion and RAII isolation integrity",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -768,7 +771,7 @@
     {
       "id": "OA-11",
       "name": "audit_ssot_symbol_deduplication",
-      "doc": "audit_ssot_symbol_deduplication(file_rel, source)",
+      "doc": "Audit SSOT symbol deduplication across crates/deap-core/src/digest.rs, crates/deap-core/src/rust_cst/, and crates/deap-core/src/dart_cst/ via ra_ap_syntax and cargo_metadata",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -776,7 +779,7 @@
     {
       "id": "OA-12",
       "name": "scan_all",
-      "doc": "scan_all(raw_sysml_source)",
+      "doc": "Tokenize raw SysML v2 and KerML 1.0 source via logos DFA lexer into rowan GreenNode tokens with zero span drift",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -784,7 +787,7 @@
     {
       "id": "OA-13",
       "name": "parse_package_or_file",
-      "doc": "parse_package_or_file(tokens)",
+      "doc": "Parse full 6-clause OMG SysML v2.0 + KerML 1.0 grammar into lossless rowan Red/Green CST (deap_core::sysml_cst) and salsa HIR",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -792,7 +795,7 @@
     {
       "id": "OA-14",
       "name": "ParseTypeExprAndParseTransition",
-      "doc": "parse_type_expr and parse_transition_decl_tokens",
+      "doc": "Parse KerML 1.0 type expressions, specialization operators (:>, :>>, ::>, ~), and nested state def transitions over rowan CST",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -800,7 +803,7 @@
     {
       "id": "OA-15",
       "name": "verify_bijective_ast_roundtrip",
-      "doc": "verify_bijective_ast_roundtrip(ast_orig)",
+      "doc": "Verify Stage-1 == Stage-2 bijective CST/AST roundtrip parity via verify_bijective_ast_roundtrip(ast_orig)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -808,7 +811,7 @@
     {
       "id": "OA-16",
       "name": "ast_orig_to_sysml",
-      "doc": "ast_orig.to_sysml(0)",
+      "doc": "Emit canonical SysML v2.0 text from lossless rowan CST and PackageDef HIR via ast_orig.to_sysml(0)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -816,7 +819,7 @@
     {
       "id": "OA-17",
       "name": "AssertAstOrigEqualsAstReparsed",
-      "doc": "Assert ast_orig equals ast_reparsed",
+      "doc": "Assert Stage-1 PackageDef HIR equals Stage-2 reparsed PackageDef HIR with ariadne span diagnostics on drift",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -824,7 +827,7 @@
     {
       "id": "OA-18",
       "name": "CompileSysmlForwardSyncDocs",
-      "doc": "compile-sysml --forward-sync docs",
+      "doc": "Execute compile-sysml --forward-sync docs via salsa derived queries and pulldown-cmark-to-cmark",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -832,7 +835,7 @@
     {
       "id": "OA-19",
       "name": "ResolveParentEpicByPkgName",
-      "doc": "Resolve Parent Epic by pkg_name == ConOps",
+      "doc": "Resolve Parent Epic by pkg_name == ConOps across 6-clause SysML v2.0 PackageDef HIR",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -840,7 +843,7 @@
     {
       "id": "OA-20",
       "name": "BindAllPackageStoriesToUse",
-      "doc": "Bind all package stories to Use Case matrices",
+      "doc": "Bind all package stories to Use Case matrices via BTreeMap-ordered salsa queries",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -848,7 +851,7 @@
     {
       "id": "OA-21",
       "name": "EmitSymmetricActionDefSignaturesAndE1",
-      "doc": "Emit symmetric ActionDef signatures and E1-E5 Mermaid",
+      "doc": "Emit symmetric ActionDef signatures and Check 13B E1-E5 Mermaid via pulldown-cmark-to-cmark",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -856,7 +859,7 @@
     {
       "id": "OA-22",
       "name": "CompileSysmlEmitIcdDocsInterfaces",
-      "doc": "compile-sysml --emit-icd docs/interfaces",
+      "doc": "Execute compile-sysml --emit-icd docs/interfaces via salsa interconnect projection",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -864,7 +867,7 @@
     {
       "id": "OA-23",
       "name": "ProjectNxNConnectionDefMatrixAndFlowDef",
-      "doc": "Project NxN ConnectionDef matrix and FlowDef signals",
+      "doc": "Project NxN ConnectionDef matrix and FlowDef signals via BTreeMap-ordered pulldown-cmark-to-cmark tables",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -872,7 +875,7 @@
     {
       "id": "OA-24",
       "name": "CompileSysmlEmitWbsDocsManagement",
-      "doc": "compile-sysml --emit-wbs docs/management",
+      "doc": "Execute compile-sysml --emit-wbs docs/management via MIL-STD-881E salsa projection",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -880,7 +883,7 @@
     {
       "id": "OA-25",
       "name": "SynthesizeMilStd881eTreeAnd",
-      "doc": "Synthesize MIL-STD-881E tree and CSV/JSON exports",
+      "doc": "Synthesize MIL-STD-881E tree and RFC 4180 CSV / serde_json AST exports",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -888,7 +891,7 @@
     {
       "id": "OA-26",
       "name": "ReconcileBacklogReconcileDocsDirDocs",
-      "doc": "reconcile-backlog reconcile --docs-dir docs",
+      "doc": "Execute reconcile-backlog reconcile --docs-dir docs via pulldown-cmark Event::Html and table AST",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -896,7 +899,7 @@
     {
       "id": "OA-27",
       "name": "ParseCommonMarkTablesWithInHtml",
-      "doc": "Parse CommonMark tables with in_html_comment guard",
+      "doc": "Parse CommonMark tables and HTML comment events via pulldown-cmark Event::Html and Tag::Table AST",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -904,7 +907,7 @@
     {
       "id": "OA-28",
       "name": "ReconcileChecklistsWithParentInclusiveEpic",
-      "doc": "Reconcile checklists with parent-inclusive epic count",
+      "doc": "Reconcile checklists with parent-inclusive epic count via pulldown-cmark-to-cmark lossless serialization",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -912,7 +915,7 @@
     {
       "id": "OA-29",
       "name": "CompileSysmlReverseSyncDocs",
-      "doc": "compile-sysml --reverse-sync docs",
+      "doc": "Execute compile-sysml --reverse-sync docs via pulldown-cmark AST and rowan CST splicing",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -920,7 +923,7 @@
     {
       "id": "OA-30",
       "name": "MergeExtractedEntitiesIntoOwningSubpackages",
-      "doc": "Merge extracted entities into owning subpackages",
+      "doc": "Merge extracted entities into owning subpackages via deap_core::sysml_cst formatting-preserving splices",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -928,7 +931,7 @@
     {
       "id": "OA-31",
       "name": "RunCompileSysmlInjectSafetyDocstrings",
-      "doc": "Run compile-sysml --inject-safety-docstrings <DIR>",
+      "doc": "Execute compile-sysml --inject-safety-docstrings <DIR> and --compact-tier-bc <DIR> via ra_ap_syntax, ra_ap_text_edit, and rowan",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -936,7 +939,7 @@
     {
       "id": "OA-32",
       "name": "ParseSourceCstViaRustAndDartCst",
-      "doc": "Parse source CST via deap_core::rust_cst and deap_core::dart_cst",
+      "doc": "Parse lossless Rust and Dart CSTs via deap_core::rust_cst (ra_ap_syntax + rowan) and deap_core::dart_cst (logos + rowan)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -944,7 +947,7 @@
     {
       "id": "OA-33",
       "name": "ResolveSchemaContextViaCollectAll",
-      "doc": "Resolve schema context via collect_all_parts without .first() fallback",
+      "doc": "Resolve schema context via salsa-tracked collect_all_parts across 6-clause OMG SysML v2.0 PackageDef trees without .first() fallback",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -952,7 +955,7 @@
     {
       "id": "OA-34",
       "name": "RunVerifyBaselineNoDomain",
-      "doc": "Run verify-baseline . --no-domain (Check 36 & Check 34)",
+      "doc": "Execute verify-baseline . --no-domain (Check 36 Tier-A vs Tier-B/C CST verification & Check 34 uniqueness)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -960,7 +963,7 @@
     {
       "id": "OA-35",
       "name": "TokenizeRsAndDartFilesUsing",
-      "doc": "Tokenize .rs and .dart files using shared deap-core lexical state",
+      "doc": "Extract typed Rust (ra_ap_syntax ast::{HasDocComments, HasAttrs}) and Dart (deap_core::dart_cst) declaration CST nodes",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -968,7 +971,7 @@
     {
       "id": "OA-36",
       "name": "RunIngestSysmlSchemaBlueprint05",
-      "doc": "Run ingest-sysml --schema blueprint-05 --format markdown",
+      "doc": "Execute ingest-sysml --schema blueprint-05 --format markdown via pulldown-cmark and logos+rowan SysML v2 CST",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -976,7 +979,7 @@
     {
       "id": "OA-37",
       "name": "VerifyBaselineAuditCodePathCrates",
-      "doc": "verify-baseline audit-code --path crates/ --publish",
+      "doc": "Execute verify-baseline audit-code --path crates/ --publish via ra_ap_syntax and Stage-2 Dylint MIR",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -984,7 +987,7 @@
     {
       "id": "OA-38",
       "name": "ParseRustCstAndParseDartCst",
-      "doc": "parse_rust_deap_core::rust_cst / deap_core::dart_cst and parse_dart_deap_core::rust_cst / deap_core::dart_cst",
+      "doc": "Parse lossless Rust and Dart CSTs via deap_core::rust_cst (ra_ap_syntax + rowan) and deap_core::dart_cst (logos + rowan)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -992,7 +995,7 @@
     {
       "id": "OA-39",
       "name": "EvaluateSourceFilePillarsAcross5",
-      "doc": "evaluate_source_file_pillars across 5 pillars",
+      "doc": "Evaluate 5 correctness pillars via ra_ap_syntax AST, Stage-2 Dylint MIR (rustc_middle::mir::Body, TyCtxt), and deap_core::dart_cst",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -1000,7 +1003,7 @@
     {
       "id": "OA-40",
       "name": "synthesize_defect_dossier_markdown",
-      "doc": "synthesize_defect_dossier_markdown(finding)",
+      "doc": "Synthesize 7-section defect dossier Markdown via pulldown-cmark-to-cmark (synthesize_defect_dossier_markdown)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -1008,7 +1011,7 @@
     {
       "id": "OA-41",
       "name": "run_check_defect",
-      "doc": "run_check_defect(DefectDossierArgs)",
+      "doc": "Execute run_check_defect(DefectDossierArgs) 12-check validation and closed-loop publisher gate",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -1016,7 +1019,7 @@
     {
       "id": "OA-42",
       "name": "Execute12CheckValidateDefectDossier",
-      "doc": "Execute 12-check validate_defect_dossier gate",
+      "doc": "Execute 12-check validate_defect_dossier gate over pulldown-cmark CommonMark AST and Mermaid E1-E5 blocks",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -1024,7 +1027,7 @@
     {
       "id": "OA-43",
       "name": "GhIssueCreateOrGhIssue",
-      "doc": "gh issue create or gh issue edit with body-file",
+      "doc": "Execute gh issue create or gh issue edit with --body-file and serde_json receipt parsing",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -1032,7 +1035,7 @@
     {
       "id": "OA-44",
       "name": "GhIssueViewJsonTitleBody",
-      "doc": "gh issue view --json title,body,url",
+      "doc": "Execute gh issue view --json title,body,url and verify LF-normalized byte parity via serde_json",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -1878,85 +1881,85 @@
     {
       "name": "WorkspaceManifestForbidGate",
       "node_type": "Part",
-      "doc": "Enforces forbid lint levels in root Cargo.toml and workspace = true inheritance across all member crates.",
+      "doc": "Enforces forbid lint levels in root Cargo.toml and workspace = true inheritance across all member crates via toml_edit, cargo_metadata, cargo-lock, cargo-util-schemas, and cargo-platform.",
       "allocated_activities": []
     },
     {
       "name": "ClippyAttributeCstParser",
       "node_type": "Part",
-      "doc": "Zero-regex multi-line token-stream CST/AST verifier in Check 34 rejecting allow(clippy:: attribute sequences.",
+      "doc": "Lossless ra_ap_syntax (ast::Attr, ast::HasAttrs) and rowan CST verifier in Check 34 rejecting allow(clippy::...) and cfg_attr(..., allow(clippy::...)) attribute trees with ra_ap_line_index span resolution.",
       "allocated_activities": []
     },
     {
       "name": "CrateRootAttributeSanitizer",
       "node_type": "Part",
-      "doc": "Strips crate-level #![allow(clippy::...)] headers and replaces complex tuples with named structs or type aliases.",
+      "doc": "Strips crate-level #![allow(clippy::...)] headers via ra_ap_text_edit and replaces complex tuples with named structs or type aliases in < 380-SLOC submodules.",
       "allocated_activities": []
     },
     {
       "name": "TestTargetLintEnforcer",
       "node_type": "Part",
-      "doc": "Enforces identical forbid lint discipline across unit tests (#[cfg(test)]) and integration tests (tests/ *.rs).",
+      "doc": "Enforces identical forbid lint discipline across unit tests (#[cfg(test)]) and integration tests (tests/ *.rs) via cargo clippy --all-targets and ra_ap_syntax CST checks.",
       "allocated_activities": []
     },
     {
       "name": "AntiGamingTestBodyAuditor",
       "node_type": "Part",
-      "doc": "Test AST auditor that parses `#[test]` functions and rejects zero-assertion bodies, `mem::size_of` tautologies, unguarded `.exists()` skips, and non-RAII temp paths",
+      "doc": "Lossless ra_ap_syntax test AST auditor that inspects typed ast::{Fn, MacroCall, CallExpr} nodes in #[test] functions and rejects zero-assertion bodies, mem::size_of tautologies, unguarded .exists() skips, and non-RAII temp paths",
       "allocated_activities": []
     },
     {
       "name": "Check34AstPurityAndAntiGamingGate",
       "node_type": "Part",
-      "doc": "Total detected panicking direct range-slice indexing expressions (`expr[a..b]`) across audited workspace modules [unit: count]",
+      "doc": "Total detected panicking direct range-slice indexing expressions (`ast::IndexExpr` with range operands) across audited workspace modules [unit: count]",
       "allocated_activities": []
     },
     {
       "name": "FailClosedIoAstVerifier",
       "node_type": "Part",
-      "doc": "AST pattern verifier that rejects fail-open iterator flattening, `.filter_map(Result::ok)`, `.unwrap_or_default()` on filesystem reads, and `let _ = fs::` error discarding",
+      "doc": "Typed ra_ap_syntax AST pattern verifier inspecting ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr} nodes to reject fail-open iterator flattening, .filter_map(Result::ok), .unwrap_or_default() on filesystem reads, and let _ = fs:: error discarding",
       "allocated_activities": []
     },
     {
       "name": "RangeSliceAstDetector",
       "node_type": "Part",
-      "doc": "Zero-regex token-stream analyzer that detects panicking Rust bracket range indexing (`expr[a..b]`, `expr[..b]`, `expr[a..]`) outside string literals, comments, and `.get(..)` calls",
+      "doc": "Lossless ra_ap_syntax + rowan CST analyzer inspecting typed ast::IndexExpr nodes to reject panicking Rust bracket range indexing (expr[a..b], expr[..b], expr[a..]) outside .get(..) calls",
       "allocated_activities": []
     },
     {
       "name": "SsotSymbolDeduplicationGate",
       "node_type": "Part",
-      "doc": "Workspace-wide AST symbol CST/AST verifier enforcing single-module residency for SHA-256 constants (`0x428a2f98`) and Rust lexical state machines",
+      "doc": "Workspace-wide ra_ap_syntax, cargo_metadata, cargo-lock, cargo-util-schemas, cargo-platform, and toml_edit symbol CST/AST verifier enforcing single-module residency for SHA-256 constants (0x428a2f98) in digest.rs and CST parsers in rust_cst/ and dart_cst/",
       "allocated_activities": []
     },
     {
       "name": "BijectiveSysmlSerializer",
       "node_type": "Part",
-      "doc": "Canonical `SysmlSerializable::to_sysml` formatter preserving 100% of `PackageDef` AST fields without double-quoting",
+      "doc": "Canonical rowan CST printer and SysmlSerializable::to_sysml formatter preserving 100% of 6-clause OMG SysML v2.0 + KerML 1.0 AST fields and trivia without double-quoting",
       "allocated_activities": []
     },
     {
       "name": "CompilerRoundtripVerificationGate",
       "node_type": "Part",
-      "doc": "Built-in compiler verification stage asserting `parse_sysml(to_sysml(ast)) == ast` on every `compile-sysml` run",
+      "doc": "Built-in salsa-tracked compiler verification stage asserting parse_sysml(to_sysml(ast)) == ast and Stage-1 == Stage-2 SHA-256 parity on every compile-sysml run",
       "allocated_activities": []
     },
     {
       "name": "FailClosedRecursiveDescentParser",
       "node_type": "Part",
-      "doc": "Strict token-stream parser for all 12 inner declaration blocks, composite type expressions, and nested state transitions",
+      "doc": "Lossless rowan Red/Green CST parser (deap_core::sysml_cst) covering all 6 clauses of the normative OMG SysML v2.0 + KerML 1.0 grammar with zero 16-construct caps and zero silent-skip branches",
       "allocated_activities": []
     },
     {
       "name": "NativeSigilAndLifetimeLexer",
       "node_type": "Part",
-      "doc": "Zero-rewrite CST/AST verifier emitting native `Ampersand`, `Question`, `Lifetime`, and `DoubleColon` tokens with exact byte spans",
+      "doc": "Zero-rewrite logos DFA lexer (deap_core::sysml_cst::lexer) emitting native sigil, KerML 1.0 specialization (:>, :>>, ::>, ~), lifetime, and trivia tokens with exact UTF-8 byte spans",
       "allocated_activities": []
     },
     {
       "name": "SysmlBijectiveRoundtripCompilerGate",
       "node_type": "Part",
-      "doc": "Cumulative byte-offset drift between raw source character positions and emitted token spans [unit: bytes]",
+      "doc": "Cumulative byte-offset drift between raw source character positions and emitted logos + rowan token spans [unit: bytes]",
       "allocated_activities": []
     },
     {
@@ -1992,31 +1995,31 @@
     {
       "name": "Check36AstCompletenessVerifier",
       "node_type": "Part",
-      "doc": "Baseline verification gate in `verify-baseline` auditing 100% per-item 7-section docstring coverage and Check 34 normalized body uniqueness using `deap_core::rust_cst / deap_core::dart_cst`",
+      "doc": "Baseline verification gate in verify-baseline auditing Tier-A 7-section docstring completeness, Tier-B/C <= 4-line [REQ-*] / [FLS: fls_*] compaction, and Check 34 normalized body uniqueness using deap_core::rust_cst (ra_ap_syntax + rowan) and deap_core::dart_cst (logos + rowan)",
       "allocated_activities": []
     },
     {
       "name": "ScopedSchemaContextResolver",
       "node_type": "Part",
-      "doc": "Strict SysML v2 requirement and constraint resolver in `compile-sysml` traversing recursive `part.parts` trees with `owner_name` isolation and zero `.first()` fallback",
+      "doc": "Strict 6-clause OMG SysML v2.0 + KerML 1.0 requirement and constraint resolver in compile-sysml traversing recursive part.parts trees with owner_name isolation and zero .first() fallback",
       "allocated_activities": []
     },
     {
       "name": "SevenSectionDocstringGenerator",
       "node_type": "Part",
-      "doc": "Deterministic forward synthesizer interpolating AST parameters, return types, struct fields, invariants, and `Realises:` bindings into unique 7-section docblocks",
+      "doc": "Deterministic CST synthesizer using ra_ap_syntax ast::HasDocComments and ra_ap_text_edit::TextEdit to interpolate AST parameters, return types, struct fields, invariants, and [REQ-*] / [FLS: fls_*] bindings into Tier-A 7-section and Tier-B/C <= 4-line docblocks",
       "allocated_activities": []
     },
     {
       "name": "UnifiedRustDartCstParser",
       "node_type": "Part",
-      "doc": "Canonical zero-regex lexical state machine in `deap_core::rust_cst / deap_core::dart_cst` handling nested `/ * * /`, `r#\"...\"#`, Dart `${...}` frames, and exact char-literal vs. lifetime disambiguation",
+      "doc": "Lossless Red/Green CST parser facade combining deap_core::rust_cst (ra_ap_syntax + rowan, ra_ap_vfs, ra_ap_paths, ra_ap_line_index, camino, ignore) and deap_core::dart_cst (logos + rowan) with zero hand-rolled line scanners",
       "allocated_activities": []
     },
     {
       "name": "UnifiedSafetyDocstringSynthesizer",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Top-level unified safety docstring synthesizer and Check 36 CST verification orchestrator enforcing < 380-SLOC submodules and -8,200+ SLOC legacy docstring scanner deletion",
       "allocated_activities": []
     },
     {
@@ -2040,7 +2043,7 @@
     {
       "name": "FivePillarStaticAstAnalyzer",
       "node_type": "Part",
-      "doc": "Count of active static AST evaluators (`E0601` through `E0605`). [unit: pillars]",
+      "doc": "Count of active static AST and MIR evaluators (`E0601` through `E0605`) over `ra_ap_syntax`, Stage-2 `rustc_middle::mir::Body`, and `deap_core::dart_cst`. [unit: pillars]",
       "allocated_activities": []
     },
     {
@@ -2130,7 +2133,7 @@
     {
       "name": "MultiStageVerificationOrchestrator",
       "node_type": "Part",
-      "doc": "Ordered verification stage count (`Stage 1 Clippy` -> `Stage 2 Dylint MIR` -> `Stage 3 FRB + Miri` -> `Stage 4 Kani CBMC`). [unit: stages]",
+      "doc": "Ordered verification stage count (`Stage 1 Clippy` -> `Stage 2 Dylint MIR` -> `Stage 3 FRB + Miri` -> `Stage 4 Kani CBMC` -> `Stage 5 Ferrocene criticalup`). [unit: stages]",
       "allocated_activities": []
     },
     {
