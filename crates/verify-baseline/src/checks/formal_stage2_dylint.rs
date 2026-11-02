@@ -49,7 +49,7 @@ pub const REQUIRED_DYLINT_DESCRIPTORS: [&str; 3] = [
     "DEAP_REALISES_REQ_ATTR",
 ];
 
-/// Structured fail-closed diagnostic emitted by the Stage-2 Dylint verification gate.
+/// Structured fail-closed diagnostic emitted by the Stage-2 Dylint verification gate. Realises: [REQ-0601]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     /// Normative diagnostic code (`DEAP-E0901` or `DEAP-E0902`).
@@ -60,7 +60,7 @@ pub struct Diagnostic {
     pub message: String,
 }
 
-/// Verification outcome for the Stage-2 Dylint MIR gatekeeper check.
+/// Verification outcome for the Stage-2 Dylint MIR gatekeeper check. Realises: [REQ-0601]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Stage2DylintOutcome {
     /// Dynamically discovered `cargo-dylint` executable path on `PATH`, if installed.
@@ -74,27 +74,27 @@ pub struct Stage2DylintOutcome {
 }
 
 impl Stage2DylintOutcome {
-    /// Returns `true` when zero fail-closed diagnostics were emitted.
+    /// Returns `true` when zero fail-closed diagnostics were emitted. Realises: [REQ-0601]
     #[must_use]
     pub const fn is_ok(&self) -> bool {
         self.diagnostics.is_empty()
     }
 }
 
-/// Returns the platform-native executable filename for `cargo-dylint` using `EXE_SUFFIX`.
+/// Returns the platform-native executable filename for `cargo-dylint` using `EXE_SUFFIX`. Realises: [REQ-0601]
 #[must_use]
 pub fn dylint_executable_name() -> String {
     format!("cargo-dylint{EXE_SUFFIX}")
 }
 
-/// Formats the platform-native shared library filename for a Dylint crate using `DLL_PREFIX` and `DLL_SUFFIX`.
+/// Formats the platform-native shared library filename for a Dylint crate using `DLL_PREFIX` and `DLL_SUFFIX`. Realises: [REQ-0601]
 #[must_use]
 pub fn format_dylint_library_filename(crate_name: &str) -> String {
     let normalized = crate_name.replace('-', "_");
     format!("{DLL_PREFIX}{normalized}{DLL_SUFFIX}")
 }
 
-/// Searches the provided `PATH` value for `cargo-dylint` using `std::env::consts::EXE_SUFFIX`.
+/// Searches the provided `PATH` value for `cargo-dylint` using `std::env::consts::EXE_SUFFIX`. Realises: [REQ-0601]
 #[must_use]
 pub fn discover_cargo_dylint_in_path(path_env: Option<&OsStr>) -> Option<PathBuf> {
     let exe_name = dylint_executable_name();
@@ -103,7 +103,7 @@ pub fn discover_cargo_dylint_in_path(path_env: Option<&OsStr>) -> Option<PathBuf
         .find(|candidate| candidate.is_file())
 }
 
-/// Parses and validates `lints/deap-dylint-mir/src/lib.rs` source text via `ra_ap_syntax`.
+/// Parses and validates `lints/deap-dylint-mir/src/lib.rs` source text via `ra_ap_syntax`. Realises: [REQ-0601]
 #[must_use]
 pub fn validate_dylint_plugin_source(
     source: &str,
@@ -142,6 +142,7 @@ pub fn validate_dylint_plugin_source(
 }
 
 /// Evaluates the Stage-2 Dylint MIR gate against `workspace_root` using an explicit `PATH` value.
+/// Realises: [REQ-0601]
 #[must_use]
 pub fn check_formal_stage2_dylint_with_path(
     workspace_root: &Path,
@@ -183,6 +184,7 @@ pub fn check_formal_stage2_dylint_with_path(
 }
 
 /// Evaluates the Stage-2 Dylint MIR gate against `workspace_root` using the process `PATH`.
+/// Realises: [REQ-0601]
 #[must_use]
 pub fn check_formal_stage2_dylint(
     workspace_root: &Path,

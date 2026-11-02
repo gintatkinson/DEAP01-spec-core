@@ -24,7 +24,8 @@
 //! Realises: [LosslessRustCstAnalyzer/tests], [REQ-0608]
 //! SysML v2: part def LosslessRustCstAnalyzer
 
-use super::*;
+mod tests {
+    use crate::rust_cst::*;
 use std::collections::{BTreeMap, BTreeSet};
 
 fn make_fixture_snapshot() -> LockManifestSnapshot {
@@ -213,4 +214,5 @@ pub fn string_err() -> Result<(), String> {
     let ariadne_lines = evaluate_metrics_and_format_ndjson(&report, &thresholds, src, false)?;
     assert!(!ariadne_lines.is_empty());
     Ok(())
+}
 }

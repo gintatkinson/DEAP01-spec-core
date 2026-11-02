@@ -50,7 +50,7 @@ use crate::digest::compute_sha256;
 use super::parser::{parse_sysml_cst, ParsedSysmlCst, SysmlConstructSummary};
 use super::syntax_kind::SysmlSyntaxKind;
 
-/// Incremental source input handle for the SysML v2 query database.
+/// Incremental source input handle for the SysML v2 query database. Realises: [REQ-0201]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SourceProgram {
     /// Canonical workspace-relative path or logical URI of the SysML v2 source unit.
@@ -62,7 +62,7 @@ pub struct SourceProgram {
 }
 
 impl SourceProgram {
-    /// Creates a new `SourceProgram` input at revision `1`.
+    /// Creates a new `SourceProgram` input at revision `1`. Realises: [REQ-0201]
     #[must_use]
     pub fn new(uri: impl Into<String>, text: impl Into<String>) -> Self {
         Self {
@@ -72,7 +72,7 @@ impl SourceProgram {
         }
     }
 
-    /// Returns an updated `SourceProgram` with new source text and incremented revision.
+    /// Returns an updated `SourceProgram` with new source text and incremented revision. Realises: [REQ-0201]
     #[must_use]
     pub fn with_text(&self, text: impl Into<String>) -> Self {
         Self {
@@ -83,6 +83,7 @@ impl SourceProgram {
     }
 }
 
+/// Cached program entry in incremental database. Realises: [REQ-0201]
 #[derive(Debug, Clone)]
 struct CachedProgramEntry {
     text: String,
@@ -91,7 +92,7 @@ struct CachedProgramEntry {
     canonical_digest: String,
 }
 
-/// Deterministic incremental query database for SysML v2 CST and HIR compilation.
+/// Deterministic incremental query database for SysML v2 CST and HIR compilation. Realises: [REQ-0201]
 #[derive(Debug, Default, Clone)]
 pub struct SysmlCompilerDb {
     entries: BTreeMap<String, CachedProgramEntry>,
@@ -100,39 +101,40 @@ pub struct SysmlCompilerDb {
 }
 
 impl SysmlCompilerDb {
-    /// Creates an empty `SysmlCompilerDb` instance.
+    /// Creates an empty `SysmlCompilerDb` instance. Realises: [REQ-0201]
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Returns the current monotonic database revision counter.
+    /// Returns the current monotonic database revision counter. Realises: [REQ-0201]
     #[must_use]
     pub fn revision(&self) -> u64 {
         self.revision
     }
 
-    /// Returns the total number of uncached CST parse executions performed.
+    /// Returns the total number of uncached CST parse executions performed. Realises: [REQ-0201]
     #[must_use]
     pub fn parse_count(&self) -> usize {
         self.parse_count
     }
 
-    /// Memoizes and returns the lossless Rowan CST for `program`.
+    /// Memoizes and returns the lossless Rowan CST for `program`. Realises: [REQ-0201]
     pub fn parse_sysml_green(&mut self, program: &SourceProgram) -> Arc<ParsedSysmlCst> {
         Arc::clone(&self.ensure_cached(program).cst)
     }
 
-    /// Memoizes and returns the lowered HIR construct summaries for `program`.
+    /// Memoizes and returns the lowered HIR construct summaries for `program`. Realises: [REQ-0201]
     pub fn lower_sysml_hir(&mut self, program: &SourceProgram) -> Vec<SysmlConstructSummary> {
         (*self.ensure_cached(program).hir).clone()
     }
 
-    /// Memoizes and returns the canonical whitespace-invariant SHA-256 hex digest for `program`.
+    /// Memoizes and returns the canonical whitespace-invariant SHA-256 hex digest for `program`. Realises: [REQ-0201]
     pub fn compute_canonical_digest(&mut self, program: &SourceProgram) -> String {
         self.ensure_cached(program).canonical_digest.clone()
     }
 
+    /// Ensures cached entry is up to date. Realises: [REQ-0201]
     fn ensure_cached(&mut self, program: &SourceProgram) -> &CachedProgramEntry {
         let stale = self
             .entries
@@ -161,7 +163,7 @@ impl SysmlCompilerDb {
     }
 }
 
-/// Query function returning the memoized `Arc<ParsedSysmlCst>` for `program`.
+/// Query function returning the memoized `Arc<ParsedSysmlCst>` for `program`. Realises: [REQ-0201]
 pub fn parse_sysml_green(
     db: &mut SysmlCompilerDb,
     program: &SourceProgram,
@@ -169,7 +171,7 @@ pub fn parse_sysml_green(
     db.parse_sysml_green(program)
 }
 
-/// Query function returning the lowered `Vec<SysmlConstructSummary>` HIR for `program`.
+/// Query function returning the lowered `Vec<SysmlConstructSummary>` HIR for `program`. Realises: [REQ-0201]
 pub fn lower_sysml_hir(
     db: &mut SysmlCompilerDb,
     program: &SourceProgram,
@@ -177,11 +179,12 @@ pub fn lower_sysml_hir(
     db.lower_sysml_hir(program)
 }
 
-/// Query function returning the canonical whitespace-invariant SHA-256 hex digest for `program`.
+/// Query function returning the canonical whitespace-invariant SHA-256 hex digest for `program`. Realises: [REQ-0201]
 pub fn compute_canonical_digest(db: &mut SysmlCompilerDb, program: &SourceProgram) -> String {
     db.compute_canonical_digest(program)
 }
 
+/// Hashes canonical CST tokens into SHA-256 digest. Realises: [REQ-0201]
 fn hash_canonical_cst(parsed: &ParsedSysmlCst) -> String {
     let mut buffer = Vec::new();
     for element in parsed.syntax().descendants_with_tokens() {

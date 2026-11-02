@@ -277,7 +277,7 @@ mod tests {
         assert_eq!(rt, 1);
         assert_eq!(req, 0);
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].code, "DEAP-E0901");
+        assert_eq!(findings.first().map(|f| f.code.as_str()), Some("DEAP-E0901"));
     }
 
     #[test]
@@ -288,7 +288,7 @@ mod tests {
         assert_eq!(rt, 0);
         assert_eq!(req, 1);
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].code, "DEAP-E0902");
+        assert_eq!(findings.first().map(|f| f.code.as_str()), Some("DEAP-E0902"));
     }
 
     #[test]

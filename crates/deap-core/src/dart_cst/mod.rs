@@ -69,7 +69,7 @@ pub enum DartToken {
     #[regex(r"[A-Za-z_$][A-Za-z0-9_$]*", priority = 2)]
     Ident,
     /// Structural delimiter or assignment punctuation. Realises: [REQ-0201]
-    #[regex(r"[{}\(\);=]")]
+    #[regex(r"[{}\(\)\[\];=]")]
     Punct,
     /// Fallback single-character token. Realises: [REQ-0201]
     #[regex(r".", priority = 1)]
@@ -143,7 +143,7 @@ fn extract_items(tokens: &[(DartToken, usize, &str)]) -> Vec<DartCstItem> {
     let (mut items, mut docs) = (Vec::new(), Vec::new());
     let (mut brace_depth, mut paren_depth) = (0usize, 0usize);
     let mut active: Option<(DartItemKind, usize, Option<String>, bool)> = None;
-    let (mut stmt_start, mut last_ident): (Option<usize>, Option<String>) = (None, None);
+    let (mut stmt_start, mut last_ident, mut seen_top_eq): (Option<usize>, Option<String>, bool) = (None, None, false);
 
     for &(tok, line, slice) in tokens {
         if brace_depth == 0 && active.is_none() && tok == DartToken::DocComment {
@@ -176,11 +176,14 @@ fn extract_items(tokens: &[(DartToken, usize, &str)]) -> Vec<DartCstItem> {
                     }
                 }
             } else if slice == "=" {
+                seen_top_eq = true;
                 if let Some((_, _, _, ref mut seen_eq)) = active {
                     *seen_eq = true;
                 }
-            } else if slice == "(" && active.is_none() {
-                if let Some(fn_name) = last_ident.clone() {
+            } else if slice == "(" && active.is_none() && !seen_top_eq {
+                if let Some(fn_name) = last_ident.clone().filter(|n| {
+                    !matches!(n.as_str(), "Function" | "if" | "for" | "while" | "switch" | "catch" | "assert" | "return" | "super" | "this")
+                }) {
                     active = Some((DartItemKind::Function, stmt_start.unwrap_or(line), Some(fn_name), false));
                 }
             }
@@ -198,7 +201,7 @@ fn extract_items(tokens: &[(DartToken, usize, &str)]) -> Vec<DartCstItem> {
                 items.push(DartCstItem { kind, name, start_line, end_line: line, has_doc_comment: !docs.is_empty(), doc_text: docs.join("\n") });
             }
             docs.clear();
-            (stmt_start, last_ident) = (None, None);
+            (stmt_start, last_ident, seen_top_eq) = (None, None, false);
         }
     }
     items

@@ -34,7 +34,7 @@ pub const REQUIRED_TIER_BC_DOC_LINES: u32 = 2;
 pub const BP08_DETERMINISTIC_UUID: &str = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 pub const MAX_AST_DEPTH: usize = 64;
 
-/// Provenance of a locked package dependency in the air-gapped build graph.
+/// Provenance of a locked package dependency in the air-gapped build graph. Realises: [REQ-0608]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum PackageSourceKind {
     WorkspaceMember,
@@ -42,7 +42,7 @@ pub enum PackageSourceKind {
     VendoredLocal,
 }
 
-/// Metadata record for a single package pinned in Cargo.lock.
+/// Metadata record for a single package pinned in Cargo.lock. Realises: [REQ-0608]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LockedPackageRecord {
     pub name: String,
@@ -52,7 +52,7 @@ pub struct LockedPackageRecord {
     pub dependencies: BTreeSet<String>,
 }
 
-/// Air-gapped supply chain snapshot of workspace manifests and locked dependencies.
+/// Air-gapped supply chain snapshot of workspace manifests and locked dependencies. Realises: [REQ-0608]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LockManifestSnapshot {
     pub cargo_toml_sha256: [u8; 32],
@@ -63,7 +63,7 @@ pub struct LockManifestSnapshot {
     pub vendor_bundle_supported: bool,
 }
 
-/// Typed fail-closed error taxonomy for air-gapped lock and envelope governance.
+/// Typed fail-closed error taxonomy for air-gapped lock and envelope governance. Realises: [REQ-0608]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum OfflineLockGovernanceError {
     LockPolicyDisabled,
@@ -80,6 +80,7 @@ pub enum OfflineLockGovernanceError {
 }
 
 impl OfflineLockGovernanceError {
+    /// Returns canonical diagnostic code. Realises: [REQ-0608]
     pub const fn diagnostic_code(&self) -> &'static str {
         match self {
             Self::CstConstraintEnvelopeViolation => "DEAP-E0803",
@@ -89,6 +90,7 @@ impl OfflineLockGovernanceError {
 }
 
 impl std::fmt::Display for OfflineLockGovernanceError {
+    /// Formats error for display. Realises: [REQ-0608]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{}] offline lock governance failure", self.diagnostic_code())
     }
@@ -96,7 +98,7 @@ impl std::fmt::Display for OfflineLockGovernanceError {
 
 impl std::error::Error for OfflineLockGovernanceError {}
 
-/// Verified structural complexity envelope bounding LosslessRustCstAnalyzer.
+/// Verified structural complexity envelope bounding LosslessRustCstAnalyzer. Realises: [REQ-0608]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct CstComplexityEnvelope {
     pub max_fn_exec_sloc: u32,
@@ -111,6 +113,7 @@ pub struct CstComplexityEnvelope {
 }
 
 impl Default for CstComplexityEnvelope {
+    /// Default complexity envelope. Realises: [REQ-0608]
     fn default() -> Self {
         Self {
             max_fn_exec_sloc: MAX_CST_FN_EXEC_SLOC,
@@ -126,7 +129,7 @@ impl Default for CstComplexityEnvelope {
     }
 }
 
-/// Cryptographically sealed supply-chain receipt authorizing transition from Idle.
+/// Cryptographically sealed supply-chain receipt authorizing transition from Idle. Realises: [REQ-0608]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SupplyChainVerificationReceipt {
     pub cargo_toml_sha256: [u8; 32],
@@ -139,6 +142,7 @@ pub struct SupplyChainVerificationReceipt {
 }
 
 impl SupplyChainVerificationReceipt {
+    /// Verifies snapshot parity against active receipt. Realises: [REQ-0608]
     pub fn verify_snapshot_parity(
         &self,
         snapshot: &LockManifestSnapshot,
@@ -160,6 +164,7 @@ impl SupplyChainVerificationReceipt {
     }
 }
 
+/// Validates structural complexity envelope limits. Realises: [REQ-0608]
 fn validate_cst_complexity_envelope(
     envelope: &CstComplexityEnvelope,
 ) -> Result<(), OfflineLockGovernanceError> {
@@ -179,11 +184,13 @@ fn validate_cst_complexity_envelope(
     Ok(())
 }
 
+/// Appends length-prefixed string slice to buffer. Realises: [REQ-0608]
 fn push_len_prefixed_str(buf: &mut Vec<u8>, value: &str) {
     buf.extend_from_slice(&(value.len() as u64).to_be_bytes());
     buf.extend_from_slice(value.as_bytes());
 }
 
+/// Computes cryptographic receipt seal digest. Realises: [REQ-0608]
 fn compute_supply_chain_receipt_seal(
     snapshot: &LockManifestSnapshot,
     verified_crates: &BTreeSet<String>,

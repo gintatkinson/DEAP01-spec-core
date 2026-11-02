@@ -1,4 +1,4 @@
-//! Deterministic ConOps & Mission Intent Assembly Engine (ISO/IEC/IEEE 29148 / ISO/IEC/IEEE 15288 / OMG UAF).
+//! Deterministic ConOps & Mission Intent Assembly Engine (ISO/IEC/IEEE 29148 / ISO/IEC/IEEE 15288 / OMG UAF). [DOC-TIER: A]
 //!
 //! ## 1. Safety Intent & Regulatory Scope
 //! Provides the top-level library interface for deterministic Concept of Operations (ConOps)
@@ -49,7 +49,7 @@ pub use deap_core::markdown_ast::{
     MarkdownTableAst, ParsedMarkdownAst,
 };
 
-/// Parses and formats ConOps Markdown via the shared CommonMark AST adapter (`[REQ-0401]`, `[REQ-0402]`).
+/// [DOC-TIER: A] Parses and formats ConOps Markdown via the shared CommonMark AST adapter (`[REQ-0401]`, `[REQ-0402]`).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `parse_and_format_conops_markdown` in `crates/assemble-conops/src/lib.rs`.

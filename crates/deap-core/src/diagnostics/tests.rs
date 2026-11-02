@@ -1,6 +1,6 @@
 //! Unit tests for diagnostics, defect dossier synthesis, and source purity.
-
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
 use super::super::*;
 

@@ -272,6 +272,7 @@ pub fn synthesize_typed_domain_struct_tokens(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

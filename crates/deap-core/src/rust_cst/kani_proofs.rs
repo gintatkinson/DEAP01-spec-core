@@ -29,7 +29,7 @@
 use std::env;
 use std::path::PathBuf;
 
-/// Error taxonomy for Stage-3 FRB and Miri boundary validation.
+/// Error taxonomy for Stage-3 FRB and Miri boundary validation. Realises: [REQ-0609]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum FrbGuardError {
     NonFiniteValue(String),
@@ -39,6 +39,7 @@ pub enum FrbGuardError {
 }
 
 impl std::fmt::Display for FrbGuardError {
+    /// Formats error for display. Realises: [REQ-0609]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NonFiniteValue(msg) => write!(f, "DEAP-E0903 non-finite value: {msg}"),
@@ -51,7 +52,7 @@ impl std::fmt::Display for FrbGuardError {
 
 impl std::error::Error for FrbGuardError {}
 
-/// Inbound FRB port guard specification.
+/// Inbound FRB port guard specification. Realises: [REQ-0609]
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FrbPortGuardSpec {
     pub port_id: String,
@@ -60,7 +61,7 @@ pub struct FrbPortGuardSpec {
     pub allowed_state: String,
 }
 
-/// Specifications for generating a Kani CBMC proof harness.
+/// Specifications for generating a Kani CBMC proof harness. Realises: [REQ-0609]
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct KaniProofHarnessSpec {
     pub fn_symbol: String,
@@ -72,6 +73,7 @@ pub struct KaniProofHarnessSpec {
 }
 
 impl Default for KaniProofHarnessSpec {
+    /// Default harness specification. Realises: [REQ-0609]
     fn default() -> Self {
         Self {
             fn_symbol: "verify_port_range".into(),
@@ -84,7 +86,7 @@ impl Default for KaniProofHarnessSpec {
     }
 }
 
-/// Verification receipt for Stage-4 Kani CBMC proofs.
+/// Verification receipt for Stage-4 Kani CBMC proofs. Realises: [REQ-0609]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct KaniStageReceipt {
     pub toolchain_discovered: bool,

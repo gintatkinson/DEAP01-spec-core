@@ -45,7 +45,7 @@ use rowan::GreenNodeBuilder;
 use super::lexer::{tokenize_sysml, LexedSysmlToken, SysmlToken};
 use super::syntax_kind::{token_to_syntax_kind, SysmlSyntaxKind, SysmlSyntaxNode};
 
-/// Diagnostic emitted during lossless SysML v2 CST construction.
+/// Diagnostic emitted during lossless SysML v2 CST construction. Realises: [REQ-0201]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SysmlCstDiagnostic {
     /// Human-readable diagnostic message.
@@ -56,7 +56,7 @@ pub struct SysmlCstDiagnostic {
     pub span_end: usize,
 }
 
-/// Summary of a normative SysML v2 or KerML construct discovered in the token stream.
+/// Summary of a normative SysML v2 or KerML construct discovered in the token stream. Realises: [REQ-0201]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SysmlConstructSummary {
     /// Classified composite syntax kind (`*_DEF`, `*_USAGE`, or `*_DECL`).
@@ -73,7 +73,7 @@ pub struct SysmlConstructSummary {
     pub span_end: usize,
 }
 
-/// Output of lossless SysML v2 CST parsing.
+/// Output of lossless SysML v2 CST parsing. Realises: [REQ-0201]
 #[derive(Debug, Clone)]
 pub struct ParsedSysmlCst {
     /// Immutable Rowan green tree rooted at `SysmlSyntaxKind::SOURCE_FILE`.
@@ -87,14 +87,14 @@ pub struct ParsedSysmlCst {
 }
 
 impl ParsedSysmlCst {
-    /// Creates a navigable typed Rowan red-tree root node from the stored green node.
+    /// Creates a navigable typed Rowan red-tree root node from the stored green node. Realises: [REQ-0201]
     #[must_use]
     pub fn syntax(&self) -> SysmlSyntaxNode {
         SysmlSyntaxNode::new_root(self.green.clone())
     }
 }
 
-/// Maps a normative SysML v2 / KerML keyword head and `is_def` flag to `SysmlSyntaxKind`.
+/// Maps a normative SysML v2 / KerML keyword head and `is_def` flag to `SysmlSyntaxKind`. Realises: [REQ-0201]
 #[must_use]
 pub fn classify_keyword_kind(keyword: &str, is_def: bool) -> SysmlSyntaxKind {
     match keyword {
@@ -136,6 +136,7 @@ pub fn classify_keyword_kind(keyword: &str, is_def: bool) -> SysmlSyntaxKind {
     }
 }
 
+/// Selects definition or usage syntax kind based on flag. Realises: [REQ-0201]
 const fn select_kind(
     is_def: bool,
     def_kind: SysmlSyntaxKind,
@@ -144,7 +145,7 @@ const fn select_kind(
     if is_def { def_kind } else { usage_kind }
 }
 
-/// Parses `source` into a lossless Rowan CST and extracts SysML v2 / KerML constructs.
+/// Parses `source` into a lossless Rowan CST and extracts SysML v2 / KerML constructs. Realises: [REQ-0201]
 #[must_use]
 pub fn parse_sysml_cst(source: &str) -> ParsedSysmlCst {
     let tokens = tokenize_sysml(source);
@@ -195,6 +196,7 @@ pub fn parse_sysml_cst(source: &str) -> ParsedSysmlCst {
     }
 }
 
+/// Extracts constructs from non-trivia token stream. Realises: [REQ-0201]
 fn extract_constructs(tokens: &[LexedSysmlToken<'_>]) -> Vec<SysmlConstructSummary> {
     let non_trivia: Vec<&LexedSysmlToken<'_>> = tokens
         .iter()
@@ -243,6 +245,7 @@ fn extract_constructs(tokens: &[LexedSysmlToken<'_>]) -> Vec<SysmlConstructSumma
     constructs
 }
 
+/// Extracts construct identifier name from token stream. Realises: [REQ-0201]
 fn extract_construct_name(
     non_trivia: &[&LexedSysmlToken<'_>],
      mut cursor: usize,
@@ -260,6 +263,7 @@ fn extract_construct_name(
     (None, cursor)
 }
 
+/// Finds ending byte offset of construct. Realises: [REQ-0201]
 fn find_construct_end(
     non_trivia: &[&LexedSysmlToken<'_>],
     start_cursor: usize,

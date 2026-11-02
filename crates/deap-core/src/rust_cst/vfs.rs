@@ -182,6 +182,9 @@ impl WorkspaceVfs {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static VFS_SEQ: AtomicUsize = AtomicUsize::new(0);
 
     #[test]
     fn test_normalize_lf() {
@@ -199,7 +202,8 @@ mod tests {
 
     #[test]
     fn test_workspace_vfs_load() -> Result<(), String> {
-        let temp_dir = std::env::temp_dir().join("deap_test_vfs_1");
+        let seq = VFS_SEQ.fetch_add(1, Ordering::Relaxed);
+        let temp_dir = std::env::temp_dir().join(format!("deap_test_vfs_1_{}_{seq}", std::process::id()));
         let _ = fs::remove_dir_all(&temp_dir);
         fs::create_dir_all(temp_dir.join("src")).map_err(|e| e.to_string())?;
         fs::write(temp_dir.join("src/lib.rs"), "pub fn hello() {}\r\n").map_err(|e| e.to_string())?;

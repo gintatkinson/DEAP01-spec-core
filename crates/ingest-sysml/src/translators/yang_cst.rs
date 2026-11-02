@@ -33,7 +33,7 @@
 use logos::Logos;
 use rowan::{GreenNode, GreenNodeBuilder, Language, SyntaxKind, SyntaxNode};
 
-/// Lexical token kinds for RFC 6020 / RFC 7950 YANG specifications.
+/// Lexical token kinds for RFC 6020 / RFC 7950 YANG specifications. Realises: [REQ-0201]
 #[derive(Logos, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum YangToken {
     #[regex(r"[ \t\r\n]+")]
@@ -58,7 +58,7 @@ pub enum YangToken {
     Error,
 }
 
-/// Lossless syntax node and token discriminator for `rowan`.
+/// Lossless syntax node and token discriminator for `rowan`. Realises: [REQ-0201]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum YangSyntaxKind {
     Root,
@@ -74,13 +74,14 @@ pub enum YangSyntaxKind {
     Error,
 }
 
-/// Safe `rowan::Language` tag for YANG CST trees.
+/// Safe `rowan::Language` tag for YANG CST trees. Realises: [REQ-0201]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum YangLanguage {}
 
 impl Language for YangLanguage {
     type Kind = YangSyntaxKind;
 
+    /// Maps raw syntax kind to `YangSyntaxKind`. Realises: [REQ-0201]
     fn kind_from_raw(raw: SyntaxKind) -> Self::Kind {
         match raw.0 {
             0 => YangSyntaxKind::Root,
@@ -97,6 +98,7 @@ impl Language for YangLanguage {
         }
     }
 
+    /// Maps `YangSyntaxKind` to raw syntax kind. Realises: [REQ-0201]
     fn kind_to_raw(kind: Self::Kind) -> SyntaxKind {
         SyntaxKind(match kind {
             YangSyntaxKind::Root => 0,
@@ -114,7 +116,7 @@ impl Language for YangLanguage {
     }
 }
 
-/// Extracted summary of a single RFC 7950 YANG statement node.
+/// Extracted summary of a single RFC 7950 YANG statement node. Realises: [REQ-0201]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct YangNodeSummary {
     pub keyword: String,
@@ -123,7 +125,7 @@ pub struct YangNodeSummary {
     pub span_end: usize,
 }
 
-/// Result of parsing a YANG specification into a lossless `rowan` CST.
+/// Result of parsing a YANG specification into a lossless `rowan` CST. Realises: [REQ-0201]
 #[derive(Debug, Clone)]
 pub struct ParsedYangCst {
     pub green: GreenNode,
@@ -131,7 +133,7 @@ pub struct ParsedYangCst {
     pub lossless_roundtrip_eq: bool,
 }
 
-/// Parses a YANG source string into a lossless `rowan` CST and statement summary list.
+/// Parses a YANG source string into a lossless `rowan` CST and statement summary list. Realises: [REQ-0201]
 #[must_use]
 pub fn parse_yang_cst(source: &str) -> ParsedYangCst {
     let mut builder = GreenNodeBuilder::new();

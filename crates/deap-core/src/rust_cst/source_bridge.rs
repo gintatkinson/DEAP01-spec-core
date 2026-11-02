@@ -403,16 +403,13 @@ pub fn extract_realises_ids_from_doc_lines(doc_lines: &[String]) -> Vec<String> 
     for line in doc_lines {
         let trimmed = line.trim_start_matches('/').trim_start_matches('*').trim();
         if let Some(pos) = trimmed.find("Realises:") {
-            let after = trimmed.get(pos.saturating_add(9)..).unwrap_or("").trim();
-            if let Some(open) = after.find('[') {
-                if let Some(close) = after.find(']') {
-                    if close > open {
-                        let inner = after.get(open.saturating_add(1)..close).unwrap_or("").trim();
-                        for raw_id in inner.split(',') {
-                            let clean = raw_id.trim();
-                            if !clean.is_empty() && !req_ids.iter().any(|r: &String| r == clean) {
-                                req_ids.push(clean.to_string());
-                            }
+            let before_pipe = trimmed.get(pos.saturating_add(9)..).unwrap_or("").split('|').next().unwrap_or("").trim();
+            for group in before_pipe.split('[').skip(1) {
+                if let Some((inner, _)) = group.split_once(']') {
+                    for raw_id in inner.split(',') {
+                        let clean = raw_id.trim();
+                        if !clean.is_empty() && !req_ids.iter().any(|r: &String| r == clean) {
+                            req_ids.push(clean.to_string());
                         }
                     }
                 }

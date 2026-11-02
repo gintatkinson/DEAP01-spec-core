@@ -44,11 +44,15 @@ mod toml {
     use std::path::Path;
     use std::str::FromStr;
 
+    /// Manifest structure table flags.
+    /// Realises: [REQ-1101]
     pub struct Value {
         pub(super) has_ferrocene_table: bool,
         pub(super) has_toolchain_table: bool,
     }
 
+    /// Parses input string using lossless witness function.
+    /// Realises: [REQ-1101]
     fn parse_with_witness<T: FromStr>(
         raw: &str,
         _witness: fn(&Path) -> Result<T, deap_core::CoreError>,
@@ -59,6 +63,8 @@ mod toml {
     impl FromStr for Value {
         type Err = String;
 
+        /// Parses value from TOML string.
+        /// Realises: [REQ-1101]
         fn from_str(raw: &str) -> Result<Self, Self::Err> {
             let doc = parse_with_witness(raw, deap_core::workspace::parse_cargo_toml_lossless)
                 .map_err(|e| e.to_string())?;
@@ -84,6 +90,8 @@ mod toml {
         }
     }
 
+    /// Parses typed value from TOML string.
+    /// Realises: [REQ-1101]
     pub fn from_str<T: FromStr>(raw: &str) -> Result<T, T::Err> {
         raw.parse::<T>()
     }
@@ -93,6 +101,7 @@ mod toml {
 pub const CHECK_ID: &str = "CHECK-STAGE5-FERROCENE";
 
 /// Diagnostic emitted by Stage 5 Ferrocene qualification and MC/DC verification gates.
+/// Realises: [REQ-1101], [REQ-1102]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     /// Gate check identifier (`CHECK-STAGE5-FERROCENE`).
@@ -104,12 +113,15 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
+    /// Constructs a new Ferrocene qualification diagnostic.
+    /// Realises: [REQ-1101]
     fn new(path: impl Into<String>, message: impl Into<String>) -> Self {
         Self { check_id: CHECK_ID, path: path.into(), message: message.into() }
     }
 }
 
 /// Dynamically discovers the `criticalup` binary on `PATH` using `std::env::consts::EXE_SUFFIX`.
+/// Realises: [REQ-1101]
 #[must_use]
 pub fn discover_criticalup_binary() -> Option<PathBuf> {
     let bin_name = format!("criticalup{}", std::env::consts::EXE_SUFFIX);
@@ -120,6 +132,7 @@ pub fn discover_criticalup_binary() -> Option<PathBuf> {
 }
 
 /// Verifies `criticalup.toml` and `rust-toolchain.toml` parity and optional `criticalup` presence (`REQ-1101`).
+/// Realises: [REQ-1101]
 #[must_use]
 pub fn verify_ferrocene_qualification_manifests(
     workspace_root: &Path,
@@ -212,6 +225,7 @@ pub fn validate_fls_paragraph_anchor(doc_text: &str, relative_path: &str) -> Vec
 }
 
 /// Validates DO-178C DAL-A MC/DC `symbol-report` / `blanket` JSON schema (`REQ-1102`).
+/// Realises: [REQ-1102]
 #[must_use]
 pub fn validate_mcdc_symbol_report_json(json_str: &str, relative_path: &str) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
@@ -240,6 +254,7 @@ pub fn validate_mcdc_symbol_report_json(json_str: &str, relative_path: &str) -> 
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};

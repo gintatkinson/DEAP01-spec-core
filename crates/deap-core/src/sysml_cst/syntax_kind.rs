@@ -26,7 +26,7 @@
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 #![allow(clippy::doc_markdown, clippy::missing_const_for_fn)]
 
-/// Complete enumeration of tokens and composite CST nodes for SysML v2 and KerML.
+/// Complete enumeration of tokens and composite CST nodes for SysML v2 and KerML. Realises: [REQ-0201]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u16)]
 #[allow(non_camel_case_types)]
@@ -138,12 +138,14 @@ pub enum SysmlSyntaxKind {
 }
 
 impl From<SysmlSyntaxKind> for rowan::SyntaxKind {
+    /// Converts SysmlSyntaxKind to rowan::SyntaxKind. Realises: [REQ-0201]
     fn from(kind: SysmlSyntaxKind) -> Self {
         Self(kind as u16)
     }
 }
 
 impl From<SysmlSyntaxKind> for u16 {
+    /// Converts SysmlSyntaxKind to raw u16. Realises: [REQ-0201]
     fn from(kind: SysmlSyntaxKind) -> Self {
         kind as Self
     }
@@ -253,13 +255,14 @@ const ALL_SYNTAX_KINDS: [SysmlSyntaxKind; (SysmlSyntaxKind::__LAST as usize) + 1
     SysmlSyntaxKind::__LAST,
 ];
 
-/// Rowan language definition for SysML v2 / KerML CST.
+/// Rowan language definition for SysML v2 / KerML CST. Realises: [REQ-0201]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SysmlLanguage {}
 
 impl rowan::Language for SysmlLanguage {
     type Kind = SysmlSyntaxKind;
 
+    /// Converts rowan::SyntaxKind to SysmlSyntaxKind. Realises: [REQ-0201]
     fn kind_from_raw(raw: rowan::SyntaxKind) -> Self::Kind {
         ALL_SYNTAX_KINDS
             .get(usize::from(raw.0))
@@ -267,6 +270,7 @@ impl rowan::Language for SysmlLanguage {
             .unwrap_or(SysmlSyntaxKind::ERROR_NODE)
     }
 
+    /// Converts SysmlSyntaxKind to rowan::SyntaxKind. Realises: [REQ-0201]
     fn kind_to_raw(kind: Self::Kind) -> rowan::SyntaxKind {
         rowan::SyntaxKind(kind as u16)
     }
@@ -278,7 +282,7 @@ pub type SysmlSyntaxNode = rowan::SyntaxNode<SysmlLanguage>;
 /// Rowan syntax token alias for SysML v2 / KerML.
 pub type SysmlSyntaxToken = rowan::SyntaxToken<SysmlLanguage>;
 
-/// Map a `SysmlToken` lexer token to its corresponding `SysmlSyntaxKind`.
+/// Map a `SysmlToken` lexer token to its corresponding `SysmlSyntaxKind`. Realises: [REQ-0201]
 #[must_use]
 pub const fn token_to_syntax_kind(token: super::lexer::SysmlToken) -> SysmlSyntaxKind {
     match token {

@@ -24,10 +24,14 @@
 
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 pub use crate::dart_cst::{parse_dart_cst, parse_dart_items, DartCstItem, DartItemKind, DartToken};
 pub use crate::rust_cst::source_bridge::*;
+use crate::sysml_ast::{
+    ActionDef, AttributeDef, ConstraintDef, PackageDef, PartDef, PortDef, RequirementDef,
+};
 
 /// [DOC-TIER: A] Lowers extracted items into canonical `PackageDef`.
 ///
@@ -35,24 +39,95 @@ pub use crate::rust_cst::source_bridge::*;
 /// Contract: Deterministically lowers CST-backed `SourceAstItem` records into a `SysML` v2 `PackageDef`.
 /// Bounds & Faults: Executes in linear O(N) time and space over `items.len()`; falls back to `"SourceCodeModel"` on empty package names.
 #[must_use]
-pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) -> crate::sysml_ast::PackageDef {
+pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) -> PackageDef {
     let clean_pkg = sanitize_sysml_identifier(package_name, "SourceCodeModel");
-    let mut pkg = crate::sysml_ast::PackageDef { name: clean_pkg.clone(), ..Default::default() };
+    let mut pkg = PackageDef { name: clean_pkg.clone(), ..Default::default() };
+    let mut seen_reqs = BTreeSet::new();
     for item in items {
-        if matches!(item.kind, SourceItemKind::Struct | SourceItemKind::Class | SourceItemKind::Type) {
-            pkg.part_defs.push(crate::sysml_ast::PartDef {
-                name: item.name.clone(), is_def: true, satisfied_requirements: item.satisfied_requirements.clone(), ..Default::default()
-            });
-        } else if item.kind.is_callable() {
-            pkg.action_defs.push(crate::sysml_ast::ActionDef { name: item.name.clone(), ..Default::default() });
+        for req_id in &item.satisfied_requirements {
+            if seen_reqs.insert(req_id.clone()) {
+                pkg.requirement_defs.push(RequirementDef {
+                    name: sanitize_sysml_identifier(req_id, "REQ_ITEM"),
+                    req_id: req_id.clone(),
+                    text: format!("Requirement {req_id} realized by {}", item.name),
+                    ..Default::default()
+                });
+            }
+        }
+        if matches!(item.kind, SourceItemKind::Struct | SourceItemKind::Class | SourceItemKind::Type | SourceItemKind::Trait | SourceItemKind::Mixin | SourceItemKind::Extension | SourceItemKind::Typedef) {
+            pkg.part_defs.push(lower_type_item_to_part(item));
         }
     }
+    attach_callable_items_to_package(items, &mut pkg);
     if pkg.part_defs.is_empty() && !pkg.action_defs.is_empty() {
-        pkg.part_defs.push(crate::sysml_ast::PartDef {
+        pkg.part_defs.push(PartDef {
             name: format!("{clean_pkg}Module"), is_def: true, actions: pkg.action_defs.clone(), ..Default::default()
         });
     }
     pkg
+}
+
+/// Lowers a structural type item into a `PartDef` with attributes and ports.
+/// Realises: [REQ-0201]
+fn lower_type_item_to_part(item: &SourceAstItem) -> PartDef {
+    let mut attributes = Vec::new();
+    let mut ports = Vec::new();
+    for field in &item.fields {
+        let fname = sanitize_sysml_identifier(&field.name, "field_attr");
+        let ftype = normalize_type_for_sysml(&field.type_name);
+        if field.is_callback_or_port {
+            ports.push(PortDef { name: fname, type_name: ftype, direction: "inout".to_string(), port_category: "DataPort".to_string(), doc: field.doc.clone(), ..Default::default() });
+        } else {
+            attributes.push(AttributeDef { name: fname, type_name: ftype, default_value: None, doc: field.doc.clone() });
+        }
+    }
+    PartDef {
+        name: sanitize_sysml_identifier(&item.name, "ComponentPart"),
+        doc: summary_from_doc_lines(&item.doc_lines),
+        is_def: true,
+        attributes,
+        ports,
+        satisfied_requirements: item.satisfied_requirements.clone(),
+        ..Default::default()
+    }
+}
+
+/// Lowers callable functions and methods onto their owner `PartDef` or package `action_defs`.
+/// Realises: [REQ-0201]
+fn attach_callable_items_to_package(items: &[SourceAstItem], pkg: &mut PackageDef) {
+    for item in items.iter().filter(|i| i.kind.is_callable()) {
+        let act_name = sanitize_sysml_identifier(&item.name, "action_op");
+        let in_params: Vec<AttributeDef> = item
+            .params
+            .iter()
+            .filter(|p| !matches!(p.name.trim(), "self" | "&self" | "&mut self" | "mut self"))
+            .map(|p| AttributeDef {
+                name: sanitize_sysml_identifier(&p.name, "param"),
+                type_name: normalize_type_for_sysml(&p.type_name),
+                default_value: None,
+                doc: None,
+            })
+            .collect();
+        let out_params = item
+            .return_type
+            .as_deref()
+            .map(str::trim)
+            .filter(|rt| !rt.is_empty() && *rt != "()" && *rt != "void")
+            .map(|rt| vec![AttributeDef { name: "result".to_string(), type_name: normalize_type_for_sysml(rt), default_value: None, doc: None }])
+            .unwrap_or_default();
+        let action = ActionDef { name: act_name.clone(), doc: summary_from_doc_lines(&item.doc_lines), in_params, out_params, performer: item.owner_name.clone(), is_def: true, ..Default::default() };
+        if let Some(ref owner_raw) = item.owner_name {
+            let owner_clean = sanitize_sysml_identifier(owner_raw, "ComponentPart");
+            if let Some(owner_part) = pkg.part_defs.iter_mut().find(|p| p.name == owner_clean) {
+                owner_part.actions.push(action);
+                for (idx, expr) in item.invariants.iter().enumerate() {
+                    owner_part.constraints.push(ConstraintDef { name: format!("invariant_{act_name}_{}", idx + 1), expression: expr.clone(), is_assertion: true, ..Default::default() });
+                }
+            }
+        } else {
+            pkg.action_defs.push(action);
+        }
+    }
 }
 
 /// [DOC-TIER: A] Sanitizes `SysML` identifier.
@@ -70,10 +145,37 @@ pub fn sanitize_sysml_identifier(input: &str, fallback: &str) -> String {
 /// [DOC-TIER: A] Normalizes type for `SysML`.
 ///
 /// Safety & Traceability: Realises: [REQ-0201]
-/// Contract: Trims leading and trailing whitespace trivia from extracted source type names.
+/// Contract: Maps source-language primitive and generic wrapper types to canonical `SysML` v2 scalar or part type names.
 /// Bounds & Faults: Executes in linear O(N) time over `ty.len()` with zero panics.
 #[must_use]
-pub fn normalize_type_for_sysml(ty: &str) -> String { ty.trim().to_string() }
+pub fn normalize_type_for_sysml(ty: &str) -> String {
+    let mut s = ty.trim().trim_end_matches('?').trim();
+    while let Some(rest) = s.strip_prefix('&') {
+        s = rest.trim_start().strip_prefix("mut ").unwrap_or_else(|| rest.trim_start()).trim_start();
+    }
+    if let Some((outer, rest)) = s.split_once('<') {
+        if let Some(inner) = rest.strip_suffix('>') {
+            let outer_ident = outer.trim().rsplit_once("::").map_or_else(|| outer.trim(), |(_, l)| l.trim());
+            if matches!(outer_ident, "Result" | "Option" | "Vec" | "List" | "Set" | "Box" | "Arc" | "Rc" | "Future" | "Stream" | "ValueChanged" | "ValueSetter" | "ValueGetter") {
+                let first = inner.split(',').next().unwrap_or("").trim();
+                if !first.is_empty() && first != "()" && first != "void" {
+                    return normalize_type_for_sysml(first);
+                }
+                return "String".to_string();
+            }
+        }
+    }
+    let base = s.split_once('<').map_or(s, |(o, _)| o.trim());
+    let last = base.rsplit_once("::").map_or(base, |(_, l)| l.trim());
+    let ident = sanitize_sysml_identifier(last, "String");
+    match ident.as_str() {
+        "u8" | "u16" | "u32" | "u64" | "u128" | "usize" | "i8" | "i16" | "i32" | "i64" | "i128" | "isize" | "int" => "Integer".to_string(),
+        "f32" | "f64" | "double" | "num" => "Real".to_string(),
+        "bool" => "Boolean".to_string(),
+        "str" | "String" | "char" | "Path" | "PathBuf" | "Self" | "void" | "dynamic" | "Object" => "String".to_string(),
+        other => other.to_string(),
+    }
+}
 
 /// [DOC-TIER: A] Synthesizes first doc line summary.
 ///
@@ -92,14 +194,19 @@ pub fn summary_from_doc_lines(doc_lines: &[String]) -> Option<String> {
 /// [DOC-TIER: A] Resolves package name for source directory.
 ///
 /// Safety & Traceability: Realises: [REQ-0201]
-/// Contract: Determines the canonical `SysML` v2 package identifier from `explicit_package` override or `source_dir` stem.
+/// Contract: Determines the canonical `SysML` v2 package identifier from `explicit_package` override or parent-qualified `source_dir` stem.
 /// Bounds & Faults: O(N) over path length; falls back to `"SourceCodeModel"` on unnamed or root paths.
 #[must_use]
 pub fn resolve_source_package_name(source_dir: &Path, explicit_package: Option<&str>) -> String {
-    if let Some(pkg) = explicit_package.map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(pkg) = explicit_package.map(str::trim).filter(|s| !s.is_empty() && !matches!(*s, "src" | "lib")) {
         return sanitize_sysml_identifier(pkg, "SourceCodeModel");
     }
-    let leaf = source_dir.file_name().and_then(|n| n.to_str()).unwrap_or("SourceCodeModel");
+    let leaf = source_dir.file_name().and_then(|n| n.to_str()).filter(|s| !s.is_empty()).unwrap_or("SourceCodeModel");
+    if matches!(leaf, "src" | "lib") {
+        if let Some(parent_name) = source_dir.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()).filter(|s| !s.is_empty() && *s != "." && *s != "..") {
+            return sanitize_sysml_identifier(&format!("{parent_name}_{leaf}_Realization"), "SourceCodeModel");
+        }
+    }
     sanitize_sysml_identifier(leaf, "SourceCodeModel")
 }
 
@@ -131,16 +238,25 @@ pub fn discover_source_files(source_dir: &Path, language: SourceLanguage) -> Res
 /// [DOC-TIER: A] Ingests directory of source files into a `PackageDef`.
 ///
 /// Safety & Traceability: Realises: [REQ-0201]
-/// Contract: Discovers, reads, and parses all source files in `source_dir` and lowers them into a consolidated `PackageDef`.
-/// Bounds & Faults: O(N) over total source bytes; propagates file read errors via `CoreError::io`.
+/// Contract: Discovers, reads, validates, and parses all source files in `source_dir` and lowers them into a consolidated `PackageDef`.
+/// Bounds & Faults: O(N) over total source bytes; propagates file read or syntax errors via `CoreError`.
 ///
 /// # Errors
-/// Fails if source file discovery or reading fails.
-pub fn ingest_source_directory(source_dir: &Path, language: SourceLanguage, package_name: &str) -> Result<crate::sysml_ast::PackageDef, crate::error::CoreError> {
+/// Fails if source file discovery, reading, or syntax validation fails.
+pub fn ingest_source_directory(source_dir: &Path, language: SourceLanguage, package_name: &str) -> Result<PackageDef, crate::error::CoreError> {
     let mut items = Vec::new();
     for path in discover_source_files(source_dir, language)? {
         let content = std::fs::read_to_string(&path).map_err(|e| crate::error::CoreError::io(e.to_string()))?;
-        if let Some(ast) = parse_source_file_ast(&path, &content) { items.extend(ast.items); }
+        let label = path.display().to_string();
+        let file_lang = match language {
+            SourceLanguage::Auto => SourceLanguage::from_path(&path).unwrap_or(SourceLanguage::Rust),
+            explicit => explicit,
+        };
+        let mut parsed = match file_lang {
+            SourceLanguage::Rust | SourceLanguage::Auto => parse_rust_source_ast(&content, &label)?,
+            SourceLanguage::Dart => parse_dart_source_ast(&content, &label)?,
+        };
+        items.append(&mut parsed);
     }
     let effective = resolve_source_package_name(source_dir, if package_name.is_empty() { None } else { Some(package_name) });
     Ok(lower_source_ast_to_package(&items, &effective))

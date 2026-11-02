@@ -71,12 +71,14 @@ pub struct DeapV2AstMetricsReport {
     pub lossless_roundtrip_verified: bool,
 }
 
+/// Accumulator for callable metrics during AST traversal. Realises: [REQ-0608]
 struct CallableBodyAccumulator {
     exec_lines: BTreeSet<usize>,
     mut_bool_flag_count: usize,
     max_predicate_clauses: usize,
 }
 
+/// Computes root CST depth of a function. Realises: [REQ-0608]
 fn compute_fn_root_cst_depth(fn_node: &ra_ap_syntax::ast::Fn) -> Result<usize, CstMetricsError> {
     let start = u32::from(fn_node.syntax().text_range().start()) as usize;
     let mut depth = 0usize;
@@ -88,6 +90,7 @@ fn compute_fn_root_cst_depth(fn_node: &ra_ap_syntax::ast::Fn) -> Result<usize, C
     Ok(depth)
 }
 
+/// Extracts parameter arity excluding receiver. Realises: [REQ-0608]
 fn extract_receiver_excluded_arity(fn_node: &ra_ap_syntax::ast::Fn) -> Result<(usize, bool), CstMetricsError> {
     let Some(param_list) = fn_node.param_list() else { return Ok((0, false)); };
     let has_self = param_list.self_param().is_some();
@@ -99,6 +102,7 @@ fn extract_receiver_excluded_arity(fn_node: &ra_ap_syntax::ast::Fn) -> Result<(u
     Ok((count, has_self))
 }
 
+/// Checks for outer rt_loop attribute. Realises: [REQ-0608]
 fn has_outer_rt_loop_attr(fn_node: &ra_ap_syntax::ast::Fn) -> bool {
     ra_ap_syntax::ast::HasAttrs::attrs(fn_node).any(|attr| {
         attr.kind() == ra_ap_syntax::ast::AttrKind::Outer
@@ -107,6 +111,7 @@ fn has_outer_rt_loop_attr(fn_node: &ra_ap_syntax::ast::Fn) -> bool {
     })
 }
 
+/// Unwraps paren AST type wrappers. Realises: [REQ-0608]
 fn unwrap_paren_ast_type(mut ty: ra_ap_syntax::ast::Type) -> ra_ap_syntax::ast::Type {
     let mut steps = 0usize;
     while let ra_ap_syntax::ast::Type::ParenType(paren) = ty {
@@ -118,6 +123,7 @@ fn unwrap_paren_ast_type(mut ty: ra_ap_syntax::ast::Type) -> ra_ap_syntax::ast::
     ty
 }
 
+/// Checks whether AST type represents String. Realises: [REQ-0608]
 fn is_rust_string_ast_type(ty: ra_ap_syntax::ast::Type) -> bool {
     use ra_ap_syntax::ast::HasGenericArgs;
     let ra_ap_syntax::ast::Type::PathType(pt) = unwrap_paren_ast_type(ty) else { return false; };
@@ -129,6 +135,7 @@ fn is_rust_string_ast_type(ty: ra_ap_syntax::ast::Type) -> bool {
     is_str && valid
 }
 
+/// Checks whether function returns Result<T, String>. Realises: [REQ-0608]
 fn fn_returns_result_string_err(fn_node: &ra_ap_syntax::ast::Fn) -> bool {
     use ra_ap_syntax::ast::HasGenericArgs;
     let Some(ret_ty) = fn_node.ret_type().and_then(|rt| rt.ty()) else { return false; };
@@ -140,6 +147,7 @@ fn fn_returns_result_string_err(fn_node: &ra_ap_syntax::ast::Fn) -> bool {
     targs.len() == 2 && targs.get(1).cloned().is_some_and(is_rust_string_ast_type)
 }
 
+/// Checks whether AST type represents bool. Realises: [REQ-0608]
 fn is_bool_ast_type(ty: ra_ap_syntax::ast::Type) -> bool {
     use ra_ap_syntax::ast::HasGenericArgs;
     let ra_ap_syntax::ast::Type::PathType(pt) = unwrap_paren_ast_type(ty) else { return false; };
@@ -150,6 +158,7 @@ fn is_bool_ast_type(ty: ra_ap_syntax::ast::Type) -> bool {
     is_b && valid
 }
 
+/// Checks whether expression is boolean literal. Realises: [REQ-0608]
 fn is_bool_literal_expr(mut expr: ra_ap_syntax::ast::Expr) -> bool {
     let mut steps = 0usize;
     loop {
@@ -166,6 +175,7 @@ fn is_bool_literal_expr(mut expr: ra_ap_syntax::ast::Expr) -> bool {
     }
 }
 
+/// Counts mutable boolean flags in let statement. Realises: [REQ-0608]
 fn count_let_stmt_mut_bool_flags(let_stmt: &ra_ap_syntax::ast::LetStmt) -> usize {
     let Some(pat) = let_stmt.pat() else { return 0; };
     match pat {
@@ -178,10 +188,12 @@ fn count_let_stmt_mut_bool_flags(let_stmt: &ra_ap_syntax::ast::LetStmt) -> usize
     }
 }
 
+/// Checks whether binary expression is logical AND/OR. Realises: [REQ-0608]
 fn is_logical_and_or_bin_expr(bin: &ra_ap_syntax::ast::BinExpr) -> bool {
     matches!(bin.op_kind(), Some(ra_ap_syntax::ast::BinaryOp::LogicOp(_)))
 }
 
+/// Checks whether binary expression is child of logical binary expr. Realises: [REQ-0608]
 fn is_child_of_logical_bin_expr(bin: &ra_ap_syntax::ast::BinExpr) -> bool {
     let mut cursor = bin.syntax().parent();
     let mut steps = 0usize;
@@ -199,6 +211,7 @@ fn is_child_of_logical_bin_expr(bin: &ra_ap_syntax::ast::BinExpr) -> bool {
     false
 }
 
+/// Unwraps clause expression wrappers. Realises: [REQ-0608]
 fn unwrap_clause_wrappers(mut expr: ra_ap_syntax::ast::Expr) -> ra_ap_syntax::ast::Expr {
     let mut steps = 0usize;
     loop {
@@ -214,6 +227,7 @@ fn unwrap_clause_wrappers(mut expr: ra_ap_syntax::ast::Expr) -> ra_ap_syntax::as
     }
 }
 
+/// Counts predicate clauses in logical binary expr. Realises: [REQ-0608]
 fn count_predicate_clauses(bin: &ra_ap_syntax::ast::BinExpr) -> Result<usize, CstMetricsError> {
     if !is_logical_and_or_bin_expr(bin) || is_child_of_logical_bin_expr(bin) { return Ok(0); }
     let start = u32::from(bin.syntax().text_range().start()) as usize;
@@ -233,6 +247,7 @@ fn count_predicate_clauses(bin: &ra_ap_syntax::ast::BinExpr) -> Result<usize, Cs
     Ok(clauses)
 }
 
+/// Records executable lines of callable node. Realises: [REQ-0608]
 fn record_callable_lines(node: &ra_ap_syntax::SyntaxNode, line_starts: &[usize], lines: &mut BTreeSet<usize>) -> Result<(), CstMetricsError> {
     if is_inside_doc_attr(node) { return Ok(()); }
     for child in node.children_with_tokens() {
@@ -254,6 +269,7 @@ fn record_callable_lines(node: &ra_ap_syntax::SyntaxNode, line_starts: &[usize],
     Ok(())
 }
 
+/// Accumulates callable metrics from AST node. Realises: [REQ-0608]
 fn accumulate_callable_metrics(node: &ra_ap_syntax::SyntaxNode, is_root: bool, line_starts: &[usize], acc: &mut CallableBodyAccumulator) -> Result<bool, CstMetricsError> {
     if !is_root && (node_enters_test_scope(node) || ra_ap_syntax::ast::Fn::can_cast(node.kind())) { return Ok(false); }
     record_callable_lines(node, line_starts, &mut acc.exec_lines)?;

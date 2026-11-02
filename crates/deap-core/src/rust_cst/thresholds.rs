@@ -57,6 +57,7 @@ pub struct CstMetricsThresholds {
 }
 
 impl Default for CstMetricsThresholds {
+    /// Default thresholds. Realises: [REQ-0608]
     fn default() -> Self {
         Self {
             max_fn_exec_sloc: MAX_THRESHOLD_FN_EXEC_SLOC,
@@ -101,7 +102,7 @@ pub enum CstMetricsError {
 }
 
 impl CstMetricsError {
-    /// Returns the canonical DEAP-E0801..DEAP-E0804 diagnostic code.
+    /// Returns the canonical DEAP-E0801..DEAP-E0804 diagnostic code. Realises: [REQ-0608]
     pub const fn diagnostic_code(&self) -> &'static str {
         match self {
             Self::UnverifiedParsePrecondition { .. } => "DEAP-E0801",
@@ -112,7 +113,7 @@ impl CstMetricsError {
         }
     }
 
-    /// Returns the half-open UTF-8 byte span (byte_start, byte_end).
+    /// Returns the half-open UTF-8 byte span (byte_start, byte_end). Realises: [REQ-0608]
     pub const fn byte_span(&self) -> (usize, usize) {
         match self {
             Self::UnverifiedParsePrecondition { .. } => (0, 0),
@@ -128,6 +129,7 @@ impl CstMetricsError {
     }
 }
 
+/// Cleans diagnostic line from unprintable characters. Realises: [REQ-0608]
 fn clean_diag_line(raw: &str) -> String {
     raw.chars()
         .map(|ch| if ch == '\n' || ch == '\r' || ch == '\x1b' { ' ' } else { ch })
@@ -135,6 +137,7 @@ fn clean_diag_line(raw: &str) -> String {
 }
 
 impl std::fmt::Display for CstMetricsError {
+    /// Formats CST metrics error. Realises: [REQ-0608]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let diag = self.diagnostic_code();
         match self {
@@ -159,6 +162,7 @@ impl std::fmt::Display for CstMetricsError {
 
 impl std::error::Error for CstMetricsError {}
 
+/// Helper to construct threshold violation error. Realises: [REQ-0608]
 fn threshold_violation(code: &'static str, symbol: &'static str) -> CstMetricsError {
     CstMetricsError::ThresholdEnvelopeOrMetricsViolation {
         code,

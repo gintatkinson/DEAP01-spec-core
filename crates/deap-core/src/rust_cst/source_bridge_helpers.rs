@@ -33,16 +33,6 @@ use crate::dart_cst::{parse_dart_items, DartItemKind, DartToken};
 use crate::rust_cst::source_bridge::{SourceItemKind, SourceLanguage, SourceParam};
 use crate::rust_cst::source_bridge_rust::ExtractedMethodSignature;
 
-/// Multi-line lexical scanner state for Rust source files. Realises: [REQ-0605]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum RustStringScannerState {
-    #[default]
-    Normal,
-    BlockComment(usize),
-    StringLiteral,
-    RawString(usize),
-}
-
 /// Lossless CST token masking state across Rust (`ra_ap_syntax`) and Dart (`dart_cst`). Realises: [REQ-0605]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CstLexState {
@@ -52,9 +42,6 @@ pub struct CstLexState {
     pub raw_hash_count: Option<usize>,
     pub interp_stack: Vec<usize>,
 }
-
-/// Unified lexical tracking state alias across Rust and Dart. Realises: [REQ-0605]
-pub type RustDartLexState = CstLexState;
 
 /// Scoped scanner state for items and tests. Realises: [REQ-0605]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -118,7 +105,7 @@ fn mask_dart_line_via_cst(line: &str, state: &mut CstLexState) -> String {
                     if state.block_comment_depth == 0 && slice.ends_with("*/") {
                         out.push_str("  ");
                     } else {
-                        out.extend((0..slice.len()).map(|_| ' '));
+                        return format!("{out}{}{}", " ".repeat(slice.len()), scan_line_with_unified_lex_state(line.get(span.end..).unwrap_or(""), state));
                     }
                 } else if slice.chars().all(char::is_whitespace) {
                     out.push_str(slice);
@@ -418,7 +405,8 @@ fn parse_single_dart_param(raw: &str) -> Option<SourceParam> {
         let raw_name = parts.last().copied().unwrap_or("");
         let name = raw_name.strip_prefix("this.").or_else(|| raw_name.strip_prefix("super.")).unwrap_or(raw_name);
         let clean_name = extract_leading_ast_ident(name).unwrap_or_else(|| name.to_string());
-        Some(SourceParam { name: clean_name, type_name: parts[..parts.len() - 1].join(" ") })
+        let type_name = parts.get(..parts.len().saturating_sub(1)).map(|s| s.join(" ")).unwrap_or_default();
+        Some(SourceParam { name: clean_name, type_name })
     } else {
         extract_leading_ast_ident(clean).map(|name| SourceParam { name, type_name: "dynamic".to_string() })
     }
@@ -429,7 +417,7 @@ fn parse_single_dart_param(raw: &str) -> Option<SourceParam> {
 pub fn parse_dart_callable_signature(code: &str, callable_name: &str) -> (Vec<SourceParam>, Option<String>) {
     let Some((before_open, after_open)) = code.split_once('(') else { return (Vec::new(), None); };
     let ret = before_open.trim().strip_suffix(callable_name)
-        .map(|p| p.trim().strip_prefix("static ").unwrap_or(p.trim()).trim())
+        .map(|p| p.trim().strip_prefix("static ").unwrap_or_else(|| p.trim()).trim())
         .filter(|s| !s.is_empty() && *s != "const" && *s != "factory")
         .map(ToString::to_string);
     let (mut depth, mut end_idx) = (1usize, after_open.len());

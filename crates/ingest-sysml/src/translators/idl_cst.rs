@@ -9,6 +9,7 @@
 
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 
+/// IDL lexer tokens. Realises: [REQ-0201]
 #[derive(logos::Logos, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IdlToken {
     #[regex(r"[ \t\r\n]+")]
@@ -30,6 +31,7 @@ pub enum IdlToken {
     Error,
 }
 
+/// IDL syntax kind for Rowan CST. Realises: [REQ-0201]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u16)]
 #[allow(non_camel_case_types)]
@@ -46,12 +48,14 @@ pub enum IdlSyntaxKind {
     SOURCE_FILE,
 }
 
+/// IDL Rowan language definition. Realises: [REQ-0201]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum IdlLanguage {}
 
 impl rowan::Language for IdlLanguage {
     type Kind = IdlSyntaxKind;
 
+    /// Maps raw syntax kind to `IdlSyntaxKind`. Realises: [REQ-0201]
     fn kind_from_raw(raw: rowan::SyntaxKind) -> Self::Kind {
         match raw.0 {
             0 => IdlSyntaxKind::WHITESPACE,
@@ -67,6 +71,7 @@ impl rowan::Language for IdlLanguage {
         }
     }
 
+    /// Maps `IdlSyntaxKind` to raw syntax kind. Realises: [REQ-0201]
     fn kind_to_raw(kind: Self::Kind) -> rowan::SyntaxKind {
         match kind {
             IdlSyntaxKind::WHITESPACE => rowan::SyntaxKind(0),
@@ -83,6 +88,7 @@ impl rowan::Language for IdlLanguage {
     }
 }
 
+/// Summary of an IDL construct. Realises: [REQ-0201]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdlNodeSummary {
     pub kind: String,
@@ -91,6 +97,7 @@ pub struct IdlNodeSummary {
     pub span_end: usize,
 }
 
+/// Parsed IDL CST output. Realises: [REQ-0201]
 #[derive(Debug, Clone)]
 pub struct ParsedIdlCst {
     pub green: rowan::GreenNode,
@@ -102,6 +109,7 @@ const TARGET_KEYWORDS: &[&str] = &[
     "module", "interface", "struct", "enum", "typedef", "const", "exception", "attribute",
 ];
 
+/// Maps token to syntax kind. Realises: [REQ-0201]
 const fn token_to_syntax_kind(token: IdlToken) -> IdlSyntaxKind {
     match token {
         IdlToken::Whitespace => IdlSyntaxKind::WHITESPACE,
@@ -116,6 +124,7 @@ const fn token_to_syntax_kind(token: IdlToken) -> IdlSyntaxKind {
     }
 }
 
+/// Parses IDL source into lossless CST. Realises: [REQ-0201]
 #[must_use]
 pub fn parse_idl_cst(source: &str) -> ParsedIdlCst {
     let mut builder = rowan::GreenNodeBuilder::new();

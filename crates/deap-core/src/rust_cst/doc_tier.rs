@@ -48,10 +48,12 @@ pub enum DocTier {
 }
 
 impl DocTier {
+    /// Returns whether tier represents production item. Realises: [REQ-0608]
     pub const fn is_production(self) -> bool {
         matches!(self, Self::RustTierA | Self::RustTierBC | Self::TierA | Self::TierB | Self::TierC)
     }
 
+    /// Returns label for tier. Realises: [REQ-0608]
     pub const fn label(self) -> &'static str {
         match self {
             Self::RustTierA => "RustTierA",
@@ -64,7 +66,7 @@ impl DocTier {
     }
 }
 
-/// Verified production DocTier descriptor for a single non-test Rust CST declaration.
+/// Verified production DocTier descriptor for a single non-test Rust CST declaration. Realises: [REQ-0608]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct ClassifiedDocTierItem {
     pub symbol: String,
@@ -75,7 +77,7 @@ pub struct ClassifiedDocTierItem {
     pub is_callable: bool,
 }
 
-/// Deterministic BTreeMap/BTreeSet-ordered DocTier inventory.
+/// Deterministic BTreeMap/BTreeSet-ordered DocTier inventory. Realises: [REQ-0608]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DocTierInventory {
     pub source_path: String,
@@ -88,6 +90,7 @@ pub struct DocTierInventory {
     pub pruned_test_subtree_ranges: Vec<(usize, usize)>,
 }
 
+/// Creates new empty DocTier inventory. Realises: [REQ-0608]
 fn new_empty_doc_tier_inventory(source_path: &str) -> DocTierInventory {
     DocTierInventory {
         source_path: source_path.to_string(),
@@ -101,6 +104,7 @@ fn new_empty_doc_tier_inventory(source_path: &str) -> DocTierInventory {
     }
 }
 
+/// Checks if token is trivia. Realises: [REQ-0608]
 pub(crate) fn is_trivia_token(tok: &ra_ap_syntax::SyntaxToken) -> bool {
     matches!(
         tok.kind(),
@@ -111,6 +115,7 @@ pub(crate) fn is_trivia_token(tok: &ra_ap_syntax::SyntaxToken) -> bool {
     )
 }
 
+/// Collects bounded non-trivia tokens. Realises: [REQ-0608]
 fn collect_bounded_tokens(node: &ra_ap_syntax::SyntaxNode, limit: usize) -> Vec<ra_ap_syntax::SyntaxToken> {
     let mut out = Vec::new();
     for elem in node.descendants_with_tokens() {
@@ -124,6 +129,7 @@ fn collect_bounded_tokens(node: &ra_ap_syntax::SyntaxNode, limit: usize) -> Vec<
     out
 }
 
+/// Checks if attribute is doc attribute. Realises: [REQ-0608]
 fn is_doc_meta_attr(attr: &ra_ap_syntax::ast::Attr) -> bool {
     let Some(meta) = attr.meta() else { return false; };
     let toks = collect_bounded_tokens(meta.syntax(), 3);
@@ -131,6 +137,7 @@ fn is_doc_meta_attr(attr: &ra_ap_syntax::ast::Attr) -> bool {
         && toks.get(1).is_some_and(|t| t.text() == "=" || t.text() == "(")
 }
 
+/// Checks if node is inside doc attribute. Realises: [REQ-0608]
 pub(crate) fn is_inside_doc_attr(node: &ra_ap_syntax::SyntaxNode) -> bool {
     for ancestor in node.ancestors().take(MAX_AST_DEPTH.saturating_add(1)) {
         if let Some(attr) = ra_ap_syntax::ast::Attr::cast(ancestor) {
@@ -140,6 +147,7 @@ pub(crate) fn is_inside_doc_attr(node: &ra_ap_syntax::SyntaxNode) -> bool {
     false
 }
 
+/// Checks if attribute is outer cfg(test). Realises: [REQ-0608]
 fn is_outer_cfg_test_attr(attr: &ra_ap_syntax::ast::Attr) -> bool {
     if attr.kind() != ra_ap_syntax::ast::AttrKind::Outer { return false; }
     let Some(meta) = attr.meta() else { return false; };
@@ -151,6 +159,7 @@ fn is_outer_cfg_test_attr(attr: &ra_ap_syntax::ast::Attr) -> bool {
         && toks.get(3).is_some_and(|t| t.text() == ")")
 }
 
+/// Checks if attribute is outer test fn attribute. Realises: [REQ-0608]
 fn is_outer_test_fn_attr(attr: &ra_ap_syntax::ast::Attr) -> bool {
     if attr.kind() != ra_ap_syntax::ast::AttrKind::Outer { return false; }
     let Some(meta) = attr.meta() else { return false; };
@@ -158,6 +167,7 @@ fn is_outer_test_fn_attr(attr: &ra_ap_syntax::ast::Attr) -> bool {
     !toks.is_empty() && toks.len() < 16 && toks.last().is_some_and(|t| t.text() == "test")
 }
 
+/// Checks if node enters test scope. Realises: [REQ-0608]
 pub(crate) fn node_enters_test_scope(node: &ra_ap_syntax::SyntaxNode) -> bool {
     if node.children().filter_map(ra_ap_syntax::ast::Attr::cast).any(|a| is_outer_cfg_test_attr(&a)) {
         return true;
@@ -168,11 +178,13 @@ pub(crate) fn node_enters_test_scope(node: &ra_ap_syntax::SyntaxNode) -> bool {
     false
 }
 
+/// Checks if visibility is unrestricted pub. Realises: [REQ-0608]
 fn is_unrestricted_pub(vis: Option<ra_ap_syntax::ast::Visibility>) -> bool {
     let Some(v) = vis else { return false; };
     v.pub_token().is_some() && !v.syntax().descendants_with_tokens().any(|el| el.kind() == ra_ap_syntax::SyntaxKind::L_PAREN)
 }
 
+/// Extracts named target item. Realises: [REQ-0608]
 fn extract_named_target(node: &ra_ap_syntax::SyntaxNode, test_scope: bool) -> Option<(String, bool, bool)> {
     use ra_ap_syntax::ast::Item;
     let item = Item::cast(node.clone())?;
@@ -194,12 +206,14 @@ fn extract_named_target(node: &ra_ap_syntax::SyntaxNode, test_scope: bool) -> Op
     }
 }
 
+/// Counts outer doc lines from comment slice. Realises: [REQ-0608]
 fn outer_doc_lines(slice: &str) -> usize {
     if slice.starts_with("///") && !slice.starts_with("////") { 1 }
     else if slice.starts_with("/**") && !slice.starts_with("/***") && slice != "/**/" { slice.lines().count().max(1) }
     else { 0 }
 }
 
+/// Extracts outer doc count from node. Realises: [REQ-0608]
 fn extract_outer_doc_count(node: &ra_ap_syntax::SyntaxNode, src: &str) -> Result<usize, CstMetricsError> {
     let mut count = 0usize;
     for child in node.children_with_tokens() {
@@ -227,6 +241,7 @@ fn extract_outer_doc_count(node: &ra_ap_syntax::SyntaxNode, src: &str) -> Result
     Ok(count)
 }
 
+/// Resolves byte offset to 1-based line number. Realises: [REQ-0608]
 pub(crate) fn resolve_byte_to_line(line_starts: &[usize], offset: usize) -> Result<usize, CstMetricsError> {
     let idx = match line_starts.binary_search(&offset) {
         Ok(i) => i,
@@ -235,6 +250,7 @@ pub(crate) fn resolve_byte_to_line(line_starts: &[usize], offset: usize) -> Resu
     line_starts.get(idx).map(|_| idx).ok_or(CstMetricsError::LosslessRoundtripOrSpanMismatch { byte_start: offset, byte_end: offset })
 }
 
+/// Records executable lines for node. Realises: [REQ-0608]
 fn record_exec_lines(node: &ra_ap_syntax::SyntaxNode, src: &str, line_starts: &[usize], lines: &mut BTreeSet<usize>) -> Result<(), CstMetricsError> {
     if is_inside_doc_attr(node) { return Ok(()); }
     for child in node.children_with_tokens() {
@@ -256,6 +272,7 @@ fn record_exec_lines(node: &ra_ap_syntax::SyntaxNode, src: &str, line_starts: &[
     Ok(())
 }
 
+/// Inserts production item into inventory. Realises: [REQ-0608]
 fn insert_prod_item(inv: &mut DocTierInventory, start_u32: u32, item: ClassifiedDocTierItem) -> Result<(), CstMetricsError> {
     let (bs, be) = (item.byte_start, item.byte_end);
     match item.tier {
@@ -269,6 +286,7 @@ fn insert_prod_item(inv: &mut DocTierInventory, start_u32: u32, item: Classified
     Ok(())
 }
 
+/// Pushes child nodes onto tier worklist. Realises: [REQ-0608]
 pub(crate) fn push_tier_worklist_children(
     node: &ra_ap_syntax::SyntaxNode,
     depth: usize,

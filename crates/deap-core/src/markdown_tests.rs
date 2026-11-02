@@ -1,3 +1,4 @@
+#![cfg(test)]
 #![deny(clippy::too_many_lines, clippy::too_many_arguments, clippy::undocumented_unsafe_blocks)]
 //! Unit tests for `deap_core::markdown` token scanning, KaTeX math blocks, Mermaid validation, and CommonMark AST re-exports.
 //!
@@ -23,7 +24,9 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-0401], [REQ-0402], [REQ-0608]
 
-use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
 #[test]
 fn test_glfm_inline_math_does_not_synthesize_display_math() {
@@ -349,4 +352,5 @@ fn test_markdown_ast_reexports_from_markdown_module() -> Result<(), String> {
     let formatted = format_markdown_cmark(md)?;
     assert!(formatted.contains("Heading"));
     Ok(())
+}
 }

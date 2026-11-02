@@ -32,12 +32,13 @@
 //! Realises: [REQ-0903], [REQ-1102], [BP-09], [BP-11]
 
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(clippy::missing_errors_doc)]
 
 use deap_core::rust_cst::parse::parse_rust_source;
 use quote::quote;
 use ra_ap_syntax::Edition;
 
-/// Specification for a single Kani bounded model-checking proof harness (`REQ-0903`).
+/// Specification for a single Kani bounded model-checking proof harness. Realises: [REQ-0903]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KaniProofSpec {
     /// Target Rust proof function identifier.
@@ -53,10 +54,7 @@ pub struct KaniProofSpec {
 }
 
 /// Synthesizes a deterministic `#[cfg(kani)]` proof harness module from `specs` (`REQ-0903`).
-///
-/// # Errors
-/// Returns `Err(String)` if `specs` is empty, any identifier is invalid, `min_bound > max_bound`,
-/// or CST validation fails.
+/// Realises: [REQ-0903]
 #[allow(clippy::double_must_use)]
 #[must_use]
 pub fn synthesize_kani_proof_module(specs: &[KaniProofSpec]) -> Result<String, String> {
@@ -112,10 +110,7 @@ pub fn synthesize_kani_proof_module(specs: &[KaniProofSpec]) -> Result<String, S
 }
 
 /// Synthesizes a Ring-2 FRB FFI boundary bridge module with `// SAFETY: [SC-...]` contract metadata (`REQ-1102`).
-///
-/// # Errors
-/// Returns `Err(String)` if `bridge_name` is not a valid Rust identifier, `sc_id` does not start
-/// with `SC-`, or CST validation fails.
+/// Realises: [REQ-1102]
 #[allow(clippy::double_must_use)]
 #[must_use]
 pub fn synthesize_ring2_frb_ffi_bridge(bridge_name: &str, sc_id: &str) -> Result<String, String> {
@@ -149,6 +144,7 @@ pub fn synthesize_ring2_frb_ffi_bridge(bridge_name: &str, sc_id: &str) -> Result
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 

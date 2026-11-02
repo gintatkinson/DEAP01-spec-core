@@ -28,7 +28,7 @@
 
 use std::ops::Range;
 
-/// Concrete syntax tree tokens for OMG SysML v2 and KerML.
+/// Concrete syntax tree tokens for OMG SysML v2 and KerML. Realises: [REQ-0201]
 #[derive(logos::Logos, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SysmlToken {
     /// Whitespace characters (spaces, tabs, newlines).
@@ -191,7 +191,7 @@ pub enum SysmlToken {
     Error,
 }
 
-/// A token spanned across a slice of the original SysML source text.
+/// A token spanned across a slice of the original SysML source text. Realises: [REQ-0201]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LexedSysmlToken<'a> {
     /// Token category classified by the lexer.
@@ -202,7 +202,7 @@ pub struct LexedSysmlToken<'a> {
     pub span: Range<usize>,
 }
 
-/// Tokenize a SysML v2 / KerML source string into a stream of spanned tokens.
+/// Tokenize a SysML v2 / KerML source string into a stream of spanned tokens. Realises: [REQ-0201]
 #[must_use]
 pub fn tokenize_sysml(source: &str) -> Vec<LexedSysmlToken<'_>> {
     logos::Logos::lexer(source)

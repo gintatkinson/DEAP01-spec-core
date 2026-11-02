@@ -1,7 +1,7 @@
 #![deny(clippy::too_many_lines, clippy::too_many_arguments, clippy::undocumented_unsafe_blocks)]
 //! Unit tests for `deap_core::markdown` token scanning, KaTeX math blocks, Mermaid validation, and CommonMark AST re-exports.
-
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
 use super::super::*;
 

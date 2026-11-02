@@ -40,6 +40,7 @@ use std::path::PathBuf;
 const CHECK_STAGE3_4_FORMAL: u8 = 36;
 
 /// Structured diagnostic finding emitted by the Stage 3/4 Miri & Kani verification gate (`REQ-0903`, `REQ-1102`).
+/// Realises: [REQ-0903], [REQ-1102]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     /// Baseline check identifier (`36`).
@@ -54,6 +55,7 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     /// Constructs a Stage 3/4 formal verification error diagnostic.
+    /// Realises: [REQ-0903], [REQ-1102]
     #[must_use]
     pub fn error(check_id: u8, relative_path: &str, line: usize, message: impl Into<String>) -> Self {
         Self { check_id, relative_path: relative_path.to_string(), line, message: message.into() }
@@ -61,6 +63,7 @@ impl Diagnostic {
 }
 
 /// Locates an executable `binary_stem` across `search_dirs` appending `std::env::consts::EXE_SUFFIX`.
+/// Realises: [REQ-0903]
 #[must_use]
 pub fn find_executable_in_dirs(binary_stem: &str, search_dirs: &[PathBuf]) -> Option<PathBuf> {
     let exe_name = format!("{binary_stem}{EXE_SUFFIX}");
@@ -68,6 +71,7 @@ pub fn find_executable_in_dirs(binary_stem: &str, search_dirs: &[PathBuf]) -> Op
 }
 
 /// Discovers `binary_stem` dynamically on the process `PATH` using `std::env::consts::EXE_SUFFIX`.
+/// Realises: [REQ-0903]
 #[must_use]
 pub fn discover_executable_on_path(binary_stem: &str) -> Option<PathBuf> {
     let path_var = std::env::var_os("PATH")?;
@@ -76,6 +80,7 @@ pub fn discover_executable_on_path(binary_stem: &str) -> Option<PathBuf> {
 }
 
 /// Audits Stage 3 (`miri`) and Stage 4 (`cargo-kani`) formal toolchains across `search_dirs`.
+/// Realises: [REQ-0903]
 #[must_use]
 pub fn check_formal_toolchains_in_dirs(
     search_dirs: &[PathBuf],
@@ -100,6 +105,7 @@ pub fn check_formal_toolchains_in_dirs(
 }
 
 /// Audits Ring 1/2/3 `unsafe` partitioning rules over the lossless `ra_ap_syntax` CST (`REQ-0903`, `REQ-1102`).
+/// Realises: [REQ-0903], [REQ-1102]
 #[must_use]
 pub fn audit_ring_unsafe_partition(source: &str, ring: u8, relative_path: &str) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
@@ -169,6 +175,7 @@ pub fn audit_ring_unsafe_partition(source: &str, ring: u8, relative_path: &str) 
 }
 
 /// Verifies that a Kani proof harness parses cleanly via `ra_ap_syntax` and declares `#[kani::proof]` (`REQ-0903`).
+/// Realises: [REQ-0903]
 #[must_use]
 pub fn verify_kani_harness_cst(harness_source: &str, relative_path: &str) -> Vec<Diagnostic> {
     let mut diags = Vec::new();

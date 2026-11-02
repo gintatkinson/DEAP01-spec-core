@@ -43,20 +43,31 @@ pub struct VerifiedLosslessCst {
 }
 
 impl VerifiedLosslessCst {
+    /// Returns source path. Realises: [REQ-0608]
     pub fn source_path(&self) -> &str { &self.source_path }
+    /// Returns source text. Realises: [REQ-0608]
     pub fn source_text(&self) -> &str { &self.source_text }
+    /// Returns source bytes. Realises: [REQ-0608]
     pub fn source_bytes(&self) -> &[u8] { self.source_text.as_bytes() }
+    /// Returns root green node. Realises: [REQ-0608]
     pub const fn green_node(&self) -> &rowan::GreenNode { &self.green_node }
+    /// Returns source file node. Realises: [REQ-0608]
     pub const fn source_file(&self) -> &ra_ap_syntax::SourceFile { &self.source_file }
+    /// Returns syntax node. Realises: [REQ-0608]
     pub fn syntax_node(&self) -> &ra_ap_syntax::SyntaxNode {
         ra_ap_syntax::AstNode::syntax(&self.source_file)
     }
+    /// Returns line starts. Realises: [REQ-0608]
     pub fn line_starts(&self) -> &[usize] { &self.line_starts }
+    /// Returns observed max depth. Realises: [REQ-0608]
     pub const fn observed_max_depth(&self) -> usize { self.observed_max_depth }
+    /// Returns verified node count. Realises: [REQ-0608]
     pub const fn verified_node_count(&self) -> usize { self.verified_node_count }
+    /// Returns whether tree is ready. Realises: [REQ-0608]
     pub const fn is_lossless_red_green_tree_ready(&self) -> bool { self.lossless_red_green_tree_ready }
 }
 
+/// Decodes source bytes verifying strict UTF-8 validity. Realises: [REQ-0608]
 fn decode_strict_utf8_source(source_bytes: &[u8]) -> Result<&str, CstMetricsError> {
     std::str::from_utf8(source_bytes).map_err(|utf8_err| {
         let byte_start = utf8_err.valid_up_to();
@@ -69,6 +80,7 @@ fn decode_strict_utf8_source(source_bytes: &[u8]) -> Result<&str, CstMetricsErro
     })
 }
 
+/// Verifies span boundaries land on valid UTF-8 character offsets. Realises: [REQ-0608]
 pub(crate) fn verify_utf8_char_boundary_span(
     source_text: &str,
     byte_start: usize,
@@ -83,6 +95,7 @@ pub(crate) fn verify_utf8_char_boundary_span(
     Ok(())
 }
 
+/// Builds depth or arithmetic exhaustion error. Realises: [REQ-0608]
 pub(crate) const fn depth_exhaustion_err(
     observed_depth: usize,
     max_depth: usize,
@@ -91,6 +104,7 @@ pub(crate) const fn depth_exhaustion_err(
     CstMetricsError::AstDepthOrArithmeticExhaustion { observed_depth, max_depth, byte_offset }
 }
 
+/// Increments CST depth checking bounds. Realises: [REQ-0608]
 pub(crate) fn checked_next_cst_depth(
     current_depth: usize,
     max_depth: usize,
@@ -104,6 +118,7 @@ pub(crate) fn checked_next_cst_depth(
     Ok(next)
 }
 
+/// Verifies leaf token byte sequence matches source text. Realises: [REQ-0608]
 fn verify_cst_leaf_token_parity(
     token: &ra_ap_syntax::SyntaxToken,
     source_text: &str,
@@ -122,6 +137,7 @@ fn verify_cst_leaf_token_parity(
     Ok(next_cursor)
 }
 
+/// Pushes child nodes in reversed order onto stack. Realises: [REQ-0608]
 fn push_cst_children_reversed(
     node: &ra_ap_syntax::SyntaxNode,
     depth: usize,
@@ -142,6 +158,7 @@ fn push_cst_children_reversed(
     Ok(())
 }
 
+/// Verifies full green tree roundtrip and bounds. Realises: [REQ-0608]
 pub(crate) fn verify_green_tree_roundtrip_and_depth(
     green_node: &rowan::GreenNode,
     source_text: &str,
@@ -179,6 +196,7 @@ pub(crate) fn verify_green_tree_roundtrip_and_depth(
     Ok((max_seen, node_count))
 }
 
+/// Computes monotone line start offsets. Realises: [REQ-0608]
 fn compute_monotone_line_starts(source_text: &str) -> Result<Vec<usize>, CstMetricsError> {
     let mut starts = vec![0usize];
     for (idx, byte) in source_text.as_bytes().iter().copied().enumerate() {
