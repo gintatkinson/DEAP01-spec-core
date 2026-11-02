@@ -1107,6 +1107,7 @@ impl YangTranslator {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-TRANSLATORS-YANG-YANGTRANSLATOR-TRANSLATE] | SysML v2: ActionDef(YangTranslator::translate)
     pub fn translate(&self, content: &str, default_name: &str) -> Result<PackageDef, String> {
+        let _ = super::yang_cst::parse_yang_cst(content);
         let tokens = tokenize_yang(content)?;
         let stmts = parse_yang_statements(&tokens)?;
 

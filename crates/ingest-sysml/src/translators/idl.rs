@@ -110,6 +110,7 @@ impl IDLTranslator {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-0001/IDLTranslator_translate] | SysML v2: ActionDef(IDLTranslator::translate)
     pub fn translate(&self, content: &str, default_name: &str) -> Result<PackageDef, String> {
+        let _ = super::idl_cst::parse_idl_cst(content);
         let pkg_name = if let Some(mod_name) = scan_module_name(content) {
             sanitize_identifier(&mod_name, default_name)
         } else {
