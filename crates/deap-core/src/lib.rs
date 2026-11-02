@@ -57,6 +57,14 @@ pub use rules::{
     MetaConfig, TrackerRules, ValidationRules, CANONICAL_ARCHITECTURE_BLUEPRINTS, EXCLUDED_DIRS,
     MASTER_BLUEPRINTS,
 };
+pub use rust_cst::{
+    analyze_cst_v2_metrics, classify_cfg_test_excluded_doc_tier, extract_callable_v2_metrics,
+    parse_verified_lossless_cst, validate_metrics_thresholds,
+    verify_analyzer_envelope_and_seal_receipt, ClassifiedDocTierItem, CstComplexityEnvelope,
+    CstMetricsError, CstMetricsThresholds, DeapV2AstMetricsReport, DocTier, DocTierInventory,
+    FnAstMetrics, LockManifestSnapshot, LockedPackageRecord, OfflineLockGovernanceError,
+    PackageSourceKind, SupplyChainVerificationReceipt, VerifiedLosslessCst,
+};
 pub use source_ast::{
     classify_dart_member_ast, classify_dart_top_level_ast, classify_rust_item_line_ast,
     contains_direct_range_slice, discover_source_files, extract_component_method_table,

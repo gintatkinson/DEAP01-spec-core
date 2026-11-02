@@ -27,19 +27,40 @@
 
 pub mod diagnostics_ndjson;
 pub mod doc_edit;
+pub mod doc_tier;
+pub mod envelope;
 pub mod extract_module;
 pub mod items;
+pub mod metrics;
 pub mod parse;
 pub mod source_bridge;
 pub mod source_bridge_rust;
+pub mod thresholds;
+pub mod verified_cst;
 pub mod vfs;
+
+#[cfg(test)]
+mod cst_tests;
 
 pub use diagnostics_ndjson::{
     apply_machine_applicable_fixes, emit_ndjson_line, render_ariadne_diagnostic,
     NdjsonDiagnostic, NdjsonSpan,
 };
-pub use doc_edit::{apply_non_overlapping_edits, classify_file_doc_tier, compact_tier_bc_docstrings, DocTier};
+pub use doc_edit::{apply_non_overlapping_edits, classify_file_doc_tier, compact_tier_bc_docstrings};
+pub use doc_tier::{
+    classify_cfg_test_excluded_doc_tier, ClassifiedDocTierItem, DocTier, DocTierInventory,
+};
+pub use envelope::{
+    verify_analyzer_envelope_and_seal_receipt, CstComplexityEnvelope, LockManifestSnapshot,
+    LockedPackageRecord, OfflineLockGovernanceError, PackageSourceKind,
+    SupplyChainVerificationReceipt,
+};
 pub use extract_module::{extract_rust_module, rewrite_blueprint_line_refs, ExtractedModulePlan};
 pub use items::{list_rust_items, RustCstItem, RustItemKind};
+pub use metrics::{
+    analyze_cst_v2_metrics, extract_callable_v2_metrics, DeapV2AstMetricsReport, FnAstMetrics,
+};
 pub use parse::ParsedRustFile;
+pub use thresholds::{validate_metrics_thresholds, CstMetricsError, CstMetricsThresholds};
+pub use verified_cst::{parse_verified_lossless_cst, VerifiedLosslessCst};
 pub use vfs::{normalize_lf, normalize_rel_path, WorkspaceVfs};

@@ -30,14 +30,7 @@
 use ra_ap_syntax::{AstNode, Edition, SourceFile, SyntaxKind, SyntaxToken, TextRange, TextSize};
 use ra_ap_text_edit::TextEditBuilder;
 
-/// Safety documentation tier classifying items or files.
-/// Realises: [REQ-0608], [SC-01]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum DocTier {
-    TierA,
-    TierB,
-    TierC,
-}
+pub use super::doc_tier::DocTier;
 
 /// Classifies the documentation tier of a Rust source file based on its module header.
 /// Realises: [REQ-0608], [SC-01]
