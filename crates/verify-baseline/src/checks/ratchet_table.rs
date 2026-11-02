@@ -32,6 +32,8 @@ pub const FORBIDDEN_DUMMY_CST_PATTERNS: &[&str] = &[
     "let _ = deap_core::rust_cst::parse::parse_rust_source",
     "let _ = deap_core::dart_cst::parse_dart_cst",
     "let _ = deap_core::sysml_cst::parse_sysml_cst",
+    "RustStringScannerState",
+    "RustDartLexState",
 ];
 
 /// Mechanically verifies anti-sharding paths, ratchet ceiling non-growth, and zero dummy CST discards (`[REQ-0601]`, `[REQ-0608]`).

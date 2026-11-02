@@ -139,7 +139,7 @@ pub const LEGACY_RATCHET_MAX_LINES: &[RatchetPair] = &[
     ("./crates/deap-core/src/markdown/mermaid.rs", 260),
     ("./crates/deap-core/src/markdown/mermaid_catalog.rs", 297),
     ("./crates/deap-core/src/markdown/mod.rs", 50),
-    ("./crates/deap-core/src/markdown/sanitization.rs", 276),
+    ("./crates/deap-core/src/markdown/sanitization.rs", 214),
     ("./crates/deap-core/src/markdown/tests.rs", 339),
     ("./crates/deap-core/src/rules/canonical_blueprints.rs", 287),
     ("./crates/deap-core/src/rules/codebase.rs", 295),

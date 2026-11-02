@@ -43,15 +43,18 @@ pub enum RustStringScannerState {
     RawString(usize),
 }
 
-/// Unified lexical tracking state across Rust and Dart. Realises: [REQ-0605]
+/// Lossless CST token masking state across Rust (`ra_ap_syntax`) and Dart (`dart_cst`). Realises: [REQ-0605]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct RustDartLexState {
+pub struct CstLexState {
     pub language: SourceLanguage,
     pub block_comment_depth: usize,
     pub active_string: Option<(u8, bool, bool)>,
     pub raw_hash_count: Option<usize>,
     pub interp_stack: Vec<usize>,
 }
+
+/// Unified lexical tracking state alias across Rust and Dart. Realises: [REQ-0605]
+pub type RustDartLexState = CstLexState;
 
 /// Scoped scanner state for items and tests. Realises: [REQ-0605]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -73,7 +76,7 @@ fn find_next_comment_delim(s: &str) -> Option<(usize, bool)> {
 }
 
 /// Masks a string literal token while tracking multi-line string state. Realises: [REQ-0605]
-fn mask_string_token(slice: &str, state: &mut RustDartLexState, out: &mut String) {
+fn mask_string_token(slice: &str, state: &mut CstLexState, out: &mut String) {
     if slice.starts_with("r#") || slice.starts_with("r\"") {
         let hash_count = slice.trim_start_matches('r').chars().take_while(|&c| c == '#').count();
         let closing = format!("\"{}", "#".repeat(hash_count));
@@ -94,9 +97,52 @@ fn mask_string_token(slice: &str, state: &mut RustDartLexState, out: &mut String
     }
 }
 
-/// Scans a source line preserving token boundaries and updating lexical state via `ra_ap_syntax`. Realises: [REQ-0605]
+/// Masks a Dart source line via `dart_cst` (`logos` + `rowan`) token traversal. Realises: [REQ-0605]
+fn mask_dart_line_via_cst(line: &str, state: &mut CstLexState) -> String {
+    for (tr, q) in [("'''", b'\''), ("\"\"\"", b'"')] {
+        if let Some((b, a)) = line.split_once(tr) {
+            if !a.contains(tr) {
+                state.active_string = Some((q, true, false));
+                return format!("{b}   {}", " ".repeat(a.len()));
+            }
+        }
+    }
+    let mut out = String::with_capacity(line.len());
+    for (tok, span) in DartToken::lexer(line).spanned() {
+        let slice = line.get(span.clone()).unwrap_or("");
+        match tok {
+            Ok(DartToken::Trivia) => {
+                if slice.starts_with("/*") {
+                    let (opens, closes) = (slice.matches("/*").count(), slice.matches("*/").count());
+                    state.block_comment_depth = (state.block_comment_depth + opens).saturating_sub(closes);
+                    if state.block_comment_depth == 0 && slice.ends_with("*/") {
+                        out.push_str("  ");
+                    } else {
+                        out.extend((0..slice.len()).map(|_| ' '));
+                    }
+                } else if slice.chars().all(char::is_whitespace) {
+                    out.push_str(slice);
+                } else {
+                    out.extend((0..slice.len()).map(|_| ' '));
+                }
+            }
+            Ok(DartToken::DocComment) => out.extend((0..slice.len()).map(|_| ' ')),
+            _ if slice == "/" && line.get(span.start..).is_some_and(|s| s.starts_with("/*")) => {
+                let rest = line.get(span.start..).unwrap_or("");
+                let (opens, closes) = (rest.matches("/*").count(), rest.matches("*/").count());
+                state.block_comment_depth = (state.block_comment_depth + opens).saturating_sub(closes);
+                out.extend((0..rest.len()).map(|_| ' '));
+                break;
+            }
+            _ => out.push_str(slice),
+        }
+    }
+    if out.is_empty() && !line.is_empty() { line.to_string() } else { out }
+}
+
+/// Scans a source line preserving token boundaries and updating lexical state via `ra_ap_syntax` and `dart_cst`. Realises: [REQ-0605]
 #[must_use]
-pub fn scan_line_with_unified_lex_state(line: &str, state: &mut RustDartLexState) -> String {
+pub fn scan_line_with_unified_lex_state(line: &str, state: &mut CstLexState) -> String {
     if state.block_comment_depth > 0 {
         let (mut cur, mut prefix_len) = (line, 0);
         while let Some((pos, is_open)) = find_next_comment_delim(cur) {
@@ -130,11 +176,7 @@ pub fn scan_line_with_unified_lex_state(line: &str, state: &mut RustDartLexState
         return " ".repeat(line.len());
     }
     if state.language == SourceLanguage::Dart {
-        for (tr, q) in [("'''", b'\''), ("\"\"\"", b'"')] {
-            if let Some((b, a)) = line.split_once(tr) {
-                if !a.contains(tr) { state.active_string = Some((q, true, false)); return format!("{b}   {}", " ".repeat(a.len())); }
-            }
-        }
+        return mask_dart_line_via_cst(line, state);
     }
 
     let parsed = SourceFile::parse(line, Edition::CURRENT);
@@ -163,13 +205,6 @@ pub fn scan_line_with_unified_lex_state(line: &str, state: &mut RustDartLexState
     if out.is_empty() && !line.is_empty() { line.to_string() } else { out }
 }
 
-/// Masking scanner preserving lexical code tokens via `scan_line_with_unified_lex_state`. Realises: [REQ-0605]
-#[must_use]
-pub fn scan_rust_line_preserving_lex_state(line: &str, _state: &mut RustStringScannerState) -> String {
-    let mut lex_state = RustDartLexState { language: SourceLanguage::Rust, ..Default::default() };
-    scan_line_with_unified_lex_state(line, &mut lex_state)
-}
-
 /// Single character literal length via CST token stream. Realises: [REQ-0605]
 #[must_use]
 pub fn single_char_literal_byte_len(slice: &str) -> Option<usize> {
@@ -179,28 +214,63 @@ pub fn single_char_literal_byte_len(slice: &str) -> Option<usize> {
     })
 }
 
-/// Extracts Rust impl prefix text via CST. Realises: [REQ-0201]
+/// Extracts Rust impl prefix text via CST when an opening `{` is present. Realises: [REQ-0201]
 #[must_use]
 pub fn extract_rust_impl_header_prefix(code: &str) -> Option<String> {
     let imp = SourceFile::parse(code, Edition::CURRENT).tree().syntax().descendants().find_map(ast::Impl::cast)?;
-    let text = imp.syntax().text().to_string();
-    Some(text[..text.find('{').unwrap_or(text.len())].trim().to_string())
+    let offset = u32::from(imp.assoc_item_list()?.l_curly_token()?.text_range().start()) as usize;
+    Some(code.get(..offset)?.trim().to_string())
 }
 
-/// Extracts target type from Rust impl header via CST. Realises: [REQ-0201]
+/// Extracts target type identifier from Rust impl header via CST. Realises: [REQ-0201]
 #[must_use]
 pub fn parse_rust_impl_header(code: &str) -> Option<String> {
-    SourceFile::parse(code, Edition::CURRENT).tree().syntax().descendants().find_map(ast::Impl::cast)?.self_ty().map(|t| t.syntax().text().to_string().trim().to_string())
+    extract_rust_impl_header_prefix(code)?;
+    let imp = SourceFile::parse(code, Edition::CURRENT).tree().syntax().descendants().find_map(ast::Impl::cast)?;
+    imp.self_ty()?.syntax().descendants_with_tokens().find_map(|e| {
+        e.into_token().filter(|t| t.kind() == SyntaxKind::IDENT).map(|t| t.text().to_string())
+    })
 }
 
 /// Classifies Dart member declaration snippet. Realises: [REQ-0201]
 #[must_use]
 pub fn classify_dart_member_ast(code: &str, class_name: &str) -> Option<(SourceItemKind, String)> {
     let t = code.trim();
-    if t.starts_with("factory ") || t.starts_with(class_name) {
-        return Some((SourceItemKind::Constructor, t.split('(').next()?.trim().to_string()));
+    if ["final ", "var ", "late ", "static final ", "static const ", "static var ", "static late "].iter().any(|p| t.starts_with(p)) {
+        return None;
     }
-    parse_dart_items(code).into_iter().find(|i| i.kind == DartItemKind::Function).map(|i| (SourceItemKind::Method, i.name))
+    if let Some(after_factory) = t.strip_prefix("factory ").map(str::trim_start) {
+        if let Some((cls, rest)) = after_factory.split_once('.') {
+            if let Some(named) = extract_leading_ast_ident(rest) {
+                return Some((SourceItemKind::Constructor, format!("{cls}.{named}")));
+            }
+        }
+        return extract_leading_ast_ident(after_factory).map(|cname| (SourceItemKind::Constructor, cname));
+    }
+    let after_const = t.strip_prefix("const ").map_or(t, str::trim_start);
+    if let Some(after_cls) = after_const.strip_prefix(class_name).map(str::trim_start) {
+        if after_cls.starts_with('(') {
+            return Some((SourceItemKind::Constructor, class_name.to_string()));
+        }
+        if let Some(named_ctor) = after_cls.strip_prefix('.').and_then(extract_leading_ast_ident) {
+            return Some((SourceItemKind::Constructor, format!("{class_name}.{named_ctor}")));
+        }
+    }
+    if t.starts_with("const ") { return None; }
+    if let Some(getter_name) = extract_dart_getter_ident(t) {
+        return Some((SourceItemKind::Method, getter_name));
+    }
+    let (open_p, close_p) = (t.matches('(').count(), t.matches(')').count());
+    let mut probe = t.to_string();
+    if open_p > close_p {
+        probe.push_str(&")".repeat(open_p - close_p));
+        probe.push_str(" {}");
+    } else if probe.ends_with('{') {
+        probe.push('}');
+    } else if !probe.ends_with('}') && !probe.ends_with(';') {
+        probe.push_str(" {}");
+    }
+    parse_dart_items(&probe).into_iter().find(|i| i.kind == DartItemKind::Function).map(|i| (SourceItemKind::Method, i.name))
 }
 
 /// Extracts leading identifier token via CST tokenizer. Realises: [REQ-0201]
@@ -247,7 +317,17 @@ pub fn strip_dart_annotations_tracking_state<'a>(mut code: &'a str, depth: &mut 
         let mut closed_at = None;
         if *depth == 0 {
             let after_at = code.trim_start().strip_prefix('@').unwrap_or("");
-            let ident_len = after_at.bytes().take_while(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'.').count();
+            let mut ident_len = 0usize;
+            for (tok, span) in DartToken::lexer(after_at).spanned() {
+                if span.start == ident_len
+                    && (matches!(tok, Ok(DartToken::Ident | DartToken::Keyword))
+                        || after_at.get(span.clone()) == Some("."))
+                {
+                    ident_len = span.end;
+                } else {
+                    break;
+                }
+            }
             if ident_len == 0 { return code.trim_start(); }
             let rest = after_at.get(ident_len..).unwrap_or("").trim_start();
             if !rest.starts_with('(') { code = rest; continue; }
@@ -314,28 +394,79 @@ pub fn parse_rust_callable_signature(code: &str) -> (Vec<SourceParam>, Option<St
     (Vec::new(), None)
 }
 
+/// Parses a single Dart formal parameter token into a `SourceParam`. Realises: [REQ-0201]
+fn parse_single_dart_param(raw: &str) -> Option<SourceParam> {
+    let before_eq = raw.split_once('=').map_or(raw, |(b, _)| b).trim();
+    let mut clean = strip_leading_dart_annotations(before_eq).trim();
+    while let Some(rest) = clean
+        .strip_prefix("required ")
+        .or_else(|| clean.strip_prefix("covariant "))
+        .or_else(|| clean.strip_prefix("final "))
+        .or_else(|| clean.strip_prefix("var "))
+    {
+        clean = rest.trim();
+    }
+    if clean.is_empty() {
+        return None;
+    }
+    if let Some(field) = clean.strip_prefix("this.").or_else(|| clean.strip_prefix("super.")) {
+        let name = extract_leading_ast_ident(field.trim())?;
+        return Some(SourceParam { name, type_name: "dynamic".to_string() });
+    }
+    let parts: Vec<&str> = clean.split_whitespace().collect();
+    if parts.len() >= 2 {
+        let raw_name = parts.last().copied().unwrap_or("");
+        let name = raw_name.strip_prefix("this.").or_else(|| raw_name.strip_prefix("super.")).unwrap_or(raw_name);
+        let clean_name = extract_leading_ast_ident(name).unwrap_or_else(|| name.to_string());
+        Some(SourceParam { name: clean_name, type_name: parts[..parts.len() - 1].join(" ") })
+    } else {
+        extract_leading_ast_ident(clean).map(|name| SourceParam { name, type_name: "dynamic".to_string() })
+    }
+}
+
 /// Parses Dart callable signature. Realises: [REQ-0201]
 #[must_use]
 pub fn parse_dart_callable_signature(code: &str, callable_name: &str) -> (Vec<SourceParam>, Option<String>) {
     let Some((before_open, after_open)) = code.split_once('(') else { return (Vec::new(), None); };
-    let ret = before_open.trim().strip_suffix(callable_name).map(str::trim).filter(|s| !s.is_empty()).map(ToString::to_string);
-    let mut params = Vec::new();
-    if let Some((param_str, _)) = after_open.split_once(')') {
-        for seg in param_str.split(',') {
-            let parts: Vec<&str> = seg.trim().trim_start_matches("required").trim().split_whitespace().collect();
-            if parts.len() >= 2 {
-                params.push(SourceParam { name: (*parts.last().unwrap_or(&"")).to_string(), type_name: parts[..parts.len() - 1].join(" ") });
-            } else if let Some(first) = parts.first().filter(|p| !p.is_empty()) {
-                params.push(SourceParam { name: (*first).to_string(), type_name: String::new() });
+    let ret = before_open.trim().strip_suffix(callable_name)
+        .map(|p| p.trim().strip_prefix("static ").unwrap_or(p.trim()).trim())
+        .filter(|s| !s.is_empty() && *s != "const" && *s != "factory")
+        .map(ToString::to_string);
+    let (mut depth, mut end_idx) = (1usize, after_open.len());
+    for (tok, span) in DartToken::lexer(after_open).spanned() {
+        if tok == Ok(DartToken::Punct) {
+            if after_open.get(span.clone()) == Some("(") { depth += 1; }
+            else if after_open.get(span.clone()) == Some(")") {
+                depth = depth.saturating_sub(1);
+                if depth == 0 { end_idx = span.start; break; }
             }
         }
     }
+    let param_str = after_open.get(..end_idx).unwrap_or(after_open);
+    let params = param_str.split(',').filter_map(|seg| {
+        parse_single_dart_param(seg.trim().trim_start_matches(['{', '[']).trim_end_matches(['}', ']']).trim())
+    }).collect();
     (params, ret)
 }
 
-/// Collects Dart callable signature from lines. Realises: [REQ-0201]
+/// Collects Dart callable signature from lines across multi-line parameter lists. Realises: [REQ-0201]
 #[must_use]
-pub fn collect_dart_callable_signature(lines: &[&str], start_idx: usize) -> String { lines.get(start_idx).copied().unwrap_or("").to_string() }
+pub fn collect_dart_callable_signature(raw_lines: &[&str], start_idx: usize) -> String {
+    let (mut combined, mut brace_depth, mut paren_depth, mut saw_open_paren) = (String::new(), 0usize, 0usize, false);
+    for (offset, raw_line) in raw_lines.get(start_idx..start_idx.saturating_add(32).min(raw_lines.len())).unwrap_or(&[]).iter().enumerate() {
+        let trimmed = raw_line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("//") { continue; }
+        let without_comment = strip_line_comment_preserving_strings(trimmed).trim();
+        let cleaned = if offset == 0 { strip_leading_dart_annotations(without_comment).trim() } else { without_comment };
+        if cleaned.is_empty() { continue; }
+        if !combined.is_empty() { combined.push(' '); }
+        combined.push_str(cleaned);
+        if cleaned.contains('(') { saw_open_paren = true; }
+        update_ast_delimiter_depths(cleaned, &mut brace_depth, &mut paren_depth);
+        if !saw_open_paren || paren_depth == 0 { break; }
+    }
+    combined
+}
 
 /// Extracts method signature. Realises: [REQ-0201]
 #[must_use]

@@ -43,7 +43,7 @@
 
 use deap_core::source_ast::{
     extract_dart_getter_ident, scan_line_with_unified_lex_state,
-    strip_dart_annotations_tracking_state, RustDartLexState, ScopedItemScannerState,
+    strip_dart_annotations_tracking_state, CstLexState, ScopedItemScannerState,
     SourceLanguage,
 };
 pub use crate::checks::docstring_cst_gate;
@@ -896,7 +896,7 @@ struct RustAuditState {
 pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usize, Vec<String>> {
     let mut violations = Vec::new();
     let mut state = RustAuditState::default();
-    let mut lex_state = RustDartLexState {
+    let mut lex_state = CstLexState {
         language: SourceLanguage::Rust,
         ..Default::default()
     };
@@ -1540,7 +1540,7 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
     let mut violations = Vec::new();
     let mut current_doc: Vec<String> = Vec::new();
     let mut seen_docblocks: BTreeSet<String> = BTreeSet::new();
-    let mut dart_lex_state = RustDartLexState {
+    let mut dart_lex_state = CstLexState {
         language: SourceLanguage::Dart,
         ..Default::default()
     };
@@ -3379,13 +3379,13 @@ pub fn documented_followup() {}
         );
     }
 
-    /// Verifies `scan_line_with_unified_lex_state`, `RustDartLexState`, and zero-allocation placeholder detection.
+    /// Verifies `scan_line_with_unified_lex_state`, `CstLexState`, and zero-allocation placeholder detection.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A and DO-330 TQL-4 lexical unit verification (`test_consume_rust_char_literal_and_nested_block_comments`).
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - `scan_line_with_unified_lex_state` preserves token boundaries across inline block comments (`pub/*comment*/fn`) and tracks nested block comments via `RustDartLexState` in both Rust and Dart modes.
+    /// - `scan_line_with_unified_lex_state` preserves token boundaries across inline block comments (`pub/*comment*/fn`) and tracks nested block comments via `CstLexState` in both Rust and Dart modes.
     ///
     /// ## 3. Preconditions
     /// - Deterministic in-memory test inputs for `scan_line_with_unified_lex_state`.
@@ -3407,7 +3407,7 @@ pub fn documented_followup() {}
     /// Realises: [REQ-0605], [REQ-CHECK-36-CHAR-LITERAL-AND-NESTED-COMMENT-UNIT-TEST]
     #[test]
     fn test_consume_rust_char_literal_and_nested_block_comments() {
-        let mut state = RustDartLexState {
+        let mut state = CstLexState {
             language: SourceLanguage::Rust,
             ..Default::default()
         };
@@ -3427,7 +3427,7 @@ pub fn documented_followup() {}
             Some(("fn", "inline_fn".to_string()))
         );
 
-        let mut dart_state = RustDartLexState {
+        let mut dart_state = CstLexState {
             language: SourceLanguage::Dart,
             ..Default::default()
         };

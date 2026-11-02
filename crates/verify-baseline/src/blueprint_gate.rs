@@ -3220,7 +3220,7 @@ fn has_split_token(haystack: &str, prefix: &str, suffix: &str) -> bool {
 fn scan_rust_contract_line(
     raw_line: &str,
     line_no: usize,
-    lex_state: &mut deap_core::source_ast::RustStringScannerState,
+    lex_state: &mut deap_core::source_ast::CstLexState,
     errors: &mut Vec<String>,
 ) {
     const FORBIDDEN_REGEX_TOKENS: [(&str, &str); 5] = [
@@ -3254,7 +3254,7 @@ fn scan_rust_contract_line(
         ("airf", "rame", "airf", "rame"),
     ];
 
-    let code_only = deap_core::source_ast::scan_rust_line_preserving_lex_state(raw_line, lex_state);
+    let code_only = deap_core::source_ast::scan_line_with_unified_lex_state(raw_line, lex_state);
 
     if FORBIDDEN_REGEX_TOKENS
         .iter()
@@ -3352,7 +3352,7 @@ pub fn check_9_rust_code_blocks(section_6_lines: &[&str]) -> Result<usize, Vec<S
     let mut in_rust_block = false;
     let mut in_other_fence = false;
     let mut rust_block_count = 0usize;
-    let mut lex_state = deap_core::source_ast::RustStringScannerState::Normal;
+    let mut lex_state = deap_core::source_ast::CstLexState::default();
 
     for (idx, raw_line) in section_6_lines.iter().enumerate() {
         let line_no = idx.saturating_add(1);
@@ -3368,7 +3368,7 @@ pub fn check_9_rust_code_blocks(section_6_lines: &[&str]) -> Result<usize, Vec<S
                 if first_token.eq_ignore_ascii_case("rust") {
                     in_rust_block = true;
                     rust_block_count = rust_block_count.saturating_add(1);
-                    lex_state = deap_core::source_ast::RustStringScannerState::Normal;
+                    lex_state = deap_core::source_ast::CstLexState::default();
                 } else {
                     in_other_fence = true;
                 }
@@ -4801,7 +4801,7 @@ mod tests {
         assert!(!has_split_token("prefix_gap_suffix", "prefix_", "suffix"));
         assert!(!has_split_token("short", "longer_prefix", "suffix"));
 
-        let mut lex_state = deap_core::source_ast::RustStringScannerState::Normal;
+        let mut lex_state = deap_core::source_ast::CstLexState::default();
         let mut errors = Vec::new();
         let bad_regex_line = format!("let r = {}{}(\"x\");", "Re", "gex::new");
         scan_rust_contract_line(&bad_regex_line, 1, &mut lex_state, &mut errors);

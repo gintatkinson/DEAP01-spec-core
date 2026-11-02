@@ -25,7 +25,9 @@
 
 use std::path::Path;
 
-use crate::dart_cst::DartItemKind;
+use logos::Logos;
+
+use crate::dart_cst::{DartItemKind, DartToken};
 pub use super::source_bridge_helpers::*;
 pub use super::source_bridge_rust::{
     classify_rust_item_ast, classify_rust_item_line_ast, classify_rust_item_with_tier_ast,
@@ -242,6 +244,41 @@ impl ParsedSourceFileAst {
     }
 }
 
+/// Extracts Dart class `extends` parent type and field declarations from class lines. Realises: [REQ-0201]
+fn extract_dart_class_metadata(lines: &[&str], start_line: usize, end_line: usize) -> (Option<String>, Vec<SourceField>) {
+    let header = lines.get(start_line.saturating_sub(1)).copied().unwrap_or("");
+    let parent_type = header
+        .split_once(" extends ")
+        .map(|(_, after)| after.split('{').next().unwrap_or(after).trim().to_string())
+        .filter(|s| !s.is_empty());
+    let mut fields = Vec::new();
+    for raw in lines.get(start_line..end_line.saturating_sub(1)).unwrap_or(&[]) {
+        let t = raw.trim();
+        if !t.ends_with(';') || t.starts_with("//") || t.starts_with("return ") || t.contains('(') || t.contains('=') {
+            continue;
+        }
+        let body = t
+            .trim_end_matches(';')
+            .trim_start_matches("static ")
+            .trim_start_matches("late ")
+            .trim_start_matches("final ")
+            .trim_start_matches("const ")
+            .trim();
+        let parts: Vec<&str> = body.split_whitespace().collect();
+        if parts.len() >= 2 {
+            let name = (*parts.last().unwrap_or(&"")).to_string();
+            let type_name = parts.get(..parts.len().saturating_sub(1)).unwrap_or(&[]).join(" ");
+            let is_callback_or_port = type_name.contains("Callback")
+                || type_name.starts_with("ValueChanged")
+                || type_name.starts_with("ValueSetter")
+                || type_name.starts_with("ValueGetter")
+                || type_name.contains("Function");
+            fields.push(SourceField { name, type_name, is_callback_or_port, doc: None });
+        }
+    }
+    (parent_type, fields)
+}
+
 /// Parses Dart source into a normalized `ParsedSourceFileAst` via `dart_cst`. Realises: [REQ-0201]
 #[must_use]
 pub fn parse_dart_source_file_ast(source: &str) -> ParsedSourceFileAst {
@@ -260,6 +297,11 @@ pub fn parse_dart_source_file_ast(source: &str) -> ParsedSourceFileAst {
             };
             let (doc_lines, has_doc) = extract_item_doc_block_ast(&lines, d.start_line.saturating_sub(1));
             let satisfied_requirements = extract_realises_ids_from_doc_lines(&doc_lines);
+            let (parent_type, fields) = if kind == SourceItemKind::Class {
+                extract_dart_class_metadata(&lines, d.start_line, d.end_line)
+            } else {
+                (None, Vec::new())
+            };
             SourceAstItem {
                 kind,
                 name: d.name,
@@ -272,8 +314,8 @@ pub fn parse_dart_source_file_ast(source: &str) -> ParsedSourceFileAst {
                 is_inside_test_block: false,
                 is_trait_impl_member: false,
                 owner_name: None,
-                parent_type: None,
-                fields: Vec::new(),
+                parent_type,
+                fields,
                 params: Vec::new(),
                 return_type: None,
                 satisfied_requirements,
@@ -282,21 +324,58 @@ pub fn parse_dart_source_file_ast(source: &str) -> ParsedSourceFileAst {
             }
         })
         .collect();
-    let code_line_mask = lines.iter().map(|l| {
-        let t = l.trim();
-        !t.is_empty() && !t.starts_with("//") && !t.starts_with("/*") && !t.starts_with('*')
-    }).collect();
-    ParsedSourceFileAst { language: SourceLanguage::Dart, items, code_line_mask, brace_depths: vec![0; lines.len()] }
+    let mut code_line_mask = Vec::with_capacity(lines.len());
+    let mut brace_depths = Vec::with_capacity(lines.len());
+    let mut running_braces = 0usize;
+    for &line in &lines {
+        brace_depths.push(running_braces);
+        let mut has_code = false;
+        for (tok, span) in DartToken::lexer(line).spanned() {
+            if !matches!(tok, Ok(DartToken::Trivia | DartToken::DocComment)) {
+                has_code = true;
+            }
+            if tok == Ok(DartToken::Punct) {
+                match line.get(span).unwrap_or("") {
+                    "{" => running_braces += 1,
+                    "}" => running_braces = running_braces.saturating_sub(1),
+                    _ => {}
+                }
+            }
+        }
+        code_line_mask.push(has_code);
+    }
+    ParsedSourceFileAst { language: SourceLanguage::Dart, items, code_line_mask, brace_depths }
 }
 
 /// Classifies a single Dart top-level snippet using `dart_cst`. Realises: [REQ-0201]
 #[must_use]
 pub fn classify_dart_top_level_ast(trimmed: &str) -> Option<(SourceItemKind, String, Option<String>)> {
-    let mut probe = trimmed.to_string();
-    if !probe.ends_with('}') && !probe.ends_with(';') {
+    let t = trimmed.trim();
+    if t.starts_with("import ") || t.starts_with("export ") || t.starts_with("part ") || t.starts_with("library ")
+        || t.starts_with("const ") || t.starts_with("var ") || t.starts_with("late ")
+        || (t.starts_with("final ") && !t.contains("class ") && !t.contains("mixin "))
+    {
+        return None;
+    }
+    if let Some(getter_name) = extract_dart_getter_ident(t) {
+        return Some((SourceItemKind::Function, getter_name, None));
+    }
+    let open_parens = t.matches('(').count();
+    let close_parens = t.matches(')').count();
+    let mut probe = t.to_string();
+    if open_parens > close_parens {
+        probe.push_str(&")".repeat(open_parens - close_parens));
+        probe.push_str(" {}");
+    } else if probe.ends_with('{') {
+        probe.push('}');
+    } else if !probe.ends_with('}') && !probe.ends_with(';') {
         probe.push_str(" {}");
     }
-    parse_dart_source_file_ast(&probe).items.into_iter().next().map(|i| (i.kind, i.name, i.parent_type))
+    parse_dart_source_file_ast(&probe)
+        .items
+        .into_iter()
+        .find(|i| i.kind != SourceItemKind::Const)
+        .map(|i| (i.kind, i.name, i.parent_type))
 }
 
 /// Extracts contiguous `///` doc comments preceding `item_line_idx`. Realises: [REQ-0201]

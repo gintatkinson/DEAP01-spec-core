@@ -48,7 +48,7 @@ use deap_core::source_ast::{
     scan_line_with_unified_lex_state, single_char_literal_byte_len,
     strip_dart_annotations_tracking_state, strip_leading_dart_annotations,
     strip_line_comment_preserving_strings, summary_from_doc_lines, update_ast_delimiter_depths,
-    validate_source_syntax_for_language, RustDartLexState, ScopedItemScannerState, SourceItemKind,
+    validate_source_syntax_for_language, CstLexState, ScopedItemScannerState, SourceItemKind,
     SourceLanguage, SourceParam,
 };
 use deap_core::sysml_ast::PackageDef;
@@ -883,7 +883,7 @@ fn validate_unforced_schema_realises(
 
 /// Checks whether `lex_state` is outside block comments, raw strings, active strings, and interpolations.
 /// Realises: [REQ-FEAT-42-IS-LEX-STATE-NORMAL]
-fn is_lex_state_normal(lex_state: &RustDartLexState) -> bool {
+fn is_lex_state_normal(lex_state: &CstLexState) -> bool {
     let outside_strings = lex_state.raw_hash_count.is_none() && lex_state.active_string.is_none();
     lex_state.block_comment_depth == 0 && outside_strings && lex_state.interp_stack.is_empty()
 }
@@ -987,7 +987,7 @@ struct RustInjectorState<'a> {
     pending_doc_indices: Vec<usize>,
     first_attr_idx: Option<usize>,
     seen_docblocks: BTreeSet<String>,
-    lex_state: RustDartLexState,
+    lex_state: CstLexState,
     in_mod_tests: bool,
     pending_attr: RustPendingAttr,
     attr_bracket_depth: usize,
@@ -1020,7 +1020,7 @@ impl<'a> RustInjectorState<'a> {
             pending_doc_indices: Vec::new(),
             first_attr_idx: None,
             seen_docblocks: BTreeSet::new(),
-            lex_state: RustDartLexState {
+            lex_state: CstLexState {
                 language: SourceLanguage::Rust,
                 ..Default::default()
             },
@@ -1467,7 +1467,7 @@ struct DartInjectorState<'a> {
     pending_doc_indices: Vec<usize>,
     first_annot_idx: Option<usize>,
     seen_docblocks: BTreeSet<String>,
-    dart_lex_state: RustDartLexState,
+    dart_lex_state: CstLexState,
     scoped_state: ScopedItemScannerState,
     brace_depth: usize,
     paren_depth: usize,
@@ -1494,7 +1494,7 @@ impl<'a> DartInjectorState<'a> {
             pending_doc_indices: Vec::new(),
             first_annot_idx: None,
             seen_docblocks: BTreeSet::new(),
-            dart_lex_state: RustDartLexState {
+            dart_lex_state: CstLexState {
                 language: SourceLanguage::Dart,
                 ..Default::default()
             },
@@ -4223,7 +4223,7 @@ mod tests {
             (None, None),
             "Method on SecondaryMonitor must not bleed inline requirement owned by NestedSubunit"
         );
-        let mut st = RustDartLexState {
+        let mut st = CstLexState {
             language: SourceLanguage::Rust,
             ..Default::default()
         };
@@ -4364,8 +4364,8 @@ pub fn unmapped_checksum_helper(seed: u32) -> u32 {
             "src/docstring.rs must not contain magic close_pos heuristic"
         );
         assert!(
-            !prod_src.contains("enum RustStringScannerState"),
-            "src/docstring.rs must import RustStringScannerState from deap_core::source_ast instead of redefining it"
+            !prod_src.contains(concat!("enum RustString", "ScannerState")),
+            "src/docstring.rs must use CstLexState from deap_core::source_ast instead of local scanner enums"
         );
         assert!(
             !prod_src.contains("size_of::<"),

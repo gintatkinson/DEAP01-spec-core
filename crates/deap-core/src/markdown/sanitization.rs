@@ -23,7 +23,36 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-MD-MODULE], [DO-330-TQL-4-MARKDOWN].
 
+use std::ops::Range;
+
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+
+/// Masks all non-newline characters within the sorted `ranges` of `content` with ASCII spaces.
+/// Realises: [REQ-MD-MODULE]
+fn mask_byte_ranges(content: &str, ranges: &[Range<usize>]) -> String {
+    let mut out = String::with_capacity(content.len());
+    let mut range_idx = 0;
+
+    for (byte_idx, ch) in content.char_indices() {
+        while range_idx < ranges.len()
+            && ranges.get(range_idx).is_some_and(|r| byte_idx >= r.end)
+        {
+            range_idx += 1;
+        }
+
+        let in_masked = ranges
+            .get(range_idx)
+            .is_some_and(|r| byte_idx >= r.start && byte_idx < r.end);
+
+        if in_masked && ch != '\n' && ch != '\r' {
+            out.push(' ');
+        } else {
+            out.push(ch);
+        }
+    }
+
+    out
+}
 
 /// Removes fenced code blocks (` ```...``` ` and `~~~...~~~`), replacing non-newline characters
 /// with ASCII spaces so downstream line and column offsets remain invariant.
@@ -71,32 +100,7 @@ pub fn strip_fenced_code_blocks(content: &str) -> String {
         code_ranges.push(start..content.len());
     }
 
-    let mut out = String::with_capacity(content.len());
-    let mut range_idx = 0;
-
-    for (byte_idx, ch) in content.char_indices() {
-        while range_idx < code_ranges.len()
-            && code_ranges.get(range_idx).is_some_and(|r| byte_idx >= r.end)
-        {
-            range_idx += 1;
-        }
-
-        let in_code = code_ranges
-            .get(range_idx)
-            .is_some_and(|r| byte_idx >= r.start && byte_idx < r.end);
-
-        if in_code {
-            if ch == '\n' || ch == '\r' {
-                out.push(ch);
-            } else {
-                out.push(' ');
-            }
-        } else {
-            out.push(ch);
-        }
-    }
-
-    out
+    mask_byte_ranges(content, &code_ranges)
 }
 
 /// Removes GitLab Flavored Markdown (GLFM) inline math spans (`$`...`$` or `$``...``$`),
@@ -108,7 +112,7 @@ pub fn strip_fenced_code_blocks(content: &str) -> String {
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Character-Length Invariant: `output.chars().count() == content.chars().count()`.
-/// - Exact Backtick Run Parity: An opening `$` with $k$ backticks matches matching closing backtick run plus `$`.
+/// - CommonMark Event-Offset Span Masking: Uses `pulldown_cmark::Parser` code span offsets.
 ///
 /// ## 3. Preconditions
 /// `content` is a valid UTF-8 string slice.
@@ -120,57 +124,28 @@ pub fn strip_fenced_code_blocks(content: &str) -> String {
 /// Time Complexity: O(N) typical linear scan. Space Complexity: O(N).
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// Non-panicking total function using checked slice indexing.
+/// Non-panicking total function using `pulldown_cmark` event offsets.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-MD-GLFM]
 pub fn strip_glfm_inline_math(content: &str) -> String {
-    let chars: Vec<char> = content.chars().collect();
-    let n = chars.len();
-    let mut result = chars.clone();
-    let mut i = 0;
+    let bytes = content.as_bytes();
+    let mut glfm_ranges = Vec::new();
 
-    while i < n {
-        if chars.get(i) == Some(&'$') && chars.get(i + 1) == Some(&'`') {
-            let mut k = 0;
-            while chars.get(i + 1 + k) == Some(&'`') {
-                k += 1;
-            }
-
-            let mut close_idx = None;
-            let mut j = i + 1 + k;
-            while j + k < n {
-                if chars.get(j) == Some(&'`') {
-                    let mut count = 0;
-                    while chars.get(j + count) == Some(&'`') {
-                        count += 1;
-                    }
-                    if count == k && chars.get(j + count) == Some(&'$') {
-                        close_idx = Some(j + count);
-                        break;
-                    }
-                    j += count;
-                } else {
-                    j += 1;
-                }
-            }
-
-            if let Some(end) = close_idx {
-                if let Some(slice) = result.get_mut(i..=end) {
-                    for item in slice {
-                        if *item != '\n' && *item != '\r' {
-                            *item = ' ';
-                        }
-                    }
-                }
-                i = end + 1;
-                continue;
+    for (event, range) in Parser::new_ext(content, Options::empty()).into_offset_iter() {
+        if let Event::Code(code_str) = event {
+            if range.start > 0
+                && bytes.get(range.start - 1) == Some(&b'$')
+                && bytes.get(range.end) == Some(&b'$')
+            {
+                glfm_ranges.push((range.start - 1)..(range.end + 1));
+            } else if code_str.starts_with("$`") && code_str.ends_with("`$") {
+                glfm_ranges.push(range);
             }
         }
-        i += 1;
     }
 
-    result.into_iter().collect()
+    mask_byte_ranges(content, &glfm_ranges)
 }
 
 /// Removes CommonMark inline code spans delimited by matching backtick runs of length $k \ge 1$,
@@ -181,7 +156,7 @@ pub fn strip_glfm_inline_math(content: &str) -> String {
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Character-Length Invariant: `output.chars().count() == content.chars().count()`.
-/// - CommonMark Backtick Matching: Opening run of $k$ backticks closed by matching run of length $k$.
+/// - CommonMark Backtick Matching: Driven by `pulldown_cmark::Event::Code` offset spans.
 ///
 /// ## 3. Preconditions
 /// `content` is a valid UTF-8 string slice.
@@ -193,57 +168,20 @@ pub fn strip_glfm_inline_math(content: &str) -> String {
 /// Time Complexity: O(N) typical. Space Complexity: O(N).
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// Non-panicking total function using checked indexing.
+/// Non-panicking total function using `pulldown_cmark` event offsets.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-MD-INLINE]
 pub fn strip_inline_code(content: &str) -> String {
-    let chars: Vec<char> = content.chars().collect();
-    let n = chars.len();
-    let mut result = chars.clone();
-    let mut i = 0;
+    let mut code_ranges = Vec::new();
 
-    while i < n {
-        if chars.get(i) == Some(&'`') {
-            let mut k = 0;
-            while chars.get(i + k) == Some(&'`') {
-                k += 1;
-            }
-
-            let mut close_idx = None;
-            let mut j = i + k;
-            while j < n {
-                if chars.get(j) == Some(&'`') {
-                    let mut count = 0;
-                    while chars.get(j + count) == Some(&'`') {
-                        count += 1;
-                    }
-                    if count == k {
-                        close_idx = Some(j + count - 1);
-                        break;
-                    }
-                    j += count;
-                } else {
-                    j += 1;
-                }
-            }
-
-            if let Some(end) = close_idx {
-                if let Some(slice) = result.get_mut(i..=end) {
-                    for item in slice {
-                        if *item != '\n' && *item != '\r' {
-                            *item = ' ';
-                        }
-                    }
-                }
-                i = end + 1;
-                continue;
-            }
+    for (event, range) in Parser::new_ext(content, Options::empty()).into_offset_iter() {
+        if matches!(event, Event::Code(_)) {
+            code_ranges.push(range);
         }
-        i += 1;
     }
 
-    result.into_iter().collect()
+    mask_byte_ranges(content, &code_ranges)
 }
 
 /// Sequentially strips fenced code blocks, GLFM inline math (`$`...`$` ), and standard inline code

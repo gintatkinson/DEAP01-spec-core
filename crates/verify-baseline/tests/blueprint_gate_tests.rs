@@ -1634,7 +1634,7 @@ fn test_req_0605_ac01_ac05_unified_lexer_multiline_annotations_and_schema_isolat
     };
     use deap_core::source_ast::{
         extract_rust_impl_header_prefix, parse_rust_impl_header, scan_line_with_unified_lex_state,
-        strip_dart_annotations_tracking_state, RustDartLexState, ScopedItemScannerState,
+        strip_dart_annotations_tracking_state, CstLexState, ScopedItemScannerState,
         SourceLanguage,
     };
     use deap_core::sysml_ast::{ConstraintDef, PackageDef, PartDef, RequirementDef};
@@ -1772,7 +1772,7 @@ impl UnmappedHelper {
     );
 
     // AC-05: Unified lexer state and absence of duplicate scanners in docstring and docstring_gate modules
-    let mut dart_lex = RustDartLexState {
+    let mut dart_lex = CstLexState {
         language: SourceLanguage::Dart,
         ..Default::default()
     };

@@ -82,11 +82,11 @@ pub use source_ast::{
     extract_method_signature, extract_realises_ids_from_doc_lines, ingest_source_directory,
     lower_source_ast_to_package, normalize_type_for_sysml, parse_dart_callable_signature,
     parse_dart_source_ast, parse_rust_callable_signature, parse_rust_source_ast,
-    resolve_source_package_name, sanitize_sysml_identifier, scan_rust_line_preserving_lex_state,
+    resolve_source_package_name, sanitize_sysml_identifier, scan_line_with_unified_lex_state,
     single_char_literal_byte_len, strip_leading_dart_annotations,
     strip_line_comment_preserving_strings, summary_from_doc_lines, update_ast_delimiter_depths,
     validate_source_syntax, validate_source_syntax_for_language, ComponentMethodTable,
-    ExtractedMethodSignature, RustStringScannerState, SourceAstItem, SourceField, SourceItemKind,
+    CstLexState, ExtractedMethodSignature, SourceAstItem, SourceField, SourceItemKind,
     SourceLanguage, SourceParam,
 };
 pub use sysml_ast::{
