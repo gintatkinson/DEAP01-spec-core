@@ -4,7 +4,12 @@
 //! Contract: Provides deterministic, zero-regex lexical identifier classifiers, directionality and cardinality defaults, `AttributeDef` and `FlowDef` value records, annotation/metrology literal extractors, and offset-preserving brace and string-masking scanners.
 //! Bounds & Faults: All routines execute in linear O(N) or constant O(1) time with checked `.get` indexing, saturating offset arithmetic, and zero panics on malformed or multi-byte UTF-8 inputs.
 
+use logos::Logos;
 use serde::{Deserialize, Serialize};
+
+use crate::sysml_cst::lexer::SysmlToken;
+use crate::sysml_cst::parser::parse_sysml_cst;
+use crate::sysml_cst::syntax_kind::{token_to_syntax_kind, SysmlSyntaxKind};
 
 /// Returns `true` as the default boolean definition flag for SysML v2 AST nodes.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/DEFAULT-TRUE]
@@ -84,24 +89,15 @@ pub(super) fn is_ident_char(b: u8) -> bool {
 /// Checks whether byte offset `pos` in `text` is preceded by start-of-input or a non-identifier byte.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/WORD-BOUNDARY-BEFORE]
 pub(super) fn is_word_boundary_before(text: &str, pos: usize) -> bool {
-    match pos.checked_sub(1) {
-        None => true,
-        Some(prev) => !text
-            .as_bytes()
-            .get(prev)
-            .copied()
-            .is_some_and(is_ident_char),
-    }
+    pos.checked_sub(1)
+        .and_then(|prev| text.as_bytes().get(prev).copied())
+        .is_none_or(|b| !is_ident_char(b))
 }
 
 /// Checks whether byte offset `pos` in `text` is followed by end-of-input or a non-identifier byte.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/WORD-BOUNDARY-AFTER]
 pub(super) fn is_word_boundary_after(text: &str, pos: usize) -> bool {
-    if pos >= text.len() {
-        true
-    } else {
-        !text.as_bytes().get(pos).copied().is_some_and(is_ident_char)
-    }
+    text.as_bytes().get(pos).copied().is_none_or(|b| !is_ident_char(b))
 }
 
 /// Counts contiguous leading ASCII whitespace bytes in `text`.
@@ -121,12 +117,13 @@ pub(super) fn extract_ident(text: &str) -> (&str, usize) {
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-TYPE-IDENT]
 pub(super) fn extract_type_ident(s: &str) -> (&str, usize) {
     let mut len: usize = 0;
-    let bytes = s.as_bytes();
-    while let Some(&b) = bytes.get(len) {
-        if is_ident_char(b) {
-            len = len.saturating_add(1);
-        } else if s.get(len..).is_some_and(|rest| rest.starts_with("::")) {
-            len = len.saturating_add(2);
+    for (res, span) in SysmlToken::lexer(s).spanned() {
+        if span.start == len
+            && (matches!(res, Ok(SysmlToken::ColonColon))
+                || s.get(span.clone())
+                    .is_some_and(|tok| !tok.is_empty() && tok.bytes().all(is_ident_char)))
+        {
+            len = span.end;
         } else {
             break;
         }
@@ -134,56 +131,19 @@ pub(super) fn extract_type_ident(s: &str) -> (&str, usize) {
     (s.get(..len).unwrap_or(""), len)
 }
 
-/// Checks whether a lowercase token matches a reserved schema meta-keyword or primitive scalar name.
+/// Checks whether a token matches a reserved schema meta-keyword or primitive scalar name.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/VALID-SUBSYSTEM-IDENT]
-fn is_reserved_subsystem_keyword(lower: &str) -> bool {
-    matches!(
-        lower,
-        "true"
-            | "false"
-            | "null"
-            | "none"
-            | "na"
-            | "string"
-            | "int"
-            | "integer"
-            | "boolean"
-            | "float"
-            | "description"
-            | "version"
-            | "name"
-            | "id"
-            | "type"
-            | "subsystem"
-            | "component"
-            | "part"
-            | "module"
-            | "parameters"
-            | "attributes"
-            | "properties"
-            | "specs"
-            | "metadata"
-            | "title"
-            | "status"
-            | "real"
-            | "primary"
-            | "secondary"
-            | "optional"
-            | "required"
-            | "level"
-            | "segment"
-            | "layer"
-            | "architecture"
-            | "purpose"
-            | "function"
-            | "item"
-            | "flow"
-            | "port"
-            | "interface"
-            | "doc"
-            | "package"
-            | "def"
-    )
+fn is_reserved_subsystem_keyword(s: &str) -> bool {
+    [
+        "true", "false", "null", "none", "na", "string", "int", "integer", "boolean", "float",
+        "description", "version", "name", "id", "type", "subsystem", "component", "part", "module",
+        "parameters", "attributes", "properties", "specs", "metadata", "title", "status", "real",
+        "primary", "secondary", "optional", "required", "level", "segment", "layer",
+        "architecture", "purpose", "function", "item", "flow", "port", "interface", "doc",
+        "package", "def",
+    ]
+    .iter()
+    .any(|&kw| s.eq_ignore_ascii_case(kw))
 }
 
 /// Validates whether `s` is a well-formed, non-reserved identifier for a subsystem, component, or part.
@@ -192,19 +152,10 @@ fn is_reserved_subsystem_keyword(lower: &str) -> bool {
 /// Contract: Returns `true` iff `1 <= s.len() <= 128`, `s` starts with an ASCII letter or `_`, contains only `[A-Za-z0-9_]`, and does not match any case-insensitive reserved schema keyword.
 /// Bounds & Faults: O(|s|) deterministic lexical check; returns `false` without panicking on empty, oversized, or non-ASCII inputs.
 pub fn is_valid_subsystem_identifier(s: &str) -> bool {
-    if s.is_empty() || s.len() > 128 {
-        return false;
-    }
-    let Some(first) = s.chars().next() else {
-        return false;
-    };
-    if !first.is_ascii_alphabetic() && first != '_' {
-        return false;
-    }
-    if is_reserved_subsystem_keyword(&s.to_ascii_lowercase()) {
-        return false;
-    }
-    s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    (1..=128).contains(&s.len())
+        && s.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && !is_reserved_subsystem_keyword(s)
+        && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// Extracts an optional `doc /* ... */` documentation block immediately preceding `keyword_pos`.
@@ -268,158 +219,64 @@ pub(super) fn extract_si_unit_and_bounds(raw: &str) -> (Option<String>, Option<(
     (si_unit, range_bounds)
 }
 
-/// Lexical state machine states for double-quoted string scanning with backslash escapes.
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/MASK-STRING-LITERALS]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum QuoteScanState {
-    Outside,
-    InString,
-    Escaped,
-}
-
 /// Locates the byte offset of the closing `}` matching the block starting at or after `open_pos`.
 ///
 /// Safety & Traceability: Realises: [REQ-SYSML-AST-SSOT-PARITY/FIND-MATCHING-BRACE]
-/// Contract: Scans UTF-8 characters from `open_pos`, ignoring braces inside escaped double-quoted string literals, and returns `Some(close_byte_offset)` when brace depth returns to `0`.
-/// Bounds & Faults: O(N) single-pass scan with saturating depth counters; returns `None` cleanly on out-of-bounds `open_pos`, leading unmatched `}`, or unclosed braces.
+/// Contract: Scans `SysmlToken` spans from `open_pos`, ignoring braces inside string literals and comments, and returns `Some(close_byte_offset)` when brace depth returns to `0`.
+/// Bounds & Faults: O(N) single-pass token scan with saturating depth counters; returns `None` cleanly on out-of-bounds `open_pos`, leading unmatched `}`, or unclosed braces.
 pub fn find_matching_brace(s: &str, open_pos: usize) -> Option<usize> {
+    let tail = s.get(open_pos..)?;
     let mut depth: usize = 0;
-    let mut state = QuoteScanState::Outside;
-    let chars = s.get(open_pos..)?.char_indices();
-    for (idx, ch) in chars {
-        match state {
-            QuoteScanState::Escaped => {
-                state = QuoteScanState::InString;
-            }
-            QuoteScanState::InString => {
-                if ch == '\\' {
-                    state = QuoteScanState::Escaped;
-                } else if ch == '"' {
-                    state = QuoteScanState::Outside;
+    for (res, span) in SysmlToken::lexer(tail).spanned() {
+        match res {
+            Ok(SysmlToken::LBrace) => depth = depth.saturating_add(1),
+            Ok(SysmlToken::RBrace) => {
+                if depth == 0 {
+                    return None;
+                }
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Some(open_pos.saturating_add(span.start));
                 }
             }
-            QuoteScanState::Outside => match ch {
-                '"' => state = QuoteScanState::InString,
-                '{' => depth = depth.saturating_add(1),
-                '}' => {
-                    if depth == 0 {
-                        return None;
-                    }
-                    depth = depth.saturating_sub(1);
-                    if depth == 0 {
-                        return Some(open_pos.saturating_add(idx));
-                    }
-                }
-                _ => {}
-            },
+            Err(()) if tail.get(span.clone()) == Some("\"") => return None,
+            _ => {}
         }
     }
     None
-}
-
-/// Replaces a `// ...` line comment starting at `start` with spaces while preserving `\n`.
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/MASK-STRING-LITERALS]
-fn mask_line_comment_bytes(out: &mut [u8], start: usize) -> usize {
-    if let Some(slot) = out.get_mut(start) {
-        *slot = b' ';
-    }
-    let second = start.saturating_add(1);
-    if let Some(slot) = out.get_mut(second) {
-        *slot = b' ';
-    }
-    let mut idx = start.saturating_add(2);
-    while let Some(&b) = out.get(idx) {
-        if b == b'\n' {
-            break;
-        }
-        if let Some(slot) = out.get_mut(idx) {
-            *slot = b' ';
-        }
-        idx = idx.saturating_add(1);
-    }
-    idx
-}
-
-/// Replaces a `/* ... */` block comment starting at `start` with spaces while preserving `\n`.
-/// Realises: [REQ-SYSML-AST-SSOT-PARITY/MASK-STRING-LITERALS]
-fn mask_block_comment_bytes(out: &mut [u8], start: usize) -> usize {
-    if let Some(slot) = out.get_mut(start) {
-        *slot = b' ';
-    }
-    let second = start.saturating_add(1);
-    if let Some(slot) = out.get_mut(second) {
-        *slot = b' ';
-    }
-    let mut idx = start.saturating_add(2);
-    while let Some(&b) = out.get(idx) {
-        let next_idx = idx.saturating_add(1);
-        if b == b'*' && out.get(next_idx) == Some(&b'/') {
-            if let Some(slot) = out.get_mut(idx) {
-                *slot = b' ';
-            }
-            if let Some(slot) = out.get_mut(next_idx) {
-                *slot = b' ';
-            }
-            return idx.saturating_add(2);
-        }
-        if b != b'\n' {
-            if let Some(slot) = out.get_mut(idx) {
-                *slot = b' ';
-            }
-        }
-        idx = next_idx;
-    }
-    idx
 }
 
 /// Masks string literal contents and line/block comments with ASCII spaces while preserving byte offsets.
 ///
 /// Safety & Traceability: Realises: [REQ-SYSML-AST-SSOT-PARITY/MASK-STRING-LITERALS]
 /// Contract: Guarantees `mask_string_literals(s).len() == s.len()` and preserves every newline byte position so keyword indices in the masked buffer align 1:1 with `s`.
-/// Bounds & Faults: O(N) time and O(N) space over `s.len()` using checked `.get` / `.get_mut` byte access with zero panics on unclosed quotes or comments.
+/// Bounds & Faults: O(N) time and O(N) space over `s.len()` using `parse_sysml_cst` Rowan token spans with zero panics on unclosed quotes or comments.
 pub fn mask_string_literals(s: &str) -> String {
+    let cst = parse_sysml_cst(s);
     let mut out = s.as_bytes().to_vec();
-    let mut i: usize = 0;
-    let mut state = QuoteScanState::Outside;
-    while i < out.len() {
-        let cur = out.get(i).copied().unwrap_or(0);
-        match state {
-            QuoteScanState::Escaped => {
-                state = QuoteScanState::InString;
-                if cur != b'\n' {
-                    if let Some(slot) = out.get_mut(i) {
-                        *slot = b' ';
+    for elem in cst.syntax().children_with_tokens() {
+        let Some(tok) = elem.into_token() else {
+            continue;
+        };
+        let range = tok.text_range();
+        let start: usize = range.start().into();
+        let end: usize = range.end().into();
+        let mask_range = match tok.kind() {
+            SysmlSyntaxKind::STRING_LIT => start.saturating_add(1)..end.saturating_sub(1),
+            SysmlSyntaxKind::LINE_COMMENT | SysmlSyntaxKind::BLOCK_COMMENT => start..end,
+            kind if kind == token_to_syntax_kind(SysmlToken::Error) && tok.text().starts_with('"') => {
+                for b in out.get_mut(start.saturating_add(1)..).into_iter().flatten() {
+                    if *b != b'\n' {
+                        *b = b' ';
                     }
                 }
-                i = i.saturating_add(1);
+                break;
             }
-            QuoteScanState::InString => {
-                if cur == b'\\' {
-                    state = QuoteScanState::Escaped;
-                    if let Some(slot) = out.get_mut(i) {
-                        *slot = b' ';
-                    }
-                } else if cur == b'"' {
-                    state = QuoteScanState::Outside;
-                } else if cur != b'\n' {
-                    if let Some(slot) = out.get_mut(i) {
-                        *slot = b' ';
-                    }
-                }
-                i = i.saturating_add(1);
-            }
-            QuoteScanState::Outside => {
-                let next_i = i.saturating_add(1);
-                if cur == b'"' {
-                    state = QuoteScanState::InString;
-                    i = next_i;
-                } else if cur == b'/' && out.get(next_i) == Some(&b'/') {
-                    i = mask_line_comment_bytes(&mut out, i);
-                } else if cur == b'/' && out.get(next_i) == Some(&b'*') {
-                    i = mask_block_comment_bytes(&mut out, i);
-                } else {
-                    i = next_i;
-                }
+            _ => continue,
+        };
+        for b in out.get_mut(mask_range).into_iter().flatten() {
+            if *b != b'\n' {
+                *b = b' ';
             }
         }
     }

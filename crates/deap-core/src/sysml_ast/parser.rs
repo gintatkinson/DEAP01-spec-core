@@ -8,14 +8,16 @@ use super::actions::parse_action_defs;
 use super::connections_and_flows::{parse_connection_defs, parse_port_defs};
 use super::expressions::parse_constraint_defs;
 use super::identifiers::{
-    extract_doc_comment_before, extract_ident, find_matching_brace, is_ident_char,
-    is_word_boundary_after, is_word_boundary_before, mask_string_literals, skip_ws,
+    extract_doc_comment_before, extract_ident, find_matching_brace, is_word_boundary_after,
+    is_word_boundary_before, mask_string_literals, skip_ws,
 };
 use super::interfaces_and_items::{parse_attribute_defs, parse_part_defs};
 use super::package_model::SysmlModel;
 use super::requirements::parse_requirement_defs;
 use super::safety_and_fmeca::parse_hazard_defs;
 use super::test_cases::parse_test_case_defs;
+use crate::sysml_cst::parser::parse_sysml_cst;
+use crate::sysml_cst::syntax_kind::SysmlSyntaxKind;
 
 /// Parse an entire SysML v2 source text into a structured SysmlModel.
 ///
@@ -154,73 +156,34 @@ pub fn parse_sysml_model(content: &str) -> SysmlModel {
 /// Conforms to DO-178C Level A and ECSS-E-ST-40C.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/STRIP-COMMENTS]
 pub fn strip_sysml_comments(content: &str) -> String {
+    let cst = parse_sysml_cst(content);
     let mut out = String::with_capacity(content.len());
-    let mut chars = content.chars().peekable();
-    let mut in_str = false;
-    let mut in_escape = false;
-    while let Some(c) = chars.next() {
-        if in_str {
-            out.push(c);
-            if in_escape {
-                in_escape = false;
-            } else if c == '\\' {
-                in_escape = true;
-            } else if c == '"' {
-                in_str = false;
-            }
+    let mut prev_is_doc = false;
+    for elem in cst.syntax().children_with_tokens() {
+        let Some(tok) = elem.into_token() else {
             continue;
-        }
-        if c == '"' {
-            in_str = true;
-            out.push(c);
-            continue;
-        }
-        if c == '/' {
-            if let Some(&'/') = chars.peek() {
-                chars.next();
-                for next_c in chars.by_ref() {
-                    if next_c == '\n' {
-                        out.push('\n');
-                        break;
-                    }
-                }
-            } else if let Some(&'*') = chars.peek() {
-                let trimmed_before = out.trim_end();
-                let is_doc_block = trimmed_before.ends_with("doc")
-                    && (trimmed_before.len() == 3
-                        || !trimmed_before
-                            .as_bytes()
-                            .get(trimmed_before.len() - 4)
-                            .copied()
-                            .is_some_and(is_ident_char));
-                chars.next();
-                if is_doc_block {
-                    out.push_str("/*");
-                    while let Some(next_c) = chars.next() {
-                        out.push(next_c);
-                        if next_c == '*' && chars.peek() == Some(&'/') {
-                            out.push('/');
-                            chars.next();
-                            break;
-                        }
-                    }
+        };
+        let text = tok.text();
+        match tok.kind() {
+            SysmlSyntaxKind::LINE_COMMENT => {}
+            SysmlSyntaxKind::BLOCK_COMMENT => {
+                if prev_is_doc {
+                    out.push_str(text);
+                    prev_is_doc = false;
                 } else {
                     out.push(' ');
-                    while let Some(next_c) = chars.next() {
-                        if next_c == '\n' {
+                    for b in text.bytes() {
+                        if b == b'\n' {
                             out.push('\n');
-                        }
-                        if next_c == '*' && chars.peek() == Some(&'/') {
-                            chars.next();
-                            break;
                         }
                     }
                 }
-            } else {
-                out.push(c);
             }
-        } else {
-            out.push(c);
+            SysmlSyntaxKind::WHITESPACE => out.push_str(text),
+            kind => {
+                out.push_str(text);
+                prev_is_doc = kind == SysmlSyntaxKind::DOC_META_KW && text == "doc";
+            }
         }
     }
     out
@@ -229,57 +192,29 @@ pub fn strip_sysml_comments(content: &str) -> String {
 /// Strips all line comments (`// ...`), block comments (`/* ... */`, including `doc /* ... */`),
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/STRIP-ALL-COMMENTS-AND-STRINGS]
 pub(crate) fn strip_all_block_comments_and_strings(input: &str) -> String {
+    let cst = parse_sysml_cst(input);
     let mut out = String::with_capacity(input.len());
-    let mut chars = input.chars().peekable();
-    let mut in_str = false;
-    let mut in_escape = false;
-    while let Some(c) = chars.next() {
-        if in_str {
-            if c == '\n' {
-                out.push('\n');
-            } else {
-                out.push(' ');
-            }
-            if in_escape {
-                in_escape = false;
-            } else if c == '\\' {
-                in_escape = true;
-            } else if c == '"' {
-                in_str = false;
-            }
+    for elem in cst.syntax().children_with_tokens() {
+        let Some(tok) = elem.into_token() else {
             continue;
-        }
-        if c == '"' {
-            in_str = true;
-            out.push(' ');
-            continue;
-        }
-        if c == '/' {
-            if let Some(&'/') = chars.peek() {
-                chars.next();
-                for next_c in chars.by_ref() {
-                    if next_c == '\n' {
-                        out.push('\n');
-                        break;
-                    }
-                }
-            } else if let Some(&'*') = chars.peek() {
-                chars.next();
+        };
+        let text = tok.text();
+        match tok.kind() {
+            SysmlSyntaxKind::LINE_COMMENT => {}
+            SysmlSyntaxKind::BLOCK_COMMENT => {
                 out.push(' ');
-                while let Some(next_c) = chars.next() {
-                    if next_c == '\n' {
+                for b in text.bytes() {
+                    if b == b'\n' {
                         out.push('\n');
                     }
-                    if next_c == '*' && chars.peek() == Some(&'/') {
-                        chars.next();
-                        break;
-                    }
                 }
-            } else {
-                out.push(c);
             }
-        } else {
-            out.push(c);
+            SysmlSyntaxKind::STRING_LIT => {
+                for ch in text.chars() {
+                    out.push(if ch == '\n' { '\n' } else { ' ' });
+                }
+            }
+            _ => out.push_str(text),
         }
     }
     out
