@@ -1446,7 +1446,7 @@ state def BP_01_LifecycleState {
             "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
         ] {
             assert_eq!(
-                compute_sha256_hex(sample.as_bytes()),
+                crate::sysml_ast::cache::compute_sha256_hex(sample.as_bytes()),
                 crate::digest::compute_sha256(sample.as_bytes())
             );
             assert_eq!(
