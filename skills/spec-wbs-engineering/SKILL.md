@@ -31,6 +31,29 @@ Level 4 WBS & Enterprise Realization acts as the authoritative programmatic and 
 
 ---
 
+## Normative OMG SysML v2.0 + KerML 1.0 Grammar & Official Rust Compiler Stack Contracts (Contracts A & B)
+
+### Contract A: 100% Normative OMG SysML v2.0 + KerML 1.0 Textual Grammar Coverage
+All WBS decomposition, technical realization allocation, and traceability matrix synthesis MUST enforce full Definition and Usage symmetry across all normative OMG SysML v2.0 and KerML 1.0 clauses (with zero 16-construct artificial caps):
+- **Namespaces & Metadata**: `package`, `library package`, `standard library package`, `import` (`all`, `::*`, `::**`, filter `[...]`), `alias`, `doc`, `comment`, `rep`, `dependency`, `metadata def` / `metadata` / `@Metadata` / `#user_keyword` (modeling `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` via standard OMG SysML v2 `metadata def` keywords while preserving backward-compatible parsing of legacy `hazard def` / `risk def` / `capability def`).
+- **Structural & Data Types**: `attribute def`/`attribute`, `enum def`/`enum`, `item def`/`item`, `part def`/`part`, `port def`/`port` (`in`, `out`, `inout`, `~` conjugation), `connection def`/`connection` (`connect ... to ...`), `interface def`/`interface`, `flow def`/`flow` (`of ... from ... to ...`), `allocation def`/`allocation` (`allocate ... to ...`), `occurrence def`/`occurrence` (`individual`, `snapshot`, `timeslice`).
+- **Behavioral & State**: `action def`/`action` (`perform`, `accept`, `send`, `assign`, `if`/`else`, `while`/`loop`, `for`, `fork`, `join`, `merge`, `decide`, `first ... then ...` succession), `state def`/`state` (`exhibit`, `parallel`, `entry`, `do`, `exit`, `transition first ... accept ... if ... do ... then ...`).
+- **Calculations, Constraints & Requirements**: `calc def`/`calc` (`return`), `constraint def`/`constraint` (`assert`, `assume`, `require`), `requirement def`/`requirement` (`subject`, `actor`, `stakeholder`, `framed concern`, `satisfy ... by ...`), `concern def`/`concern`.
+- **Use Cases, Analysis, Verification & Views**: `use case def`/`use case` (`include use case`), `analysis def`/`analysis` (`objective`), `verification def`/`verification` (`verify requirement`), `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering` (`expose`, `filter`, `render`), `variation`/`variant`.
+- **KerML 1.0 Specialization, Multiplicity & Expressions**: `:` (`defined by`), `:>` (`subsets`), `:>>` (`redefines`), `::>` (`references`), `~` (`conjugates`), `ref`, `abstract`, `readonly`, `derived`, `end`, `default`, `:=`, `[lo..hi]`, `[*]`, `{ordered, nonunique}`, full KerML logical/conditional/relational/arithmetic/collection expressions (`implies`, `xor`, `??`, `->`, `collect`, `select`, `forAll`, `exists`), and `ISQ`/`SI`/`ScalarValues` standard libraries.
+
+### Contract B: 100% Official Rust Compiler, Cargo, `rust-analyzer` & Rustdoc Crate Stack (Zero Hand-Rolled Scanners)
+All WBS discovery, manifest parsing, Rust/SysML/Markdown CST inspection, and verification gates backing this workflow MUST use the official Rust compiler and `rust-analyzer` crate stack with zero hand-rolled string/line/char-by-char scanners:
+- **Workspace & Manifests**: `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`.
+- **Lossless Rust CST, VFS & Codemods**: `ra_ap_syntax` (`ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr, Fn, HasDocComments, HasAttrs}`), `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`.
+- **Lossless SysML v2, Dart & Polyglot CST + Incremental Query DB**: `logos` + `rowan` + `salsa` + `ariadne` (`deap_core::sysml_cst`, `deap_core::dart_cst`, `ingest_sysml::cst::{idl_cst, yang_cst}`, typed `serde_json` OpenAPI/JSON-Schema).
+- **Lossless Markdown AST**: `pulldown-cmark` + `pulldown-cmark-to-cmark`.
+- **Deterministic Fixed-Point Codegen**: `syn` + `proc-macro2` + `quote` + `prettyplease`.
+- **5-Stage Verification & Ferrocene Qualification**: Stage 1 `rustc`/`cargo clippy --message-format=json` -> Stage 2 isolated `./lints/deap-dylint-mir/` (`#![feature(rustc_private)]`, `rustc_middle::mir`) -> Stage 3 `cargo miri` + `flutter_rust_bridge` -> Stage 4 `cargo kani` (`#[kani::proof]`) -> Stage 5 Ferrocene `criticalup.toml` + `[FLS: fls_*]` + `symbol-report`/`blanket` MC/DC + 3-Ring DAL-A..E partitioning (cross-platform runtime `PATH` discovery across macOS, Linux, and Windows).
+- **3-Layer Definition of Done (DoD) & Submodule Modularity**: Every work package and micro-task closes all 3 layers (Domain State & Data Model, Logic & State Management, Presentation & Actuator Interface Binding) targeting `< 380`-SLOC submodules and explicit legacy hand-rolled scanner deletion, with zero Unicode em dashes (`\u2014`) and zero hardcoded OS/user/machine paths.
+
+---
+
 ## Execution Trigger & Pipeline Sequencing
 
 You should invoke this skill as **Phase 4 (Worker WBS - Work Breakdown Structure & Enterprise Realization Engineer)** within the Master Orchestrator lifecycle (`skills/spec-orchestrator/SKILL.md`):
@@ -327,19 +350,19 @@ sequenceDiagram
 ```
 
 ### Step 1: Ingest System Root, ConOps, and Safety Baselines
-1. Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` to establish the root system boundary (`1.0`) and Level 2 subsystem packages (`1.1` to `1.N`).
-2. Ingest `docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md` to map high-level operational lifecycle stages and mission essential tasks.
+1. Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` via `deap_core::sysml_cst` (`logos` + `rowan` + `salsa` + `ariadne`) to establish the root system boundary (`1.0`) and Level 2 subsystem packages (`1.1` to `1.N`) across all `package`/`library package`/`standard library package`, `part def`/`part`, `item def`/`item`, `allocation def`/`allocation`, and `#capability`/`#hazard`/`#risk`/`#rt_loop`/`#dal`/`#fls` metadata usages.
+2. Ingest `docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md` via lossless Markdown AST (`pulldown-cmark` + `pulldown-cmark-to-cmark`) to map high-level operational lifecycle stages and mission essential tasks.
 3. Ingest `docs/safety/STPA_MATRIX.md` to identify safety constraints and fault tolerance invariants allocated to each subsystem.
 
 ### Step 2: Ingest Epics, Features, Use Cases, and User Stories
-1. Scan `docs/epics/` to extract Level 2 Subsystem packages and their associated backlog issue IDs.
-2. Scan `docs/features/` to extract all Level 3 Domain Features, acceptance criteria, and SysML container paths.
-3. Scan `docs/user-stories/` and `docs/use-cases/` to establish requirement-to-story realization mappings.
+1. Scan `docs/epics/` via `pulldown-cmark` to extract Level 2 Subsystem packages and their associated backlog issue IDs.
+2. Scan `docs/features/` via `pulldown-cmark` to extract all Level 3 Domain Features, acceptance criteria, and SysML container paths.
+3. Scan `docs/user-stories/` and `docs/use-cases/` via `pulldown-cmark` to establish requirement-to-story realization mappings.
 
 ### Step 3: Discover Implementation Models & Verification Evidence
 1. Scan `models/matlab/` and `models/scripts/` for Track A MATLAB parameters and Simulink builder scripts.
-2. Scan `crates/` for Track B strongly-typed domain models and 250 Hz simulation engines.
-3. Scan `crates/*/tests/` for automated Cargo verification suites.
+2. Inspect `Cargo.toml` / `Cargo.lock` via `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit`, and scan `crates/` via `ra_ap_syntax`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, and `ignore` for Track B strongly-typed domain models and 250 Hz simulation engines (`< 380`-SLOC submodules).
+3. Scan `crates/*/tests/` for automated Cargo verification suites and 5-Stage Verification / Ferrocene qualification artifacts (`rustc`/`clippy`, `./lints/deap-dylint-mir/`, `cargo miri` + `flutter_rust_bridge`, `cargo kani` `#[kani::proof]`, and Ferrocene `criticalup.toml` + `[FLS: fls_*]` + `symbol-report`/`blanket` MC/DC + 3-Ring DAL-A..E partitioning).
 4. Scan `docs/reports/simulink_results/` for formal DO-178C / DO-331 verification evidence reports.
 
 ### Step 4: Synthesize Deliverables Suite
@@ -354,7 +377,7 @@ Generate the three canonical Level 4 engineering deliverables:
    - Generate validated JSON AST matching the formal schema.
 
 ### Step 5: Verify Structural & Mathematical Consistency
-1. Assert 100% Feature Coverage: Every Level 3 Feature MUST contain all 7 concrete work packages.
+1. Assert 100% Feature Coverage: Every Level 3 Feature MUST contain all 7 concrete work packages closing the 3-Layer Definition of Done.
 2. Assert 0 Orphaned Work Packages: Every work package must link to an existing file or a documented scheduled task.
 3. Assert Directed Acyclic Graph (DAG) Integrity: Predecessor dependency links in CSV and JSON must form a valid DAG with zero cyclical deadlocks.
 4. Assert Discrete Equivalence Invariant: Mathematical error between Simulink and Rust twins must satisfy $\epsilon_{\mathrm{equiv}} \le 10^{-6}$.
@@ -363,7 +386,7 @@ Generate the three canonical Level 4 engineering deliverables:
 
 ## Standardized Level 4 Markdown Artifact Structure
 
-All Level 4 WBS suite documents reside in `docs/management/` and MUST begin at lines 1–10 with a native CommonMark two-column Metadata Table per `rules/specification-metadata-integrity.md`.
+All Level 4 WBS suite documents reside in `docs/management/` and MUST begin at lines 1-10 with a native CommonMark two-column Metadata Table per `rules/specification-metadata-integrity.md`.
 
 ```markdown
 | Attribute | Specification Detail |
@@ -413,9 +436,9 @@ Normative Specification: [MIL-STD-881E Standard Reference](https://quicksearch.d
 
 The Worker WBS must strictly enforce the following repository invariants:
 
-### 1. Pure Schema AST Derivation Mandate
-- All subsystem boundaries, segment codes, and feature allocations must derive directly from the parsed SysML v2 AST (`package`, `part def`, `item def`).
-- Zero hallucination of undeclared subsystems or unallocated features is permitted.
+### 1. Pure Schema CST/AST Derivation Mandate
+- All subsystem boundaries, segment codes, and feature allocations must derive directly from the parsed SysML v2 CST/AST (`deap_core::sysml_cst` via `logos` + `rowan` + `salsa` + `ariadne`) with full Definition and Usage symmetry (`package`/`library package`/`standard library package`, `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port`, `interface def`/`interface`, `connection def`/`connection`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, and `#hazard`/`#risk`/`#capability`/`#rt_loop`/`#dal`/`#fls` metadata usages).
+- Zero hallucination of undeclared subsystems or unallocated features is permitted, and zero hand-rolled scanners may be used.
 
 ### 2. Zero Unicode Em Dash Invariant (`\u2014`)
 - Strictly prohibit Unicode em dashes (`\u2014`) across all generated markdown, CSV, JSON, and test files.

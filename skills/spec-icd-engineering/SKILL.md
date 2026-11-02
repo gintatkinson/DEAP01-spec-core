@@ -13,11 +13,11 @@ metadata:
 
 # Logical Interface Specification & ICD Engineering (Worker ICD)
 
-Use this as the single canonical workflow for transforming formal SysML v2 Abstract Syntax Tree (AST) port definitions, item flows, connections, and normative interface schemas into rigorous, machine-verifiable **Level 1C: Logical Interface Specifications & Signal Flow Dictionaries**.
+Use this as the single canonical workflow for transforming formal SysML v2 Concrete/Abstract Syntax Tree (CST/AST) port definitions, item flows, connections, interfaces, allocations, and normative interface schemas into rigorous, machine-verifiable **Level 1C: Logical Interface Specifications & Signal Flow Dictionaries** with full Definition and Usage symmetry across the OMG SysML v2.0 and KerML 1.0 grammar.
 
 In accordance with [`rules/sysml-ssot-completeness.md`](rules/sysml-ssot-completeness.md) and [`docs/architecture/blueprints/DEAP_LOGICAL_INTERFACE_SPECIFICATION_BLUEPRINT.md`](https://github.com/gintatkinson/DEAP01-spec-core/blob/main/docs/architecture/blueprints/DEAP_LOGICAL_INTERFACE_SPECIFICATION_BLUEPRINT.md), SysML v2 is the 100% Single Source of Truth (SSOT) for all architectural subsystem boundaries, directional interface ports, logical connections, and conveyed data item flows. Heuristic prose interpretation or ad-hoc interface assumptions without formal AST backing are strictly forbidden.
 
-Level 1C operates as an immutable architectural bridge between high-level operational concepts (Level 1B CONOPS and STPA Hazard Analyses) and downstream agile specifications (Level 2 Epics, Features, BDD User Stories, and UML Use Cases). It eliminates interface ambiguity, untracked coupling, and type mismatches before software code generation or Model-Based Design (MBD) synthesis in the Primary Tier-1 Commercial Toolchain Context (**MATLAB / Simulink / Stateflow / Embedded Coder** for DO-178C C / SPARK Ada generation).
+Level 1C operates as an immutable architectural bridge between high-level operational concepts (Level 1B CONOPS and STPA Hazard Analyses) and downstream agile specifications (Level 2 Epics, Features, BDD User Stories, and UML Use Cases). It eliminates interface ambiguity, untracked coupling, and type mismatches before software code generation or Model-Based Design (MBD) synthesis in the Primary Tier-1 Commercial Toolchain Context (**MATLAB / Simulink / Stateflow / Embedded Coder** for DO-178C C / SPARK Ada generation and **Ferrocene** safety-qualified Rust toolchains).
 
 > [!TIP]
 > This skill operates in the spirit of the `andrej-karpathy` methodology: focus deeply on the fundamentals, enforce exhaustive structural rigor, eliminate interface ambiguity, and instrument all deliverables flawlessly into project tracking systems.
@@ -26,6 +26,29 @@ Level 1C operates as an immutable architectural bridge between high-level operat
 - **Exit code 0 is NEVER sufficient proof of success.**
 - After generating or publishing any ICD artifact or tracker issue, the agent MUST run live payload inspection (`gh issue view <ID>` or `glab issue view <ID>`) to verify markdown table alignment, Mermaid syntax headers, schema citations, and link validity.
 - **Optimism bias is prohibited**: agents must cite empirical output of live payload inspection before declaring completion.
+
+---
+
+## Normative OMG SysML v2.0 + KerML 1.0 Grammar & Official Rust Compiler Stack Contracts (Contracts A & B)
+
+### Contract A: 100% Normative OMG SysML v2.0 + KerML 1.0 Textual Grammar Coverage
+All ICD port, connection, interface, and item flow extraction MUST enforce full Definition and Usage symmetry across all normative OMG SysML v2.0 and KerML 1.0 clauses (with zero 16-construct artificial caps):
+- **Namespaces & Metadata**: `package`, `library package`, `standard library package`, `import` (`all`, `::*`, `::**`, filter `[...]`), `alias`, `doc`, `comment`, `rep`, `dependency`, `metadata def` / `metadata` / `@Metadata` / `#user_keyword` (modeling `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` via standard OMG SysML v2 `metadata def` keywords while preserving backward-compatible parsing of legacy `hazard def` / `risk def` / `capability def`).
+- **Structural & Data Types**: `attribute def`/`attribute`, `enum def`/`enum`, `item def`/`item`, `part def`/`part`, `port def`/`port` (`in`, `out`, `inout`, `~` conjugation), `connection def`/`connection` (`connect ... to ...`), `interface def`/`interface`, `flow def`/`flow` (`of ... from ... to ...`), `allocation def`/`allocation` (`allocate ... to ...`), `occurrence def`/`occurrence` (`individual`, `snapshot`, `timeslice`).
+- **Behavioral & State**: `action def`/`action` (`perform`, `accept`, `send`, `assign`, `if`/`else`, `while`/`loop`, `for`, `fork`, `join`, `merge`, `decide`, `first ... then ...` succession), `state def`/`state` (`exhibit`, `parallel`, `entry`, `do`, `exit`, `transition first ... accept ... if ... do ... then ...`).
+- **Calculations, Constraints & Requirements**: `calc def`/`calc` (`return`), `constraint def`/`constraint` (`assert`, `assume`, `require`), `requirement def`/`requirement` (`subject`, `actor`, `stakeholder`, `framed concern`, `satisfy ... by ...`), `concern def`/`concern`.
+- **Use Cases, Analysis, Verification & Views**: `use case def`/`use case` (`include use case`), `analysis def`/`analysis` (`objective`), `verification def`/`verification` (`verify requirement`), `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering` (`expose`, `filter`, `render`), `variation`/`variant`.
+- **KerML 1.0 Specialization, Multiplicity & Expressions**: `:` (`defined by`), `:>` (`subsets`), `:>>` (`redefines`), `::>` (`references`), `~` (`conjugates`), `ref`, `abstract`, `readonly`, `derived`, `end`, `default`, `:=`, `[lo..hi]`, `[*]`, `{ordered, nonunique}`, full KerML logical/conditional/relational/arithmetic/collection expressions (`implies`, `xor`, `??`, `->`, `collect`, `select`, `forAll`, `exists`), and `ISQ`/`SI`/`ScalarValues` standard libraries.
+
+### Contract B: 100% Official Rust Compiler, Cargo, `rust-analyzer` & Rustdoc Crate Stack (Zero Hand-Rolled Scanners)
+All compiler, ingestion, verification, and codegen tooling backing this workflow MUST use the official Rust compiler and `rust-analyzer` crate stack with zero hand-rolled string/line/char-by-char scanners:
+- **Workspace & Manifests**: `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`.
+- **Lossless Rust CST, VFS & Codemods**: `ra_ap_syntax` (`ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr, Fn, HasDocComments, HasAttrs}`), `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`.
+- **Lossless SysML v2, Dart & Polyglot CST + Incremental Query DB**: `logos` + `rowan` + `salsa` + `ariadne` (`deap_core::sysml_cst`, `deap_core::dart_cst`, `ingest_sysml::cst::{idl_cst, yang_cst}`, typed `serde_json` OpenAPI/JSON-Schema).
+- **Lossless Markdown AST**: `pulldown-cmark` + `pulldown-cmark-to-cmark`.
+- **Deterministic Fixed-Point Codegen**: `syn` + `proc-macro2` + `quote` + `prettyplease`.
+- **5-Stage Verification & Ferrocene Qualification**: Stage 1 `rustc`/`cargo clippy --message-format=json` -> Stage 2 isolated `./lints/deap-dylint-mir/` (`#![feature(rustc_private)]`, `rustc_middle::mir`) -> Stage 3 `cargo miri` + `flutter_rust_bridge` -> Stage 4 `cargo kani` (`#[kani::proof]`) -> Stage 5 Ferrocene `criticalup.toml` + `[FLS: fls_*]` + `symbol-report`/`blanket` MC/DC + 3-Ring DAL-A..E partitioning (cross-platform runtime `PATH` discovery across macOS, Linux, and Windows).
+- **3-Layer Definition of Done (DoD) & Submodule Modularity**: Every spec item and micro-task closes all 3 layers (Domain State & Data Model, Logic & State Management, Presentation & Actuator Interface Binding) targeting `< 380`-SLOC submodules and explicit legacy hand-rolled scanner deletion, with zero Unicode em dashes (`\u2014`) and zero hardcoded OS/user/machine paths.
 
 ---
 
@@ -40,18 +63,21 @@ You should invoke this skill as **Worker 0D (Logical Interface Engineer)** in Pi
 ## Step 1: Context Ingestion (SysML v2 AST, Digest & Safety Concept)
 
 1. **Ingest Canonical Schema Models & Cryptographic Digest**:
-   - Ingest authoritative schemas from `schema/` and `.pipeline/` (`.pipeline/schema.sysml`, `.pipeline/schema-digest.json`, or heterogeneous schemas `.yaml`, `.json`, `.proto`, `.idl`, `.arxml`, `.md` discovered via `UnifiedSchemaModelExtractor`).
+   - Ingest authoritative schemas from `schema/` and `.pipeline/` (`.pipeline/schema.sysml`, `.pipeline/schema-digest.json`, or heterogeneous schemas `.yaml`, `.json`, `.proto`, `.idl`, `.yang`, `.arxml`, `.md` parsed via `deap_core::sysml_cst`, `ingest_sysml::cst::{idl_cst, yang_cst}`, and typed `serde_json` OpenAPI/JSON-Schema).
    - When `.pipeline/schema.sysml` is present, verify SHA-256 integrity hash against `.pipeline/schema-digest.json` per [`rules/sysml-ssot-completeness.md`](rules/sysml-ssot-completeness.md).
 
-2. **AST Query & Entity Extraction**:
-   Scan and parse the authoritative schema AST (SysML v2 or heterogeneous model extracted via `UnifiedSchemaModelExtractor`) to identify all formal interface elements:
-   - **`part def`**: Subsystems and structural components forming the system boundary partitions.
-   - **`port def` / `port`**: Directional ports (`in`, `out`, `inout`) declared on subsystem boundaries with port typing (Command, Telemetry, Data, Event).
+2. **CST/AST Query & Entity Extraction**:
+   Scan and parse the authoritative schema CST/AST (`deap_core::sysml_cst` powered by `logos` + `rowan` + `salsa` + `ariadne`) to identify all formal interface elements with full Definition and Usage symmetry:
+   - **`package` / `library package` / `standard library package`**: Architectural namespaces, `import` (`all`, `::*`, `::**`, filter `[...]`), `alias`, and `dependency` declarations.
+   - **`part def` / `part`**: Subsystems and structural components forming the system boundary partitions.
+   - **`port def` / `port`**: Directional ports (`in`, `out`, `inout`, and `~` conjugation) declared on subsystem boundaries with port typing (Command, Telemetry, Data, Event).
    - **`interface def` / `interface`**: Formal interface block contracts declaring provided/required capabilities and service signatures.
-   - **`connection` / `connect`**: Directed topological links binding source output ports to destination input ports.
-   - **`flow` / `item flow`**: Typed information flows conveying discrete data payloads across connection bindings.
-   - **`item def`**: Data structure definitions, field types, numeric bounds, resolution, and valid domain intervals.
-   - **`constraint def` / `assert constraint`**: Interface timing constraints ($\tau_{\mathrm{latency}}$ bounds, update frequencies $f_{\mathrm{rate}}$, failsafe invariant assertions).
+   - **`connection def` / `connection`**: Directed topological links (`connect ... to ...`) binding source output ports to destination input ports.
+   - **`flow def` / `flow`**: Typed information flows (`of ... from ... to ...`) conveying discrete data payloads across connection bindings.
+   - **`allocation def` / `allocation`**: Logical-to-physical or subsystem-to-port allocations (`allocate ... to ...`).
+   - **`item def` / `item`, `attribute def` / `attribute`, `enum def` / `enum`**: Data structure definitions, field types, `ISQ`/`SI`/`ScalarValues` dimensional units, numeric bounds, `[lo..hi]` / `[*]` / `{ordered, nonunique}` multiplicities, default values (`default`, `:=`), and valid domain intervals.
+   - **`constraint def` / `constraint` & `calc def` / `calc`**: Interface timing constraints (`assert`, `assume`, `require`, `return`, $\tau_{\mathrm{latency}}$ bounds, update frequencies $f_{\mathrm{rate}}$, failsafe invariant assertions).
+   - **`metadata def` / `metadata` / `@Metadata` / `#user_keyword`**: User-defined safety and real-time metadata annotations (`#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls`, alongside backward-compatible parsing of legacy `hazard def` / `risk def` / `capability def`).
 
 3. **Ingest Level 1B Safety & Operational Concept (When Available)**:
    - Ingest `docs/safety/STPA_MATRIX.md` (or STPA analysis tables) and `CONOPS.md` to map identified safety hazards (`**H-1**`, `**SC-01**`, `**UCA-1**`) and fail-safe default values directly to their respective logical signals.
@@ -113,7 +139,7 @@ The Worker ICD synthesizes two primary Level 1C engineering artifacts in `docs/i
 
 ## Step 3: Standardized Level 1C Markdown Artifact Structures
 
-All Level 1C documents are stored under `docs/interfaces/` and MUST begin at lines 1–10 with a native CommonMark two-column Metadata Table per `rules/specification-metadata-integrity.md`.
+All Level 1C documents are stored under `docs/interfaces/` and MUST begin at lines 1-10 with a native CommonMark two-column Metadata Table per `rules/specification-metadata-integrity.md`.
 
 ### 3.1 Metadata Table Specification (Mandatory for all ICD files)
 
@@ -131,7 +157,7 @@ Every generated ICD document MUST open with the following exact table structure:
 ```
 
 > [!WARNING]
-> Raw `--- ... ---` YAML frontmatter blocks are strictly forbidden in specification markdown files. All metadata must reside in the native CommonMark 2-column table at lines 1–10.
+> Raw `--- ... ---` YAML frontmatter blocks are strictly forbidden in specification markdown files. All metadata must reside in the native CommonMark 2-column table at lines 1-10.
 
 ---
 
@@ -250,9 +276,9 @@ Normative Specification: [Normative Document Link](link-to-specification)
 
 The Worker ICD must strictly enforce the following repository invariants:
 
-### 4.1 100% Pure Schema AST Derivation Mandate
-- All port definitions, item flows, and connections must derive directly from the parsed SysML v2 AST (`port def`, `connection`, `item flow`, `item def`, `interface def`).
-- Zero hallucination of undeclared ports or unmapped signals is permitted.
+### 4.1 100% Pure Schema CST/AST Derivation Mandate
+- All port definitions, item flows, connections, interfaces, allocations, and safety constraints must derive directly from the parsed SysML v2 CST/AST (`deap_core::sysml_cst` via `logos` + `rowan` + `salsa` + `ariadne`) with full Definition and Usage symmetry (`port def`/`port` (`in`, `out`, `inout`, `~` conjugation), `connection def`/`connection` (`connect ... to ...`), `flow def`/`flow` (`of ... from ... to ...`), `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `interface def`/`interface`, `allocation def`/`allocation` (`allocate ... to ...`), `constraint def`/`constraint`, `calc def`/`calc`, `ISQ`/`SI`/`ScalarValues`, and `#hazard`/`#risk`/`#capability`/`#rt_loop`/`#dal`/`#fls` metadata usages).
+- Zero hallucination of undeclared ports or unmapped signals is permitted, and zero hand-rolled string/line scanners may be used.
 
 ### 4.2 Strict Logical Abstraction Invariants
 To maintain pure platform independence and prevent premature hardware coupling:

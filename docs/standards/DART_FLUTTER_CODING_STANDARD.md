@@ -40,6 +40,22 @@ Per `docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.
   - Command envelopes and Ring-1 safety annunciations carry monotonic sequence numbers, freshness epochs, and CRC-32C or SHA-256 integrity digests computed and verified inside Ring-1.
   - Ring-3 confirmation views and annunciation banners MUST render the Ring-1-echoed readback payload and digest-verified state verbatim rather than optimistic local ViewModel state, transitioning immediately to an explicit `Failure<T>` / stale-interlock state on any sequence gap, timeout, or CRC/SHA-256 mismatch.
 
+### 1.4 Contract A & Contract B: 100% Normative OMG SysML v2.0 + KerML 1.0 Grammar Projection & Official CST Verification Stack
+
+All synthesized Dart/Flutter domain contracts, `flutter_rust_bridge` Ring-2 bindings, runtime metadata seeds (`SupportedSchemaExtension`: `.sysml`, `.yaml`, `.yml`, `.json`, `.proto`, `.idl`, `.arxml`, `.md`, `.markdown`, `.yang`, plus `.rs` and `.dart` CSTs), and Tier-0 AST/CST verification gates (`Checks 36, 38, 39, 40, 41`) enforce:
+
+1. **Contract A -- 100% Normative OMG SysML v2.0 + KerML 1.0 Textual Grammar Coverage (`deap_core::sysml_cst`, Zero 16-Construct Artificial Caps)**:
+   - **Namespaces & Metadata**: `package`, `library package`, `standard library package`, `import` (`all`, `::*`, `::**`, filter `[...]`), `alias`, `doc`, `comment`, `rep`, `dependency`, `metadata def` / `metadata` / `@Metadata` / `#user_keyword` (`#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` via standard OMG SysML v2 `metadata def` keywords while preserving backward-compatible parsing of legacy `hazard def` / `risk def` / `capability def`).
+   - **Structural & Data Types**: `attribute def`/`attribute`, `enum def`/`enum`, `item def`/`item`, `part def`/`part`, `port def`/`port` (`in`, `out`, `inout`, `~` conjugation), `connection def`/`connection` (`connect ... to ...`), `interface def`/`interface`, `flow def`/`flow` (`of ... from ... to ...`), `allocation def`/`allocation` (`allocate ... to ...`), `occurrence def`/`occurrence` (`individual`, `snapshot`, `timeslice`).
+   - **Behavioral & State**: `action def`/`action` (`perform`, `accept`, `send`, `assign`, `if`/`else`, `while`/`loop`, `for`, `fork`, `join`, `merge`, `decide`, `first ... then ...` succession), `state def`/`state` (`exhibit`, `parallel`, `entry`, `do`, `exit`, `transition first ... accept ... if ... do ... then ...`).
+   - **Calculations, Constraints & Requirements**: `calc def`/`calc` (`return`), `constraint def`/`constraint` (`assert`, `assume`, `require`), `requirement def`/`requirement` (`subject`, `actor`, `stakeholder`, `framed concern`, `satisfy ... by ...`), `concern def`/`concern`.
+   - **Use Cases, Analysis, Verification & Views**: `use case def`/`use case` (`include use case`), `analysis def`/`analysis` (`objective`), `verification def`/`verification` (`verify requirement`), `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering` (`expose`, `filter`, `render`), `variation`/`variant`.
+   - **KerML 1.0 Specialization, Multiplicity & Expressions**: `:` (`defined by`), `:>` (`subsets`), `:>>` (`redefines`), `::>` (`references`), `~` (`conjugates`), `ref`, `abstract`, `readonly`, `derived`, `end`, `default`, `:=`, `[lo..hi]`, `[*]`, `{ordered, nonunique}`, full KerML logical/conditional/relational/arithmetic/collection expressions (`implies`, `xor`, `??`, `->`, `collect`, `select`, `forAll`, `exists`), and `ISQ`/`SI`/`ScalarValues` standard libraries.
+2. **Contract B -- 100% Official Compiler, CST & 5-Stage Verification Stack (Zero Hand-Rolled Scanners)**:
+   - **Lossless Dart, SysML v2 & Polyglot CST + Incremental Query DB**: `logos` + `rowan` + `salsa` + `ariadne` (`deap_core::dart_cst` for all Dart/Flutter static gates and reverse sync, `deap_core::sysml_cst`, `ingest_sysml::cst::{idl_cst, yang_cst}`, and typed `serde_json` OpenAPI/JSON-Schema) with explicit deletion of legacy hand-rolled character/line scanners.
+   - **Companion Rust CST, Manifests, Markdown & Codegen Stack**: `ra_ap_syntax` (`ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr, Fn, HasDocComments, HasAttrs}`), `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, `pulldown-cmark` + `pulldown-cmark-to-cmark`, and `syn` + `proc-macro2` + `quote` + `prettyplease`.
+   - **5-Stage Verification & Cross-Platform Portability**: Stage 1 `rustc`/`cargo clippy --message-format=json` -> Stage 2 isolated `./lints/deap-dylint-mir/` (`#![feature(rustc_private)]`, `rustc_middle::mir`) -> Stage 3 `cargo miri` + `flutter_rust_bridge` + `dart analyze --fatal-infos` -> Stage 4 `cargo kani` (`#[kani::proof]`) -> Stage 5 Ferrocene `criticalup.toml` + `[FLS: fls_*]` + `symbol-report`/`blanket` MC/DC + 3-Ring DAL-A..E partitioning, using dynamic runtime `PATH` and shared-library discovery (`std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}`, `camino::Utf8Path`) across macOS, Linux, and Windows with zero hardcoded OS/user/machine paths.
+
 ## 2. Architectural Isolation & MVVM 3-Layer Definition of Done
 
 All downstream Flutter applications enforce strict **MVVM (Model-View-ViewModel)** unidirectional dependency flow:
@@ -262,7 +278,7 @@ Widget and ViewModel test suites MUST pump teardown cycles (`await tester.pumpWi
 
 | Metric | Normative Bound | Enforcement & Decomposition Rule |
 | :--- | :--- | :--- |
-| Production file size | `< 500` executable SLOC | Excludes blank lines and `///` DartDoc comments. Split files by single domain, ViewModel, or sub-widget responsibility. |
+| Production file size | `< 500` executable SLOC (`< 380` target SLOC per submodule) | Excludes blank lines and `///` DartDoc comments. Split files by single domain, ViewModel, or sub-widget responsibility (`deap_core::dart_cst` CST audited, zero hand-rolled scanners). |
 | Function / method / `build()` length | `<= 60` executable SLOC | Extract sub-trees into dedicated `const` `StatelessWidget` classes rather than private `_buildSection()` helper methods. |
 | Cyclomatic complexity | `v(G) <= 10` | Replace nested flag branches with exhaustive `switch` expressions on `sealed class` states and named predicate getters. |
 | Control-flow / branch nesting depth | `<= 4` | Use early guard returns and flat `sealed class` state sub-widgets. |
@@ -306,7 +322,8 @@ During downstream full-application verification gates, run the target platform r
 - [ ] Zero `!` null-assertion operators, zero unchecked collection indexing, and zero unguarded `NaN`/`infinity` layout inputs exist in `app_flutter/lib/**`.
 - [ ] Main UI isolate executes zero synchronous I/O; `_disposed` and `mounted` guards protect every async boundary; `build()` is pure; `dispose()` follows reverse-acquisition order.
 - [ ] Tests follow RED-GREEN-REFACTOR with `given_when_then` BDD naming against live SQLite/emulator persistence (zero `mockito`/`mocktail` mocks) and verify 1080p-6K pairwise HUD non-overlap.
-- [ ] Every file is `< 500` executable SLOC, every method is `<= 60` SLOC, `v(G) <= 10`, max nesting `<= 4`, and zero unapproved `// ignore:` directives exist.
+- [ ] Every file is `< 500` executable SLOC (`< 380` target SLOC per submodule), every method is `<= 60` SLOC, `v(G) <= 10`, max nesting `<= 4`, and zero unapproved `// ignore:` directives exist.
+- [ ] All schema projections (`SupportedSchemaExtension`, `deap_core::sysml_cst`) preserve 100% normative OMG SysML v2.0 + KerML 1.0 grammar coverage (zero 16-construct caps), and all Dart static gates execute over the lossless `logos` + `rowan` + `salsa` + `ariadne` CST (`deap_core::dart_cst`) with explicit legacy hand-rolled scanner deletion and cross-platform runtime `PATH` discovery across macOS, Linux, and Windows (Section 1.4).
 
 ## 11. Waivers, Deviations & Change Control
 

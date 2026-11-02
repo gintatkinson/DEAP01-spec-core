@@ -71,36 +71,49 @@ flowchart TD
 
 ## 2. Modular Cargo Workspace Architecture
 
-The Runtime Metadata Engine is organized within the standard DEAP pure Rust Cargo workspace (`Cargo.toml`):
+The Runtime Metadata Engine is organized within the standard DEAP pure Rust Cargo workspace (`Cargo.toml`) plus isolated Stage-2 MIR lint plugins (`./lints/deap-dylint-mir/`):
 
 ```
 DEAP01-spec-core/
 ├── Cargo.toml                      # Workspace manifest (resolver = "2")
+├── lints/
+│   └── deap-dylint-mir/            # Isolated Stage-2 nightly MIR linter (#![feature(rustc_private)], rustc_middle::mir)
 ├── crates/
-│   ├── deap-core/                  # Shared AST models (sysml_ast, `deap_core::rust_cst` and `deap_core::dart_cst`), rules, diagnostics, markdown
-│   ├── verify-baseline/            # 38-gate architectural, structural, and parity verification runner
-│   ├── compile-sysml/              # SysML v2 lexer, recursive-descent parser, SHA-256 digest, STPA & sync
-│   ├── ingest-sysml/               # Ground 0.0 multi-format Level 0 schema ingestion CLI
+│   ├── deap-core/                  # Lossless CST/AST core (deap_core::sysml_cst, deap_core::rust_cst, deap_core::dart_cst), rules, diagnostics, markdown
+│   ├── verify-baseline/            # 41-gate architectural, structural, CST, and 5-Stage formal verification runner
+│   ├── compile-sysml/              # SysML v2.0 + KerML 1.0 logos+rowan+salsa compiler, SHA-256 digest, STPA, CST sync & syn/quote/prettyplease codegen
+│   ├── ingest-sysml/               # Ground 0.0 multi-format Level 0 schema CST ingestion CLI
 │   ├── assemble-conops/            # Deterministic Concept of Operations & Mission Intent assembler
 │   └── reconcile-backlog/          # Bidirectional GitHub/GitLab Agile backlog & WBS reconciler
 ```
 
-### 2.1 Crate Distribution
+### 2.1 Crate Distribution & Official Compiler-Crate Stack (Contract B)
 
-| Crate | Primary Modules | Responsibility in Metadata & AST Architecture |
+All workspace crates enforce a strict 3-Layer Definition of Done targeting `< 380`-SLOC submodules and explicit legacy hand-rolled scanner deletion (zero hand-rolled character/line scanners):
+
+| Crate | Primary Modules | Responsibility in Metadata, CST & AST Architecture |
 | :--- | :--- | :--- |
-| **`crates/deap-core`** | `src/sysml_ast/mod.rs`, `deap_core::rust_cst` and `deap_core::dart_cst`, `src/rules.rs`, `src/diagnostics.rs`, `src/markdown.rs`, `src/workspace.rs` | Defines canonical SysML v2 AST models (`PackageDef`, `PartDef`, `PortDef`, `AttributeDef`, `FlowDef`, `ActionDef`, `ConstraintDef`, `RequirementDef`, `StateDef`, `ConnectionDef`, `CalcDef`, `SysmlModel`), multi-format schema discovery (`UnifiedSchemaModelExtractor`, `SupportedSchemaExtension`, `SupportedExtensionsCatalog`), and `deap_core::rust_cst` and `deap_core::dart_cst` lowering (`SourceItem`, `lower_cst_to_package`). |
-| **`crates/compile-sysml`** | `src/lib.rs`, `src/parser/grammar.rs`, `src/semantic/digest.rs`, `src/stpa/`, `src/sync/`, `src/flutter_codegen.rs` | Parses textual SysML v2 models (`SysmlParser`, `parse_sysml_tree`), computes atomic SHA-256 digests (`SchemaDigest`, `FileDigestEntry`, `generate_digest`), synthesizes STPA/FMECA matrices, executes bidirectional specification sync, and deterministically generates Flutter contracts, seeds, and C-ABI DTOs (`crates/compile-sysml/src/flutter_codegen.rs`). |
-| **`crates/verify-baseline`** | `src/runner.rs`, `src/checks/parity_gates.rs`, `src/checks/domain_cleanliness_gate.rs`, `src/checks/codebase.rs` | Enforces 41 deterministic verification gates across AST parity, schema cleanliness, traceability, Mermaid/KaTeX rendering, defect dossiers, and adversarial AST codebase checks 38-41 (`crates/verify-baseline/src/checks/codebase.rs`). |
-| **`crates/ingest-sysml`** | `src/lib.rs`, `src/main.rs` | Discovers and translates Level 0 specifications (`.sysml`, `.yaml`, `.yml`, `.json`, `.proto`, `.idl`, `.arxml`, `.md`, `.yang`) into `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. |
-| **`crates/assemble-conops`** | `src/lib.rs`, `src/main.rs` | Assembles hierarchical Concept of Operations and Tactical Mission Intent specification units from pure schema contracts. |
-| **`crates/reconcile-backlog`** | `src/lib.rs`, `src/main.rs` | Synchronizes local Epics, Features, User Stories, Use Cases, and WBS registers with the remote issue tracker. |
+| **`crates/deap-core`** | `src/sysml_ast/mod.rs`, `deap_core::sysml_cst`, `deap_core::rust_cst`, `deap_core::dart_cst`, `src/rules.rs`, `src/diagnostics.rs`, `src/markdown.rs`, `src/workspace.rs` | Defines canonical 100% OMG SysML v2.0 + KerML 1.0 AST/HIR models (`src/sysml_ast/mod.rs`) and lossless CSTs (`deap_core::sysml_cst` via `logos` + `rowan` + `salsa` + `ariadne`), lossless Rust CST inspection & codemods (`deap_core::rust_cst` via `ra_ap_syntax` `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr, Fn, HasDocComments, HasAttrs}`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`), lossless Dart CST (`deap_core::dart_cst` via `logos` + `rowan`), lossless CommonMark AST (`pulldown-cmark` + `pulldown-cmark-to-cmark`), Cargo workspace/manifest inspection (`cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`), and multi-format schema discovery (`UnifiedSchemaModelExtractor`, `SupportedSchemaExtension`, `SupportedExtensionsCatalog`). |
+| **`crates/compile-sysml`** | `src/lib.rs`, `src/parser/grammar/mod.rs`, `src/semantic/digest.rs`, `src/stpa/`, `src/sync/`, `src/modular_codegen/mod.rs`, `src/flutter_codegen.rs` | Parses 100% normative OMG SysML v2.0 + KerML 1.0 models via `logos` + `rowan` + `salsa` (`deap_core::sysml_cst`, `SysmlParser`, `parse_sysml_tree`), computes atomic SHA-256 digests (`SchemaDigest`, `FileDigestEntry`, `generate_digest`), synthesizes STPA/FMECA matrices, executes formatting-preserving CST-splice bidirectional sync, and emits deterministic Fixed-Point Rust/Flutter code (`syn` + `proc-macro2` + `quote` + `prettyplease`), `flutter_rust_bridge` Ring-2 guards, and Stage-4 `#[kani::proof]` harnesses (`crates/compile-sysml/src/modular_codegen/mod.rs`, `crates/compile-sysml/src/flutter_codegen.rs`). |
+| **`crates/verify-baseline`** | `src/runner.rs`, `src/checks/parity_gates.rs`, `src/checks/domain_cleanliness_gate.rs`, `src/checks/codebase.rs` | Enforces 41 deterministic verification gates across AST/CST parity, schema cleanliness, traceability, `pulldown-cmark` Markdown/Mermaid/KaTeX rendering, defect dossiers, adversarial CST codebase checks 38-41 (`crates/verify-baseline/src/checks/codebase.rs`), and the 5-Stage Compiler & Ferrocene Verification Gatekeeper (Stage 1 `rustc`/`cargo clippy --message-format=json` -> Stage 2 `./lints/deap-dylint-mir/` -> Stage 3 `cargo miri` + `flutter_rust_bridge` -> Stage 4 `cargo kani` `#[kani::proof]` -> Stage 5 Ferrocene `criticalup.toml` + `[FLS: fls_*]` + `symbol-report`/`blanket` MC/DC + 3-Ring DAL-A..E partitioning). |
+| **`crates/ingest-sysml`** | `src/lib.rs`, `src/main.rs`, `src/translators/mod.rs`, `ingest_sysml::cst::{idl_cst, yang_cst}` | Discovers and translates all `SupportedSchemaExtension` Level 0 specifications (`.sysml`, `.yaml`, `.yml`, `.json`, `.proto`, `.idl`, `.arxml`, `.md`, `.markdown`, `.yang`, plus polyglot `.rs` and `.dart` CSTs) into `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` via `deap_core::sysml_cst`, `ingest_sysml::cst::{idl_cst, yang_cst}`, `pulldown-cmark` + `pulldown-cmark-to-cmark`, and typed `serde_json` OpenAPI/JSON-Schema CST/AST translators with zero hand-rolled scanners. |
+| **`crates/assemble-conops`** | `src/lib.rs`, `src/main.rs` | Assembles hierarchical Concept of Operations and Tactical Mission Intent specification units from pure schema contracts using `pulldown-cmark` + `pulldown-cmark-to-cmark`. |
+| **`crates/reconcile-backlog`** | `src/lib.rs`, `src/main.rs` | Synchronizes local Epics, Features, User Stories, Use Cases, and WBS registers with the remote issue tracker using lossless `pulldown-cmark` AST and `--message-format=json` diagnostics. |
 
 ---
 
 ## 3. Core AST Models & Runtime Metadata Projection Contracts
 
-### 3.1 Canonical SysML v2 AST Structures (`crates/deap-core/src/sysml_ast/mod.rs`)
+### 3.1 Contract A: 100% Normative OMG SysML v2.0 + KerML 1.0 Textual Grammar Coverage (`crates/deap-core/src/sysml_ast/mod.rs` & `deap_core::sysml_cst`)
+
+The lossless `logos` + `rowan` + `salsa` + `ariadne` frontend (`deap_core::sysml_cst`) and lowered HIR metamodel (`crates/deap-core/src/sysml_ast/mod.rs`) enforce **100% normative OMG SysML v2.0 + KerML 1.0 textual grammar coverage** with full Definition & Usage symmetry across all normative clauses and **zero 16-construct artificial caps**:
+
+1. **Namespaces & Metadata**: `package`, `library package`, `standard library package`, `import` (`all`, `::*`, `::**`, filter `[...]`), `alias`, `doc`, `comment`, `rep`, `dependency`, `metadata def` / `metadata` / `@Metadata` / `#user_keyword` (`#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` via standard OMG SysML v2 `metadata def` keywords while preserving backward-compatible parsing of legacy `hazard def` / `risk def` / `capability def`).
+2. **Structural & Data Types**: `attribute def`/`attribute`, `enum def`/`enum`, `item def`/`item`, `part def`/`part`, `port def`/`port` (`in`, `out`, `inout`, `~` conjugation), `connection def`/`connection` (`connect ... to ...`), `interface def`/`interface`, `flow def`/`flow` (`of ... from ... to ...`), `allocation def`/`allocation` (`allocate ... to ...`), `occurrence def`/`occurrence` (`individual`, `snapshot`, `timeslice`).
+3. **Behavioral & State**: `action def`/`action` (`perform`, `accept`, `send`, `assign`, `if`/`else`, `while`/`loop`, `for`, `fork`, `join`, `merge`, `decide`, `first ... then ...` succession), `state def`/`state` (`exhibit`, `parallel`, `entry`, `do`, `exit`, `transition first ... accept ... if ... do ... then ...`).
+4. **Calculations, Constraints & Requirements**: `calc def`/`calc` (`return`), `constraint def`/`constraint` (`assert`, `assume`, `require`), `requirement def`/`requirement` (`subject`, `actor`, `stakeholder`, `framed concern`, `satisfy ... by ...`), `concern def`/`concern`.
+5. **Use Cases, Analysis, Verification & Views**: `use case def`/`use case` (`include use case`), `analysis def`/`analysis` (`objective`), `verification def`/`verification` (`verify requirement`), `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering` (`expose`, `filter`, `render`), `variation`/`variant`.
+6. **KerML 1.0 Specialization, Multiplicity & Expressions**: `:` (`defined by`), `:>` (`subsets`), `:>>` (`redefines`), `::>` (`references`), `~` (`conjugates`), `ref`, `abstract`, `readonly`, `derived`, `end`, `default`, `:=`, `[lo..hi]`, `[*]`, `{ordered, nonunique}`, full KerML logical/conditional/relational/arithmetic/collection expressions (`implies`, `xor`, `??`, `->`, `collect`, `select`, `forAll`, `exists`), and `ISQ`/`SI`/`ScalarValues` standard libraries.
 
 The authoritative structural and behavioral metadata in `crates/deap-core/src/sysml_ast/mod.rs` is represented by strongly-typed, `serde`-serializable AST definitions:
 
@@ -283,7 +296,12 @@ Any peripheral nodes exceeding the 4,096 token boundary are stubbed as opaque in
 
 ## 5. Multi-Source Pluggable Data Source Engine
 
-The Metadata Engine supports three canonical data source implementations operating without compile-time domain code, backed by `UnifiedSchemaModelExtractor` (`crates/deap-core/src/sysml_ast/mod.rs`) across all 10 `SupportedSchemaExtension` formats (`.sysml`, `.yaml`, `.yml`, `.json`, `.proto`, `.idl`, `.arxml`, `.md`, `.markdown`, `.yang`):
+The Metadata Engine supports three canonical data source implementations operating without compile-time domain code, backed by `UnifiedSchemaModelExtractor` (`crates/deap-core/src/sysml_ast/mod.rs`) across all `SupportedSchemaExtension` formats (`.sysml`, `.yaml`, `.yml`, `.json`, `.proto`, `.idl`, `.arxml`, `.md`, `.markdown`, `.yang`, plus polyglot source lowering for `.rs` and `.dart`) using the official compiler-crate CST/AST stack with **zero hand-rolled scanners**:
+- **`.sysml`**: `logos` + `rowan` + `salsa` + `ariadne` (`deap_core::sysml_cst`) covering 100% of the normative OMG SysML v2.0 + KerML 1.0 textual grammar (Contract A);
+- **`.idl` & `.yang`**: lossless `logos` + `rowan` CST frontends (`ingest_sysml::cst::{idl_cst, yang_cst}`);
+- **`.json`, `.yaml`, `.yml` (OpenAPI 3.0/3.1 & JSON-Schema)**: typed `serde_json` AST deserialization;
+- **`.md` & `.markdown`**: lossless CommonMark AST via `pulldown-cmark` + `pulldown-cmark-to-cmark`;
+- **`.rs` & `.dart`**: lossless Rust CST (`deap_core::rust_cst` via `ra_ap_syntax`) and lossless Dart CST (`deap_core::dart_cst` via `logos` + `rowan`).
 
 ### 5.1 Relational Schema Dictionary (SQLite Backend)
 
@@ -328,11 +346,11 @@ CREATE TABLE type_relations (
 - Ingests compiled SysML v2 AST from `.pipeline/schema.sysml` via `compile_sysml::parse_sysml_tree` and verifies SHA-256 integrity via `.pipeline/schema-digest.json` (`compile_sysml::semantic::digest::SchemaDigest`).
 - Extracts `PartDef`, `PortDef`, `ActionDef`, and `ConstraintDef` nodes directly into the runtime `TypeDescriptor` pool.
 
-### 5.4 Option 1C Typed InstanceRecord Views & Zero-Trust C-ABI Bridge (`crates/compile-sysml/src/flutter_codegen.rs`)
+### 5.4 Option 1C Typed InstanceRecord Views, `flutter_rust_bridge` & Zero-Trust C-ABI Bridge (`crates/compile-sysml/src/flutter_codegen.rs`)
 To resolve the tension between dynamic SQLite metadata discovery and compile-time type safety:
-- **Option 1C App Glue Architecture**: `crates/compile-sysml/src/flutter_codegen.rs` deterministically synthesizes `app_flutter/lib/data/seeds/generated_domain_seed.g.dart` (populating all 5 canonical SQLite tables `type_definitions`, `type_attributes`, `type_relations`, `properties`, and `instances` from `.pipeline/schema.sysml` and `topology_data.json`) and typed `InstanceRecord` views in `app_flutter/lib/models/generated_schema_models.g.dart`, realizing `DEAP-BLUEPRINT-APP-GLUE-001` (`docs/designs/option-1c-rust-app-glue-ui-contracts-and-anti-fabrication-blueprint.md`, GitHub Feature Issue `#489`).
-- **Zero-Trust Deterministic Rust C-ABI Bridge**: `compile-sysml` synthesizes `app_flutter/lib/data/generated/solver_bridge.g.dart` providing zero-trust `DeapByteBuffer` FFI bindings to native Rust solvers, realizing `DEAP-BLUEPRINT-CABI-001` (`docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md`, GitHub Feature Issue `#483`).
-- **Verification Gates**: Validated automatically in `verify-baseline` via `crates/verify-baseline/src/checks/codebase.rs` (Checks 38-41).
+- **Option 1C App Glue Architecture**: `crates/compile-sysml/src/flutter_codegen.rs` and `crates/compile-sysml/src/modular_codegen/mod.rs` (`syn` + `proc-macro2` + `quote` + `prettyplease`) deterministically synthesize `app_flutter/lib/data/seeds/generated_domain_seed.g.dart` (populating all 5 canonical SQLite tables `type_definitions`, `type_attributes`, `type_relations`, `properties`, and `instances` from `.pipeline/schema.sysml` and `topology_data.json`) and typed `InstanceRecord` views in `app_flutter/lib/models/generated_schema_models.g.dart`, realizing `DEAP-BLUEPRINT-APP-GLUE-001` (`docs/designs/option-1c-rust-app-glue-ui-contracts-and-anti-fabrication-blueprint.md`, GitHub Feature Issue `#489`).
+- **Zero-Trust Deterministic Rust C-ABI & `flutter_rust_bridge` Ring-2 Bridge**: `compile-sysml` synthesizes `app_flutter/lib/data/generated/solver_bridge.g.dart` and `flutter_rust_bridge` Ring-2 FFI guards providing zero-trust `DeapByteBuffer` FFI bindings to native Ring-1 `#![no_std]` Rust solvers across 3-Ring DAL-A..E partitions, realizing `DEAP-BLUEPRINT-CABI-001` (`docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md`, GitHub Feature Issue `#483`).
+- **Verification Gates**: Validated automatically in `verify-baseline` via `crates/verify-baseline/src/checks/codebase.rs` (Checks 38-41) and the 5-Stage Compiler & Ferrocene Gatekeeper (Stage 1 `rustc`/`cargo clippy --message-format=json` -> Stage 2 isolated `./lints/deap-dylint-mir/` -> Stage 3 `cargo miri` + `flutter_rust_bridge` -> Stage 4 `cargo kani` `#[kani::proof]` -> Stage 5 Ferrocene `criticalup.toml` + `[FLS: fls_*]` + `symbol-report`/`blanket` MC/DC) with cross-platform runtime `PATH` discovery (`std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}`, `camino::Utf8Path`) across macOS, Linux, and Windows.
 
 ---
 
