@@ -1,0 +1,8 @@
+[package]
+name = "deap-dylint-mir"
+version = "0.1.0"
+edition = "2021"
+description = "Isolated Stage-2 Nightly Dylint MIR gatekeeper plugin (BP-09 / FEAT-51)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]

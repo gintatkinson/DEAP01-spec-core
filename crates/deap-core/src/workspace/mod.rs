@@ -28,6 +28,8 @@
 pub mod cargo_tooling;
 pub mod checks;
 pub mod clippy_gate;
+pub mod dylint_gate;
+pub mod ferrocene_gate;
 
 #[cfg(test)]
 mod workspace_tests;
@@ -45,4 +47,15 @@ pub use clippy_gate::{
     filter_clippy_ndjson_stream, run_stable_clippy_gate, validate_manifest_and_clippy_bundle,
     ClippyGateError, ClippyNdjsonFinding, ManifestBundleDigest, StableClippyGateConfig,
     StageGateReceipt, MANDATORY_DENIED_CLIPPY_LINTS,
+};
+pub use dylint_gate::{
+    audit_source_in_process, probe_executable_in_path, run_stage2_dylint_gate,
+    verify_workspace_exclude, DylintFinding, DylintGateError, Stage2DylintConfig,
+    Stage2DylintReceipt,
+};
+pub use ferrocene_gate::{
+    probe_ferrocene_driver, run_stage5_ferrocene_gate, verify_certified_core_and_coverage,
+    verify_dual_toolchain_parity, verify_fls_traceability,
+    verify_three_ring_coupling_and_monitor, CoverageSummary, DualToolchainSpec,
+    FerroceneGateError, SafetyMonitorEnvelope, Stage5FerroceneReceipt,
 };

@@ -32,6 +32,7 @@ pub mod envelope;
 pub mod extract_module;
 pub mod gate;
 pub mod items;
+pub mod kani_proofs;
 pub mod metrics;
 pub mod parse;
 pub mod source_bridge;
@@ -61,6 +62,11 @@ pub use gate::{
     evaluate_metrics, evaluate_metrics_and_format_ndjson, run_offline_locked_workspace_gate,
 };
 pub use items::{list_rust_items, RustCstItem, RustItemKind};
+pub use kani_proofs::{
+    evaluate_stage4_kani, guard_inbound_frb_f64, probe_formal_driver,
+    synthesize_kani_proof_module, FrbGuardError, FrbPortGuardSpec, KaniProofHarnessSpec,
+    KaniStageReceipt,
+};
 pub use metrics::{
     analyze_cst_v2_metrics, extract_callable_v2_metrics, DeapV2AstMetricsReport, FnAstMetrics,
 };

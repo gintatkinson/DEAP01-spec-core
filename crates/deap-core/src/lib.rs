@@ -69,6 +69,11 @@ pub use rust_cst::{
     LockedPackageRecord, OfflineLockGovernanceError, PackageSourceKind,
     SupplyChainVerificationReceipt, VerifiedLosslessCst,
 };
+pub use salsa_db::{
+    create_vfs_salsa_input, file_diagnostics_query, parse_cst_query, semantic_metrics_query,
+    FileDiagnostics, IncrementalDatabase, ParsedCstSummary, SalsaDatabase,
+    SemanticMetricsSummary, SourceFileInput,
+};
 pub use source_ast::{
     classify_dart_member_ast, classify_dart_top_level_ast, classify_rust_item_line_ast,
     contains_direct_range_slice, discover_source_files, extract_component_method_table,
