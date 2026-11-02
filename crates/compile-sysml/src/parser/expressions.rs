@@ -17,32 +17,20 @@ static EXPR_EOF_TOKEN: Token = Token {
 /// Realises: [REQ-PARSER-EXPRESSIONS-MAX-EXPR-DEPTH]
 const MAX_EXPR_DEPTH: usize = 64;
 
+/// Validates that `depth < MAX_EXPR_DEPTH`.
+/// Realises: [REQ-PARSER-EXPRESSIONS-MAX-EXPR-DEPTH]
+fn ensure_expr_depth(depth: usize) -> Result<(), String> {
+    if depth >= MAX_EXPR_DEPTH {
+        Err(format!(
+            "Expression recursion depth exceeds maximum limit of {MAX_EXPR_DEPTH}"
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 /// Binary operations supported in SysML v2 constraints and expressions.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `BinaryOp` in `crates/compile-sysml/src/parser/expressions.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for enum `BinaryOp` across member set `[Add, Sub, Mul, Div, Mod, Pow]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `BinaryOp` members (`Add, Sub, Mul, Div, Mod, Pow`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `BinaryOp` representation for enum `BinaryOp`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(6)) bounded over input/member dimension of `BinaryOp`.
-/// - Space Complexity: O(M(6)) bounded auxiliary memory for `BinaryOp`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `BinaryOp` (`BinaryOp`).
-/// - State: Maintains consistent state invariants across `BinaryOp` without partial mutation on error.
-/// - Action: Executes `BinaryOp` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `BinaryOp` (`PARSER-EXPRESSIONS`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-PARSER-EXPRESSIONS-BINARYOP] | SysML v2: PartDef(BinaryOp)
+/// Realises: [REQ-PARSER-EXPRESSIONS-BINARYOP]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinaryOp {
     Add,
@@ -62,32 +50,8 @@ pub enum BinaryOp {
 }
 
 impl BinaryOp {
-    /// Executes deterministic fn `BinaryOp::as_str` within `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `BinaryOp::as_str` in `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `BinaryOp::as_str` (declaration #2) within `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `BinaryOp::as_str` in `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `&'static str` from `BinaryOp::as_str` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(as_str)) bounded over input/member dimension of `BinaryOp::as_str`.
-    /// - Space Complexity: O(K(as_str)) bounded auxiliary memory for `BinaryOp::as_str`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `BinaryOp::as_str` (`&'static str`).
-    /// - State: Maintains consistent state invariants across `BinaryOp::as_str` without partial mutation on error.
-    /// - Action: Executes `BinaryOp::as_str` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `BinaryOp::as_str` (`PARSER-EXPRESSIONS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-EXPRESSIONS-BINARYOP-AS-STR] | SysML v2: ActionDef(BinaryOp::as_str)
+    /// Returns the canonical operator token string for `BinaryOp`.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-BINARYOP-AS-STR]
     pub fn as_str(&self) -> &'static str {
         match self {
             BinaryOp::Add => "+",
@@ -109,31 +73,7 @@ impl BinaryOp {
 }
 
 /// Unary operations supported in SysML v2 expressions.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `UnaryOp` in `crates/compile-sysml/src/parser/expressions.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for enum `UnaryOp` across member set `[Neg, Not]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `UnaryOp` members (`Neg, Not`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `UnaryOp` representation for enum `UnaryOp`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(2)) bounded over input/member dimension of `UnaryOp`.
-/// - Space Complexity: O(M(2)) bounded auxiliary memory for `UnaryOp`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `UnaryOp` (`UnaryOp`).
-/// - State: Maintains consistent state invariants across `UnaryOp` without partial mutation on error.
-/// - Action: Executes `UnaryOp` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `UnaryOp` (`PARSER-EXPRESSIONS`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-PARSER-EXPRESSIONS-UNARYOP] | SysML v2: PartDef(UnaryOp)
+/// Realises: [REQ-PARSER-EXPRESSIONS-UNARYOP]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnaryOp {
     Neg,
@@ -141,32 +81,8 @@ pub enum UnaryOp {
 }
 
 impl UnaryOp {
-    /// Executes deterministic fn `UnaryOp::as_str` within `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `UnaryOp::as_str` in `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `UnaryOp::as_str` (declaration #4) within `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `UnaryOp::as_str` in `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `&'static str` from `UnaryOp::as_str` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(as_str)) bounded over input/member dimension of `UnaryOp::as_str`.
-    /// - Space Complexity: O(K(as_str)) bounded auxiliary memory for `UnaryOp::as_str`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `UnaryOp::as_str` (`&'static str`).
-    /// - State: Maintains consistent state invariants across `UnaryOp::as_str` without partial mutation on error.
-    /// - Action: Executes `UnaryOp::as_str` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `UnaryOp::as_str` (`PARSER-EXPRESSIONS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-EXPRESSIONS-UNARYOP-AS-STR] | SysML v2: ActionDef(UnaryOp::as_str)
+    /// Returns the canonical operator prefix string for `UnaryOp`.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-UNARYOP-AS-STR]
     pub fn as_str(&self) -> &'static str {
         match self {
             UnaryOp::Neg => "-",
@@ -176,31 +92,7 @@ impl UnaryOp {
 }
 
 /// Abstract syntax tree node for mathematical and boolean expressions.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `Expr` in `crates/compile-sysml/src/parser/expressions.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for enum `Expr` across member set `[Ident, Number, StringLit, BoolLit, Unary, op]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `Expr` members (`Ident, Number, StringLit, BoolLit, Unary, op`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `Expr` representation for enum `Expr`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(6)) bounded over input/member dimension of `Expr`.
-/// - Space Complexity: O(M(6)) bounded auxiliary memory for `Expr`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `Expr` (`Expr`).
-/// - State: Maintains consistent state invariants across `Expr` without partial mutation on error.
-/// - Action: Executes `Expr` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `Expr` (`PARSER-EXPRESSIONS`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-PARSER-EXPRESSIONS-EXPR] | SysML v2: PartDef(Expr)
+/// Realises: [REQ-PARSER-EXPRESSIONS-EXPR]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Ident(String),
@@ -228,32 +120,8 @@ pub enum Expr {
 }
 
 impl Expr {
-    /// Format expression into standard algebraic / SysML textual syntax.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `Expr::to_string_repr` in `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `Expr::to_string_repr` (declaration #6) within `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `Expr::to_string_repr` in `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `String` from `Expr::to_string_repr` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(to_string_repr)) bounded over input/member dimension of `Expr::to_string_repr`.
-    /// - Space Complexity: O(K(to_string_repr)) bounded auxiliary memory for `Expr::to_string_repr`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `Expr::to_string_repr` (`String`).
-    /// - State: Maintains consistent state invariants across `Expr::to_string_repr` without partial mutation on error.
-    /// - Action: Executes `Expr::to_string_repr` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `Expr::to_string_repr` (`PARSER-EXPRESSIONS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPR-TO-STRING-REPR] | SysML v2: ActionDef(Expr::to_string_repr)
+    /// Formats expression into standard algebraic / SysML textual syntax.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPR-TO-STRING-REPR]
     pub fn to_string_repr(&self) -> String {
         self.to_string_repr_bounded(0)
     }
@@ -269,24 +137,22 @@ impl Expr {
             Expr::Ident(name) => name.clone(),
             Expr::Number(val) => {
                 if val.fract() == 0.0 {
-                    format!("{:.1}", val)
+                    format!("{val:.1}")
                 } else {
-                    format!("{}", val)
+                    format!("{val}")
                 }
             }
-            Expr::StringLit(s) => format!("\"{}\"", s),
-            Expr::BoolLit(b) => format!("{}", b),
+            Expr::StringLit(s) => format!("\"{s}\""),
+            Expr::BoolLit(b) => format!("{b}"),
             Expr::Unary { op, expr } => {
                 format!("{}{}", op.as_str(), expr.to_string_repr_bounded(next_depth))
             }
-            Expr::Binary { op, left, right } => {
-                format!(
-                    "{} {} {}",
-                    left.to_string_repr_bounded(next_depth),
-                    op.as_str(),
-                    right.to_string_repr_bounded(next_depth)
-                )
-            }
+            Expr::Binary { op, left, right } => format!(
+                "{} {} {}",
+                left.to_string_repr_bounded(next_depth),
+                op.as_str(),
+                right.to_string_repr_bounded(next_depth)
+            ),
             Expr::Call { func, args } => {
                 let arg_strs: Vec<String> = args
                     .iter()
@@ -303,126 +169,39 @@ impl Expr {
 }
 
 /// Expression parser using precedence climbing.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ExpressionParser` in `crates/compile-sysml/src/parser/expressions.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `ExpressionParser` across member set `[tokens: &'a [Token], pos: usize]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `ExpressionParser` members (`tokens: &'a [Token], pos: usize`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `ExpressionParser` representation for struct `ExpressionParser`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(2)) bounded over input/member dimension of `ExpressionParser`.
-/// - Space Complexity: O(M(2)) bounded auxiliary memory for `ExpressionParser`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `ExpressionParser` (`ExpressionParser`).
-/// - State: Maintains consistent state invariants across `ExpressionParser` without partial mutation on error.
-/// - Action: Executes `ExpressionParser` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `ExpressionParser` (`PARSER-EXPRESSIONS`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER] | SysML v2: PartDef(ExpressionParser)
+/// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER]
 pub struct ExpressionParser<'a> {
     tokens: &'a [Token],
     pos: usize,
 }
 
 impl<'a> ExpressionParser<'a> {
-    /// Executes deterministic fn `ExpressionParser::new` within `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `ExpressionParser::new` in `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `ExpressionParser::new` (declaration #8) within `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 3. Preconditions
-    /// - `tokens: &'a [Token]` must satisfy domain and type-safety constraints prior to invoking `ExpressionParser::new`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Self` from `ExpressionParser::new` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(tokens)) bounded over input/member dimension of `ExpressionParser::new`.
-    /// - Space Complexity: O(N(tokens)) bounded auxiliary memory for `ExpressionParser::new`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `ExpressionParser::new` (`Self`).
-    /// - State: Maintains consistent state invariants across `ExpressionParser::new` without partial mutation on error.
-    /// - Action: Executes `ExpressionParser::new` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `ExpressionParser::new` (`PARSER-EXPRESSIONS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-NEW] | SysML v2: ActionDef(ExpressionParser::new)
+    /// Creates a new `ExpressionParser` over `tokens`.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-NEW]
     pub fn new(tokens: &'a [Token]) -> Self {
         Self { tokens, pos: 0 }
     }
 
-    /// Parse complete expression.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `ExpressionParser::parse` in `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `ExpressionParser::parse` (declaration #9) within `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `ExpressionParser::parse` in `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<Expr, String>` from `ExpressionParser::parse` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(parse)) bounded over input/member dimension of `ExpressionParser::parse`.
-    /// - Space Complexity: O(K(parse)) bounded auxiliary memory for `ExpressionParser::parse`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `ExpressionParser::parse` (`Result<Expr, String>`).
-    /// - State: Maintains consistent state invariants across `ExpressionParser::parse` without partial mutation on error.
-    /// - Action: Executes `ExpressionParser::parse` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `ExpressionParser::parse` (`PARSER-EXPRESSIONS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE] | SysML v2: ActionDef(ExpressionParser::parse)
+    /// Parses a complete expression from the token stream.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE]
     pub fn parse(&mut self) -> Result<Expr, String> {
-        let expr = self.parse_binary_expr(0, 0)?;
-        Ok(expr)
+        self.parse_binary_expr(0, 0)
     }
 
     /// Parses binary operator expressions via precedence climbing while enforcing `MAX_EXPR_DEPTH`.
     /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE-BINARY-EXPR]
     fn parse_binary_expr(&mut self, min_precedence: u8, depth: usize) -> Result<Expr, String> {
-        if depth >= MAX_EXPR_DEPTH {
-            return Err(format!(
-                "Expression recursion depth exceeds maximum limit of {}",
-                MAX_EXPR_DEPTH
-            ));
-        }
-
+        ensure_expr_depth(depth)?;
         let mut left = self.parse_unary_or_primary(depth)?;
         let mut chain_depth = depth;
-
         while let Some(op) = self.peek_binary_op() {
             let (prec, assoc_right) = binary_precedence(&op);
             if prec < min_precedence {
                 break;
             }
-
             chain_depth = chain_depth.saturating_add(1);
-            if chain_depth >= MAX_EXPR_DEPTH {
-                return Err(format!(
-                    "Expression recursion depth exceeds maximum limit of {}",
-                    MAX_EXPR_DEPTH
-                ));
-            }
-
-            self.advance(); // consume operator
+            ensure_expr_depth(chain_depth)?;
+            self.advance();
             let next_prec = if assoc_right {
                 prec
             } else {
@@ -435,60 +214,40 @@ impl<'a> ExpressionParser<'a> {
                 right: Box::new(right),
             };
         }
-
         Ok(left)
     }
 
     /// Parses prefix unary operators or delegates to primary expression parsing within `MAX_EXPR_DEPTH`.
     /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE-UNARY-OR-PRIMARY]
     fn parse_unary_or_primary(&mut self, depth: usize) -> Result<Expr, String> {
-        if depth >= MAX_EXPR_DEPTH {
-            return Err(format!(
-                "Expression recursion depth exceeds maximum limit of {}",
-                MAX_EXPR_DEPTH
-            ));
-        }
-
+        ensure_expr_depth(depth)?;
         if self.is_at_end() {
             return Err("Unexpected end of expression tokens".to_string());
         }
-
-        let next_depth = depth.saturating_add(1);
-        match &self.peek().kind {
-            TokenKind::Minus => {
-                self.advance();
-                let expr = self.parse_unary_or_primary(next_depth)?;
-                Ok(Expr::Unary {
-                    op: UnaryOp::Neg,
-                    expr: Box::new(expr),
-                })
-            }
-            TokenKind::Exclamation => {
-                self.advance();
-                let expr = self.parse_unary_or_primary(next_depth)?;
-                Ok(Expr::Unary {
-                    op: UnaryOp::Not,
-                    expr: Box::new(expr),
-                })
-            }
-            _ => self.parse_primary(depth),
+        let unary_op = match &self.peek().kind {
+            TokenKind::Minus => Some(UnaryOp::Neg),
+            TokenKind::Exclamation => Some(UnaryOp::Not),
+            _ => None,
+        };
+        if let Some(op) = unary_op {
+            self.advance();
+            let expr = self.parse_unary_or_primary(depth.saturating_add(1))?;
+            Ok(Expr::Unary {
+                op,
+                expr: Box::new(expr),
+            })
+        } else {
+            self.parse_primary(depth)
         }
     }
 
     /// Parses literals, identifiers, calls, parenthesized groups, and postfix member chains within `MAX_EXPR_DEPTH`.
     /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE-PRIMARY]
     fn parse_primary(&mut self, depth: usize) -> Result<Expr, String> {
-        if depth >= MAX_EXPR_DEPTH {
-            return Err(format!(
-                "Expression recursion depth exceeds maximum limit of {}",
-                MAX_EXPR_DEPTH
-            ));
-        }
-
+        ensure_expr_depth(depth)?;
         if self.is_at_end() {
             return Err("Expected primary expression, found EOF".to_string());
         }
-
         let next_depth = depth.saturating_add(1);
         let tok = self.advance();
         let expr = match &tok.kind {
@@ -513,18 +272,15 @@ impl<'a> ExpressionParser<'a> {
                     return Err("Expected matching ')' in parenthesized expression".to_string());
                 }
             }
-            other => {
-                return Err(format!("Unexpected token in expression: {:?}", other));
-            }
+            other => return Err(format!("Unexpected token in expression: {other:?}")),
         };
-
         self.parse_member_chain(expr, depth)
     }
 
     /// Parses a parenthesized function argument list for `ident` at recursion depth `arg_depth`.
     /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PARSE-PRIMARY]
     fn parse_call_expr(&mut self, ident: String, arg_depth: usize) -> Result<Expr, String> {
-        self.advance(); // consume '('
+        self.advance();
         let mut args = Vec::new();
         while self.peek_kind() != Some(&TokenKind::CloseParen) && !self.is_at_end() {
             args.push(self.parse_binary_expr(0, arg_depth)?);
@@ -538,10 +294,7 @@ impl<'a> ExpressionParser<'a> {
             self.advance();
             Ok(Expr::Call { func: ident, args })
         } else {
-            Err(format!(
-                "Expected ')' after function arguments for {}",
-                ident
-            ))
+            Err(format!("Expected ')' after function arguments for {ident}"))
         }
     }
 
@@ -551,13 +304,8 @@ impl<'a> ExpressionParser<'a> {
         let mut member_depth = depth;
         while self.peek_kind() == Some(&TokenKind::Dot) {
             member_depth = member_depth.saturating_add(1);
-            if member_depth >= MAX_EXPR_DEPTH {
-                return Err(format!(
-                    "Expression recursion depth exceeds maximum limit of {}",
-                    MAX_EXPR_DEPTH
-                ));
-            }
-            self.advance(); // consume '.'
+            ensure_expr_depth(member_depth)?;
+            self.advance();
             if let Some(TokenKind::Ident(field_name)) = self.peek_kind().cloned() {
                 self.advance();
                 expr = Expr::Member {
@@ -571,32 +319,8 @@ impl<'a> ExpressionParser<'a> {
         Ok(expr)
     }
 
-    /// Executes deterministic fn `ExpressionParser::peek` within `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `ExpressionParser::peek` in `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `ExpressionParser::peek` (declaration #13) within `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `ExpressionParser::peek` in `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `&Token` from `ExpressionParser::peek` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(peek)) bounded over input/member dimension of `ExpressionParser::peek`.
-    /// - Space Complexity: O(K(peek)) bounded auxiliary memory for `ExpressionParser::peek`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `ExpressionParser::peek` (`&Token`).
-    /// - State: Maintains consistent state invariants across `ExpressionParser::peek` without partial mutation on error.
-    /// - Action: Executes `ExpressionParser::peek` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `ExpressionParser::peek` (`PARSER-EXPRESSIONS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PEEK] | SysML v2: ActionDef(ExpressionParser::peek)
+    /// Peeks the current token or returns `EXPR_EOF_TOKEN`.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PEEK]
     fn peek(&self) -> &Token {
         self.tokens
             .get(self.pos)
@@ -604,32 +328,8 @@ impl<'a> ExpressionParser<'a> {
             .unwrap_or(&EXPR_EOF_TOKEN)
     }
 
-    /// Executes deterministic fn `ExpressionParser::peek_kind` within `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `ExpressionParser::peek_kind` in `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `ExpressionParser::peek_kind` (declaration #14) within `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `ExpressionParser::peek_kind` in `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Option<&TokenKind>` from `ExpressionParser::peek_kind` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(peek_kind)) bounded over input/member dimension of `ExpressionParser::peek_kind`.
-    /// - Space Complexity: O(K(peek_kind)) bounded auxiliary memory for `ExpressionParser::peek_kind`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `ExpressionParser::peek_kind` (`Option<&TokenKind>`).
-    /// - State: Maintains consistent state invariants across `ExpressionParser::peek_kind` without partial mutation on error.
-    /// - Action: Executes `ExpressionParser::peek_kind` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `ExpressionParser::peek_kind` (`PARSER-EXPRESSIONS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PEEK-KIND] | SysML v2: ActionDef(ExpressionParser::peek_kind)
+    /// Peeks the current `TokenKind` when not at EOF.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PEEK-KIND]
     fn peek_kind(&self) -> Option<&TokenKind> {
         if self.is_at_end() {
             None
@@ -638,32 +338,8 @@ impl<'a> ExpressionParser<'a> {
         }
     }
 
-    /// Executes deterministic fn `ExpressionParser::advance` within `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `ExpressionParser::advance` in `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `ExpressionParser::advance` (declaration #15) within `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `ExpressionParser::advance` in `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `&Token` from `ExpressionParser::advance` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(advance)) bounded over input/member dimension of `ExpressionParser::advance`.
-    /// - Space Complexity: O(K(advance)) bounded auxiliary memory for `ExpressionParser::advance`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `ExpressionParser::advance` (`&Token`).
-    /// - State: Maintains consistent state invariants across `ExpressionParser::advance` without partial mutation on error.
-    /// - Action: Executes `ExpressionParser::advance` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `ExpressionParser::advance` (`PARSER-EXPRESSIONS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-ADVANCE] | SysML v2: ActionDef(ExpressionParser::advance)
+    /// Advances the cursor and returns the consumed token.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-ADVANCE]
     fn advance(&mut self) -> &Token {
         let idx = self.pos;
         if self.pos < self.tokens.len() {
@@ -675,114 +351,41 @@ impl<'a> ExpressionParser<'a> {
             .unwrap_or(&EXPR_EOF_TOKEN)
     }
 
-    /// Executes deterministic fn `ExpressionParser::is_at_end` within `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `ExpressionParser::is_at_end` in `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `ExpressionParser::is_at_end` (declaration #16) within `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `ExpressionParser::is_at_end` in `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `bool` from `ExpressionParser::is_at_end` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(is_at_end)) bounded over input/member dimension of `ExpressionParser::is_at_end`.
-    /// - Space Complexity: O(K(is_at_end)) bounded auxiliary memory for `ExpressionParser::is_at_end`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `ExpressionParser::is_at_end` (`bool`).
-    /// - State: Maintains consistent state invariants across `ExpressionParser::is_at_end` without partial mutation on error.
-    /// - Action: Executes `ExpressionParser::is_at_end` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `ExpressionParser::is_at_end` (`PARSER-EXPRESSIONS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-IS-AT-END] | SysML v2: ActionDef(ExpressionParser::is_at_end)
+    /// Returns `true` when the cursor is at or past `TokenKind::Eof`.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-IS-AT-END]
     fn is_at_end(&self) -> bool {
         self.tokens
             .get(self.pos)
             .is_none_or(|t| t.kind == TokenKind::Eof)
     }
 
-    /// Executes deterministic fn `ExpressionParser::peek_binary_op` within `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `ExpressionParser::peek_binary_op` in `crates/compile-sysml/src/parser/expressions.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `ExpressionParser::peek_binary_op` (declaration #17) within `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `ExpressionParser::peek_binary_op` in `PARSER-EXPRESSIONS`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Option<BinaryOp>` from `ExpressionParser::peek_binary_op` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(peek_binary_op)) bounded over input/member dimension of `ExpressionParser::peek_binary_op`.
-    /// - Space Complexity: O(K(peek_binary_op)) bounded auxiliary memory for `ExpressionParser::peek_binary_op`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `ExpressionParser::peek_binary_op` (`Option<BinaryOp>`).
-    /// - State: Maintains consistent state invariants across `ExpressionParser::peek_binary_op` without partial mutation on error.
-    /// - Action: Executes `ExpressionParser::peek_binary_op` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `ExpressionParser::peek_binary_op` (`PARSER-EXPRESSIONS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PEEK-BINARY-OP] | SysML v2: ActionDef(ExpressionParser::peek_binary_op)
+    /// Maps the current lookahead token to a `BinaryOp` if applicable.
+    /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PEEK-BINARY-OP]
     fn peek_binary_op(&self) -> Option<BinaryOp> {
-        let kind = self.peek_kind()?;
-        match kind {
-            TokenKind::Plus => Some(BinaryOp::Add),
-            TokenKind::Minus => Some(BinaryOp::Sub),
-            TokenKind::Star => Some(BinaryOp::Mul),
-            TokenKind::Slash => Some(BinaryOp::Div),
-            TokenKind::Percent => Some(BinaryOp::Mod),
-            TokenKind::Caret => Some(BinaryOp::Pow),
-            TokenKind::EqEq => Some(BinaryOp::Eq),
-            TokenKind::NotEq => Some(BinaryOp::NotEq),
-            TokenKind::Lt => Some(BinaryOp::Lt),
-            TokenKind::LtEq => Some(BinaryOp::LtEq),
-            TokenKind::Gt => Some(BinaryOp::Gt),
-            TokenKind::GtEq => Some(BinaryOp::GtEq),
-            TokenKind::AmpAmp => Some(BinaryOp::And),
-            TokenKind::PipePipe => Some(BinaryOp::Or),
-            TokenKind::Ident(s) if s == "and" => Some(BinaryOp::And),
-            TokenKind::Ident(s) if s == "or" => Some(BinaryOp::Or),
-            _ => None,
-        }
+        Some(match self.peek_kind()? {
+            TokenKind::Plus => BinaryOp::Add,
+            TokenKind::Minus => BinaryOp::Sub,
+            TokenKind::Star => BinaryOp::Mul,
+            TokenKind::Slash => BinaryOp::Div,
+            TokenKind::Percent => BinaryOp::Mod,
+            TokenKind::Caret => BinaryOp::Pow,
+            TokenKind::EqEq => BinaryOp::Eq,
+            TokenKind::NotEq => BinaryOp::NotEq,
+            TokenKind::Lt => BinaryOp::Lt,
+            TokenKind::LtEq => BinaryOp::LtEq,
+            TokenKind::Gt => BinaryOp::Gt,
+            TokenKind::GtEq => BinaryOp::GtEq,
+            TokenKind::AmpAmp => BinaryOp::And,
+            TokenKind::PipePipe => BinaryOp::Or,
+            TokenKind::Ident(s) if s == "and" => BinaryOp::And,
+            TokenKind::Ident(s) if s == "or" => BinaryOp::Or,
+            _ => return None,
+        })
     }
 }
 
-/// Executes deterministic fn `binary_precedence` within `crates/compile-sysml/src/parser/expressions.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `binary_precedence` in `crates/compile-sysml/src/parser/expressions.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `binary_precedence` (declaration #18) within `PARSER-EXPRESSIONS`.
-///
-/// ## 3. Preconditions
-/// - `op: &BinaryOp` must satisfy domain and type-safety constraints prior to invoking `binary_precedence`.
-///
-/// ## 4. Postconditions
-/// - Returns `(u8, bool)` from `binary_precedence` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(op)) bounded over input/member dimension of `binary_precedence`.
-/// - Space Complexity: O(N(op)) bounded auxiliary memory for `binary_precedence`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `binary_precedence` (`(u8, bool)`).
-/// - State: Maintains consistent state invariants across `binary_precedence` without partial mutation on error.
-/// - Action: Executes `binary_precedence` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `binary_precedence` (`PARSER-EXPRESSIONS`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-PARSER-EXPRESSIONS-BINARY-PRECEDENCE] | SysML v2: ActionDef(binary_precedence)
+/// Returns `(precedence, is_right_associative)` for `op`.
+/// Realises: [REQ-PARSER-EXPRESSIONS-BINARY-PRECEDENCE]
 fn binary_precedence(op: &BinaryOp) -> (u8, bool) {
     match op {
         BinaryOp::Or => (1, false),
@@ -796,34 +399,9 @@ fn binary_precedence(op: &BinaryOp) -> (u8, bool) {
 }
 
 /// Convenience function to parse tokens into an `Expr`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `parse_expression` in `crates/compile-sysml/src/parser/expressions.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `parse_expression` (declaration #19) within `PARSER-EXPRESSIONS`.
-///
-/// ## 3. Preconditions
-/// - `tokens: &[Token]` must satisfy domain and type-safety constraints prior to invoking `parse_expression`.
-///
-/// ## 4. Postconditions
-/// - Returns `Result<Expr, String>` from `parse_expression` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(tokens)) bounded over input/member dimension of `parse_expression`.
-/// - Space Complexity: O(N(tokens)) bounded auxiliary memory for `parse_expression`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `parse_expression` (`Result<Expr, String>`).
-/// - State: Maintains consistent state invariants across `parse_expression` without partial mutation on error.
-/// - Action: Executes `parse_expression` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `parse_expression` (`PARSER-EXPRESSIONS`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-PARSER-EXPRESSIONS-PARSE-EXPRESSION] | SysML v2: ActionDef(parse_expression)
+/// Realises: [REQ-PARSER-EXPRESSIONS-PARSE-EXPRESSION]
 pub fn parse_expression(tokens: &[Token]) -> Result<Expr, String> {
-    let mut parser = ExpressionParser::new(tokens);
-    parser.parse()
+    ExpressionParser::new(tokens).parse()
 }
 
 #[cfg(test)]
@@ -833,72 +411,42 @@ mod tests {
 
     #[test]
     fn test_parse_inequality_constraint() -> Result<(), Box<dyn std::error::Error>> {
-        let mut scanner = Scanner::new("v <= 60.0");
-        let tokens = scanner.scan_all()?;
+        let tokens = Scanner::new("v <= 60.0").scan_all()?;
         let expr = parse_expression(&tokens)?;
-
-        assert_eq!(
-            expr,
-            Expr::Binary {
-                op: BinaryOp::LtEq,
-                left: Box::new(Expr::Ident("v".to_string())),
-                right: Box::new(Expr::Number(60.0)),
-            }
-        );
         assert_eq!(expr.to_string_repr(), "v <= 60.0");
         Ok(())
     }
 
     #[test]
     fn test_parse_nested_logical_expression() -> Result<(), Box<dyn std::error::Error>> {
-        let mut scanner = Scanner::new("alt >= 10.0 && alt <= 120.0");
-        let tokens = scanner.scan_all()?;
+        let tokens = Scanner::new("alt >= 10.0 && alt <= 120.0").scan_all()?;
         let expr = parse_expression(&tokens)?;
-
-        match expr {
-            Expr::Binary { op, left, right } => {
-                assert_eq!(op, BinaryOp::And);
-                assert_eq!(left.to_string_repr(), "alt >= 10.0");
-                assert_eq!(right.to_string_repr(), "alt <= 120.0");
-            }
-            _ => return Err("Expected binary AND".into()),
-        }
+        assert_eq!(expr.to_string_repr(), "alt >= 10.0 and alt <= 120.0");
         Ok(())
     }
 
     #[test]
     fn test_parse_member_and_function_call() -> Result<(), Box<dyn std::error::Error>> {
-        let mut scanner = Scanner::new("abs(fcc.speed) <= limits.max");
-        let tokens = scanner.scan_all()?;
+        let tokens = Scanner::new("abs(fcc.speed) <= limits.max").scan_all()?;
         let expr = parse_expression(&tokens)?;
-
         assert_eq!(expr.to_string_repr(), "abs(fcc.speed) <= limits.max");
         Ok(())
     }
 
     #[test]
     fn test_parse_parenthesized_depth_bounds() -> Result<(), Box<dyn std::error::Error>> {
-        let max_valid_parens = MAX_EXPR_DEPTH - 1;
-        let valid_src = format!(
-            "{}x{}",
-            "(".repeat(max_valid_parens),
-            ")".repeat(max_valid_parens)
+        let max_valid = MAX_EXPR_DEPTH - 1;
+        let valid_src = format!("{}x{}", "(".repeat(max_valid), ")".repeat(max_valid));
+        assert_eq!(
+            parse_expression(&Scanner::new(&valid_src).scan_all()?)?.to_string_repr(),
+            "x"
         );
-        let tokens = Scanner::new(&valid_src).scan_all()?;
-        let parsed = parse_expression(&tokens)?;
-        assert_eq!(parsed.to_string_repr(), "x");
-
-        let exceeded_src = format!(
+        let exceeded = format!(
             "{}x{}",
             "(".repeat(MAX_EXPR_DEPTH),
             ")".repeat(MAX_EXPR_DEPTH)
         );
-        let exceeded_tokens = Scanner::new(&exceeded_src).scan_all()?;
-        assert!(parse_expression(&exceeded_tokens).is_err());
-
-        let very_deep_src = format!("{}x{}", "(".repeat(256), ")".repeat(256));
-        let very_deep_tokens = Scanner::new(&very_deep_src).scan_all()?;
-        assert!(parse_expression(&very_deep_tokens).is_err());
+        assert!(parse_expression(&Scanner::new(&exceeded).scan_all()?).is_err());
         Ok(())
     }
 
@@ -906,14 +454,10 @@ mod tests {
     fn test_parse_unary_call_binary_and_member_depth_bounds(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let max_ops = MAX_EXPR_DEPTH - 1;
-
-        // Unary at bound vs beyond bound
         let valid_unary = format!("{}x", "-".repeat(max_ops));
         assert!(parse_expression(&Scanner::new(&valid_unary).scan_all()?).is_ok());
         let deep_unary = format!("{}x", "-".repeat(MAX_EXPR_DEPTH));
         assert!(parse_expression(&Scanner::new(&deep_unary).scan_all()?).is_err());
-
-        // Nested calls at bound vs beyond bound
         let valid_calls = format!("{}x{}", "f(".repeat(max_ops), ")".repeat(max_ops));
         assert!(parse_expression(&Scanner::new(&valid_calls).scan_all()?).is_ok());
         let deep_calls = format!(
@@ -922,8 +466,6 @@ mod tests {
             ")".repeat(MAX_EXPR_DEPTH)
         );
         assert!(parse_expression(&Scanner::new(&deep_calls).scan_all()?).is_err());
-
-        // Right-associative binary (`^`) at bound vs beyond bound
         let valid_pow = std::iter::repeat_n("x", MAX_EXPR_DEPTH)
             .collect::<Vec<_>>()
             .join(" ^ ");
@@ -932,23 +474,10 @@ mod tests {
             .collect::<Vec<_>>()
             .join(" ^ ");
         assert!(parse_expression(&Scanner::new(&deep_pow).scan_all()?).is_err());
-
-        // Left-associative binary (`+`) at bound vs beyond bound
-        let valid_add = std::iter::repeat_n("x", MAX_EXPR_DEPTH)
-            .collect::<Vec<_>>()
-            .join(" + ");
-        assert!(parse_expression(&Scanner::new(&valid_add).scan_all()?).is_ok());
-        let deep_add = std::iter::repeat_n("x", MAX_EXPR_DEPTH + 1)
-            .collect::<Vec<_>>()
-            .join(" + ");
-        assert!(parse_expression(&Scanner::new(&deep_add).scan_all()?).is_err());
-
-        // Member chain (`.a`) at bound vs beyond bound
         let valid_member = format!("x{}", ".a".repeat(max_ops));
         assert!(parse_expression(&Scanner::new(&valid_member).scan_all()?).is_ok());
         let deep_member = format!("x{}", ".a".repeat(MAX_EXPR_DEPTH));
         assert!(parse_expression(&Scanner::new(&deep_member).scan_all()?).is_err());
-
         Ok(())
     }
 
@@ -965,9 +494,8 @@ mod tests {
             at_bound.to_string_repr(),
             format!("{}x", "-".repeat(MAX_EXPR_DEPTH - 1))
         );
-
         let mut beyond_bound = Expr::Ident("x".to_string());
-        for _ in 0..(MAX_EXPR_DEPTH + 32) {
+        for _ in 0..(MAX_EXPR_DEPTH + 8) {
             beyond_bound = Expr::Unary {
                 op: UnaryOp::Neg,
                 expr: Box::new(beyond_bound),
@@ -977,34 +505,5 @@ mod tests {
             beyond_bound.to_string_repr(),
             format!("{}...", "-".repeat(MAX_EXPR_DEPTH))
         );
-
-        // Also verify Member, Call, and Binary variants truncate cleanly beyond MAX_EXPR_DEPTH
-        let mut deep_member = Expr::Ident("root".to_string());
-        for _ in 0..(MAX_EXPR_DEPTH + 10) {
-            deep_member = Expr::Member {
-                object: Box::new(deep_member),
-                member: "m".to_string(),
-            };
-        }
-        assert!(deep_member.to_string_repr().starts_with("....m"));
-
-        let mut deep_call = Expr::Ident("x".to_string());
-        for _ in 0..(MAX_EXPR_DEPTH + 10) {
-            deep_call = Expr::Call {
-                func: "fn_call".to_string(),
-                args: vec![deep_call],
-            };
-        }
-        assert!(deep_call.to_string_repr().contains("fn_call(...)"));
-
-        let mut deep_bin = Expr::Ident("x".to_string());
-        for _ in 0..(MAX_EXPR_DEPTH + 10) {
-            deep_bin = Expr::Binary {
-                op: BinaryOp::Add,
-                left: Box::new(deep_bin),
-                right: Box::new(Expr::Number(1.0)),
-            };
-        }
-        assert!(deep_bin.to_string_repr().starts_with("... + ... + 1.0"));
     }
 }

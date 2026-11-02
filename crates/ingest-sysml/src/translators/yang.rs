@@ -315,60 +315,45 @@ enum YangToken {
     Semicolon,
 }
 
-/// Skips whitespace and both single-line (`//`) and block (`/* ... */`) comments.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `skip_whitespace_and_comments` in `crates/ingest-sysml/src/translators/yang.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `skip_whitespace_and_comments` (declaration #6) within `TRANSLATORS-YANG`.
-///
-/// ## 3. Preconditions
-/// - `chars: &[char]` must satisfy domain and type-safety constraints prior to invoking `skip_whitespace_and_comments`.
-/// - `pos: &mut usize` must satisfy domain and type-safety constraints prior to invoking `skip_whitespace_and_comments`.
-///
-/// ## 4. Postconditions
-/// - Returns `()` from `skip_whitespace_and_comments` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(chars)) bounded over input/member dimension of `skip_whitespace_and_comments`.
-/// - Space Complexity: O(N(chars)) bounded auxiliary memory for `skip_whitespace_and_comments`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `skip_whitespace_and_comments` (`()`).
-/// - State: Maintains consistent state invariants across `skip_whitespace_and_comments` without partial mutation on error.
-/// - Action: Executes `skip_whitespace_and_comments` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `skip_whitespace_and_comments` (`TRANSLATORS-YANG`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-TRANSLATORS-YANG-SKIP-WHITESPACE-AND-COMMENTS] | SysML v2: ActionDef(skip_whitespace_and_comments)
-fn skip_whitespace_and_comments(chars: &[char], pos: &mut usize) {
-    while let Some(&ch) = chars.get(*pos) {
-        if ch.is_whitespace() {
-            *pos += 1;
-        } else if ch == '/' {
-            match chars.get(*pos + 1).copied() {
-                Some('/') => {
-                    *pos += 2;
-                    while chars.get(*pos).is_some_and(|&c| c != '\n') {
-                        *pos += 1;
-                    }
-                }
-                Some('*') => {
-                    *pos += 2;
-                    while *pos + 1 < chars.len() {
-                        if chars.get(*pos) == Some(&'*') && chars.get(*pos + 1) == Some(&'/') {
-                            *pos += 2;
-                            break;
-                        }
-                        *pos += 1;
-                    }
-                }
-                _ => break,
-            }
-        } else {
-            break;
+/// Strips RFC 6020 / RFC 7950 line (`//`) and block (`/* ... */`) comments via `yang_cst`.
+/// Realises: [REQ-TRANSLATORS-YANG-STRIP-COMMENTS]
+fn strip_yang_comments(content: &str) -> String {
+    use crate::translators::yang_cst::{parse_yang_cst, YangToken as CstToken};
+    use logos::Logos;
+    let cst = parse_yang_cst(content);
+    let mut cleaned = String::with_capacity(content.len().saturating_add(cst.statements.len()));
+    let mut last_end = 0usize;
+    for (tok_res, span) in CstToken::lexer(content).spanned() {
+        if let Some(gap) = content.get(last_end..span.start) {
+            cleaned.push_str(gap);
         }
+        match tok_res {
+            Ok(CstToken::LineComment | CstToken::BlockComment) => {
+                if let Some(slice) = content.get(span.clone()) {
+                    for ch in slice.chars() {
+                        cleaned.push(if ch == '\n' { '\n' } else { ' ' });
+                    }
+                }
+            }
+            _ => {
+                if let Some(slice) = content.get(span.clone()) {
+                    cleaned.push_str(slice);
+                }
+            }
+        }
+        last_end = span.end;
+    }
+    if let Some(tail) = content.get(last_end..) {
+        cleaned.push_str(tail);
+    }
+    cleaned
+}
+
+/// Advances `pos` past contiguous whitespace in `chars`.
+/// Realises: [REQ-TRANSLATORS-YANG-SKIP-WHITESPACE-AND-COMMENTS]
+fn skip_whitespace_and_comments(chars: &[char], pos: &mut usize) {
+    while chars.get(*pos).is_some_and(|ch| ch.is_whitespace()) {
+        *pos += 1;
     }
 }
 
@@ -517,7 +502,8 @@ fn scan_string_literal(chars: &[char], pos: &mut usize) -> Result<String, String
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-TRANSLATORS-YANG-TOKENIZE-YANG] | SysML v2: ActionDef(tokenize_yang)
 fn tokenize_yang(source: &str) -> Result<Vec<YangToken>, String> {
-    let chars: Vec<char> = source.chars().collect();
+    let stripped = strip_yang_comments(source);
+    let chars: Vec<char> = stripped.chars().collect();
     let mut pos = 0;
     let mut tokens = Vec::new();
 
@@ -1107,7 +1093,6 @@ impl YangTranslator {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-TRANSLATORS-YANG-YANGTRANSLATOR-TRANSLATE] | SysML v2: ActionDef(YangTranslator::translate)
     pub fn translate(&self, content: &str, default_name: &str) -> Result<PackageDef, String> {
-        let _ = super::yang_cst::parse_yang_cst(content);
         let tokens = tokenize_yang(content)?;
         let stmts = parse_yang_statements(&tokens)?;
 
