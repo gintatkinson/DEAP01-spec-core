@@ -536,6 +536,25 @@ The platform includes deterministic Work Breakdown Structure (WBS) & Enterprise 
   2. `docs/management/wbs_export_jira_monday_ms_project.csv`: Multi-platform RFC 4180 compliant CSV export formatted for Atlassian Jira, Monday.com, and Microsoft Project.
   3. `docs/management/wbs_export.json`: Validated hierarchical JSON Abstract Syntax Tree conforming to formal WBS schema.
 
+### 7.5 Normative OMG SysML v2.0 + KerML 1.0 Compiler Architecture (`logos` + `rowan` + `salsa`)
+
+The Tier-0 specification compiler implements a zero-hand-rolled-scanner, lossless concrete/abstract syntax and incremental query architecture covering the normative OMG SysML v2.0 (formal/2026-01-01) and OMG KerML 1.0 (formal/2026-01-02) grammars:
+- **DFA Lexical Tokenization (`logos`):** Total-function, zero-copy lexer (`SysmlToken`) covering all 126 normative SysML v2.0 / KerML 1.0 reserved keywords, multi-character operators (`::>`, `:>>`, `:>=`, `~`), unrestricted single-quoted names, and trivia.
+- **Lossless Concrete Syntax Tree (`rowan`):** Red-Green lossless CST (`SysmlLanguage`, `SyntaxNode`, `SyntaxToken`) with 100% byte-for-byte source fidelity (`cst.text() == source`) and resilient error recovery across all 8 normative clause groups (Root Namespace, KerML Core Types, Structural Definitions/Usages, Behavioral Actions/States/Calculations, Requirements/Cases/Analysis, Connectors/Flows/Allocations, Expressions/Feature Chains, and Metadata/Annotations/Views).
+- **Demand-Driven Incremental Semantic Engine (`salsa`):** Tracked incremental compilation database (`#[salsa::db]`, `#[salsa::input]`, `#[salsa::tracked]`, `#[salsa::accumulator]`) computing symbol tables, specialization graphs (`:>`, `:>>`, `::>`), cross-file `import` namespaces, and deterministic `.pipeline/schema-digest.json` projections with $O(1)$ unchanged-file memoization.
+
+### 7.6 5-Stage Formal Verification Pipeline (`BP-07` through `BP-11`)
+
+All safety-critical Rust crates and downstream synthesis artifacts are governed by a 5-stage compiler-native formal verification pipeline (enforced in strict mode via `./target/release/verify-baseline . --require-formal-toolchains`):
+
+| Stage | Verification Gate & Toolchain | Scope & Mathematical Guarantee |
+| :--- | :--- | :--- |
+| **Stage 1** | **`rustc` + `clippy` (`Cargo.toml`, `clippy.toml`)** | `#![forbid(unsafe_code)]`, `#![deny(clippy::all, clippy::pedantic, clippy::nursery)]`, cognitive complexity $\le 15$, function length $\le 80$ lines, parameters $\le 5$, and total-function arithmetic/indexing lints (`BP-07`). |
+| **Stage 2** | **`deap-dylint-mir` Custom `rustc_private` LateLintPass** | Custom HIR/MIR/Thir inspection driver auditing call-graph recursion cycles (`DEAP_UNBOUNDED_LOOP`), panic-path reachability (`DEAP_PANIC_REACHABLE`), and 7-section `[DOC-TIER: A]` docstring completeness (`BP-08`). |
+| **Stage 3** | **`Miri` + `flutter_rust_bridge` Ring-2 FFI Verification** | Operational semantics interpretation under Stacked/Tree Borrows (`cargo +nightly miri test`) and zero-unsafe Ring-2 FFI bridge codegen verification (`BP-09`, `REQ-0901`, `REQ-0902`). |
+| **Stage 4** | **`Kani` CBMC Bounded Model Checking (`#[kani::proof]`)** | Bit-precise symbolic execution (`cargo kani`) proving `#[kani::requires]` / `#[kani::ensures]` contracts, `#[kani::unwind(N)]` bounds, and freedom from arithmetic overflow or out-of-bounds panics across all inputs (`BP-10`, `REQ-1001`, `REQ-1002`). |
+| **Stage 5** | **`Ferrocene` Qualified Toolchain (`criticalup.toml`) & DO-178C MC/DC** | ISO 26262 ASIL-D / IEC 61508 SIL-4 / RTCA DO-178C DAL-A / DO-330 TQL-1 compiler qualification (`criticalup.toml` + `rust-toolchain.toml` parity), `[FLS: fls_*]` paragraph traceability (`REQ-1101`), and 100% MC/DC `symbol-report` / `blanket` structural coverage (`BP-11`, `REQ-1102`). |
+
 ---
 
 ## 8. Multi-Pipeline Master-Worker Subagent Topologies & Safety Engineering Workflows

@@ -1,6 +1,8 @@
 //! Unit tests for diagnostics, defect dossier synthesis, and source purity.
 
-use super::*;
+#[cfg(test)]
+mod tests {
+use super::super::*;
 
 #[test]
 fn test_diagnostic_creation_and_serialization() -> Result<(), Box<dyn std::error::Error>> {
@@ -227,4 +229,5 @@ fn test_render_diagnostic_with_ariadne_multispan_color_and_note() {
     assert!(multispan.contains("primary violation"));
     assert!(multispan.contains("dependent power expr"));
     assert!(multispan.contains("DO-178C Level A invariant violated"));
+}
 }

@@ -83,6 +83,8 @@ pub struct ParsedMarkdownAst {
     pub code_blocks: Vec<MarkdownCodeBlockAst>,
 }
 
+/// Maps a `pulldown_cmark::HeadingLevel` variant to its 1-based numeric heading depth (`1..=6`).
+/// Realises: [REQ-0401]
 const fn heading_level_u8(level: HeadingLevel) -> u8 {
     match level {
         HeadingLevel::H1 => 1,

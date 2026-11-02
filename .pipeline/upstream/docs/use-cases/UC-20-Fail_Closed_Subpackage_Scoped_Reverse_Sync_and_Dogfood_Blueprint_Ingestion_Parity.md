@@ -29,7 +29,7 @@ graph TD
     UC_Main -. "<<include>>" .-> UC_Step03
 ```
 
-```mermaid
+```sysml
 stateDiagram-v2
     [*] --> BacklogReconciled
     BacklogReconciled --> ReverseSynced : "reverseSyncToSubpackages [forward_reverse_drift_count == 0]"

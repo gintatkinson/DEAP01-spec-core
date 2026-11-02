@@ -32,6 +32,9 @@ use std::fs;
 use std::path::PathBuf;
 
 /// Error taxonomy for the Stage-2 Dylint gate.
+/// Safety & Traceability: Realises: [REQ-0609], [SC-02], [FLS: fls_dylint_runner]
+/// Contract: Enumerates missing toolchain, manifest I/O, workspace exclusion, and MIR violation failures.
+/// Bounds & Faults: O(1) variant construction and display formatting with zero panics.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DylintGateError {
     MissingFormalToolchain(String),
@@ -41,6 +44,8 @@ pub enum DylintGateError {
 }
 
 impl std::fmt::Display for DylintGateError {
+    /// Formats the Stage-2 Dylint error into a diagnostic string.
+    /// Realises: [REQ-0609], [SC-02]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::MissingFormalToolchain(msg) => write!(f, "DEAP-E0905 toolchain missing: {msg}"),
@@ -56,6 +61,9 @@ impl std::fmt::Display for DylintGateError {
 impl std::error::Error for DylintGateError {}
 
 /// Configuration for the Stage-2 Dylint gate runner.
+/// Safety & Traceability: Realises: [REQ-0609], [SC-02], [FLS: fls_dylint_runner]
+/// Contract: Configures formal toolchain enforcement, plugin crate relative path, and zero-allocation/binding thresholds.
+/// Bounds & Faults: O(1) configuration record with deterministic `Default` implementation.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Stage2DylintConfig {
     pub require_formal_toolchains: bool,
@@ -65,6 +73,8 @@ pub struct Stage2DylintConfig {
 }
 
 impl Default for Stage2DylintConfig {
+    /// Returns the default Stage-2 Dylint gate configuration.
+    /// Realises: [REQ-0609], [SC-02]
     fn default() -> Self {
         Self {
             require_formal_toolchains: false,
@@ -76,6 +86,9 @@ impl Default for Stage2DylintConfig {
 }
 
 /// Structured finding from Stage-2 Dylint analysis.
+/// Safety & Traceability: Realises: [REQ-0609], [SC-02], [FLS: fls_dylint_runner]
+/// Contract: Captures diagnostic code (`DEAP-E0901` / `DEAP-E0902`), file path, line number, symbol, and message.
+/// Bounds & Faults: O(M) memory proportional to diagnostic text strings.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DylintFinding {
     pub code: String,
@@ -86,6 +99,9 @@ pub struct DylintFinding {
 }
 
 /// Verification receipt emitted by Stage-2 Dylint gate.
+/// Safety & Traceability: Realises: [REQ-0609], [SC-02], [SC-05], [FLS: fls_dylint_runner]
+/// Contract: Records toolchain discovery, workspace exclusion verification, audited callable counts, findings, and pass status.
+/// Bounds & Faults: O(F) space proportional to recorded findings `F`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Stage2DylintReceipt {
     pub toolchain_discovered: bool,
@@ -216,12 +232,12 @@ pub fn run_stage2_dylint_gate(
         {
             let p = entry.path();
             if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("rs") {
-                if let Ok(src) = fs::read_to_string(p) {
-                    let rel = p.strip_prefix(root.as_std_path()).unwrap_or(p);
-                    let (rt, req) = audit_source_in_process(&src, &rel.display().to_string(), &mut findings);
-                    total_rt_loops = total_rt_loops.saturating_add(rt);
-                    total_req_links = total_req_links.saturating_add(req);
-                }
+                let src = fs::read_to_string(p)
+                    .map_err(|e| DylintGateError::ManifestMissingOrUnreadable(e.to_string()))?;
+                let rel = p.strip_prefix(root.as_std_path()).unwrap_or(p);
+                let (rt, req) = audit_source_in_process(&src, &rel.display().to_string(), &mut findings);
+                total_rt_loops = total_rt_loops.saturating_add(rt);
+                total_req_links = total_req_links.saturating_add(req);
             }
         }
     }

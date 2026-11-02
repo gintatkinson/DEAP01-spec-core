@@ -29,7 +29,7 @@ graph TD
     UC_Main -. "<<include>>" .-> UC_Step03
 ```
 
-```mermaid
+```sysml
 stateDiagram-v2
     [*] --> ForwardProjected
     ForwardProjected --> IcdSynthesized : "emitLogicalIcd [lexicographicalSort == true]"

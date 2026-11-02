@@ -13,7 +13,7 @@
 
 ## User Story
 
-As a `Operator_Or_CI_Pipeline`, I want to invoke `GhIssueViewJsonTitleBody()` on `ClosedLoopDefectPublisherGate`, `DeterministicStaticDefectAuditor`, and `DeterministicDossierSynthesizer`, so that `gh issue view --json title,body,url` retrieves the live GitHub issue payload via `GitHubIssueSsotQueryPort` and proves zero-byte discrepancy (`closed_loop_mismatch_bytes == 0`, `requireByteParity == true`) after CRLF-to-LF normalization against the local `./.pipeline/defects/<NAME>.md` file.
+As a `Operator_Or_CI_Pipeline`, I want to invoke `GhIssueViewJsonTitleBody()` on `ClosedLoopDefectPublisherGate`, `DeterministicStaticDefectAuditor`, and `DeterministicDossierSynthesizer`, so that `gh issue view --json title,body,url` retrieves the live GitHub issue document via `GitHubIssueSsotQueryPort` and proves zero-byte discrepancy (`closed_loop_mismatch_bytes == 0`, `requireByteParity == true`) after CRLF-to-LF normalization against the local `./.pipeline/defects/<NAME>.md` file.
 
 ## Architectural Realization (3-Layer Definition of Done)
 

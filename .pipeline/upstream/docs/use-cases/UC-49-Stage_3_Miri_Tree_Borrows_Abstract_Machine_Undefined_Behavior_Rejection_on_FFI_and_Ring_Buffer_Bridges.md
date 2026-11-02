@@ -29,7 +29,7 @@ graph TD
 ```
 
 ### State Machine Diagram
-```mermaid
+```sysml
 stateDiagram-v2
     [*] --> RunningStage3FrbAndMiri
     RunningStage3FrbAndMiri --> RunningStage4KaniCbmc : "stage3FrbMiriAndDartVerified [C_VER_04 && max_miri_ub_violations == 0] / emitStage3PassReceipt"
@@ -56,13 +56,13 @@ stateDiagram-v2
 5. For the negative mutation probe introducing a Tree Borrows pointer-aliasing violation or uninitialized byte read, `FrbIcdBridgeAndMiriUbGate` transitions to `FailedClosedJsonDiagnostic` and emits single-line NDJSON diagnostic `DEAP-E0903` on `miri_and_dart_receipt_out` with exit code 1.
 
 ## 5. Alternate and Exception Flows
-- **3a. Miri detects a Tree Borrows pointer-aliasing violation, out-of-bounds pointer arithmetic, uninitialized memory read, or memory leak (`max_miri_ub_violations > 0`, `Diagnostic: DEAP-E0903`) (Branches from Basic Flow step 3):**
+- 3a. Miri detects a Tree Borrows pointer-aliasing violation, out-of-bounds pointer arithmetic, uninitialized memory read, or memory leak (`max_miri_ub_violations > 0`, `Diagnostic: DEAP-E0903`) (Branches from Basic Flow step 3):
   1. `FrbIcdBridgeAndMiriUbGate` captures the Miri abstract-machine violation trace.
   2. `FrbIcdBridgeAndMiriUbGate` transitions to `FailedClosedJsonDiagnostic`, emits single-line JSON diagnostic `DEAP-E0903` on `miri_and_dart_receipt_out`, and terminates fail-closed with exit code 1.
-- **4a. Any `unsafe` block in the FFI bridge lacks a preceding `// SAFETY:` justification comment (`Diagnostic: DEAP-E0900`) (Branches from Basic Flow step 2):**
+- 4a. Any `unsafe` block in the FFI bridge lacks a preceding `// SAFETY:` justification comment (`Diagnostic: DEAP-E0900`) (Branches from Basic Flow step 2):
   1. `StableClippyTotalFunctionGate` (`undocumented_unsafe_blocks = "deny"`) detects the undocumented `unsafe` block.
   2. `StableClippyTotalFunctionGate` rejects the module with `DEAP-E0900` and halts promotion before Stage 3 completes.
-- **5a. Invariant violation while enforcing `C_VER_04` or `Invariant_REQ_0609_SC_03` (Branches from Basic Flow step 4):**
+- 5a. Invariant violation while enforcing `C_VER_04` or `Invariant_REQ_0609_SC_03` (Branches from Basic Flow step 4):
   1. `FrbIcdBridgeAndMiriUbGate` detects a violated Miri aliasing model or postcondition invariant.
   2. `FrbIcdBridgeAndMiriUbGate` aborts execution without partial state mutation, preserves prior verified state, and notifies `Operator`.
 
@@ -72,7 +72,7 @@ stateDiagram-v2
 
 ## 7. Architectural Realization & Operational Context (Contracts A & B, 3-Layer DoD)
 - **Contract A (100% OMG SysML v2.0 + KerML 1.0 Grammar Coverage)**: Verifies memory and aliasing safety across FFI and ring-buffer channels derived from full OMG SysML v2.0 and KerML 1.0 `port def`/`port`, `item def`/`item`, `flow def`/`flow`, `connection def`/`connection`, `interface def`/`interface`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, and `#rt_loop`/`#dal`/`#fls` metadata usages with zero 16-construct artificial caps.
-- **Contract B (Stage 3 Miri `-Zmiri-tree-borrows` + `flutter_rust_bridge` in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Executes `cargo +nightly miri test` under `MIRIFLAGS="-Zmiri-tree-borrows"` inside the 5-Stage pipeline (Stage 1 Clippy -> Stage 2 excluded `./lints/deap-dylint-mir/` -> Stage 3 Miri + `flutter_rust_bridge` -> Stage 4 Kani `#[kani::proof]` synthesis via `syn`+`proc-macro2`+`quote`+`prettyplease` -> Stage 5 Ferrocene qualification) with dynamic runtime `PATH` discovery and `ra_ap_syntax` CST inspection (zero hand-rolled scanners).
+- **Contract B (Stage 3 Miri `-Zmiri-tree-borrows` + `flutter_rust_bridge` in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Executes `cargo +nightly miri test` under `MIRIFLAGS="-Zmiri-tree-borrows"` inside the 5-Stage pipeline (Stage 1 Clippy -> Stage 2 excluded `./lints/deap-dylint-mir/` -> Stage 3 Miri + `flutter_rust_bridge` -> Stage 4 Kani `outer kani::proof` synthesis via `syn`+`proc-macro2`+`quote`+`prettyplease` -> Stage 5 Ferrocene qualification) with dynamic runtime `PATH` discovery and `ra_ap_syntax` CST inspection (zero hand-rolled scanners).
 - **3-Layer Definition of Done**: Closes Layer 1 (`miri_aliasing_model` and `max_miri_ub_violations` domain state), Layer 2 (Miri `-Zmiri-tree-borrows` evaluation inside `< 380`-SLOC submodules `./crates/verify-baseline/src/formal_gates/` and `./crates/compile-sysml/src/frb_guard/` with explicit deletion of legacy hand-rolled `unsafe` string scanners), and Layer 3 (`miri_and_dart_receipt_out` NDJSON binding).
 
 ## 8. Realization Matrix

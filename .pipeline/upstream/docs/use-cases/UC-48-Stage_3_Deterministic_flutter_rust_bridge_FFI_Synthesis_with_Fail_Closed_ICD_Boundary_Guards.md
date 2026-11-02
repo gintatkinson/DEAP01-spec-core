@@ -29,7 +29,7 @@ graph TD
 ```
 
 ### State Machine Diagram
-```mermaid
+```sysml
 stateDiagram-v2
     [*] --> RunningStage2DylintMir
     RunningStage2DylintMir --> RunningStage3FrbAndMiri : "stage2ZeroRtAllocVerified [ok] / invokeStage3FrbGuard"
@@ -57,13 +57,13 @@ stateDiagram-v2
 5. Compliant inbound FFI signals forward cleanly into the pure domain state machine, whereas out-of-range, `NaN`, or invalid-mode payloads return `Err(DEAP_E0903)` without panicking across the FFI boundary.
 
 ## 5. Alternate and Exception Flows
-- **3a. Inbound FFI signal is `NaN`, infinite, outside `[p_min..p_max]`, or arrives in a disallowed `state def` mode (`Diagnostic: DEAP-E0903`) (Branches from Basic Flow step 3):**
+- 3a. Inbound FFI signal is `NaN`, infinite, outside `[p_min..p_max]`, or arrives in a disallowed `state def` mode (`Diagnostic: DEAP-E0903`) (Branches from Basic Flow step 3):
   1. `guard_inbound_frb_f64` intercepts the non-finite, out-of-range, or invalid-state payload before domain state mutation.
   2. `guard_inbound_frb_f64` rejects the payload fail-closed, emits `DEAP-E0903` on `miri_and_dart_receipt_out`, and preserves domain state.
-- **4a. Pure domain crate contains an `unsafe` block or synthesized Dart bindings fail `dart analyze --fatal-infos` (`Diagnostic: DEAP-E0903`) (Branches from Basic Flow step 4):**
+- 4a. Pure domain crate contains an `unsafe` block or synthesized Dart bindings fail `dart analyze --fatal-infos` (`Diagnostic: DEAP-E0903`) (Branches from Basic Flow step 4):
   1. `FrbIcdBridgeAndMiriUbGate` detects the `#![forbid(unsafe_code)]` breach via `ra_ap_syntax` or non-zero `dart analyze --fatal-infos` findings.
   2. `FrbIcdBridgeAndMiriUbGate` transitions to `FailedClosedJsonDiagnostic`, emits single-line NDJSON diagnostic `DEAP-E0903`, and exits fail-closed with code 1.
-- **5a. Invariant violation while enforcing `Invariant_REQ_0609_SC_03` in `FrbIcdBridgeAndMiriUbGate` (Branches from Basic Flow step 2):**
+- 5a. Invariant violation while enforcing `Invariant_REQ_0609_SC_03` in `FrbIcdBridgeAndMiriUbGate` (Branches from Basic Flow step 2):
   1. `FrbIcdBridgeAndMiriUbGate` detects a structural or `< 380`-SLOC modularity violation (`C_VER_07`).
   2. `FrbIcdBridgeAndMiriUbGate` aborts execution without partial state mutation, preserves prior verified state, and notifies `Operator`.
 
@@ -73,7 +73,7 @@ stateDiagram-v2
 
 ## 7. Architectural Realization & Operational Context (Contracts A & B, 3-Layer DoD)
 - **Contract A (100% OMG SysML v2.0 + KerML 1.0 Grammar Coverage)**: Lowers `port def`/`port` (`in`, `out`, `inout`, `~`), `item def`/`item`, `flow def`/`flow` (`of ... from ... to ...`), `interface def`/`interface`, `connection def`/`connection`, `state def`/`state`, `constraint def`/`constraint`, and `ISQ`/`SI`/`ScalarValues` `[lo..hi]` bounds across the full OMG SysML v2.0 and KerML 1.0 textual grammar with zero 16-construct artificial caps.
-- **Contract B (Stage 3 `flutter_rust_bridge` + `deap_core::dart_cst` in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Synthesizes FFI facades via `syn` + `proc-macro2` + `quote` + `prettyplease` and validates Dart CSTs via `deap_core::dart_cst` (`logos` + `rowan`) inside the 5-Stage pipeline (Stage 1 Clippy -> Stage 2 excluded `./lints/deap-dylint-mir/` -> Stage 3 Miri + `flutter_rust_bridge` -> Stage 4 Kani `#[kani::proof]` -> Stage 5 Ferrocene qualification) with dynamic runtime `PATH` discovery and zero hand-rolled scanners.
+- **Contract B (Stage 3 `flutter_rust_bridge` + `deap_core::dart_cst` in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Synthesizes FFI facades via `syn` + `proc-macro2` + `quote` + `prettyplease` and validates Dart CSTs via `deap_core::dart_cst` (`logos` + `rowan`) inside the 5-Stage pipeline (Stage 1 Clippy -> Stage 2 excluded `./lints/deap-dylint-mir/` -> Stage 3 Miri + `flutter_rust_bridge` -> Stage 4 Kani `outer kani::proof` -> Stage 5 Ferrocene qualification) with dynamic runtime `PATH` discovery and zero hand-rolled scanners.
 - **3-Layer Definition of Done**: Closes Layer 1 (`IcdSignalGuardSpec` domain model), Layer 2 (`guard_inbound_frb_f64` inside `< 380`-SLOC submodules `./crates/compile-sysml/src/frb_guard/` and `./crates/verify-baseline/src/formal_gates/` with explicit deletion of legacy unguarded FFI emitters and hand-rolled Dart scanners), and Layer 3 (`sysml_icd_ast_in`, `frb_facade_and_dart_out`, and `miri_and_dart_receipt_out` port bindings).
 
 ## 8. Realization Matrix

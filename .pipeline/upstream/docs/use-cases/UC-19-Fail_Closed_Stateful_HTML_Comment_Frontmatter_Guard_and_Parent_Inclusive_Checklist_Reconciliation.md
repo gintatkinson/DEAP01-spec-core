@@ -29,7 +29,7 @@ graph TD
     UC_Main -. "<<include>>" .-> UC_Step03
 ```
 
-```mermaid
+```sysml
 stateDiagram-v2
     [*] --> WbsExported
     WbsExported --> BacklogReconciled : "reconcileBacklog [trackHtmlCommentState == true && parentInclusiveEpics == true]"
@@ -53,7 +53,7 @@ stateDiagram-v2
 1. `Operator_Or_CI_Runner` invokes `ReconcileBacklogReconcileDocsDirDocs` (`reconcile-backlog reconcile --docs-dir docs`) on `BidirectionalBacklogReconciler` via `specDocsInOutPort`.
 2. `BidirectionalBacklogReconciler` executes `ParseCommonMarkTablesWithInHtml` using `pulldown-cmark` (`Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS`) with `trackHtmlCommentState = true` (`in_html_comment` state tracking over `pulldown-cmark::Event::Html`) so commented-out example tables never spoof frontmatter `Issue ID` attributes (Contract B, zero hand-rolled line scanners).
 3. `BidirectionalBacklogReconciler` executes `ReconcileChecklistsWithParentInclusiveEpic` (`parentInclusiveEpics = true`) via `salsa` derived queries across the full OMG SysML v2.0 + KerML 1.0 package/part/interaction/use-case hierarchy (Contract A, zero 16-construct caps) to compute the parent-inclusive Epic count and reconcile bidirectional Epic, Feature, User Story, and Use Case checklists without wildcard misbinding.
-4. `BidirectionalBacklogReconciler` verifies that zero unpopulated placeholders (`#[IssueID]`) or spoofed issue IDs exist across `./docs/epics/`, `./docs/features/`, `./docs/user-stories/`, and `./docs/use-cases/`.
+4. `BidirectionalBacklogReconciler` verifies that zero unpopulated placeholders (`#IssueID`) or spoofed issue IDs exist across `./docs/epics/`, `./docs/features/`, `./docs/user-stories/`, and `./docs/use-cases/`.
 5. `BidirectionalBacklogReconciler` transitions `BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_LifecycleState` to `BacklogReconciled`, serializes updated checklists losslessly via `pulldown-cmark-to-cmark` across `specDocsInOutPort`, and returns `Result::Ok` to `Operator_Or_CI_Runner`.
 
 ## 5. Alternate and Exception Flows

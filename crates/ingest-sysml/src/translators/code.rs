@@ -296,11 +296,9 @@ impl CodeTranslator {
 
         let items = match resolved_lang {
             SourceLanguage::Rust | SourceLanguage::Auto => {
-                let _ = deap_core::rust_cst::parse::parse_rust_source(file_name, content);
                 parse_rust_source_ast(content, file_name)?
             }
             SourceLanguage::Dart => {
-                let _ = deap_core::dart_cst::parse_dart_cst(content);
                 parse_dart_source_ast(content, file_name)?
             }
         };
@@ -363,11 +361,9 @@ impl CodeTranslator {
             };
             let mut items = match file_lang {
                 SourceLanguage::Rust | SourceLanguage::Auto => {
-                    let _ = deap_core::rust_cst::parse::parse_rust_source(&label, &content);
                     parse_rust_source_ast(&content, &label)?
                 }
                 SourceLanguage::Dart => {
-                    let _ = deap_core::dart_cst::parse_dart_cst(&content);
                     parse_dart_source_ast(&content, &label)?
                 }
             };

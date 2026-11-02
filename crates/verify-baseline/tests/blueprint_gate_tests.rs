@@ -1802,7 +1802,7 @@ impl UnmappedHelper {
     assert_eq!(scoped.dart_annotation_paren_depth, 0);
     assert_eq!(
         extract_rust_impl_header_prefix("impl<F: Fn(u32) -> bool> CoreHandler<F> {"),
-        Some("impl<F: Fn(u32) -> bool> CoreHandler<F>")
+        Some("impl<F: Fn(u32) -> bool> CoreHandler<F>".to_string())
     );
     assert_eq!(
         parse_rust_impl_header("impl<F: Fn(u32) -> bool> CoreHandler<F> {"),

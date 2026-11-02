@@ -12,7 +12,7 @@
 # User Story 63: guard inbound frb f64
 
 ## User Story
-As a `MultiStageVerificationOrchestrator`, I want to invoke `guard_inbound_frb_f64(spec, raw_value, active_fsm_state)` on `FrbIcdBridgeAndMiriUbGate`, so that every inbound `flutter_rust_bridge` FFI signal is checked for IEEE 754 finiteness (`is_finite()`), closed `[min..max]` interval bounds, and admissible `state def` operational modes before entering `#![forbid(unsafe_code)]` domain logic, while Stage 3 Miri `-Zmiri-tree-borrows` and `dart analyze --fatal-infos` verify zero undefined behavior (`C_VER_04`).
+As a `MultiStageVerificationOrchestrator`, I want to invoke `guard_inbound_frb_f64(spec, raw_value, active_fsm_state)` on `FrbIcdBridgeAndMiriUbGate`, so that every inbound `flutter_rust_bridge` FFI signal is checked for IEEE 754 finiteness (`is_finite()`), closed `[min..max]` interval bounds, and admissible `state def` operational modes before entering `inner forbid(unsafe_code)` domain logic, while Stage 3 Miri `-Zmiri-tree-borrows` and `dart analyze --fatal-infos` verify zero undefined behavior (`C_VER_04`).
 
 ## Architectural Realization (3-Layer Definition of Done)
 
@@ -23,7 +23,7 @@ As a `MultiStageVerificationOrchestrator`, I want to invoke `guard_inbound_frb_f
 - Declared lifecycle state model: `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_LifecycleState` (`Idle`, `ProbingFormalDrivers`, `RunningStage1Clippy`, `FailedClosedJsonDiagnostic`, `RunningStage2DylintMir`, `RunningStage3FrbAndMiri`, `RunningStage4KaniCbmc`, `VerifiedAllFourStages`).
 
 ### Layer 2: Logic & State Management
-- **Contract B (Stage 3 `flutter_rust_bridge` + Miri `-Zmiri-tree-borrows` in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Behavioral execution contract invokes `guard_inbound_frb_f64(spec, raw_value, active_fsm_state)` on `FrbIcdBridgeAndMiriUbGate`, synthesizing `#![forbid(unsafe_code)]` domain crates and isolated `flutter_rust_bridge` FFI guards via `syn` + `proc-macro2` + `quote` + `prettyplease`, verifying Dart bindings via `deap_core::dart_cst` (`logos` + `rowan`) and `dart analyze --fatal-infos`, and executing `cargo +nightly miri test` under `MIRIFLAGS="-Zmiri-tree-borrows"` (`C_VER_04: max_miri_ub_violations == 0`) inside the 5-Stage pipeline (Stage 1 Clippy -> Stage 2 excluded `./lints/deap-dylint-mir/` -> Stage 3 Miri + `flutter_rust_bridge` -> Stage 4 Kani `#[kani::proof]` -> Stage 5 Ferrocene qualification) with dynamic runtime `PATH` discovery and zero hand-rolled scanners.
+- **Contract B (Stage 3 `flutter_rust_bridge` + Miri `-Zmiri-tree-borrows` in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Behavioral execution contract invokes `guard_inbound_frb_f64(spec, raw_value, active_fsm_state)` on `FrbIcdBridgeAndMiriUbGate`, synthesizing `inner forbid(unsafe_code)` domain crates and isolated `flutter_rust_bridge` FFI guards via `syn` + `proc-macro2` + `quote` + `prettyplease`, verifying Dart bindings via `deap_core::dart_cst` (`logos` + `rowan`) and `dart analyze --fatal-infos`, and executing `cargo +nightly miri test` under `MIRIFLAGS="-Zmiri-tree-borrows"` (`C_VER_04: max_miri_ub_violations == 0`) inside the 5-Stage pipeline (Stage 1 Clippy -> Stage 2 excluded `./lints/deap-dylint-mir/` -> Stage 3 Miri + `flutter_rust_bridge` -> Stage 4 Kani `outer kani::proof` -> Stage 5 Ferrocene qualification) with dynamic runtime `PATH` discovery and zero hand-rolled scanners.
 - State transition management: `RunningStage3FrbAndMiri -> RunningStage4KaniCbmc` (guard `stage3FrbMiriAndDartVerified`); `RunningStage3FrbAndMiri -> FailedClosedJsonDiagnostic` (guard `rejectMiriTreeBorrowsOrDartFatalInfo`, emitting `DEAP-E0903`).
 - Formal constraints and requirements enforced: `C_VER_01 (too_many_lines_threshold >= 1 and too_many_lines_threshold <= 80)`, `C_VER_02 (too_many_arguments_threshold >= 0 and too_many_arguments_threshold <= 5)`, `C_VER_03 (max_rt_heap_allocations >= 0 and max_rt_heap_allocations <= 0)`, `C_VER_04 (max_miri_ub_violations >= 0 and max_miri_ub_violations <= 0)`, `C_VER_05 (max_kani_counterexamples >= 0 and max_kani_counterexamples <= 0)`, `C_VER_06 (default_kani_unwind_bound >= 1 and default_kani_unwind_bound <= 64)`, `C_VER_07 (max_module_exec_sloc >= 1 and max_module_exec_sloc <= 380)`, `C_VER_08 (min_toolchain_discovery_probes >= 1 and min_toolchain_discovery_probes <= 3)`, `Invariant_REQ_0609_SC_03`, `REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`.
 - Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`./crates/compile-sysml/src/frb_guard/`, `./crates/verify-baseline/src/formal_gates/`, `./crates/compile-sysml/src/kani_synth/`, and excluded `./lints/deap-dylint-mir/`) while explicitly deleting legacy unguarded FFI emitters and hand-rolled Dart/FFI string scanners.
@@ -42,17 +42,12 @@ sequenceDiagram
     participant MultiStageVerificationOrchestrator as "orchestrator : MultiStageVerificationOrchestrator"
     participant FrbIcdBridgeAndMiriUbGate as "frbGate : FrbIcdBridgeAndMiriUbGate"
     participant StableClippyTotalFunctionGate as "clippyGate : StableClippyTotalFunctionGate"
-    Operator->>MultiStageVerificationOrchestrator: guard_inbound_frb_f64(spec: String, raw_value: Real, active_fsm_state: String)
-    MultiStageVerificationOrchestrator->>FrbIcdBridgeAndMiriUbGate: guard_inbound_frb_f64(spec: String, raw_value: Real, active_fsm_state: String)
-    FrbIcdBridgeAndMiriUbGate->>StableClippyTotalFunctionGate: verify_clippy_policy(policy: String, manifest_lints: String)
-    StableClippyTotalFunctionGate-->FrbIcdBridgeAndMiriUbGate: policyValid : Boolean
-    alt [stage3FrbMiriAndDartVerified == true]
-        FrbIcdBridgeAndMiriUbGate-->MultiStageVerificationOrchestrator: stage3Receipt : StageGateReceipt
-        MultiStageVerificationOrchestrator-->Operator: statusReport : StageGateReceipt
-    else [rejectMiriTreeBorrowsOrDartFatalInfo == true]
-        FrbIcdBridgeAndMiriUbGate-->MultiStageVerificationOrchestrator: diagnostic : String
-        MultiStageVerificationOrchestrator-->Operator: statusReport : StageGateReceipt
-    end
+    Operator->>MultiStageVerificationOrchestrator: guard_inbound_frb_f64()
+    MultiStageVerificationOrchestrator->>FrbIcdBridgeAndMiriUbGate: guard_inbound_frb_f64()
+    FrbIcdBridgeAndMiriUbGate->>StableClippyTotalFunctionGate: verify_clippy_policy()
+    StableClippyTotalFunctionGate-->>FrbIcdBridgeAndMiriUbGate: policyValid : Boolean
+    FrbIcdBridgeAndMiriUbGate-->>MultiStageVerificationOrchestrator: stage3Receipt : StageGateReceipt
+    MultiStageVerificationOrchestrator-->>Operator: statusReport : StageGateReceipt
 ```
 
 ## UML State Machine Diagram
@@ -60,8 +55,8 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> RunningStage3FrbAndMiri
-    RunningStage3FrbAndMiri --> RunningStage4KaniCbmc : "stage3FrbMiriAndDartVerified [C_VER_04 && isFinite && inRange && validState] / emitStage3PassReceipt"
-    RunningStage3FrbAndMiri --> FailedClosedJsonDiagnostic : "rejectMiriTreeBorrowsOrDartFatalInfo [!isFinite || !inRange || !validState || miriUb > 0] / emitDeapE0903"
+    RunningStage3FrbAndMiri --> RunningStage4KaniCbmc : "stage3FrbMiriAndDartVerified [C_VER_04 && isFinite && inRange && validState] / guard_inbound_frb_f64"
+    RunningStage3FrbAndMiri --> FailedClosedJsonDiagnostic : "rejectMiriTreeBorrowsOrDartFatalInfo [!isFinite || !inRange || !validState || miriUb > 0] / guard_inbound_frb_f64"
     RunningStage4KaniCbmc --> [*]
     FailedClosedJsonDiagnostic --> [*]
 ```
@@ -93,7 +88,7 @@ test case def Test_guard_inbound_frb_f64 {
 - [ ] AC-US-63-08: Given `NaN`, infinite, out-of-range `raw_value`, disallowed `active_fsm_state`, or violated `C_VER_04`, When `MultiStageVerificationOrchestrator` invokes `guard_inbound_frb_f64` on `FrbIcdBridgeAndMiriUbGate`, Then `FrbIcdBridgeAndMiriUbGate` rejects the request without partial state mutation, transitions to `FailedClosedJsonDiagnostic`, and emits single-line NDJSON diagnostic `DEAP-E0903`.
 
 ## Required Features
-- [ ] #747 - [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) (Implements `guard_inbound_frb_f64`, `#![forbid(unsafe_code)]` domain isolation, `dart analyze --fatal-infos`, and Miri `-Zmiri-tree-borrows` verification)
+- [ ] #747 - [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) (Implements `guard_inbound_frb_f64`, `inner forbid(unsafe_code)` domain isolation, `dart analyze --fatal-infos`, and Miri `-Zmiri-tree-borrows` verification)
 - [ ] #750 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Orchestrates Stage 3 FFI and Miri evaluation and short-circuits Stage 4 promotion on `DEAP-E0903`)
 - [ ] #751 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Enforces Stage 1 total-function and `undocumented_unsafe_blocks = "deny"` prerequisites)
 

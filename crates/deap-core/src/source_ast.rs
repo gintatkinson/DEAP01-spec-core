@@ -29,7 +29,11 @@ use std::path::{Path, PathBuf};
 pub use crate::dart_cst::{parse_dart_cst, parse_dart_items, DartCstItem, DartItemKind, DartToken};
 pub use crate::rust_cst::source_bridge::*;
 
-/// Lowers extracted items into canonical `PackageDef`. Realises: [REQ-0201]
+/// [DOC-TIER: A] Lowers extracted items into canonical `PackageDef`.
+///
+/// Safety & Traceability: Realises: [REQ-0201]
+/// Contract: Deterministically lowers CST-backed `SourceAstItem` records into a `SysML` v2 `PackageDef`.
+/// Bounds & Faults: Executes in linear O(N) time and space over `items.len()`; falls back to `"SourceCodeModel"` on empty package names.
 #[must_use]
 pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) -> crate::sysml_ast::PackageDef {
     let clean_pkg = sanitize_sysml_identifier(package_name, "SourceCodeModel");
@@ -51,7 +55,11 @@ pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) 
     pkg
 }
 
-/// Sanitizes `SysML` identifier. Realises: [REQ-0201]
+/// [DOC-TIER: A] Sanitizes `SysML` identifier.
+///
+/// Safety & Traceability: Realises: [REQ-0201]
+/// Contract: Normalizes arbitrary string tokens into valid ASCII `SysML` v2 identifiers containing only alphanumeric or `_` characters.
+/// Bounds & Faults: Executes in linear O(N) time over `input.len()`; returns `fallback` when trimmed result is empty.
 #[must_use]
 pub fn sanitize_sysml_identifier(input: &str, fallback: &str) -> String {
     let s: String = input.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' }).collect();
@@ -59,11 +67,19 @@ pub fn sanitize_sysml_identifier(input: &str, fallback: &str) -> String {
     if trimmed.is_empty() { fallback.to_string() } else { trimmed.to_string() }
 }
 
-/// Normalizes type for `SysML`. Realises: [REQ-0201]
+/// [DOC-TIER: A] Normalizes type for `SysML`.
+///
+/// Safety & Traceability: Realises: [REQ-0201]
+/// Contract: Trims leading and trailing whitespace trivia from extracted source type names.
+/// Bounds & Faults: Executes in linear O(N) time over `ty.len()` with zero panics.
 #[must_use]
 pub fn normalize_type_for_sysml(ty: &str) -> String { ty.trim().to_string() }
 
-/// Synthesizes first doc line summary. Realises: [REQ-0201]
+/// [DOC-TIER: A] Synthesizes first doc line summary.
+///
+/// Safety & Traceability: Realises: [REQ-0201]
+/// Contract: Extracts the primary prose summary line from collected doc comment lines while skipping headings and `Realises:` annotations.
+/// Bounds & Faults: Executes in linear O(N) time over `doc_lines`; returns `None` when no prose summary line exists.
 #[must_use]
 pub fn summary_from_doc_lines(doc_lines: &[String]) -> Option<String> {
     for line in doc_lines {
@@ -73,7 +89,11 @@ pub fn summary_from_doc_lines(doc_lines: &[String]) -> Option<String> {
     None
 }
 
-/// Resolves package name for source directory. Realises: [REQ-0201]
+/// [DOC-TIER: A] Resolves package name for source directory.
+///
+/// Safety & Traceability: Realises: [REQ-0201]
+/// Contract: Determines the canonical `SysML` v2 package identifier from `explicit_package` override or `source_dir` stem.
+/// Bounds & Faults: O(N) over path length; falls back to `"SourceCodeModel"` on unnamed or root paths.
 #[must_use]
 pub fn resolve_source_package_name(source_dir: &Path, explicit_package: Option<&str>) -> String {
     if let Some(pkg) = explicit_package.map(str::trim).filter(|s| !s.is_empty()) {
@@ -83,21 +103,36 @@ pub fn resolve_source_package_name(source_dir: &Path, explicit_package: Option<&
     sanitize_sysml_identifier(leaf, "SourceCodeModel")
 }
 
-/// Discovers `.rs` and `.dart` files in source directory. Realises: [REQ-0201]
+/// [DOC-TIER: A] Discovers `.rs` and `.dart` files in source directory.
+///
+/// Safety & Traceability: Realises: [REQ-0201]
+/// Contract: Recursively discovers and lexicographically sorts `.rs` and `.dart` files matching `language` under `source_dir`.
+/// Bounds & Faults: O(F log F) over discovered files `F`; propagates fatal traversal errors via `CoreError`.
 ///
 /// # Errors
-/// Fails if filesystem traversal encounters unreadable directories.
+/// Fails if filesystem traversal encounters fatal error conditions.
 pub fn discover_source_files(source_dir: &Path, language: SourceLanguage) -> Result<Vec<PathBuf>, crate::error::CoreError> {
-    let mut files: Vec<PathBuf> = walkdir::WalkDir::new(source_dir).into_iter().filter_map(Result::ok).filter(|e| e.path().is_file() && match language {
-        SourceLanguage::Rust => e.path().extension().is_some_and(|ext| ext == "rs"),
-        SourceLanguage::Dart => e.path().extension().is_some_and(|ext| ext == "dart"),
-        SourceLanguage::Auto => e.path().extension().is_some_and(|ext| ext == "rs" || ext == "dart"),
-    }).map(|e| e.path().to_path_buf()).collect();
+    let mut files = Vec::new();
+    for entry_res in walkdir::WalkDir::new(source_dir) {
+        let Ok(e) = entry_res else { continue };
+        let matches_lang = e.path().is_file() && match language {
+            SourceLanguage::Rust => e.path().extension().is_some_and(|ext| ext == "rs"),
+            SourceLanguage::Dart => e.path().extension().is_some_and(|ext| ext == "dart"),
+            SourceLanguage::Auto => e.path().extension().is_some_and(|ext| ext == "rs" || ext == "dart"),
+        };
+        if matches_lang {
+            files.push(e.path().to_path_buf());
+        }
+    }
     files.sort();
     Ok(files)
 }
 
-/// Ingests directory of source files into a `PackageDef`. Realises: [REQ-0201]
+/// [DOC-TIER: A] Ingests directory of source files into a `PackageDef`.
+///
+/// Safety & Traceability: Realises: [REQ-0201]
+/// Contract: Discovers, reads, and parses all source files in `source_dir` and lowers them into a consolidated `PackageDef`.
+/// Bounds & Faults: O(N) over total source bytes; propagates file read errors via `CoreError::io`.
 ///
 /// # Errors
 /// Fails if source file discovery or reading fails.

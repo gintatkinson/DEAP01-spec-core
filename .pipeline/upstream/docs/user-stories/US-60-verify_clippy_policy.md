@@ -23,7 +23,7 @@ As a `MultiStageVerificationOrchestrator`, I want to invoke `verify_clippy_polic
 - Declared lifecycle state model: `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_LifecycleState` (`Idle`, `ProbingFormalDrivers`, `RunningStage1Clippy`, `FailedClosedJsonDiagnostic`, `RunningStage2DylintMir`, `RunningStage3FrbAndMiri`, `RunningStage4KaniCbmc`, `VerifiedAllFourStages`).
 
 ### Layer 2: Logic & State Management
-- **Contract B (Official Cargo & `toml_edit` Stack in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Behavioral execution contract invokes `verify_clippy_policy(policy, manifest_lints)` on `StableClippyTotalFunctionGate` using `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` (with zero hand-rolled TOML/string scanners) to verify all 14 total-function Clippy lints (`unwrap_used`, `expect_used`, `panic`, `indexing_slicing`, `todo`, `unimplemented`, `unreachable`, `dbg_macro`, `arithmetic_side_effects`, `cast_possible_truncation`, `cast_sign_loss`, `cast_possible_wrap`, `float_cmp`, `undocumented_unsafe_blocks`), `C_VER_01`, `C_VER_02`, and `disallowed_types_count >= 3`, feeding Stage 2 (`./lints/deap-dylint-mir/`), Stage 3 (`cargo miri` + `flutter_rust_bridge`), Stage 4 (`cargo kani` `#[kani::proof]` via `syn`+`proc-macro2`+`quote`+`prettyplease`), and Stage 5 Ferrocene qualification.
+- **Contract B (Official Cargo & `toml_edit` Stack in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Behavioral execution contract invokes `verify_clippy_policy(policy, manifest_lints)` on `StableClippyTotalFunctionGate` using `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` (with zero hand-rolled TOML/string scanners) to verify all 14 total-function Clippy lints (`unwrap_used`, `expect_used`, `panic`, `indexing_slicing`, `todo`, `unimplemented`, `unreachable`, `dbg_macro`, `arithmetic_side_effects`, `cast_possible_truncation`, `cast_sign_loss`, `cast_possible_wrap`, `float_cmp`, `undocumented_unsafe_blocks`), `C_VER_01`, `C_VER_02`, and `disallowed_types_count >= 3`, feeding Stage 2 (`./lints/deap-dylint-mir/`), Stage 3 (`cargo miri` + `flutter_rust_bridge`), Stage 4 (`cargo kani` `outer kani::proof` via `syn`+`proc-macro2`+`quote`+`prettyplease`), and Stage 5 Ferrocene qualification.
 - State transition management: `RunningStage1Clippy -> RunningStage2DylintMir` (guard `stage1TotalFunctionsVerified`); `RunningStage1Clippy -> FailedClosedJsonDiagnostic` (guard `rejectStage1ClippyViolation`, emitting `DEAP-E0900`).
 - Formal constraints and requirements enforced: `C_VER_01 (too_many_lines_threshold >= 1 and too_many_lines_threshold <= 80)`, `C_VER_02 (too_many_arguments_threshold >= 0 and too_many_arguments_threshold <= 5)`, `C_VER_03 (max_rt_heap_allocations >= 0 and max_rt_heap_allocations <= 0)`, `C_VER_04 (max_miri_ub_violations >= 0 and max_miri_ub_violations <= 0)`, `C_VER_05 (max_kani_counterexamples >= 0 and max_kani_counterexamples <= 0)`, `C_VER_06 (default_kani_unwind_bound >= 1 and default_kani_unwind_bound <= 64)`, `C_VER_07 (max_module_exec_sloc >= 1 and max_module_exec_sloc <= 380)`, `C_VER_08 (min_toolchain_discovery_probes >= 1 and min_toolchain_discovery_probes <= 3)`, `Invariant_REQ_0609_SC_01`, `REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`.
 - Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`./crates/verify-baseline/src/formal_gates/`, `./crates/compile-sysml/src/kani_synth/`, `./crates/compile-sysml/src/frb_guard/`, and excluded `./lints/deap-dylint-mir/`) while explicitly deleting legacy hand-rolled manifest/attribute string scanners and ratcheting Check 34 ceilings.
@@ -41,15 +41,10 @@ sequenceDiagram
     actor Operator as "operator : Operator"
     participant MultiStageVerificationOrchestrator as "orchestrator : MultiStageVerificationOrchestrator"
     participant StableClippyTotalFunctionGate as "clippyGate : StableClippyTotalFunctionGate"
-    Operator->>MultiStageVerificationOrchestrator: verify_clippy_policy(policy: String, manifest_lints: String)
-    MultiStageVerificationOrchestrator->>StableClippyTotalFunctionGate: verify_clippy_policy(policy: String, manifest_lints: String)
-    alt [stage1TotalFunctionsVerified == true]
-        StableClippyTotalFunctionGate-->MultiStageVerificationOrchestrator: stage1Receipt : StageGateReceipt
-        MultiStageVerificationOrchestrator-->Operator: statusReport : StageGateReceipt
-    else [rejectStage1ClippyViolation == true]
-        StableClippyTotalFunctionGate-->MultiStageVerificationOrchestrator: diagnostic : String
-        MultiStageVerificationOrchestrator-->Operator: statusReport : StageGateReceipt
-    end
+    Operator->>MultiStageVerificationOrchestrator: verify_clippy_policy()
+    MultiStageVerificationOrchestrator->>StableClippyTotalFunctionGate: verify_clippy_policy()
+    StableClippyTotalFunctionGate-->>MultiStageVerificationOrchestrator: stage1Receipt : StageGateReceipt
+    MultiStageVerificationOrchestrator-->>Operator: statusReport : StageGateReceipt
 ```
 
 ## UML State Machine Diagram
@@ -57,8 +52,8 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> RunningStage1Clippy
-    RunningStage1Clippy --> RunningStage2DylintMir : "stage1TotalFunctionsVerified [C_VER_01 && C_VER_02 && lintsDenied == 14] / emitStage1PassReceipt"
-    RunningStage1Clippy --> FailedClosedJsonDiagnostic : "rejectStage1ClippyViolation [!C_VER_01 || !C_VER_02 || clippyViolations > 0] / emitDeapE0900"
+    RunningStage1Clippy --> RunningStage2DylintMir : "stage1TotalFunctionsVerified [C_VER_01 && C_VER_02 && lintsDenied == 14] / verify_clippy_policy"
+    RunningStage1Clippy --> FailedClosedJsonDiagnostic : "rejectStage1ClippyViolation [!C_VER_01 || !C_VER_02 || clippyViolations > 0] / verify_clippy_policy"
     RunningStage2DylintMir --> [*]
     FailedClosedJsonDiagnostic --> [*]
 ```

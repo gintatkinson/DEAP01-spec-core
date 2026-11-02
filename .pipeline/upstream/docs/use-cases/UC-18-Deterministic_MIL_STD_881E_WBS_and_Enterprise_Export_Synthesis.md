@@ -29,7 +29,7 @@ graph TD
     UC_Main -. "<<include>>" .-> UC_Step03
 ```
 
-```mermaid
+```sysml
 stateDiagram-v2
     [*] --> IcdSynthesized
     IcdSynthesized --> WbsExported : "emitMilStd881eWbs [wbsHierarchyDepth == 4]"

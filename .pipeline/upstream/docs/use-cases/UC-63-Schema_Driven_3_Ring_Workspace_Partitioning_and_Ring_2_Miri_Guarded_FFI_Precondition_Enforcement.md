@@ -29,7 +29,7 @@ graph TD
 - `Operator`
 
 ## 2. Preconditions
-- An OMG SysML v2.0 + KerML 1.0 system model (Contract A, zero 16-construct caps) annotated with `#dal` (`AssuranceLevel`) and `@Layer` metadata (`Domain`, `Application`, `Presentation`) and `port def`/`port` `(min..max)` ranges, plus two negative probes: Probe A introducing an illegal `safety_kernel -> ffi_guard_bridge` or `safety_kernel -> app_flutter` dependency edge, and Probe B injecting an out-of-range or `NaN` `OperatorConsole` payload across the Ring-2 FFI boundary.
+- An OMG SysML v2.0 + KerML 1.0 system model (Contract A, zero 16-construct caps) annotated with `#dal` (`AssuranceLevel`) and `@Layer` metadata (`Domain`, `Application`, `Presentation`) and `port def`/`port` `(min..max)` ranges, plus two negative probes: Probe A introducing an illegal `safety_kernel -> ffi_guard_bridge` or `safety_kernel -> app_flutter` dependency edge, and Probe B injecting an out-of-range or `NaN` `OperatorConsole` input across the Ring-2 FFI boundary.
 
 ## 3. Trigger
 - `ThreeRingAssurancePartitionCompiler` synthesizes the 3-ring workspace (`safety_kernel/`, `ffi_guard_bridge/`, `app_flutter/`) via `syn` + `proc-macro2` + `quote` + `prettyplease` and executes the Ring-2 Miri-guarded FFI boundary and `cargo_metadata` dependency verification suite (Contract B, zero hand-rolled scanners).
@@ -54,7 +54,7 @@ graph TD
 
 ## 7. Operational Context & Architectural Realization (3-Layer Definition of Done)
 - **Contract A (Full OMG SysML v2.0 + KerML 1.0 Grammar Coverage)**: Ingests full SysML v2.0 + KerML 1.0 `package`, `part def`/`part`, `port def`/`port`, `state def`/`state`, `action def`/`action`, `constraint def`/`constraint`, `allocation def`/`allocation`, and `#dal`/`@Layer` CST/AST constructs via `logos` + `rowan` + `salsa` + `ariadne` (`deap_core::sysml_cst`, `deap_core::dart_cst`) with zero 16-construct caps.
-- **Contract B (Official Rust Crate Stack & Zero Hand-Rolled Scanners)**: Synthesizes 3-Ring Rust/Flutter crates via `syn` + `proc-macro2` + `quote` + `prettyplease` and verifies crate dependency DAGs and FFI guards via `cargo_metadata`, `cargo-lock`, `toml_edit`, and `ra_ap_syntax` with zero hand-rolled scanners.
+- **Contract B (Official Rust Crate Stack & Zero Hand-Rolled Scanners)**: Synthesizes 3-Ring `Rust_Flutter` crates via `syn` + `proc-macro2` + `quote` + `prettyplease` and verifies crate dependency DAGs and FFI guards via `cargo_metadata`, `cargo-lock`, `toml_edit`, and `ra_ap_syntax` with zero hand-rolled scanners.
 - **Layer 1 (Domain State & Data Model)**: Typed `ThreeRingAssurancePartitionCompiler` domain state (`assurance_ring_count`, `max_ring1_heap_allocations`, `max_unguarded_ffi_entrypoints`, `enable_ring1_safety_monitor`) and `ThreeRingWorkspacePlan`.
 - **Layer 2 (Logic & State Management)**: Deterministic 3-Ring partition synthesis and Ring-2 Miri FFI guard generation inside `< 380`-SLOC submodules (`crates/compile-sysml/src/ring_partition/`, `C_CERT_07`) with explicit deletion of legacy hand-rolled workspace/FFI string scanners.
 - **Layer 3 (Presentation & Actuator Interface Binding)**: Boundary ports `sysml_assurance_ast_in`, `partitioned_workspace_out`, and `partition_diag_out` emitting `ThreeRingWorkspacePlan` and `DEAP-E1105` diagnostics.

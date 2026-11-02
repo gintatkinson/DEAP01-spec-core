@@ -126,7 +126,12 @@ fn extract_item(it: &ast::Item, kind: RustItemKind, parsed: &ParsedRustFile) -> 
     let attrs: Vec<String> = it.attrs().map(|a| a.syntax().text().to_string()).collect();
     let (name, is_pub) = extract_name_and_pub(it, &attrs);
     let text_range = it.syntax().text_range();
-    let start_line = parsed.line_col(text_range.start()).0;
+    let decl_offset = it
+        .syntax()
+        .children_with_tokens()
+        .find(|el| !matches!(el.kind(), SyntaxKind::COMMENT | SyntaxKind::DOC_COMMENT | SyntaxKind::WHITESPACE | SyntaxKind::ATTR))
+        .map_or(text_range.start(), |el| el.text_range().start());
+    let start_line = parsed.line_col(decl_offset).0;
     let end_offset = if text_range.end() > text_range.start() { text_range.end() - TextSize::from(1) } else { text_range.start() };
     let end_line = parsed.line_col(end_offset).0;
     let (fn_exec_lines, fn_param_count) = match it {

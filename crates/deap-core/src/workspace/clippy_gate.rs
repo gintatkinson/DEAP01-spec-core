@@ -31,7 +31,13 @@ use std::io::BufRead;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-pub const MANDATORY_DENIED_CLIPPY_LINTS: [&str; 14] = [
+/// Canonical Clippy lint identifier string slice.
+/// Realises: [REQ-0609]
+pub type ClippyLintName = &'static str;
+
+/// Complete 14-lint deny table enforced by Stage-1 Clippy total-function verification.
+/// Realises: [REQ-0609]
+pub const MANDATORY_DENIED_CLIPPY_LINTS: [ClippyLintName; 14] = [
     "unwrap_used",
     "expect_used",
     "panic",
@@ -49,6 +55,9 @@ pub const MANDATORY_DENIED_CLIPPY_LINTS: [&str; 14] = [
 ];
 
 /// Configuration parameters for the stable Clippy total function gate.
+/// Safety & Traceability: Realises: [REQ-0609], [SC-BP09-17]
+/// Contract: Captures maximum line, argument, boolean parameter, disallowed-type, cognitive-complexity, and denied-lint thresholds.
+/// Bounds & Faults: O(1) value type with deterministic default thresholds (`80`, `5`, `3`, `3`, `15`, `14`).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StableClippyGateConfig {
     pub too_many_lines_threshold: usize,
@@ -60,6 +69,8 @@ pub struct StableClippyGateConfig {
 }
 
 impl Default for StableClippyGateConfig {
+    /// Returns the normative Stage-1 Clippy total-function threshold configuration.
+    /// Realises: [REQ-0609], [SC-BP09-17]
     fn default() -> Self {
         Self {
             too_many_lines_threshold: 80,
@@ -73,6 +84,9 @@ impl Default for StableClippyGateConfig {
 }
 
 /// Cryptographic digest bundle across Cargo.toml, Cargo.lock, and clippy.toml.
+/// Safety & Traceability: Realises: [REQ-0609], [SC-BP09-18]
+/// Contract: Stores SHA-256 digests for `Cargo.toml`, `Cargo.lock`, `clippy.toml`, and their combined manifest bundle.
+/// Bounds & Faults: O(1) fixed-size 128-byte digest record with zero heap allocations.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ManifestBundleDigest {
     pub combined_sha256: [u8; 32],
@@ -82,6 +96,9 @@ pub struct ManifestBundleDigest {
 }
 
 /// Structured finding filtered from the cargo clippy NDJSON stream.
+/// Safety & Traceability: Realises: [REQ-0609], [SC-BP09-19]
+/// Contract: Captures file path, 1-based line and column, lint code, diagnostic message, and optional replacement suggestion.
+/// Bounds & Faults: O(M) space proportional to diagnostic message length with deterministic serialization.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ClippyNdjsonFinding {
     pub file_name: String,
@@ -93,6 +110,9 @@ pub struct ClippyNdjsonFinding {
 }
 
 /// Receipt authorizing Stage-1 completion and explicitly deferring Wave-2 stages.
+/// Safety & Traceability: Realises: [REQ-0609], [SC-BP09-20]
+/// Contract: Binds the verified `ManifestBundleDigest`, Stage-1 pass flag, Wave-2 deferral flag, finding count, and receipt SHA-256.
+/// Bounds & Faults: O(1) fixed-size receipt structure; emitted only when Stage-1 passes with zero findings.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StageGateReceipt {
     pub workspace_manifest_digest: ManifestBundleDigest,
@@ -103,6 +123,9 @@ pub struct StageGateReceipt {
 }
 
 /// Typed fail-closed errors emitted by the stable Clippy gate.
+/// Safety & Traceability: Realises: [REQ-0609], [SC-BP09-17]
+/// Contract: Enumerates all fail-closed Stage-1 failure modes from manifest drift to lint violations.
+/// Bounds & Faults: O(1) discriminant dispatch; formats deterministically with `[DEAP-E0900]`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ClippyGateError {
     NonCanonicalWorkspacePath,
@@ -118,6 +141,8 @@ pub enum ClippyGateError {
 }
 
 impl std::fmt::Display for ClippyGateError {
+    /// Formats the Stage-1 Clippy gate error with its `[DEAP-E0900]` diagnostic prefix.
+    /// Realises: [REQ-0609]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[DEAP-E0900] {:?}", self)
     }

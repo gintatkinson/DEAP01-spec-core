@@ -54,7 +54,7 @@ graph TD
   - `ClosedLoopDefectPublisherGate` aborts execution without emitting a receipt on `verifiedReceiptOutPort`, preserves prior verified state, and exits fail-closed with code 1.
 
 ## 6. Postconditions
-- **3-Layer DoD Realization**: Layer 1 (Domain State & Data Model: typed `serde_json` GitHub issue payload and `closed_loop_mismatch_bytes == 0` parity state), Layer 2 (Logic & State Management: closed-loop LF-normalized byte comparison inside `< 380`-SLOC submodules under `./crates/verify-baseline/src/defect_dossier/` with `source_ast.rs` and all legacy hand-rolled scanners deleted), and Layer 3 (Presentation & Actuator Interface Binding: `ClosedLoopTrackerPublishPort`, `GitHubIssueSsotQueryPort`, and `verifiedReceiptOutPort` bindings) are satisfied.
+- **3-Layer DoD Realization**: Layer 1 (Domain State & Data Model: typed `serde_json` GitHub issue document and `closed_loop_mismatch_bytes == 0` parity state), Layer 2 (Logic & State Management: closed-loop LF-normalized byte comparison inside `< 380`-SLOC submodules under `./crates/verify-baseline/src/defect_dossier/` with `source_ast.rs` and all legacy hand-rolled scanners deleted), and Layer 3 (Presentation & Actuator Interface Binding: `ClosedLoopTrackerPublishPort`, `GitHubIssueSsotQueryPort`, and `verifiedReceiptOutPort` bindings) are satisfied.
 - `ClosedLoopDefectPublisherGate` satisfies declared objective `Closed Loop GitHub SSOT Publishing and Byte Parity Verification` with all subsystem invariants intact.
 - Verified `Closed Loop GitHub SSOT Publishing and Byte Parity Verification` completion status is recorded for `Operator_Or_CI_Pipeline`.
 

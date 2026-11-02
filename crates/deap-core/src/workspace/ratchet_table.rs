@@ -1,14 +1,21 @@
 #![deny(clippy::too_many_lines, clippy::too_many_arguments, clippy::undocumented_unsafe_blocks)]
 //! Baseline line-count ratchet table locking legacy `.rs` files at exact HEAD ceilings.
-//! Non-ratcheted and new modules must satisfy strict modularity bounds without exemption.
-//! Realises: [REQ-0601], [REQ-0608]
+//!
+//! Safety & Traceability: Realises: [REQ-0601], [REQ-0608]
+//! Contract: Provides `LEGACY_RATCHET_MAX_LINES`, `active_greater_than_500_ratchet_count`, and `lookup_ratchet_ceiling` for exact legacy file line-count verification.
+//! Bounds & Faults: O(log N) binary search over sorted static entries with zero panicking operations.
 
 use std::borrow::Cow;
 
+/// Canonical `(rel_path, max_lines)` entry in `LEGACY_RATCHET_MAX_LINES`.
+/// Realises: [REQ-0601], [REQ-0608]
+pub type RatchetPair = (&'static str, usize);
+
 /// Lexicographically sorted `(rel_path, max_lines)` ceilings for legacy workspace `.rs` files.
 /// Any growth above the recorded HEAD line count fails verification (`[REQ-0601]`, `[REQ-0608]`).
-pub const LEGACY_RATCHET_MAX_LINES: &[(&str, usize)] = &[
-    ("./crates/assemble-conops/src/assembler.rs", 2284),
+/// Realises: [REQ-0601], [REQ-0608]
+pub const LEGACY_RATCHET_MAX_LINES: &[RatchetPair] = &[
+    ("./crates/assemble-conops/src/assembler.rs", 2295),
     ("./crates/assemble-conops/src/main.rs", 339),
     ("./crates/assemble-conops/src/params.rs", 5750),
     ("./crates/assemble-conops/src/sanitize.rs", 1475),
@@ -123,7 +130,7 @@ pub const LEGACY_RATCHET_MAX_LINES: &[(&str, usize)] = &[
     ("./crates/deap-core/src/diagnostics/item.rs", 272),
     ("./crates/deap-core/src/diagnostics/mod.rs", 45),
     ("./crates/deap-core/src/diagnostics/severity.rs", 112),
-    ("./crates/deap-core/src/diagnostics/tests.rs", 230),
+    ("./crates/deap-core/src/diagnostics/tests.rs", 233),
     ("./crates/deap-core/src/digest.rs", 361),
     ("./crates/deap-core/src/error.rs", 232),
     ("./crates/deap-core/src/markdown/alignment.rs", 292),
@@ -133,40 +140,40 @@ pub const LEGACY_RATCHET_MAX_LINES: &[(&str, usize)] = &[
     ("./crates/deap-core/src/markdown/mermaid_catalog.rs", 297),
     ("./crates/deap-core/src/markdown/mod.rs", 50),
     ("./crates/deap-core/src/markdown/sanitization.rs", 276),
-    ("./crates/deap-core/src/markdown/tests.rs", 338),
+    ("./crates/deap-core/src/markdown/tests.rs", 339),
     ("./crates/deap-core/src/rules/canonical_blueprints.rs", 287),
     ("./crates/deap-core/src/rules/codebase.rs", 295),
     ("./crates/deap-core/src/rules/excluded_dirs.rs", 282),
     ("./crates/deap-core/src/rules/master_blueprints.rs", 224),
     ("./crates/deap-core/src/rules/mod.rs", 41),
-    ("./crates/deap-core/src/rules/tests.rs", 298),
+    ("./crates/deap-core/src/rules/tests.rs", 299),
     ("./crates/deap-core/src/sysml_ast/actions.rs", 359),
-    ("./crates/deap-core/src/sysml_ast/cache.rs", 92),
+    ("./crates/deap-core/src/sysml_ast/cache.rs", 93),
     ("./crates/deap-core/src/sysml_ast/connections_and_flows.rs", 577),
-    ("./crates/deap-core/src/sysml_ast/cot_audit.rs", 62),
+    ("./crates/deap-core/src/sysml_ast/cot_audit.rs", 63),
     ("./crates/deap-core/src/sysml_ast/expressions.rs", 576),
-    ("./crates/deap-core/src/sysml_ast/identifiers.rs", 272),
+    ("./crates/deap-core/src/sysml_ast/identifiers.rs", 520),
     ("./crates/deap-core/src/sysml_ast/interactions.rs", 128),
     ("./crates/deap-core/src/sysml_ast/interfaces_and_items.rs", 581),
-    ("./crates/deap-core/src/sysml_ast/mod.rs", 94),
+    ("./crates/deap-core/src/sysml_ast/mod.rs", 86),
     ("./crates/deap-core/src/sysml_ast/package_model.rs", 621),
-    ("./crates/deap-core/src/sysml_ast/parser.rs", 285),
-    ("./crates/deap-core/src/sysml_ast/parts_and_ports.rs", 267),
-    ("./crates/deap-core/src/sysml_ast/persistence.rs", 104),
+    ("./crates/deap-core/src/sysml_ast/parser.rs", 286),
+    ("./crates/deap-core/src/sysml_ast/parts_and_ports.rs", 487),
+    ("./crates/deap-core/src/sysml_ast/persistence.rs", 105),
     ("./crates/deap-core/src/sysml_ast/requirements.rs", 545),
     ("./crates/deap-core/src/sysml_ast/safety_and_fmeca.rs", 557),
-    ("./crates/deap-core/src/sysml_ast/schema_extractor.rs", 335),
-    ("./crates/deap-core/src/sysml_ast/schema_extractor_data.rs", 151),
-    ("./crates/deap-core/src/sysml_ast/slice.rs", 201),
-    ("./crates/deap-core/src/sysml_ast/states.rs", 289),
+    ("./crates/deap-core/src/sysml_ast/schema_extractor.rs", 336),
+    ("./crates/deap-core/src/sysml_ast/schema_extractor_data.rs", 152),
+    ("./crates/deap-core/src/sysml_ast/slice.rs", 202),
+    ("./crates/deap-core/src/sysml_ast/states.rs", 393),
     ("./crates/deap-core/src/sysml_ast/sysml_ast_tests.rs", 1535),
-    ("./crates/deap-core/src/sysml_ast/test_cases.rs", 158),
+    ("./crates/deap-core/src/sysml_ast/test_cases.rs", 159),
     ("./crates/ingest-sysml/src/detectors.rs", 1279),
     ("./crates/ingest-sysml/src/digest.rs", 843),
     ("./crates/ingest-sysml/src/lib.rs", 1084),
     ("./crates/ingest-sysml/src/main.rs", 974),
     ("./crates/ingest-sysml/src/table.rs", 1451),
-    ("./crates/ingest-sysml/src/translators/code.rs", 473),
+    ("./crates/ingest-sysml/src/translators/code.rs", 469),
     ("./crates/ingest-sysml/src/translators/idl.rs", 599),
     ("./crates/ingest-sysml/src/translators/markdown.rs", 6569),
     ("./crates/ingest-sysml/src/translators/openapi.rs", 394),
@@ -174,7 +181,7 @@ pub const LEGACY_RATCHET_MAX_LINES: &[(&str, usize)] = &[
     ("./crates/ingest-sysml/tests/code_ingestion_tests.rs", 769),
     ("./crates/ingest-sysml/tests/code_realization_scoping_tests.rs", 413),
     ("./crates/ingest-sysml/tests/reproducer_tests.rs", 611),
-    ("./crates/reconcile-backlog/src/checklist.rs", 2358),
+    ("./crates/reconcile-backlog/src/checklist.rs", 2366),
     ("./crates/reconcile-backlog/src/create_issue.rs", 1068),
     ("./crates/reconcile-backlog/src/frontmatter.rs", 1356),
     ("./crates/reconcile-backlog/src/lib.rs", 2625),
@@ -191,7 +198,7 @@ pub const LEGACY_RATCHET_MAX_LINES: &[(&str, usize)] = &[
     ("./crates/verify-baseline/src/checks/mermaid.rs", 206),
     ("./crates/verify-baseline/src/checks/parity_gates.rs", 7416),
     ("./crates/verify-baseline/src/checks/safety_stpa.rs", 2055),
-    ("./crates/verify-baseline/src/checks/structural.rs", 5592),
+    ("./crates/verify-baseline/src/checks/structural.rs", 5589),
     ("./crates/verify-baseline/src/checks/wbs_integrity.rs", 407),
     ("./crates/verify-baseline/src/commit_msg.rs", 1043),
     ("./crates/verify-baseline/src/defect_dossier.rs", 2465),

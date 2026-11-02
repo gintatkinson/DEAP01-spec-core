@@ -27,7 +27,7 @@ graph TD
 ```
 
 ### State Machine Diagram
-```mermaid
+```sysml
 stateDiagram-v2
     [*] --> RewritingCheck37Paths
     RewritingCheck37Paths --> VerifyingSelfHostFixedPoint : "atomicFilesCommitted"

@@ -1,64 +1,139 @@
 {
-  "sha256": "5a06e10908d7de86bddec24dddfe2dc9f2d6469502cacf982f8bd490a634019e",
-  "total_lines": 1075,
+  "sha256": "e2596df3b4d37bde55840f26040f916f1738e96edd005cb8e58e4835b234e377",
+  "total_lines": 2896,
   "node_counts": {
-    "action_defs": 44,
-    "attribute_defs": 70,
+    "action_defs": 78,
+    "attribute_defs": 255,
     "calc_defs": 0,
     "capability_defs": 0,
-    "connection_defs": 0,
-    "constraint_defs": 0,
-    "containers": 30,
+    "connection_defs": 11,
+    "constraint_defs": 35,
+    "containers": 53,
     "groupings": 0,
     "hazard_defs": 0,
     "identities": 0,
-    "interaction_defs": 6,
+    "interaction_defs": 11,
     "item_defs": 0,
-    "leaves": 70,
-    "lists": 44,
+    "leaves": 255,
+    "lists": 78,
     "operation_defs": 0,
-    "packages": 7,
-    "part_defs": 30,
-    "port_defs": 44,
-    "requirement_defs": 6,
+    "packages": 12,
+    "part_defs": 53,
+    "port_defs": 120,
+    "requirement_defs": 11,
     "risk_defs": 0,
-    "state_defs": 6,
-    "test_case_defs": 0,
+    "state_defs": 11,
+    "test_case_defs": 101,
     "typedefs": 0,
-    "use_case_defs": 31
+    "use_case_defs": 65
   },
   "schema_nodes": [
     "AgileSpecForwardProjector",
+    "AirGappedCargoLockGovernor",
     "AntiGamingTestBodyAuditor",
     "AssertAstOrigEqualsAstReparsed",
     "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint",
     "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_LifecycleState",
     "BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_SequenceInteraction",
+    "BP_01_ForbidLintPortDef",
+    "BP_01_ManifestToForbidGateConnection",
+    "BP_02_AuditorToPurityGateConnection",
     "BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint",
     "BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint_LifecycleState",
     "BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint_SequenceInteraction",
+    "BP_02_PurityDiagnosticPortDef",
+    "BP_03_BijectiveRoundtripPortDef",
+    "BP_03_SerializerToRoundtripGateConnection",
     "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint",
     "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_LifecycleState",
     "BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_SequenceInteraction",
     "BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint",
     "BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_LifecycleState",
     "BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_SequenceInteraction",
+    "BP_04_ForwardProjectionPortDef",
+    "BP_04_ReconcilerToForwardCompilerConnection",
+    "BP_05_ContextToDocstringGeneratorConnection",
+    "BP_05_SafetyDocstringPortDef",
     "BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
     "BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState",
     "BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction",
+    "BP_06_DefectDossierPortDef",
     "BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
     "BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_LifecycleState",
     "BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_SequenceInteraction",
+    "BP_06_DossierToPublisherGateConnection",
+    "BP_07_ModularCodegenPortDef",
+    "BP_07_PartitionerToRustEmitterConnection",
+    "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+    "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint_LifecycleState",
+    "BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint_SequenceInteraction",
+    "BP_08_CodemodToDiagnosticEmitterConnection",
+    "BP_08_LosslessRustCstPortDef",
+    "BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics",
+    "BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics_LifecycleState",
+    "BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics_SequenceInteraction",
+    "BP_09_ClippyToOrchestratorConnection",
+    "BP_09_FormalVerificationPortDef",
+    "BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper",
+    "BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_LifecycleState",
+    "BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction",
+    "BP_10_IncrementalCstPortDef",
+    "BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine",
+    "BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine_LifecycleState",
+    "BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine_SequenceInteraction",
+    "BP_10_PolyglotToSalsaDbConnection",
+    "BP_11_FerroceneAssurancePortDef",
+    "BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture",
+    "BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture_LifecycleState",
+    "BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture_SequenceInteraction",
+    "BP_11_PartitionToFlsTraceabilityConnection",
     "BaselineGateVerdictPort",
     "BidirectionalBacklogReconciler",
     "BijectiveDiffDiagnosticPort",
     "BijectiveSysmlSerializer",
     "BindAllPackageStoriesToUse",
+    "Blueprint_ID",
+    "C_CERT_01",
+    "C_CERT_02",
+    "C_CERT_03",
+    "C_CERT_04",
+    "C_CERT_05",
+    "C_CERT_06",
+    "C_CERT_07",
+    "C_CERT_08",
+    "C_CST_01",
+    "C_CST_02",
+    "C_CST_03",
+    "C_CST_04",
+    "C_CST_05",
+    "C_CST_06",
+    "C_INC_01",
+    "C_INC_02",
+    "C_INC_03",
+    "C_INC_04",
+    "C_INC_05",
+    "C_INC_06",
+    "C_INC_07",
+    "C_MOD_01",
+    "C_MOD_02",
+    "C_MOD_03",
+    "C_MOD_04",
+    "C_MOD_05",
+    "C_MOD_06",
+    "C_VER_01",
+    "C_VER_02",
+    "C_VER_03",
+    "C_VER_04",
+    "C_VER_05",
+    "C_VER_06",
+    "C_VER_07",
+    "C_VER_08",
     "CargoManifestInputPort",
+    "CertifiedCoreSubsetAndCoverageGate",
     "Check34AstPurityAndAntiGamingGate",
     "Check34GateStatusPort",
     "Check36AstCompletenessVerifier",
-    "ClippyAttributeAstScanner",
+    "ClippyAttributeCstParser",
     "ClosedLoopDefectPublisherGate",
     "ClosedLoopTrackerPublishPort",
     "CompileSysmlEmitIcdDocsInterfaces",
@@ -73,6 +148,7 @@
     "DeterministicDossierSynthesizer",
     "DeterministicSpecIcdWbsForwardCompiler",
     "DeterministicStaticDefectAuditor",
+    "DualModeFerroceneToolchainGate",
     "EmitSymmetricActionDefSignaturesAndE1",
     "EvaluateSourceFilePillarsAcross5",
     "Execute12CheckValidateDefectDossier",
@@ -82,18 +158,34 @@
     "FailClosedIoAstVerifier",
     "FailClosedRecursiveDescentParser",
     "FivePillarStaticAstAnalyzer",
+    "FlsParagraphTraceabilitySynthesizer",
+    "FormattingPreservingSyncSplicer",
+    "FourLevelAstPartitionerAndHoister",
+    "FrbIcdBridgeAndMiriUbGate",
+    "Generation_Mode",
     "GhIssueCreateOrGhIssue",
     "GhIssueViewJsonTitleBody",
     "GitHubIssueSsotQueryPort",
     "IcdMatrixArtifactPort",
+    "IsolatedDylintMirAllocationGate",
+    "KaniCbmcProofSynthesizer",
+    "Layer_1_Domain_State_Data_Model",
+    "Layer_2_Logic_State_Management",
+    "Layer_3_Presentation_Actuator_Interface_Binding",
     "LogicalIcdMatrixCompiler",
+    "LogosRowanSysmlCstEngine",
+    "LosslessRustCstAnalyzer",
     "MarkdownSpecSuiteOutputPort",
     "MergeExtractedEntitiesIntoOwningSubpackages",
     "MermaidUmlDiagramGenerator",
     "MilStd881eWbsExporter",
+    "ModularFlutterMultiFileEmitter",
+    "ModularRustMultiFileEmitter",
+    "MultiStageVerificationOrchestrator",
     "NativeSigilAndLifetimeLexer",
     "ParseCommonMarkTablesWithInHtml",
-    "ParseRustSourceAstAndParse",
+    "ParseRustCstAndParseDartCst",
+    "ParseSourceCstViaRustAndDartCst",
     "ParseTypeExprAndParseTransition",
     "ProjectNxNConnectionDefMatrixAndFlowDef",
     "PurityViolationDiagnosticPort",
@@ -103,11 +195,17 @@
     "REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint",
     "REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint",
     "REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint",
+    "REQ_0607_BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint",
+    "REQ_0608_BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics",
+    "REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper",
+    "REQ_0610_BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine",
+    "REQ_0611_BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C",
     "RangeSliceAstDetector",
     "RawSysmlSourceInputPort",
     "ReadWorkspaceLintsClippyForbidTable",
     "ReconcileBacklogReconcileDocsDirDocs",
     "ReconcileChecklistsWithParentInclusiveEpic",
+    "Requirement_ID",
     "ResolveParentEpicByPkgName",
     "ResolveSchemaContextViaCollectAll",
     "RunCompileSysmlInjectSafetyDocstrings",
@@ -115,82 +213,295 @@
     "RunScanClippyAllowTokensOn",
     "RunVerifyBaselineNoDomain",
     "RustSourceTokenStreamPort",
-    "ScanSourceLinesViaRustDartLexStateAnd",
+    "SalsaIncrementalCompilerDatabase",
     "ScopedSchemaContextResolver",
+    "SelfHostingModularCodegenCompiler",
     "SerializedSysmlOutputPort",
     "SevenSectionDocstringGenerator",
+    "Specification_Source",
     "SsotSymbolDeduplicationGate",
+    "StableClippyTotalFunctionGate",
+    "Status",
+    "StructuredModularCodegenSynthesizer",
     "SynthesizeMilStd881eTreeAnd",
     "SysML_Model",
     "SysmlBijectiveRoundtripCompilerGate",
     "SysmlPackageAstInputPort",
-    "TargetSourceAstInputPort",
+    "TC_REQ_0601_Blueprint_Conformance",
+    "TC_REQ_0601_Forbid_Lint_Gate",
+    "TC_REQ_0602_Blueprint_Conformance",
+    "TC_REQ_0602_Check34_Purity_Gate",
+    "TC_REQ_0603_Bijective_Roundtrip_Gate",
+    "TC_REQ_0603_Blueprint_Conformance",
+    "TC_REQ_0604_Blueprint_Conformance",
+    "TC_REQ_0604_Forward_Sync_Icd_Wbs",
+    "TC_REQ_0605_Blueprint_Conformance",
+    "TC_REQ_0605_Safety_Docstring_Synthesizer",
+    "TC_REQ_0606_Blueprint_Conformance",
+    "TC_REQ_0606_Static_Defect_Auditor",
+    "TC_REQ_0607_Blueprint_Conformance",
+    "TC_REQ_0607_Self_Hosting_Modular_Codegen",
+    "TC_REQ_0608_Blueprint_Conformance",
+    "TC_REQ_0608_Lossless_Rust_Cst_Codemod",
+    "TC_REQ_0609_Blueprint_Conformance",
+    "TC_REQ_0609_Multi_Stage_Formal_Gatekeeper",
+    "TC_REQ_0610_Blueprint_Conformance",
+    "TC_REQ_0610_Incremental_Sysml_Engine",
+    "TC_REQ_0611_Blueprint_Conformance",
+    "TC_REQ_0611_Ferrocene_Three_Ring_Certification",
+    "TargetRustCstInputPort",
+    "Target_Crates",
     "TestFunctionAstStreamPort",
     "TestTargetLintEnforcer",
+    "Test_AssertAstOrigEqualsAstReparsed",
+    "Test_BindAllPackageStoriesToUse",
+    "Test_CompileSysmlEmitIcdDocsInterfaces",
+    "Test_CompileSysmlEmitWbsDocsManagement",
+    "Test_CompileSysmlForwardSyncDocs",
+    "Test_CompileSysmlReverseSyncDocs",
+    "Test_EmitSymmetricActionDefSignaturesAndE1",
+    "Test_EvaluateSourceFilePillarsAcross5",
+    "Test_Execute12CheckValidateDefectDossier",
+    "Test_ExecuteCargoClippyWorkspaceAllTargets",
+    "Test_ExecuteIngestSysmlSchemaBlueprint01",
+    "Test_ExecuteVerifyBaselineNoDomain",
+    "Test_GhIssueCreateOrGhIssue",
+    "Test_GhIssueViewJsonTitleBody",
+    "Test_MergeExtractedEntitiesIntoOwningSubpackages",
+    "Test_ParseCommonMarkTablesWithInHtml",
+    "Test_ParseRustCstAndParseDartCst",
+    "Test_ParseSourceCstViaRustAndDartCst",
+    "Test_ParseTypeExprAndParseTransition",
+    "Test_ProjectNxNConnectionDefMatrixAndFlowDef",
+    "Test_ReadWorkspaceLintsClippyForbidTable",
+    "Test_ReconcileBacklogReconcileDocsDirDocs",
+    "Test_ReconcileChecklistsWithParentInclusiveEpic",
+    "Test_ResolveParentEpicByPkgName",
+    "Test_ResolveSchemaContextViaCollectAll",
+    "Test_RunCompileSysmlInjectSafetyDocstrings",
+    "Test_RunIngestSysmlSchemaBlueprint05",
+    "Test_RunScanClippyAllowTokensOn",
+    "Test_RunVerifyBaselineNoDomain",
+    "Test_ScanSourceLinesViaRustDartLexStateAnd",
+    "Test_SynthesizeMilStd881eTreeAnd",
+    "Test_TokenizeRsAndDartFilesUsing",
+    "Test_VerifyBaselineAuditCodePathCrates",
+    "Test_analyze_metrics",
+    "Test_apply_formatting_preserving_splices",
+    "Test_ast_orig_to_sysml",
+    "Test_audit_fail_closed_io_patterns",
+    "Test_audit_ssot_symbol_deduplication",
+    "Test_audit_test_integrity_and_anti_gaming",
+    "Test_build_syn_file",
+    "Test_check_compiler_ast_purity",
+    "Test_contains_direct_range_slice",
+    "Test_emit_modular_flutter_tree",
+    "Test_emit_modular_rust_tree",
+    "Test_evaluate_four_stage_gatekeeper",
+    "Test_evaluate_hir_early_cutoff",
+    "Test_evaluate_stage2_dylint_mir",
+    "Test_extract_rust_module",
+    "Test_format_ndjson_line",
+    "Test_format_pretty_syn_file",
+    "Test_guard_inbound_frb_f64",
+    "Test_list_rust_items",
+    "Test_mask_literals_and_comments",
+    "Test_normalize_line_endings",
+    "Test_parse_lossless_sysml_cst",
+    "Test_parse_package_or_file",
+    "Test_partition_and_hoist",
+    "Test_probe_criticalup_toolchain",
+    "Test_probe_formal_toolchain",
+    "Test_render_ariadne_diagnostic",
+    "Test_resolve_polyglot_backend",
+    "Test_run_check_defect",
+    "Test_scan_all",
+    "Test_synthesize_defect_dossier_markdown",
+    "Test_synthesize_module_tokens",
+    "Test_synthesize_three_ring_workspace",
+    "Test_validate_kani_harness_spec",
+    "Test_verify_bijective_ast_roundtrip",
+    "Test_verify_certified_core_and_table_a7_coverage",
+    "Test_verify_clippy_policy",
+    "Test_verify_dag_and_layers",
+    "Test_verify_dual_toolchain_parity",
+    "Test_verify_fixed_point_digest",
+    "Test_verify_fls_traceability_chain",
+    "Test_verify_in_process_cst_syntax",
+    "Test_verify_lossless_cst_invariants",
+    "Test_verify_offline_locked_build",
+    "Test_verify_stage_fixed_point",
+    "Test_verify_three_ring_edge_and_monitor_readback",
+    "ThreeRingAssurancePartitionCompiler",
+    "Title",
     "TokenStreamChannelPort",
     "TokenizeRsAndDartFilesUsing",
+    "TopologicalLayerDagVerifier",
+    "Tracked_Issues",
+    "TypedPolyglotIngestionFrontend",
     "UC_AC_01_Deterministic_Multi_Story_Use_Case_and_ConOps_Parent_Epic_Projection",
+    "UC_AC_01_Dual_Mode_criticalup_toml_and_rust_toolchain_toml_Parity_Cross_Platform_Discovery_and_DO_330_Fixed_Point_Qualification",
+    "UC_AC_01_Fail_Closed_Rejection_on_Directed_Dependency_Cycles_and_Upward_Layer_Imports",
     "UC_AC_01_General_Direct_Range_Slice_Indexing_Rejection",
+    "UC_AC_01_Lossless_Red_Green_CST_Roundtrip_and_Exact_DEAP_v2_0_AST_Metrics_Extraction",
+    "UC_AC_01_Lossless_logos_and_rowan_Concrete_Syntax_Tree_Full_Fidelity_Roundtrip_and_Cross_Platform_CRLF_Normalization",
     "UC_AC_01_Native_Lexer_Sigil_and_Lifetime_Tokenization",
     "UC_AC_01_Rustc_E0453_Hard_Rejection_of_Inner_and_Outer_Clippy_Allow_Attributes",
+    "UC_AC_01_Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement",
     "UC_AC_01_Static_Five_Pillar_AST_Defect_Detection",
     "UC_AC_01_Unified_Rust_and_Dart_Lexical_State_Machine_Without_Magic_Offsets",
     "UC_AC_02_Check_34_Multi_Line_Whitespace_Insensitive_Suppression_Rejection",
+    "UC_AC_02_Deterministic_BTreeMap_Item_Inventory_and_Atomic_Module_Extraction_with_Check_37_Path_Rewriting",
     "UC_AC_02_Deterministic_Logical_ICD_Matrix_and_Signal_Dictionary_Synthesis",
     "UC_AC_02_Deterministic_Seven_Section_Dossier_and_Mermaid_Synthesis",
+    "UC_AC_02_End_to_End_FLS_Normative_Paragraph_Traceability_Emission_and_Fail_Closed_Orphan_Detection",
     "UC_AC_02_Fail_Closed_Filesystem_and_WalkDir_Enforcement",
     "UC_AC_02_Fail_Closed_Inner_Block_and_Composite_Type_Parsing",
+    "UC_AC_02_Four_Level_Deterministic_Lowering_with_Typed_syn_File_AST_and_prettyplease_Formatting",
+    "UC_AC_02_Resilient_Error_Recovery_Parsing_MAX_AST_DEPTH_Guard_and_Deterministic_Ariadne_Byte_Span_Diagnostics",
+    "UC_AC_02_Stage_2_Isolated_Nightly_Dylint_MIR_Zero_Allocation_Proof_on_Real_Time_Control_Loops",
     "UC_AC_02_Strict_Schema_Context_Resolution_and_Recursive_Part_Traversal",
     "UC_AC_03_Anti_Gaming_Test_Body_AST_Enforcement",
+    "UC_AC_03_Certified_core_Library_Subset_Symbol_Report_Gate_Rejecting_std_alloc_and_Dynamic_Formatting_Symbols",
     "UC_AC_03_Deterministic_MIL_STD_881E_WBS_and_Enterprise_Export_Synthesis",
+    "UC_AC_03_Fail_Closed_Rejection_on_Span_Collisions_Missing_Symbols_or_Post_Splice_Syntax_Errors",
+    "UC_AC_03_Formatting_Preserving_Bidirectional_CST_Splicing_Across_Forward_and_Reverse_Sync",
     "UC_AC_03_Idempotent_Local_and_Remote_SSOT_Deduplication",
+    "UC_AC_03_Metacircular_Self_Hosting_Stage_1_to_Stage_2_SHA_256_Fixed_Point_Identity",
     "UC_AC_03_Scoped_mod_tests_Brace_Tracking_unsafe_extern_Classification_and_Arrow_Aware_impl_Headers",
+    "UC_AC_03_Stage_2_Compile_Time_MIR_Requirement_Binding_Verification_Against_Active_SysML_Digests",
     "UC_AC_03_Token_Stream_State_Transition_Parsing_and_Recursive_MBD_Synthesis",
     "UC_AC_03_Unconditional_Test_Target_Enforcement_Without_Conditional_Exemption",
     "UC_AC_04_Bit_for_Bit_Idempotency_and_Fail_Closed_Check_34_Per_Function_Normalized_Body_Uniqueness",
     "UC_AC_04_Closed_Loop_GitHub_SSOT_Publishing_and_Byte_Parity_Verification",
     "UC_AC_04_Fail_Closed_Stateful_HTML_Comment_Frontmatter_Guard_and_Parent_Inclusive_Checklist_Reconciliation",
+    "UC_AC_04_Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules",
     "UC_AC_04_Lossless_to_sysml_Serialization_and_Fail_Closed_Bijective_Roundtrip_Gate",
+    "UC_AC_04_Modular_Multi_File_Flutter_Contract_Emission_and_Monolith_Barrel_Decomposition",
     "UC_AC_04_SSOT_Cryptographic_and_Lexer_Deduplication",
+    "UC_AC_04_Salsa_Early_Cutoff_Durability_Preventing_Downstream_Recomputations_on_Trivia_Edits",
     "UC_AC_04_Semantic_Type_Alias_Replacement_for_Type_Complexity",
+    "UC_AC_04_Stage_3_Deterministic_flutter_rust_bridge_FFI_Synthesis_with_Fail_Closed_ICD_Boundary_Guards",
+    "UC_AC_04_Zero_Overcount_Structural_and_MC_DC_Coverage_Verification_Mapped_to_SysML_Verification_Cases",
     "UC_AC_05_Deterministic_Dogfood_Ingestion_into_Canonical_SysML_v2",
     "UC_AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0601",
     "UC_AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0605",
     "UC_AC_05_Dogfood_Markdown_to_SysML_Ingestion_and_Baseline_Verification",
     "UC_AC_05_Fail_Closed_Rejection_on_Malformed_Dossier_Schema_Ephemeral_Paths_or_Payload_Divergence",
+    "UC_AC_05_Fail_Closed_Salsa_Cycle_Detection_and_Net_Negative_Legacy_Cst_Parser_Retirement",
     "UC_AC_05_Fail_Closed_Subpackage_Scoped_Reverse_Sync_and_Dogfood_Blueprint_Ingestion_Parity",
+    "UC_AC_05_Schema_Driven_3_Ring_Workspace_Partitioning_and_Ring_2_Miri_Guarded_FFI_Precondition_Enforcement",
+    "UC_AC_05_Stage_3_Miri_Tree_Borrows_Abstract_Machine_Undefined_Behavior_Rejection_on_FFI_and_Ring_Buffer_Bridges",
+    "UC_AC_05_Structured_Codegen_Boundary_Preserving_Stage_1_to_Stage_2_Metacircular_SHA_256_Fixed_Point",
+    "UC_AC_05_Zero_String_Concatenation_Codegen_DO_178C_Seven_Section_Docstring_and_Clippy_Forbid_Compliance",
+    "UC_AC_06_Cohesive_Typed_Polyglot_CST_AST_Lowering_with_Zero_rustc_private_and_Exact_Byte_Span_Diagnostics",
+    "UC_AC_06_Dogfood_SysML_v2_Blueprint_Ingestion_and_Twelve_Gate_Closed_Loop_Conformance",
     "UC_AC_06_Dogfood_SysML_v2_Markdown_Ingestion_and_Blueprint_Gate_Conformance",
-    "UnifiedRustDartLexicalScanner",
+    "UC_AC_06_Ring_1_Challenge_Response_Command_Interlock_and_TelemetryFrame_Digest_Readback_SafetyMonitor_Against_Ring_3_Faults",
+    "UC_AC_06_Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification",
+    "UC_AC_06_Unified_rustc_Compatible_Single_Line_JSON_Diagnostics_and_MachineApplicable_Auto_Fix_Across_All_Five_CLIs",
+    "UC_AC_07_Air_Gapped_Offline_Cargo_Lock_Reproducibility_and_Twelve_Gate_Blueprint_Conformance",
+    "UC_AC_07_Cross_Platform_Execution_Submodule_Layout_Conformance_and_Twelve_Gate_Blueprint_Verification_Gate",
+    "UC_AC_07_Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate",
+    "UC_AC_07_Twelve_Gate_Blueprint_Verification_and_Baseline_Cleanliness_Gate_Conformance",
+    "UnifiedRustDartCstParser",
+    "UnifiedRustcJsonDiagnosticEmitter",
     "UnifiedSafetyDocstringSynthesizer",
     "VerifyBaselineAuditCodePathCrates",
     "WbsEnterpriseExportPort",
     "WorkspaceManifestForbidGate",
-    "WorkspaceSourceAstPort",
+    "WorkspaceRustCstPort",
+    "ZeroTokenRustSpanCodemodEngine",
     "activePillarCount",
     "allowed_suppression_count",
+    "analyze_metrics",
+    "anf_branch_budget",
+    "apply_formatting_preserving_splices",
+    "assurance_ring_count",
     "astStreamInPort",
     "ast_node_coverage_percent",
     "ast_orig_to_sysml",
+    "atomic_disjoint_splice",
+    "atomic_patch_out",
+    "audit_ast_out",
     "audit_fail_closed_io_patterns",
     "audit_ssot_symbol_deduplication",
     "audit_test_integrity_and_anti_gaming",
     "auditor_subagent_count",
+    "build_syn_file",
+    "canonical_prettyplease_format",
+    "cbmc_proof_receipt_out",
     "check13bCompliant",
     "check_compiler_ast_purity",
+    "cli_binary_count",
+    "clippy_ndjson_out",
     "closed_loop_mismatch_bytes",
     "cmd_in",
+    "codemod_command_in",
+    "codemod_error_out",
+    "compile_sysml_codegen_ast_fixed_point_gate",
+    "compile_sysml_codegen_ast_pretty_emitter",
+    "compile_sysml_codegen_ast_token_builder",
     "contains_direct_range_slice",
+    "coverage_diag_out",
+    "crates_compile_sysml_src_docstring_rs",
+    "crates_compile_sysml_src_driver_rs",
+    "crates_compile_sysml_src_flutter_codegen_rs",
+    "crates_deap_core_src_rust_cst_diagnostics_ndjson_rs",
+    "crates_deap_core_src_rust_cst_doc_edit_rs",
+    "crates_deap_core_src_rust_cst_extract_module_rs",
+    "crates_deap_core_src_rust_cst_items_rs",
+    "crates_deap_core_src_rust_cst_manifest_lock_rs",
+    "crates_deap_core_src_rust_cst_mod_rs",
+    "crates_deap_core_src_rust_cst_parse_rs",
+    "crates_deap_core_src_rust_cst_vfs_rs",
+    "crates_deap_core_src_workspace_rs",
     "crates_enforced_count",
+    "crates_verify_baseline_src_checks_docstring_tier_rules_rs",
+    "crates_verify_baseline_src_checks_structural_rs",
+    "crates_verify_baseline_src_ratchet_table_rs",
+    "cycle_recovery_fail_closed",
+    "dal_a_mcdc_coverage_min_pct",
+    "deap_core_rust_cst_extract_module",
+    "default_kani_unwind_bound",
+    "denied_clippy_lint_count",
+    "dependency_edges_in",
+    "deterministic_uuid",
+    "diagnostic_out",
     "direct_range_slice_count",
+    "disallowed_types_count",
     "dossierCandidateInPort",
     "dossierMarkdownOutPort",
     "dossier_schema_check_count",
     "dropped_ast_field_count",
     "duplicate_lexer_impl_count",
     "duplicate_sha256_impl_count",
+    "dylint_ndjson_out",
+    "elf_and_profdata_in",
+    "emit_barrel_reexports",
+    "emit_modular_flutter_tree",
+    "emit_modular_rust_tree",
+    "enable_ring1_safety_monitor",
+    "enforce_safety_comment_fls",
+    "enforce_syn_parse_grammar",
+    "envelope_reason",
+    "evaluate_four_stage_gatekeeper",
+    "evaluate_hir_early_cutoff",
+    "evaluate_stage2_dylint_mir",
+    "extract_rust_module",
+    "facade_max_lines",
+    "fail_closed_short_circuit",
+    "fail_closed_transactional",
     "fail_open_io_site_count",
     "findingInPort",
     "findingStreamOutPort",
+    "finding_in",
+    "fixed_point_sha256_verification",
+    "fls_annotated_units_out",
+    "fls_diag_out",
+    "flutter_manifest_out",
+    "flutter_module_graph_in",
+    "flutter_tree_out",
     "forbidSemicolons",
     "forbid_disallowed_types",
     "forbid_expect_used",
@@ -198,54 +509,189 @@
     "forbid_panic",
     "forbid_rule_coverage",
     "forbid_type_complexity",
+    "forbid_unsafe_in_domain",
     "forbid_unwrap_used",
+    "format_ndjson_line",
+    "format_pretty_syn_file",
+    "formatted_rust_out",
     "forward_reverse_drift_count",
+    "frb_facade_and_dart_out",
+    "gate_invocation_in",
+    "green_cst_out",
+    "guard_inbound_frb_f64",
+    "hir_model_out",
     "icdMarkdownOutPort",
+    "in_process_prettyplease",
+    "ingest_diag_out",
     "interconnectAstInPort",
+    "isolated_nightly_workspace",
+    "item_inventory_out",
+    "json_and_ariadne_span_diagnostics",
+    "json_diagnostic_stream",
+    "kani_proof_module_out",
+    "legacy_string_codegen_deleted_sloc",
     "lexicographicalSort",
+    "list_rust_items",
     "llm_subagent_invocation_count",
+    "lock_receipt_out",
+    "lossless_roundtrip_required",
+    "lossless_trivia_preserved",
+    "lowered_hir_out",
+    "lowered_ir_in",
+    "lowered_module_graph_in",
+    "machine_applicable_only",
+    "machine_fix_inout",
     "mandatorySectionCount",
+    "manifest_lock_in",
     "mask_literals_and_comments",
     "maxForwardLatencyMs",
     "maxIcdLatencyMs",
     "maxWbsLatencyMs",
+    "max_action_steps_per_stage",
+    "max_ast_depth",
+    "max_cyclomatic_complexity",
+    "max_dart_analyze_infos",
+    "max_file_lines",
+    "max_fn_exec_sloc",
+    "max_fn_param_count",
+    "max_items_per_file",
+    "max_kani_counterexamples",
+    "max_layer_tier",
+    "max_miri_ub_violations",
+    "max_module_exec_sloc",
+    "max_mut_bool_flags",
+    "max_predicate_arity",
+    "max_ring1_heap_allocations",
+    "max_rt_heap_allocations",
+    "max_toolchain_version_drift",
+    "max_transitions_per_handler",
+    "max_unguarded_ffi_entrypoints",
+    "max_unverified_req_links",
     "mermaidBlockOutPort",
     "mermaid_e1_e5_violation_count",
+    "metrics_report_out",
+    "min_toolchain_discovery_probes",
+    "mir_body_graph_in",
+    "miri_aliasing_model",
+    "miri_and_dart_receipt_out",
+    "module_graph_out",
+    "ndjson_out",
+    "normalize_line_endings",
+    "offline_locked_enforced",
+    "overcounted_span_count",
     "packageAstInPort",
+    "package_ast_in",
     "parentInclusiveEpics",
+    "parse_lossless_sysml_cst",
     "parse_package_or_file",
+    "partition_and_hoist",
+    "partition_diag_out",
+    "partitioned_workspace_out",
     "pillar_coverage_count",
+    "plugin_toolchain_channel",
+    "polyglot_frontend_count",
+    "polyglot_source_in",
     "preserveTypedActionParams",
+    "probe_criticalup_toolchain",
+    "probe_formal_toolchain",
+    "pure_deterministic_btreemap",
+    "qualification_dossier_out",
     "quantity",
+    "query_layer_count",
+    "render_ariadne_diagnostic",
+    "reproducible_ferrocene_lock",
     "requireByteParity",
+    "require_formal_toolchains",
+    "require_sysml_test_case_link",
+    "resilient_error_recovery",
+    "resolve_polyglot_backend",
+    "resolved_context_out",
+    "rewrite_check37_citations",
     "roundtrip_ast_mismatch_count",
     "run_check_defect",
+    "runtime_llm_subagent_count",
+    "runtime_llm_token_count",
+    "rust_manifest_out",
+    "rust_module_graph_in",
+    "rust_source_in",
+    "rust_tree_out",
+    "rustc_private_feature_count",
+    "safety_verification_out",
     "scan_all",
     "schemaGateCount",
+    "schema_context_in",
+    "serialized_sysml_out",
     "silent_skip_branch_count",
+    "skip_generated_tree",
+    "source_revision_in",
     "span_offset_drift_bytes",
     "specDocsInOutPort",
     "specMarkdownOutPort",
+    "splice_diag_out",
+    "spliced_artifact_out",
+    "stage_fixed_point_mismatch_files",
     "status_out",
+    "structured_prettyplease_codegen",
+    "submodule_max_exec_sloc",
     "subpackageSyncOutPort",
+    "sync_delta_in",
+    "syntax_diag_out",
     "synthesize_defect_dossier_markdown",
+    "synthesize_module_tokens",
+    "synthesize_three_ring_workspace",
+    "sysml_assurance_ast_in",
+    "sysml_icd_ast_in",
+    "sysml_safety_ast_in",
+    "sysml_source_in",
+    "table_a7_evidence_out",
+    "tier_bc_max_doc_lines",
+    "too_many_arguments_threshold",
+    "too_many_lines_threshold",
+    "toolchain_diag_out",
+    "toolchain_manifests_in",
+    "topological_order_out",
+    "trace_chain_depth",
     "trackHtmlCommentState",
+    "trivia_edit_downstream_recomputations",
     "type",
     "umlSpecInPort",
+    "uncertified_core_symbol_count",
+    "unified_gate_ndjson_out",
+    "unmapped_fls_item_count",
+    "untouched_trivia_mutation_bytes",
     "vacuous_test_count",
+    "validate_kani_harness_spec",
+    "validated_ast_in",
+    "vendor_bundle_supported",
+    "verification_stage_count",
     "verifiedReceiptOutPort",
     "verify_bijective_ast_roundtrip",
+    "verify_certified_core_and_table_a7_coverage",
+    "verify_clippy_policy",
+    "verify_dag_and_layers",
+    "verify_dual_toolchain_parity",
+    "verify_fixed_point_digest",
+    "verify_fls_traceability_chain",
+    "verify_in_process_cst_syntax",
+    "verify_lossless_cst_invariants",
+    "verify_offline_locked_build",
+    "verify_stage_fixed_point",
+    "verify_three_ring_edge_and_monitor_readback",
     "wbsArtifactsOutPort",
     "wbsAstMetadataInPort",
     "wbsHierarchyDepth",
     "whysChainDepth",
-    "zeroRegexMode"
+    "workspace_manifest_in",
+    "zeroRegexMode",
+    "zero_ansi_in_json_mode",
+    "zero_backtracking_lexers",
+    "zero_recursion_kahn"
   ],
   "operational_activities": [
     {
       "id": "OA-01",
       "name": "ExecuteCargoClippyWorkspaceAllTargets",
-      "doc": "Execute cargo clippy --workspace --all-targets",
+      "doc": "Execute cargo clippy --workspace --all-targets --message-format=json across all workspace crates",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -253,7 +699,7 @@
     {
       "id": "OA-02",
       "name": "ReadWorkspaceLintsClippyForbidTable",
-      "doc": "Read [workspace.lints.clippy] forbid table",
+      "doc": "Parse and verify [workspace.lints.clippy] forbid table via toml_edit, cargo_metadata, cargo-lock, cargo-util-schemas, and cargo-platform",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -261,7 +707,7 @@
     {
       "id": "OA-03",
       "name": "ExecuteVerifyBaselineNoDomain",
-      "doc": "Execute verify-baseline . --no-domain",
+      "doc": "Execute verify-baseline . --no-domain with lossless ra_ap_syntax CST and cargo clippy JSON enforcement",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -269,7 +715,7 @@
     {
       "id": "OA-04",
       "name": "RunScanClippyAllowTokensOn",
-      "doc": "Run scan_clippy_allow_tokens on all crates/ ** / *.rs",
+      "doc": "Audit #[allow(clippy::...)] and #![cfg_attr(..., allow(clippy::...))] attributes across crates/ via ra_ap_syntax ast::Attr and ast::HasAttrs CST nodes",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -277,7 +723,7 @@
     {
       "id": "OA-05",
       "name": "ExecuteIngestSysmlSchemaBlueprint01",
-      "doc": "Execute ingest-sysml --schema blueprint-01 --format markdown",
+      "doc": "Execute ingest-sysml --schema blueprint-01 --format markdown via pulldown-cmark and logos+rowan SysML v2 CST",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -285,7 +731,7 @@
     {
       "id": "OA-06",
       "name": "check_compiler_ast_purity",
-      "doc": "check_compiler_ast_purity(repo_root)",
+      "doc": "Execute check_compiler_ast_purity(repo_root) across crates/ via ra_ap_syntax, ra_ap_vfs, ra_ap_paths, ra_ap_line_index, rowan, camino, and ignore",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -293,7 +739,7 @@
     {
       "id": "OA-07",
       "name": "mask_literals_and_comments",
-      "doc": "mask_literals_and_comments(source)",
+      "doc": "Partition trivia, string literals, and comments losslessly via ra_ap_syntax::SourceFile::parse and rowan Red/Green CST tokens",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -301,7 +747,7 @@
     {
       "id": "OA-08",
       "name": "contains_direct_range_slice",
-      "doc": "contains_direct_range_slice(code_line)",
+      "doc": "Inspect typed ra_ap_syntax ast::IndexExpr CST nodes for direct range-slice indexing operands outside .get(..) calls",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -309,7 +755,7 @@
     {
       "id": "OA-09",
       "name": "audit_fail_closed_io_patterns",
-      "doc": "audit_fail_closed_io_patterns(code_line)",
+      "doc": "Audit fail-closed I/O patterns via typed ra_ap_syntax ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr} CST nodes",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -317,7 +763,7 @@
     {
       "id": "OA-10",
       "name": "audit_test_integrity_and_anti_gaming",
-      "doc": "audit_test_integrity_and_anti_gaming(test_fn)",
+      "doc": "Audit #[test] function bodies via typed ra_ap_syntax ast::{Fn, MacroCall, CallExpr} CST nodes for assertion and RAII isolation integrity",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -325,7 +771,7 @@
     {
       "id": "OA-11",
       "name": "audit_ssot_symbol_deduplication",
-      "doc": "audit_ssot_symbol_deduplication(file_rel, source)",
+      "doc": "Audit SSOT symbol deduplication across crates/deap-core/src/digest.rs, crates/deap-core/src/rust_cst/, and crates/deap-core/src/dart_cst/ via ra_ap_syntax and cargo_metadata",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -333,7 +779,7 @@
     {
       "id": "OA-12",
       "name": "scan_all",
-      "doc": "scan_all(raw_sysml_source)",
+      "doc": "Tokenize raw SysML v2 and KerML 1.0 source via logos DFA lexer into rowan GreenNode tokens with zero span drift",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -341,7 +787,7 @@
     {
       "id": "OA-13",
       "name": "parse_package_or_file",
-      "doc": "parse_package_or_file(tokens)",
+      "doc": "Parse full 6-clause OMG SysML v2.0 + KerML 1.0 grammar into lossless rowan Red/Green CST (deap_core::sysml_cst) and salsa HIR",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -349,7 +795,7 @@
     {
       "id": "OA-14",
       "name": "ParseTypeExprAndParseTransition",
-      "doc": "parse_type_expr and parse_transition_decl_tokens",
+      "doc": "Parse KerML 1.0 type expressions, specialization operators (:>, :>>, ::>, ~), and nested state def transitions over rowan CST",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -357,7 +803,7 @@
     {
       "id": "OA-15",
       "name": "verify_bijective_ast_roundtrip",
-      "doc": "verify_bijective_ast_roundtrip(ast_orig)",
+      "doc": "Verify Stage-1 == Stage-2 bijective CST/AST roundtrip parity via verify_bijective_ast_roundtrip(ast_orig)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -365,7 +811,7 @@
     {
       "id": "OA-16",
       "name": "ast_orig_to_sysml",
-      "doc": "ast_orig.to_sysml(0)",
+      "doc": "Emit canonical SysML v2.0 text from lossless rowan CST and PackageDef HIR via ast_orig.to_sysml(0)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -373,7 +819,7 @@
     {
       "id": "OA-17",
       "name": "AssertAstOrigEqualsAstReparsed",
-      "doc": "Assert ast_orig equals ast_reparsed",
+      "doc": "Assert Stage-1 PackageDef HIR equals Stage-2 reparsed PackageDef HIR with ariadne span diagnostics on drift",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -381,7 +827,7 @@
     {
       "id": "OA-18",
       "name": "CompileSysmlForwardSyncDocs",
-      "doc": "compile-sysml --forward-sync docs",
+      "doc": "Execute compile-sysml --forward-sync docs via salsa derived queries and pulldown-cmark-to-cmark",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -389,7 +835,7 @@
     {
       "id": "OA-19",
       "name": "ResolveParentEpicByPkgName",
-      "doc": "Resolve Parent Epic by pkg_name == ConOps",
+      "doc": "Resolve Parent Epic by pkg_name == ConOps across 6-clause SysML v2.0 PackageDef HIR",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -397,7 +843,7 @@
     {
       "id": "OA-20",
       "name": "BindAllPackageStoriesToUse",
-      "doc": "Bind all package stories to Use Case matrices",
+      "doc": "Bind all package stories to Use Case matrices via BTreeMap-ordered salsa queries",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -405,7 +851,7 @@
     {
       "id": "OA-21",
       "name": "EmitSymmetricActionDefSignaturesAndE1",
-      "doc": "Emit symmetric ActionDef signatures and E1-E5 Mermaid",
+      "doc": "Emit symmetric ActionDef signatures and Check 13B E1-E5 Mermaid via pulldown-cmark-to-cmark",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -413,7 +859,7 @@
     {
       "id": "OA-22",
       "name": "CompileSysmlEmitIcdDocsInterfaces",
-      "doc": "compile-sysml --emit-icd docs/interfaces",
+      "doc": "Execute compile-sysml --emit-icd docs/interfaces via salsa interconnect projection",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -421,7 +867,7 @@
     {
       "id": "OA-23",
       "name": "ProjectNxNConnectionDefMatrixAndFlowDef",
-      "doc": "Project NxN ConnectionDef matrix and FlowDef signals",
+      "doc": "Project NxN ConnectionDef matrix and FlowDef signals via BTreeMap-ordered pulldown-cmark-to-cmark tables",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -429,7 +875,7 @@
     {
       "id": "OA-24",
       "name": "CompileSysmlEmitWbsDocsManagement",
-      "doc": "compile-sysml --emit-wbs docs/management",
+      "doc": "Execute compile-sysml --emit-wbs docs/management via MIL-STD-881E salsa projection",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -437,7 +883,7 @@
     {
       "id": "OA-25",
       "name": "SynthesizeMilStd881eTreeAnd",
-      "doc": "Synthesize MIL-STD-881E tree and CSV/JSON exports",
+      "doc": "Synthesize MIL-STD-881E tree and RFC 4180 CSV / serde_json AST exports",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -445,7 +891,7 @@
     {
       "id": "OA-26",
       "name": "ReconcileBacklogReconcileDocsDirDocs",
-      "doc": "reconcile-backlog reconcile --docs-dir docs",
+      "doc": "Execute reconcile-backlog reconcile --docs-dir docs via pulldown-cmark Event::Html and table AST",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -453,7 +899,7 @@
     {
       "id": "OA-27",
       "name": "ParseCommonMarkTablesWithInHtml",
-      "doc": "Parse CommonMark tables with in_html_comment guard",
+      "doc": "Parse CommonMark tables and HTML comment events via pulldown-cmark Event::Html and Tag::Table AST",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -461,7 +907,7 @@
     {
       "id": "OA-28",
       "name": "ReconcileChecklistsWithParentInclusiveEpic",
-      "doc": "Reconcile checklists with parent-inclusive epic count",
+      "doc": "Reconcile checklists with parent-inclusive epic count via pulldown-cmark-to-cmark lossless serialization",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -469,7 +915,7 @@
     {
       "id": "OA-29",
       "name": "CompileSysmlReverseSyncDocs",
-      "doc": "compile-sysml --reverse-sync docs",
+      "doc": "Execute compile-sysml --reverse-sync docs via pulldown-cmark AST and rowan CST splicing",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -477,7 +923,7 @@
     {
       "id": "OA-30",
       "name": "MergeExtractedEntitiesIntoOwningSubpackages",
-      "doc": "Merge extracted entities into owning subpackages",
+      "doc": "Merge extracted entities into owning subpackages via deap_core::sysml_cst formatting-preserving splices",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -485,15 +931,15 @@
     {
       "id": "OA-31",
       "name": "RunCompileSysmlInjectSafetyDocstrings",
-      "doc": "Run compile-sysml --inject-safety-docstrings <DIR>",
+      "doc": "Execute compile-sysml --inject-safety-docstrings <DIR> and --compact-tier-bc <DIR> via ra_ap_syntax, ra_ap_text_edit, and rowan",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
       "id": "OA-32",
-      "name": "ScanSourceLinesViaRustDartLexStateAnd",
-      "doc": "Scan source lines via RustDartLexState and ScopedItemScannerState",
+      "name": "ParseSourceCstViaRustAndDartCst",
+      "doc": "Parse lossless Rust and Dart CSTs via deap_core::rust_cst (ra_ap_syntax + rowan) and deap_core::dart_cst (logos + rowan)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -501,7 +947,7 @@
     {
       "id": "OA-33",
       "name": "ResolveSchemaContextViaCollectAll",
-      "doc": "Resolve schema context via collect_all_parts without .first() fallback",
+      "doc": "Resolve schema context via salsa-tracked collect_all_parts across 6-clause OMG SysML v2.0 PackageDef trees without .first() fallback",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -509,7 +955,7 @@
     {
       "id": "OA-34",
       "name": "RunVerifyBaselineNoDomain",
-      "doc": "Run verify-baseline . --no-domain (Check 36 & Check 34)",
+      "doc": "Execute verify-baseline . --no-domain (Check 36 Tier-A vs Tier-B/C CST verification & Check 34 uniqueness)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -517,7 +963,7 @@
     {
       "id": "OA-35",
       "name": "TokenizeRsAndDartFilesUsing",
-      "doc": "Tokenize .rs and .dart files using shared deap-core lexical state",
+      "doc": "Extract typed Rust (ra_ap_syntax ast::{HasDocComments, HasAttrs}) and Dart (deap_core::dart_cst) declaration CST nodes",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -525,7 +971,7 @@
     {
       "id": "OA-36",
       "name": "RunIngestSysmlSchemaBlueprint05",
-      "doc": "Run ingest-sysml --schema blueprint-05 --format markdown",
+      "doc": "Execute ingest-sysml --schema blueprint-05 --format markdown via pulldown-cmark and logos+rowan SysML v2 CST",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -533,15 +979,15 @@
     {
       "id": "OA-37",
       "name": "VerifyBaselineAuditCodePathCrates",
-      "doc": "verify-baseline audit-code --path crates/ --publish",
+      "doc": "Execute verify-baseline audit-code --path crates/ --publish via ra_ap_syntax and Stage-2 Dylint MIR",
       "performer": "",
       "inputs": [],
       "outputs": []
     },
     {
       "id": "OA-38",
-      "name": "ParseRustSourceAstAndParse",
-      "doc": "parse_rust_source_ast and parse_dart_source_ast",
+      "name": "ParseRustCstAndParseDartCst",
+      "doc": "Parse lossless Rust and Dart CSTs via deap_core::rust_cst (ra_ap_syntax + rowan) and deap_core::dart_cst (logos + rowan)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -549,7 +995,7 @@
     {
       "id": "OA-39",
       "name": "EvaluateSourceFilePillarsAcross5",
-      "doc": "evaluate_source_file_pillars across 5 pillars",
+      "doc": "Evaluate 5 correctness pillars via ra_ap_syntax AST, Stage-2 Dylint MIR (rustc_middle::mir::Body, TyCtxt), and deap_core::dart_cst",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -557,7 +1003,7 @@
     {
       "id": "OA-40",
       "name": "synthesize_defect_dossier_markdown",
-      "doc": "synthesize_defect_dossier_markdown(finding)",
+      "doc": "Synthesize 7-section defect dossier Markdown via pulldown-cmark-to-cmark (synthesize_defect_dossier_markdown)",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -565,7 +1011,7 @@
     {
       "id": "OA-41",
       "name": "run_check_defect",
-      "doc": "run_check_defect(DefectDossierArgs)",
+      "doc": "Execute run_check_defect(DefectDossierArgs) 12-check validation and closed-loop publisher gate",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -573,7 +1019,7 @@
     {
       "id": "OA-42",
       "name": "Execute12CheckValidateDefectDossier",
-      "doc": "Execute 12-check validate_defect_dossier gate",
+      "doc": "Execute 12-check validate_defect_dossier gate over pulldown-cmark CommonMark AST and Mermaid E1-E5 blocks",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -581,7 +1027,7 @@
     {
       "id": "OA-43",
       "name": "GhIssueCreateOrGhIssue",
-      "doc": "gh issue create or gh issue edit with body-file",
+      "doc": "Execute gh issue create or gh issue edit with --body-file and serde_json receipt parsing",
       "performer": "",
       "inputs": [],
       "outputs": []
@@ -589,229 +1035,839 @@
     {
       "id": "OA-44",
       "name": "GhIssueViewJsonTitleBody",
-      "doc": "gh issue view --json title,body,url",
+      "doc": "Execute gh issue view --json title,body,url and verify LF-normalized byte parity via serde_json",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-45",
+      "name": "verify_dag_and_layers",
+      "doc": "verify_dag_and_layers(node_layers, edges)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-46",
+      "name": "partition_and_hoist",
+      "doc": "partition_and_hoist(pkg)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-47",
+      "name": "synthesize_module_tokens",
+      "doc": "synthesize_module_tokens(module_name)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-48",
+      "name": "build_syn_file",
+      "doc": "build_syn_file(tokens)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-49",
+      "name": "format_pretty_syn_file",
+      "doc": "format_pretty_syn_file(file)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-50",
+      "name": "emit_modular_rust_tree",
+      "doc": "emit_modular_rust_tree(target_dir, units, node_layers, edges, bounds)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-51",
+      "name": "emit_modular_flutter_tree",
+      "doc": "emit_modular_flutter_tree(graph)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-52",
+      "name": "verify_fixed_point_digest",
+      "doc": "verify_fixed_point_digest(stage1, stage2)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-53",
+      "name": "verify_offline_locked_build",
+      "doc": "verify_offline_locked_build(lock_path)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-54",
+      "name": "list_rust_items",
+      "doc": "list_rust_items(path)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-55",
+      "name": "extract_rust_module",
+      "doc": "extract_rust_module(from_path, to_path, items_csv)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-56",
+      "name": "verify_stage_fixed_point",
+      "doc": "verify_stage_fixed_point(stage1_digest)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-57",
+      "name": "format_ndjson_line",
+      "doc": "format_ndjson_line(msg)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-58",
+      "name": "analyze_metrics",
+      "doc": "analyze_metrics(source)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-59",
+      "name": "probe_formal_toolchain",
+      "doc": "probe_formal_toolchain(config)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-60",
+      "name": "verify_clippy_policy",
+      "doc": "verify_clippy_policy(policy, manifest_lints)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-61",
+      "name": "evaluate_stage2_dylint_mir",
+      "doc": "evaluate_stage2_dylint_mir(input)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-62",
+      "name": "verify_in_process_cst_syntax",
+      "doc": "verify_in_process_cst_syntax(module_path, max_exec_sloc)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-63",
+      "name": "guard_inbound_frb_f64",
+      "doc": "guard_inbound_frb_f64(spec, raw_value, active_fsm_state)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-64",
+      "name": "validate_kani_harness_spec",
+      "doc": "validate_kani_harness_spec(spec)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-65",
+      "name": "evaluate_four_stage_gatekeeper",
+      "doc": "evaluate_four_stage_gatekeeper(receipts)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-66",
+      "name": "resolve_polyglot_backend",
+      "doc": "resolve_polyglot_backend(format)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-67",
+      "name": "normalize_line_endings",
+      "doc": "normalize_line_endings(raw)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-68",
+      "name": "parse_lossless_sysml_cst",
+      "doc": "parse_lossless_sysml_cst(input)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-69",
+      "name": "verify_lossless_cst_invariants",
+      "doc": "verify_lossless_cst_invariants(source, parsed)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-70",
+      "name": "evaluate_hir_early_cutoff",
+      "doc": "evaluate_hir_early_cutoff(previous_hir, current_hir)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-71",
+      "name": "apply_formatting_preserving_splices",
+      "doc": "apply_formatting_preserving_splices(file_id, source, patches)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-72",
+      "name": "render_ariadne_diagnostic",
+      "doc": "render_ariadne_diagnostic(input, diag)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-73",
+      "name": "probe_criticalup_toolchain",
+      "doc": "probe_criticalup_toolchain(config)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-74",
+      "name": "verify_dual_toolchain_parity",
+      "doc": "verify_dual_toolchain_parity(spec)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-75",
+      "name": "synthesize_three_ring_workspace",
+      "doc": "synthesize_three_ring_workspace(spec)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-76",
+      "name": "verify_fls_traceability_chain",
+      "doc": "verify_fls_traceability_chain(records, pinned_fls_catalog)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-77",
+      "name": "verify_certified_core_and_table_a7_coverage",
+      "doc": "verify_certified_core_and_table_a7_coverage(summary, certified_core_prefixes)",
+      "performer": "",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "id": "OA-78",
+      "name": "verify_three_ring_edge_and_monitor_readback",
+      "doc": "verify_three_ring_edge_and_monitor_readback(from_ring, to_ring, envelope)",
       "performer": "",
       "inputs": [],
       "outputs": []
     }
   ],
-  "operational_exchanges": [],
+  "operational_exchanges": [
+    {
+      "id": "OpTx-01",
+      "name": "BP_01_ManifestToForbidGateConnection",
+      "source_port": "WorkspaceManifestForbidGate.status_out",
+      "target_port": "CompilerLintEnforcementGate.CargoManifestInputPort",
+      "source_part": "WorkspaceManifestForbidGate",
+      "target_part": "CompilerLintEnforcementGate",
+      "protocol": ""
+    },
+    {
+      "id": "OpTx-02",
+      "name": "BP_02_AuditorToPurityGateConnection",
+      "source_port": "AntiGamingTestBodyAuditor.audit_ast_out",
+      "target_port": "Check34AstPurityAndAntiGamingGate.TestFunctionAstStreamPort",
+      "source_part": "AntiGamingTestBodyAuditor",
+      "target_part": "Check34AstPurityAndAntiGamingGate",
+      "protocol": ""
+    },
+    {
+      "id": "OpTx-03",
+      "name": "BP_03_SerializerToRoundtripGateConnection",
+      "source_port": "BijectiveSysmlSerializer.serialized_sysml_out",
+      "target_port": "SysmlBijectiveRoundtripCompilerGate.RawSysmlSourceInputPort",
+      "source_part": "BijectiveSysmlSerializer",
+      "target_part": "SysmlBijectiveRoundtripCompilerGate",
+      "protocol": ""
+    },
+    {
+      "id": "OpTx-04",
+      "name": "BP_04_ReconcilerToForwardCompilerConnection",
+      "source_port": "BidirectionalBacklogReconciler.subpackageSyncOutPort",
+      "target_port": "DeterministicSpecIcdWbsForwardCompiler.SysmlPackageAstInputPort",
+      "source_part": "BidirectionalBacklogReconciler",
+      "target_part": "DeterministicSpecIcdWbsForwardCompiler",
+      "protocol": ""
+    },
+    {
+      "id": "OpTx-05",
+      "name": "BP_05_ContextToDocstringGeneratorConnection",
+      "source_port": "ScopedSchemaContextResolver.resolved_context_out",
+      "target_port": "SevenSectionDocstringGenerator.schema_context_in",
+      "source_part": "ScopedSchemaContextResolver",
+      "target_part": "SevenSectionDocstringGenerator",
+      "protocol": ""
+    },
+    {
+      "id": "OpTx-06",
+      "name": "BP_06_DossierToPublisherGateConnection",
+      "source_port": "DeterministicDossierSynthesizer.dossierMarkdownOutPort",
+      "target_port": "ClosedLoopDefectPublisherGate.dossierCandidateInPort",
+      "source_part": "DeterministicDossierSynthesizer",
+      "target_part": "ClosedLoopDefectPublisherGate",
+      "protocol": ""
+    },
+    {
+      "id": "OpTx-07",
+      "name": "BP_07_PartitionerToRustEmitterConnection",
+      "source_port": "FourLevelAstPartitionerAndHoister.module_graph_out",
+      "target_port": "ModularRustMultiFileEmitter.rust_module_graph_in",
+      "source_part": "FourLevelAstPartitionerAndHoister",
+      "target_part": "ModularRustMultiFileEmitter",
+      "protocol": ""
+    },
+    {
+      "id": "OpTx-08",
+      "name": "BP_08_CodemodToDiagnosticEmitterConnection",
+      "source_port": "ZeroTokenRustSpanCodemodEngine.codemod_error_out",
+      "target_port": "UnifiedRustcJsonDiagnosticEmitter.finding_in",
+      "source_part": "ZeroTokenRustSpanCodemodEngine",
+      "target_part": "UnifiedRustcJsonDiagnosticEmitter",
+      "protocol": ""
+    },
+    {
+      "id": "OpTx-09",
+      "name": "BP_09_ClippyToOrchestratorConnection",
+      "source_port": "StableClippyTotalFunctionGate.clippy_ndjson_out",
+      "target_port": "MultiStageVerificationOrchestrator.gate_invocation_in",
+      "source_part": "StableClippyTotalFunctionGate",
+      "target_part": "MultiStageVerificationOrchestrator",
+      "protocol": ""
+    },
+    {
+      "id": "OpTx-10",
+      "name": "BP_10_PolyglotToSalsaDbConnection",
+      "source_port": "TypedPolyglotIngestionFrontend.lowered_hir_out",
+      "target_port": "SalsaIncrementalCompilerDatabase.source_revision_in",
+      "source_part": "TypedPolyglotIngestionFrontend",
+      "target_part": "SalsaIncrementalCompilerDatabase",
+      "protocol": ""
+    },
+    {
+      "id": "OpTx-11",
+      "name": "BP_11_PartitionToFlsTraceabilityConnection",
+      "source_port": "ThreeRingAssurancePartitionCompiler.partitioned_workspace_out",
+      "target_port": "FlsParagraphTraceabilitySynthesizer.lowered_module_graph_in",
+      "source_part": "ThreeRingAssurancePartitionCompiler",
+      "target_part": "FlsParagraphTraceabilitySynthesizer",
+      "protocol": ""
+    }
+  ],
   "operational_scenarios": [
     {
       "id": "SCN-01",
       "name": "UC_AC_01_Rustc_E0453_Hard_Rejection_of_Inner_and_Outer_Clippy_Allow_Attributes",
       "actor": "",
-      "objective": "Rustc E0453 Hard Rejection of Inner and Outer Clippy Allow Attributes",
+      "objective": "\"Rustc E0453 Hard Rejection of Inner and Outer Clippy Allow Attributes\"",
       "steps": []
     },
     {
       "id": "SCN-02",
       "name": "UC_AC_02_Check_34_Multi_Line_Whitespace_Insensitive_Suppression_Rejection",
       "actor": "",
-      "objective": "Check 34 Multi Line Whitespace Insensitive Suppression Rejection",
+      "objective": "\"Check 34 Multi Line Whitespace Insensitive Suppression Rejection\"",
       "steps": []
     },
     {
       "id": "SCN-03",
       "name": "UC_AC_03_Unconditional_Test_Target_Enforcement_Without_Conditional_Exemption",
       "actor": "",
-      "objective": "Unconditional Test Target Enforcement Without Conditional Exemption",
+      "objective": "\"Unconditional Test Target Enforcement Without Conditional Exemption\"",
       "steps": []
     },
     {
       "id": "SCN-04",
       "name": "UC_AC_04_Semantic_Type_Alias_Replacement_for_Type_Complexity",
       "actor": "",
-      "objective": "Semantic Type Alias Replacement for Type Complexity",
+      "objective": "\"Semantic Type Alias Replacement for Type Complexity\"",
       "steps": []
     },
     {
       "id": "SCN-05",
       "name": "UC_AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0601",
       "actor": "",
-      "objective": "Dogfood Ingestion and SysML v2 Compilation of REQ 0601",
+      "objective": "\"Dogfood Ingestion and SysML v2 Compilation of REQ 0601\"",
       "steps": []
     },
     {
       "id": "SCN-06",
       "name": "UC_AC_01_General_Direct_Range_Slice_Indexing_Rejection",
       "actor": "",
-      "objective": "General Direct Range Slice Indexing Rejection",
+      "objective": "\"General Direct Range Slice Indexing Rejection\"",
       "steps": []
     },
     {
       "id": "SCN-07",
       "name": "UC_AC_02_Fail_Closed_Filesystem_and_WalkDir_Enforcement",
       "actor": "",
-      "objective": "Fail Closed Filesystem and WalkDir Enforcement",
+      "objective": "\"Fail Closed Filesystem and WalkDir Enforcement\"",
       "steps": []
     },
     {
       "id": "SCN-08",
       "name": "UC_AC_03_Anti_Gaming_Test_Body_AST_Enforcement",
       "actor": "",
-      "objective": "Anti Gaming Test Body AST Enforcement",
+      "objective": "\"Anti Gaming Test Body AST Enforcement\"",
       "steps": []
     },
     {
       "id": "SCN-09",
       "name": "UC_AC_04_SSOT_Cryptographic_and_Lexer_Deduplication",
       "actor": "",
-      "objective": "SSOT Cryptographic and Lexer Deduplication",
+      "objective": "\"SSOT Cryptographic and Lexer Deduplication\"",
       "steps": []
     },
     {
       "id": "SCN-10",
       "name": "UC_AC_05_Deterministic_Dogfood_Ingestion_into_Canonical_SysML_v2",
       "actor": "",
-      "objective": "Deterministic Dogfood Ingestion into Canonical SysML v2",
+      "objective": "\"Deterministic Dogfood Ingestion into Canonical SysML v2\"",
       "steps": []
     },
     {
       "id": "SCN-11",
       "name": "UC_AC_01_Native_Lexer_Sigil_and_Lifetime_Tokenization",
       "actor": "",
-      "objective": "Native Lexer Sigil and Lifetime Tokenization",
+      "objective": "\"Native Lexer Sigil and Lifetime Tokenization\"",
       "steps": []
     },
     {
       "id": "SCN-12",
       "name": "UC_AC_02_Fail_Closed_Inner_Block_and_Composite_Type_Parsing",
       "actor": "",
-      "objective": "Fail Closed Inner Block and Composite Type Parsing",
+      "objective": "\"Fail Closed Inner Block and Composite Type Parsing\"",
       "steps": []
     },
     {
       "id": "SCN-13",
       "name": "UC_AC_03_Token_Stream_State_Transition_Parsing_and_Recursive_MBD_Synthesis",
       "actor": "",
-      "objective": "Token Stream State Transition Parsing and Recursive MBD Synthesis",
+      "objective": "\"Token Stream State Transition Parsing and Recursive MBD Synthesis\"",
       "steps": []
     },
     {
       "id": "SCN-14",
       "name": "UC_AC_04_Lossless_to_sysml_Serialization_and_Fail_Closed_Bijective_Roundtrip_Gate",
       "actor": "",
-      "objective": "Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate",
+      "objective": "\"Lossless to sysml Serialization and Fail Closed Bijective Roundtrip Gate\"",
       "steps": []
     },
     {
       "id": "SCN-15",
       "name": "UC_AC_05_Dogfood_Markdown_to_SysML_Ingestion_and_Baseline_Verification",
       "actor": "",
-      "objective": "Dogfood Markdown to SysML Ingestion and Baseline Verification",
+      "objective": "\"Dogfood Markdown to SysML Ingestion and Baseline Verification\"",
       "steps": []
     },
     {
       "id": "SCN-16",
       "name": "UC_AC_01_Deterministic_Multi_Story_Use_Case_and_ConOps_Parent_Epic_Projection",
       "actor": "",
-      "objective": "Deterministic Multi Story Use Case and ConOps Parent Epic Projection",
+      "objective": "\"Deterministic Multi Story Use Case and ConOps Parent Epic Projection\"",
       "steps": []
     },
     {
       "id": "SCN-17",
       "name": "UC_AC_02_Deterministic_Logical_ICD_Matrix_and_Signal_Dictionary_Synthesis",
       "actor": "",
-      "objective": "Deterministic Logical ICD Matrix and Signal Dictionary Synthesis",
+      "objective": "\"Deterministic Logical ICD Matrix and Signal Dictionary Synthesis\"",
       "steps": []
     },
     {
       "id": "SCN-18",
       "name": "UC_AC_03_Deterministic_MIL_STD_881E_WBS_and_Enterprise_Export_Synthesis",
       "actor": "",
-      "objective": "Deterministic MIL STD 881E WBS and Enterprise Export Synthesis",
+      "objective": "\"Deterministic MIL STD 881E WBS and Enterprise Export Synthesis\"",
       "steps": []
     },
     {
       "id": "SCN-19",
       "name": "UC_AC_04_Fail_Closed_Stateful_HTML_Comment_Frontmatter_Guard_and_Parent_Inclusive_Checklist_Reconciliation",
       "actor": "",
-      "objective": "Fail Closed Stateful HTML Comment Frontmatter Guard and Parent Inclusive Checklist Reconciliation",
+      "objective": "\"Fail Closed Stateful HTML Comment Frontmatter Guard and Parent Inclusive Checklist Reconciliation\"",
       "steps": []
     },
     {
       "id": "SCN-20",
       "name": "UC_AC_05_Fail_Closed_Subpackage_Scoped_Reverse_Sync_and_Dogfood_Blueprint_Ingestion_Parity",
       "actor": "",
-      "objective": "Fail Closed Subpackage Scoped Reverse Sync and Dogfood Blueprint Ingestion Parity",
+      "objective": "\"Fail Closed Subpackage Scoped Reverse Sync and Dogfood Blueprint Ingestion Parity\"",
       "steps": []
     },
     {
       "id": "SCN-21",
       "name": "UC_AC_01_Unified_Rust_and_Dart_Lexical_State_Machine_Without_Magic_Offsets",
       "actor": "",
-      "objective": "Unified Rust and Dart Lexical State Machine Without Magic Offsets",
+      "objective": "\"Unified Rust and Dart Lexical State Machine Without Magic Offsets\"",
       "steps": []
     },
     {
       "id": "SCN-22",
       "name": "UC_AC_02_Strict_Schema_Context_Resolution_and_Recursive_Part_Traversal",
       "actor": "",
-      "objective": "Strict Schema Context Resolution and Recursive Part Traversal",
+      "objective": "\"Strict Schema Context Resolution and Recursive Part Traversal\"",
       "steps": []
     },
     {
       "id": "SCN-23",
       "name": "UC_AC_03_Scoped_mod_tests_Brace_Tracking_unsafe_extern_Classification_and_Arrow_Aware_impl_Headers",
       "actor": "",
-      "objective": "Scoped mod tests Brace Tracking unsafe extern Classification and Arrow Aware impl Headers",
+      "objective": "\"Scoped mod tests Brace Tracking unsafe extern Classification and Arrow Aware impl Headers\"",
       "steps": []
     },
     {
       "id": "SCN-24",
       "name": "UC_AC_04_Bit_for_Bit_Idempotency_and_Fail_Closed_Check_34_Per_Function_Normalized_Body_Uniqueness",
       "actor": "",
-      "objective": "Bit for Bit Idempotency and Fail Closed Check 34 Per Function Normalized Body Uniqueness",
+      "objective": "\"Bit for Bit Idempotency and Fail Closed Check 34 Per Function Normalized Body Uniqueness\"",
       "steps": []
     },
     {
       "id": "SCN-25",
       "name": "UC_AC_05_Dogfood_Ingestion_and_SysML_v2_Compilation_of_REQ_0605",
       "actor": "",
-      "objective": "Dogfood Ingestion and SysML v2 Compilation of REQ 0605",
+      "objective": "\"Dogfood Ingestion and SysML v2 Compilation of REQ 0605\"",
       "steps": []
     },
     {
       "id": "SCN-26",
       "name": "UC_AC_01_Static_Five_Pillar_AST_Defect_Detection",
       "actor": "",
-      "objective": "Static Five Pillar AST Defect Detection",
+      "objective": "\"Static Five Pillar AST Defect Detection\"",
       "steps": []
     },
     {
       "id": "SCN-27",
       "name": "UC_AC_02_Deterministic_Seven_Section_Dossier_and_Mermaid_Synthesis",
       "actor": "",
-      "objective": "Deterministic Seven Section Dossier and Mermaid Synthesis",
+      "objective": "\"Deterministic Seven Section Dossier and Mermaid Synthesis\"",
       "steps": []
     },
     {
       "id": "SCN-28",
       "name": "UC_AC_03_Idempotent_Local_and_Remote_SSOT_Deduplication",
       "actor": "",
-      "objective": "Idempotent Local and Remote SSOT Deduplication",
+      "objective": "\"Idempotent Local and Remote SSOT Deduplication\"",
       "steps": []
     },
     {
       "id": "SCN-29",
       "name": "UC_AC_04_Closed_Loop_GitHub_SSOT_Publishing_and_Byte_Parity_Verification",
       "actor": "",
-      "objective": "Closed Loop GitHub SSOT Publishing and Byte Parity Verification",
+      "objective": "\"Closed Loop GitHub SSOT Publishing and Byte Parity Verification\"",
       "steps": []
     },
     {
       "id": "SCN-30",
       "name": "UC_AC_05_Fail_Closed_Rejection_on_Malformed_Dossier_Schema_Ephemeral_Paths_or_Payload_Divergence",
       "actor": "",
-      "objective": "Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence",
+      "objective": "\"Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence\"",
       "steps": []
     },
     {
       "id": "SCN-31",
       "name": "UC_AC_06_Dogfood_SysML_v2_Markdown_Ingestion_and_Blueprint_Gate_Conformance",
       "actor": "",
-      "objective": "Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance",
+      "objective": "\"Dogfood SysML v2 Markdown Ingestion and Blueprint Gate Conformance\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-32",
+      "name": "UC_AC_01_Fail_Closed_Rejection_on_Directed_Dependency_Cycles_and_Upward_Layer_Imports",
+      "actor": "",
+      "objective": "\"Fail Closed Rejection on Directed Dependency Cycles and Upward Layer Imports\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-33",
+      "name": "UC_AC_02_Four_Level_Deterministic_Lowering_with_Typed_syn_File_AST_and_prettyplease_Formatting",
+      "actor": "",
+      "objective": "\"Four Level Deterministic Lowering with Typed syn File AST and prettyplease Formatting\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-34",
+      "name": "UC_AC_03_Metacircular_Self_Hosting_Stage_1_to_Stage_2_SHA_256_Fixed_Point_Identity",
+      "actor": "",
+      "objective": "\"Metacircular Self Hosting Stage 1 to Stage 2 SHA 256 Fixed Point Identity\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-35",
+      "name": "UC_AC_04_Modular_Multi_File_Flutter_Contract_Emission_and_Monolith_Barrel_Decomposition",
+      "actor": "",
+      "objective": "\"Modular Multi File Flutter Contract Emission and Monolith Barrel Decomposition\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-36",
+      "name": "UC_AC_05_Zero_String_Concatenation_Codegen_DO_178C_Seven_Section_Docstring_and_Clippy_Forbid_Compliance",
+      "actor": "",
+      "objective": "\"Zero String Concatenation Codegen DO 178C Seven Section Docstring and Clippy Forbid Compliance\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-37",
+      "name": "UC_AC_06_Dogfood_SysML_v2_Blueprint_Ingestion_and_Twelve_Gate_Closed_Loop_Conformance",
+      "actor": "",
+      "objective": "\"Dogfood SysML v2 Blueprint Ingestion and Twelve Gate Closed Loop Conformance\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-38",
+      "name": "UC_AC_01_Lossless_Red_Green_CST_Roundtrip_and_Exact_DEAP_v2_0_AST_Metrics_Extraction",
+      "actor": "",
+      "objective": "\"Lossless Red Green CST Roundtrip and Exact DEAP v2 0 AST Metrics Extraction\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-39",
+      "name": "UC_AC_02_Deterministic_BTreeMap_Item_Inventory_and_Atomic_Module_Extraction_with_Check_37_Path_Rewriting",
+      "actor": "",
+      "objective": "\"Deterministic BTreeMap Item Inventory and Atomic Module Extraction with Check 37 Path Rewriting\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-40",
+      "name": "UC_AC_03_Fail_Closed_Rejection_on_Span_Collisions_Missing_Symbols_or_Post_Splice_Syntax_Errors",
+      "actor": "",
+      "objective": "\"Fail Closed Rejection on Span Collisions Missing Symbols or Post Splice Syntax Errors\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-41",
+      "name": "UC_AC_04_Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules",
+      "actor": "",
+      "objective": "\"Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-42",
+      "name": "UC_AC_05_Structured_Codegen_Boundary_Preserving_Stage_1_to_Stage_2_Metacircular_SHA_256_Fixed_Point",
+      "actor": "",
+      "objective": "\"Structured Codegen Boundary Preserving Stage 1 to Stage 2 Metacircular SHA 256 Fixed Point\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-43",
+      "name": "UC_AC_06_Unified_rustc_Compatible_Single_Line_JSON_Diagnostics_and_MachineApplicable_Auto_Fix_Across_All_Five_CLIs",
+      "actor": "",
+      "objective": "\"Unified rustc Compatible Single Line JSON Diagnostics and MachineApplicable Auto Fix Across All Five CLIs\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-44",
+      "name": "UC_AC_07_Air_Gapped_Offline_Cargo_Lock_Reproducibility_and_Twelve_Gate_Blueprint_Conformance",
+      "actor": "",
+      "objective": "\"Air Gapped Offline Cargo Lock Reproducibility and Twelve Gate Blueprint Conformance\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-45",
+      "name": "UC_AC_01_Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement",
+      "actor": "",
+      "objective": "\"Stage 1 Universal Stable Clippy Total Function and clippy toml Threshold Enforcement\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-46",
+      "name": "UC_AC_02_Stage_2_Isolated_Nightly_Dylint_MIR_Zero_Allocation_Proof_on_Real_Time_Control_Loops",
+      "actor": "",
+      "objective": "\"Stage 2 Isolated Nightly Dylint MIR Zero Allocation Proof on Real Time Control Loops\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-47",
+      "name": "UC_AC_03_Stage_2_Compile_Time_MIR_Requirement_Binding_Verification_Against_Active_SysML_Digests",
+      "actor": "",
+      "objective": "\"Stage 2 Compile Time MIR Requirement Binding Verification Against Active SysML Digests\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-48",
+      "name": "UC_AC_04_Stage_3_Deterministic_flutter_rust_bridge_FFI_Synthesis_with_Fail_Closed_ICD_Boundary_Guards",
+      "actor": "",
+      "objective": "\"Stage 3 Deterministic flutter rust bridge FFI Synthesis with Fail Closed ICD Boundary Guards\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-49",
+      "name": "UC_AC_05_Stage_3_Miri_Tree_Borrows_Abstract_Machine_Undefined_Behavior_Rejection_on_FFI_and_Ring_Buffer_Bridges",
+      "actor": "",
+      "objective": "\"Stage 3 Miri Tree Borrows Abstract Machine Undefined Behavior Rejection on FFI and Ring Buffer Bridges\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-50",
+      "name": "UC_AC_06_Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification",
+      "actor": "",
+      "objective": "\"Stage 4 Deterministic Kani CBMC Proof Synthesis and STPA Unsafe Control Action Falsification\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-51",
+      "name": "UC_AC_07_Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate",
+      "actor": "",
+      "objective": "\"Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-52",
+      "name": "UC_AC_01_Lossless_logos_and_rowan_Concrete_Syntax_Tree_Full_Fidelity_Roundtrip_and_Cross_Platform_CRLF_Normalization",
+      "actor": "",
+      "objective": "\"Lossless logos and rowan Concrete Syntax Tree Full Fidelity Roundtrip and Cross Platform CRLF Normalization\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-53",
+      "name": "UC_AC_02_Resilient_Error_Recovery_Parsing_MAX_AST_DEPTH_Guard_and_Deterministic_Ariadne_Byte_Span_Diagnostics",
+      "actor": "",
+      "objective": "\"Resilient Error Recovery Parsing MAX AST DEPTH Guard and Deterministic Ariadne Byte Span Diagnostics\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-54",
+      "name": "UC_AC_03_Formatting_Preserving_Bidirectional_CST_Splicing_Across_Forward_and_Reverse_Sync",
+      "actor": "",
+      "objective": "\"Formatting Preserving Bidirectional CST Splicing Across Forward and Reverse Sync\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-55",
+      "name": "UC_AC_04_Salsa_Early_Cutoff_Durability_Preventing_Downstream_Recomputations_on_Trivia_Edits",
+      "actor": "",
+      "objective": "\"Salsa Early Cutoff Durability Preventing Downstream Recomputations on Trivia Edits\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-56",
+      "name": "UC_AC_05_Fail_Closed_Salsa_Cycle_Detection_and_Net_Negative_Legacy_Cst_Parser_Retirement",
+      "actor": "",
+      "objective": "\"Fail Closed Salsa Cycle Detection and Net Negative Legacy CST Parser Retirement\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-57",
+      "name": "UC_AC_06_Cohesive_Typed_Polyglot_CST_AST_Lowering_with_Zero_rustc_private_and_Exact_Byte_Span_Diagnostics",
+      "actor": "",
+      "objective": "\"Cohesive Typed Polyglot CST AST Lowering with Zero rustc private and Exact Byte Span Diagnostics\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-58",
+      "name": "UC_AC_07_Twelve_Gate_Blueprint_Verification_and_Baseline_Cleanliness_Gate_Conformance",
+      "actor": "",
+      "objective": "\"Twelve Gate Blueprint Verification and Baseline Cleanliness Gate Conformance\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-59",
+      "name": "UC_AC_01_Dual_Mode_criticalup_toml_and_rust_toolchain_toml_Parity_Cross_Platform_Discovery_and_DO_330_Fixed_Point_Qualification",
+      "actor": "",
+      "objective": "\"Dual Mode criticalup toml and rust toolchain toml Parity Cross Platform Discovery and DO 330 Fixed Point Qualification\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-60",
+      "name": "UC_AC_02_End_to_End_FLS_Normative_Paragraph_Traceability_Emission_and_Fail_Closed_Orphan_Detection",
+      "actor": "",
+      "objective": "\"End to End FLS Normative Paragraph Traceability Emission and Fail Closed Orphan Detection\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-61",
+      "name": "UC_AC_03_Certified_core_Library_Subset_Symbol_Report_Gate_Rejecting_std_alloc_and_Dynamic_Formatting_Symbols",
+      "actor": "",
+      "objective": "\"Certified core Library Subset Symbol Report Gate Rejecting std alloc and Dynamic Formatting Symbols\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-62",
+      "name": "UC_AC_04_Zero_Overcount_Structural_and_MC_DC_Coverage_Verification_Mapped_to_SysML_Verification_Cases",
+      "actor": "",
+      "objective": "\"Zero Overcount Structural and MC DC Coverage Verification Mapped to SysML Verification Cases\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-63",
+      "name": "UC_AC_05_Schema_Driven_3_Ring_Workspace_Partitioning_and_Ring_2_Miri_Guarded_FFI_Precondition_Enforcement",
+      "actor": "",
+      "objective": "\"Schema Driven 3 Ring Workspace Partitioning and Ring 2 Miri Guarded FFI Precondition Enforcement\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-64",
+      "name": "UC_AC_06_Ring_1_Challenge_Response_Command_Interlock_and_TelemetryFrame_Digest_Readback_SafetyMonitor_Against_Ring_3_Faults",
+      "actor": "",
+      "objective": "\"Ring 1 Challenge Response Command Interlock and TelemetryFrame Digest Readback SafetyMonitor Against Ring 3 Faults\"",
+      "steps": []
+    },
+    {
+      "id": "SCN-65",
+      "name": "UC_AC_07_Cross_Platform_Execution_Submodule_Layout_Conformance_and_Twelve_Gate_Blueprint_Verification_Gate",
+      "actor": "",
+      "objective": "\"Cross Platform Execution Submodule Layout Conformance and Twelve Gate Blueprint Verification Gate\"",
       "steps": []
     }
   ],
@@ -819,181 +1875,319 @@
     {
       "name": "CompilerLintEnforcementGate",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Configures `clippy::unwrap_used = \"forbid\"` across the workspace [unit: flag]",
       "allocated_activities": []
     },
     {
       "name": "WorkspaceManifestForbidGate",
       "node_type": "Part",
-      "doc": "Enforces forbid lint levels in root Cargo.toml and workspace = true inheritance across all member crates.",
+      "doc": "Enforces forbid lint levels in root Cargo.toml and workspace = true inheritance across all member crates via toml_edit, cargo_metadata, cargo-lock, cargo-util-schemas, and cargo-platform.",
       "allocated_activities": []
     },
     {
-      "name": "ClippyAttributeAstScanner",
+      "name": "ClippyAttributeCstParser",
       "node_type": "Part",
-      "doc": "Zero-regex multi-line token-stream scanner in Check 34 rejecting allow(clippy:: attribute sequences.",
+      "doc": "Lossless ra_ap_syntax (ast::Attr, ast::HasAttrs) and rowan CST verifier in Check 34 rejecting allow(clippy::...) and cfg_attr(..., allow(clippy::...)) attribute trees with ra_ap_line_index span resolution.",
       "allocated_activities": []
     },
     {
       "name": "CrateRootAttributeSanitizer",
       "node_type": "Part",
-      "doc": "Strips crate-level #![allow(clippy::...)] headers and replaces complex tuples with named structs or type aliases.",
+      "doc": "Strips crate-level #![allow(clippy::...)] headers via ra_ap_text_edit and replaces complex tuples with named structs or type aliases in < 380-SLOC submodules.",
       "allocated_activities": []
     },
     {
       "name": "TestTargetLintEnforcer",
       "node_type": "Part",
-      "doc": "Enforces identical forbid lint discipline across unit tests (#[cfg(test)]) and integration tests (tests/ *.rs).",
+      "doc": "Enforces identical forbid lint discipline across unit tests (#[cfg(test)]) and integration tests (tests/ *.rs) via cargo clippy --all-targets and ra_ap_syntax CST checks.",
       "allocated_activities": []
     },
     {
       "name": "AntiGamingTestBodyAuditor",
       "node_type": "Part",
-      "doc": "Test AST auditor that parses `#[test]` functions and rejects zero-assertion bodies, `mem::size_of` tautologies, unguarded `.exists()` skips, and non-RAII temp paths",
+      "doc": "Lossless ra_ap_syntax test AST auditor that inspects typed ast::{Fn, MacroCall, CallExpr} nodes in #[test] functions and rejects zero-assertion bodies, mem::size_of tautologies, unguarded .exists() skips, and non-RAII temp paths",
       "allocated_activities": []
     },
     {
       "name": "Check34AstPurityAndAntiGamingGate",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Total detected panicking direct range-slice indexing expressions (`ast::IndexExpr` with range operands) across audited workspace modules [unit: count]",
       "allocated_activities": []
     },
     {
       "name": "FailClosedIoAstVerifier",
       "node_type": "Part",
-      "doc": "AST pattern verifier that rejects fail-open iterator flattening, `.filter_map(Result::ok)`, `.unwrap_or_default()` on filesystem reads, and `let _ = fs::` error discarding",
+      "doc": "Typed ra_ap_syntax AST pattern verifier inspecting ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr} nodes to reject fail-open iterator flattening, .filter_map(Result::ok), .unwrap_or_default() on filesystem reads, and let _ = fs:: error discarding",
       "allocated_activities": []
     },
     {
       "name": "RangeSliceAstDetector",
       "node_type": "Part",
-      "doc": "Zero-regex token-stream analyzer that detects panicking Rust bracket range indexing (`expr[a..b]`, `expr[..b]`, `expr[a..]`) outside string literals, comments, and `.get(..)` calls",
+      "doc": "Lossless ra_ap_syntax + rowan CST analyzer inspecting typed ast::IndexExpr nodes to reject panicking Rust bracket range indexing (expr[a..b], expr[..b], expr[a..]) outside .get(..) calls",
       "allocated_activities": []
     },
     {
       "name": "SsotSymbolDeduplicationGate",
       "node_type": "Part",
-      "doc": "Workspace-wide AST symbol scanner enforcing single-module residency for SHA-256 constants (`0x428a2f98`) and Rust lexical state machines",
+      "doc": "Workspace-wide ra_ap_syntax, cargo_metadata, cargo-lock, cargo-util-schemas, cargo-platform, and toml_edit symbol CST/AST verifier enforcing single-module residency for SHA-256 constants (0x428a2f98) in digest.rs and CST parsers in rust_cst/ and dart_cst/",
       "allocated_activities": []
     },
     {
       "name": "BijectiveSysmlSerializer",
       "node_type": "Part",
-      "doc": "Canonical `SysmlSerializable::to_sysml` formatter preserving 100% of `PackageDef` AST fields without double-quoting",
+      "doc": "Canonical rowan CST printer and SysmlSerializable::to_sysml formatter preserving 100% of 6-clause OMG SysML v2.0 + KerML 1.0 AST fields and trivia without double-quoting",
       "allocated_activities": []
     },
     {
       "name": "CompilerRoundtripVerificationGate",
       "node_type": "Part",
-      "doc": "Built-in compiler verification stage asserting `parse_sysml(to_sysml(ast)) == ast` on every `compile-sysml` run",
+      "doc": "Built-in salsa-tracked compiler verification stage asserting parse_sysml(to_sysml(ast)) == ast and Stage-1 == Stage-2 SHA-256 parity on every compile-sysml run",
       "allocated_activities": []
     },
     {
       "name": "FailClosedRecursiveDescentParser",
       "node_type": "Part",
-      "doc": "Strict token-stream parser for all 12 inner declaration blocks, composite type expressions, and nested state transitions",
+      "doc": "Lossless rowan Red/Green CST parser (deap_core::sysml_cst) covering all 6 clauses of the normative OMG SysML v2.0 + KerML 1.0 grammar with zero 16-construct caps and zero silent-skip branches",
       "allocated_activities": []
     },
     {
       "name": "NativeSigilAndLifetimeLexer",
       "node_type": "Part",
-      "doc": "Zero-rewrite scanner emitting native `Ampersand`, `Question`, `Lifetime`, and `DoubleColon` tokens with exact byte spans",
+      "doc": "Zero-rewrite logos DFA lexer (deap_core::sysml_cst::lexer) emitting native sigil, KerML 1.0 specialization (:>, :>>, ::>, ~), lifetime, and trivia tokens with exact UTF-8 byte spans",
       "allocated_activities": []
     },
     {
       "name": "SysmlBijectiveRoundtripCompilerGate",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Cumulative byte-offset drift between raw source character positions and emitted logos + rowan token spans [unit: bytes]",
       "allocated_activities": []
     },
     {
       "name": "AgileSpecForwardProjector",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Maximum deterministic execution bound for `--forward-sync` across all package subtrees. [unit: ms]",
       "allocated_activities": []
     },
     {
       "name": "BidirectionalBacklogReconciler",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Tracks multi-line `in_html_comment` state to prevent commented example tables from spoofing frontmatter issue IDs. [unit: flag]",
       "allocated_activities": []
     },
     {
       "name": "DeterministicSpecIcdWbsForwardCompiler",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Total number of generative LLM subagents invoked during specification, ICD, and WBS forward compilation (`C-FWD-01 == 0`). [unit: count]",
       "allocated_activities": []
     },
     {
       "name": "LogicalIcdMatrixCompiler",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Maximum deterministic execution bound for `--emit-icd` interface matrix and signal dictionary compilation. [unit: ms]",
       "allocated_activities": []
     },
     {
       "name": "MilStd881eWbsExporter",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Canonical 4-level MIL-STD-881E decomposition depth (System, Subsystem, Work Package, Deliverable Task). [unit: levels]",
       "allocated_activities": []
     },
     {
       "name": "Check36AstCompletenessVerifier",
       "node_type": "Part",
-      "doc": "Baseline verification gate in `verify-baseline` auditing 100% per-item 7-section docstring coverage and Check 34 normalized body uniqueness using `deap_core::source_ast`",
+      "doc": "Baseline verification gate in verify-baseline auditing Tier-A 7-section docstring completeness, Tier-B/C <= 4-line [REQ-*] / [FLS: fls_*] compaction, and Check 34 normalized body uniqueness using deap_core::rust_cst (ra_ap_syntax + rowan) and deap_core::dart_cst (logos + rowan)",
       "allocated_activities": []
     },
     {
       "name": "ScopedSchemaContextResolver",
       "node_type": "Part",
-      "doc": "Strict SysML v2 requirement and constraint resolver in `compile-sysml` traversing recursive `part.parts` trees with `owner_name` isolation and zero `.first()` fallback",
+      "doc": "Strict 6-clause OMG SysML v2.0 + KerML 1.0 requirement and constraint resolver in compile-sysml traversing recursive part.parts trees with owner_name isolation and zero .first() fallback",
       "allocated_activities": []
     },
     {
       "name": "SevenSectionDocstringGenerator",
       "node_type": "Part",
-      "doc": "Deterministic forward synthesizer interpolating AST parameters, return types, struct fields, invariants, and `Realises:` bindings into unique 7-section docblocks",
+      "doc": "Deterministic CST synthesizer using ra_ap_syntax ast::HasDocComments and ra_ap_text_edit::TextEdit to interpolate AST parameters, return types, struct fields, invariants, and [REQ-*] / [FLS: fls_*] bindings into Tier-A 7-section and Tier-B/C <= 4-line docblocks",
       "allocated_activities": []
     },
     {
-      "name": "UnifiedRustDartLexicalScanner",
+      "name": "UnifiedRustDartCstParser",
       "node_type": "Part",
-      "doc": "Canonical zero-regex lexical state machine in `deap_core::source_ast` handling nested `/ * * /`, `r#\"...\"#`, Dart `${...}` frames, and exact char-literal vs. lifetime disambiguation",
+      "doc": "Lossless Red/Green CST parser facade combining deap_core::rust_cst (ra_ap_syntax + rowan, ra_ap_vfs, ra_ap_paths, ra_ap_line_index, camino, ignore) and deap_core::dart_cst (logos + rowan) with zero hand-rolled line scanners",
       "allocated_activities": []
     },
     {
       "name": "UnifiedSafetyDocstringSynthesizer",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Top-level unified safety docstring synthesizer and Check 36 CST verification orchestrator enforcing < 380-SLOC submodules and -8,200+ SLOC legacy docstring scanner deletion",
       "allocated_activities": []
     },
     {
       "name": "ClosedLoopDefectPublisherGate",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Enforces all 12 `validate_defect_dossier` checks prior to persistence or publication. [unit: checks]",
       "allocated_activities": []
     },
     {
       "name": "DeterministicDossierSynthesizer",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Enforces all 7 canonical `DossierSection` headers plus the `## Audit Source` footer. [unit: sections]",
       "allocated_activities": []
     },
     {
       "name": "DeterministicStaticDefectAuditor",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Number of LLM subagents dispatched during static code auditing and defect dossier generation. [unit: count]",
       "allocated_activities": []
     },
     {
       "name": "FivePillarStaticAstAnalyzer",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Count of active static AST and MIR evaluators (`E0601` through `E0605`) over `ra_ap_syntax`, Stage-2 `rustc_middle::mir::Body`, and `deap_core::dart_cst`. [unit: pillars]",
       "allocated_activities": []
     },
     {
       "name": "MermaidUmlDiagramGenerator",
       "node_type": "Part",
-      "doc": "",
+      "doc": "Guarantees zero semicolons and quoted special tokens inside Section 4 Mermaid blocks. [unit: flag]",
+      "allocated_activities": []
+    },
+    {
+      "name": "FourLevelAstPartitionerAndHoister",
+      "node_type": "Part",
+      "doc": "Maximum sequential `ActionDef::steps` statements grouped into a single outlined stage function. [unit: steps]",
+      "allocated_activities": []
+    },
+    {
+      "name": "ModularFlutterMultiFileEmitter",
+      "node_type": "Part",
+      "doc": "Emits top-level Dart barrel facades re-exporting per-package and per-classifier `.g.dart` units. [unit: flag]",
+      "allocated_activities": []
+    },
+    {
+      "name": "ModularRustMultiFileEmitter",
+      "node_type": "Part",
+      "doc": "Validates every synthesized token stream via syn::parse2:: failing closed on syntax errors. [unit: flag]",
+      "allocated_activities": []
+    },
+    {
+      "name": "SelfHostingModularCodegenCompiler",
+      "node_type": "Part",
+      "doc": "Upper bound on physical lines of code permitted per generated compilation unit. [unit: LOC]",
+      "allocated_activities": []
+    },
+    {
+      "name": "TopologicalLayerDagVerifier",
+      "node_type": "Part",
+      "doc": "Maximum architectural layer ordinal (`Domain = 1`, `Application = 2`, `Presentation = 3`). [unit: tier]",
+      "allocated_activities": []
+    },
+    {
+      "name": "AirGappedCargoLockGovernor",
+      "node_type": "Part",
+      "doc": "Mandates reproducible `--offline --locked` workspace builds against pinned `Cargo.lock` dependency checksums. [unit: flag]",
+      "allocated_activities": []
+    },
+    {
+      "name": "LosslessRustCstAnalyzer",
+      "node_type": "Part",
+      "doc": "Upper bound on executable lines of code per Rust function excluding comments, docblocks, attributes, and blank lines. [unit: SLOC]",
+      "allocated_activities": []
+    },
+    {
+      "name": "StructuredModularCodegenSynthesizer",
+      "node_type": "Part",
+      "doc": "Permitted Stage-1 versus Stage-2 SHA-256 file digest mismatch count across self-hosted modular codegen (`E0705`). [unit: files]",
+      "allocated_activities": []
+    },
+    {
+      "name": "UnifiedRustcJsonDiagnosticEmitter",
+      "node_type": "Part",
+      "doc": "Count of workspace CLI binaries unified on `--message-format=json` (`compile-sysml`, `verify-baseline`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`). [unit: binaries]",
+      "allocated_activities": []
+    },
+    {
+      "name": "ZeroTokenRustSpanCodemodEngine",
+      "node_type": "Part",
+      "doc": "Mandatory zero runtime LLM token consumption across item listing, module extraction, and Tier B/C docstring compaction. [unit: tokens]",
+      "allocated_activities": []
+    },
+    {
+      "name": "FrbIcdBridgeAndMiriUbGate",
+      "node_type": "Part",
+      "doc": "Permitted Rust Abstract Machine undefined-behavior findings under `cargo +nightly miri test` with Tree Borrows. [unit: violations]",
+      "allocated_activities": []
+    },
+    {
+      "name": "IsolatedDylintMirAllocationGate",
+      "node_type": "Part",
+      "doc": "Permitted transitive heap allocation or dynamic drop-deallocation terminators reachable from any `#[rt_loop]` function. [unit: allocs]",
+      "allocated_activities": []
+    },
+    {
+      "name": "KaniCbmcProofSynthesizer",
+      "node_type": "Part",
+      "doc": "Permitted reachable CBMC property failures (panics, overflows, div-by-zero, OOB, or STPA `UCA-*` breaches). [unit: counterexamples]",
+      "allocated_activities": []
+    },
+    {
+      "name": "MultiStageVerificationOrchestrator",
+      "node_type": "Part",
+      "doc": "Ordered verification stage count (`Stage 1 Clippy` -> `Stage 2 Dylint MIR` -> `Stage 3 FRB + Miri` -> `Stage 4 Kani CBMC` -> `Stage 5 Ferrocene criticalup`). [unit: stages]",
+      "allocated_activities": []
+    },
+    {
+      "name": "StableClippyTotalFunctionGate",
+      "node_type": "Part",
+      "doc": "Mandatory count of total-function, cast-safety, arithmetic, unsafe-doc, and structural complexity Clippy lints set to `deny` or `forbid`. [unit: lints]",
+      "allocated_activities": []
+    },
+    {
+      "name": "FormattingPreservingSyncSplicer",
+      "node_type": "Part",
+      "doc": "Permitted Stage-1 versus Stage-2 SHA-256 digest mismatch count across bijective (`BP-03`) and self-hosted modular codegen (`E0705`). [unit: files]",
+      "allocated_activities": []
+    },
+    {
+      "name": "LogosRowanSysmlCstEngine",
+      "node_type": "Part",
+      "doc": "Hard structural nesting ceiling across nested `package`, `part`, `port`, `action`, `state`, and expression CST blocks in `deap_core::sysml_cst::parser`. [unit: levels]",
+      "allocated_activities": []
+    },
+    {
+      "name": "SalsaIncrementalCompilerDatabase",
+      "node_type": "Part",
+      "doc": "Mandatory count of stratified `salsa` query groups in `compile_sysml::salsa_db` (`SourceDatabase`, `CstDatabase`, `HirDatabase`, `SafetyVerificationDatabase`). [unit: layers]",
+      "allocated_activities": []
+    },
+    {
+      "name": "TypedPolyglotIngestionFrontend",
+      "node_type": "Part",
+      "doc": "Count of typed CST/AST frontends in `ingest_sysml::polyglot_cst` (`ra_ap_syntax` Rust, `deap_core::dart_cst` Dart, typed `serde_json` OpenAPI/JSON-Schema, `logos`+`rowan` OMG IDL, IETF YANG, Markdown). [unit: frontends]",
+      "allocated_activities": []
+    },
+    {
+      "name": "CertifiedCoreSubsetAndCoverageGate",
+      "node_type": "Part",
+      "doc": "Permitted count of linked Ring-1 ELF or MIR symbols resolving outside the Ferrocene certified `core` subset. [unit: symbols]",
+      "allocated_activities": []
+    },
+    {
+      "name": "DualModeFerroceneToolchainGate",
+      "node_type": "Part",
+      "doc": "Permitted semantic `rustc` version or target-triple delta between `criticalup.toml` and `rust-toolchain.toml`. [unit: versions]",
+      "allocated_activities": []
+    },
+    {
+      "name": "FlsParagraphTraceabilitySynthesizer",
+      "node_type": "Part",
+      "doc": "Permitted count of Ring-1 AST items or Ring-2 `unsafe` blocks lacking a verified `[FLS: fls_*]` normative paragraph tag. [unit: items]",
+      "allocated_activities": []
+    },
+    {
+      "name": "ThreeRingAssurancePartitionCompiler",
+      "node_type": "Part",
+      "doc": "Mandatory count of isolated downstream assurance rings (`Ring 1 safety_kernel`, `Ring 2 ffi_guard_bridge`, `Ring 3 hmi_presentation_shell`). [unit: rings]",
       "allocated_activities": []
     }
   ],

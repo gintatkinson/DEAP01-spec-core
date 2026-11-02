@@ -1,7 +1,8 @@
 //! JSON and YAML subsystem/component data extractors.
 //!
-//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C.
-//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Safety & Traceability: Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Contract: Provides `extract_parts_from_json` and `extract_parts_from_yaml_lines` for structured schema part extraction.
+//! Bounds & Faults: O(N) traversal over JSON nodes and YAML lines with zero panics.
 
 use super::identifiers::is_valid_subsystem_identifier;
 use std::collections::BTreeSet;

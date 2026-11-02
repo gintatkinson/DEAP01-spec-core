@@ -1,7 +1,8 @@
 //! Centralized schema discovery and AST part extractor.
 //!
-//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C.
-//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Safety & Traceability: Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Contract: Provides `UnifiedSchemaModelExtractor` to discover schema files and extract subsystem part identifiers across polyglot formats.
+//! Bounds & Faults: O(F * N) deterministic sorted traversal with zero regex and non-panicking slice operations.
 
 use super::identifiers::is_valid_subsystem_identifier;
 use super::interfaces_and_items::parse_part_defs;
@@ -157,6 +158,8 @@ impl UnifiedSchemaModelExtractor {
         part_names
     }
 
+    /// Scans comment-free SysML lines for `part def` and `part` usage identifiers.
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
     fn scan_sysml_part_statements(comment_free: &str, part_names: &mut BTreeSet<String>) {
         for line in comment_free.lines() {
             let mut stmt = line.trim();
@@ -195,6 +198,8 @@ impl UnifiedSchemaModelExtractor {
         }
     }
 
+    /// Scans Markdown tables for subsystem, component, segment, part, or unit identifiers.
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
     fn scan_markdown_table_parts(content: &str, part_names: &mut BTreeSet<String>) {
         let mut in_table = false;
         let mut col_subsys_idx = None;
@@ -249,6 +254,8 @@ impl UnifiedSchemaModelExtractor {
         }
     }
 
+    /// Scans Protocol Buffers (`service`, `message`) declarations for subsystem identifiers.
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
     fn scan_proto_parts(content: &str, part_names: &mut BTreeSet<String>) {
         for line in content.lines() {
             let trimmed = line.trim();
@@ -267,6 +274,8 @@ impl UnifiedSchemaModelExtractor {
         }
     }
 
+    /// Scans OMG IDL (`interface`, `module`, `struct`) declarations for subsystem identifiers.
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
     fn scan_idl_parts(content: &str, part_names: &mut BTreeSet<String>) {
         for line in content.lines() {
             let trimmed = line.trim();
@@ -285,6 +294,8 @@ impl UnifiedSchemaModelExtractor {
         }
     }
 
+    /// Scans AUTOSAR ARXML `<SHORT-NAME>` elements for subsystem identifiers.
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
     fn scan_arxml_parts(content: &str, part_names: &mut BTreeSet<String>) {
         for line in content.lines() {
             if line.contains("<SHORT-NAME>") && line.contains("</SHORT-NAME>") {
@@ -301,6 +312,8 @@ impl UnifiedSchemaModelExtractor {
         }
     }
 
+    /// Scans IETF YANG (`container`, `grouping`, `list`) declarations for subsystem identifiers.
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
     fn scan_yang_parts(content: &str, part_names: &mut BTreeSet<String>) {
         for line in content.lines() {
             let trimmed = line.trim();

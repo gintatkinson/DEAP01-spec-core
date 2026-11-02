@@ -73,6 +73,8 @@ pub fn validate_mermaid_angle_bracket_escaping(line: &str) -> Option<char> {
     None
 }
 
+/// Strips `<<stereotype>>` tokens from a Mermaid diagram line prior to angle-bracket scanning.
+/// Realises: [REQ-MD-MERMAID]
 fn strip_mermaid_stereotypes(clean_line: &str) -> String {
     let mut stripped = String::with_capacity(clean_line.len());
     let mut idx = 0;
@@ -99,6 +101,8 @@ fn strip_mermaid_stereotypes(clean_line: &str) -> String {
     stripped
 }
 
+/// Strips Mermaid edge/message arrow operators from `line` prior to angle-bracket scanning.
+/// Realises: [REQ-MD-MERMAID]
 fn strip_mermaid_arrows(line: &str) -> String {
     let mut clean_line = line.to_string();
     let arrows = [
@@ -173,6 +177,8 @@ pub fn check_mermaid_syntax(content: &str, file_rel_path: &str) -> Vec<String> {
     errors
 }
 
+/// Validates a single Mermaid diagram body for a valid diagram header and note/arrow escaping.
+/// Realises: [REQ-MD-MERMAID]
 fn validate_mermaid_block(
     body: &[(usize, &str)],
     file_rel_path: &str,
@@ -209,6 +215,8 @@ fn validate_mermaid_block(
     check_mermaid_notes_and_arrows(body, &kind, file_rel_path, errors);
 }
 
+/// Checks Mermaid notes, sequence messages, and transition labels for forbidden semicolons or unquoted angle brackets.
+/// Realises: [REQ-MD-MERMAID]
 fn check_mermaid_notes_and_arrows(
     body: &[(usize, &str)],
     kind: &str,

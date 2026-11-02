@@ -1,7 +1,8 @@
 //! Chain-of-Thought (CoT) reasoning audit record and tamper-evident log.
 //!
-//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C.
-//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Safety & Traceability: Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Contract: Defines `CotAuditRecord` and `CotAuditLog` for append-only cryptographic reasoning provenance verification.
+//! Bounds & Faults: O(R) validation over record count R; fails closed with `CoreError` on empty digests or traces.
 
 use crate::error::CoreError;
 use serde::{Deserialize, Serialize};

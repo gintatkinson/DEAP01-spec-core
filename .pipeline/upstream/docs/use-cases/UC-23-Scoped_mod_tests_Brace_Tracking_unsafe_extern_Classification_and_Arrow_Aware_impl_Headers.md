@@ -29,14 +29,14 @@ graph TD
 - `Compiler_CLI_CI_Pipeline`
 
 ## 2. Preconditions
-- A Rust module containing `#[cfg(test)] mod tests { ... }` followed by a production `pub unsafe fn post_test_api()`, a `#[cfg(test)] impl MockHelper { ... }` block, an `impl<F: Fn(u32) -> bool> FilterEngine<F>` block, and a Dart class method preceded by a multi-line `@pragma('vm:prefer-inline')` annotation bound to a full OMG SysML v2.0 + KerML 1.0 model (zero 16-construct caps).
+- A Rust module containing `outer cfg(test) mod tests { ... }` followed by a production `pub unsafe fn post_test_api()`, a `outer cfg(test) impl MockHelper { ... }` block, an `impl<F: Fn(u32) -> bool> FilterEngine<F>` block, and a Dart class method preceded by a multi-line `@pragma('vm:prefer-inline')` annotation bound to a full OMG SysML v2.0 + KerML 1.0 model (zero 16-construct caps).
 
 ## 3. Trigger
 - `compile-sysml --inject-safety-docstrings` and `verify-baseline` Check 36 inspect the files using `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `ra_ap_text_edit`, `ra_ap_line_index`, and `deap_core::dart_cst` (`logos` + `rowan` + `salsa` + `ariadne`) with zero hand-rolled scanners.
 
 ## 4. Main Success Scenario
 1. `Compiler_CLI_CI_Pipeline` invokes `RunCompileSysmlInjectSafetyDocstrings` and `RunVerifyBaselineNoDomain` on `Check36AstCompletenessVerifier` and `UnifiedRustDartCstParser`.
-2. `UnifiedRustDartCstParser` executes `TokenizeRsAndDartFilesUsing` via `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `ra_ap_line_index`, `rowan`, and `deap_core::dart_cst` to isolate `#[cfg(test)] mod tests` and `#[cfg(test)] impl MockHelper` AST subtrees without hand-rolled brace counters.
+2. `UnifiedRustDartCstParser` executes `TokenizeRsAndDartFilesUsing` via `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `ra_ap_line_index`, `rowan`, and `deap_core::dart_cst` to isolate `outer cfg(test) mod tests` and `outer cfg(test) impl MockHelper` AST subtrees without hand-rolled brace counters.
 3. `UnifiedRustDartCstParser` parses `impl<F: Fn(u32) -> bool> FilterEngine<F>` headers natively via `ra_ap_syntax` AST nodes without truncating on the `->` return-type arrow inside generic trait bounds and tracks multi-line Dart `@pragma` annotations via `deap_core::dart_cst`.
 4. `Check36AstCompletenessVerifier` classifies `pub unsafe fn post_test_api()`, `extern` blocks, and `pub` crate entrypoints (`[DOC-TIER: A]`) as Tier-A items requiring 7-section safety docstrings, while classifying internal/private declarations as Tier-B/C items requiring `<= 4`-line `[REQ-*]`/`[FLS: fls_*]` docstrings injected via `ra_ap_text_edit` + `ra_ap_line_index`.
 5. `Check36AstCompletenessVerifier` verifies `[DOC-TIER: A]` 7-section docstrings on `post_test_api()` and `<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` docstrings on internal `FilterEngine<F>` methods (rejecting undocumented production declarations fail-closed with exit code 1) and emits the verdict on `docstring_verdict_out`.
@@ -50,7 +50,7 @@ graph TD
   - `Check36AstCompletenessVerifier` aborts execution, preserves prior verified state, and returns fail-closed status code 1 to `Compiler_CLI_CI_Pipeline`.
 
 ## 6. Postconditions
-- **Success Guarantee**: `#[cfg(test)] mod tests` and `#[cfg(test)] impl MockHelper` subtrees are isolated via `ra_ap_syntax` (`ast::HasAttrs`), `post_test_api` is audited as `[DOC-TIER: A]`, and `FilterEngine<F>` and Dart `@pragma`-annotated methods receive `<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` or `[DOC-TIER: A]` docstrings via `ra_ap_text_edit` + `ra_ap_line_index` without corrupting attributes.
+- **Success Guarantee**: `outer cfg(test) mod tests` and `outer cfg(test) impl MockHelper` subtrees are isolated via `ra_ap_syntax` (`ast::HasAttrs`), `post_test_api` is audited as `[DOC-TIER: A]`, and `FilterEngine<F>` and Dart `@pragma`-annotated methods receive `<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` or `[DOC-TIER: A]` docstrings via `ra_ap_text_edit` + `ra_ap_line_index` without corrupting attributes.
 - **Failure Guarantee**: Undocumented production items fail closed with a byte-exact `ariadne`/`miette` diagnostic and exit code 1.
 - **3-Layer Definition of Done (DoD)**:
   - **Layer 1 (Domain State & Data Model)**: Lossless `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `deap_core::dart_cst`, and `deap_core::sysml_cst` AST models covering 100% of the OMG SysML v2.0 + KerML 1.0 grammar (zero 16-construct caps).

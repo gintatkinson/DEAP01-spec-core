@@ -97,6 +97,8 @@ pub fn check_latex_katex_syntax(content: &str, file_rel_path: &str) -> Vec<Strin
     errors
 }
 
+/// Validates that all `\begin{aligned}` and `\end{aligned}` blocks are balanced across `cleaned`.
+/// Realises: [REQ-MD-KATEX]
 fn validate_aligned_pairs(cleaned: &str, file_rel_path: &str, errors: &mut Vec<String>) {
     let num_begin = cleaned.matches(r"\begin{aligned}").count();
     let num_end = cleaned.matches(r"\end{aligned}").count();
@@ -108,6 +110,8 @@ fn validate_aligned_pairs(cleaned: &str, file_rel_path: &str, errors: &mut Vec<S
     }
 }
 
+/// Validates a single `$$ ... $$` display math block for forbidden `align` environments and alignment rules.
+/// Realises: [REQ-MD-KATEX]
 fn validate_single_math_block(block: &str, file_rel_path: &str, errors: &mut Vec<String>) {
     if block.contains(r"\begin{align}") || block.contains(r"\begin{align*}") {
         errors.push(format!(
@@ -128,6 +132,8 @@ fn validate_single_math_block(block: &str, file_rel_path: &str, errors: &mut Vec
     scan_math_block_env(block, file_rel_path, errors);
 }
 
+/// Scans a display math block character-by-character tracking active `\begin{...}` environments.
+/// Realises: [REQ-MD-KATEX]
 fn scan_math_block_env(block: &str, file_rel_path: &str, errors: &mut Vec<String>) {
     let mut env_stack: Vec<String> = Vec::new();
     let mut idx = 0;
@@ -159,6 +165,8 @@ fn scan_math_block_env(block: &str, file_rel_path: &str, errors: &mut Vec<String
     }
 }
 
+/// Parses a `\begin{env}` token starting at byte offset `idx` in `block`.
+/// Realises: [REQ-MD-KATEX]
 fn parse_begin_env(block: &str, idx: usize) -> Option<(String, usize)> {
     if block.get(idx..).is_some_and(|s| s.starts_with(r"\begin{")) {
         let after = block.get(idx + 7..).unwrap_or("");
@@ -172,6 +180,8 @@ fn parse_begin_env(block: &str, idx: usize) -> Option<(String, usize)> {
     None
 }
 
+/// Parses an `\end{env}` token starting at byte offset `idx` in `block`.
+/// Realises: [REQ-MD-KATEX]
 fn parse_end_env(block: &str, idx: usize) -> Option<(String, usize)> {
     if block.get(idx..).is_some_and(|s| s.starts_with(r"\end{")) {
         let after = block.get(idx + 5..).unwrap_or("");
@@ -185,6 +195,8 @@ fn parse_end_env(block: &str, idx: usize) -> Option<(String, usize)> {
     None
 }
 
+/// Verifies that an unescaped `&` alignment operator at `idx` lies within an allowed environment.
+/// Realises: [REQ-MD-KATEX]
 fn check_bare_alignment(
     block: &str,
     idx: usize,

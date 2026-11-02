@@ -87,7 +87,7 @@ Classifier `AntiGamingTestBodyAuditor` encapsulates typed domain state attribute
 Classifier `AntiGamingTestBodyAuditor` governs stateless structural transition evaluation enforcing invariant obligations `Invariant_REQ_0602_SC_01`, `Invariant_REQ_0602_SC_02` via typed `ra_ap_syntax` AST traversal (`ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}`) with zero hand-rolled scanners, targeting `< 380`-SLOC submodules and explicit legacy hand-rolled scanner deletion.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `AntiGamingTestBodyAuditor` exposes an internal structural boundary coupled to `Check34AstPurityAndAntiGamingGate` via `BP_02_AuditorToPurityGateConnection`, routing `ariadne` / `miette` diagnostics for vacuous `#[test]` bodies, `std::mem::size_of` tautologies, conditional `.exists()` skips, and non-RAII `std::env::temp_dir()` paths.
+Classifier `AntiGamingTestBodyAuditor` exposes an internal structural boundary coupled to `Check34AstPurityAndAntiGamingGate` via `BP_02_AuditorToPurityGateConnection`, routing `ariadne` / `miette` diagnostics for vacuous `outer test` bodies, `std::mem::size_of` tautologies, conditional `.exists()` skips, and non-RAII `std::env::temp_dir()` paths.
 
 ### Associated Use Cases & User Stories
 

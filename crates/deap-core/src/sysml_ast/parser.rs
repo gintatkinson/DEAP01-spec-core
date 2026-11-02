@@ -1,7 +1,8 @@
 //! SysML v2 source parsing and comment stripping utilities.
 //!
-//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C.
-//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Safety & Traceability: Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Contract: Provides `parse_sysml`, `parse_sysml_model`, and comment/string stripping state machines for SysML v2 source text.
+//! Bounds & Faults: Executes in linear O(N) time and space over source length with zero regex and zero panicking slice operations.
 
 use super::actions::parse_action_defs;
 use super::connections_and_flows::{parse_connection_defs, parse_port_defs};

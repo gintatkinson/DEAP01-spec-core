@@ -23,7 +23,7 @@ As a `MultiStageVerificationOrchestrator`, I want to invoke `verify_in_process_c
 - Declared lifecycle state model: `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_LifecycleState` (`Idle`, `ProbingFormalDrivers`, `RunningStage1Clippy`, `FailedClosedJsonDiagnostic`, `RunningStage2DylintMir`, `RunningStage3FrbAndMiri`, `RunningStage4KaniCbmc`, `VerifiedAllFourStages`).
 
 ### Layer 2: Logic & State Management
-- **Contract B (Lossless `ra_ap_syntax` & `rowan` CST Stack in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Behavioral execution contract invokes `verify_in_process_cst_syntax(module_path, max_exec_sloc)` using `ra_ap_syntax` (`SourceFile::parse`, `SyntaxKind::{COMMENT, WHITESPACE}`), `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `rowan`, and `camino::Utf8Path` (with zero hand-rolled string/line/char-by-char scanners) inside the 5-Stage pipeline (Stage 1 Clippy -> Stage 2 excluded `./lints/deap-dylint-mir/` -> Stage 3 Miri + `flutter_rust_bridge` -> Stage 4 Kani `#[kani::proof]` via `syn`+`proc-macro2`+`quote`+`prettyplease` -> Stage 5 Ferrocene qualification) with dynamic runtime `PATH` discovery.
+- **Contract B (Lossless `ra_ap_syntax` & `rowan` CST Stack in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Behavioral execution contract invokes `verify_in_process_cst_syntax(module_path, max_exec_sloc)` using `ra_ap_syntax` (`SourceFile::parse`, `SyntaxKind::{COMMENT, WHITESPACE}`), `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `rowan`, and `camino::Utf8Path` (with zero hand-rolled string/line/char-by-char scanners) inside the 5-Stage pipeline (Stage 1 Clippy -> Stage 2 excluded `./lints/deap-dylint-mir/` -> Stage 3 Miri + `flutter_rust_bridge` -> Stage 4 Kani `outer kani::proof` via `syn`+`proc-macro2`+`quote`+`prettyplease` -> Stage 5 Ferrocene qualification) with dynamic runtime `PATH` discovery.
 - State transition management: preserves active stage progression when `cst.errors().is_empty()` and `exec_sloc <= max_exec_sloc` (`380` SLOC per `C_VER_07`), or transitions to `FailedClosedJsonDiagnostic` with `DEAP-E0905` on CST parse error or SLOC ceiling breach.
 - Formal constraints and requirements enforced: `C_VER_01 (too_many_lines_threshold >= 1 and too_many_lines_threshold <= 80)`, `C_VER_02 (too_many_arguments_threshold >= 0 and too_many_arguments_threshold <= 5)`, `C_VER_03 (max_rt_heap_allocations >= 0 and max_rt_heap_allocations <= 0)`, `C_VER_04 (max_miri_ub_violations >= 0 and max_miri_ub_violations <= 0)`, `C_VER_05 (max_kani_counterexamples >= 0 and max_kani_counterexamples <= 0)`, `C_VER_06 (default_kani_unwind_bound >= 1 and default_kani_unwind_bound <= 64)`, `C_VER_07 (max_module_exec_sloc >= 1 and max_module_exec_sloc <= 380)`, `C_VER_08 (min_toolchain_discovery_probes >= 1 and min_toolchain_discovery_probes <= 3)`, `Invariant_REQ_0609_SC_05`, `REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`.
 - Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`./crates/verify-baseline/src/formal_gates/`, `./crates/compile-sysml/src/kani_synth/`, `./crates/compile-sysml/src/frb_guard/`, and excluded `./lints/deap-dylint-mir/`) while explicitly deleting legacy hand-rolled line-counting/comment-stripping scanners and ratcheting Check 34 ceilings.
@@ -42,17 +42,12 @@ sequenceDiagram
     participant MultiStageVerificationOrchestrator as "orchestrator : MultiStageVerificationOrchestrator"
     participant IsolatedDylintMirAllocationGate as "dylintGate : IsolatedDylintMirAllocationGate"
     participant StableClippyTotalFunctionGate as "clippyGate : StableClippyTotalFunctionGate"
-    Operator->>MultiStageVerificationOrchestrator: verify_in_process_cst_syntax(module_path: String, max_exec_sloc: Integer)
-    MultiStageVerificationOrchestrator->>IsolatedDylintMirAllocationGate: verify_in_process_cst_syntax(module_path: String, max_exec_sloc: Integer)
-    IsolatedDylintMirAllocationGate->>StableClippyTotalFunctionGate: verify_clippy_policy(policy: String, manifest_lints: String)
-    StableClippyTotalFunctionGate-->IsolatedDylintMirAllocationGate: policyValid : Boolean
-    alt "[cstErrors == 0 && execSloc <= 380]"
-        IsolatedDylintMirAllocationGate-->MultiStageVerificationOrchestrator: cstReceipt : StageGateReceipt
-        MultiStageVerificationOrchestrator-->Operator: statusReport : StageGateReceipt
-    else "[cstErrors > 0 || execSloc > 380]"
-        IsolatedDylintMirAllocationGate-->MultiStageVerificationOrchestrator: diagnostic : String
-        MultiStageVerificationOrchestrator-->Operator: statusReport : StageGateReceipt
-    end
+    Operator->>MultiStageVerificationOrchestrator: verify_in_process_cst_syntax()
+    MultiStageVerificationOrchestrator->>IsolatedDylintMirAllocationGate: verify_in_process_cst_syntax()
+    IsolatedDylintMirAllocationGate->>StableClippyTotalFunctionGate: verify_clippy_policy()
+    StableClippyTotalFunctionGate-->>IsolatedDylintMirAllocationGate: policyValid : Boolean
+    IsolatedDylintMirAllocationGate-->>MultiStageVerificationOrchestrator: cstReceipt : StageGateReceipt
+    MultiStageVerificationOrchestrator-->>Operator: statusReport : StageGateReceipt
 ```
 
 ## UML State Machine Diagram
@@ -60,8 +55,8 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> RunningStage2DylintMir
-    RunningStage2DylintMir --> RunningStage3FrbAndMiri : "verify_in_process_cst_syntax [C_VER_07 && cstErrors == 0] / commitCstReceipt"
-    RunningStage2DylintMir --> FailedClosedJsonDiagnostic : "rejectCstOrSlocViolation [execSloc > 380 || cstErrors > 0] / emitDeapE0905"
+    RunningStage2DylintMir --> RunningStage3FrbAndMiri : "verify_in_process_cst_syntax [C_VER_07 && cstErrors == 0] / verify_in_process_cst_syntax"
+    RunningStage2DylintMir --> FailedClosedJsonDiagnostic : "rejectCstOrSlocViolation [execSloc > 380 || cstErrors > 0] / verify_in_process_cst_syntax"
     RunningStage3FrbAndMiri --> [*]
     FailedClosedJsonDiagnostic --> [*]
 ```

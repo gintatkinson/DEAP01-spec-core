@@ -1,7 +1,8 @@
 //! Zero-mocking file-backed persistence engine for `SysmlModel` AST snapshots.
 //!
-//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C.
-//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Safety & Traceability: Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Contract: Provides `AstPersistenceEngine` for deterministic JSON snapshot persistence and loading of `SysmlModel` instances.
+//! Bounds & Faults: O(N) serialization and filesystem I/O; fails closed with `CoreError` on invalid model IDs or I/O faults.
 
 use super::package_model::SysmlModel;
 use crate::error::CoreError;

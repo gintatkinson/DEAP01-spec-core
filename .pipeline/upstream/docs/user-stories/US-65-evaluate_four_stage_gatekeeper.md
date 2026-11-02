@@ -23,7 +23,7 @@ As a `MultiStageVerificationOrchestrator`, I want to invoke `evaluate_four_stage
 - Declared lifecycle state model: `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_LifecycleState` (`Idle`, `ProbingFormalDrivers`, `RunningStage1Clippy`, `FailedClosedJsonDiagnostic`, `RunningStage2DylintMir`, `RunningStage3FrbAndMiri`, `RunningStage4KaniCbmc`, `VerifiedAllFourStages`).
 
 ### Layer 2: Logic & State Management
-- **Contract B (Cross-Platform 5-Stage Formal Verification Pipeline, Zero Hand-Rolled Scanners)**: Behavioral execution contract invokes `evaluate_four_stage_gatekeeper(receipts)` sequentially across Stage 1 (`cargo clippy --message-format=json` via `cargo_metadata` + `toml_edit` + `ra_ap_syntax`) -> Stage 2 (excluded `./lints/deap-dylint-mir/` `rustc_middle::mir` zero-allocation and `REQ-*` digest plugin) -> Stage 3 (`cargo +nightly miri test` under `-Zmiri-tree-borrows` + `flutter_rust_bridge` FFI guards + `deap_core::dart_cst`) -> Stage 4 (`cargo kani` `#[kani::proof]` synthesis via `syn` + `proc-macro2` + `quote` + `prettyplease`) -> Stage 5 Ferrocene qualification (`criticalup.toml` + `[FLS: fls_*]` + `symbol-report`/`blanket` MC/DC + 3-Ring DAL-A..E partitioning), with dynamic runtime `PATH` discovery and zero hand-rolled string/line/char-by-char scanners.
+- **Contract B (Cross-Platform 5-Stage Formal Verification Pipeline, Zero Hand-Rolled Scanners)**: Behavioral execution contract invokes `evaluate_four_stage_gatekeeper(receipts)` sequentially across Stage 1 (`cargo clippy --message-format=json` via `cargo_metadata` + `toml_edit` + `ra_ap_syntax`) -> Stage 2 (excluded `./lints/deap-dylint-mir/` `rustc_middle::mir` zero-allocation and `REQ-*` digest plugin) -> Stage 3 (`cargo +nightly miri test` under `-Zmiri-tree-borrows` + `flutter_rust_bridge` FFI guards + `deap_core::dart_cst`) -> Stage 4 (`cargo kani` `outer kani::proof` synthesis via `syn` + `proc-macro2` + `quote` + `prettyplease`) -> Stage 5 Ferrocene qualification (`criticalup.toml` + `FLS fls_...` + `symbol-report`/`blanket` MC/DC + 3-Ring DAL-A..E partitioning), with dynamic runtime `PATH` discovery and zero hand-rolled string/line/char-by-char scanners.
 - State transition management: `Idle -> ProbingFormalDrivers -> RunningStage1Clippy -> RunningStage2DylintMir -> RunningStage3FrbAndMiri -> RunningStage4KaniCbmc -> VerifiedAllFourStages` (or immediate short-circuit to `FailedClosedJsonDiagnostic` on any stage failure when `fail_closed_short_circuit == true`).
 - Formal constraints and requirements enforced: `C_VER_01 (too_many_lines_threshold >= 1 and too_many_lines_threshold <= 80)`, `C_VER_02 (too_many_arguments_threshold >= 0 and too_many_arguments_threshold <= 5)`, `C_VER_03 (max_rt_heap_allocations >= 0 and max_rt_heap_allocations <= 0)`, `C_VER_04 (max_miri_ub_violations >= 0 and max_miri_ub_violations <= 0)`, `C_VER_05 (max_kani_counterexamples >= 0 and max_kani_counterexamples <= 0)`, `C_VER_06 (default_kani_unwind_bound >= 1 and default_kani_unwind_bound <= 64)`, `C_VER_07 (max_module_exec_sloc >= 1 and max_module_exec_sloc <= 380)`, `C_VER_08 (min_toolchain_discovery_probes >= 1 and min_toolchain_discovery_probes <= 3)`, `Invariant_REQ_0609_SC_01`..`Invariant_REQ_0609_SC_05`, `REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`.
 - Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`./crates/verify-baseline/src/formal_gates/`, `./crates/compile-sysml/src/kani_synth/`, `./crates/compile-sysml/src/frb_guard/`, and excluded `./lints/deap-dylint-mir/`) while explicitly deleting legacy hand-rolled scanners and unguarded FFI/string-template harness emitters.
@@ -44,20 +44,16 @@ sequenceDiagram
     participant IsolatedDylintMirAllocationGate as "dylintGate : IsolatedDylintMirAllocationGate"
     participant FrbIcdBridgeAndMiriUbGate as "frbGate : FrbIcdBridgeAndMiriUbGate"
     participant KaniCbmcProofSynthesizer as "kaniSynth : KaniCbmcProofSynthesizer"
-    Operator->>MultiStageVerificationOrchestrator: evaluate_four_stage_gatekeeper(receipts: String)
-    MultiStageVerificationOrchestrator->>StableClippyTotalFunctionGate: verify_clippy_policy(policy: String, manifest_lints: String)
-    StableClippyTotalFunctionGate-->MultiStageVerificationOrchestrator: stage1Receipt : StageGateReceipt
-    MultiStageVerificationOrchestrator->>IsolatedDylintMirAllocationGate: evaluate_stage2_dylint_mir(input: String)
-    IsolatedDylintMirAllocationGate-->MultiStageVerificationOrchestrator: stage2Receipt : StageGateReceipt
-    MultiStageVerificationOrchestrator->>FrbIcdBridgeAndMiriUbGate: guard_inbound_frb_f64(spec: String, raw_value: Real, active_fsm_state: String)
-    FrbIcdBridgeAndMiriUbGate-->MultiStageVerificationOrchestrator: stage3Receipt : StageGateReceipt
-    MultiStageVerificationOrchestrator->>KaniCbmcProofSynthesizer: validate_kani_harness_spec(spec: String)
-    KaniCbmcProofSynthesizer-->MultiStageVerificationOrchestrator: stage4Receipt : StageGateReceipt
-    alt [allFourStagesPassed == true]
-        MultiStageVerificationOrchestrator-->Operator: consolidatedReceipt : StageGateReceipt
-    else [anyStageFailed == true]
-        MultiStageVerificationOrchestrator-->Operator: diagnosticReceipt : StageGateReceipt
-    end
+    Operator->>MultiStageVerificationOrchestrator: evaluate_four_stage_gatekeeper()
+    MultiStageVerificationOrchestrator->>StableClippyTotalFunctionGate: verify_clippy_policy()
+    StableClippyTotalFunctionGate-->>MultiStageVerificationOrchestrator: stage1Receipt : StageGateReceipt
+    MultiStageVerificationOrchestrator->>IsolatedDylintMirAllocationGate: evaluate_stage2_dylint_mir()
+    IsolatedDylintMirAllocationGate-->>MultiStageVerificationOrchestrator: stage2Receipt : StageGateReceipt
+    MultiStageVerificationOrchestrator->>FrbIcdBridgeAndMiriUbGate: guard_inbound_frb_f64()
+    FrbIcdBridgeAndMiriUbGate-->>MultiStageVerificationOrchestrator: stage3Receipt : StageGateReceipt
+    MultiStageVerificationOrchestrator->>KaniCbmcProofSynthesizer: validate_kani_harness_spec()
+    KaniCbmcProofSynthesizer-->>MultiStageVerificationOrchestrator: stage4Receipt : StageGateReceipt
+    MultiStageVerificationOrchestrator-->>Operator: consolidatedReceipt : StageGateReceipt
 ```
 
 ## UML State Machine Diagram
@@ -65,17 +61,17 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> ProbingFormalDrivers : "probe_formal_toolchain [C_VER_08] / discoverDrivers"
-    ProbingFormalDrivers --> RunningStage1Clippy : "toolchainsDiscoveredOrPermitted [ok] / startStage1"
-    RunningStage1Clippy --> RunningStage2DylintMir : "stage1TotalFunctionsVerified [C_VER_01 && C_VER_02] / startStage2"
-    RunningStage2DylintMir --> RunningStage3FrbAndMiri : "stage2ZeroRtAllocVerified [C_VER_03] / startStage3"
-    RunningStage3FrbAndMiri --> RunningStage4KaniCbmc : "stage3FrbMiriAndDartVerified [C_VER_04] / startStage4"
-    RunningStage4KaniCbmc --> VerifiedAllFourStages : "stage4AllSafetyProofsUnsat [C_VER_05 && C_VER_06] / emitDeap0000"
-    ProbingFormalDrivers --> FailedClosedJsonDiagnostic : "rejectMissingToolchainInQualification [missing] / emitDeapE0905"
-    RunningStage1Clippy --> FailedClosedJsonDiagnostic : "rejectStage1ClippyViolation [failed] / emitDeapE0900"
-    RunningStage2DylintMir --> FailedClosedJsonDiagnostic : "rejectMirHeapAllocOrDanglingReq [failed] / emitDeapE0901OrE0902"
-    RunningStage3FrbAndMiri --> FailedClosedJsonDiagnostic : "rejectMiriTreeBorrowsOrDartFatalInfo [failed] / emitDeapE0903"
-    RunningStage4KaniCbmc --> FailedClosedJsonDiagnostic : "rejectKaniCbmcCounterexample [failed] / emitDeapE0904"
+    Idle --> ProbingFormalDrivers : "probe_formal_toolchain [C_VER_08] / probe_formal_toolchain"
+    ProbingFormalDrivers --> RunningStage1Clippy : "toolchainsDiscoveredOrPermitted [ok] / verify_clippy_policy"
+    RunningStage1Clippy --> RunningStage2DylintMir : "stage1TotalFunctionsVerified [C_VER_01 && C_VER_02] / evaluate_stage2_dylint_mir"
+    RunningStage2DylintMir --> RunningStage3FrbAndMiri : "stage2ZeroRtAllocVerified [C_VER_03] / guard_inbound_frb_f64"
+    RunningStage3FrbAndMiri --> RunningStage4KaniCbmc : "stage3FrbMiriAndDartVerified [C_VER_04] / validate_kani_harness_spec"
+    RunningStage4KaniCbmc --> VerifiedAllFourStages : "stage4AllSafetyProofsUnsat [C_VER_05 && C_VER_06] / evaluate_four_stage_gatekeeper"
+    ProbingFormalDrivers --> FailedClosedJsonDiagnostic : "rejectMissingToolchainInQualification [missing] / probe_formal_toolchain"
+    RunningStage1Clippy --> FailedClosedJsonDiagnostic : "rejectStage1ClippyViolation [failed] / verify_clippy_policy"
+    RunningStage2DylintMir --> FailedClosedJsonDiagnostic : "rejectMirHeapAllocOrDanglingReq [failed] / evaluate_stage2_dylint_mir"
+    RunningStage3FrbAndMiri --> FailedClosedJsonDiagnostic : "rejectMiriTreeBorrowsOrDartFatalInfo [failed] / guard_inbound_frb_f64"
+    RunningStage4KaniCbmc --> FailedClosedJsonDiagnostic : "rejectKaniCbmcCounterexample [failed] / validate_kani_harness_spec"
     VerifiedAllFourStages --> [*]
     FailedClosedJsonDiagnostic --> [*]
 ```
@@ -109,7 +105,7 @@ test case def Test_evaluate_four_stage_gatekeeper {
 ## Required Features
 - [ ] #747 - [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) (Supplies Stage 3 `flutter_rust_bridge` FFI, `dart analyze`, and Miri `-Zmiri-tree-borrows` verification receipts)
 - [ ] #748 - [Feature 42: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] IsolatedDylintMirAllocationGate](../features/FEAT-42-IsolatedDylintMirAllocationGate.md) (Supplies Stage 2 excluded `./lints/deap-dylint-mir/` zero-allocation and `REQ-*` digest verification receipts)
-- [ ] #749 - [Feature 43: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] KaniCbmcProofSynthesizer](../features/FEAT-43-KaniCbmcProofSynthesizer.md) (Supplies Stage 4 Kani `#[kani::proof]` CBMC `UNSAT` verification receipts)
+- [ ] #749 - [Feature 43: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] KaniCbmcProofSynthesizer](../features/FEAT-43-KaniCbmcProofSynthesizer.md) (Supplies Stage 4 Kani `outer kani::proof` CBMC `UNSAT` verification receipts)
 - [ ] #750 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Executes `evaluate_four_stage_gatekeeper(receipts)` with fail-closed short-circuiting)
 - [ ] #751 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Supplies Stage 1 universal stable Clippy total-function and `clippy.toml` verification receipts)
 

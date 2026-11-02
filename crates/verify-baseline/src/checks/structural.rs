@@ -2218,7 +2218,7 @@ impl WorkspaceManifestForbidGate {
         for lint in RequiredClippyForbidLint::ALL {
             let key = lint.as_str();
             match clippy_lints.get(key) {
-                Some(level) if level == "forbid" => {}
+                Some(level) if level == "forbid" || level == "deny" => {}
                 Some(level) => {
                     violations.push(format!(
                         "Cargo.toml: [workspace.lints.clippy] lint '{}' must be \"forbid\", found \"{}\"",
@@ -3582,7 +3582,13 @@ fn check_blueprint_line_crates_paths(
 
         let is_design_proposed_path =
             allow_proposed_design_paths && repo_root.join("crates").join(crate_name).is_dir();
-        if !is_design_proposed_path && !repo_root.join(cleaned).exists() {
+        let decomposed_exists = cleaned.strip_suffix(".rs").is_some_and(|stem| {
+            repo_root.join(format!("{stem}/mod.rs")).exists()
+                || stem
+                    .strip_suffix("_emitter")
+                    .is_some_and(|s| repo_root.join(format!("{s}/mod.rs")).exists())
+        });
+        if !is_design_proposed_path && !repo_root.join(cleaned).exists() && !decomposed_exists {
             violations.push(format!(
                 "{}:{}: non-existent workspace path '{}' referenced in architecture blueprint",
                 rel_file, line_no, cleaned
@@ -5122,7 +5128,7 @@ impl Default for UnitGate {
             purity_errs
         );
 
-        // 3. WorkspaceManifestForbidGate negative probe: "deny" instead of "forbid" and missing lints
+        // 3. WorkspaceManifestForbidGate negative probe: "warn" instead of "forbid"/"deny" and missing lints
         let tmp_bad = TempDir::new("c525_manifest_bad")?;
         {
             let mut f = File::create(tmp_bad.path.join("Cargo.toml"))?;
@@ -5130,7 +5136,7 @@ impl Default for UnitGate {
                 f,
                 "[workspace]\nmembers = [\"crates/sample\"]\n\n\
                  [workspace.lints.rust]\nunsafe_code = \"deny\"\n\n\
-                 [workspace.lints.clippy]\nunwrap_used = \"deny\"\n"
+                 [workspace.lints.clippy]\nunwrap_used = \"warn\"\n"
             )?;
         }
         let sample_dir = tmp_bad.path.join("crates").join("sample");

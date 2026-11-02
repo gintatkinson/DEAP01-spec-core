@@ -64,15 +64,52 @@ pub struct ScopedItemScannerState {
     pub dart_annotation_paren_depth: usize,
 }
 
+/// Finds the nearest /* or */ delimiter in a comment slice. Realises: [REQ-0605]
+fn find_next_comment_delim(s: &str) -> Option<(usize, bool)> {
+    match (s.find("/*").map(|p| (p, true)), s.find("*/").map(|p| (p, false))) {
+        (Some(o), Some(c)) => Some(if o.0 <= c.0 { o } else { c }),
+        (o, c) => o.or(c),
+    }
+}
+
+/// Masks a string literal token while tracking multi-line string state. Realises: [REQ-0605]
+fn mask_string_token(slice: &str, state: &mut RustDartLexState, out: &mut String) {
+    if slice.starts_with("r#") || slice.starts_with("r\"") {
+        let hash_count = slice.trim_start_matches('r').chars().take_while(|&c| c == '#').count();
+        let closing = format!("\"{}", "#".repeat(hash_count));
+        if let Some((_, suffix)) = slice.get(hash_count + 2..).and_then(|s| s.split_once(&closing)) {
+            out.push_str("\"\" "); out.push_str(suffix);
+        } else {
+            state.raw_hash_count = Some(hash_count); out.extend((0..slice.len()).map(|_| ' '));
+        }
+    } else if let Some(close_idx) = slice.rfind('"').filter(|&i| i > 0) {
+        let suffix = slice.get(close_idx + 1..).unwrap_or("");
+        if suffix.is_empty() {
+            out.push('"'); out.extend((1..close_idx).map(|_| ' ')); out.push('"');
+        } else {
+            out.push_str("\"\" "); out.push_str(suffix);
+        }
+    } else {
+        state.active_string = Some((b'"', false, false)); out.extend((0..slice.len()).map(|_| ' '));
+    }
+}
+
 /// Scans a source line preserving token boundaries and updating lexical state via `ra_ap_syntax`. Realises: [REQ-0605]
 #[must_use]
 pub fn scan_line_with_unified_lex_state(line: &str, state: &mut RustDartLexState) -> String {
     if state.block_comment_depth > 0 {
-        if let Some((_, after)) = line.split_once("*/") {
-            state.block_comment_depth = state.block_comment_depth.saturating_sub(1);
-            let mut prefix = " ".repeat(line.len().saturating_sub(after.len()));
-            prefix.push_str(after);
-            return scan_line_with_unified_lex_state(&prefix, state);
+        let (mut cur, mut prefix_len) = (line, 0);
+        while let Some((pos, is_open)) = find_next_comment_delim(cur) {
+            if is_open {
+                state.block_comment_depth = state.block_comment_depth.saturating_add(1);
+            } else {
+                state.block_comment_depth = state.block_comment_depth.saturating_sub(1);
+                if state.block_comment_depth == 0 {
+                    return scan_line_with_unified_lex_state(&format!("{}{}", " ".repeat(prefix_len + pos + 2), &cur[pos + 2..]), state);
+                }
+            }
+            cur = &cur[pos + 2..];
+            prefix_len += pos + 2;
         }
         return " ".repeat(line.len());
     }
@@ -80,25 +117,24 @@ pub fn scan_line_with_unified_lex_state(line: &str, state: &mut RustDartLexState
         let closing = format!("\"{}", "#".repeat(hashes));
         if let Some((_, after)) = line.split_once(&closing) {
             state.raw_hash_count = None;
-            let mut prefix = " ".repeat(line.len().saturating_sub(after.len()));
-            prefix.push_str(after);
-            return scan_line_with_unified_lex_state(&prefix, state);
+            return scan_line_with_unified_lex_state(&format!("{}{after}", " ".repeat(line.len().saturating_sub(after.len()))), state);
         }
         return " ".repeat(line.len());
     }
     if let Some((quote, is_triple, _)) = state.active_string {
-        let closing = if is_triple {
-            format!("{}{}{}", quote as char, quote as char, quote as char)
-        } else {
-            (quote as char).to_string()
-        };
+        let closing = if is_triple { format!("{0}{0}{0}", quote as char) } else { (quote as char).to_string() };
         if let Some((_, after)) = line.split_once(&closing) {
             state.active_string = None;
-            let mut prefix = " ".repeat(line.len().saturating_sub(after.len()));
-            prefix.push_str(after);
-            return scan_line_with_unified_lex_state(&prefix, state);
+            return scan_line_with_unified_lex_state(&format!("{}{after}", " ".repeat(line.len().saturating_sub(after.len()))), state);
         }
         return " ".repeat(line.len());
+    }
+    if state.language == SourceLanguage::Dart {
+        for (tr, q) in [("'''", b'\''), ("\"\"\"", b'"')] {
+            if let Some((b, a)) = line.split_once(tr) {
+                if !a.contains(tr) { state.active_string = Some((q, true, false)); return format!("{b}   {}", " ".repeat(a.len())); }
+            }
+        }
     }
 
     let parsed = SourceFile::parse(line, Edition::CURRENT);
@@ -108,25 +144,19 @@ pub fn scan_line_with_unified_lex_state(line: &str, state: &mut RustDartLexState
         let slice = tok.text();
         match tok.kind() {
             SyntaxKind::COMMENT => {
-                if slice.starts_with("/*") && !slice.ends_with("*/") {
-                    state.block_comment_depth += 1;
-                }
-                out.extend((0..slice.len()).map(|_| ' '));
-            }
-            SyntaxKind::STRING => {
-                if slice.starts_with("r#") || slice.starts_with("r\"") {
-                    let hash_count = slice.trim_start_matches('r').chars().take_while(|&c| c == '#').count();
-                    let closing = format!("\"{}", "#".repeat(hash_count));
-                    if !slice.ends_with(&closing) {
-                        state.raw_hash_count = Some(hash_count);
+                if slice.starts_with("/*") {
+                    let (opens, closes) = (slice.matches("/*").count(), slice.matches("*/").count());
+                    state.block_comment_depth = (state.block_comment_depth + opens).saturating_sub(closes);
+                    if state.block_comment_depth == 0 && slice.ends_with("*/") {
+                        out.push_str("  ");
+                    } else {
+                        out.extend((0..slice.len()).map(|_| ' '));
                     }
-                } else if !slice.ends_with('"') || slice.len() == 1 {
-                    state.active_string = Some((b'"', false, false));
+                } else {
+                    out.extend((0..slice.len()).map(|_| ' '));
                 }
-                out.push('"');
-                out.extend((1..slice.len().saturating_sub(1)).map(|_| ' '));
-                if slice.len() > 1 && slice.ends_with('"') { out.push('"'); }
             }
+            SyntaxKind::STRING => mask_string_token(slice, state, &mut out),
             _ => out.push_str(slice),
         }
     }
@@ -143,15 +173,10 @@ pub fn scan_rust_line_preserving_lex_state(line: &str, _state: &mut RustStringSc
 /// Single character literal length via CST token stream. Realises: [REQ-0605]
 #[must_use]
 pub fn single_char_literal_byte_len(slice: &str) -> Option<usize> {
-    let parsed = SourceFile::parse(slice, Edition::CURRENT);
-    for elem in parsed.tree().syntax().descendants_with_tokens() {
-        let Some(tok) = elem.into_token() else { continue };
-        if tok.kind() == SyntaxKind::CHAR || tok.kind() == SyntaxKind::BYTE {
-            return Some(tok.text().len());
-        }
-        break;
-    }
-    None
+    SourceFile::parse(slice, Edition::CURRENT).tree().syntax().descendants_with_tokens().find_map(|e| {
+        let tok = e.into_token()?;
+        (tok.kind() == SyntaxKind::CHAR || tok.kind() == SyntaxKind::BYTE).then(|| tok.text().len())
+    })
 }
 
 /// Extracts Rust impl prefix text via CST. Realises: [REQ-0201]
@@ -159,15 +184,13 @@ pub fn single_char_literal_byte_len(slice: &str) -> Option<usize> {
 pub fn extract_rust_impl_header_prefix(code: &str) -> Option<String> {
     let imp = SourceFile::parse(code, Edition::CURRENT).tree().syntax().descendants().find_map(ast::Impl::cast)?;
     let text = imp.syntax().text().to_string();
-    let body_pos = text.find('{').unwrap_or(text.len());
-    Some(text[..body_pos].trim().to_string())
+    Some(text[..text.find('{').unwrap_or(text.len())].trim().to_string())
 }
 
 /// Extracts target type from Rust impl header via CST. Realises: [REQ-0201]
 #[must_use]
 pub fn parse_rust_impl_header(code: &str) -> Option<String> {
-    let imp = SourceFile::parse(code, Edition::CURRENT).tree().syntax().descendants().find_map(ast::Impl::cast)?;
-    Some(imp.self_ty()?.syntax().text().to_string().trim().to_string())
+    SourceFile::parse(code, Edition::CURRENT).tree().syntax().descendants().find_map(ast::Impl::cast)?.self_ty().map(|t| t.syntax().text().to_string().trim().to_string())
 }
 
 /// Classifies Dart member declaration snippet. Realises: [REQ-0201]
@@ -175,26 +198,15 @@ pub fn parse_rust_impl_header(code: &str) -> Option<String> {
 pub fn classify_dart_member_ast(code: &str, class_name: &str) -> Option<(SourceItemKind, String)> {
     let t = code.trim();
     if t.starts_with("factory ") || t.starts_with(class_name) {
-        let name = t.split('(').next()?.trim().to_string();
-        return Some((SourceItemKind::Constructor, name));
+        return Some((SourceItemKind::Constructor, t.split('(').next()?.trim().to_string()));
     }
-    for item in parse_dart_items(code) {
-        if item.kind == DartItemKind::Function {
-            return Some((SourceItemKind::Method, item.name));
-        }
-    }
-    None
+    parse_dart_items(code).into_iter().find(|i| i.kind == DartItemKind::Function).map(|i| (SourceItemKind::Method, i.name))
 }
 
 /// Extracts leading identifier token via CST tokenizer. Realises: [REQ-0201]
 #[must_use]
 pub fn extract_leading_ast_ident(code: &str) -> Option<String> {
-    let parsed = SourceFile::parse(code, Edition::CURRENT);
-    for elem in parsed.tree().syntax().descendants_with_tokens() {
-        let Some(tok) = elem.into_token() else { continue };
-        if tok.kind() == SyntaxKind::IDENT { return Some(tok.text().to_string()); }
-    }
-    None
+    SourceFile::parse(code, Edition::CURRENT).tree().syntax().descendants_with_tokens().find_map(|e| e.into_token().filter(|t| t.kind() == SyntaxKind::IDENT).map(|t| t.text().to_string()))
 }
 
 /// Extracts Dart callable identifier. Realises: [REQ-0201]
@@ -204,21 +216,21 @@ pub fn extract_dart_callable_ident(code: &str) -> Option<String> { extract_leadi
 /// Extracts Dart getter identifier. Realises: [REQ-0201]
 #[must_use]
 pub fn extract_dart_getter_ident(code: &str) -> Option<String> {
-    extract_leading_ast_ident(code.strip_prefix("get ")?.trim_start())
+    let s = strip_leading_dart_annotations(code.trim()).trim_start_matches("static ").trim_start();
+    let after = s.strip_prefix("get ").or_else(|| s.split_once(" get ").map(|(_, r)| r)).or_else(|| s.split_once("\tget ").map(|(_, r)| r))?;
+    (!after.contains('(')).then(|| extract_leading_ast_ident(after.trim_start())).flatten()
 }
 
 /// Strips line comment preserving string literals via CST. Realises: [REQ-0605]
 #[must_use]
 pub fn strip_line_comment_preserving_strings(line: &str) -> &str {
-    let parsed = SourceFile::parse(line, Edition::CURRENT);
-    for elem in parsed.tree().syntax().descendants_with_tokens() {
-        let Some(tok) = elem.into_token() else { continue };
+    SourceFile::parse(line, Edition::CURRENT).tree().syntax().descendants_with_tokens().find_map(|e| {
+        let tok = e.into_token()?;
         if tok.kind() == SyntaxKind::COMMENT && tok.text().starts_with("//") {
-            let offset: usize = u32::from(tok.text_range().start()) as usize;
-            return line.get(..offset).unwrap_or(line);
-        }
-    }
-    line
+            let offset = u32::from(tok.text_range().start()) as usize;
+            Some(line.get(..offset).unwrap_or(line))
+        } else { None }
+    }).unwrap_or(line)
 }
 
 /// Strips leading Dart annotations. Realises: [REQ-0201]
@@ -234,34 +246,43 @@ pub fn strip_dart_annotations_tracking_state<'a>(mut code: &'a str, depth: &mut 
     while *depth > 0 || code.trim_start().starts_with('@') {
         let mut closed_at = None;
         if *depth == 0 {
-            let trimmed = code.trim_start();
-            let after_at = trimmed.strip_prefix('@').unwrap_or("");
+            let after_at = code.trim_start().strip_prefix('@').unwrap_or("");
             let ident_len = after_at.bytes().take_while(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'.').count();
-            if ident_len == 0 { return trimmed; }
+            if ident_len == 0 { return code.trim_start(); }
             let rest = after_at.get(ident_len..).unwrap_or("").trim_start();
             if !rest.starts_with('(') { code = rest; continue; }
             code = rest;
         }
         for (tok, span) in DartToken::lexer(code).spanned() {
-            match (tok, code.get(span.clone()).unwrap_or("")) {
-                (Ok(DartToken::Punct), "(") => *depth += 1,
-                (Ok(DartToken::Punct), ")") => {
+            if tok == Ok(DartToken::Punct) {
+                if code.get(span.clone()) == Some("(") { *depth += 1; }
+                else if code.get(span.clone()) == Some(")") {
                     *depth = depth.saturating_sub(1);
                     if *depth == 0 { closed_at = Some(span.end); break; }
                 }
-                _ => {}
             }
         }
-        match closed_at {
-            Some(end) => code = code.get(end..).unwrap_or(""),
-            None => return "",
-        }
+        code = match closed_at { Some(end) => code.get(end..).unwrap_or(""), None => return "" };
     }
     code.trim_start()
 }
 
 /// Updates delimiter depths using CST tokens. Realises: [REQ-0201]
 pub fn update_ast_delimiter_depths(code: &str, brace_depth: &mut usize, paren_depth: &mut usize) {
+    if code.contains("r'") || code.contains("${") {
+        for (tok, span) in DartToken::lexer(code).spanned() {
+            if tok == Ok(DartToken::Punct) {
+                match code.get(span).unwrap_or("") {
+                    "{" => *brace_depth += 1,
+                    "}" => *brace_depth = brace_depth.saturating_sub(1),
+                    "(" => *paren_depth += 1,
+                    ")" => *paren_depth = paren_depth.saturating_sub(1),
+                    _ => {}
+                }
+            }
+        }
+        return;
+    }
     let parsed = SourceFile::parse(code, Edition::CURRENT);
     for elem in parsed.tree().syntax().descendants_with_tokens() {
         let Some(tok) = elem.into_token() else { continue };
@@ -282,16 +303,13 @@ pub fn parse_rust_callable_signature(code: &str) -> (Vec<SourceParam>, Option<St
     if !snippet.ends_with('}') && !snippet.ends_with(';') { snippet.push_str(" {}"); }
     let parsed = SourceFile::parse(&snippet, Edition::CURRENT);
     if let Some(fn_item) = parsed.tree().syntax().descendants().find_map(ast::Fn::cast) {
-        let mut params = Vec::new();
-        if let Some(plist) = fn_item.param_list() {
-            for p in plist.params() {
-                let name = p.pat().map(|pat| pat.syntax().text().to_string()).unwrap_or_default();
-                let type_name = p.ty().map(|t| t.syntax().text().to_string()).unwrap_or_default();
-                params.push(SourceParam { name, type_name });
-            }
-        }
-        let ret = fn_item.ret_type().and_then(|r| r.ty()).map(|t| t.syntax().text().to_string());
-        return (params, ret);
+        let params = fn_item.param_list().map_or_else(Vec::new, |pl| {
+            pl.params().map(|p| SourceParam {
+                name: p.pat().map(|pat| pat.syntax().text().to_string()).unwrap_or_default(),
+                type_name: p.ty().map(|t| t.syntax().text().to_string()).unwrap_or_default(),
+            }).collect()
+        });
+        return (params, fn_item.ret_type().and_then(|r| r.ty()).map(|t| t.syntax().text().to_string()));
     }
     (Vec::new(), None)
 }
@@ -299,16 +317,14 @@ pub fn parse_rust_callable_signature(code: &str) -> (Vec<SourceParam>, Option<St
 /// Parses Dart callable signature. Realises: [REQ-0201]
 #[must_use]
 pub fn parse_dart_callable_signature(code: &str, callable_name: &str) -> (Vec<SourceParam>, Option<String>) {
-    let mut params = Vec::new();
-    let Some((before_open, after_open)) = code.split_once('(') else { return (params, None); };
+    let Some((before_open, after_open)) = code.split_once('(') else { return (Vec::new(), None); };
     let ret = before_open.trim().strip_suffix(callable_name).map(str::trim).filter(|s| !s.is_empty()).map(ToString::to_string);
+    let mut params = Vec::new();
     if let Some((param_str, _)) = after_open.split_once(')') {
         for seg in param_str.split(',') {
-            let s = seg.trim().trim_start_matches("required").trim();
-            let parts: Vec<&str> = s.split_whitespace().collect();
+            let parts: Vec<&str> = seg.trim().trim_start_matches("required").trim().split_whitespace().collect();
             if parts.len() >= 2 {
-                let type_parts = parts.get(..parts.len().saturating_sub(1)).unwrap_or(&[]);
-                params.push(SourceParam { name: (*parts.last().unwrap_or(&"")).to_string(), type_name: type_parts.join(" ") });
+                params.push(SourceParam { name: (*parts.last().unwrap_or(&"")).to_string(), type_name: parts[..parts.len() - 1].join(" ") });
             } else if let Some(first) = parts.first().filter(|p| !p.is_empty()) {
                 params.push(SourceParam { name: (*first).to_string(), type_name: String::new() });
             }

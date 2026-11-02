@@ -30,6 +30,7 @@ pub mod checks;
 pub mod clippy_gate;
 pub mod dylint_gate;
 pub mod ferrocene_gate;
+pub mod ratchet_table;
 
 #[cfg(test)]
 mod workspace_tests;

@@ -27,7 +27,7 @@ graph TD
 ```
 
 ### State Machine Diagram
-```mermaid
+```sysml
 stateDiagram-v2
     [*] --> Idle
     Idle --> ProbingFormalDrivers : "probe_formal_toolchain [C_VER_08] / probeRuntimePath"
@@ -56,13 +56,13 @@ stateDiagram-v2
 5. All 12 mechanical blueprint verification gates and all 4 verification stages pass with exit code 0, emitting a consolidated NDJSON verification receipt (`DEAP-0000`) on `unified_gate_ndjson_out`.
 
 ## 5. Alternate and Exception Flows
-- **3a. Required formal driver (`dylint`, `miri`, or `kani`) is absent while `require_formal_toolchains == true` (`Diagnostic: DEAP-E0905`) (Branches from Basic Flow step 2):**
+- 3a. Required formal driver (`dylint`, `miri`, or `kani`) is absent while `require_formal_toolchains == true` (`Diagnostic: DEAP-E0905`) (Branches from Basic Flow step 2):
   1. `MultiStageVerificationOrchestrator` detects `discovered == false` when `require_formal_toolchains == true`.
   2. `MultiStageVerificationOrchestrator` transitions from `ProbingFormalDrivers` to `FailedClosedJsonDiagnostic` on `rejectMissingToolchainInQualification`, emits single-line NDJSON diagnostic `DEAP-E0905`, and exits fail-closed with code 1.
-- **4a. Any formal verification submodule exceeds `380` exec SLOC (`C_VER_07`) or contains CST syntax errors (`Diagnostic: DEAP-E0905`) (Branches from Basic Flow step 3):**
+- 4a. Any formal verification submodule exceeds `380` exec SLOC (`C_VER_07`) or contains CST syntax errors (`Diagnostic: DEAP-E0905`) (Branches from Basic Flow step 3):
   1. `verify_in_process_cst_syntax` detects `exec_sloc > 380` or non-empty `cst.errors()` via `ra_ap_syntax`.
   2. `verify_in_process_cst_syntax` rejects the module, emits `DEAP-E0905` on `unified_gate_ndjson_out`, and terminates fail-closed with exit code 1.
-- **5a. Any of the 12 mechanical blueprint verification gates fails on `./docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md` (Branches from Basic Flow step 4):**
+- 5a. Any of the 12 mechanical blueprint verification gates fails on `./docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md` (Branches from Basic Flow step 4):
   1. `verify-baseline check-blueprint` detects a mechanical gate violation.
   2. `verify-baseline check-blueprint` aborts artifact persistence, preserves prior verified state, and exits fail-closed with code 1.
 
@@ -72,7 +72,7 @@ stateDiagram-v2
 
 ## 7. Architectural Realization & Operational Context (Contracts A & B, 3-Layer DoD)
 - **Contract A (100% OMG SysML v2.0 + KerML 1.0 Grammar Coverage)**: Verifies complete OMG SysML v2.0 and KerML 1.0 Definition and Usage symmetry (`package`/`library package`/`standard library package`, `import`, `metadata def`/`metadata`/`@Metadata`/`#user_keyword` (`#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` and legacy `hazard def`/`risk def`/`capability def`), `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port`, `connection def`/`connection`, `interface def`/`interface`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, and KerML specialization/multiplicity/expressions) with zero 16-construct artificial caps.
-- **Contract B (Cross-Platform 5-Stage Pipeline & Dynamic Runtime `PATH` Discovery, Zero Hand-Rolled Scanners)**: Coordinates Stage 1 (`cargo clippy --message-format=json` via `cargo_metadata` + `toml_edit` + `ra_ap_syntax`) -> Stage 2 (excluded `./lints/deap-dylint-mir/`) -> Stage 3 (`cargo miri` + `flutter_rust_bridge` + `deap_core::dart_cst`) -> Stage 4 (`cargo kani` `#[kani::proof]` synthesis via `syn` + `proc-macro2` + `quote` + `prettyplease`) -> Stage 5 (Ferrocene qualification) with dynamic runtime `PATH` discovery (`std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}`, `camino::Utf8Path`) and zero hand-rolled scanners.
+- **Contract B (Cross-Platform 5-Stage Pipeline & Dynamic Runtime `PATH` Discovery, Zero Hand-Rolled Scanners)**: Coordinates Stage 1 (`cargo clippy --message-format=json` via `cargo_metadata` + `toml_edit` + `ra_ap_syntax`) -> Stage 2 (excluded `./lints/deap-dylint-mir/`) -> Stage 3 (`cargo miri` + `flutter_rust_bridge` + `deap_core::dart_cst`) -> Stage 4 (`cargo kani` `outer kani::proof` synthesis via `syn` + `proc-macro2` + `quote` + `prettyplease`) -> Stage 5 (Ferrocene qualification) with dynamic runtime `PATH` discovery (`std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}`, `camino::Utf8Path`) and zero hand-rolled scanners.
 - **3-Layer Definition of Done**: Closes Layer 1 (`FormalToolchainProbeConfig`, `ToolchainDiscoveryReceipt`, and `StageGateReceipt` domain models), Layer 2 (`probe_formal_toolchain`, `verify_in_process_cst_syntax`, and `evaluate_four_stage_gatekeeper` inside `< 380`-SLOC submodules `./crates/verify-baseline/src/formal_gates/`, `./crates/compile-sysml/src/kani_synth/`, `./crates/compile-sysml/src/frb_guard/`, and excluded `./lints/deap-dylint-mir/` with explicit deletion of legacy hand-rolled scanners), and Layer 3 (`gate_invocation_in` and `unified_gate_ndjson_out` NDJSON binding).
 
 ## 8. Realization Matrix
@@ -95,7 +95,7 @@ stateDiagram-v2
 ### Required Features
 - [ ] #747 - [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) (Enforces Stage 3 FFI boundary guards and Miri `-Zmiri-tree-borrows`)
 - [ ] #748 - [Feature 42: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] IsolatedDylintMirAllocationGate](../features/FEAT-42-IsolatedDylintMirAllocationGate.md) (Enforces Stage 2 excluded `./lints/deap-dylint-mir/` MIR zero-allocation and CST SLOC limits)
-- [ ] #749 - [Feature 43: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] KaniCbmcProofSynthesizer](../features/FEAT-43-KaniCbmcProofSynthesizer.md) (Enforces Stage 4 `#[kani::proof]` synthesis via `syn` + `proc-macro2` + `quote` + `prettyplease`)
+- [ ] #749 - [Feature 43: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] KaniCbmcProofSynthesizer](../features/FEAT-43-KaniCbmcProofSynthesizer.md) (Enforces Stage 4 `outer kani::proof` synthesis via `syn` + `proc-macro2` + `quote` + `prettyplease`)
 - [ ] #750 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Implements cross-platform runtime `PATH` probing and 4-stage gatekeeper orchestration)
 - [ ] #751 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Enforces Stage 1 total-function Clippy policy and `./clippy.toml` thresholds)
 

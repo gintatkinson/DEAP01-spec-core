@@ -1,7 +1,8 @@
 //! Token-budgeted subsystem AST projection / slicing.
 //!
-//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C.
-//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Safety & Traceability: Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Contract: Implements `SysmlModel::slice_package_subsystem` for token-budgeted package and requirement AST slicing.
+//! Bounds & Faults: O(N) projection over model elements; fails closed with `CoreError` on invalid package or token bounds.
 
 use super::interfaces_and_items::InterfaceDef;
 use super::package_model::{AstSlice, PackageDef, SysmlModel};

@@ -33,6 +33,9 @@ use std::fs;
 use std::path::PathBuf;
 
 /// Error taxonomy for Stage-5 Ferrocene certification gate.
+/// Safety & Traceability: Realises: [REQ-0611], [SC-01], [FLS: fls_ferrocene_gate]
+/// Contract: Enumerates toolchain drift, missing FLS tags, uncertified core symbols, coverage shortfalls, cross-ring coupling, and monitor faults.
+/// Bounds & Faults: O(1) discriminant representation mapping deterministically to `DEAP-E1101..DEAP-E1106`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum FerroceneGateError {
     ToolchainVersionDrift(String),
@@ -45,6 +48,8 @@ pub enum FerroceneGateError {
 }
 
 impl std::fmt::Display for FerroceneGateError {
+    /// Formats the Stage-5 Ferrocene certification error with its canonical diagnostic code.
+    /// Realises: [REQ-0611], [SC-01]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ToolchainVersionDrift(m) => write!(f, "DEAP-E1101 toolchain drift: {m}"),
@@ -61,6 +66,9 @@ impl std::fmt::Display for FerroceneGateError {
 impl std::error::Error for FerroceneGateError {}
 
 /// Dual toolchain lock specification.
+/// Safety & Traceability: Realises: [REQ-0611], [SC-01], [FLS: fls_ferrocene_gate]
+/// Contract: Captures `criticalup_version`, `rust_toolchain_version`, and the set of `qualified_targets`.
+/// Bounds & Faults: O(T) space over target triples `T` with deterministic equality semantics.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DualToolchainSpec {
     pub criticalup_version: String,
@@ -69,6 +77,9 @@ pub struct DualToolchainSpec {
 }
 
 /// Structural coverage summary mapped to DO-178C Table A-7.
+/// Safety & Traceability: Realises: [REQ-0611], [SC-03], [FLS: fls_ferrocene_gate]
+/// Contract: Records statement, decision, and MC/DC coverage percentages alongside the target DAL level (`DAL-A` / `DAL-B`).
+/// Bounds & Faults: O(1) fixed-size coverage summary record.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CoverageSummary {
     pub statement_pct: f64,
@@ -78,6 +89,9 @@ pub struct CoverageSummary {
 }
 
 /// Safety monitor challenge-response readback envelope.
+/// Safety & Traceability: Realises: [REQ-0611], [SC-04], [FLS: fls_ferrocene_gate]
+/// Contract: Binds `sequence_number`, `challenge_nonce`, and `frame_digest_sha256` for Ring-1/Ring-2 readback verification.
+/// Bounds & Faults: O(1) fixed-size 48-byte envelope with zero heap allocations.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SafetyMonitorEnvelope {
     pub sequence_number: u64,
@@ -86,6 +100,9 @@ pub struct SafetyMonitorEnvelope {
 }
 
 /// Verification receipt emitted by Stage-5 Ferrocene certification gate.
+/// Safety & Traceability: Realises: [REQ-0611], [SC-05], [FLS: fls_ferrocene_gate]
+/// Contract: Summarizes toolchain discovery, version parity, FLS traceability count, uncertified symbol count, and 3-Ring isolation status.
+/// Bounds & Faults: O(1) fixed-size receipt structure.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Stage5FerroceneReceipt {
     pub toolchain_discovered: bool,
@@ -242,10 +259,9 @@ pub fn run_stage5_ferrocene_gate(
         {
             let p = entry.path();
             if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("rs") {
-                if let Ok(src) = fs::read_to_string(p) {
-                    if let Ok(count) = verify_fls_traceability(&src, &registered_fls) {
-                        fls_items = fls_items.saturating_add(count);
-                    }
+                let src = fs::read_to_string(p).unwrap_or_default();
+                if let Ok(count) = verify_fls_traceability(&src, &registered_fls) {
+                    fls_items = fls_items.saturating_add(count);
                 }
             }
         }

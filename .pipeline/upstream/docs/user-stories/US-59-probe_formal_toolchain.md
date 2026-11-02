@@ -23,7 +23,7 @@ As a `MultiStageVerificationOrchestrator`, I want to invoke `probe_formal_toolch
 - Declared lifecycle state model: `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_LifecycleState` (`Idle`, `ProbingFormalDrivers`, `RunningStage1Clippy`, `FailedClosedJsonDiagnostic`, `RunningStage2DylintMir`, `RunningStage3FrbAndMiri`, `RunningStage4KaniCbmc`, `VerifiedAllFourStages`).
 
 ### Layer 2: Logic & State Management
-- **Contract B (Cross-Platform 5-Stage Pipeline & Dynamic Runtime `PATH` Discovery, Zero Hand-Rolled Scanners)**: Behavioral execution contract invokes `probe_formal_toolchain(config)` across macOS, Linux, and Windows using `std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}` and `camino::Utf8Path` (`1 <= min_toolchain_discovery_probes <= 3` per `C_VER_08`) to discover Stage 1 `cargo-clippy` -> Stage 2 isolated `./lints/deap-dylint-mir/` `cargo-dylint` -> Stage 3 `cargo-miri` + `flutter_rust_bridge` + `dart` -> Stage 4 `cargo-kani` (`#[kani::proof]` synthesis via `syn` + `proc-macro2` + `quote` + `prettyplease`) -> Stage 5 Ferrocene qualification drivers with zero hardcoded OS/user/machine paths and zero hand-rolled string/line/char-by-char scanners.
+- **Contract B (Cross-Platform 5-Stage Pipeline & Dynamic Runtime `PATH` Discovery, Zero Hand-Rolled Scanners)**: Behavioral execution contract invokes `probe_formal_toolchain(config)` across macOS, Linux, and Windows using `std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}` and `camino::Utf8Path` (`1 <= min_toolchain_discovery_probes <= 3` per `C_VER_08`) to discover Stage 1 `cargo-clippy` -> Stage 2 isolated `./lints/deap-dylint-mir/` `cargo-dylint` -> Stage 3 `cargo-miri` + `flutter_rust_bridge` + `dart` -> Stage 4 `cargo-kani` (`outer kani::proof` synthesis via `syn` + `proc-macro2` + `quote` + `prettyplease`) -> Stage 5 Ferrocene qualification drivers with zero hardcoded OS/user/machine paths and zero hand-rolled string/line/char-by-char scanners.
 - State transition management: `Idle -> ProbingFormalDrivers` (trigger `probe_formal_toolchain`); `ProbingFormalDrivers -> RunningStage1Clippy` (guard `toolchainsDiscoveredOrPermitted`); `ProbingFormalDrivers -> FailedClosedJsonDiagnostic` (guard `rejectMissingToolchainInQualification`, emitting `DEAP-E0905`).
 - Formal constraints and requirements enforced: `C_VER_01 (too_many_lines_threshold >= 1 and too_many_lines_threshold <= 80)`, `C_VER_02 (too_many_arguments_threshold >= 0 and too_many_arguments_threshold <= 5)`, `C_VER_03 (max_rt_heap_allocations >= 0 and max_rt_heap_allocations <= 0)`, `C_VER_04 (max_miri_ub_violations >= 0 and max_miri_ub_violations <= 0)`, `C_VER_05 (max_kani_counterexamples >= 0 and max_kani_counterexamples <= 0)`, `C_VER_06 (default_kani_unwind_bound >= 1 and default_kani_unwind_bound <= 64)`, `C_VER_07 (max_module_exec_sloc >= 1 and max_module_exec_sloc <= 380)`, `C_VER_08 (min_toolchain_discovery_probes >= 1 and min_toolchain_discovery_probes <= 3)`, `Invariant_REQ_0609_SC_05`, `REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`.
 - Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`./crates/verify-baseline/src/formal_gates/`, `./crates/compile-sysml/src/kani_synth/`, `./crates/compile-sysml/src/frb_guard/`, and excluded `./lints/deap-dylint-mir/`) while explicitly deleting legacy hand-rolled scanners, unguarded FFI/string-template harness emitters, and hardcoded host path assumptions.
@@ -41,15 +41,10 @@ sequenceDiagram
     actor Operator as "operator : Operator"
     participant MultiStageVerificationOrchestrator as "orchestrator : MultiStageVerificationOrchestrator"
     participant StableClippyTotalFunctionGate as "clippyGate : StableClippyTotalFunctionGate"
-    Operator->>MultiStageVerificationOrchestrator: probe_formal_toolchain(config: String)
-    MultiStageVerificationOrchestrator->>StableClippyTotalFunctionGate: probe_formal_toolchain(config: String)
-    alt [toolchainsDiscoveredOrPermitted == true]
-        StableClippyTotalFunctionGate-->MultiStageVerificationOrchestrator: discoveryReceipt : ToolchainDiscoveryReceipt
-        MultiStageVerificationOrchestrator-->Operator: statusReport : StageGateReceipt
-    else [rejectMissingToolchainInQualification == true]
-        StableClippyTotalFunctionGate-->MultiStageVerificationOrchestrator: diagnostic : String
-        MultiStageVerificationOrchestrator-->Operator: statusReport : StageGateReceipt
-    end
+    Operator->>MultiStageVerificationOrchestrator: probe_formal_toolchain()
+    MultiStageVerificationOrchestrator->>StableClippyTotalFunctionGate: probe_formal_toolchain()
+    StableClippyTotalFunctionGate-->>MultiStageVerificationOrchestrator: discoveryReceipt : ToolchainDiscoveryReceipt
+    MultiStageVerificationOrchestrator-->>Operator: statusReport : StageGateReceipt
 ```
 
 ## UML State Machine Diagram
@@ -57,9 +52,9 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> ProbingFormalDrivers : "probe_formal_toolchain [C_VER_08] / probeRuntimePath"
-    ProbingFormalDrivers --> RunningStage1Clippy : "toolchainsDiscoveredOrPermitted [discovered || !require_formal_toolchains] / commitDiscoveryReceipt"
-    ProbingFormalDrivers --> FailedClosedJsonDiagnostic : "rejectMissingToolchainInQualification [!discovered && require_formal_toolchains] / emitDeapE0905"
+    Idle --> ProbingFormalDrivers : "probe_formal_toolchain [C_VER_08] / probe_formal_toolchain"
+    ProbingFormalDrivers --> RunningStage1Clippy : "toolchainsDiscoveredOrPermitted [discovered || !require_formal_toolchains] / verify_clippy_policy"
+    ProbingFormalDrivers --> FailedClosedJsonDiagnostic : "rejectMissingToolchainInQualification [!discovered && require_formal_toolchains] / probe_formal_toolchain"
     RunningStage1Clippy --> [*]
     FailedClosedJsonDiagnostic --> [*]
 ```

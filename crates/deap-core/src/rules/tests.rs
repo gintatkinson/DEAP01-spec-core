@@ -1,6 +1,8 @@
 //! Unit tests covering codebase rules, catalogs, and blueprint verification.
 
-use super::*;
+#[cfg(test)]
+mod tests {
+use super::super::*;
 use std::path::Path;
 
 #[test]
@@ -293,4 +295,5 @@ fn test_canonical_architecture_blueprints_skipped_in_downstream_workspace() -> R
         "Upstream workspace missing canonical blueprints on disk must fail"
     );
     Ok(())
+}
 }

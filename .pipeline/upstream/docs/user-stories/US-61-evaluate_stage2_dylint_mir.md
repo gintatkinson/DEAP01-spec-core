@@ -12,7 +12,7 @@
 # User Story 61: evaluate stage2 dylint mir
 
 ## User Story
-As a `MultiStageVerificationOrchestrator`, I want to invoke `evaluate_stage2_dylint_mir(input)` on `IsolatedDylintMirAllocationGate`, so that the standalone nightly Dylint MIR plugin at `./lints/deap-dylint-mir/` (excluded from the root stable `Cargo.toml`) proves zero transitive heap allocations or dynamic drop terminators (`C_VER_03: max_rt_heap_allocations == 0`) across `#rt_loop` control loops and verifies 100% of `#[realises("REQ-*")]` / `/// Realises: (REQ-*)` bindings against active SysML `.digest.json` inventories before promoting to Stage 3.
+As a `MultiStageVerificationOrchestrator`, I want to invoke `evaluate_stage2_dylint_mir(input)` on `IsolatedDylintMirAllocationGate`, so that the standalone nightly Dylint MIR plugin at `./lints/deap-dylint-mir/` (excluded from the root stable `Cargo.toml`) proves zero transitive heap allocations or dynamic drop terminators (`C_VER_03: max_rt_heap_allocations == 0`) across `#rt_loop` control loops and verifies 100% of `outer realises("REQ-*")` / `/// Realises: [REQ-*]` bindings against active SysML `.digest.json` inventories before promoting to Stage 3.
 
 ## Architectural Realization (3-Layer Definition of Done)
 
@@ -23,7 +23,7 @@ As a `MultiStageVerificationOrchestrator`, I want to invoke `evaluate_stage2_dyl
 - Declared lifecycle state model: `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_LifecycleState` (`Idle`, `ProbingFormalDrivers`, `RunningStage1Clippy`, `FailedClosedJsonDiagnostic`, `RunningStage2DylintMir`, `RunningStage3FrbAndMiri`, `RunningStage4KaniCbmc`, `VerifiedAllFourStages`).
 
 ### Layer 2: Logic & State Management
-- **Contract B (Excluded `./lints/deap-dylint-mir/` Nightly MIR Plugin in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Behavioral execution contract invokes `evaluate_stage2_dylint_mir(input)` on `IsolatedDylintMirAllocationGate` inside the excluded `./lints/deap-dylint-mir/` nightly plugin (`#![feature(rustc_private)]`, `rustc_lint`, `rustc_middle::mir::Body`) and `./crates/verify-baseline/src/formal_gates/` evaluator inside the 5-Stage pipeline (Stage 1 Clippy -> Stage 2 excluded `./lints/deap-dylint-mir/` -> Stage 3 Miri + `flutter_rust_bridge` -> Stage 4 Kani `#[kani::proof]` via `syn`+`proc-macro2`+`quote`+`prettyplease` -> Stage 5 Ferrocene qualification) with dynamic runtime `PATH` discovery and zero hand-rolled string/line/char-by-char scanners.
+- **Contract B (Excluded `./lints/deap-dylint-mir/` Nightly MIR Plugin in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Behavioral execution contract invokes `evaluate_stage2_dylint_mir(input)` on `IsolatedDylintMirAllocationGate` inside the excluded `./lints/deap-dylint-mir/` nightly plugin (`inner feature(rustc_private)`, `rustc_lint`, `rustc_middle::mir::Body`) and `./crates/verify-baseline/src/formal_gates/` evaluator inside the 5-Stage pipeline (Stage 1 Clippy -> Stage 2 excluded `./lints/deap-dylint-mir/` -> Stage 3 Miri + `flutter_rust_bridge` -> Stage 4 Kani `outer kani::proof` via `syn`+`proc-macro2`+`quote`+`prettyplease` -> Stage 5 Ferrocene qualification) with dynamic runtime `PATH` discovery and zero hand-rolled string/line/char-by-char scanners.
 - State transition management: `RunningStage2DylintMir -> RunningStage3FrbAndMiri` (guard `stage2ZeroRtAllocVerified`); `RunningStage2DylintMir -> FailedClosedJsonDiagnostic` (guard `rejectMirHeapAllocOrDanglingReq`, emitting `DEAP-E0901` on `#rt_loop` heap allocation or `DEAP-E0902` on dangling `REQ-*` link).
 - Formal constraints and requirements enforced: `C_VER_01 (too_many_lines_threshold >= 1 and too_many_lines_threshold <= 80)`, `C_VER_02 (too_many_arguments_threshold >= 0 and too_many_arguments_threshold <= 5)`, `C_VER_03 (max_rt_heap_allocations >= 0 and max_rt_heap_allocations <= 0)`, `C_VER_04 (max_miri_ub_violations >= 0 and max_miri_ub_violations <= 0)`, `C_VER_05 (max_kani_counterexamples >= 0 and max_kani_counterexamples <= 0)`, `C_VER_06 (default_kani_unwind_bound >= 1 and default_kani_unwind_bound <= 64)`, `C_VER_07 (max_module_exec_sloc >= 1 and max_module_exec_sloc <= 380)`, `C_VER_08 (min_toolchain_discovery_probes >= 1 and min_toolchain_discovery_probes <= 3)`, `Invariant_REQ_0609_SC_02`, `REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`.
 - Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`./crates/verify-baseline/src/formal_gates/`, `./crates/compile-sysml/src/kani_synth/`, `./crates/compile-sysml/src/frb_guard/`, and excluded `./lints/deap-dylint-mir/`) while explicitly deleting legacy hand-rolled attribute/call-graph string scanners and ratcheting Check 34 ceilings.
@@ -42,17 +42,12 @@ sequenceDiagram
     participant MultiStageVerificationOrchestrator as "orchestrator : MultiStageVerificationOrchestrator"
     participant IsolatedDylintMirAllocationGate as "dylintGate : IsolatedDylintMirAllocationGate"
     participant StableClippyTotalFunctionGate as "clippyGate : StableClippyTotalFunctionGate"
-    Operator->>MultiStageVerificationOrchestrator: evaluate_stage2_dylint_mir(input: String)
-    MultiStageVerificationOrchestrator->>IsolatedDylintMirAllocationGate: evaluate_stage2_dylint_mir(input: String)
-    IsolatedDylintMirAllocationGate->>StableClippyTotalFunctionGate: verify_clippy_policy(policy: String, manifest_lints: String)
-    StableClippyTotalFunctionGate-->IsolatedDylintMirAllocationGate: stage1Verified : Boolean
-    alt [stage2ZeroRtAllocVerified == true]
-        IsolatedDylintMirAllocationGate-->MultiStageVerificationOrchestrator: stage2Receipt : StageGateReceipt
-        MultiStageVerificationOrchestrator-->Operator: statusReport : StageGateReceipt
-    else [rejectMirHeapAllocOrDanglingReq == true]
-        IsolatedDylintMirAllocationGate-->MultiStageVerificationOrchestrator: diagnostic : String
-        MultiStageVerificationOrchestrator-->Operator: statusReport : StageGateReceipt
-    end
+    Operator->>MultiStageVerificationOrchestrator: evaluate_stage2_dylint_mir()
+    MultiStageVerificationOrchestrator->>IsolatedDylintMirAllocationGate: evaluate_stage2_dylint_mir()
+    IsolatedDylintMirAllocationGate->>StableClippyTotalFunctionGate: verify_clippy_policy()
+    StableClippyTotalFunctionGate-->>IsolatedDylintMirAllocationGate: stage1Verified : Boolean
+    IsolatedDylintMirAllocationGate-->>MultiStageVerificationOrchestrator: stage2Receipt : StageGateReceipt
+    MultiStageVerificationOrchestrator-->>Operator: statusReport : StageGateReceipt
 ```
 
 ## UML State Machine Diagram
@@ -60,8 +55,8 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> RunningStage2DylintMir
-    RunningStage2DylintMir --> RunningStage3FrbAndMiri : "stage2ZeroRtAllocVerified [C_VER_03 && max_unverified_req_links == 0] / emitStage2PassReceipt"
-    RunningStage2DylintMir --> FailedClosedJsonDiagnostic : "rejectMirHeapAllocOrDanglingReq [rtHeapAllocs > 0 || danglingReqs > 0] / emitDeapE0901OrE0902"
+    RunningStage2DylintMir --> RunningStage3FrbAndMiri : "stage2ZeroRtAllocVerified [C_VER_03 && max_unverified_req_links == 0] / evaluate_stage2_dylint_mir"
+    RunningStage2DylintMir --> FailedClosedJsonDiagnostic : "rejectMirHeapAllocOrDanglingReq [rtHeapAllocs > 0 || danglingReqs > 0] / evaluate_stage2_dylint_mir"
     RunningStage3FrbAndMiri --> [*]
     FailedClosedJsonDiagnostic --> [*]
 ```

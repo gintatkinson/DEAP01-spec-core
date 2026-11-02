@@ -12,7 +12,7 @@
 # User Story 75: synthesize three ring workspace
 
 ## User Story
-As a `DualModeFerroceneToolchainGate`, I want to invoke `synthesize_three_ring_workspace()` on `ThreeRingAssurancePartitionCompiler`, so that `synthesize_three_ring_workspace(spec)` partitions the OMG SysML v2.0 + KerML 1.0 assurance AST into a 3-Ring DAL-A..E Rust/Flutter workspace (`assurance_ring_count == 3`, `C_CERT_06`: Ring 1 `safety_kernel/` `#![no_std]` + `#![forbid(unsafe_code)]`, Ring 2 `ffi_guard_bridge/` Miri-verified FFI precondition guards, Ring 3 `app_flutter/` untrusted presentation) via `syn` + `proc-macro2` + `quote` + `prettyplease` with zero hand-rolled scanners.
+As a `DualModeFerroceneToolchainGate`, I want to invoke `synthesize_three_ring_workspace()` on `ThreeRingAssurancePartitionCompiler`, so that `synthesize_three_ring_workspace(spec)` partitions the OMG SysML v2.0 + KerML 1.0 assurance AST into a 3-Ring DAL-A..E `Rust_Flutter` workspace (`assurance_ring_count == 3`, `C_CERT_06`: Ring 1 `safety_kernel/` `#![no_std]` + `#![forbid(unsafe_code)]`, Ring 2 `ffi_guard_bridge/` Miri-verified FFI precondition guards, Ring 3 `app_flutter/` untrusted presentation) via `syn` + `proc-macro2` + `quote` + `prettyplease` with zero hand-rolled scanners.
 
 ## Architectural Realization (3-Layer Definition of Done)
 

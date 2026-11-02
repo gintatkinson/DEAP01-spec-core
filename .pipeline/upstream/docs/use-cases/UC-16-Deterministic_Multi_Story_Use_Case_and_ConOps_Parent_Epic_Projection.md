@@ -29,7 +29,7 @@ graph TD
     UC_Main -. "<<include>>" .-> UC_Step03
 ```
 
-```mermaid
+```sysml
 stateDiagram-v2
     [*] --> AstLoaded
     AstLoaded --> ForwardProjected : "forwardSyncSpecs [ast_node_coverage_percent == 100.0]"

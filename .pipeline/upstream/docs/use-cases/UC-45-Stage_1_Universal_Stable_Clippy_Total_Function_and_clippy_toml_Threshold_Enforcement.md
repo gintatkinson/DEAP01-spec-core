@@ -27,7 +27,7 @@ graph TD
 ```
 
 ### State Machine Diagram
-```mermaid
+```sysml
 stateDiagram-v2
     [*] --> Idle
     Idle --> ProbingFormalDrivers : "probe_formal_toolchain [C_VER_08] / discoverClippyDriver"
@@ -56,13 +56,13 @@ stateDiagram-v2
 5. For the negative fixture, `StableClippyTotalFunctionGate` intercepts the lint failure, transitions to `FailedClosedJsonDiagnostic`, short-circuits Stage 2 promotion, and emits a single-line NDJSON diagnostic (`DEAP-E0900`) on `unified_gate_ndjson_out` with exit code 1.
 
 ## 5. Alternate and Exception Flows
-- **3a. Root `./Cargo.toml` or `./clippy.toml` omits a required total-function denial or exceeds `C_VER_01` (`80` lines) / `C_VER_02` (`5` arguments) (`Diagnostic: DEAP-E0900`) (Branches from Basic Flow step 2):**
+- 3a. Root `./Cargo.toml` or `./clippy.toml` omits a required total-function denial or exceeds `C_VER_01` (`80` lines) / `C_VER_02` (`5` arguments) (`Diagnostic: DEAP-E0900`) (Branches from Basic Flow step 2):
   1. `StableClippyTotalFunctionGate` detects the missing lint key or threshold violation via `toml_edit` and `cargo_metadata`.
   2. `StableClippyTotalFunctionGate` transitions to `FailedClosedJsonDiagnostic`, emits single-line NDJSON diagnostic `DEAP-E0900` on `clippy_ndjson_out`, and exits fail-closed with code 1.
-- **4a. Target crate introduces unchecked arithmetic, direct slice indexing, or banned `std::collections::HashMap` under `Invariant_REQ_0609_SC_01` (Branches from Basic Flow step 3):**
+- 4a. Target crate introduces unchecked arithmetic, direct slice indexing, or banned `std::collections::HashMap` under `Invariant_REQ_0609_SC_01` (Branches from Basic Flow step 3):
   1. `StableClippyTotalFunctionGate` captures the compiler JSON diagnostic span from `cargo clippy --workspace --all-targets --message-format=json`.
   2. `StableClippyTotalFunctionGate` fails closed with non-zero exit status, halts downstream Stage 2..4 execution (`fail_closed_short_circuit = true`), and streams the exact span diagnostic (`DEAP-E0900`) to `Operator`.
-- **5a. Precondition or manifest parse error in `FrbIcdBridgeAndMiriUbGate` / `StableClippyTotalFunctionGate` (Branches from Basic Flow step 1):**
+- 5a. Precondition or manifest parse error in `FrbIcdBridgeAndMiriUbGate` / `StableClippyTotalFunctionGate` (Branches from Basic Flow step 1):
   1. `StableClippyTotalFunctionGate` detects a malformed manifest or CST violation via `ra_ap_syntax`.
   2. `FrbIcdBridgeAndMiriUbGate` aborts execution without partial state mutation, preserves prior verified state, and notifies `Operator`.
 
@@ -72,7 +72,7 @@ stateDiagram-v2
 
 ## 7. Architectural Realization & Operational Context (Contracts A & B, 3-Layer DoD)
 - **Contract A (100% OMG SysML v2.0 + KerML 1.0 Grammar Coverage)**: Enforces Stage 1 total-function guarantees across all crates parsing and compiling the full OMG SysML v2.0 and KerML 1.0 textual grammar (`package`/`library package`/`standard library package`, `import`, `metadata def`/`metadata`/`@Metadata`/`#user_keyword` (`#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` and legacy `hazard def`/`risk def`/`capability def`), `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port`, `connection def`/`connection`, `interface def`/`interface`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, and KerML specialization/multiplicity/expressions) with zero 16-construct artificial caps.
-- **Contract B (5-Stage Pipeline & Official Compiler Stack, Zero Hand-Rolled Scanners)**: Executes Stage 1 (`cargo_metadata` + `toml_edit` + `ra_ap_syntax` + `cargo clippy --message-format=json`) -> Stage 2 (excluded `./lints/deap-dylint-mir/`) -> Stage 3 (`cargo miri` + `flutter_rust_bridge`) -> Stage 4 (`cargo kani` `#[kani::proof]` synthesis via `syn` + `proc-macro2` + `quote` + `prettyplease`) -> Stage 5 (Ferrocene qualification) with dynamic runtime `PATH` discovery and zero hand-rolled scanners.
+- **Contract B (5-Stage Pipeline & Official Compiler Stack, Zero Hand-Rolled Scanners)**: Executes Stage 1 (`cargo_metadata` + `toml_edit` + `ra_ap_syntax` + `cargo clippy --message-format=json`) -> Stage 2 (excluded `./lints/deap-dylint-mir/`) -> Stage 3 (`cargo miri` + `flutter_rust_bridge`) -> Stage 4 (`cargo kani` `outer kani::proof` synthesis via `syn` + `proc-macro2` + `quote` + `prettyplease`) -> Stage 5 (Ferrocene qualification) with dynamic runtime `PATH` discovery and zero hand-rolled scanners.
 - **3-Layer Definition of Done**: Closes Layer 1 (`ClippyThresholdPolicy` domain state), Layer 2 (`verify_clippy_policy` inside `< 380`-SLOC submodules `./crates/verify-baseline/src/formal_gates/` with explicit deletion of legacy hand-rolled TOML/attribute string scanners), and Layer 3 (`workspace_manifest_in` and `clippy_ndjson_out` NDJSON binding).
 
 ## 8. Realization Matrix

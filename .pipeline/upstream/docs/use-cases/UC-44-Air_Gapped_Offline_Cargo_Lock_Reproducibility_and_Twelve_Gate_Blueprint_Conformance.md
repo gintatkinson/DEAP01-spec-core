@@ -27,7 +27,7 @@ graph TD
 ```
 
 ### State Machine Diagram
-```mermaid
+```sysml
 stateDiagram-v2
     [*] --> Idle
     Idle --> ParsingLosslessCst : "parseRustCst"

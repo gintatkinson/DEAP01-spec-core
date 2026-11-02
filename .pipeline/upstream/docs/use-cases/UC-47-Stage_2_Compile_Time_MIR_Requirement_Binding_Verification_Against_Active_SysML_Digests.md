@@ -29,7 +29,7 @@ graph TD
 ```
 
 ### State Machine Diagram
-```mermaid
+```sysml
 stateDiagram-v2
     [*] --> RunningStage2DylintMir
     RunningStage2DylintMir --> RunningStage3FrbAndMiri : "stage2ZeroRtAllocVerified [max_unverified_req_links == 0 && C_VER_03] / emitStage2PassReceipt"
@@ -43,26 +43,26 @@ stateDiagram-v2
 - **Secondary Actors:** `MultiStageVerificationOrchestrator`, `IsolatedDylintMirAllocationGate`, `FrbIcdBridgeAndMiriUbGate`
 
 ## 2. Preconditions
-- Rust items annotated with outer `#[realises("REQ-0609")]` or `/// Realises: (REQ-0609)` verified against an active `.digest.json` compiled from `.sysml`, plus a negative fixture referencing a non-existent or retired identifier `REQ-9999`.
+- Rust items annotated with outer `realises("REQ-0609")` or `/// Realises: [REQ-0609]` verified against an active `.digest.json` compiled from `.sysml`, plus a negative fixture referencing a non-existent or retired identifier `REQ-9999`.
 
 ## 3. Trigger
 - `IsolatedDylintMirAllocationGate` cross-checks extracted HIR/MIR `DefId` requirement bindings against the active SysML requirement digest inventory inside excluded `./lints/deap-dylint-mir/`.
 
 ## 4. Main Success Scenario
 1. `MultiStageVerificationOrchestrator` invokes `evaluate_stage2_dylint_mir(input)` on `IsolatedDylintMirAllocationGate` (`max_unverified_req_links = 0`) with lowered HIR/MIR `DefId` attributes and the active `.digest.json` inventory on `mir_body_graph_in`.
-2. `IsolatedDylintMirAllocationGate` extracts every outer `#[realises("REQ-*")]` and `/// Realises: (REQ-*)` binding across crate items via `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`) and HIR/MIR `DefId` inspection inside `< 380` exec SLOC submodules (`./crates/verify-baseline/src/formal_gates/` and excluded `./lints/deap-dylint-mir/`) with zero hand-rolled scanners.
+2. `IsolatedDylintMirAllocationGate` extracts every outer `realises("REQ-*")` and `/// Realises: [REQ-*]` binding across crate items via `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`) and HIR/MIR `DefId` inspection inside `< 380` exec SLOC submodules (`./crates/verify-baseline/src/formal_gates/` and excluded `./lints/deap-dylint-mir/`) with zero hand-rolled scanners.
 3. `IsolatedDylintMirAllocationGate` cross-checks the extracted requirement identifier set against the compiled SysML requirement digest inventory (`Q_sysml`) under `Invariant_REQ_0609_SC_02`.
 4. Valid `REQ-0609` bindings resolve cleanly with `max_unverified_req_links == 0`, emitting a verified `StageGateReceipt` to `MultiStageVerificationOrchestrator`.
 5. For the negative fixture referencing `REQ-9999`, `IsolatedDylintMirAllocationGate` transitions `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_LifecycleState` to `FailedClosedJsonDiagnostic` and emits single-line JSON diagnostic `DEAP-E0902` on `dylint_ndjson_out` with exit code 1.
 
 ## 5. Alternate and Exception Flows
-- **3a. Annotated item cites a non-existent or retired requirement ID such as `REQ-9999` (`max_unverified_req_links > 0`, `Diagnostic: DEAP-E0902`) (Branches from Basic Flow step 3):**
+- 3a. Annotated item cites a non-existent or retired requirement ID such as `REQ-9999` (`max_unverified_req_links > 0`, `Diagnostic: DEAP-E0902`) (Branches from Basic Flow step 3):
   1. `IsolatedDylintMirAllocationGate` identifies the unverified requirement identifier (`REQ-9999` not in `Q_sysml`).
   2. `IsolatedDylintMirAllocationGate` transitions to `FailedClosedJsonDiagnostic`, emits single-line NDJSON diagnostic `DEAP-E0902` on `dylint_ndjson_out`, and exits fail-closed with code 1.
-- **4a. Active `.digest.json` is missing or fails typed `serde_json` schema deserialization (`Diagnostic: DEAP-E0902`) (Branches from Basic Flow step 1):**
+- 4a. Active `.digest.json` is missing or fails typed `serde_json` schema deserialization (`Diagnostic: DEAP-E0902`) (Branches from Basic Flow step 1):
   1. `IsolatedDylintMirAllocationGate` detects the missing or corrupted SysML digest inventory.
   2. `IsolatedDylintMirAllocationGate` aborts Stage 2 verification, emits `DEAP-E0902`, and terminates fail-closed with exit code 1.
-- **5a. Invariant violation while enforcing `Invariant_REQ_0609_SC_02` in `FrbIcdBridgeAndMiriUbGate` (Branches from Basic Flow step 3):**
+- 5a. Invariant violation while enforcing `Invariant_REQ_0609_SC_02` in `FrbIcdBridgeAndMiriUbGate` (Branches from Basic Flow step 3):
   1. `FrbIcdBridgeAndMiriUbGate` detects a structural invariant failure during Stage 2 evaluation.
   2. `FrbIcdBridgeAndMiriUbGate` aborts execution without partial state mutation, preserves prior verified state, and notifies `Operator`.
 
@@ -72,7 +72,7 @@ stateDiagram-v2
 
 ## 7. Architectural Realization & Operational Context (Contracts A & B, 3-Layer DoD)
 - **Contract A (100% OMG SysML v2.0 + KerML 1.0 Grammar Coverage)**: Resolves `requirement def`/`requirement` (`subject`, `actor`, `stakeholder`, `framed concern`, `satisfy ... by ...`), `concern def`/`concern`, `verification def`/`verification` (`verify requirement`), `test case def`/`test case`, and `#hazard`/`#risk`/`#capability`/`#rt_loop`/`#dal`/`#fls` metadata usages across the full OMG SysML v2.0 and KerML 1.0 textual grammar with zero 16-construct artificial caps.
-- **Contract B (Excluded `./lints/deap-dylint-mir/` & `ra_ap_syntax` in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Uses `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `rustc_middle::mir`, and typed `serde_json` `.digest.json` parsing inside the 5-Stage pipeline (Stage 1 Clippy -> Stage 2 excluded `./lints/deap-dylint-mir/` -> Stage 3 Miri + `flutter_rust_bridge` -> Stage 4 Kani `#[kani::proof]` synthesis via `syn`+`proc-macro2`+`quote`+`prettyplease` -> Stage 5 Ferrocene qualification) with dynamic runtime `PATH` discovery and zero hand-rolled scanners.
+- **Contract B (Excluded `./lints/deap-dylint-mir/` & `ra_ap_syntax` in 5-Stage Pipeline, Zero Hand-Rolled Scanners)**: Uses `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `rustc_middle::mir`, and typed `serde_json` `.digest.json` parsing inside the 5-Stage pipeline (Stage 1 Clippy -> Stage 2 excluded `./lints/deap-dylint-mir/` -> Stage 3 Miri + `flutter_rust_bridge` -> Stage 4 Kani `outer kani::proof` synthesis via `syn`+`proc-macro2`+`quote`+`prettyplease` -> Stage 5 Ferrocene qualification) with dynamic runtime `PATH` discovery and zero hand-rolled scanners.
 - **3-Layer Definition of Done**: Closes Layer 1 (`Stage2MirEvalInput` `claimed_req_ids` / `valid_sysml_req_ids` domain state), Layer 2 (`evaluate_stage2_dylint_mir` inside `< 380`-SLOC submodules `./crates/verify-baseline/src/formal_gates/` and `./lints/deap-dylint-mir/` with explicit deletion of legacy hand-rolled docstring/attribute scanners), and Layer 3 (`mir_body_graph_in` and `dylint_ndjson_out` NDJSON binding).
 
 ## 8. Realization Matrix

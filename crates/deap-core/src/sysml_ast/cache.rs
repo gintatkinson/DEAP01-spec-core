@@ -1,7 +1,8 @@
 //! Content-addressable incremental cache for parsed `SysmlModel` AST trees.
 //!
-//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C.
-//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Safety & Traceability: Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Contract: Provides `IncrementalAstCache` for SHA-256 content-addressable caching of parsed `SysmlModel` AST trees under `.pipeline/cache/ast/`.
+//! Bounds & Faults: O(N) digest and serialization over input size; fails closed with `CoreError` on I/O or deserialization faults.
 
 use super::package_model::SysmlModel;
 use super::parser::parse_sysml_model;

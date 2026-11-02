@@ -57,6 +57,8 @@ pub enum DartToken {
     /// Non-doc trivia (comments, string literals, whitespace). Realises: [REQ-0201]
     #[regex(r"//[^\n]*", allow_greedy = true)]
     #[regex(r"/\*([^*]|\*+[^*/])*\*+/")]
+    #[regex(r#"r"[^"]*"|r'[^']*'"#)]
+    #[regex(r#""\$\{[^}]*\}"|'\$\{[^}]*\}'"#)]
     #[regex(r#""([^"\\]|\\.)*"|'([^'\\]|\\.)*'"#)]
     #[regex(r"\s+")]
     Trivia,

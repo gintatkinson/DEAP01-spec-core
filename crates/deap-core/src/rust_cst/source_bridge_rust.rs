@@ -291,7 +291,10 @@ pub fn validate_source_syntax_for_language(source: &str, file_label: &str, lang:
             return Err(crate::error::CoreError::syntax(format!("{file_label}: {:?}", parsed.syntax_errors())));
         }
     } else if lang == SourceLanguage::Dart {
-        drop(crate::dart_cst::parse_dart_items(source));
+        let items = crate::dart_cst::parse_dart_items(source);
+        if items.iter().any(|item| item.name.is_empty()) {
+            return Err(crate::error::CoreError::syntax(format!("{file_label}: empty Dart item identifier")));
+        }
     }
     Ok(())
 }

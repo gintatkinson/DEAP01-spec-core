@@ -1,7 +1,8 @@
 //! Test case definition structures and parser for SysML v2.
 //!
-//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C.
-//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Safety & Traceability: Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
+//! Contract: Defines `TestCaseDef` and `parse_test_case_defs` for extracting SysML v2 `test case def` blocks and requirement verification links.
+//! Bounds & Faults: Executes in linear O(N) time over source text with bounds-checked `.get` slicing and zero panics.
 
 use super::identifiers::{
     extract_doc_comment_before, extract_ident, find_matching_brace, is_word_boundary_after,
