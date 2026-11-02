@@ -45,6 +45,7 @@ pub mod rust_cst;
 pub mod salsa_db;
 pub mod source_ast;
 pub mod sysml_ast;
+pub mod sysml_cst;
 pub mod workspace;
 
 pub use diagnostics::{DefectDossier, Diagnostic, DiagnosticSeverity, WhyEntry};
@@ -98,6 +99,12 @@ pub use sysml_ast::{
     IncrementalAstCache, InteractionDef, InterfaceDef, ItemDef, OperationDef, PackageDef, PartDef,
     PortDef, RequirementDef, RiskDef, StateDef, SysmlModel, TestCaseDef, TransitionDef,
     TypeDescriptor, UnifiedSchemaModelExtractor, UseCaseDef,
+};
+pub use sysml_cst::{
+    classify_keyword_kind, compute_canonical_digest, lower_sysml_hir, parse_sysml_cst,
+    parse_sysml_green, token_to_syntax_kind, tokenize_sysml, LexedSysmlToken, ParsedSysmlCst,
+    SourceProgram, SysmlCompilerDb, SysmlConstructSummary, SysmlCstDiagnostic, SysmlLanguage,
+    SysmlSyntaxKind, SysmlSyntaxNode, SysmlSyntaxToken, SysmlToken,
 };
 pub use workspace::{
     check_downstream_instructions_exist, check_gitignore_exists, check_no_ds_store_files,
