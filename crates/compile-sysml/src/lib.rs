@@ -33,6 +33,7 @@
 pub mod cli;
 pub mod cst_cli;
 pub mod docstring;
+pub mod docstring_cst;
 pub mod driver;
 pub mod flutter_codegen;
 pub mod lexer;
@@ -46,13 +47,11 @@ pub mod sync;
 pub use cli::*;
 pub use deap_core::sysml_ast::*;
 pub use docstring::{
-    inject_dart_file_docstrings, inject_rust_file_docstrings, run_docstring_injection,
-    run_extract_source, DocstringExitCode, DocstringInjectionOptions, DocstringInjectionReport,
+    inject_dart_file_docstrings, inject_rust_file_docstrings, run_docstring_injection, run_extract_source, DocstringExitCode, DocstringInjectionOptions, DocstringInjectionReport,
 };
+pub use docstring_cst::*;
 pub use driver::*;
-pub use flutter_codegen::{
-    emit_flutter_contracts, FlutterCodegenError, FlutterContractOptions, FlutterContractReport,
-};
+pub use flutter_codegen::{emit_flutter_contracts, FlutterCodegenError, FlutterContractOptions, FlutterContractReport};
 pub use lexer::scanner::Scanner;
 pub use lexer::token::{Span, Token, TokenKind};
 pub use parser::expressions::{parse_expression, BinaryOp, Expr, ExpressionParser, UnaryOp};

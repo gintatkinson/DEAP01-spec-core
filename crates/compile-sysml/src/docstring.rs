@@ -39,6 +39,7 @@
 
 use crate::semantic::digest::{generate_digest, write_atomic, write_digest_atomic};
 use crate::semantic::serializer::to_sysml;
+pub use crate::docstring_cst;
 use deap_core::source_ast::{
     classify_dart_member_ast, classify_dart_top_level_ast, classify_rust_item_line_ast,
     extract_leading_ast_ident, extract_realises_ids_from_doc_lines,
@@ -51,9 +52,7 @@ use deap_core::source_ast::{
     SourceLanguage, SourceParam,
 };
 use deap_core::sysml_ast::PackageDef;
-use std::collections::BTreeSet;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::{collections::BTreeSet, fs, path::{Path, PathBuf}};
 use walkdir::WalkDir;
 
 /// Process exit code contract for `compile-sysml --inject-safety-docstrings` (FEAT-42 Section 2.2).

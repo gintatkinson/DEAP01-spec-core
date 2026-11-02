@@ -6,8 +6,8 @@
 //! defect-free Agile specification hierarchy across Epics, Features, User Stories, and Use Cases.
 //!
 //! ## 2. Invariants & Mathematical Properties
-//! - Exact cardinality invariant: $|Epics| = 6 \land |Features| = 30 \land |UserStories| = 44 \land |UseCases| = 31$,
-//!   yielding $|Specs_{total}| = 111$.
+//! - Exact cardinality invariant: $|Epics| = 11 \land |Features| = 53 \land |UserStories| = 78 \land |UseCases| = 65$,
+//!   yielding $|Specs_{total}| = 207$.
 //! - Link closure invariant: $\forall d \in Specs_{total}, \forall l \in Links_{rel}(d): \text{exists}(\text{dir}(d) \oplus l) = \text{true}$.
 //! - Local purity invariant: $\forall d \in Specs_{total}: \text{https://github.com/} \notin d$.
 //! - Anti-stutter invariant: $\forall d \in Specs_{total}: \text{UC\_AC\_} \notin \text{name}(d) \land \text{US\_AC\_} \notin \text{name}(d)$.
@@ -19,11 +19,11 @@
 //! - The temporary filesystem directory is writable for isolated test execution.
 //!
 //! ## 4. Postconditions
-//! - All 111 specification files are synthesized and verified inside an isolated RAII directory.
+//! - All 208 specification files are synthesized and verified inside an isolated RAII directory.
 //! - The temporary directory is deterministically removed on test completion via `Drop`.
 //!
 //! ## 5. Algorithmic Complexity Bounds
-//! - Time Complexity: $O(N + L)$ where $N = 111$ generated specification files and $L$ is the total byte length of all generated markdown files.
+//! - Time Complexity: $O(N + L)$ where $N = 208$ generated specification files and $L$ is the total byte length of all generated markdown files.
 //! - Space Complexity: $O(L)$ bounded by the in-memory AST and generated specification strings.
 //!
 //! ## 6. Failure Modes & Fault Tolerance
@@ -237,7 +237,7 @@ fn collect_sorted_md_files(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn std::erro
     Ok(files)
 }
 
-/// Verifies end-to-end compilation of `.pipeline/upstream/schema/model.sysml` into 111 defect-free specifications.
+/// Verifies end-to-end compilation of `.pipeline/upstream/schema/model.sysml` into 208 defect-free specifications.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Acts as the primary regression and acceptance gate for upstream SysML-to-specification projection,
@@ -245,7 +245,7 @@ fn collect_sorted_md_files(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn std::erro
 /// zero cross-package `FEAT-01` feature link pollution, and non-empty Epic state diagrams.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Synthesizes 6 Epics, 30 Features, 44 User Stories, and 31 Use Cases (111 total markdown files).
+/// - Synthesizes 11 Epics, 53 Features, 78 User Stories, and 65 Use Cases (207 total markdown files).
 /// - Every relative link target resolves to an existing file on disk.
 /// - No generated markdown file contains `"https://github.com/"`.
 /// - No filename contains `"UC_AC_"` or `"US_AC_"`, and no heading title contains `"UC AC "` or `"US AC "`.
@@ -256,10 +256,10 @@ fn collect_sorted_md_files(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn std::erro
 /// - `.pipeline/upstream/schema/model.sysml` is present relative to the workspace root.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(())` only if all cardinality and content invariants hold across all 111 files.
+/// - Returns `Ok(())` only if all cardinality and content invariants hold across all 208 files.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N + L)$ over $N = 111$ files and $L$ total markdown bytes.
+/// - Time Complexity: $O(N + L)$ over $N = 208$ files and $L$ total markdown bytes.
 /// - Space Complexity: $O(L)$ bounded by the temporary workspace and in-memory verification buffers.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
@@ -295,9 +295,9 @@ fn test_upstream_blueprint_to_spec_and_github_projection_zero_defects(
         force: true,
     };
     let generated = compile_sysml::sync::forward::forward_sync_sysml_to_specs(&pkg, &opts)?;
-    if generated.len() < 111 {
+    if generated.len() < 208 {
         return Err(format!(
-            "Expected at least 111 forward-synced files, got {}",
+            "Expected at least 208 forward-synced files, got {}",
             generated.len()
         )
         .into());
@@ -313,28 +313,28 @@ fn test_upstream_blueprint_to_spec_and_github_projection_zero_defects(
     let story_files = collect_sorted_md_files(&stories_dir)?;
     let use_case_files = collect_sorted_md_files(&use_cases_dir)?;
 
-    if epic_files.len() != 6 {
-        return Err(format!("Expected 6 Epics, found {}", epic_files.len()).into());
+    if epic_files.len() != 11 {
+        return Err(format!("Expected 11 Epics, found {}", epic_files.len()).into());
     }
-    if feature_files.len() != 30 {
-        return Err(format!("Expected 30 Features, found {}", feature_files.len()).into());
+    if feature_files.len() != 53 {
+        return Err(format!("Expected 53 Features, found {}", feature_files.len()).into());
     }
-    if story_files.len() != 44 {
-        return Err(format!("Expected 44 User Stories, found {}", story_files.len()).into());
+    if story_files.len() != 78 {
+        return Err(format!("Expected 78 User Stories, found {}", story_files.len()).into());
     }
-    if use_case_files.len() != 31 {
-        return Err(format!("Expected 31 Use Cases, found {}", use_case_files.len()).into());
+    if use_case_files.len() != 65 {
+        return Err(format!("Expected 65 Use Cases, found {}", use_case_files.len()).into());
     }
 
-    let mut all_files = Vec::with_capacity(111);
+    let mut all_files = Vec::with_capacity(208);
     all_files.extend(epic_files.iter().cloned());
     all_files.extend(feature_files.iter().cloned());
     all_files.extend(story_files.iter().cloned());
     all_files.extend(use_case_files.iter().cloned());
 
-    if all_files.len() != 111 {
+    if all_files.len() != 207 {
         return Err(format!(
-            "Expected total of 111 specification files, found {}",
+            "Expected total of 207 specification files, found {}",
             all_files.len()
         )
         .into());

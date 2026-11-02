@@ -11,6 +11,10 @@ workspace = true
 
 [dependencies]
 deap-core = { path = "../deap-core" }
+camino = { workspace = true }
+ra_ap_line_index = { workspace = true }
+ra_ap_syntax = { workspace = true }
+ra_ap_text_edit = { workspace = true }
 clap = { version = "4.4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

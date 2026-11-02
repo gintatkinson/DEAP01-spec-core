@@ -53,8 +53,11 @@ pub fn classify_file_doc_tier(source: &str) -> DocTier {
             break;
         }
     }
+    let has_func_purpose = header.contains("# 1. Functional Purpose")
+        || header.contains("## 1. Functional Purpose")
+        || header.contains("1. Functional Purpose");
     let all_seven = (1..=7).all(|i| header.contains(&format!("## {i}.")) || header.contains(&format!("## {i} ")));
-    if header.contains("[DOC-TIER: A]") || all_seven {
+    if header.contains("[DOC-TIER: A]") || has_func_purpose || all_seven {
         DocTier::TierA
     } else if header.contains("[DOC-TIER: B]") {
         DocTier::TierB
@@ -196,6 +199,7 @@ pub fn actuator() {}
 fn internal_helper() {}
 "#;
         assert_eq!(classify_file_doc_tier(src), DocTier::TierA);
+        assert_eq!(classify_file_doc_tier("//! # 1. Functional Purpose\n//! Scope"), DocTier::TierA);
         assert_eq!(classify_file_doc_tier("fn foo() {}"), DocTier::TierC);
         let compacted = compact_tier_bc_docstrings(src);
         assert!(compacted.contains("//! Module level documentation. [DOC-TIER: A]"));

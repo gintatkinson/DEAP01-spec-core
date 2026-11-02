@@ -302,9 +302,13 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 name = "compile-sysml"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "chrono",
  "clap",
  "deap-core",
+ "line-index",
+ "ra_ap_syntax",
+ "ra_ap_text_edit",
  "serde",
  "serde_json",
  "walkdir",
@@ -1722,13 +1726,17 @@ dependencies = [
 name = "verify-baseline"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "chrono",
  "clap",
  "compile-sysml",
  "deap-core",
  "ingest-sysml",
+ "line-index",
  "proc-macro2",
  "pulldown-cmark",
+ "ra_ap_syntax",
+ "ra_ap_text_edit",
  "rayon",
  "serde",
  "serde_json",

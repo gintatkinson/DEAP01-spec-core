@@ -30,6 +30,7 @@
 //! Realises: [REQ-VERIFY-BASELINE-CHECKS-MOD], [DO-330-TQL-4-CHECKS-MOD]
 
 pub mod codebase;
+pub mod docstring_cst_gate;
 pub mod docstring_gate;
 pub mod docstring_tier_rules;
 pub mod dod_gates;
@@ -45,6 +46,7 @@ pub mod structural;
 pub mod wbs_integrity;
 
 pub use codebase::*;
+pub use docstring_cst_gate::*;
 pub use docstring_gate::*;
 pub use dod_gates::check_dod_gates;
 pub use domain_cleanliness_gate::*;

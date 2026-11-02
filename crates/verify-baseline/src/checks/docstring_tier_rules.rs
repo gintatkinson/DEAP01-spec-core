@@ -17,6 +17,16 @@ pub fn has_explicit_tier_a_marker(doc_lines: &[String]) -> bool {
         .any(|line| line_has_unbackticked_tier_a_marker(line))
 }
 
+/// Returns `true` iff the file's module header indicates Tier-A compliance (`[REQ-0605]`).
+#[must_use]
+pub fn is_tier_a_file_header(header: &str) -> bool {
+    header.contains(EXPLICIT_TIER_A_MARKER)
+        || header.contains("# 1. Functional Purpose")
+        || header.contains("## 1. Functional Purpose")
+        || header.contains("1. Functional Purpose")
+        || (1..=7).all(|i| header.contains(&format!("## {i}.")) || header.contains(&format!("## {i} ")))
+}
+
 /// Checks a single doc line for `[DOC-TIER: A]` outside balanced backtick code spans (`[REQ-0605]`).
 fn line_has_unbackticked_tier_a_marker(line: &str) -> bool {
     let backtick_count = line.bytes().filter(|&b| b == b'`').count();

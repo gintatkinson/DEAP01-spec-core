@@ -46,9 +46,8 @@ use deap_core::source_ast::{
     strip_dart_annotations_tracking_state, RustDartLexState, ScopedItemScannerState,
     SourceLanguage,
 };
-use std::collections::BTreeSet;
-use std::fs;
-use std::path::Path;
+pub use crate::checks::docstring_cst_gate;
+use std::{collections::BTreeSet, fs, path::Path};
 use walkdir::WalkDir;
 
 /// Strongly typed enumeration of the 7 mandatory DO-178C safety docstring sections enforced by Check 36.
@@ -223,7 +222,7 @@ impl DocstringSection {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-36-DOC-TIER-ENUM]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DocTier {
+pub(crate) enum DocTier {
     /// Rust public API surface (`pub struct`, `pub enum`, `pub trait`, top-level `pub fn`, inherent `pub fn`).
     RustTierA,
     /// Rust private/crate-restricted item, trait declaration member, or `impl Trait for Type` method.
@@ -1693,19 +1692,19 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-36-ITEM-DOC-TARGET]
-struct ItemDocTarget<'a> {
+pub(crate) struct ItemDocTarget<'a> {
     /// Workspace-relative file path for diagnostic reporting.
-    file_rel: &'a str,
+    pub(crate) file_rel: &'a str,
     /// 1-based declaration line number.
-    line_no: usize,
+    pub(crate) line_no: usize,
     /// Item classification label (`struct`, `enum`, `trait`, `fn`, `class`, `constructor`, `method`, etc.).
-    kind: &'a str,
+    pub(crate) kind: &'a str,
     /// Identifier of the declared item.
-    item_name: &'a str,
+    pub(crate) item_name: &'a str,
     /// Normative documentation tier (`RustTierA`, `RustTierBC`, or `DartSevenSection`).
-    tier: DocTier,
+    pub(crate) tier: DocTier,
     /// Whether a 7-section docstring body on this item must be unique within the file.
-    check_uniqueness: bool,
+    pub(crate) check_uniqueness: bool,
 }
 
 /// Evaluates whether a standalone Rust outer (`///`) or inner (`//!`) docblock satisfies its normative tier contract.
@@ -1805,7 +1804,7 @@ pub fn is_compliant_rust_docblock(doc_lines: &[String], is_tier_a: bool) -> bool
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-36-VALIDATE-ITEM-DOCBLOCK]
-fn validate_item_docblock(
+pub(crate) fn validate_item_docblock(
     current_doc: &[String],
     target: &ItemDocTarget<'_>,
     seen_docblocks: &mut BTreeSet<String>,
@@ -2344,7 +2343,7 @@ fn strip_balanced_code_and_quote_spans(raw: &str) -> String {
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-36-PLACEHOLDER-DETECTION]
-fn contains_placeholder_docstring(doc_line: &str) -> bool {
+pub(crate) fn contains_placeholder_docstring(doc_line: &str) -> bool {
     let raw = strip_doc_comment_marker(doc_line);
     let lower = raw.to_ascii_lowercase();
     let mut words = lower.split_whitespace();
