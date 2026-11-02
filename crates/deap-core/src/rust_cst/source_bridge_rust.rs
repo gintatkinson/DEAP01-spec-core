@@ -22,6 +22,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-0201], [REQ-0608]
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use ra_ap_syntax::ast::{self, AstNode, HasName, HasVisibility};
@@ -30,12 +31,58 @@ use ra_ap_syntax::{Edition, SourceFile, SyntaxKind};
 use crate::rust_cst::items::{list_rust_items, RustCstItem, RustItemKind};
 use crate::rust_cst::parse::ParsedRustFile;
 use crate::rust_cst::source_bridge::{
-    parse_dart_source_ast, ParsedSourceFileAst, SourceAstItem, SourceItemKind, SourceLanguage,
+    parse_dart_source_file_ast, ParsedSourceFileAst, SourceAstItem, SourceItemKind, SourceLanguage,
+    SourceParam,
 };
+
+/// Extracted callable method signature representation. Realises: [REQ-0201]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractedMethodSignature {
+    /// Identifier name. Realises: [REQ-0201]
+    pub name: String,
+    /// Parameter signatures. Realises: [REQ-0201]
+    pub params: Vec<SourceParam>,
+    /// Return type if declared. Realises: [REQ-0201]
+    pub return_type: Option<String>,
+}
+
+/// Extracted component method table. Realises: [REQ-0201]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ComponentMethodTable {
+    /// Inherent and trait methods keyed by method name. Realises: [REQ-0201]
+    pub methods: BTreeMap<String, ExtractedMethodSignature>,
+}
+
+impl ComponentMethodTable {
+    /// Returns true if empty. Realises: [REQ-0201]
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.methods.is_empty()
+    }
+}
+
+/// Extracts a method table from parsed source AST items. Realises: [REQ-0201]
+#[must_use]
+pub fn extract_component_method_table(items: &[SourceAstItem]) -> ComponentMethodTable {
+    let mut methods = BTreeMap::new();
+    for item in items {
+        if item.kind.is_callable() {
+            methods.insert(
+                item.name.clone(),
+                ExtractedMethodSignature {
+                    name: item.name.clone(),
+                    params: item.params.clone(),
+                    return_type: item.return_type.clone(),
+                },
+            );
+        }
+    }
+    ComponentMethodTable { methods }
+}
 
 /// Parses Rust source text into a normalized `ParsedSourceFileAst` via `ra_ap_syntax`. Realises: [REQ-0201]
 #[must_use]
-pub fn parse_rust_source_ast(source: &str) -> ParsedSourceFileAst {
+pub fn parse_rust_source_file_ast(source: &str) -> ParsedSourceFileAst {
     let parsed = ParsedRustFile::parse_rust_source(source);
     let cst_items = list_rust_items(&parsed);
     let test_spans: Vec<(usize, usize)> = cst_items
@@ -59,8 +106,10 @@ pub fn parse_rust_source_ast(source: &str) -> ParsedSourceFileAst {
 fn map_cst_item(item: RustCstItem, test_spans: &[(usize, usize)], trait_spans: &[(usize, usize)]) -> SourceAstItem {
     let kind = match item.kind {
         RustItemKind::Fn => SourceItemKind::Function,
-        RustItemKind::Struct | RustItemKind::Enum | RustItemKind::TypeAlias => SourceItemKind::Type,
-        RustItemKind::Trait => SourceItemKind::TraitOrMixin,
+        RustItemKind::Struct => SourceItemKind::Struct,
+        RustItemKind::Enum => SourceItemKind::Enum,
+        RustItemKind::TypeAlias => SourceItemKind::Typedef,
+        RustItemKind::Trait => SourceItemKind::Trait,
         RustItemKind::Impl => SourceItemKind::Impl,
         RustItemKind::Mod => SourceItemKind::Module,
         RustItemKind::MacroRules => SourceItemKind::Macro,
@@ -75,12 +124,29 @@ fn map_cst_item(item: RustCstItem, test_spans: &[(usize, usize)], trait_spans: &
         })
         .collect();
     let has_doc = !doc_lines.is_empty();
+    let satisfied_requirements = crate::rust_cst::source_bridge::extract_realises_ids_from_doc_lines(&doc_lines);
     let is_test_annotated = item.attrs.iter().any(|a| a.contains("test"));
     let is_inside_test_block = test_spans.iter().any(|&(s, e)| item.start_line >= s && item.end_line <= e);
     let is_trait_impl_member = kind != SourceItemKind::Impl && trait_spans.iter().any(|&(s, e)| item.start_line >= s && item.end_line <= e);
     SourceAstItem {
-        kind, name: item.name, line: item.start_line, end_line: item.end_line,
-        doc_lines, has_doc, is_test_annotated, is_inside_test_block, is_trait_impl_member,
+        kind,
+        name: item.name,
+        line: item.start_line,
+        line_no: item.start_line,
+        end_line: item.end_line,
+        doc_lines,
+        has_doc,
+        is_test_annotated,
+        is_inside_test_block,
+        is_trait_impl_member,
+        owner_name: None,
+        parent_type: None,
+        fields: Vec::new(),
+        params: Vec::new(),
+        return_type: None,
+        satisfied_requirements,
+        invariants: Vec::new(),
+        states: Vec::new(),
     }
 }
 
@@ -133,10 +199,10 @@ pub fn classify_rust_item_with_tier_ast(trimmed: &str, allow_private: bool) -> O
         let Some(item) = tree.syntax().children().find_map(ast::Item::cast) else { continue };
         let (kind, name, is_pub) = match item {
             ast::Item::Fn(n) => (SourceItemKind::Function, n.name()?.to_string(), n.visibility().is_some()),
-            ast::Item::Struct(n) => (SourceItemKind::Type, n.name()?.to_string(), n.visibility().is_some()),
-            ast::Item::Enum(n) => (SourceItemKind::Type, n.name()?.to_string(), n.visibility().is_some()),
-            ast::Item::Trait(n) => (SourceItemKind::TraitOrMixin, n.name()?.to_string(), n.visibility().is_some()),
-            ast::Item::TypeAlias(n) => (SourceItemKind::Type, n.name()?.to_string(), n.visibility().is_some()),
+            ast::Item::Struct(n) => (SourceItemKind::Struct, n.name()?.to_string(), n.visibility().is_some()),
+            ast::Item::Enum(n) => (SourceItemKind::Enum, n.name()?.to_string(), n.visibility().is_some()),
+            ast::Item::Trait(n) => (SourceItemKind::Trait, n.name()?.to_string(), n.visibility().is_some()),
+            ast::Item::TypeAlias(n) => (SourceItemKind::Typedef, n.name()?.to_string(), n.visibility().is_some()),
             ast::Item::Const(n) => (SourceItemKind::Const, n.name()?.to_string(), n.visibility().is_some()),
             ast::Item::Static(n) => (SourceItemKind::Const, n.name()?.to_string(), n.visibility().is_some()),
             ast::Item::Module(n) => (SourceItemKind::Module, n.name()?.to_string(), n.visibility().is_some()),
@@ -150,19 +216,115 @@ pub fn classify_rust_item_with_tier_ast(trimmed: &str, allow_private: bool) -> O
     None
 }
 
+/// Classifies a single Rust declaration line returning kind and identifier name. Realises: [REQ-0201]
+#[must_use]
+pub fn classify_rust_item_line_ast(trimmed: &str) -> Option<(SourceItemKind, String)> {
+    let clean = trimmed.trim();
+    if clean.is_empty() {
+        return None;
+    }
+    let candidates = if clean.ends_with(';') || clean.ends_with('}') {
+        [clean.to_string(), format!("{clean} {{}}")]
+    } else if clean.ends_with('{') {
+        [format!("{clean}}}"), format!("{clean};")]
+    } else {
+        [format!("{clean} {{}}"), format!("{clean};")]
+    };
+    for snippet in candidates {
+        let tree = SourceFile::parse(&snippet, Edition::CURRENT).tree();
+        let Some(item) = tree.syntax().children().find_map(ast::Item::cast) else { continue };
+        let (kind, name) = match item {
+            ast::Item::Fn(n) => (SourceItemKind::Function, n.name()?.to_string()),
+            ast::Item::Struct(n) => (SourceItemKind::Struct, n.name()?.to_string()),
+            ast::Item::Enum(n) => (SourceItemKind::Enum, n.name()?.to_string()),
+            ast::Item::Trait(n) => (SourceItemKind::Trait, n.name()?.to_string()),
+            ast::Item::TypeAlias(n) => (SourceItemKind::Typedef, n.name()?.to_string()),
+            ast::Item::Const(n) => (SourceItemKind::Const, n.name()?.to_string()),
+            ast::Item::Static(n) => (SourceItemKind::Const, n.name()?.to_string()),
+            ast::Item::Module(n) => (SourceItemKind::Module, n.name()?.to_string()),
+            _ => continue,
+        };
+        return Some((kind, name));
+    }
+    None
+}
+
 /// Classifies a public Rust declaration snippet into `(SourceItemKind, String)`. Realises: [REQ-0201]
 #[must_use]
 pub fn classify_rust_item_ast(trimmed: &str) -> Option<(SourceItemKind, String)> {
     classify_rust_item_with_tier_ast(trimmed, false)
 }
 
+/// Checks whether a code snippet contains an unchecked direct range slice index (`[a..b]`). Realises: [REQ-0602]
+#[must_use]
+pub fn contains_direct_range_slice(code: &str) -> bool {
+    let parsed = SourceFile::parse(code, Edition::CURRENT);
+    for node in parsed.tree().syntax().descendants() {
+        if let Some(index_expr) = ast::IndexExpr::cast(node) {
+            if let Some(index) = index_expr.index() {
+                if matches!(index, ast::Expr::RangeExpr(_)) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// Dispatches file parsing by path extension to the appropriate CST bridge. Realises: [REQ-0201]
 #[must_use]
 pub fn parse_source_file_ast(path: &Path, source: &str) -> Option<ParsedSourceFileAst> {
     match SourceLanguage::from_path(path)? {
-        SourceLanguage::Rust => Some(parse_rust_source_ast(source)),
-        SourceLanguage::Dart => Some(parse_dart_source_ast(source)),
+        SourceLanguage::Rust | SourceLanguage::Auto => Some(parse_rust_source_file_ast(source)),
+        SourceLanguage::Dart => Some(parse_dart_source_file_ast(source)),
     }
+}
+
+/// Validates syntax for explicit language. Realises: [REQ-0201]
+///
+/// # Errors
+/// Returns syntax error diagnostics if language-specific source is malformed.
+pub fn validate_source_syntax_for_language(source: &str, file_label: &str, lang: SourceLanguage) -> Result<(), crate::error::CoreError> {
+    if lang == SourceLanguage::Rust {
+        let parsed = ParsedRustFile::parse_rust_source(source);
+        if !parsed.syntax_errors().is_empty() {
+            return Err(crate::error::CoreError::syntax(format!("{file_label}: {:?}", parsed.syntax_errors())));
+        }
+    } else if lang == SourceLanguage::Dart {
+        drop(crate::dart_cst::parse_dart_items(source));
+    }
+    Ok(())
+}
+
+/// Validates syntax of source text. Realises: [REQ-0201]
+///
+/// # Errors
+/// Returns syntax error diagnostics if source is malformed.
+pub fn validate_source_syntax(source: &str, file_label: &str) -> Result<(), crate::error::CoreError> {
+    let lang = match Path::new(file_label).extension().and_then(|e| e.to_str()) {
+        Some("rs") => SourceLanguage::Rust,
+        Some("dart") => SourceLanguage::Dart,
+        _ => SourceLanguage::Auto,
+    };
+    validate_source_syntax_for_language(source, file_label, lang)
+}
+
+/// Parses Rust source file into `SourceAstItem` vector. Realises: [REQ-0201]
+///
+/// # Errors
+/// Returns validation errors if the Rust source syntax is invalid.
+pub fn parse_rust_source_ast(source: &str, file_label: &str) -> Result<Vec<SourceAstItem>, crate::error::CoreError> {
+    validate_source_syntax_for_language(source, file_label, SourceLanguage::Rust)?;
+    Ok(parse_rust_source_file_ast(source).items)
+}
+
+/// Parses Dart source file into `SourceAstItem` vector. Realises: [REQ-0201]
+///
+/// # Errors
+/// Returns validation errors if the Dart source syntax is invalid.
+pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<SourceAstItem>, crate::error::CoreError> {
+    validate_source_syntax_for_language(source, file_label, SourceLanguage::Dart)?;
+    Ok(parse_dart_source_file_ast(source).items)
 }
 
 #[cfg(test)]
@@ -174,7 +336,7 @@ mod tests {
         let src = "/// Doc line\npub fn compute(x: i32) -> i32 {\n    x + 1\n}\n";
         let ast = parse_source_file_ast(Path::new("lib.rs"), src);
         assert!(ast.is_some());
-        let parsed = parse_rust_source_ast(src);
+        let parsed = parse_rust_source_file_ast(src);
         assert_eq!(parsed.items.first().map(|i| (i.kind, i.has_doc)), Some((SourceItemKind::Function, true)));
         assert_eq!(parsed.code_line_mask, vec![false, true, true, true]);
     }

@@ -79,15 +79,24 @@ fn test_thresholds_validation_and_error_codes() {
 
     let mut bad_sloc = default_t;
     bad_sloc.max_fn_exec_sloc = 0;
-    assert_eq!(validate_metrics_thresholds(&bad_sloc).unwrap_err().diagnostic_code(), "DEAP-E0803");
+    assert_eq!(
+        validate_metrics_thresholds(&bad_sloc).err().map(|e| e.diagnostic_code()),
+        Some("DEAP-E0803")
+    );
 
     let mut bad_params = default_t;
     bad_params.max_fn_param_count = 6;
-    assert_eq!(validate_metrics_thresholds(&bad_params).unwrap_err().diagnostic_code(), "DEAP-E0803");
+    assert_eq!(
+        validate_metrics_thresholds(&bad_params).err().map(|e| e.diagnostic_code()),
+        Some("DEAP-E0803")
+    );
 
     let mut bad_uuid = default_t;
     bad_uuid.deterministic_uuid = "wrong-uuid";
-    assert_eq!(validate_metrics_thresholds(&bad_uuid).unwrap_err().diagnostic_code(), "DEAP-E0803");
+    assert_eq!(
+        validate_metrics_thresholds(&bad_uuid).err().map(|e| e.diagnostic_code()),
+        Some("DEAP-E0803")
+    );
 }
 
 #[test]
@@ -98,12 +107,11 @@ fn test_parse_verified_lossless_cst() -> Result<(), Box<dyn std::error::Error>> 
     assert!(cst.is_lossless_red_green_tree_ready());
     assert_eq!(cst.source_path(), "src/add.rs");
     assert_eq!(cst.source_bytes(), code);
-    assert_eq!(cst.observed_max_depth() > 0, true);
+    assert!(cst.observed_max_depth() > 0);
 
     let bad_code = b"fn unclosed( {";
     let err = parse_verified_lossless_cst("bad.rs", bad_code, &thresholds);
-    assert!(err.is_err());
-    assert_eq!(err.unwrap_err().diagnostic_code(), "DEAP-E0803");
+    assert_eq!(err.err().map(|e| e.diagnostic_code()), Some("DEAP-E0803"));
     Ok(())
 }
 
@@ -127,8 +135,8 @@ mod tests {
     let inv = classify_cfg_test_excluded_doc_tier(&cst, &thresholds, false)?;
     assert_eq!(inv.rust_tier_a_count, 1);
     assert_eq!(inv.rust_tier_bc_count, 1);
-    assert_eq!(inv.test_excluded_item_count > 0, true);
-    assert_eq!(inv.pruned_test_subtree_ranges.is_empty(), false);
+    assert!(inv.test_excluded_item_count > 0);
+    assert!(!inv.pruned_test_subtree_ranges.is_empty());
     assert!(DocTier::RustTierA.is_production());
     assert!(DocTier::RustTierBC.is_production());
     assert!(!DocTier::TestExcluded.is_production());
@@ -155,15 +163,23 @@ pub fn string_err() -> Result<(), String> {
 "#;
     let cst = parse_verified_lossless_cst("src/calc.rs", src.as_bytes(), &thresholds)?;
     let report = analyze_cst_v2_metrics(&cst, &thresholds)?;
-    assert_eq!(report.lossless_roundtrip_verified, true);
-    let calc_fn = report.callable_metrics.values().find(|m| m.symbol == "calc").unwrap();
+    assert!(report.lossless_roundtrip_verified);
+    let calc_fn = report
+        .callable_metrics
+        .values()
+        .find(|m| m.symbol == "calc")
+        .ok_or("missing calc")?;
     assert_eq!(calc_fn.param_count, 2);
     assert!(!calc_fn.has_self_receiver);
     assert_eq!(calc_fn.mut_bool_flag_count, 1);
     assert_eq!(calc_fn.max_predicate_clauses, 3);
     assert!(!calc_fn.returns_result_string_err);
 
-    let err_fn = report.callable_metrics.values().find(|m| m.symbol == "string_err").unwrap();
+    let err_fn = report
+        .callable_metrics
+        .values()
+        .find(|m| m.symbol == "string_err")
+        .ok_or("missing string_err")?;
     assert!(err_fn.returns_result_string_err);
     Ok(())
 }

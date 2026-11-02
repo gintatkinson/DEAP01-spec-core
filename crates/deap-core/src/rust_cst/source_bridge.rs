@@ -26,15 +26,25 @@
 use std::path::Path;
 
 use crate::dart_cst::DartItemKind;
-pub use super::source_bridge_rust::{classify_rust_item_ast, classify_rust_item_with_tier_ast, parse_rust_source_ast, parse_source_file_ast};
+pub use super::source_bridge_helpers::*;
+pub use super::source_bridge_rust::{
+    classify_rust_item_ast, classify_rust_item_line_ast, classify_rust_item_with_tier_ast,
+    contains_direct_range_slice, extract_component_method_table, parse_dart_source_ast,
+    parse_rust_source_ast, parse_rust_source_file_ast, parse_source_file_ast,
+    validate_source_syntax, validate_source_syntax_for_language, ComponentMethodTable,
+    ExtractedMethodSignature,
+};
 
 /// Supported source languages for CST/AST governance analysis. Realises: [REQ-0201]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SourceLanguage {
     /// Rust source file (`.rs`). Realises: [REQ-0201]
+    #[default]
     Rust,
     /// Dart source file (`.dart`). Realises: [REQ-0201]
     Dart,
+    /// Automatic language detection from file extension or content. Realises: [REQ-0201]
+    Auto,
 }
 
 impl SourceLanguage {
@@ -47,10 +57,39 @@ impl SourceLanguage {
             _ => None,
         }
     }
+
+    /// Detects the source language from a file path extension (alias). Realises: [REQ-0201]
+    #[must_use]
+    pub fn detect_from_extension(path: &Path) -> Option<Self> {
+        Self::from_path(path)
+    }
+
+    /// Returns human-readable lowercase language identifier. Realises: [REQ-0201]
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Rust => "rust",
+            Self::Dart => "dart",
+            Self::Auto => "auto",
+        }
+    }
+
+    /// Parses source language from CLI flag or returns a typed `CoreError`. Realises: [REQ-0201]
+    ///
+    /// # Errors
+    /// Returns `CoreError::Validation` if `flag` does not match a supported language name.
+    pub fn from_flag(flag: &str) -> Result<Self, crate::error::CoreError> {
+        match flag.to_ascii_lowercase().as_str() {
+            "rust" | "rs" => Ok(Self::Rust),
+            "dart" => Ok(Self::Dart),
+            "auto" => Ok(Self::Auto),
+            other => Err(crate::error::CoreError::validation(format!("unsupported language: '{other}'"))),
+        }
+    }
 }
 
 /// Normalized structural item kind across supported languages. Realises: [REQ-0201]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SourceItemKind {
     /// Function or method declaration. Realises: [REQ-0201]
     Function,
@@ -66,6 +105,24 @@ pub enum SourceItemKind {
     Macro,
     /// Constant or static item. Realises: [REQ-0201]
     Const,
+    /// Struct declaration. Realises: [REQ-0201]
+    Struct,
+    /// Enum declaration. Realises: [REQ-0201]
+    Enum,
+    /// Trait declaration. Realises: [REQ-0201]
+    Trait,
+    /// Class declaration. Realises: [REQ-0201]
+    Class,
+    /// Mixin declaration. Realises: [REQ-0201]
+    Mixin,
+    /// Extension declaration. Realises: [REQ-0201]
+    Extension,
+    /// Typedef declaration. Realises: [REQ-0201]
+    Typedef,
+    /// Method declaration. Realises: [REQ-0201]
+    Method,
+    /// Constructor declaration. Realises: [REQ-0201]
+    Constructor,
 }
 
 impl SourceItemKind {
@@ -74,38 +131,88 @@ impl SourceItemKind {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Function => "function",
-            Self::Type => "type",
-            Self::TraitOrMixin => "trait",
+            Self::Type | Self::Typedef => "type",
+            Self::TraitOrMixin | Self::Trait => "trait",
             Self::Impl => "impl",
             Self::Module => "module",
             Self::Macro => "macro",
             Self::Const => "const",
+            Self::Struct => "struct",
+            Self::Enum => "enum",
+            Self::Class => "class",
+            Self::Mixin => "mixin",
+            Self::Extension => "extension",
+            Self::Method => "method",
+            Self::Constructor => "constructor",
         }
     }
+
+    /// Returns the canonical source keyword label for `self`. Realises: [REQ-0201]
+    #[must_use]
+    pub const fn keyword(self) -> &'static str {
+        match self {
+            Self::Struct => "struct",
+            Self::Enum => "enum",
+            Self::Trait | Self::TraitOrMixin => "trait",
+            Self::Class => "class",
+            Self::Mixin => "mixin",
+            Self::Extension => "extension",
+            Self::Typedef | Self::Type => "type",
+            Self::Function => "fn",
+            Self::Method => "method",
+            Self::Constructor => "constructor",
+            Self::Impl => "impl",
+            Self::Module => "mod",
+            Self::Macro => "macro_rules",
+            Self::Const => "const",
+        }
+    }
+
+    /// Returns `true` if `self` represents a callable function, method, or constructor. Realises: [REQ-0201]
+    #[must_use]
+    pub const fn is_callable(self) -> bool {
+        matches!(self, Self::Function | Self::Method | Self::Constructor)
+    }
+}
+
+/// Formal input parameter extracted from a callable signature. Realises: [REQ-0201]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SourceParam {
+    pub name: String,
+    pub type_name: String,
+}
+
+/// Structural field or callback property extracted from a type declaration. Realises: [REQ-0201]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SourceField {
+    pub name: String,
+    pub type_name: String,
+    pub is_callback_or_port: bool,
+    pub doc: Option<String>,
 }
 
 /// Normalized AST item descriptor with line span and doc metadata. Realises: [REQ-0201]
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct SourceAstItem {
-    /// Structural category of the item. Realises: [REQ-0201]
     pub kind: SourceItemKind,
-    /// Identifier name of the item. Realises: [REQ-0201]
     pub name: String,
-    /// 1-based start line of the item declaration. Realises: [REQ-0201]
     pub line: usize,
-    /// 1-based inclusive end line of the item declaration. Realises: [REQ-0201]
+    pub line_no: usize,
     pub end_line: usize,
-    /// Extracted documentation comment lines preceding the item. Realises: [REQ-0201]
     pub doc_lines: Vec<String>,
-    /// Whether at least one documentation comment line is attached. Realises: [REQ-0201]
     pub has_doc: bool,
-    /// Whether the item carries a direct test annotation. Realises: [REQ-0201]
     pub is_test_annotated: bool,
-    /// Whether the item resides inside a test module or block. Realises: [REQ-0201]
     pub is_inside_test_block: bool,
-    /// Whether the item is a member of a trait implementation block. Realises: [REQ-0201]
     pub is_trait_impl_member: bool,
+    pub owner_name: Option<String>,
+    pub parent_type: Option<String>,
+    pub fields: Vec<SourceField>,
+    pub params: Vec<SourceParam>,
+    pub return_type: Option<String>,
+    pub satisfied_requirements: Vec<String>,
+    pub invariants: Vec<String>,
+    pub states: Vec<String>,
 }
 
 /// Parsed source file representation with items and line masks. Realises: [REQ-0201]
@@ -137,22 +244,41 @@ impl ParsedSourceFileAst {
 
 /// Parses Dart source into a normalized `ParsedSourceFileAst` via `dart_cst`. Realises: [REQ-0201]
 #[must_use]
-pub fn parse_dart_source_ast(source: &str) -> ParsedSourceFileAst {
+pub fn parse_dart_source_file_ast(source: &str) -> ParsedSourceFileAst {
     let lines: Vec<&str> = source.lines().collect();
     let items = crate::dart_cst::parse_dart_items(source)
         .into_iter()
         .map(|d| {
             let kind = match d.kind {
-                DartItemKind::Class | DartItemKind::Enum | DartItemKind::TypeAlias => SourceItemKind::Type,
-                DartItemKind::Mixin => SourceItemKind::TraitOrMixin,
-                DartItemKind::Extension => SourceItemKind::Impl,
+                DartItemKind::Class => SourceItemKind::Class,
+                DartItemKind::Enum => SourceItemKind::Enum,
+                DartItemKind::TypeAlias => SourceItemKind::Typedef,
+                DartItemKind::Mixin => SourceItemKind::Mixin,
+                DartItemKind::Extension => SourceItemKind::Extension,
                 DartItemKind::Function => SourceItemKind::Function,
                 DartItemKind::Const => SourceItemKind::Const,
             };
             let (doc_lines, has_doc) = extract_item_doc_block_ast(&lines, d.start_line.saturating_sub(1));
+            let satisfied_requirements = extract_realises_ids_from_doc_lines(&doc_lines);
             SourceAstItem {
-                kind, name: d.name, line: d.start_line, end_line: d.end_line,
-                doc_lines, has_doc, is_test_annotated: false, is_inside_test_block: false, is_trait_impl_member: false,
+                kind,
+                name: d.name,
+                line: d.start_line,
+                line_no: d.start_line,
+                end_line: d.end_line,
+                doc_lines,
+                has_doc,
+                is_test_annotated: false,
+                is_inside_test_block: false,
+                is_trait_impl_member: false,
+                owner_name: None,
+                parent_type: None,
+                fields: Vec::new(),
+                params: Vec::new(),
+                return_type: None,
+                satisfied_requirements,
+                invariants: Vec::new(),
+                states: Vec::new(),
             }
         })
         .collect();
@@ -165,12 +291,12 @@ pub fn parse_dart_source_ast(source: &str) -> ParsedSourceFileAst {
 
 /// Classifies a single Dart top-level snippet using `dart_cst`. Realises: [REQ-0201]
 #[must_use]
-pub fn classify_dart_top_level_ast(trimmed: &str) -> Option<(SourceItemKind, String)> {
+pub fn classify_dart_top_level_ast(trimmed: &str) -> Option<(SourceItemKind, String, Option<String>)> {
     let mut probe = trimmed.to_string();
     if !probe.ends_with('}') && !probe.ends_with(';') {
         probe.push_str(" {}");
     }
-    parse_dart_source_ast(&probe).items.into_iter().next().map(|i| (i.kind, i.name))
+    parse_dart_source_file_ast(&probe).items.into_iter().next().map(|i| (i.kind, i.name, i.parent_type))
 }
 
 /// Extracts contiguous `///` doc comments preceding `item_line_idx`. Realises: [REQ-0201]
@@ -189,4 +315,30 @@ pub fn extract_item_doc_block_ast(lines: &[&str], item_line_idx: usize) -> (Vec<
     docs.reverse();
     let has_doc = !docs.is_empty();
     (docs, has_doc)
+}
+
+/// Extracts requirement identifiers from `Realises: [...]` docstring tags. Realises: [REQ-0201]
+#[must_use]
+pub fn extract_realises_ids_from_doc_lines(doc_lines: &[String]) -> Vec<String> {
+    let mut req_ids = Vec::new();
+    for line in doc_lines {
+        let trimmed = line.trim_start_matches('/').trim_start_matches('*').trim();
+        if let Some(pos) = trimmed.find("Realises:") {
+            let after = trimmed.get(pos.saturating_add(9)..).unwrap_or("").trim();
+            if let Some(open) = after.find('[') {
+                if let Some(close) = after.find(']') {
+                    if close > open {
+                        let inner = after.get(open.saturating_add(1)..close).unwrap_or("").trim();
+                        for raw_id in inner.split(',') {
+                            let clean = raw_id.trim();
+                            if !clean.is_empty() && !req_ids.iter().any(|r: &String| r == clean) {
+                                req_ids.push(clean.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    req_ids
 }
