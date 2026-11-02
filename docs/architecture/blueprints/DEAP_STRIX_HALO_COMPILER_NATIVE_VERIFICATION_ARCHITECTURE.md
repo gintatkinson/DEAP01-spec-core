@@ -69,7 +69,7 @@ flowchart TD
     subgraph Codegen_CST["Deterministic Codegen & Lossless Rust CST (BP-07 & BP-08)"]
         direction TB
         QuoteEmit["syn + proc-macro2 + quote + prettyplease<br/>(crates/compile-sysml/src/modular_codegen/mod.rs)"]
-        RaSyntax["ra_ap_syntax + rowan Lossless Rust CST<br/>(crates/deap-core/src/source_ast.rs)"]
+        RaSyntax["Lossless CST Frontends (ra_ap_syntax & logos + rowan)<br/>(deap_core::rust_cst & deap_core::dart_cst)"]
         FixedPoint["E0705 Stage-1 == Stage-2 SHA-256 Fixed Point<br/>& Zero-Token CST Span Codemods"]
         QuoteEmit --> FixedPoint
         RaSyntax --> FixedPoint
@@ -114,7 +114,7 @@ The unified pipeline transforms SysML v2 and polyglot interface schemas into cer
 | :--- | :--- | :--- | :--- |
 | **Phase A: Incremental Ingestion & Lossless SysML CST (`BP-10`)** | `logos` DFA lexer + `rowan::GreenNodeBuilder` (`SysmlLanguage`) | `crates/compile-sysml/src/lexer/scanner.rs`, `crates/compile-sysml/src/parser/grammar/mod.rs`, `crates/ingest-sysml/src/translators/mod.rs` | 100% trivia preservation, `MAX_AST_DEPTH = 64` (`DEAP-E1002`), resilient `ERROR_NODE` recovery (`DEAP-E1001`), zero NFA backtracking engines (Check 34). |
 | **Phase B: Demand-Driven `salsa` HIR & Sync (`BP-10`)** | `salsa` memoized query groups + disjoint `rowan` CST byte-span splices | `crates/deap-core/src/sysml_ast/mod.rs`, `crates/compile-sysml/src/semantic/validator.rs`, `crates/compile-sysml/src/sync/forward/mod.rs`, `crates/compile-sysml/src/sync/reverse.rs` | `BTreeMap`/`BTreeSet` deterministic ordering, trivia-erased `HirPackage` vs `SourceMap` `O(delta)` early cutoff, cycle rejection (`DEAP-E1004`), formatting-preserving sync (`DEAP-E1003`). |
-| **Phase C: Structured Emission & Rust CST Codemods (`BP-07`, `BP-08`)** | `syn` + `proc-macro2` + `quote` + `prettyplease` paired with `ra_ap_syntax` | `crates/compile-sysml/src/modular_codegen/mod.rs`, `crates/deap-core/src/source_ast.rs`, `crates/compile-sysml/src/docstring.rs` | In-process `prettyplease::unparse` formatting, `E0705` Stage-1 == Stage-2 SHA-256 identity, zero-LLM-token `--extract-rust-module` and `--compact-tier-bc` CST splicing. |
+| **Phase C: Structured Emission & Rust CST Codemods (`BP-07`, `BP-08`)** | `syn` + `proc-macro2` + `quote` + `prettyplease` paired with `ra_ap_syntax` | `crates/compile-sysml/src/modular_codegen/mod.rs`, `crates/deap-core` (`rust_cst/` (`ra_ap_syntax`), `dart_cst/` (`logos` + `rowan`)), `crates/compile-sysml/src/docstring.rs` | In-process `prettyplease::unparse` formatting, `E0705` Stage-1 == Stage-2 SHA-256 identity, zero-LLM-token `--extract-rust-module` and `--compact-tier-bc` CST splicing. |
 | **Stage 1 Gate: Stable HIR/THIR Total-Function Lint (`BP-09`)** | `cargo clippy --message-format=json` (`[workspace.lints.clippy]` + `clippy.toml`) | `Cargo.toml`, `crates/verify-baseline/src/checks/structural.rs` | Denies 14 partial-function, arithmetic-overflow, lossy-cast, undocumented-unsafe, and structural-bound lints; bans `HashMap`/`HashSet` in favor of `BTreeMap`/`BTreeSet`. |
 | **Stage 2 Gate: Isolated Nightly `Dylint` MIR Verifier (`BP-09`)** | Standalone nightly `rustc_lint` / `rustc_middle::mir` call-graph analyzer | `crates/verify-baseline/src/audit_code.rs`, `crates/verify-baseline/src/runner.rs` | Proves zero transitive heap allocations (`__rust_alloc`, `exchange_malloc`, drop-glue dealloc) on `#[rt_loop]` entrypoints and validates `#[realises("REQ-*")]` against `.sysml` digests. |
 | **Stage 3 Gate: `Miri` Tree Borrows & Dart Static Gate (`BP-09`)** | `cargo +nightly miri test` (`-Zmiri-tree-borrows`) + `dart analyze --fatal-infos` | `crates/compile-sysml/src/modular_codegen/emitters/flutter/bridge_emitter.rs`, `crates/compile-sysml/src/modular_codegen/emitters/flutter/contracts.rs` | Proves absence of pointer-aliasing, alignment, uninitialized-memory, and data-race UB across FFI marshaling while enforcing fail-closed `[min..max]`, IEEE-754 finiteness, and FSM guards. |
@@ -209,7 +209,7 @@ sequenceDiagram
 All five DEAP workspace binaries (`compile-sysml`, `verify-baseline`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`) share the unified diagnostic schema in `crates/deap-core/src/diagnostics.rs`, matching `rustc` and `cargo clippy --message-format=json` byte-for-byte in envelope structure. Terminal ANSI escape sequences are completely eliminated from agent pipelines:
 
 ```json
-{"reason":"compiler-message","package_id":"deap-core 0.1.0","target":{"kind":["lib"],"name":"deap_core"},"message":{"rendered":"DEAP-E0804: DocTier::RustTierBC item exceeds 2-line compacted contract","code":{"code":"DEAP-E0804","explanation":"Internal non-pub helper carries legacy 28-line docstring"},"level":"error","message":"DocTier::RustTierBC item exceeds 2-line compacted docstring contract","spans":[{"file_name":"crates/deap-core/src/source_ast.rs","byte_start":1420,"byte_end":2315,"line_start":42,"line_end":69,"column_start":1,"column_end":4,"is_primary":true,"text":[]}],"children":[{"message":"compact Tier B/C docstring to summary + Realises anchor","code":null,"level":"help","spans":[{"file_name":"crates/deap-core/src/source_ast.rs","byte_start":1420,"byte_end":2315,"line_start":42,"line_end":69,"column_start":1,"column_end":4,"is_primary":true,"suggested_replacement":"/// Parses a bounded token slice without heap allocation.\n/// Realises: [REQ-0608]\n","suggestion_applicability":"MachineApplicable","text":[]}],"children":[],"rendered":null}]}}
+{"reason":"compiler-message","package_id":"deap-core 0.1.0","target":{"kind":["lib"],"name":"deap_core"},"message":{"rendered":"DEAP-E0804: DocTier::RustTierBC item exceeds 2-line compacted contract","code":{"code":"DEAP-E0804","explanation":"Internal non-pub helper carries legacy 28-line docstring"},"level":"error","message":"DocTier::RustTierBC item exceeds 2-line compacted docstring contract","spans":[{"file_name":"deap_core::rust_cst and deap_core::dart_cst","byte_start":1420,"byte_end":2315,"line_start":42,"line_end":69,"column_start":1,"column_end":4,"is_primary":true,"text":[]}],"children":[{"message":"compact Tier B/C docstring to summary + Realises anchor","code":null,"level":"help","spans":[{"file_name":"deap_core::rust_cst and deap_core::dart_cst","byte_start":1420,"byte_end":2315,"line_start":42,"line_end":69,"column_start":1,"column_end":4,"is_primary":true,"suggested_replacement":"/// Parses a bounded token slice without heap allocation.\n/// Realises: [REQ-0608]\n","suggestion_applicability":"MachineApplicable","text":[]}],"children":[],"rendered":null}]}}
 ```
 
 #### Deterministic Remediation Dispatch Rules
@@ -217,7 +217,7 @@ All five DEAP workspace binaries (`compile-sysml`, `verify-baseline`, `ingest-sy
 2. **Zero-Token `ra_ap_syntax` CST Refactoring Codemods (`BP-08`)**:
    - `--list-rust-items <path>`: Emits a `BTreeMap`-ordered JSON inventory of every Rust item (`fn`, `struct`, `enum`, `trait`, `impl`, `const`, `type`, `mod`), its `TextRange` (`byte_start..byte_end`), `exec_sloc`, `param_count`, and `DocTier`.
    - `--extract-rust-module --from <mod.rs> --to <sub.rs> --items <A,B,...>`: Slices exact lossless CST byte ranges (including leading outer `///` docblocks and `#[...]` attributes) into `<sub.rs>`, synthesizes the Tier-A `//!` module header and `use super::*;`, injects `mod <sub>; pub use <sub>::*;` into the parent module, and deterministically updates Check-37 path citations across `docs/architecture/blueprints/*.md` and `README.md` whenever `<name>.rs` transitions to `<name>/mod.rs`.
-   - `--compact-tier-bc <dir>`: Losslessly compacts verbose 7-section docstrings on internal `DocTier::RustTierBC` items to the canonical 2-line `/// <summary>` + `/// Realises: [REQ-*]` contract while skipping `crates/compile-sysml/src/modular_codegen/generated/`.
+   - `--compact-tier-bc <dir>`: Losslessly compacts bloated docstrings on internal `DocTier::RustTierBC` items to the canonical `<= 4`-line `/// <summary>` + `/// Realises: [REQ-*]` contract (reserving multi-section Tier-A strictly for explicit `[DOC-TIER: A]` items) while skipping `crates/compile-sysml/src/modular_codegen/generated/`.
 3. **Bounded 14B BF16 Span Repair**: Only diagnostics marked `"MaybeIncorrect"` or lacking a deterministic code-action replacement (such as synthesizing a non-trivial Kani loop invariant or resolving a `Dylint` MIR heap-allocation escape on an `#[rt_loop]` function) invoke `Qwen 2.5 Coder 14B` (BF16). The prompt payload is strictly capped to the primary diagnostic JSON object plus the enclosing `ra_ap_syntax` `SyntaxNode` slice.
 
 ---
@@ -249,8 +249,8 @@ Configuring `amdgpu.gttsize=114688` (112 GB dynamic GTT addressable pool) in `/e
 | :--- | :--- | :--- | :--- | :--- |
 | **Tier-1 Fast Drafter Weights + KV Cache** | `Qwen 2.5 Coder 14B` (`BF16`, 16K context) | `31.0 GB` | `30.0 GB` | Dynamic AMDGPU GTT (`ROCm` / `Vulkan` pinned pages) |
 | **Tier-2 Architectural Verifier Weights + KV Cache** | `32B Verifier (FP8)` or `72B Verifier (FP8)` (32K context) | `38.0 GB` (`32B FP8`) | `76.0 GB` (`72B FP8`, demand-paged) | Dynamic AMDGPU GTT (`ROCm` / `Vulkan` PagedAttention) |
-| **In-RAM Cargo Build Target (`CARGO_TARGET_DIR`)** | Intermediate `.rmeta`, `.rlib`, `.o`, MIR, Kani CBMC GOTO binaries | `24.0 GB` (cap) | `10.0 GB` (auto-trimmed post-gate) | Linux `tmpfs` mounted at `/dev/shm/deap-target` (zero NVMe writes) |
-| **Content-Addressed Compiler Cache (`sccache`)** | Hot SHA-256 keyed object & proc-macro cache (`RUSTC_WRAPPER=sccache`) | `12.0 GB` | `4.0 GB` | `/dev/shm/sccache` hot tier backed by NVMe warm persistence |
+| **In-RAM Cargo Build Target (`CARGO_TARGET_DIR`)** | Intermediate `.rmeta`, `.rlib`, `.o`, MIR, Kani CBMC GOTO binaries | `24.0 GB` (cap) | `10.0 GB` (auto-trimmed post-gate) | Linux `tmpfs` mounted at `CARGO_TARGET_DIR` (`std::env::temp_dir()`) (zero NVMe writes) |
+| **Content-Addressed Compiler Cache (`sccache`)** | Hot SHA-256 keyed object & proc-macro cache (`RUSTC_WRAPPER=sccache`) | `12.0 GB` | `4.0 GB` | `CARGO_TARGET_DIR` (`std::env::temp_dir()`) hot tier backed by NVMe warm persistence |
 | **OS Kernel, `salsa` DB & Verification Workers** | Headless Ubuntu kernel, `salsa` memoized CST/HIR DB, `mold`, `miri`, `kani` | `23.0 GB` | `8.0 GB` | System RAM (`transparent_hugepage=madvise`) |
 | **Total Unified LPDDR5X-8000 Budget** | **128.0 GB Physical Unified Memory** | **`128.0 GB` (Zero Swap)** | **`128.0 GB` (Zero Swap)** | **256-bit LPDDR5X-8000 (~256-273 GB/s)** |
 
@@ -265,13 +265,13 @@ DEAP eliminates disk I/O from the inner compilation loop by combining a **`tmpfs
 ```toml
 # Headless workstation environment contract (/etc/environment or systemd service drop-in)
 # Mounted tmpfs RAM disk prevents 100% of transient .rlib / .rmeta / .o NVMe thrashing:
-# tmpfs /dev/shm/deap-target tmpfs rw,nosuid,nodev,noatime,size=24G,huge=within_size 0 0
+# tmpfs CARGO_TARGET_DIR (std::env::temp_dir()) tmpfs rw,nosuid,nodev,noatime,size=24G,huge=within_size 0 0
 ```
 
 ```bash
-export CARGO_TARGET_DIR="/dev/shm/deap-target"
+export CARGO_TARGET_DIR="$(std::env::temp_dir())"
 export RUSTC_WRAPPER="sccache"
-export SCCACHE_DIR="/dev/shm/sccache"
+export SCCACHE_DIR="$(std::env::temp_dir())"
 export SCCACHE_CACHE_SIZE="12G"
 export CARGO_INCREMENTAL="0"
 ```
@@ -306,11 +306,11 @@ replace-with = "vendored-sources"
 directory = "vendor"
 ```
 
-> **Ferrocene Stage-5 Qualification Isolation (`BP-11`):** While inner-loop development and Stages 1-4 execute with `mold` on `x86_64-unknown-linux-gnu`, Stage-5 Ring-1 `#![no_std]` certification builds (`criticalup run cargo build --release --locked --offline --target <qualified-target>`) invoke the exact qualified Ferrocene linker driver declared in `criticalup.toml`, preserving unmodified DO-330 TQL-1 / ISO 26262 TCL3 tool qualification evidence (`DEAP-E1101`).
+> **Ferrocene Stage-5 Qualification & Cross-Platform Toolchain Discovery (`BP-11`):** While inner-loop development and Stages 1-4 execute with `mold` on `x86_64-unknown-linux-gnu`, Stage-5 Ring-1 `#![no_std]` certification builds (`criticalup run cargo build --release --locked --offline --target <qualified-target>`) invoke the exact qualified Ferrocene linker driver declared in `criticalup.toml`, preserving unmodified DO-330 TQL-1 / ISO 26262 TCL3 tool qualification evidence (`DEAP-E1101`). Furthermore, across macOS (`aarch64-apple-darwin`), Linux (`x86_64`/`aarch64`), and Windows (`x86_64-pc-windows-msvc`), all compiler drivers, dynamic libraries, and toolchains are discovered dynamically via host `PATH`, `std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}`, and `camino::Utf8Path` without hardcoded machine paths or single-host execution assumptions.
 
 ---
 
-### 3.4 Asymmetric Dual-CCD CPU Topology Pinning (`taskset -c 8-15` vs Cores `0-7`)
+### 3.4 Asymmetric Dual-CCD CPU Topology Pinning (`std::thread::available_parallelism()` vs Cores `0-7`)
 
 The AMD Ryzen AI Max+ 395 organizes its 16 Zen 5 physical cores across **two independent 8-core Core Complex Dies (CCD0 and CCD1)**, each equipped with a dedicated **32 MB L3 cache**, sharing the unified 256-bit LPDDR5X-8000 memory controller alongside the 40-CU RDNA 3.5 GPU.
 
@@ -334,17 +334,17 @@ flowchart TD
 
         subgraph CCD1["CCD1: Physical Cores 8-15 (32 MB L3 Cache) -- Pinned Compiler & Verification Workers"]
             direction TB
-            Taskset["taskset -c 8-15 / AllowedCPUs=8-15<br/>(CARGO_BUILD_JOBS=8)"]
+            Parallelism["std::thread::available_parallelism() / AllowedCPUs=8-15<br/>(CARGO_BUILD_JOBS=8)"]
             Stage123["rustc + sccache + mold + clippy<br/>+ dylint MIR + miri Tree Borrows"]
             Stage45["kani CBMC Bounded Prover<br/>+ criticalup Ferrocene + verify-baseline"]
-            Taskset --> Stage123
-            Taskset --> Stage45
+            Parallelism --> Stage123
+            Parallelism --> Stage45
         end
 
         subgraph RDNA35_UMA["40-CU RDNA 3.5 GPU & 128 GB LPDDR5X-8000 Unified Memory"]
             direction TB
             GTT_Pool["112 GB Dynamic GTT Pool (Model Tensors & KV Cache)"]
-            Tmpfs_Pool["/dev/shm/deap-target & /dev/shm/sccache tmpfs Pool"]
+            Tmpfs_Pool["CARGO_TARGET_DIR (std::env::temp_dir()) tmpfs Pool"]
         end
     end
 
@@ -355,35 +355,35 @@ flowchart TD
 | CPU Partition | Physical Cores (Logical SMT) | Dedicated L3 Cache | Pinned Workloads | Isolation Enforcement Mechanism |
 | :--- | :--- | :--- | :--- | :--- |
 | **CCD0: Inference & Orchestration Plane** | Cores `0-7` (Threads `0-7, 16-23`) | `32 MB L3` (CCD0) | ROCm/Vulkan GPU kernel launch threads, 14B/32B/72B token streaming, NDJSON `--apply-machine-fixes` dispatcher, `salsa` query coordinator, OS kernel interrupts | `systemd` inference slice `AllowedCPUs=0-7,16-23` |
-| **CCD1: Compiler & Formal Verification Plane** | Cores `8-15` (Threads `8-15, 24-31`) | `32 MB L3` (CCD1) | `rustc`, `sccache`, `clang` + `mold`, `cargo clippy`, `cargo dylint`, `cargo +nightly miri test`, `cargo kani --jobs 8`, `criticalup`, `./target/release/verify-baseline` | `taskset -c 8-15` + `CARGO_BUILD_JOBS=8` + `RAYON_NUM_THREADS=8` |
+| **CCD1: Compiler & Formal Verification Plane** | Cores `8-15` (Threads `8-15, 24-31`) | `32 MB L3` (CCD1) | `rustc`, `sccache`, `clang` + `mold`, `cargo clippy`, `cargo dylint`, `cargo +nightly miri test`, `cargo kani --jobs 8`, `criticalup`, `./target/release/verify-baseline` | `std::thread::available_parallelism()` + `CARGO_BUILD_JOBS=8` + `RAYON_NUM_THREADS=8` |
 
 #### Canonical Pinned 5-Stage Gatekeeper Execution Sequence
 
 ```bash
 # Stage 0: Incremental SysML compilation & lossless CST audit pinned to CCD1
-taskset -c 8-15 ./target/release/compile-sysml --compile --message-format=json
+std::thread::available_parallelism() ./target/release/compile-sysml --compile --message-format=json
 
 # Stage 1: Stable Clippy 14-lint total-function gate (tmpfs + sccache + mold, < 350 ms warm)
-CARGO_TARGET_DIR=/dev/shm/deap-target CARGO_BUILD_JOBS=8 \
-  taskset -c 8-15 cargo clippy --workspace --all-targets --offline --locked --message-format=json
+CARGO_TARGET_DIR="$(std::env::temp_dir())" CARGO_BUILD_JOBS=8 \
+  std::thread::available_parallelism() cargo clippy --workspace --all-targets --offline --locked --message-format=json
 
 # Stage 2: Isolated nightly Dylint MIR zero-allocation & #[realises] gate
-CARGO_TARGET_DIR=/dev/shm/deap-target CARGO_BUILD_JOBS=8 \
-  taskset -c 8-15 cargo dylint --all -- --offline --locked --message-format=json
+CARGO_TARGET_DIR="$(std::env::temp_dir())" CARGO_BUILD_JOBS=8 \
+  std::thread::available_parallelism() cargo dylint --all -- --offline --locked --message-format=json
 
 # Stage 3: Miri Tree Borrows FFI UB gate & Dart fatal-info static analysis
-CARGO_TARGET_DIR=/dev/shm/deap-target MIRIFLAGS="-Zmiri-tree-borrows" \
-  taskset -c 8-15 cargo +nightly miri test --offline --locked --message-format=json
-taskset -c 8-15 dart analyze --fatal-infos
+CARGO_TARGET_DIR="$(std::env::temp_dir())" MIRIFLAGS="-Zmiri-tree-borrows" \
+  std::thread::available_parallelism() cargo +nightly miri test --offline --locked --message-format=json
+std::thread::available_parallelism() dart analyze --fatal-infos
 
 # Stage 4: Kani CBMC bounded model-checking proof gate
-CARGO_TARGET_DIR=/dev/shm/deap-target \
-  taskset -c 8-15 cargo kani --workspace --jobs 8 --offline --locked
+CARGO_TARGET_DIR="$(std::env::temp_dir())" \
+  std::thread::available_parallelism() cargo kani --workspace --jobs 8 --offline --locked
 
 # Stage 5: Ferrocene qualified build, FLS fls_* audit, symbol-report & baseline verification
-CARGO_TARGET_DIR=/dev/shm/deap-target CARGO_BUILD_JOBS=8 \
-  taskset -c 8-15 criticalup run cargo build --release --offline --locked
-RAYON_NUM_THREADS=8 taskset -c 8-15 ./target/release/verify-baseline . --no-domain
+CARGO_TARGET_DIR="$(std::env::temp_dir())" CARGO_BUILD_JOBS=8 \
+  std::thread::available_parallelism() criticalup run cargo build --release --offline --locked
+RAYON_NUM_THREADS=8 std::thread::available_parallelism() ./target/release/verify-baseline . --no-domain
 ```
 
 ---
@@ -413,7 +413,7 @@ Every compiler, CST refactoring, incremental query, formal verification, and bac
 
 | Workspace Crate | Manifest & Core Entrypoints | Grounded On-Disk Submodules | Unified Compiler-Native & Workstation Responsibilities (`BP-08`..`BP-11`) |
 | :--- | :--- | :--- | :--- |
-| **`crates/deap-core`** | `crates/deap-core/Cargo.toml`, `crates/deap-core/src/lib.rs` | `crates/deap-core/src/sysml_ast/mod.rs`, `crates/deap-core/src/sysml_ast/package_model.rs`, `crates/deap-core/src/sysml_ast/parts_and_ports.rs`, `crates/deap-core/src/sysml_ast/actions.rs`, `crates/deap-core/src/sysml_ast/states.rs`, `crates/deap-core/src/sysml_ast/requirements.rs`, `crates/deap-core/src/sysml_ast/safety_and_fmeca.rs`, `crates/deap-core/src/source_ast.rs`, `crates/deap-core/src/diagnostics.rs`, `crates/deap-core/src/digest.rs`, `crates/deap-core/src/markdown.rs`, `crates/deap-core/src/rules.rs`, `crates/deap-core/src/workspace.rs` | Hosts the canonical trivia-erased SysML v2 HIR metamodel (`sysml_ast/mod.rs`), `ra_ap_syntax` (`rowan`) lossless Rust CST metrics and item slicer (`source_ast.rs`, `BP-08`), unified `rustc`-compatible `--message-format=json` NDJSON diagnostic envelopes and disjoint `MachineApplicable` auto-fix applicator (`diagnostics.rs`, `BP-08`), FIPS 180-4 SHA-256 digests (`digest.rs`), KaTeX/Mermaid verifiers (`markdown.rs`), and workspace role/cleanliness guards (`workspace.rs`). |
+| **`crates/deap-core`** | `crates/deap-core/Cargo.toml`, `crates/deap-core/src/lib.rs` | `crates/deap-core/src/sysml_ast/mod.rs`, `crates/deap-core/src/sysml_ast/package_model.rs`, `crates/deap-core/src/sysml_ast/parts_and_ports.rs`, `crates/deap-core/src/sysml_ast/actions.rs`, `crates/deap-core/src/sysml_ast/states.rs`, `crates/deap-core/src/sysml_ast/requirements.rs`, `crates/deap-core/src/sysml_ast/safety_and_fmeca.rs`, `deap_core::rust_cst`, `deap_core::dart_cst`, `crates/deap-core/src/diagnostics.rs`, `crates/deap-core/src/digest.rs`, `crates/deap-core/src/markdown.rs`, `crates/deap-core/src/rules.rs`, `crates/deap-core/src/workspace.rs` | Hosts the canonical trivia-erased SysML v2 HIR metamodel (`sysml_ast/mod.rs`), `ra_ap_syntax` (`rowan`) lossless Rust CST metrics and item slicer (`deap_core::rust_cst`, `BP-08`), unified `rustc`-compatible `--message-format=json` NDJSON diagnostic envelopes and disjoint `MachineApplicable` auto-fix applicator (`diagnostics.rs`, `BP-08`), FIPS 180-4 SHA-256 digests (`digest.rs`), KaTeX/Mermaid verifiers (`markdown.rs`), and workspace role/cleanliness guards (`workspace.rs`). |
 | **`crates/compile-sysml`** | `crates/compile-sysml/Cargo.toml`, `crates/compile-sysml/src/lib.rs`, `crates/compile-sysml/src/main.rs`, `crates/compile-sysml/src/cli.rs`, `crates/compile-sysml/src/driver.rs` | `crates/compile-sysml/src/lexer/scanner.rs`, `crates/compile-sysml/src/lexer/token.rs`, `crates/compile-sysml/src/parser/grammar/mod.rs`, `crates/compile-sysml/src/parser/expressions.rs`, `crates/compile-sysml/src/semantic/validator.rs`, `crates/compile-sysml/src/semantic/symbols.rs`, `crates/compile-sysml/src/semantic/digest.rs`, `crates/compile-sysml/src/semantic/serializer.rs`, `crates/compile-sysml/src/stpa/uca.rs`, `crates/compile-sysml/src/stpa/fmeca.rs`, `crates/compile-sysml/src/sync/forward/mod.rs`, `crates/compile-sysml/src/sync/reverse.rs`, `crates/compile-sysml/src/docstring.rs`, `crates/compile-sysml/src/modular_codegen/mod.rs`, `crates/compile-sysml/src/modular_codegen/domain/layer_role.rs`, `crates/compile-sysml/src/modular_codegen/domain/bounds.rs`, `crates/compile-sysml/src/modular_codegen/domain/module_graph.rs`, `crates/compile-sysml/src/modular_codegen/emitters/rust_emitter.rs`, `crates/compile-sysml/src/modular_codegen/emitters/flutter/bridge_emitter.rs`, `crates/compile-sysml/src/modular_codegen/emitters/flutter/contracts.rs` | Executes `logos` + `rowan` lossless SysML CST parsing and `salsa` incremental HIR/STPA queries (`BP-10`), formatting-preserving CST-splice forward/reverse sync (`sync/`), zero-token Rust CST span codemods and Tier B/C docstring compaction (`docstring.rs`, `BP-08`), `syn` + `quote` + `prettyplease` deterministic 3-Ring Rust/Flutter + `flutter_rust_bridge` emission preserving `E0705` (`modular_codegen/`, `BP-07`..`BP-11`), `#[cfg(kani)]` CBMC harness synthesis (`BP-09`), and `[FLS: fls_*]` paragraph injection (`BP-11`). |
 | **`crates/ingest-sysml`** | `crates/ingest-sysml/Cargo.toml`, `crates/ingest-sysml/src/lib.rs`, `crates/ingest-sysml/src/main.rs` | `crates/ingest-sysml/src/detectors.rs`, `crates/ingest-sysml/src/digest.rs`, `crates/ingest-sysml/src/table.rs`, `crates/ingest-sysml/src/translators/mod.rs`, `crates/ingest-sysml/src/translators/code.rs`, `crates/ingest-sysml/src/translators/markdown.rs`, `crates/ingest-sysml/src/translators/idl.rs`, `crates/ingest-sysml/src/translators/yang.rs`, `crates/ingest-sysml/src/translators/openapi.rs` | Lowers polyglot Level-0 inputs (Rust via `ra_ap_syntax`, Dart typed AST, Markdown tables, OMG IDL, RFC 7950 YANG, OpenAPI 3.0/3.1) through typed CST translators into `salsa` `HirDatabase` packages with exact `TextRange` provenance and `--message-format=json` diagnostics (`DEAP-E1005`, `BP-10`). |
 | **`crates/verify-baseline`** | `crates/verify-baseline/Cargo.toml`, `crates/verify-baseline/src/lib.rs`, `crates/verify-baseline/src/main.rs`, `crates/verify-baseline/src/runner.rs` | `crates/verify-baseline/src/audit_code.rs`, `crates/verify-baseline/src/blueprint_gate.rs`, `crates/verify-baseline/src/defect_dossier.rs`, `crates/verify-baseline/src/checks/structural.rs`, `crates/verify-baseline/src/checks/docstring_gate.rs`, `crates/verify-baseline/src/checks/domain_cleanliness_gate.rs`, `crates/verify-baseline/src/checks/parity_gates.rs`, `crates/verify-baseline/src/checks/safety_stpa.rs`, `crates/verify-baseline/src/checks/mermaid.rs`, `crates/verify-baseline/src/checks/math_katex.rs`, `crates/verify-baseline/src/checks/wbs_integrity.rs` | Independent DO-330 TQL-5 / ISO 26262 TCL3 verification runner executing Checks 10-41 (`runner.rs`), `ra_ap_syntax` CST code-quality & docstring auditing (`audit_code.rs`, `docstring_gate.rs`), 8-part design blueprint validation (`blueprint_gate.rs`), 7-section defect dossier validation (`defect_dossier.rs`), and 5-stage `Clippy`/`Dylint`/`Miri`/`Kani`/`Ferrocene` gate orchestration (`BP-08`..`BP-11`). |

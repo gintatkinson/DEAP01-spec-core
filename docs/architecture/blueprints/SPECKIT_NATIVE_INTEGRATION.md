@@ -150,7 +150,7 @@ DEAP01-spec-core/
     │       ├── diagnostics.rs              # DefectDossier, Diagnostic, DiagnosticSeverity, WhyEntry
     │       ├── markdown.rs                 # check_latex_katex_syntax, check_mermaid_syntax
     │       ├── rules.rs                    # CodebaseRules, MetaConfig, EXCLUDED_DIRS, MASTER_BLUEPRINTS
-    │       ├── source_ast.rs               # Rust/Dart source AST extraction & SysML lowering
+    │       ├── `deap_core::rust_cst` and `deap_core::dart_cst` # Rust/Dart source extraction & SysML lowering
     │       ├── sysml_ast/mod.rs            # SysmlModel, PackageDef, PartDef, parse_sysml
     │       └── workspace.rs                # is_upstream_compiler & Checks 10, 11, 12, 14, 15, 16
     ├── ingest-sysml/                       # Level 0 Ground Truth to SysML v2 AST ingestion engine

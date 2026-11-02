@@ -122,7 +122,7 @@ DEAP01-spec-core/
 
 - **`crates/deap-core`**: Core AST primitives, slicing, caching, markdown/KaTeX/Mermaid verification, and workspace governance rules:
   - `src/sysml_ast/mod.rs` (`SysmlModel`, `AstSlice`, `IncrementalAstCache`, `PartDef`, `PortDef`, `RequirementDef`, `HazardDef`)
-  - `src/source_ast.rs`
+  - `deap_core::rust_cst` and `deap_core::dart_cst`
   - `src/markdown.rs`
   - `src/workspace.rs`
   - `src/rules.rs`
@@ -133,7 +133,7 @@ DEAP01-spec-core/
   - `src/detectors.rs`
   - `src/digest.rs`
   - `src/translators/mod.rs`
-- **`crates/compile-sysml`**: SysML v2 / KerML grammar parser, cryptographic schema digest generator, bidirectional specification synchronization, STPA safety suite synthesis, MBD artifact export, and 7-section safety docstring injection:
+- **`crates/compile-sysml`**: SysML v2 / KerML grammar parser, cryptographic schema digest generator, bidirectional specification synchronization, STPA safety suite synthesis, MBD artifact export, and tiered safety docstring injection:
   - `src/main.rs`
   - `src/lib.rs` (`MbdExportBundle`, `synthesize_mbd_bundle`, `export_mbd_artifacts`)
   - `src/parser/grammar.rs`
@@ -376,7 +376,7 @@ The integrity of the bidirectional digital thread is mechanically enforced by `.
 - **`crates/verify-baseline/src/checks/math_katex.rs`** (Check 13: KaTeX/LaTeX mathematical syntax)
 - **`crates/verify-baseline/src/checks/safety_stpa.rs`** (Checks 17 & 25: 8-pillar STPA/FMECA safety integrity & operational-to-resource allocation)
 - **`crates/verify-baseline/src/checks/structural.rs`** (Checks 10-16, 18, 32-35, 37: workspace topology, zero shell/Python/regex prohibited per Check 32 and Check 33, compiler AST purity, blueprint grounding)
-- **`crates/verify-baseline/src/checks/docstring_gate.rs`** (Check 36: per-item 7-section safety docstrings)
+- **`crates/verify-baseline/src/checks/docstring_gate.rs`** (Check 36: tiered safety docstrings & docblock anti-padding)
 - **`crates/verify-baseline/src/checks/domain_cleanliness_gate.rs`** (Check 19: domain-agnostic AST cleanliness)
 - **`crates/verify-baseline/src/checks/wbs_integrity.rs`** (Check 20: MIL-STD-881E WBS integrity)
 
@@ -390,7 +390,7 @@ The integrity of the bidirectional digital thread is mechanically enforced by `.
 | **GATE-06** | Mathematical KaTeX Integrity | `verify-baseline` / `crates/verify-baseline/src/checks/math_katex.rs` (Check 13) | 0 dangling operators, 0 math-in-table errors |
 | **GATE-07** | Mermaid Syntax & Rules E1-E5 | `verify-baseline` / `crates/verify-baseline/src/checks/mermaid.rs` (Check 13B) | 100% `flowchart TD`, `direction TB`, label <= 35 chars |
 | **GATE-08** | Structural & AST Purity | `verify-baseline` / `crates/verify-baseline/src/checks/structural.rs` (Checks 10-16, 18, 32-35, 37) | Zero shell/Python/regex (forbidden per Check 32 & Check 33) |
-| **GATE-09** | Safety Docstrings & Cleanliness | `crates/verify-baseline/src/checks/docstring_gate.rs` (Check 36) & `domain_cleanliness_gate.rs` (Check 19) | 100% 7-section Rustdoc & zero hardcoded domain leaks |
+| **GATE-09** | Safety Docstrings & Cleanliness | `crates/verify-baseline/src/checks/docstring_gate.rs` (Check 36) & `domain_cleanliness_gate.rs` (Check 19) | Tiered Rustdoc (Tier-A contract / <= 4-line Tier-B/C) & zero domain leaks |
 | **GATE-10** | WBS & Dual-Track MBD Compliance | `crates/verify-baseline/src/checks/wbs_integrity.rs` (Check 20) & `rules/dual-track-mbd-verification.md` | 100% MIL-STD-881E WBS & Track A/B equivalence (tol <= 1e-6) |
 
 ---

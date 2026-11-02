@@ -77,7 +77,7 @@ The Runtime Metadata Engine is organized within the standard DEAP pure Rust Carg
 DEAP01-spec-core/
 ├── Cargo.toml                      # Workspace manifest (resolver = "2")
 ├── crates/
-│   ├── deap-core/                  # Shared AST models (sysml_ast, source_ast), rules, diagnostics, markdown
+│   ├── deap-core/                  # Shared AST models (sysml_ast, `deap_core::rust_cst` and `deap_core::dart_cst`), rules, diagnostics, markdown
 │   ├── verify-baseline/            # 38-gate architectural, structural, and parity verification runner
 │   ├── compile-sysml/              # SysML v2 lexer, recursive-descent parser, SHA-256 digest, STPA & sync
 │   ├── ingest-sysml/               # Ground 0.0 multi-format Level 0 schema ingestion CLI
@@ -89,7 +89,7 @@ DEAP01-spec-core/
 
 | Crate | Primary Modules | Responsibility in Metadata & AST Architecture |
 | :--- | :--- | :--- |
-| **`crates/deap-core`** | `src/sysml_ast/mod.rs`, `src/source_ast.rs`, `src/rules.rs`, `src/diagnostics.rs`, `src/markdown.rs`, `src/workspace.rs` | Defines canonical SysML v2 AST models (`PackageDef`, `PartDef`, `PortDef`, `AttributeDef`, `FlowDef`, `ActionDef`, `ConstraintDef`, `RequirementDef`, `StateDef`, `ConnectionDef`, `CalcDef`, `SysmlModel`), multi-format schema discovery (`UnifiedSchemaModelExtractor`, `SupportedSchemaExtension`, `SupportedExtensionsCatalog`), and source AST lowering (`SourceAstItem`, `lower_source_ast_to_package`). |
+| **`crates/deap-core`** | `src/sysml_ast/mod.rs`, `deap_core::rust_cst` and `deap_core::dart_cst`, `src/rules.rs`, `src/diagnostics.rs`, `src/markdown.rs`, `src/workspace.rs` | Defines canonical SysML v2 AST models (`PackageDef`, `PartDef`, `PortDef`, `AttributeDef`, `FlowDef`, `ActionDef`, `ConstraintDef`, `RequirementDef`, `StateDef`, `ConnectionDef`, `CalcDef`, `SysmlModel`), multi-format schema discovery (`UnifiedSchemaModelExtractor`, `SupportedSchemaExtension`, `SupportedExtensionsCatalog`), and `deap_core::rust_cst` and `deap_core::dart_cst` lowering (`SourceItem`, `lower_cst_to_package`). |
 | **`crates/compile-sysml`** | `src/lib.rs`, `src/parser/grammar.rs`, `src/semantic/digest.rs`, `src/stpa/`, `src/sync/`, `src/flutter_codegen.rs` | Parses textual SysML v2 models (`SysmlParser`, `parse_sysml_tree`), computes atomic SHA-256 digests (`SchemaDigest`, `FileDigestEntry`, `generate_digest`), synthesizes STPA/FMECA matrices, executes bidirectional specification sync, and deterministically generates Flutter contracts, seeds, and C-ABI DTOs (`crates/compile-sysml/src/flutter_codegen.rs`). |
 | **`crates/verify-baseline`** | `src/runner.rs`, `src/checks/parity_gates.rs`, `src/checks/domain_cleanliness_gate.rs`, `src/checks/codebase.rs` | Enforces 41 deterministic verification gates across AST parity, schema cleanliness, traceability, Mermaid/KaTeX rendering, defect dossiers, and adversarial AST codebase checks 38-41 (`crates/verify-baseline/src/checks/codebase.rs`). |
 | **`crates/ingest-sysml`** | `src/lib.rs`, `src/main.rs` | Discovers and translates Level 0 specifications (`.sysml`, `.yaml`, `.yml`, `.json`, `.proto`, `.idl`, `.arxml`, `.md`, `.yang`) into `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. |

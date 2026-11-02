@@ -74,7 +74,7 @@ flowchart TD
 3. **Strongly-Typed AST Slicing:** Partition monolithic model trees into context-isolated, strongly-typed `AstSlice` subgraphs strictly bounded at $\le 4,096$ tokens via `SysmlModel::slice_package_subsystem` (invoked with `--slice-package <pkg>`), enabling zero-truncation consumption by specialized synthesis subagents.
 4. **Deterministic Specification Sync & Backlog Reconciliation:** Synchronize SysML v2 packages, parts, actions, states, hazards, and requirements bidirectionally with Markdown specifications (`crates/compile-sysml/src/sync/mod.rs`), ConOps units (`crates/assemble-conops/src/main.rs`), and multi-provider GitHub/GitLab issue trackers (`crates/reconcile-backlog/src/lib.rs`) with 100% structural fidelity.
 5. **Tier-1 Commercial Toolchain Integration:** Interoperate with MATLAB / Simulink / Stateflow / Embedded Coder (`slreq.ReqSet`, Stateflow `.sfx` charts, `Simulink.Bus` objects) via `MbdExportBundle`, `synthesize_mbd_bundle`, and `export_mbd_artifacts` (`--export-mbd <dir>`) in `crates/compile-sysml/src/lib.rs` and `crates/compile-sysml/src/main.rs`.
-6. **Evolved 3-Layer Code & Safety Docstring Synthesis:** Synthesize high-integrity, certifiable target source code and 7-section safety docstrings (`crates/compile-sysml/src/docstring.rs`) across **SPARK Ada 2014**, **MISRA-C:2012**, and **High-Assurance Rust** structured into Domain State/Signals (Layer 1), Logic & Safety State Management (Layer 2), and Display/Actuator Interfaces (Layer 3).
+6. **Evolved 3-Layer Code & Tiered Safety Docstring Synthesis:** Synthesize high-integrity, certifiable target source code and tiered safety docstrings (`crates/compile-sysml/src/docstring.rs`) across **SPARK Ada 2014**, **MISRA-C:2012**, and **High-Assurance Rust** structured into Domain State/Signals (Layer 1), Logic & Safety State Management (Layer 2), and Display/Actuator Interfaces (Layer 3).
 7. **Continuous Compliance Verification:** Enforce 100% bi-directional traceability, STPA/FMECA safety parity, and zero-orphan coverage via automated fail-closed verification gates in `crates/verify-baseline` (`./target/release/verify-baseline . --no-domain`) under stringent high-assurance standards (**DO-178C**, **DO-254**, **ARP4754A/4761**, **ASTM F3269**).
 
 ---
@@ -92,7 +92,7 @@ DEAP01-spec-core/
 │   ├── deap-core/                                    # Shared AST, source inspection, Markdown/Mermaid/KaTeX gates, rules
 │   │   └── src/
 │   │       ├── sysml_ast/mod.rs                      # Core SysML v2 AST (SysmlModel, PackageDef, PartDef, AstSlice, etc.)
-│   │       ├── source_ast.rs                         # Multi-language source code AST & Realises tag extractor
+│   │       ├── `deap_core::rust_cst` and `deap_core::dart_cst` # Multi-language source code AST & Realises tag extractor
 │   │       ├── markdown.rs                           # Markdown, Mermaid (E1-E5), and KaTeX structural validators
 │   │       ├── workspace.rs                          # Workspace path & repository role inspectors
 │   │       ├── rules.rs                              # Governance rules & constitutional invariant definitions
@@ -112,7 +112,7 @@ DEAP01-spec-core/
 │   │       ├── semantic/digest.rs                    # Semantic validator & `.pipeline/schema-digest.json` emitter
 │   │       ├── sync/mod.rs                           # Bidirectional SysML <-> Markdown specification synchronization
 │   │       ├── stpa/safety_suite.rs                  # STPA/FMECA safety artifact suite synthesizer
-│   │       └── docstring.rs                          # 7-section safety docstring generator & source AST extractor
+│   │       └── docstring.rs                          # Tiered safety docstring generator & source AST extractor
 │   ├── verify-baseline/                              # Fail-closed baseline & architectural parity verification runner
 │   │   └── src/
 │   │       ├── runner.rs                             # Verification pipeline orchestrator (`./target/release/verify-baseline`)
@@ -128,9 +128,9 @@ DEAP01-spec-core/
 │           └── lib.rs                                # Issue synchronization, DAG ordering & traceability engine
 ```
 
-- **`crates/deap-core` (`deap_core`)**: Provides the canonical SysML v2 AST (`crates/deap-core/src/sysml_ast/mod.rs`), source code AST inspector (`crates/deap-core/src/source_ast.rs`), Markdown/Mermaid/KaTeX validators (`crates/deap-core/src/markdown.rs`), workspace inspectors (`crates/deap-core/src/workspace.rs`), governance rules (`crates/deap-core/src/rules.rs`), and structured diagnostics (`crates/deap-core/src/diagnostics.rs`).
+- **`crates/deap-core` (`deap_core`)**: Provides the canonical SysML v2 AST (`crates/deap-core/src/sysml_ast/mod.rs`), source code AST inspector (`deap_core::rust_cst` and `deap_core::dart_cst`), Markdown/Mermaid/KaTeX validators (`crates/deap-core/src/markdown.rs`), workspace inspectors (`crates/deap-core/src/workspace.rs`), governance rules (`crates/deap-core/src/rules.rs`), and structured diagnostics (`crates/deap-core/src/diagnostics.rs`).
 - **`crates/ingest-sysml` (`ingest-sysml`)**: Implements the Level 0 brownfield/greenfield ingestion engine (`crates/ingest-sysml/src/main.rs`, `crates/ingest-sysml/src/lib.rs`, `crates/ingest-sysml/src/detectors.rs`, `crates/ingest-sysml/src/digest.rs`, `crates/ingest-sysml/src/translators/mod.rs`), converting heterogeneous engineering schemas and OEM tables into canonical SysML v2 (`schema/*.sysml`).
-- **`crates/compile-sysml` (`compile-sysml`)**: Houses the formal SysML v2 lexer and grammar parser (`crates/compile-sysml/src/parser/grammar/mod.rs`), semantic validator and SHA-256 digest generator (`crates/compile-sysml/src/semantic/digest.rs`), bidirectional specification synchronizer (`crates/compile-sysml/src/sync/mod.rs`), STPA/FMECA safety synthesizer (`crates/compile-sysml/src/stpa/safety_suite/mod.rs`), 7-section safety docstring injector (`crates/compile-sysml/src/docstring.rs`), and MATLAB/Simulink MBD exporter (`crates/compile-sysml/src/lib.rs`).
+- **`crates/compile-sysml` (`compile-sysml`)**: Houses the formal SysML v2 lexer and grammar parser (`crates/compile-sysml/src/parser/grammar/mod.rs`), semantic validator and SHA-256 digest generator (`crates/compile-sysml/src/semantic/digest.rs`), bidirectional specification synchronizer (`crates/compile-sysml/src/sync/mod.rs`), STPA/FMECA safety synthesizer (`crates/compile-sysml/src/stpa/safety_suite/mod.rs`), tiered safety docstring injector (`crates/compile-sysml/src/docstring.rs`), and MATLAB/Simulink MBD exporter (`crates/compile-sysml/src/lib.rs`).
 - **`crates/verify-baseline` (`verify-baseline`)**: Implements the fail-closed baseline and parity verification runner (`crates/verify-baseline/src/runner.rs`, `crates/verify-baseline/src/checks/structural.rs`, `crates/verify-baseline/src/checks/parity_gates.rs`, `crates/verify-baseline/src/checks/safety_stpa.rs`).
 - **`crates/assemble-conops` (`assemble-conops`)**: Deterministically assembles hierarchical Concept of Operations and Tactical Mission Intent units (`crates/assemble-conops/src/main.rs`) from pure SysML v2 schema contracts.
 - **`crates/reconcile-backlog` (`reconcile-backlog`)**: Synchronizes local Markdown specifications, checklists, and traceability links with multi-provider GitHub/GitLab Agile issue trackers (`crates/reconcile-backlog/src/lib.rs`).
@@ -148,7 +148,7 @@ flowchart TD
 
     subgraph CoreCrate ["Shared Foundation Library"]
         direction TB
-        CORE["deap-core<br/>(sysml_ast, source_ast,<br/>markdown, workspace,<br/>rules, diagnostics)"]
+        CORE["deap-core<br/>(sysml_ast, deap_core::rust_cst and deap_core::dart_cst,<br/>markdown, workspace,<br/>rules, diagnostics)"]
     end
 
     INGEST --> CORE
@@ -582,7 +582,7 @@ To guarantee mathematical determinism, intellectual property containment, and im
 2. **Execution Slot (Qwen-2.5-Coder)**:
    - High-throughput deterministic code and specification synthesis model.
    - Ingests verified reasoning derivations from `.pipeline/diagnostics/cot_audit_log.json` alongside the strongly-typed `AstSlice`.
-   - Generates verified SysML v2 specifications, 7-section safety docstrings (`./target/release/compile-sysml --inject-safety-docstrings`), and multi-toolchain synthesis artifacts.
+   - Generates verified SysML v2 specifications, tiered safety docstrings (`./target/release/compile-sysml --inject-safety-docstrings`), and multi-toolchain synthesis artifacts.
    - All generated code and model artifacts are mechanically validated through `./target/release/verify-baseline . --no-domain` before committing to the repository.
 
 ---
@@ -775,7 +775,7 @@ Bus_Subsystem_01.Elements = elems;
 
 ## 5. Evolved 3-Layer Pure Rust Code & Docstring Synthesis Engine (`compile-sysml` & `deap-core`)
 
-The 3-Layer Code & Safety Docstring Synthesis Engine in `crates/compile-sysml/src/docstring.rs` and `crates/deap-core/src/sysml_ast/mod.rs` (`TypeDescriptor`, `FieldDescriptor`, `PartDef::layer`) translates the SysML v2 `PackageDef` / `SysmlModel` AST into target source code and 7-section safety docstrings (`./target/release/compile-sysml --inject-safety-docstrings <dir>` and `--extract-source <dir>`), guaranteeing strict separation across domain states, safety statecharts, and display/actuator interfaces.
+The 3-Layer Code & Tiered Safety Docstring Synthesis Engine in `crates/compile-sysml/src/docstring.rs` and `crates/deap-core/src/sysml_ast/mod.rs` (`TypeDescriptor`, `FieldDescriptor`, `PartDef::layer`) translates the SysML v2 `PackageDef` / `SysmlModel` AST into target source code and tiered safety docstrings (`./target/release/compile-sysml --inject-safety-docstrings <dir>` and `--extract-source <dir>`), guaranteeing strict separation across domain states, safety statecharts, and display/actuator interfaces.
 
 ```mermaid
 flowchart TD
@@ -861,7 +861,7 @@ flowchart TD
 
 #### Layer 3: Display & Actuator Interface Binding (`@Layer(tier="Layer3")`)
 - **SPARK Ada / C:** Display widget buffer driver rendering and actuator DAC bus updates bound to `PortDef` and `ConnectionDef`.
-- **High-Assurance Rust:** Zero-cost hardware abstraction layer (HAL) bindings and deterministic actuator updates carrying 7-section safety docstrings (`Realises: [REQ-...]`).
+- **High-Assurance Rust:** Zero-cost hardware abstraction layer (HAL) bindings and deterministic actuator updates carrying tiered safety docstrings (`Realises: [REQ-...]`).
 - **Semantic Acceptance Tests:** Automated verification suites (`TestCaseDef`) verifying that components render and actuate correctly in response to Layer 1/2 state changes.
 
 ---
@@ -883,7 +883,7 @@ sequenceDiagram
     Parser->>Sync: Forward/Reverse sync & backlog map
     Parser->>Synth: Emit SPARK Ada, MISRA-C, Rust & docs
     Sync->>Gate: Extract Issue Keys & Realises tags
-    Synth->>Gate: Extract source_ast Symbol References
+    Synth->>Gate: Extract deap_core::rust_cst and deap_core::dart_cst Symbol References
     Gate->>Gate: Execute Bi-Directional Parity Checks
     alt Traceability 100% & Tri-Layer Complete
         Gate-->>SysML: PASS (Exit Code 0)
@@ -894,7 +894,7 @@ sequenceDiagram
 
 ### 6.1 Parity Auditor Enforcement Rules (`crates/verify-baseline/src/checks/parity_gates.rs`)
 1. **100% Model Coverage:** Every `RequirementDef` and `PartDef` in `schema/*.sysml` and `.pipeline/schema.sysml` MUST map to corresponding specification artifacts (`docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`) and STPA/FMECA safety entries (`crates/verify-baseline/src/checks/safety_stpa.rs`).
-2. **Zero Orphaned Requirements:** Every source code symbol inspected by `crates/deap-core/src/source_ast.rs` carrying a `/// Realises: [FEAT-NNN/...]` or `[REQ-...]` tag must resolve to an active requirement or feature identifier without orphaned or hallucinated references.
+2. **Zero Orphaned Requirements:** Every source code symbol inspected by `deap_core::rust_cst` and `deap_core::dart_cst` carrying a `/// Realises: [FEAT-NNN/...]` or `[REQ-...]` tag must resolve to an active requirement or feature identifier without orphaned or hallucinated references.
 3. **Tri-Layer Definition of Done Gate:** Enforced by `crates/verify-baseline/src/checks/parity_gates.rs`. Every Feature specification must have all three architectural layers (Layer 1 Domain State/Signal, Layer 2 Logic/State Management, Layer 3 Display/Actuator Interface Binding) explicitly specified and closed.
 
 ---

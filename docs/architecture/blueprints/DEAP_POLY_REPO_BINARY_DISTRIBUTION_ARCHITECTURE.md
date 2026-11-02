@@ -87,7 +87,7 @@ flowchart TD
   - Contains the 6 canonical compiler crates:
     - `crates/deap-core/src/rules.rs`
     - `crates/deap-core/src/workspace.rs`
-    - `crates/deap-core/src/source_ast.rs`
+    - `rust_cst/` (`ra_ap_syntax`) and `dart_cst/` (`logos` + `rowan`) in `crates/deap-core`
     - `crates/deap-core/src/lib.rs`
     - `crates/verify-baseline/src/checks/structural.rs`
     - `crates/verify-baseline/src/checks/docstring_gate.rs`
@@ -283,7 +283,7 @@ Three mechanical checks enforce tier boundaries and prevent regression:
 | Blueprint Section | Realizing Workspace File | Verification Gate |
 | :--- | :--- | :--- |
 | Tier 0 Canonical Registration | `crates/deap-core/src/rules.rs` | Check 37 (`check_blueprint_grounding`) |
-| Tier 0 Lexer & Comment Stripper | `crates/deap-core/src/source_ast.rs` | Unit Tests & Check 36 |
+| Tier 0 Lexer & Comment Stripper | `crates/deap-core` (`rust_cst/` (`ra_ap_syntax`), `dart_cst/` (`logos` + `rowan`)) | Unit Tests & Check 36 |
 | Tier 0 Core Exports | `crates/deap-core/src/lib.rs` | Workspace Compilation |
 | Compiler Docstring Gate | `crates/compile-sysml/src/docstring.rs` | Docstring Injection Tests |
 | Flutter Contracts & C-ABI Codegen | `crates/compile-sysml/src/flutter_codegen.rs` | Unit Tests & Check 41 |

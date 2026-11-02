@@ -105,10 +105,14 @@ Applies to:
 
 Every Tier B/C item outside `#[cfg(test)]` must carry:
 
-- a concise 1-3 line non-placeholder `///` summary stating purpose and any key invariant or fault behavior; and
-- `/// Realises: [REQ-ID]`.
+- a concise `<= 4`-line non-placeholder `///` summary stating purpose and any key invariant or fault behavior; and
+- `/// Realises: [REQ-ID]` (paired with `[FLS: fls_*]` where normative language semantics are relied upon).
 
-No 28-line 7-section boilerplate is required or permitted on private helpers, crate-internal items, or trait implementations. Test functions and helpers inside `#[cfg(test)]` require only clear, non-placeholder test naming or a 1-line `///` summary.
+Docblock Line Cap & Explicit Tier-A Opt-In:
+- `max_tier_bc_doc_lines <= 4`: Internal and helper items are strictly capped at 4 doc lines (`/// [DOC-TIER: A]` opt-in is required to exceed 4 lines).
+- Multi-section Tier-A docblocks (Option A1 7-Section or Option A2 4-Block Contract) are permitted on internal items only with an explicit unbackticked `[DOC-TIER: A]` opt-in tag on the first doc line (e.g., `/// [DOC-TIER: A] ...`).
+- Padded Tier-B/C docstrings (`> 4` lines) without `[DOC-TIER: A]` fail Check 36.
+- No 28-line 7-section boilerplate is permitted on private helpers, crate-internal items, or trait implementations unless explicitly opted into Tier A. Test functions and helpers inside `#[cfg(test)]` require only clear, non-placeholder test naming or a 1-line `///` summary.
 
 ### 4.2 Traceability rules
 
@@ -140,11 +144,12 @@ Unbounded recursion is forbidden in safety-critical paths.
 
 ## 6. File and Function Decomposition: Prevent God Files and MC/DC Explosion
 
-- 500 executable SLOC per production file. Comments, Rustdoc, and blank lines are excluded.
-- 80 executable lines per function hard cap. 50 lines is the target.
-- 5 parameters maximum. Use a context struct beyond that.
+- `<= 500` executable SLOC per production file (`< 380` target executable SLOC for high modularity). Comments, Rustdoc, and blank lines are excluded.
+- `<= 80` executable lines per function hard cap (`too-many-lines-threshold = 80`). 50 lines is the target.
+- `<= 5` parameters maximum per function (`too-many-arguments-threshold = 5`). Use a context struct beyond that.
 - No more than 3 independent mutable boolean state flags in one function. Use a state enum or a state struct.
 - One responsibility per file and module. Split parser, synchronization, safety-suite, and codegen god files by phase and responsibility.
+- Zero hand-rolled lexers, scanners, or custom ad-hoc parsers. All lexical analysis and syntax trees must use the canonical compiler-crate stack (`logos` + `rowan`, `ra_ap_syntax`, `syn`).
 - Dependency direction: domain <- engine <- adapters and FFI. No cycles. No layer violations.
 - MC/DC-friendly design:
   - Prefer single-purpose conditions.
@@ -270,22 +275,37 @@ The Rust compiler, code generators, SysML compilers, and verifiers are tools. Th
 - Use deterministic ordering. Do not iterate hash maps in output paths.
 - Provide worst-case execution time, stack usage, and heap usage evidence where applicable.
 
-## 14. Dependencies and Build Hygiene
+## 14. Dependencies, Official Compiler Stack, and Build Hygiene
 
 - Add dependencies only with written justification covering maintenance, license, security, and safety impact.
-- The `regex` crate is forbidden. Use deterministic slice, character, or token scanning.
-- Do not add a dependency that requires `unsafe` in the pure engine crate.
+- Zero regular expressions: the `regex` crate is forbidden across all crates. Use deterministic compiler-crate tokenization and CST inspection.
+- Zero hand-rolled lexers, scanners, or ad-hoc parsers: hand-rolled character-by-character scanners, substring probes, and custom lexers are strictly forbidden across Tier-0 compiler crates and downstream safety logic. All parsing, lexing, CST construction, and syntax manipulation must use the official compiler-crate stack.
+- Do not add a dependency that requires `unsafe` in pure domain or engine crates.
 - Keep `cargo fmt`, `cargo clippy -- -D warnings`, and the build clean.
 - Do not suppress lints without an approved, scoped, documented waiver.
 
-### 14.1 Compiler-Native Refactoring, Codegen, and Incremental Compilation Contract
+### 14.1 Canonical Compiler-Crate Stack
 
-Ad-hoc regex text surgery, line-sliced Rust codemods, and raw string-concatenated Rust emitters are prohibited across Tier-0 tooling. Compiler, refactoring, and diagnostic workflows follow `docs/designs/blueprint-08-rust-analyzer-cst-refactoring-and-json-diagnostics.md` and `docs/designs/blueprint-10-rowan-salsa-incremental-sysml-compiler.md`:
+All structural inspection, refactoring, code synthesis, document parsing, workspace analysis, and diagnostic emission across DEAP Tier-0 tooling must align 100% with the official compiler-crate stack:
 
-- **Lossless Rust CST Codemods (`ra_ap_syntax` / `rowan`)**: Automated Rust structural inspection, god-file decomposition, and Tier B/C docstring compaction execute over lossless `ra_ap_syntax` Concrete Syntax Trees via `crates/compile-sysml/src/cli.rs` flags (`--list-rust-items`, `--extract-rust-module`, `--compact-tier-bc`), preserving comments, attributes, and exact token trivia without brittle line-offset slicing.
-- **Typed AST Code Generation (`syn` + `quote` + `prettyplease`)**: Synthesized Rust domain modules, Ring-2 FFI guards, and Stage 4 `#[kani::proof]` harnesses are constructed as typed `syn` / `proc_macro2` token trees via `quote!` and formatted deterministically with `prettyplease`, eliminating string-interpolation syntax defects and line-packing evasion.
-- **Incremental SysML v2 Compilation (`logos` + `rowan` + `salsa`)**: SysML v2 ingestion, lossless syntax-tree construction, and semantic validation (`crates/deap-core/src/sysml_ast/mod.rs` and `crates/compile-sysml/src/driver.rs`) use `logos` zero-copy lexing, `rowan` lossless green/red CST nodes for error-recovering parse trees, and `salsa` demand-driven incremental query memoization (`blueprint-10`).
+- **Lossless Rust CST & Path Infrastructure (`ra_ap_syntax`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`)**: Automated Rust structural inspection, item slicing, god-file decomposition (`--extract-rust-module`), and docstring compaction (`--compact-tier-bc`) execute over lossless `ra_ap_syntax` Concrete Syntax Trees via `crates/compile-sysml/src/cli.rs` and `deap_core::rust_cst`, preserving comments, attributes, and exact token trivia without brittle line-offset slicing.
+- **Incremental SysML v2 Compilation (`logos` + `rowan` + `salsa`)**: SysML v2 ingestion, lossless syntax-tree construction, and semantic validation (`crates/deap-core/src/sysml_ast/mod.rs` and `crates/compile-sysml/src/driver.rs`) use `logos` zero-copy DFA lexing, `rowan` lossless green/red CST nodes for error-recovering parse trees (`SysmlLanguage`), and `salsa` demand-driven incremental query memoization (`blueprint-10`).
+- **Compiler Diagnostic Rendering (`ariadne`)**: Source-annotated, multi-span compiler diagnostics with inline labels and colored terminal/plain-text rendering.
+- **CommonMark Markdown Processing (`pulldown-cmark` + `pulldown-cmark-to-cmark`)**: Specification parsing, Markdown table extraction, frontmatter boundary handling, and deterministic roundtrip Markdown serialization without ad-hoc string surgery.
+- **Typed AST Code Generation (`syn` + `proc-macro2` + `quote` + `prettyplease`)**: Synthesized Rust domain modules, Ring-2 FFI guards, and Stage 4 `#[kani::proof]` harnesses are constructed as typed `syn` / `proc_macro2` token trees via `quote!` and formatted deterministically with `prettyplease`, eliminating string-interpolation syntax defects and line-packing evasion.
+- **Cargo Workspace & Target Ecosystem (`cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`)**: Structured Cargo workspace inspection, deterministic `Cargo.lock` parsing and serialization, Cargo manifest schema validation, and cross-platform target-triple evaluation.
+- **Lossless Configuration Editing (`toml_edit`)**: Roundtrip whitespace- and comment-preserving TOML manipulation for `criticalup.toml`, `rust-toolchain.toml`, and `Cargo.toml`.
+- **Cross-Language Client CST Auditing (`deap_core::dart_cst`)**: Typed Dart concrete syntax tree auditing for Ring-3 `app_flutter/` client boundaries and FFI contract validation.
 - **Unified `--message-format=json` `MachineApplicable` Diagnostics**: Verification and compilation binaries (`crates/verify-baseline/src/runner.rs` and `crates/compile-sysml/src/cli.rs`) support structured `--message-format=json` diagnostic emission mirroring `rustc` JSON spans with `MachineApplicable` replacement edits so automated repair loops apply deterministic span-verified fixes (`blueprint-08`).
+
+### 14.2 Cross-Platform Toolchain & Runtime Portability Contract
+
+All toolchain discovery, driver invocation, file path handling, and external tool coordination must execute portably across macOS, Linux, and Windows:
+
+- **Dynamic Driver Probing**: Probe binaries and compilers dynamically via host `PATH` using `std::env::consts::EXE_SUFFIX` (`.exe` on Windows, empty on Unix) rather than assuming fixed POSIX paths or single-host machine configurations.
+- **Dynamic Library Portability**: Dynamic libraries across FFI boundaries must use `std::env::consts::DLL_PREFIX` and `std::env::consts::DLL_SUFFIX` (`lib*.dylib` on macOS, `lib*.so` on Linux, `*.dll` on Windows). Hardcoding `.dylib`, `.so`, or `.dll` literals without platform normalization is forbidden.
+- **Path Portability & Normalization**: Path manipulation must use `std::path::Path`, `std::path::PathBuf`, or `camino::Utf8Path` / `camino::Utf8PathBuf`. Normalization must handle CRLF vs LF line endings and Windows backslash separators transparently.
+- **Zero Single-Host or Machine-Specific Paths**: Single-host paths (such as `/Users/...`, `/home/...`, `/tmp/...`), Strix-Halo-only hardcoded execution assumptions, or machine/user-specific directories are strictly forbidden in code and normative specifications. Workspace paths must always be workspace-relative (`./...`) or dynamically derived from the environment.
 
 ## 15. Mandatory Gates and Enforcement
 
@@ -348,17 +368,19 @@ Do not claim DAL A, TQL-4, ARINC 653, or ARINC 661 compliance without this evide
 A reviewer must confirm:
 
 - [ ] The change is scoped to one issue.
-- [ ] Every production file is under 500 executable SLOC or has an approved justification.
+- [ ] Every production file is under 500 executable SLOC (< 380 target) or has an approved justification.
 - [ ] Functions are under 80 executable lines (`too-many-lines-threshold = 80`) or have a written justification.
 - [ ] No function has more than 5 parameters (`too-many-arguments-threshold = 5`) or more than 3 independent mutable boolean flags without a state type.
 - [ ] Recursion is bounded or replaced by iteration; depth tests exist.
+- [ ] Zero hand-rolled lexers, scanners, or custom ad-hoc parsers; official compiler-crate stack (`logos` + `rowan`, `ra_ap_syntax`, `syn`) used exclusively.
 - [ ] No god-file growth; new responsibilities are split via lossless `ra_ap_syntax` CST refactoring (`--list-rust-items`, `--extract-rust-module`) where automated, and codegen uses `syn`/`quote`/`prettyplease`.
+- [ ] Cross-platform portability across macOS, Linux, and Windows is maintained (`std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}`, `camino`/`std::path`, zero hardcoded `/Users/...` or machine paths).
 - [ ] No stringly-typed production errors.
 - [ ] No scanner evasion, line packing, or metric gaming.
 - [ ] No direct slice indexing or unchecked arithmetic on untrusted input (`indexing_slicing`, `arithmetic_side_effects`, `cast_possible_truncation`, `cast_sign_loss` denied).
 - [ ] `#![forbid(unsafe_code)]` holds outside Ring-2 FFI/HAL boundaries; Ring-2 `unsafe` blocks are documented (`undocumented_unsafe_blocks` denied) and pass `cargo +nightly miri test` (`-Zmiri-tree-borrows`).
 - [ ] No panic, unwrap, expect, todo, unimplemented, unreachable, dbg, or regex.
-- [ ] Documentation is tier-appropriate; no 7-section boilerplate on trivial items (`--compact-tier-bc` compliant).
+- [ ] Documentation is tier-appropriate: Tier-B/C items enforce `<= 4`-line docstrings (`max_tier_bc_doc_lines <= 4`); multi-section Tier-A is strictly opt-in via `[DOC-TIER: A]`; no 7-section boilerplate on trivial items (`--compact-tier-bc` compliant).
 - [ ] Traceability points to real `[REQ-*]` requirements/AST nodes and pairs `[FLS: fls_*]` anchors on safety-critical Ring-1/Ring-2/`#[rt_loop]` items.
 - [ ] Stage 2 `Dylint` (`#[rt_loop]` zero-allocation MIR gate), Stage 4 `#[kani::proof]` harnesses, and Stage 5 `symbol-report` / Table A-7 coverage gates pass where applicable.
 - [ ] Negative and exception paths are tested.
