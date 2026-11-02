@@ -26,14 +26,9 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-0601], [REQ-WS-MODULE], [DO-330-TQL-4-WORKSPACE] | SysML v2: part def WorkspaceInspector
 
-pub mod cargo_tooling;
-
+use super::cargo_tooling::parse_cargo_toml_lossless;
 use crate::error::CoreError;
 use crate::rules::{EXCLUDED_DIRS, MASTER_BLUEPRINTS};
-pub use cargo_tooling::{
-    evaluate_cargo_platform, load_cargo_lockfile, parse_cargo_toml_lossless,
-    resolve_cargo_metadata, set_workspace_dependency_version,
-};
 use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -373,92 +368,4 @@ pub fn check_upstream_template_clean_landing_zones(repo_root: &Path) -> Result<(
     }
 }
 
-/// Unit tests for baseline workspace topology checks 10, 11, 12, 14, 15, and 16.
-/// Realises: [REQ-0601], [FLS: fls_9ucqbbd0s2yo]
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs::File;
-    use std::io::Write;
 
-    /// Auto-cleaned temporary directory fixture for isolated filesystem tests.
-    /// Realises: [REQ-0601], [FLS: fls_9ucqbbd0s2yo]
-    struct TempDir {
-        path: std::path::PathBuf,
-    }
-
-    impl TempDir {
-        /// Creates a unique temporary directory under `std::env::temp_dir()`.
-        /// Realises: [REQ-0601], [FLS: fls_9ucqbbd0s2yo]
-        fn new(name: &str) -> Result<Self, std::io::Error> {
-            let path =
-                std::env::temp_dir().join(format!("deap_test_{}_{}", name, uuid::Uuid::new_v4()));
-            fs::create_dir_all(&path)?;
-            Ok(Self { path })
-        }
-    }
-
-    impl Drop for TempDir {
-        /// Removes the temporary directory upon scope exit.
-        /// Realises: [REQ-0601], [FLS: fls_9ucqbbd0s2yo]
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.path);
-        }
-    }
-
-    /// Verifies upstream sentinel, Check 10, Check 11, and Check 12 across isolated fixtures.
-    /// Realises: [REQ-0601], [REQ-WS-C10], [REQ-WS-C11], [REQ-WS-C12]
-    #[test]
-    fn test_checks_10_11_12() -> Result<(), Box<dyn std::error::Error>> {
-        let tmp = TempDir::new("c10_11_12")?;
-        assert!(!is_upstream_compiler(&tmp.path));
-        assert!(check_gitignore_exists(&tmp.path).is_err());
-        File::create(tmp.path.join(".gitignore"))?;
-        assert!(check_gitignore_exists(&tmp.path).is_ok());
-
-        File::create(tmp.path.join(".DS_Store"))?;
-        assert!(check_no_ds_store_files(&tmp.path).is_err());
-        fs::remove_file(tmp.path.join(".DS_Store"))?;
-        assert!(check_no_ds_store_files(&tmp.path).is_ok());
-
-        File::create(tmp.path.join("DEAP_MASTER_ARCHITECTURE.md"))?;
-        assert!(check_no_duplicate_master_blueprints(&tmp.path).is_err());
-        fs::remove_file(tmp.path.join("DEAP_MASTER_ARCHITECTURE.md"))?;
-        assert!(check_no_duplicate_master_blueprints(&tmp.path).is_ok());
-        Ok(())
-    }
-
-    /// Verifies Check 14, Check 15, and Check 16 across downstream and upstream fixtures.
-    /// Realises: [REQ-0601], [REQ-WS-C14], [REQ-WS-C15], [REQ-WS-C16]
-    #[test]
-    fn test_checks_14_15_16() -> Result<(), Box<dyn std::error::Error>> {
-        let tmp = TempDir::new("c14_15_16")?;
-        assert!(check_downstream_instructions_exist(&tmp.path).is_err());
-        assert!(check_reconcile_backlog_tooling_exists(&tmp.path).is_err());
-
-        writeln!(
-            File::create(tmp.path.join("README.md"))?,
-            "# Downstream Cyber-Physical Infrastructure Safety Project"
-        )?;
-        writeln!(File::create(tmp.path.join("AGENTS.md"))?, "# Agents")?;
-        fs::create_dir_all(tmp.path.join("rules"))?;
-        writeln!(File::create(tmp.path.join("rules/sysml-ssot-completeness.md"))?, "# Rule")?;
-        assert!(check_downstream_instructions_exist(&tmp.path).is_ok());
-
-        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
-        fs::create_dir_all(tmp.path.join("crates/reconcile-backlog/src"))?;
-        fs::write(
-            tmp.path.join("crates/reconcile-backlog/Cargo.toml"),
-            "[package]\nname = \"reconcile-backlog\"\nversion = \"0.1.0\"\n",
-        )?;
-        File::create(tmp.path.join("crates/reconcile-backlog/src/main.rs"))?;
-        assert!(check_reconcile_backlog_tooling_exists(&tmp.path).is_ok());
-
-        fs::create_dir_all(tmp.path.join("schema"))?;
-        File::create(tmp.path.join("schema/.gitkeep"))?;
-        assert!(check_upstream_template_clean_landing_zones(&tmp.path).is_ok());
-        File::create(tmp.path.join("schema/domain_model.sysml"))?;
-        assert!(check_upstream_template_clean_landing_zones(&tmp.path).is_err());
-        Ok(())
-    }
-}

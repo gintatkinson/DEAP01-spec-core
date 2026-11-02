@@ -39,6 +39,7 @@ pub mod diagnostics;
 pub mod digest;
 pub mod error;
 pub mod markdown;
+pub mod markdown_ast;
 pub mod rules;
 pub mod rust_cst;
 pub mod source_ast;
@@ -58,12 +59,14 @@ pub use rules::{
     MASTER_BLUEPRINTS,
 };
 pub use rust_cst::{
-    analyze_cst_v2_metrics, classify_cfg_test_excluded_doc_tier, extract_callable_v2_metrics,
-    parse_verified_lossless_cst, validate_metrics_thresholds,
-    verify_analyzer_envelope_and_seal_receipt, ClassifiedDocTierItem, CstComplexityEnvelope,
-    CstMetricsError, CstMetricsThresholds, DeapV2AstMetricsReport, DocTier, DocTierInventory,
-    FnAstMetrics, LockManifestSnapshot, LockedPackageRecord, OfflineLockGovernanceError,
-    PackageSourceKind, SupplyChainVerificationReceipt, VerifiedLosslessCst,
+    analyze_cst_v2_metrics, classify_cfg_test_excluded_doc_tier, evaluate_metrics,
+    evaluate_metrics_and_format_ndjson, extract_callable_v2_metrics,
+    parse_verified_lossless_cst, run_offline_locked_workspace_gate,
+    validate_metrics_thresholds, verify_analyzer_envelope_and_seal_receipt,
+    ClassifiedDocTierItem, CstComplexityEnvelope, CstMetricsError, CstMetricsThresholds,
+    DeapV2AstMetricsReport, DocTier, DocTierInventory, FnAstMetrics, LockManifestSnapshot,
+    LockedPackageRecord, OfflineLockGovernanceError, PackageSourceKind,
+    SupplyChainVerificationReceipt, VerifiedLosslessCst,
 };
 pub use source_ast::{
     classify_dart_member_ast, classify_dart_top_level_ast, classify_rust_item_line_ast,
@@ -93,7 +96,10 @@ pub use sysml_ast::{
 pub use workspace::{
     check_downstream_instructions_exist, check_gitignore_exists, check_no_ds_store_files,
     check_no_duplicate_master_blueprints, check_reconcile_backlog_tooling_exists,
-    check_upstream_template_clean_landing_zones, is_upstream_compiler,
+    check_upstream_template_clean_landing_zones, filter_clippy_ndjson_stream, is_upstream_compiler,
+    run_stable_clippy_gate, validate_manifest_and_clippy_bundle, ClippyGateError,
+    ClippyNdjsonFinding, ManifestBundleDigest, StableClippyGateConfig, StageGateReceipt,
+    MANDATORY_DENIED_CLIPPY_LINTS,
 };
 
 #[cfg(test)]

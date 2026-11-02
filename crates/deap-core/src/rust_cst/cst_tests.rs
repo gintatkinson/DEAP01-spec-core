@@ -167,3 +167,34 @@ pub fn string_err() -> Result<(), String> {
     assert!(err_fn.returns_result_string_err);
     Ok(())
 }
+
+#[test]
+fn test_evaluate_metrics_and_ndjson_reporting() -> Result<(), Box<dyn std::error::Error>> {
+    let thresholds = CstMetricsThresholds::default();
+    let src = r#"
+pub fn calc(x: i32, y: i32) -> i32 {
+    let mut flag = true;
+    x + y
+}
+pub fn string_err() -> Result<(), String> {
+    Err("fail".to_string())
+}
+"#;
+    let cst = parse_verified_lossless_cst("src/calc.rs", src.as_bytes(), &thresholds)?;
+    let report = analyze_cst_v2_metrics(&cst, &thresholds)?;
+
+    assert!(evaluate_metrics(&report, &thresholds).is_err());
+
+    let lines = evaluate_metrics_and_format_ndjson(&report, &thresholds, src, true)?;
+    assert!(!lines.is_empty());
+    for line in &lines {
+        assert!(!line.contains('\n'));
+        assert!(!line.contains('\r'));
+        assert!(!line.as_bytes().contains(&0x1b));
+        assert!(line.contains("DEAP-E0803"));
+    }
+
+    let ariadne_lines = evaluate_metrics_and_format_ndjson(&report, &thresholds, src, false)?;
+    assert!(!ariadne_lines.is_empty());
+    Ok(())
+}

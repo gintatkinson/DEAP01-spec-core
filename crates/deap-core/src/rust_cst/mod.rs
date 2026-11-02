@@ -30,6 +30,7 @@ pub mod doc_edit;
 pub mod doc_tier;
 pub mod envelope;
 pub mod extract_module;
+pub mod gate;
 pub mod items;
 pub mod metrics;
 pub mod parse;
@@ -56,6 +57,9 @@ pub use envelope::{
     SupplyChainVerificationReceipt,
 };
 pub use extract_module::{extract_rust_module, rewrite_blueprint_line_refs, ExtractedModulePlan};
+pub use gate::{
+    evaluate_metrics, evaluate_metrics_and_format_ndjson, run_offline_locked_workspace_gate,
+};
 pub use items::{list_rust_items, RustCstItem, RustItemKind};
 pub use metrics::{
     analyze_cst_v2_metrics, extract_callable_v2_metrics, DeapV2AstMetricsReport, FnAstMetrics,
