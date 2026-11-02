@@ -7,7 +7,33 @@ members = [
     "crates/assemble-conops",
     "crates/reconcile-backlog",
 ]
+exclude = ["lints/deap-dylint-mir"]
 resolver = "2"
+
+[workspace.dependencies]
+ariadne = "0.6.0"
+camino = { version = "1.2.6", features = ["serde1"] }
+cargo-lock = "11.1.0"
+cargo-platform = "0.3.3"
+cargo-util-schemas = "0.14.3"
+cargo_metadata = "0.23.1"
+ignore = "0.4.34"
+logos = "0.16.1"
+prettyplease = "0.2.37"
+proc-macro2 = "1.0.107"
+pulldown-cmark = "0.13.4"
+pulldown-cmark-to-cmark = "23.0.0"
+quote = "1.0.47"
+ra_ap_line_index = { package = "line-index", version = "0.1.2" }
+ra_ap_paths = "0.0.360"
+ra_ap_syntax = "0.0.360"
+ra_ap_text_edit = "0.0.241"
+ra_ap_vfs = "0.0.360"
+rowan = "0.17.0"
+salsa = "0.28.5"
+syn = { version = "2.0.119", features = ["full", "visit", "extra-traits"] }
+toml_edit = "0.25.17"
+
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -138,7 +138,6 @@ pub const LEGACY_RATCHET_MAX_LINES: &[(&str, usize)] = &[
     ("./crates/deap-core/src/sysml_ast/requirements.rs", 545),
     ("./crates/deap-core/src/sysml_ast/safety_and_fmeca.rs", 557),
     ("./crates/deap-core/src/sysml_ast/states.rs", 393),
-    ("./crates/deap-core/src/workspace.rs", 993),
     ("./crates/ingest-sysml/src/detectors.rs", 1279),
     ("./crates/ingest-sysml/src/digest.rs", 843),
     ("./crates/ingest-sysml/src/lib.rs", 1084),
