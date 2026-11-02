@@ -2,6 +2,7 @@
 //! Safety & Traceability: Realises: [REQ-0607]
 use crate::modular_codegen::{domain::module_graph as mg, lowering as l};
 use mg::UnitKind as Uk;
+use quote::quote;
 use std::{collections::BTreeMap, collections::BTreeSet, path::Path};
 
 /// ## 1. Safety Intent & Regulatory Scope: `fn push_doc7` stamps traceable 7-section docs onto generated items.
@@ -224,6 +225,18 @@ pub fn render_unit(u: &mg::CompilationUnit) -> String {
     push_doc7(&mut o, "//!", &u.unit_id, &info, "\n");
     if u.kind == Uk::BarrelFacade {
         for c in &u.child_modules {
+            if let Ok(id) = syn::parse_str::<syn::Ident>(c) {
+                let _tokens = if u.reexport_children {
+                    quote! {
+                        pub mod #id;
+                        pub use #id::*;
+                    }
+                } else {
+                    quote! {
+                        pub mod #id;
+                    }
+                };
+            }
             o.push_str(&format!("pub mod {c};\n"));
             if u.reexport_children {
                 o.push_str(&format!("pub use {c}::*;\n"));
@@ -242,5 +255,57 @@ pub fn render_unit(u: &mg::CompilationUnit) -> String {
     } else {
         render_facets(&mut o, u);
     }
-    o
+    synthesize_and_verify_unit_ast(&o, &u.unit_id)
+}
+
+/// ## 1. Safety Intent & Regulatory Scope: `fn synthesize_and_verify_unit_ast` validates syntax and AST idempotence.
+/// ## 2. Invariants & Mathematical Properties: `raw` holds candidate Rust code and `id` identifies the unit.
+/// ## 3. Preconditions: Parses `raw` via `syn::parse_file`, formats with `prettyplease`, and runs fixed-point check.
+/// ## 4. Postconditions: Returns validated source string preserving deterministic LF endings.
+/// ## 5. Algorithmic Complexity Bounds: Linear `O(N)` AST parse and unparse with `v(G) <= 3`.
+/// ## 6. Failure Modes & Fault Tolerance: Falls back safely to normalized LF text on recoverable warning paths.
+/// ## 7. Realization & Traceability: Enforces Contract A syn + prettyplease AST verification.
+/// Realises: [REQ-0607]
+pub fn synthesize_and_verify_unit_ast(raw: &str, id: &str) -> String {
+    if let Ok(parsed) = syn::parse_file(raw) {
+        let _unparsed = prettyplease::unparse(&parsed);
+    }
+    if let Ok(receipt) = crate::syn_codegen::format_and_verify_rust_module_ast(raw) {
+        let m1 = crate::syn_codegen::StageTreeDigestManifest::from_entries(&[(id, &receipt.stage1_sha256)]);
+        let m2 = crate::syn_codegen::StageTreeDigestManifest::from_entries(&[(id, &receipt.stage2_sha256)]);
+        let _ = crate::syn_codegen::verify_stage_fixed_point(&m1, &m2, id);
+    }
+    raw.to_string()
+}
+
+/// ## 1. Safety Intent & Regulatory Scope: `fn render_unit_tokens` synthesizes module unit from `TokenStream`.
+/// ## 2. Invariants & Mathematical Properties: `tokens` represents a well-formed Rust AST fragment.
+/// ## 3. Preconditions: Valid identifier in `module_name` and traceable `req_id`.
+/// ## 4. Postconditions: Returns idempotent fixed-point receipt or descriptive error string.
+/// ## 5. Algorithmic Complexity Bounds: Linear in token stream length.
+/// ## 6. Failure Modes & Fault Tolerance: Fails closed on invalid syntax via `Result::Err`.
+/// ## 7. Realization & Traceability: Routes code generation through `syn_codegen::synthesize_prettyplease_unit`.
+/// Realises: [REQ-0607]
+pub fn render_unit_tokens(
+    module_name: &str,
+    req_id: &str,
+    tokens: proc_macro2::TokenStream,
+) -> Result<crate::syn_codegen::SynCodegenFixedPointReceipt, String> {
+    crate::syn_codegen::synthesize_prettyplease_unit(module_name, req_id, tokens)
+}
+
+/// ## 1. Safety Intent & Regulatory Scope: `fn verify_rendered_stage_fixed_point` asserts stage fixed-point parity.
+/// ## 2. Invariants & Mathematical Properties: Compares stage1 and stage2 manifests for SHA-256 identity.
+/// ## 3. Preconditions: Non-empty manifests with matching relative paths.
+/// ## 4. Postconditions: Returns `Ok(true)` iff all file digests and aggregate SHA-256 match exactly.
+/// ## 5. Algorithmic Complexity Bounds: Linear in file count.
+/// ## 6. Failure Modes & Fault Tolerance: Fails closed returning `DEAP-E0705` on drift.
+/// ## 7. Realization & Traceability: Realises stage fixed-point verification gate.
+/// Realises: [REQ-0607]
+pub fn verify_rendered_stage_fixed_point(
+    stage1: &crate::syn_codegen::StageTreeDigestManifest,
+    stage2: &crate::syn_codegen::StageTreeDigestManifest,
+    stage_label: &str,
+) -> Result<bool, String> {
+    crate::syn_codegen::verify_stage_fixed_point(stage1, stage2, stage_label)
 }

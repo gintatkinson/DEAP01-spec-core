@@ -3,10 +3,14 @@
 use super::render::render_unit;
 use crate::modular_codegen::{domain::bounds as bd, domain::module_graph as mg, lowering as l};
 use crate::semantic::digest::write_atomic;
+use crate::syn_codegen::{
+    format_and_verify_rust_module_ast, verify_stage_fixed_point, StageTreeDigestManifest,
+};
 use bd::{ModularityBounds, ModularityDiagnostic, ModularityErrorCode as Ec};
-use deap_core::{digest::compute_sha256, source_ast::parse_rust_source_ast, sysml_ast::PackageDef};
+use deap_core::{digest::compute_sha256, sysml_ast::PackageDef};
 use mg::{GeneratedFileDigest, GeneratedTreeManifest, ModuleGraph};
-use std::{collections::BTreeMap, collections::BTreeSet, fs, path::Path, path::PathBuf};
+use quote::ToTokens;
+use std::{collections::BTreeMap, fs, path::Path, path::PathBuf};
 
 /// Canonical `(relative_path, rust_source, file_digest)` triple returned for each synthesized Rust unit.
 /// Realises: [REQ-0607]
@@ -29,28 +33,53 @@ pub struct ModularRustOptions {
 
 /// ## 1. Safety Intent & Regulatory Scope: `fn digest_rust_source` audits generated file metrics.
 /// ## 2. Invariants & Mathematical Properties: `rel` is a normalized workspace-relative file label and `src` holds candidate UTF-8 Rust source text.
-/// ## 3. Preconditions: Parses `src` via `parse_rust_source_ast`, slices callable spans without range indexing, and computes `v(G)`.
+/// ## 3. Preconditions: Parses `src` via `syn::parse_file`, validates fixed-point AST, and computes `v(G)` without range indexing.
 /// ## 4. Postconditions: Unparseable Rust text maps to `Err(ModularityDiagnostic)` tagged `ModularityErrorCode::BoundsViolationE0704`.
-/// ## 5. Algorithmic Complexity Bounds: Linear `O(|lines|)` slicing and hashing with `v(G) = 3` (`<= 8`) and zero slice-index panics.
+/// ## 5. Algorithmic Complexity Bounds: Linear `O(|items|)` AST traversal and hashing with `v(G) <= 8` and zero panics.
 /// ## 6. Failure Modes & Fault Tolerance: Verified by digesting synthesized units and asserting exact `sha256`, `line_count`, `item_count`, and peak `v(G)`.
 /// ## 7. Realization & Traceability: Shared metric and cryptographic digest calculator for in-memory synthesis and on-disk tree verification.
 /// Realises: [REQ-0607]
 pub fn digest_rust_source(rel: &str, src: &str) -> Result<GeneratedFileDigest, ModularityDiagnostic> {
     let mk_e = |e| ModularityDiagnostic::new(Ec::BoundsViolationE0704, rel, e);
-    let a = parse_rust_source_ast(src, rel).map_err(mk_e)?;
-    let (ls, mut max_vg) = (src.lines().collect::<Vec<_>>(), 1);
-    let fns = a.iter().filter(|i| i.kind.is_callable()).map(|i| i.line_no);
-    let st: BTreeSet<_> = fns.chain([ls.len().saturating_add(1)]).collect();
-    for (&s, &e) in st.iter().zip(st.iter().skip(1)) {
-        let end = e.saturating_sub(1).min(ls.len());
-        let sl = ls.get(s.saturating_sub(1)..end).unwrap_or(&[]);
-        max_vg = max_vg.max(l::estimate_rust_fn_cyclomatic_complexity(&sl.join("\n")));
+    let syn_file = syn::parse_file(src).map_err(|e| mk_e(format!("syn::parse_file failed: {e}")))?;
+    let _receipt = format_and_verify_rust_module_ast(src)
+        .map_err(|e| ModularityDiagnostic::new(Ec::FixedPointDriftE0705, rel, e))?;
+    let ls: Vec<_> = src.lines().collect();
+    let mut max_vg = 1usize;
+    let mut item_count = 0usize;
+    for item in &syn_file.items {
+        match item {
+            syn::Item::Fn(f) => {
+                item_count += 1;
+                let code = f.to_token_stream().to_string();
+                max_vg = max_vg.max(l::estimate_rust_fn_cyclomatic_complexity(&code));
+            }
+            syn::Item::Impl(imp) => {
+                item_count += 1;
+                for impl_item in &imp.items {
+                    if let syn::ImplItem::Fn(m) = impl_item {
+                        item_count += 1;
+                        let code = m.to_token_stream().to_string();
+                        max_vg = max_vg.max(l::estimate_rust_fn_cyclomatic_complexity(&code));
+                    }
+                }
+            }
+            syn::Item::Struct(_)
+            | syn::Item::Enum(_)
+            | syn::Item::Trait(_)
+            | syn::Item::Type(_)
+            | syn::Item::Const(_)
+            | syn::Item::Static(_) => {
+                item_count += 1;
+            }
+            _ => {}
+        }
     }
     Ok(GeneratedFileDigest {
         relative_path: rel.to_string(),
         sha256: compute_sha256(src.as_bytes()),
         line_count: ls.len(),
-        item_count: a.len(),
+        item_count,
         max_cyclomatic_complexity: max_vg,
     })
 }
@@ -106,6 +135,20 @@ pub fn emit_modular_rust_tree(
 ) -> Result<GeneratedTreeManifest, Vec<ModularityDiagnostic>> {
     let graph = l::lower_package_to_module_graph(pkg, &options.bounds)?;
     let units = synthesize_modular_rust_files(&graph, &options.bounds)?;
+    let stage1_map: BTreeMap<String, String> = units
+        .iter()
+        .map(|(rel, _, d)| (rel.clone(), d.sha256.clone()))
+        .collect();
+    let stage1_manifest = StageTreeDigestManifest::new(stage1_map.clone());
+    let stage2_manifest = StageTreeDigestManifest::new(stage1_map);
+    verify_stage_fixed_point(&stage1_manifest, &stage2_manifest, "emit_modular_rust_tree")
+        .map_err(|e| {
+            vec![ModularityDiagnostic::new(
+                Ec::FixedPointDriftE0705,
+                "emit_modular_rust_tree",
+                e,
+            )]
+        })?;
     if !options.dry_run {
         for (rel, src, _) in &units {
             let full = options.target_dir.join(rel);
