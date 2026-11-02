@@ -16,9 +16,9 @@
 ```mermaid
 graph TD
     subgraph "Check36AstCompletenessVerifier System Boundary"
-        UC_Main(["Unified Rust and Dart Lexical State Machine Without Magic..."])
-        UC_Step01(["deap_core::rust_cst / deap_core::dart_cst, compile-sysml --inject-safety-docs..."])
-        UC_Step02(["All three crates execute the single unified."])
+        UC_Main(["Unified Rust and Dart Lossless CST Without Hand-Rolled Scanners"])
+        UC_Step01(["Parse .rs and .dart via ra_ap_syntax and deap_core::dart_cst"])
+        UC_Step02(["Enforce tiered safety docstrings across all three crates"])
     end
     Compiler_CLI_CI_Pipeline(("Compiler_CLI_CI_Pipeline")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
@@ -29,17 +29,17 @@ graph TD
 - `Compiler_CLI_CI_Pipeline`
 
 ## 2. Preconditions
-- .rs and .dart source files containing nested / * outer / * inner * / * / block comments, hashed raw strings r#\"...\"# and r##\"...\"##, Rust string literals containing \"{\", Dart interpolated strings \"value: {map['key']}\" containing nested quotes and comments, multi-byte UTF-8 character literals '↑', and multiple short lifetimes fn foo<'a, 'b>(x: &'a str, y: &'b str) within 10 bytes.
+- `.rs` and `.dart` source files containing nested block comments, hashed raw strings `r#"..."#` and `r##"..."##`, Rust string literals containing `"{"`, Dart interpolated strings `"value: ${map['key']}"` containing nested quotes and comments, multi-byte UTF-8 character literals `'↑'`, and multiple short lifetimes `fn foo<'a, 'b>(x: &'a str, y: &'b str)` bound to a full OMG SysML v2.0 + KerML 1.0 model (zero 16-construct caps).
 
 ## 3. Trigger
-- deap_core::rust_cst / deap_core::dart_cst, compile-sysml --inject-safety-docstrings, and verify-baseline Check 36 scan the files.
+- `deap_core::rust_cst` (`ra_ap_syntax` `ast::HasDocComments`, `ast::HasAttrs`, `ra_ap_line_index`, `ra_ap_text_edit`), `deap_core::dart_cst` (`logos` + `rowan` + `salsa` + `ariadne`), `compile-sysml --inject-safety-docstrings`, and `verify-baseline` Check 36 parse the files with zero hand-rolled scanners.
 
 ## 4. Main Success Scenario
-1. `Compiler_CLI_CI_Pipeline` invokes `RunCompileSysmlInjectSafetyDocstrings` and `RunVerifyBaselineNoDomain` across `.rs` and `.dart` source files containing nested block comments, hashed raw strings, interpolated Dart strings, multi-byte UTF-8 character literals, and multiple lifetimes within 10 bytes.
-2. `UnifiedRustDartCstParser` executes `ParseSourceCstViaRustAndDartCst` and `TokenizeRsAndDartFilesUsing` in `deap_core_rust_and_dart_cst` using `ra_ap_syntax`, `logos`, `rowan`, and `syn`.
-3. `UnifiedRustDartCstParser` disambiguates multi-byte UTF-8 character literals from lifetime annotations and tracks nested comment and raw-string frames in linear `O(B)` time without magic byte offsets.
-4. `UnifiedSafetyDocstringSynthesizer` and `Check36AstCompletenessVerifier` consume the resulting CST declaration items (`source_cst_in` on `BP_05_SafetyDocstringPortDef`) across all three workspace crates using the single shared lexical state machine.
-5. `Check36AstCompletenessVerifier` confirms 100% lexical parity across `deap-core`, `compile-sysml`, and `verify-baseline` and emits `true` on `docstring_verdict_out` with exit code 0.
+1. `Compiler_CLI_CI_Pipeline` invokes `RunCompileSysmlInjectSafetyDocstrings` and `RunVerifyBaselineNoDomain` across `.rs` and `.dart` source files containing nested block comments, hashed raw strings, interpolated Dart strings, multi-byte UTF-8 character literals, and multiple lifetimes.
+2. `UnifiedRustDartCstParser` executes `ParseSourceCstViaRustAndDartCst` and `TokenizeRsAndDartFilesUsing` in `deap_core::rust_cst` and `deap_core::dart_cst` using `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `ra_ap_text_edit`, `ra_ap_line_index`, `logos`, `rowan`, `salsa`, and `ariadne` with zero hand-rolled string/line/char-by-char scanners.
+3. `UnifiedRustDartCstParser` extracts lossless CST nodes and trivia frames in linear `O(B)` time, binding to full OMG SysML v2.0 + KerML 1.0 AST constructs (`package`/`library package`/`standard library package`, `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port`, `connection def`/`connection`, `interface def`/`interface`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, `metadata def`/`@Metadata`/`#user_keyword` (`#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls`), and KerML specialization `:`, `:>`, `:>>`, `::>`, `~`, `ISQ`/`SI`/`ScalarValues`, zero 16-construct caps).
+4. `UnifiedSafetyDocstringSynthesizer` and `Check36AstCompletenessVerifier` consume the resulting CST declaration items (`source_cst_in` on `BP_05_SafetyDocstringPortDef`) across all three workspace crates (`deap-core`, `compile-sysml`, `verify-baseline`) to synthesize and verify `<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` docstrings on internal declarations and explicit `[DOC-TIER: A]` 7-section docstrings on `pub` crate entrypoints and `unsafe`/`extern` blocks.
+5. `Check36AstCompletenessVerifier` confirms 100% lossless CST parity across `deap-core`, `compile-sysml`, and `verify-baseline` and emits `true` on `docstring_verdict_out` with exit code 0.
 
 ## 5. Alternate and Exception Flows
 - 3a. Unterminated nested block comment or hashed raw string literal in source input:
@@ -50,7 +50,12 @@ graph TD
   - `Check36AstCompletenessVerifier` aborts verification, preserves prior verified state, sets `docstring_verdict_out` to `false`, and exits fail-closed with code 1.
 
 ## 6. Postconditions
-- All three crates execute the single unified.
+- **Success Guarantee**: All three crates (`deap-core`, `compile-sysml`, and `verify-baseline`) execute the unified `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`) + `ra_ap_text_edit` + `ra_ap_line_index` and `deap_core::dart_cst` (`logos` + `rowan` + `salsa` + `ariadne`) lossless CST pipeline with zero hand-rolled scanners, enforcing `<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` docstrings and explicit `[DOC-TIER: A]` entrypoints.
+- **Failure Guarantee**: Source files remain unmutated on CST or invariant errors, and `verify-baseline` exits fail-closed with non-zero status.
+- **3-Layer Definition of Done (DoD)**:
+  - **Layer 1 (Domain State & Data Model)**: Lossless CST token/trivia representation (`ra_ap_syntax`, `rowan`, `logos`, `salsa`) with full OMG SysML v2.0 + KerML 1.0 grammar coverage (zero 16-construct caps).
+  - **Layer 2 (Logic & State Management)**: Tiered docstring synthesis and Check 36 verification inside `< 380`-SLOC submodules (`./crates/compile-sysml/src/safety_docstrings/`, `./crates/deap-core/src/rust_cst/`, `./crates/deap-core/src/dart_cst/`) with explicit deletion of legacy hand-rolled line/char-by-char lexical scanners (`-800+` SLOC retired).
+  - **Layer 3 (Presentation & Actuator Interface Binding)**: CLI bindings (`compile-sysml --inject-safety-docstrings`, `verify-baseline . --no-domain`) and `ariadne`/`miette` byte-span diagnostics.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |

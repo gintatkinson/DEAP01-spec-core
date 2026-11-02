@@ -47,19 +47,19 @@ classDiagram
 Classifier `UnifiedSafetyDocstringSynthesizer` declares no additional constraints specified in schema.
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `UnifiedSafetyDocstringSynthesizer` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
+Structural composition and boundary topology for classifier `UnifiedSafetyDocstringSynthesizer` orchestrate `UnifiedRustDartCstParser`, `ScopedSchemaContextResolver`, `SevenSectionDocstringGenerator`, and `Check36AstCompletenessVerifier` across `< 380`-SLOC submodules (`./crates/compile-sysml/src/safety_docstrings/`, `./crates/deap-core/src/rust_cst/`, `./crates/deap-core/src/dart_cst/`).
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for UnifiedSafetyDocstringSynthesizer.
+Operational lifecycle events and discrete state transitions for `UnifiedSafetyDocstringSynthesizer` under `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState`.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `UnifiedSafetyDocstringSynthesizer` maintains typed lifecycle status (`nominal`, `degraded`, `fault`) with no additional value attributes declared in schema.
+Classifier `UnifiedSafetyDocstringSynthesizer` maintains typed lifecycle status (`nominal`, `degraded`, `fault`) and coordinates lossless CST/AST structures (`deap_core::sysml_cst`, `deap_core::rust_cst`, `deap_core::dart_cst` via `ra_ap_syntax`, `logos`, `rowan`, `salsa`) spanning 100% of the normative OMG SysML v2.0 + KerML 1.0 grammar (`package`/`library package`/`standard library package`, `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port`, `connection def`/`connection`, `interface def`/`interface`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, `metadata def`/`@Metadata`/`#user_keyword` (`#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls`), and KerML specialization `:`, `:>`, `:>>`, `::>`, `~`, `ISQ`/`SI`/`ScalarValues`, zero 16-construct caps).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `UnifiedSafetyDocstringSynthesizer` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `UnifiedSafetyDocstringSynthesizer` governs idempotent docstring synthesis (`docstring_idempotency_diff_bytes == 0`) using `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`) + `ra_ap_text_edit` + `ra_ap_line_index` to enforce `<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` docstrings on internal declarations and explicit `[DOC-TIER: A]` 7-section entrypoints inside `< 380`-SLOC submodules with explicit deletion of legacy hand-rolled line/char-by-char scanners (`-800+` SLOC retired).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `UnifiedSafetyDocstringSynthesizer` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
+Classifier `UnifiedSafetyDocstringSynthesizer` binds `BP_05_SafetyDocstringPortDef` (`source_cst_in`, `docstring_verdict_out`) and `BP_05_ContextToDocstringGeneratorConnection` for CLI execution (`compile-sysml --inject-safety-docstrings`, `verify-baseline . --no-domain`).
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `UnifiedSafetyDocstringSynthesizer` initialization inputs for `UnifiedSafetyDocstringSynthesizer` state representation (no additional constraints specified in schema), When `UnifiedSafetyDocstringSynthesizer` commits typed domain state, Then declared state attributes hold verified values.

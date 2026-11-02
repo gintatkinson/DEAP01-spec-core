@@ -67,19 +67,19 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `type` | `String` | Default `"Component"` |
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `UnifiedRustDartCstParser` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
+Structural composition and boundary topology for classifier `UnifiedRustDartCstParser` organize lossless Rust and Dart CST parsing across `< 380`-SLOC submodules (`./crates/deap-core/src/rust_cst/`, `./crates/deap-core/src/dart_cst/`, `./crates/compile-sysml/src/safety_docstrings/`).
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for UnifiedRustDartCstParser.
+Operational lifecycle events and discrete state transitions for `UnifiedRustDartCstParser` under `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState`.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `UnifiedRustDartCstParser` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status.
+Classifier `UnifiedRustDartCstParser` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside lossless `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`, `ast::Fn`), `ra_ap_line_index`, `ra_ap_vfs`, and `deap_core::dart_cst` (`logos` + `rowan` + `salsa` + `ariadne`) CST nodes aligned with full 100% normative OMG SysML v2.0 + KerML 1.0 grammar coverage (`package`/`library package`/`standard library package`, `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port`, `connection def`/`connection`, `interface def`/`interface`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, `metadata def`/`@Metadata`/`#user_keyword` (`#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls`), and KerML specialization `:`, `:>`, `:>>`, `::>`, `~`, `ISQ`/`SI`/`ScalarValues`, zero 16-construct caps).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `UnifiedRustDartCstParser` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `UnifiedRustDartCstParser` governs lossless CST declaration and trivia extraction via `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`) + `ra_ap_text_edit` + `ra_ap_line_index` and `deap_core::dart_cst` (`logos` + `rowan` + `salsa`) for `<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` docstrings and explicit `[DOC-TIER: A]` entrypoints inside `< 380`-SLOC submodules with zero hand-rolled string/line/char-by-char scanners and explicit deletion of legacy hand-rolled lexical state machines (`-800+` SLOC retired).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `UnifiedRustDartCstParser` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
+Classifier `UnifiedRustDartCstParser` exposes `source_cst_in` on `BP_05_SafetyDocstringPortDef` to `UnifiedSafetyDocstringSynthesizer` and `Check36AstCompletenessVerifier` and emits byte-exact `ariadne`/`miette` diagnostics.
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `UnifiedRustDartCstParser` initialization inputs for `quantity` (`Integer`), `type` (`String`) (no additional constraints specified in schema), When `UnifiedRustDartCstParser` commits typed domain state, Then declared state attributes hold verified values.

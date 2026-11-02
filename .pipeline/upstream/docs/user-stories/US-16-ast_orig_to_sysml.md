@@ -21,17 +21,18 @@ As a `Compiler_CLI_Caller`, I want to invoke `ast_orig_to_sysml()` on `NativeSig
 - Domain state attributes on `NativeSigilAndLifetimeLexer`: `quantity: Integer`, `type: String`.
 - Action `ast_orig_to_sysml` invocation message envelope bound to `NativeSigilAndLifetimeLexer` typed domain schema.
 - Declared lifecycle state model: `BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_LifecycleState`, `LexicalScanning`, `RecursiveDescentParsing`, `RejectedE0100`, `CanonicalSerialization`, `RejectedE0200`, `RoundtripReparsing`, `AstStructuralEqualityCheck`, `RejectedE0400`, `VerifiedBijectiveAst`.
+- Contract A canonical serialization domain coverage: serializes 100% of the normative OMG SysML v2.0 + KerML 1.0 BNF grammar across all 6 clauses (Namespaces & Metadata, Structural & Data Types, Behavioral & State, Calculations/Constraints/Requirements, Use Cases/Analysis/Verification/Views, and KerML 1.0 Specialization/Multiplicity/Expressions) with zero 16-construct artificial caps, emitting `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` `metadata def` (`@Metadata` / `#user_keyword`) alongside backward-compatible `hazard def`, `risk def`, and `capability def` declarations (`dropped_ast_field_count == 0`).
 
 ### Layer 2: Logic & State Management
-- Behavioral execution contract: invokes `ast_orig_to_sysml()` on `NativeSigilAndLifetimeLexer` with atomic precondition verification.
+- Behavioral execution contract: invokes `ast_orig_to_sysml()` on `NativeSigilAndLifetimeLexer` with atomic precondition verification over `logos` + `rowan` lossless Red/Green CST nodes (`deap_core::sysml_cst`), `salsa` incremental query caching (`salsa::input`, `salsa::tracked`), and Stage-1 == Stage-2 bijective round-trip serialization with zero hand-rolled scanners.
 - State transition management: `LexicalScanning -> RecursiveDescentParsing` (trigger `zeroDriftTokenStream`).
 - Formal constraints and requirements enforced: `REQ-0603 (REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint)`.
-- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/deap-core/src/sysml_cst/` and `crates/compile-sysml/src/roundtrip/`) while retiring legacy hand-rolled recursive-descent parser monoliths (`-2,400+` SLOC).
+- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`./crates/deap-core/src/sysml_cst/` and `./crates/compile-sysml/src/roundtrip/`) while explicitly deleting legacy hand-rolled scanner and recursive-descent parser monoliths (`-2,400+` SLOC).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-- Component interface endpoints: binds `NativeSigilAndLifetimeLexer` command ingress and completion notification egress channels.
+- Component interface endpoints: binds `NativeSigilAndLifetimeLexer` command ingress and completion notification egress (`SerializedSysmlOutputPort`, `BijectiveDiffDiagnosticPort`) channels.
 - Interaction binding (`BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_SequenceInteraction`): routes `ast_orig_to_sysml` invocation from `Compiler_CLI_Caller` to `NativeSigilAndLifetimeLexer` and returns `reply_VecOfTokenWithZeroSpan`.
-- Diagnostic fault surface: reports deterministic rejection diagnostics to `Compiler_CLI_Caller` across the declared interface boundary when guard or invariant checks fail.
+- Diagnostic fault surface: reports deterministic `ariadne` source-span rejection diagnostics (`E0300`, `E0400`) to `Compiler_CLI_Caller` across the declared interface boundary when guard or invariant checks fail.
 
 ## UML Sequence Diagram
 

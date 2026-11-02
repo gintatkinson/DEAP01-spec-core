@@ -67,19 +67,19 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `type` | `String` | Default `"Subcomponent"` |
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `RangeSliceAstDetector` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
+Structural composition and boundary topology for classifier `RangeSliceAstDetector` organize no nested subparts declared in schema paired with no external boundary ports declared in schema, modularized into `< 380`-SLOC submodules (`./crates/verify-baseline/src/ast_purity/` and `./crates/deap-core/src/rust_cst/`) with explicit legacy hand-rolled scanner deletion.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for RangeSliceAstDetector.
+Operational lifecycle events and discrete state transitions for `RangeSliceAstDetector` enforcing Contract A (full OMG SysML v2.0 + KerML 1.0 grammar coverage, zero 16-construct caps) and Contract B (`ra_ap_syntax` typed `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr, IndexExpr}` I/O and slice purity + `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, zero hand-rolled scanner mandates).
 
 ### Layer 1: Domain State & Signal Model
-Classifier `RangeSliceAstDetector` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status.
+Classifier `RangeSliceAstDetector` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status, typed `ra_ap_syntax` (`ast::{IndexExpr, MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}`) syntax nodes, `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` workspace metadata, and full OMG SysML v2.0 + KerML 1.0 grammar representations (zero 16-construct caps).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `RangeSliceAstDetector` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `RangeSliceAstDetector` governs stateless structural transition evaluation enforcing `C-PURITY-01` (`Invariant_REQ_0602_SC_01`, `Invariant_REQ_0602_SC_02`) via typed `ra_ap_syntax` CST/AST inspection of bracketed range-slice indexing expressions (`expr[a..b]`, `expr[..idx]`, `expr[start..]`, `expr[..=end]`) inside `< 380`-SLOC submodules with explicit deletion of legacy hand-rolled character/bracket scanners.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `RangeSliceAstDetector` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
+Classifier `RangeSliceAstDetector` exposes an internal structural boundary bound to `Check34AstPurityAndAntiGamingGate`, propagating `direct_range_slice_count` increments and `ariadne` / `miette` file-and-line diagnostics to `PurityViolationDiagnosticPort` and `Check34GateStatusPort`.
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `RangeSliceAstDetector` initialization inputs for `quantity` (`Integer`), `type` (`String`) (no additional constraints specified in schema), When `RangeSliceAstDetector` commits typed domain state, Then declared state attributes hold verified values.

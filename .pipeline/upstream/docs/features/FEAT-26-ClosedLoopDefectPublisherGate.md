@@ -87,29 +87,33 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `requireByteParity` | `Boolean` | Default `true` |
 | Port | `dossierCandidateInPort` | `in String` | Boundary interface contract |
 | Port | `verifiedReceiptOutPort` | `out String` | Boundary interface contract |
-| Constraint | `Invariant_REQ_0606_SC_01` | Invariant (`REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`) | Declared structural invariant |
-| Constraint | `Invariant_REQ_0606_SC_02` | Invariant (`REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`) | Declared structural invariant |
-| Requirement | `REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)` | Allocated Requirement | The DeterministicStaticDefectAuditor subsystem (**REQ-0606** / BP-06 / DEAP-BP-DET-06, deterministic UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c6, complexity class Class P linear single-pass token-stream and AST traversal, governed by DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and |
+| Constraint | `Invariant_REQ_0606_SC_01` | Invariant (`REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`) | Enforces `auditor_subagent_count == 0 && dossier_schema_check_count == 12 && pillar_coverage_count == 5` |
+| Constraint | `Invariant_REQ_0606_SC_02` | Invariant (`REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`) | Enforces `closed_loop_mismatch_bytes == 0 && zeroRegexMode == true` |
+| Requirement | `REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)` | Allocated Requirement | The DeterministicStaticDefectAuditor subsystem (**REQ-0606** / BP-06 / DEAP-BP-DET-06, deterministic UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c6, complexity class Class P linear single-pass token-stream and AST/MIR traversal, governed by DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and IEC 61508 SIL 4) enforces Contract A (100% OMG SysML v2.0 + KerML 1.0 grammar coverage with zero 16-construct caps) and Contract B (`ra_ap_syntax` typed AST + Stage-2 `Dylint` `rustc_middle::mir` `TyCtxt` 5-pillar auditor in `./lints/deap-dylint-mir/` + `deap_core::dart_cst` `logos`+`rowan` isolation + complete deletion of `source_ast.rs` with zero hand-rolled scanners). |
 
 ```sysml
-constraint Invariant_REQ_0606_SC_01 {}
-constraint Invariant_REQ_0606_SC_02 {}
+constraint Invariant_REQ_0606_SC_01 {
+    auditor_subagent_count == 0 and dossier_schema_check_count == 12 and pillar_coverage_count == 5
+}
+constraint Invariant_REQ_0606_SC_02 {
+    closed_loop_mismatch_bytes == 0 and zeroRegexMode == true
+}
 ```
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `ClosedLoopDefectPublisherGate` organize no nested subparts declared in schema paired with boundary ports `in dossierCandidateInPort : String`, `out verifiedReceiptOutPort : String`.
+Structural composition and boundary topology for classifier `ClosedLoopDefectPublisherGate` organize no nested subparts declared in schema paired with boundary ports `in dossierCandidateInPort : String`, `out verifiedReceiptOutPort : String`. Enforces Contract A (full OMG SysML v2.0 + KerML 1.0 Definition and Usage grammar coverage with zero 16-construct artificial caps) and Contract B (`pulldown-cmark` / `pulldown-cmark-to-cmark` lossless Markdown AST inspection, `ra_ap_syntax` typed AST verification, Stage-2 `./lints/deap-dylint-mir/` `rustc_middle::mir` `TyCtxt` provenance checks, `deap_core::dart_cst` (`logos` + `rowan`) isolation, and complete deletion of `source_ast.rs` with zero hand-rolled scanners).
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for ClosedLoopDefectPublisherGate.
+Operational lifecycle events and discrete state transitions for `ClosedLoopDefectPublisherGate` across `Validating12Gates`, `DeduplicatingSsot`, `PublishingClosedLoop`, `Verified`, and `Rejected` within `BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_LifecycleState`.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `ClosedLoopDefectPublisherGate` encapsulates typed domain state attributes `schemaGateCount : Integer`, `requireByteParity : Boolean` alongside operational lifecycle status.
+Classifier `ClosedLoopDefectPublisherGate` encapsulates typed domain state attributes `schemaGateCount : Integer` (default `12`) and `requireByteParity : Boolean` (default `true`), `pulldown-cmark` 7-section dossier AST representations, and CRLF-to-LF normalized byte-comparison buffers alongside operational lifecycle status.
 
 ### Layer 2: Logic & Safety State Management
-Classifier `ClosedLoopDefectPublisherGate` governs stateless structural transition evaluation enforcing invariant obligations `Invariant_REQ_0606_SC_01`, `Invariant_REQ_0606_SC_02`.
+Classifier `ClosedLoopDefectPublisherGate` governs deterministic 12-check dossier schema and Mermaid E1--E5 validation, SSOT deduplication against `./.pipeline/defects/*.md` and live GitHub issues, and fail-closed byte-parity verification enforcing invariant obligations `Invariant_REQ_0606_SC_01` and `Invariant_REQ_0606_SC_02`. Partitioned into `< 380`-SLOC submodules under `./crates/verify-baseline/src/defect_dossier/` with `./crates/deap-core/src/source_ast.rs` (`source_ast.rs`) and all legacy hand-rolled line/regex scanners permanently deleted.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `ClosedLoopDefectPublisherGate` binds external and behavioral interfaces across port `in dossierCandidateInPort : String`, port `out verifiedReceiptOutPort : String`.
+Classifier `ClosedLoopDefectPublisherGate` binds external and behavioral interfaces across port `in dossierCandidateInPort : String` and port `out verifiedReceiptOutPort : String`, executing `./target/release/verify-baseline check-defect`, invoking `gh issue create` / `gh issue edit --body-file` and `gh issue view --json title,body,url`, and emitting structured `ariadne` / `miette` byte-span diagnostics (`E0602`--`E0605`) on gate rejection.
 
 ### Associated Use Cases & User Stories
 

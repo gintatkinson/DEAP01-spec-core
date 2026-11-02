@@ -67,19 +67,19 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `type` | `String` | Default `"Subcomponent"` |
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `NativeSigilAndLifetimeLexer` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
+Structural composition and boundary topology for classifier `NativeSigilAndLifetimeLexer` organize no nested subparts declared in schema paired with no external boundary ports declared in schema, operating as the `logos` DFA lexer front-end for `deap_core::sysml_cst` (`rowan` Red/Green CST) and `salsa` incremental query inputs.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for NativeSigilAndLifetimeLexer.
+Operational lifecycle events and discrete state transitions for `NativeSigilAndLifetimeLexer` (`LexicalScanning -> RecursiveDescentParsing` on `zeroDriftTokenStream` or `RejectedE0100` on `lexicalSpanError`), enforcing `span_offset_drift_bytes == 0` with zero `normalize_type_sigils` pre-lexer string rewriting.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `NativeSigilAndLifetimeLexer` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status.
+Classifier `NativeSigilAndLifetimeLexer` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status, tokenizing 100% of the normative OMG SysML v2.0 + KerML 1.0 BNF lexical grammar across all 6 clauses (zero 16-construct artificial caps), including reference sigils (`&`), optionality sigils (`?`), lifetime tokens (`'a`), qualified path separators (`::`), KerML operators (`:>`, `:>>`, `::>`, `~`, `:=`, `??`, `->`, `implies`, `xor`), and `#user_keyword` / `@Metadata` sigils for `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` `metadata def` annotations alongside backward-compatible `hazard def`, `risk def`, and `capability def` keywords.
 
 ### Layer 2: Logic & Safety State Management
-Classifier `NativeSigilAndLifetimeLexer` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `NativeSigilAndLifetimeLexer` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema while executing `logos::Logos` DFA tokenization (`scan_all`) into lossless `rowan` Red/Green trivia-preserving token streams (`deap_core::sysml_cst`) and `salsa` query inputs (`salsa::input`, `salsa::tracked`) with zero hand-rolled string/line/char-by-char scanners. Implementation is bounded inside `< 380` exec SLOC submodules (`./crates/deap-core/src/sysml_cst/` and `./crates/compile-sysml/src/roundtrip/`) with explicit deletion of legacy hand-rolled character scanners and `normalize_type_sigils` string rewriters (`-2,400+` SLOC retired).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `NativeSigilAndLifetimeLexer` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
+Classifier `NativeSigilAndLifetimeLexer` exposes an internal structural boundary with no external ports, operations, or actions declared in schema, streaming zero-drift tokens onto `TokenStreamChannelPort` and routing `ariadne` lexical span diagnostics (`E0100`) through `SysmlBijectiveRoundtripCompilerGate`.
 
 ### Associated Use Cases & User Stories
 

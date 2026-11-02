@@ -13,16 +13,27 @@
 
 ## UML Diagrams
 
+### Use Case Diagram
 ```mermaid
 graph TD
-    subgraph "AirGappedCargoLockGovernor System Boundary"
-        UC_Main(["Lossless Tier B C Docblock Compaction Skipping Self Hoste..."])
-        UC_Step01(["compile-sysml --compact-tier-bc <DIR> executes across the..."])
-        UC_Step02(["Legacy 28-line docblocks on DocTier::RustTierBC items out..."])
+    subgraph "ZeroTokenRustSpanCodemodEngine System Boundary"
+        UC_Main(["Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules"])
+        UC_Step01(["Classify DocTier Items and Skip Self Hosted Generated Directory"])
+        UC_Step02(["Compact Tier B C Docblocks to Two Line Contracts via ra_ap_text_edit"])
     end
     Operator(("Operator")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
+```
+
+### State Machine Diagram
+```mermaid
+stateDiagram-v2
+    [*] --> AnalyzingMetricsAndTiers
+    AnalyzingMetricsAndTiers --> ValidatingDisjointSpans : "planCodemodOrMachineFix"
+    ValidatingDisjointSpans --> SplicingAndFormatting : "disjointUtf8SpansVerified"
+    SplicingAndFormatting --> VerifiedClean : "rustfmtAndCstReparseClean"
+    VerifiedClean --> [*]
 ```
 
 ## 1. Actors
@@ -50,13 +61,32 @@ graph TD
   - `ZeroTokenRustSpanCodemodEngine` rolls back the transaction, preserves prior verified state, and notifies `Operator`.
 
 ## 6. Postconditions
-- Legacy 28-line docblocks on `DocTier::RustTierBC` items outside `generated/` are losslessly compacted to 2-line `/// <summary>` + `/// Realises: (REQ-*)` contracts (`C_CST_06`) without mutating executable tokens or `DocTier::RustTierA` docstrings.
+- **Success Guarantee:** Legacy 28-line docblocks on `DocTier::RustTierBC` items outside `generated/` are losslessly compacted to 2-line `/// <summary>` + `/// Realises: (REQ-*)` contracts (`C_CST_06`) without mutating executable tokens or `DocTier::RustTierA` docstrings.
+- **Failure Guarantee:** Any pre-existing CST syntax error (`DEAP-E0803`) or span collision (`DEAP-E0802`) aborts compaction without mutating files on disk and exits fail-closed with code 1.
+
+## 7. Operational Context
+- **Contract A (100% Normative OMG SysML v2.0 + KerML 1.0 Grammar Coverage)**: Preserves full Definition and Usage symmetry across the OMG SysML v2.0 and KerML 1.0 textual grammar with zero 16-construct caps.
+- **Contract B (Official Rust Compiler, Cargo, `rust-analyzer` & Markdown AST Crate Stack)**: Uses `ra_ap_syntax` (`ast::HasDocComments`), `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, `pulldown-cmark`, `pulldown-cmark-to-cmark`, `cargo-lock`, `cargo_metadata`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` with explicit net-negative deletion of ~19,700+ lines of hand-rolled scanners (retiring `crates/compile-sysml/src/docstring.rs` (549 lines) and `crates/verify-baseline/src/checks/docstring_tier_rules.rs` (729 lines)).
+- **3-Layer Definition of Done (DoD)**:
+  - **Layer 1 (Domain State & Data Model)**: `DocTier::RustTierA` / `DocTier::RustTierBC` item classifications and docblock `TextRange` spans.
+  - **Layer 2 (Logic & State Management)**: Enforces `C_CST_05` (`runtime_llm_token_count == 0`), `C_CST_06` (`tier_bc_max_doc_lines == 2`), `skip_generated_tree = true`, and `Invariant_REQ_0608_SC_02` inside `< 380`-SLOC submodules (`crates/deap-core/src/rust_cst/doc_edit.rs`).
+  - **Layer 3 (Presentation & Actuator Interface Binding)**: Binds `codemod_command_in`, `atomic_patch_out`, and `codemod_error_out` on `ZeroTokenRustSpanCodemodEngine`.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **TBD** | User Story | [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) |
-| **TBD** | Feature | [Feature 36: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] AirGappedCargoLockGovernor](../features/FEAT-36-AirGappedCargoLockGovernor.md) |
+| **#803** | User Story | [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) |
+| **#804** | User Story | [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) |
+| **#746** | Feature | [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) |
+| **#743** | Feature | [Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer](../features/FEAT-37-LosslessRustCstAnalyzer.md) |
+
+### Required User Stories
+- [ ] #803 - [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) (classifies `DocTier::RustTierA` vs `DocTier::RustTierBC` items and extracts outer docblock `TextRange` spans)
+- [ ] #804 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (applies reverse-byte-order `ra_ap_text_edit::TextEdit` splices with post-splice CST verification)
+
+### Required Features
+- [ ] #746 - [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) (executes `--compact-tier-bc` enforcing `tier_bc_max_doc_lines == 2` and `skip_generated_tree = true`)
+- [ ] #743 - [Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer](../features/FEAT-37-LosslessRustCstAnalyzer.md) (provides `ra_ap_syntax` CST parsing and non-trivia token identity verification)
 
 ## Source References
 Use case operational flows and lifecycle activity references:

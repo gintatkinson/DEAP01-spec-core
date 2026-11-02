@@ -84,16 +84,16 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 Structural composition and boundary topology for classifier `WorkspaceManifestForbidGate` organize no nested subparts declared in schema paired with boundary ports `in cmd_in : String`, `out status_out : String`.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for WorkspaceManifestForbidGate.
+Operational lifecycle events and discrete state transitions for `WorkspaceManifestForbidGate` across `cargo_metadata`, `toml_edit`, and `cargo clippy --workspace --all-targets --message-format=json`.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `WorkspaceManifestForbidGate` encapsulates typed domain state attributes `quantity : Integer` alongside operational lifecycle status.
+Classifier `WorkspaceManifestForbidGate` encapsulates typed domain state attributes `quantity : Integer` alongside operational lifecycle status. Enforces Contract A (full OMG SysML v2.0 + KerML 1.0 Definition and Usage grammar coverage with zero 16-construct caps) and Contract B manifest/workspace data structures (`cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, `ra_ap_vfs`, `ra_ap_paths`, `camino`, `ignore`).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `WorkspaceManifestForbidGate` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `WorkspaceManifestForbidGate` governs stateless structural transition evaluation enforcing `[workspace.lints.clippy]` forbid rules (`unwrap_used`, `expect_used`, `panic`, `indexing_slicing`, `disallowed_types`, `type_complexity`) and `[lints] workspace = true` inheritance via `cargo_metadata`, `toml_edit`, and `rustc`/`cargo clippy --message-format=json` (`E0453`) with zero hand-rolled text-scanner lint mandates. Targets `< 380`-SLOC submodules (`crates/verify-baseline/src/clippy_forbid/` and `crates/deap-core/src/rust_cst/`) with explicit legacy hand-rolled scanner deletion (`source_ast.rs`, `structural.rs`).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `WorkspaceManifestForbidGate` binds external and behavioral interfaces across port `in cmd_in : String`, port `out status_out : String`.
+Classifier `WorkspaceManifestForbidGate` binds external and behavioral interfaces across port `in cmd_in : String`, port `out status_out : String`, emitting structured `rustc`-compatible JSON and `ariadne` diagnostics resolved via `ra_ap_line_index` and `ra_ap_text_edit`.
 
 ### Associated Use Cases & User Stories
 

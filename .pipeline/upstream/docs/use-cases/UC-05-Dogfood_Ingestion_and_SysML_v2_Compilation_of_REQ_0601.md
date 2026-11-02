@@ -29,17 +29,17 @@ graph TD
 - `Compiler_Engineer_CI`
 
 ## 2. Preconditions
-- This blueprint specification docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md.
+- This blueprint specification `docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md` under Contract A (full 100% normative OMG SysML v2.0 + KerML 1.0 Definition and Usage grammar coverage, zero 16-construct caps) and Contract B (`rustc`/`cargo clippy --message-format=json` + `ra_ap_syntax` attr CST verification, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, `logos`, `salsa`, `ariadne`, `pulldown-cmark`, zero text-scanner lint mandates).
 
 ## 3. Trigger
 - ./target/release/verify-baseline check-blueprint docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --dry-run is executed.
 
 ## 4. Main Success Scenario
-1. `Compiler_Engineer_CI` invokes `./target/release/verify-baseline check-blueprint docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --dry-run` using `pulldown-cmark` AST parsing to validate the 8-part blueprint structure.
-2. `CompilerLintEnforcementGate` verifies all 12 mechanical blueprint verification gates, including `REQ-0601` traceability, KaTeX math blocks, Mermaid state/sequence diagrams, and 5-column STPA/FMECA tables.
-3. `Compiler_Engineer_CI` invokes `ExecuteIngestSysmlSchemaBlueprint01` (`./target/release/ingest-sysml --schema docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --format markdown`) to extract SysML v2 AST nodes via `logos` and `rowan`.
+1. `Compiler_Engineer_CI` invokes `./target/release/verify-baseline check-blueprint docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --dry-run` using `pulldown-cmark` AST parsing and `ra_ap_syntax`/`ra_ap_vfs`/`ra_ap_paths`/`ra_ap_line_index`/`ra_ap_text_edit`/`rowan`/`camino`/`ignore` inside `< 380`-SLOC submodules (`crates/verify-baseline/src/clippy_forbid/` and `crates/deap-core/src/rust_cst/`, replacing deleted legacy `source_ast.rs` and `structural.rs` scanners) to validate the 8-part blueprint structure (Layer 1 Domain State & Data Model).
+2. `CompilerLintEnforcementGate` verifies all 12 mechanical blueprint verification gates, including `REQ-0601` traceability, KaTeX math blocks, Mermaid state/sequence diagrams, 5-column STPA/FMECA tables, and `rustc`/`cargo clippy --message-format=json` + `ra_ap_syntax` attr CST invariants with zero text-scanner lint mandates (Layer 2 Logic & State Management).
+3. `Compiler_Engineer_CI` invokes `ExecuteIngestSysmlSchemaBlueprint01` (`./target/release/ingest-sysml --schema docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.md --format markdown`) to extract full OMG SysML v2.0 + KerML 1.0 CST/AST nodes (zero 16-construct caps) via `logos`, `rowan`, `salsa`, and `ariadne` (`deap_core::sysml_cst`).
 4. `ingest_sysml` synthesizes `REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint`, `CompilerLintEnforcementGate`, `WorkspaceManifestForbidGate`, `ClippyAttributeCstParser`, `CrateRootAttributeSanitizer`, `TestTargetLintEnforcer`, `CargoManifestInputPort`, `RustSourceTokenStreamPort`, `CompilerDiagnosticOutputPort`, `BaselineGateVerdictPort`, and formal constraints `Invariant_REQ_0601_C_LINT_03` and `Invariant_REQ_0601_FormalInvariant`.
-5. `CompilerLintEnforcementGate` verifies bijective SysML v2 compilation into `schema/model.sysml` and emits `true` on `BaselineGateVerdictPort` with exit code 0.
+5. `CompilerLintEnforcementGate` verifies bijective SysML v2 compilation into `schema/model.sysml` and emits `true` on `BaselineGateVerdictPort` with exit code 0 (Layer 3 Presentation & Actuator Interface Binding).
 
 ## 5. Alternate and Exception Flows
 - 3a. Blueprint Markdown fails any of the 12 mechanical verification gates in `check-blueprint`:
@@ -50,7 +50,7 @@ graph TD
   - `CompilerLintEnforcementGate` halts compilation, sets `BaselineGateVerdictPort` to `false`, notifies `Compiler_Engineer_CI`, and exits fail-closed with status code 1.
 
 ## 6. Postconditions
-- All 12 mechanical blueprint verification gates pass, and the translator synthesizes REQ-0601, CompilerLintEnforcementGate, its interface ports, state attributes, formal constraints (C-LINT-01..C-LINT-03), and AC-01..AC-05 into docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.sysml and.
+- All 12 mechanical blueprint verification gates pass, and the translator synthesizes `REQ-0601`, `CompilerLintEnforcementGate`, its interface ports, state attributes, formal constraints (`C-LINT-01`..`C-LINT-03`), and `AC-01`..`AC-05` into `docs/designs/blueprint-01-compiler-enforced-lint-forbid-gate.sysml` and `schema/model.sysml` with full OMG SysML v2.0 + KerML 1.0 grammar coverage (zero 16-construct caps).
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |

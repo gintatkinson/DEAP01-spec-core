@@ -29,17 +29,17 @@ graph TD
 - `Compiler_Engineer_CI`
 
 ## 2. Preconditions
-- Unit test modules (cfg(test) mod tests) and integration test files (crates/ * /tests/ *.rs) across all six workspace crates.
+- Unit test modules (`cfg(test) mod tests`) and integration test files (`crates/*/tests/*.rs`) across all six workspace crates under Contract A (full OMG SysML v2.0 + KerML 1.0 grammar coverage, zero 16-construct caps) and Contract B (`rustc`/`cargo clippy --message-format=json` + `ra_ap_syntax` attr CST verification, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, zero text-scanner lint mandates).
 
 ## 3. Trigger
 - cargo test --workspace and ./target/release/verify-baseline . --no-domain are executed.
 
 ## 4. Main Success Scenario
-1. `Compiler_Engineer_CI` invokes `ExecuteCargoClippyWorkspaceAllTargets` and `ExecuteVerifyBaselineNoDomain` on `CompilerLintEnforcementGate` across all six workspace crates enumerated via `cargo_metadata`.
-2. `TestTargetLintEnforcer` inspects all unit test modules (`cfg(test) mod tests`) and integration test targets (`crates/*/tests/*.rs`) streamed over `RustSourceTokenStreamPort` using `ra_ap_syntax` and `syn`.
-3. `ClippyAttributeCstParser` executes `RunScanClippyAllowTokensOn` to verify that zero `cfg_attr(test, allow(...))` conditional lint exemptions exist in any crate root or test module.
-4. `CompilerLintEnforcementGate` verifies via `rustc` and `clippy` that all test assertions use fallible `Result<T, E>` return signatures or pattern matching instead of `.unwrap()`, `.expect()`, or direct slice indexing.
-5. `cargo test --workspace` and `./target/release/verify-baseline . --no-domain` complete with zero `E0453` or Check 34 violations and emit `true` on `BaselineGateVerdictPort` with exit code 0.
+1. `Compiler_Engineer_CI` invokes `ExecuteCargoClippyWorkspaceAllTargets` and `ExecuteVerifyBaselineNoDomain` on `CompilerLintEnforcementGate` across all six workspace crates enumerated via `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` (Layer 1 Domain State & Data Model).
+2. `TestTargetLintEnforcer` inspects all unit test modules (`cfg(test) mod tests`) and integration test targets (`crates/*/tests/*.rs`) streamed over `RustSourceTokenStreamPort` using `ra_ap_syntax` (`ast::Attr`, `ast::HasAttrs`), `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, and `ignore` inside `< 380`-SLOC submodules (`crates/verify-baseline/src/clippy_forbid/` and `crates/deap-core/src/rust_cst/`, replacing deleted legacy `source_ast.rs` and `structural.rs` scanners).
+3. `ClippyAttributeCstParser` executes `RunScanClippyAllowTokensOn` to verify that zero `cfg_attr(test, allow(...))` conditional lint exemptions exist in any crate root or test module with zero hand-rolled text-scanner lint mandates (Layer 2 Logic & State Management).
+4. `CompilerLintEnforcementGate` verifies via `rustc` and `cargo clippy --workspace --all-targets --message-format=json` that all test assertions use fallible `Result<T, E>` return signatures or pattern matching instead of `.unwrap()`, `.expect()`, or direct slice indexing.
+5. `cargo test --workspace` and `./target/release/verify-baseline . --no-domain` complete with zero `E0453` or Check 34 violations and emit `true` on `BaselineGateVerdictPort` with exit code 0 (Layer 3 Presentation & Actuator Interface Binding).
 
 ## 5. Alternate and Exception Flows
 - 3a. Conditional `cfg_attr(test, allow(clippy::...))` exemption detected in a test module:

@@ -67,7 +67,7 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `type` | `String` | Default `"Subcomponent"` |
 | Constraint | `Invariant_REQ_0603_Formal_Bijectivity_Complexity_Invariants` | Invariant (`REQ-0603 (REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint)`) | Declared structural invariant |
 | Constraint | `Invariant_REQ_0603_SC_04` | Invariant (`REQ-0603 (REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint)`) | Declared structural invariant |
-| Requirement | `REQ-0603 (REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint)` | Allocated Requirement | The Digital Engineering Agent Platform (DEAP) compiler pipeline (DEAP-BP-DET-03, subsystem SysmlBijectiveRoundtripCompilerGate, deterministic UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c3, complexity class Class P, diagnostic code bindings E0100, E0200, E0300, E0400, governed by ISO/IEC/IEEE |
+| Requirement | `REQ-0603 (REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint)` | Allocated Requirement | The Digital Engineering Agent Platform (DEAP) compiler pipeline (DEAP-BP-DET-03, subsystem SysmlBijectiveRoundtripCompilerGate, deterministic UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c3, complexity class Class P, diagnostic code bindings E0100, E0200, E0300, E0400, governed by ISO/IEC/IEEE 15288:2023 and OMG SysML v2.0 + KerML 1.0) |
 
 ```sysml
 constraint Invariant_REQ_0603_Formal_Bijectivity_Complexity_Invariants {}
@@ -75,19 +75,19 @@ constraint Invariant_REQ_0603_SC_04 {}
 ```
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `BijectiveSysmlSerializer` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
+Structural composition and boundary topology for classifier `BijectiveSysmlSerializer` organize no nested subparts declared in schema paired with no external boundary ports declared in schema, operating within the lossless `deap_core::sysml_cst` (`logos` + `rowan` Red/Green CST) and `salsa` incremental query database pipeline.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for BijectiveSysmlSerializer.
+Operational lifecycle events and discrete state transitions for `BijectiveSysmlSerializer` (`CanonicalSerialization -> RoundtripReparsing` on `sysmlTextEmitted` within `BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_LifecycleState`), enforcing Stage-1 == Stage-2 bijective round-trip parity (`parse_sysml(to_sysml(ast_orig)) == ast_orig`, `dropped_ast_field_count == 0`).
 
 ### Layer 1: Domain State & Signal Model
-Classifier `BijectiveSysmlSerializer` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status.
+Classifier `BijectiveSysmlSerializer` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status, serializing 100% of the normative OMG SysML v2.0 + KerML 1.0 BNF grammar across all 6 clauses (zero 16-construct artificial caps): (1) Namespaces & Metadata (`package`, `library package`, `standard library package`, `import`, `alias`, `doc`, `comment`, `rep`, `dependency`, `metadata def`/`metadata`/`@Metadata`/`#user_keyword` for `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` plus backward-compatible `hazard def`, `risk def`, `capability def`), (2) Structural & Data Types (`attribute def`/`attribute`, `enum def`/`enum`, `item def`/`item`, `part def`/`part`, `port def`/`port`, `connection def`/`connection`, `interface def`/`interface`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`), (3) Behavioral & State (`action def`/`action`, `state def`/`state`), (4) Calculations, Constraints & Requirements (`calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`), (5) Use Cases, Analysis, Verification & Views (`use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`), and (6) KerML 1.0 Specialization, Multiplicity & Expressions (`:`, `:>`, `:>>`, `::>`, `~`, `ref`, `abstract`, `readonly`, `derived`, `end`, `default`, `:=`, `[lo..hi]`, `[*]`, `{ordered, nonunique}`, `implies`, `xor`, `??`, `->`, `collect`, `select`, `forAll`, `exists`, `ISQ`/`SI`/`ScalarValues`).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `BijectiveSysmlSerializer` governs stateless structural transition evaluation enforcing invariant obligations `Invariant_REQ_0603_Formal_Bijectivity_Complexity_Invariants`, `Invariant_REQ_0603_SC_04`.
+Classifier `BijectiveSysmlSerializer` governs stateless structural transition evaluation enforcing invariant obligations `Invariant_REQ_0603_Formal_Bijectivity_Complexity_Invariants`, `Invariant_REQ_0603_SC_04` via `logos` + `rowan` lossless Red/Green CST (`deap_core::sysml_cst`), `salsa` incremental query caching (`salsa::input`, `salsa::tracked`), and Stage-1 == Stage-2 bijective round-trip verification with zero hand-rolled scanners. Implementation is bounded inside `< 380` exec SLOC submodules (`./crates/deap-core/src/sysml_cst/` and `./crates/compile-sysml/src/roundtrip/`) with explicit deletion of legacy hand-rolled scanner/serializer monoliths (`-2,400+` SLOC retired).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `BijectiveSysmlSerializer` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
+Classifier `BijectiveSysmlSerializer` exposes an internal structural boundary with no external ports, operations, or actions declared in schema, routing canonical un-double-quoted SysML v2 output and `ariadne` source-span diagnostics (`E0300`, `E0400`) through `SysmlBijectiveRoundtripCompilerGate`.
 
 ### Associated Use Cases & User Stories
 

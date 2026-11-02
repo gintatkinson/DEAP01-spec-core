@@ -29,17 +29,17 @@ graph TD
 - `Compiler_Engineer_CI`
 
 ## 2. Preconditions
-- Complex nested return or collection signatures in crates/deap-core/src/deap_core::rust_cst / deap_core::dart_cst.rs and crates/compile-sysml/src/lib.rs.
+- Complex nested return or collection signatures in `< 380`-SLOC submodules (`crates/deap-core/src/rust_cst/`, `crates/deap-core/src/dart_cst/`, `crates/verify-baseline/src/clippy_forbid/`, and `crates/compile-sysml/src/lib.rs`) following explicit deletion of legacy hand-rolled scanners (`source_ast.rs`, `structural.rs`), governed by Contract A (full OMG SysML v2.0 + KerML 1.0 grammar coverage, zero 16-construct caps) and Contract B (`rustc`/`cargo clippy --message-format=json` + `ra_ap_syntax` attr CST verification, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, zero text-scanner lint mandates).
 
 ## 3. Trigger
 - clippy::type_complexity = \"forbid\" is active across the workspace.
 
 ## 4. Main Success Scenario
-1. `Compiler_Engineer_CI` activates `forbid_type_complexity = true` in `CompilerLintEnforcementGate` via `WorkspaceManifestForbidGate` and `toml_edit` on `CargoManifestInputPort`.
-2. `CrateRootAttributeSanitizer` scans `crates/deap-core/src/` and `crates/compile-sysml/src/lib.rs` through `RustSourceTokenStreamPort` using `ra_ap_syntax`, `syn`, `quote`, and `prettyplease`.
-3. `CrateRootAttributeSanitizer` removes all `allow(clippy::type_complexity)` attributes and replaces deeply nested tuple or collection signatures with documented semantic `pub type` aliases (`ExtractedMethodSignature` and `ComponentMethodTable`) or domain structs.
-4. `ClippyAttributeCstParser` executes `RunScanClippyAllowTokensOn` to confirm `allowed_suppression_count == 0` across all workspace source files.
-5. `Compiler_Engineer_CI` executes `ExecuteCargoClippyWorkspaceAllTargets` (`cargo clippy --workspace --all-targets -- -D warnings`), which compiles cleanly with zero warnings and emits `true` on `BaselineGateVerdictPort`.
+1. `Compiler_Engineer_CI` activates `forbid_type_complexity = true` in `CompilerLintEnforcementGate` via `WorkspaceManifestForbidGate`, `cargo_metadata`, and `toml_edit` on `CargoManifestInputPort` (Layer 1 Domain State & Data Model).
+2. `CrateRootAttributeSanitizer` inspects `crates/deap-core/src/rust_cst/`, `crates/verify-baseline/src/clippy_forbid/`, and `crates/compile-sysml/src/lib.rs` through `RustSourceTokenStreamPort` using `ra_ap_syntax` (`ast::Attr`, `ast::HasAttrs`), `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, `syn`, `quote`, and `prettyplease`.
+3. `CrateRootAttributeSanitizer` removes all `allow(clippy::type_complexity)` attributes and replaces deeply nested tuple or collection signatures with documented semantic `pub type` aliases (`ExtractedMethodSignature` and `ComponentMethodTable`) or domain structs inside `< 380`-SLOC submodules while confirming legacy `source_ast.rs` and `structural.rs` hand-rolled scanners are deleted (Layer 2 Logic & State Management).
+4. `ClippyAttributeCstParser` executes `RunScanClippyAllowTokensOn` over `ra_ap_syntax` attribute CST nodes to confirm `allowed_suppression_count == 0` across all workspace source files with zero text-scanner lint mandates.
+5. `Compiler_Engineer_CI` executes `ExecuteCargoClippyWorkspaceAllTargets` (`cargo clippy --workspace --all-targets --message-format=json -- -D warnings`), which compiles cleanly with zero warnings and emits `true` on `BaselineGateVerdictPort` (Layer 3 Presentation & Actuator Interface Binding).
 
 ## 5. Alternate and Exception Flows
 - 3a. Residual `allow(clippy::type_complexity)` attribute detected by `ClippyAttributeCstParser`:

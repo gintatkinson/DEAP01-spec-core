@@ -13,25 +13,26 @@
 
 ## User Story
 
-As a `Operator_Or_CI_Runner`, I want to invoke `ResolveParentEpicByPkgName()` on `BidirectionalBacklogReconciler`, so that Resolve Parent Epic by pkg_name == ConOps.
+As a `Operator_Or_CI_Runner`, I want to invoke `ResolveParentEpicByPkgName()` on `AgileSpecForwardProjector` and `BidirectionalBacklogReconciler`, so that ConOps (`pkg_name == "ConOps"`) and subsystem packages deterministically resolve their owning Parent Epic from the full OMG SysML v2.0 + KerML 1.0 `salsa` package AST hierarchy without fallback ambiguity or hand-rolled scanners.
 
 ## Architectural Realization (3-Layer Definition of Done)
 
 ### Layer 1: Domain State & Data Model
-- Domain state attributes on `BidirectionalBacklogReconciler`: `trackHtmlCommentState: Boolean`, `parentInclusiveEpics: Boolean`.
-- Action `ResolveParentEpicByPkgName` invocation message envelope bound to `BidirectionalBacklogReconciler` typed domain schema.
-- Declared lifecycle state model: `BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_LifecycleState`, `AstLoaded`, `ForwardProjected`, `IcdSynthesized`, `WbsExported`, `BacklogReconciled`, `ReverseSynced`, `Rejected`, `VerifiedRoundtrip`.
+- Domain state attributes on `BidirectionalBacklogReconciler` (`trackHtmlCommentState: Boolean`, `parentInclusiveEpics: Boolean`) and `AgileSpecForwardProjector` (`maxForwardLatencyMs: Integer`, `preserveTypedActionParams: Boolean`).
+- **Contract A (Full OMG SysML v2.0 + KerML 1.0 Grammar Coverage -- Zero 16-Construct Caps)**: Action `ResolveParentEpicByPkgName` message envelope binds to `logos` + `rowan` + `salsa` `package`, `library package`, `standard library package`, `import`, `part def`/`part`, `use case def`/`use case`, `interaction def`/`interaction`, and `#capability` metadata usages (`deap_core::sysml_cst`) across the entire OMG SysML v2.0 and KerML 1.0 grammar with zero 16-construct caps.
+- **Contract B (`pulldown-cmark` + `pulldown-cmark-to-cmark` Lossless Markdown AST + `toml_edit` + `salsa` Across All 6 Crates -- Zero Hand-Rolled Scanners)**: Resolves Parent Epic metadata rows and links via memoized `salsa` queries and `pulldown-cmark` + `pulldown-cmark-to-cmark` AST tables across `deap-core`, `compile-sysml`, `ingest-sysml`, `reconcile-backlog`, `verify-baseline`, and `assemble-conops`.
+- Declared lifecycle state model: `BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_LifecycleState` (`AstLoaded`, `ForwardProjected`, `IcdSynthesized`, `WbsExported`, `BacklogReconciled`, `ReverseSynced`, `Rejected`, `VerifiedRoundtrip`).
 
 ### Layer 2: Logic & State Management
-- Behavioral execution contract: invokes `ResolveParentEpicByPkgName()` on `BidirectionalBacklogReconciler` with atomic precondition verification.
+- Behavioral execution contract: invokes `ResolveParentEpicByPkgName()` on `AgileSpecForwardProjector` and `BidirectionalBacklogReconciler` via `salsa` interned package symbol resolution with atomic precondition verification and zero hand-rolled string scanners.
 - State transition management: `AstLoaded -> ForwardProjected` (trigger `forwardSyncSpecs`).
-- Formal constraints and requirements enforced: `REQ-0604 (REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint)`.
-- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/compile-sysml/src/forward_sync/`, `crates/compile-sysml/src/icd_wbs/`, `crates/reconcile-backlog/src/table_cst/`) while retiring monolithic markdown/table string emitters (`-1,100+` SLOC).
+- Formal constraints and requirements enforced: `Invariant_REQ_0604_SC_01`, `Invariant_REQ_0604_SC_02`, and `REQ-0604 (REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint)`.
+- Modularity & explicit legacy scanner deletion target: bounds implementation inside `< 380` executable SLOC submodules (`./crates/compile-sysml/src/forward_sync/`, `./crates/compile-sysml/src/icd_wbs/`, `./crates/reconcile-backlog/src/table_cst/`, `./crates/assemble-conops/src/`) while enforcing explicit deletion of legacy hand-rolled Markdown/table/SysML string emitters and line-by-line scanners (`-1,100+` SLOC net-negative ratchet).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-- Component port bindings on `BidirectionalBacklogReconciler`: `specDocsInOutPort: String (inout)`, `subpackageSyncOutPort: String (out)`.
-- Interaction binding (`BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_SequenceInteraction`): routes `ResolveParentEpicByPkgName` invocation from `Operator_Or_CI_Runner` to `BidirectionalBacklogReconciler` and returns `ResolveParentEpicByPkgName`.
-- Diagnostic fault surface: reports deterministic rejection diagnostics to `Operator_Or_CI_Runner` across the declared interface boundary when guard or invariant checks fail.
+- Component port bindings on `AgileSpecForwardProjector` (`packageAstInPort: String (in)`, `specMarkdownOutPort: String (out)`) and `BidirectionalBacklogReconciler` (`specDocsInOutPort: String (inout)`, `subpackageSyncOutPort: String (out)`).
+- Interaction binding (`BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_SequenceInteraction`): routes `ResolveParentEpicByPkgName` invocation from `Operator_Or_CI_Runner` to `BidirectionalBacklogReconciler`, serializing CommonMark frontmatter via `pulldown-cmark-to-cmark` and returning `ResolveParentEpicByPkgName`.
+- Diagnostic fault surface: reports deterministic `ariadne` / `miette` rejection diagnostics (`E0100`) to `Operator_Or_CI_Runner` across the declared interface boundary when guard or invariant checks fail.
 
 ## UML Sequence Diagram
 
@@ -47,17 +48,26 @@ sequenceDiagram
     AgileSpecForwardProjector-->>Operator_Or_CI_Runner: StatusReport
 ```
 
+## Formal SysML Test Case & Verification Binding
+```sysml
+test case def Test_ResolveParentEpicByPkgName {
+    subject BidirectionalBacklogReconciler;
+    verify requirement REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint;
+    objective "Verify deterministic Parent Epic resolution for ConOps and subsystem packages via salsa HIR queries";
+}
+```
+
 ## Acceptance Criteria (BDD)
 - [ ] AC-US-19-01: Given `BidirectionalBacklogReconciler` is in declared state `AstLoaded` with domain state attributes (`trackHtmlCommentState: Boolean`, `parentInclusiveEpics: Boolean`), When `Operator_Or_CI_Runner` invokes `ResolveParentEpicByPkgName` on `BidirectionalBacklogReconciler`, Then `BidirectionalBacklogReconciler` validates and binds the request against `BidirectionalBacklogReconciler` domain state (`trackHtmlCommentState: Boolean`, `parentInclusiveEpics: Boolean`) and transitions to `ForwardProjected`.
 - [ ] AC-US-19-02: Given `BidirectionalBacklogReconciler` active state management during `ResolveParentEpicByPkgName`, When `BidirectionalBacklogReconciler` evaluates formal constraint `Invariant_REQ_0604_SC_01`, Then `BidirectionalBacklogReconciler` verifies constraint satisfaction before committing state updates.
 - [ ] AC-US-19-03: Given `BidirectionalBacklogReconciler` active state management during `ResolveParentEpicByPkgName`, When `BidirectionalBacklogReconciler` evaluates formal constraint `Invariant_REQ_0604_SC_02`, Then `BidirectionalBacklogReconciler` verifies constraint satisfaction before committing state updates.
-- [ ] AC-US-19-04: Given `BidirectionalBacklogReconciler` requirement allocation for `ResolveParentEpicByPkgName`, When `BidirectionalBacklogReconciler` verifies formal requirement `REQ-0604 (REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint)`, Then `BidirectionalBacklogReconciler` confirms normative requirement satisfaction across execution.
+- [ ] AC-US-19-04: Given `BidirectionalBacklogReconciler` requirement allocation for `ResolveParentEpicByPkgName`, When `BidirectionalBacklogReconciler` verifies formal requirement `REQ-0604 (REQ_0604_BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint)` across the full OMG SysML v2.0 + KerML 1.0 grammar (Contract A, zero 16-construct caps) and `pulldown-cmark` + `pulldown-cmark-to-cmark` + `toml_edit` + `salsa` stack (Contract B, zero hand-rolled scanners) inside `< 380`-SLOC submodules with legacy scanners deleted, Then `BidirectionalBacklogReconciler` confirms normative requirement satisfaction across execution.
 - [ ] AC-US-19-05: Given `BidirectionalBacklogReconciler` ingress port binding (`specDocsInOutPort: String`), When `BidirectionalBacklogReconciler` completes `ResolveParentEpicByPkgName`, Then `BidirectionalBacklogReconciler` delivers `ResolveParentEpicByPkgName` across egress port (`specDocsInOutPort: String`, `subpackageSyncOutPort: String`) to `Operator_Or_CI_Runner`.
-- [ ] AC-US-19-06: Given violated formal constraint `Invariant_REQ_0604_SC_01`, When `Operator_Or_CI_Runner` invokes `ResolveParentEpicByPkgName` on `BidirectionalBacklogReconciler`, Then `BidirectionalBacklogReconciler` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic fault diagnostic across the interface binding.
+- [ ] AC-US-19-06: Given violated formal constraint `Invariant_REQ_0604_SC_01`, When `Operator_Or_CI_Runner` invokes `ResolveParentEpicByPkgName` on `BidirectionalBacklogReconciler`, Then `BidirectionalBacklogReconciler` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic fault diagnostic (`E0100`) across the interface binding.
 
 ## Required Features
-- [ ] #670 - [Feature 16: [BP 04 Deterministic Specification ICD and WBS Forward Compiler Blueprint] AgileSpecForwardProjector](../features/FEAT-16-AgileSpecForwardProjector.md)
-- [ ] #671 - [Feature 17: [BP 04 Deterministic Specification ICD and WBS Forward Compiler Blueprint] BidirectionalBacklogReconciler](../features/FEAT-17-BidirectionalBacklogReconciler.md)
+- [ ] #670 - [Feature 16: [BP 04 Deterministic Specification ICD and WBS Forward Compiler Blueprint] AgileSpecForwardProjector](../features/FEAT-16-AgileSpecForwardProjector.md) (resolves Parent Epic bindings across ConOps and subsystem packages)
+- [ ] #671 - [Feature 17: [BP 04 Deterministic Specification ICD and WBS Forward Compiler Blueprint] BidirectionalBacklogReconciler](../features/FEAT-17-BidirectionalBacklogReconciler.md) (synchronizes resolved Parent Epic links across CommonMark frontmatter tables)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:

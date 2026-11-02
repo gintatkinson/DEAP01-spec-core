@@ -84,16 +84,16 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 Structural composition and boundary topology for classifier `TestTargetLintEnforcer` organize no nested subparts declared in schema paired with boundary ports `in cmd_in : String`, `out status_out : String`.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for TestTargetLintEnforcer.
+Operational lifecycle events and discrete state transitions for `TestTargetLintEnforcer` across `rustc`/`cargo clippy --workspace --all-targets --message-format=json` and `ra_ap_syntax` CST inspection.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `TestTargetLintEnforcer` encapsulates typed domain state attributes `quantity : Integer` alongside operational lifecycle status.
+Classifier `TestTargetLintEnforcer` encapsulates typed domain state attributes `quantity : Integer` alongside operational lifecycle status. Enforces Contract A (full OMG SysML v2.0 + KerML 1.0 Definition and Usage grammar coverage with zero 16-construct caps) and Contract B workspace target and CST models (`cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, `ra_ap_syntax`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `TestTargetLintEnforcer` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `TestTargetLintEnforcer` governs stateless structural transition evaluation across all unit test modules (`#[cfg(test)]`) and integration test targets via `rustc`/`cargo clippy --workspace --all-targets --message-format=json` and `ra_ap_syntax::ast::HasAttrs` CST verification, forbidding `cfg_attr(test, allow(...))` exemptions and enforcing zero hand-rolled text-scanner lint mandates. Targets `< 380`-SLOC submodules (`crates/verify-baseline/src/clippy_forbid/` and `crates/deap-core/src/rust_cst/`) with explicit legacy hand-rolled scanner deletion (`source_ast.rs`, `structural.rs`).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `TestTargetLintEnforcer` binds external and behavioral interfaces across port `in cmd_in : String`, port `out status_out : String`.
+Classifier `TestTargetLintEnforcer` binds external and behavioral interfaces across port `in cmd_in : String`, port `out status_out : String`, reporting structured compiler JSON diagnostics and `ariadne` spans resolved via `ra_ap_line_index`.
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `TestTargetLintEnforcer` initialization inputs for `quantity` (`Integer`) (no additional constraints specified in schema), When `TestTargetLintEnforcer` commits typed domain state, Then declared state attributes hold verified values.

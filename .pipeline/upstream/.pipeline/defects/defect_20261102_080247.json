@@ -1,0 +1,34 @@
+{
+  "title": "Baseline check failure: Specification Quality & Coverage Audit",
+  "severity": "Critical",
+  "file_location": "/Users/perkunas/jail/DEAP01-spec-core/.pipeline/upstream",
+  "pillar": "Pillar 1: System Baseline Integrity",
+  "symptom": "Violations found during Specification Quality & Coverage Audit:\n- docs/user-stories/US-51-emit_modular_flutter_tree.md:21: [platform-independence-framework-leak] Tier 1 specification 'docs/user-stories/US-51-emit_modular_flutter_tree.md' references forbidden concrete framework library 'flutter' on line 21.",
+  "whys": [
+    {
+      "question": "did the baseline verification check fail",
+      "because": "Specification Quality & Coverage Audit failed with 1 violation(s)"
+    },
+    {
+      "question": "were these violations present",
+      "because": "required specification files or syntax constraints were violated"
+    },
+    {
+      "question": "did this occur in the repository",
+      "because": "specifications or workspace files drifted from baseline governance standards"
+    },
+    {
+      "question": "was this not caught earlier",
+      "because": "verification was not executed before commit"
+    },
+    {
+      "question": "is this critical",
+      "because": "all downstream projects must strictly satisfy baseline gates before delivery"
+    }
+  ],
+  "impact": "Halts pipeline verification and downstream implementation until resolved.",
+  "architectural_models": "DEAP Platform Specification and Baseline Architecture.",
+  "remediation": "Resolve the following violations:\n- docs/user-stories/US-51-emit_modular_flutter_tree.md:21: [platform-independence-framework-leak] Tier 1 specification 'docs/user-stories/US-51-emit_modular_flutter_tree.md' references forbidden concrete framework library 'flutter' on line 21.",
+  "verification": "Re-run verify-baseline until all checks pass cleanly.",
+  "regression_prevention": "Run verify-baseline before every commit and PR merge."
+}

@@ -11,6 +11,11 @@
 
 # Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate
 
+## Description
+`FrbIcdBridgeAndMiriUbGate` specifies the Stage 3 `flutter_rust_bridge` FFI Boundary Guard and Miri Tree Borrows Undefined-Behavior Gate within `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper` (**REQ-0609** / `BP-09` / `DEAP-BP-DET-09`).
+- **Contract A (100% OMG SysML v2.0 + KerML 1.0 Grammar Coverage)**: Ingests full Definition and Usage symmetry across all normative OMG SysML v2.0 and KerML 1.0 constructs (`package`/`library package`/`standard library package`, `import`, `metadata def`/`metadata`/`@Metadata`/`#user_keyword` (`#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` and legacy `hazard def`/`risk def`/`capability def`), `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port` (`in`, `out`, `inout`, `~`), `connection def`/`connection`, `interface def`/`interface`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, and KerML specialization/multiplicity/expressions `:`, `:>`, `:>>`, `::>`, `~`, `[lo..hi]`, `implies`, `xor`, `??`, `->`, `collect`, `select`, `forAll`, `exists`, `ISQ`/`SI`/`ScalarValues`) with zero 16-construct artificial caps.
+- **Contract B (100% Official Rust Compiler & Formal Verification Stack, Zero Hand-Rolled Scanners)**: Operates in the 5-Stage formal verification pipeline (Stage 1 `cargo clippy --message-format=json` -> Stage 2 isolated `./lints/deap-dylint-mir/` -> Stage 3 `cargo +nightly miri test` under `MIRIFLAGS="-Zmiri-tree-borrows"` + `flutter_rust_bridge` FFI synthesis via `syn` + `proc-macro2` + `quote` + `prettyplease` + `deap_core::dart_cst` (`logos` + `rowan`) -> Stage 4 `cargo kani` `#[kani::proof]` -> Stage 5 Ferrocene qualification) with dynamic runtime `PATH` discovery across macOS, Linux, and Windows and zero hand-rolled string/line/char-by-char scanners.
+
 ## UML Class Diagram
 
 ```mermaid
@@ -23,6 +28,7 @@ classDiagram
         +Integer max_dart_analyze_infos
         +Boolean forbid_unsafe_in_domain
         +String miri_aliasing_model
+        +Boolean guard_inbound_frb_f64(String spec, Real raw_value, String active_fsm_state)
     }
 ```
 
@@ -107,19 +113,22 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 
 | AST Member Kind | Identifier | Declared Type / Direction | Default / Invariant Contract |
 | :--- | :--- | :--- | :--- |
-| Attribute | `max_miri_ub_violations` | `Integer` | Default `0` |
-| Attribute | `max_dart_analyze_infos` | `Integer` | Default `0` |
-| Attribute | `forbid_unsafe_in_domain` | `Boolean` | Default `true` |
+| Attribute | `max_miri_ub_violations` | `Integer` | Default `0` (`C_VER_04: max_miri_ub_violations == 0`) |
+| Attribute | `max_dart_analyze_infos` | `Integer` | Default `0` (`dart analyze --fatal-infos` zero findings) |
+| Attribute | `forbid_unsafe_in_domain` | `Boolean` | Default `true` (`#![forbid(unsafe_code)]` across pure domain crates) |
 | Attribute | `miri_aliasing_model` | `String` | Default `"-Zmiri-tree-borrows"` |
+| Operation | `guard_inbound_frb_f64` | `in spec: String, in raw_value: Real, in active_fsm_state: String, return Boolean` | Enforces IEEE 754 `is_finite()`, closed `[min..max]` interval bounds, and `state def` operational mode preconditions (`DEAP-E0903`) |
 | Port | `sysml_icd_ast_in` | `in String` | Boundary interface contract |
 | Port | `frb_facade_and_dart_out` | `out String` | Boundary interface contract |
 | Port | `miri_and_dart_receipt_out` | `out String` | Boundary interface contract |
-| Constraint | `Invariant_REQ_0609_SC_01` | Invariant (`REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`) | Declared structural invariant |
-| Constraint | `Invariant_REQ_0609_SC_02` | Invariant (`REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`) | Declared structural invariant |
-| Constraint | `Invariant_REQ_0609_SC_03` | Invariant (`REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`) | Declared structural invariant |
-| Constraint | `Invariant_REQ_0609_SC_04` | Invariant (`REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`) | Declared structural invariant |
-| Constraint | `Invariant_REQ_0609_SC_05` | Invariant (`REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`) | Declared structural invariant |
-| Requirement | `REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)` | Allocated Requirement | MultiStageFormalVerificationGatekeeper (**REQ-0609** / BP-09 / DEAP-BP-DET-09, UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c9, Class P static HIR/THIR/MIR linear pass complexity paired with bounded CBMC state-space unwinding, governed by DO-178C Level A, DO-330 TQL-4, DO-333 Formal Methods Supplement, |
+| Constraint | `C_VER_04` | `max_miri_ub_violations >= 0 and max_miri_ub_violations <= 0` | Zero Miri Tree Borrows undefined-behavior violations |
+| Constraint | `C_VER_07` | `max_module_exec_sloc >= 1 and max_module_exec_sloc <= 380` | Submodule executable SLOC ceiling (`< 380` SLOC verified via `ra_ap_syntax`) |
+| Constraint | `Invariant_REQ_0609_SC_01` | Invariant (`REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`) | Stage 1 universal stable Clippy total-function and `clippy.toml` threshold enforcement |
+| Constraint | `Invariant_REQ_0609_SC_02` | Invariant (`REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`) | Stage 2 isolated `./lints/deap-dylint-mir/` MIR zero-allocation and `REQ-*` digest binding enforcement |
+| Constraint | `Invariant_REQ_0609_SC_03` | Invariant (`REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`) | Stage 3 `flutter_rust_bridge` FFI boundary guard, `#![forbid(unsafe_code)]` domain isolation, and Miri `-Zmiri-tree-borrows` zero-UB enforcement |
+| Constraint | `Invariant_REQ_0609_SC_04` | Invariant (`REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`) | Stage 4 deterministic Kani `#[kani::proof]` synthesis (`syn`+`proc-macro2`+`quote`+`prettyplease`) and CBMC `UNSAT` verification |
+| Constraint | `Invariant_REQ_0609_SC_05` | Invariant (`REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`) | Cross-platform runtime `PATH` discovery, `< 380`-SLOC submodule modularity, and fail-closed qualification |
+| Requirement | `REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)` | Allocated Requirement | MultiStageFormalVerificationGatekeeper (**REQ-0609** / `BP-09` / `DEAP-BP-DET-09`, UUIDv5 `6ba7b810-9dad-11d1-80b4-00c04fd430c9`, governed by DO-178C Level A, DO-330 TQL-4, DO-333 Formal Methods Supplement, ISO 26262-6 ASIL D, and IEC 61508-3 SIL 4) |
 
 ```sysml
 constraint Invariant_REQ_0609_SC_01 {}
@@ -133,30 +142,31 @@ constraint Invariant_REQ_0609_SC_05 {}
 Structural composition and boundary topology for classifier `FrbIcdBridgeAndMiriUbGate` organize no nested subparts declared in schema paired with boundary ports `in sysml_icd_ast_in : String`, `out frb_facade_and_dart_out : String`, `out miri_and_dart_receipt_out : String`.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for FrbIcdBridgeAndMiriUbGate.
+Operational lifecycle events and discrete state transitions for `FrbIcdBridgeAndMiriUbGate` within `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_LifecycleState` (`RunningStage3FrbAndMiri -> RunningStage4KaniCbmc` on `stage3FrbMiriAndDartVerified`; `RunningStage3FrbAndMiri -> FailedClosedJsonDiagnostic` on `rejectMiriTreeBorrowsOrDartFatalInfo`).
 
 ### Layer 1: Domain State & Signal Model
-Classifier `FrbIcdBridgeAndMiriUbGate` encapsulates typed domain state attributes `max_miri_ub_violations : Integer`, `max_dart_analyze_infos : Integer`, `forbid_unsafe_in_domain : Boolean`, `miri_aliasing_model : String` alongside operational lifecycle status.
+Classifier `FrbIcdBridgeAndMiriUbGate` encapsulates typed domain state attributes `max_miri_ub_violations : Integer`, `max_dart_analyze_infos : Integer`, `forbid_unsafe_in_domain : Boolean`, `miri_aliasing_model : String` alongside `IcdSignalGuardSpec` and `StageGateReceipt` records derived from full Contract A OMG SysML v2.0 + KerML 1.0 `port def`/`port`, `item def`/`item`, `flow def`/`flow`, `state def`/`state`, and `constraint def`/`constraint` AST nodes (`deap_core::sysml_cst` via `logos` + `rowan` + `salsa` + `ariadne`).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `FrbIcdBridgeAndMiriUbGate` governs stateless structural transition evaluation enforcing invariant obligations `Invariant_REQ_0609_SC_01`, `Invariant_REQ_0609_SC_02`, `Invariant_REQ_0609_SC_03`, `Invariant_REQ_0609_SC_04`, `Invariant_REQ_0609_SC_05`.
+Classifier `FrbIcdBridgeAndMiriUbGate` governs stateless structural transition evaluation enforcing invariant obligations `Invariant_REQ_0609_SC_01`, `Invariant_REQ_0609_SC_02`, `Invariant_REQ_0609_SC_03`, `Invariant_REQ_0609_SC_04`, `Invariant_REQ_0609_SC_05`, `C_VER_04`, and `C_VER_07`. Synthesizes `#![forbid(unsafe_code)]` domain modules and `flutter_rust_bridge` FFI guards (`guard_inbound_frb_f64`) via `syn` + `proc-macro2` + `quote` + `prettyplease`, verifies Dart bindings via `deap_core::dart_cst` (`logos` + `rowan`) and `dart analyze --fatal-infos`, and executes `cargo +nightly miri test` under `-Zmiri-tree-borrows` inside `< 380`-SLOC submodules (`./crates/compile-sysml/src/frb_guard/` and `./crates/verify-baseline/src/formal_gates/`) while explicitly deleting legacy hand-rolled FFI/Dart string scanners and unguarded FFI emitters.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `FrbIcdBridgeAndMiriUbGate` binds external and behavioral interfaces across port `in sysml_icd_ast_in : String`, port `out frb_facade_and_dart_out : String`, port `out miri_and_dart_receipt_out : String`.
+Classifier `FrbIcdBridgeAndMiriUbGate` binds external and behavioral interfaces across port `in sysml_icd_ast_in : String`, port `out frb_facade_and_dart_out : String`, and port `out miri_and_dart_receipt_out : String`, emitting deterministic single-line NDJSON diagnostics (`DEAP-E0903`) on boundary, `dart analyze`, or Miri Tree Borrows violations.
 
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #773 - [Use Case 45: Stage 1 Universal Stable Clippy Total Function and clippy toml Threshold Enforcement](../use-cases/UC-45-Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement.md)
-- [ ] #774 - [Use Case 46: Stage 2 Isolated Nightly Dylint MIR Zero Allocation Proof on Real Time Control Loops](../use-cases/UC-46-Stage_2_Isolated_Nightly_Dylint_MIR_Zero_Allocation_Proof_on_Real_Time_Control_Loops.md)
-- [ ] #775 - [Use Case 47: Stage 2 Compile Time MIR Requirement Binding Verification Against Active SysML Digests](../use-cases/UC-47-Stage_2_Compile_Time_MIR_Requirement_Binding_Verification_Against_Active_SysML_Digests.md)
-- [ ] #776 - [Use Case 48: Stage 3 Deterministic flutter_rust_bridge FFI Synthesis with Fail Closed ICD Boundary Guards](../use-cases/UC-48-Stage_3_Deterministic_flutter_rust_bridge_FFI_Synthesis_with_Fail_Closed_ICD_Boundary_Guards.md)
-- [ ] #777 - [Use Case 49: Stage 3 Miri Tree Borrows Abstract Machine Undefined Behavior Rejection on FFI and Ring Buffer Bridges](../use-cases/UC-49-Stage_3_Miri_Tree_Borrows_Abstract_Machine_Undefined_Behavior_Rejection_on_FFI_and_Ring_Buffer_Bridges.md)
-- [ ] #778 - [Use Case 50: Stage 4 Deterministic Kani CBMC Proof Synthesis and STPA Unsafe Control Action Falsification](../use-cases/UC-50-Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification.md)
-- [ ] #779 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md)
+- [ ] #773 - [Use Case 45: Stage 1 Universal Stable Clippy Total Function and clippy toml Threshold Enforcement](../use-cases/UC-45-Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement.md) (Coordinates Stage 1 total-function and `undocumented_unsafe_blocks` prerequisites before Stage 3 FFI promotion)
+- [ ] #774 - [Use Case 46: Stage 2 Isolated Nightly Dylint MIR Zero Allocation Proof on Real Time Control Loops](../use-cases/UC-46-Stage_2_Isolated_Nightly_Dylint_MIR_Zero_Allocation_Proof_on_Real_Time_Control_Loops.md) (Coordinates Stage 2 `#rt_loop` zero-allocation proofs preceding Stage 3 FFI and Miri evaluation)
+- [ ] #775 - [Use Case 47: Stage 2 Compile Time MIR Requirement Binding Verification Against Active SysML Digests](../use-cases/UC-47-Stage_2_Compile_Time_MIR_Requirement_Binding_Verification_Against_Active_SysML_Digests.md) (Coordinates Stage 2 `REQ-*` SysML digest verification preceding Stage 3 FFI synthesis)
+- [ ] #776 - [Use Case 48: Stage 3 Deterministic flutter_rust_bridge FFI Synthesis with Fail Closed ICD Boundary Guards](../use-cases/UC-48-Stage_3_Deterministic_flutter_rust_bridge_FFI_Synthesis_with_Fail_Closed_ICD_Boundary_Guards.md) (Directly realizes Stage 3 `#![forbid(unsafe_code)]` domain synthesis, `guard_inbound_frb_f64` FFI boundary checks, and `dart analyze --fatal-infos`)
+- [ ] #777 - [Use Case 49: Stage 3 Miri Tree Borrows Abstract Machine Undefined Behavior Rejection on FFI and Ring Buffer Bridges](../use-cases/UC-49-Stage_3_Miri_Tree_Borrows_Abstract_Machine_Undefined_Behavior_Rejection_on_FFI_and_Ring_Buffer_Bridges.md) (Directly realizes Stage 3 `cargo +nightly miri test` under `-Zmiri-tree-borrows` across FFI and SPSC ring-buffer bridges)
+- [ ] #778 - [Use Case 50: Stage 4 Deterministic Kani CBMC Proof Synthesis and STPA Unsafe Control Action Falsification](../use-cases/UC-50-Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification.md) (Promotes verified Stage 3 FFI/Miri artifacts to Stage 4 Kani CBMC proof synthesis)
+- [ ] #779 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Enforces `< 380`-SLOC submodule modularity and cross-platform `miri`/`dart` runtime `PATH` discovery)
 
 #### Associated User Stories
-- None allocated (structural subsystem component)
+- [ ] #812 - [User Story 63: guard inbound frb f64](../user-stories/US-63-guard_inbound_frb_f64.md) (Executes `guard_inbound_frb_f64(spec, raw_value, active_fsm_state)` across inbound `flutter_rust_bridge` FFI entrypoints)
+- [ ] #814 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Consolidates Stage 3 Miri and `dart analyze` receipts into the 4-stage gatekeeper verdict)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `FrbIcdBridgeAndMiriUbGate` inputs satisfying `Invariant_REQ_0609_SC_01` [Req `REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`], When `FrbIcdBridgeAndMiriUbGate` evaluates invariant `Invariant_REQ_0609_SC_01`, Then the invariant holds and verified state is committed.
@@ -173,6 +183,7 @@ Classifier `FrbIcdBridgeAndMiriUbGate` binds external and behavioral interfaces 
 ## Source References
 Formal component specifications and normative systems engineering requirements:
 - System Architecture Model: `schema/model.sysml`
+- Engineering Design Blueprint: `./docs/designs/blueprint-09-clippy-dylint-miri-kani-formal-verification-gate.md`
 - Normative Systems Engineering Standard: ISO/IEC/IEEE 15288:2023 §6.4.3 Architecture Definition Process
 
 Component behavior and interface definitions derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 15288.

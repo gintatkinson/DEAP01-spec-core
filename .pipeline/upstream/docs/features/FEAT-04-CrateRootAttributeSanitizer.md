@@ -84,16 +84,16 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 Structural composition and boundary topology for classifier `CrateRootAttributeSanitizer` organize no nested subparts declared in schema paired with boundary ports `in cmd_in : String`, `out status_out : String`.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for CrateRootAttributeSanitizer.
+Operational lifecycle events and discrete state transitions for `CrateRootAttributeSanitizer` across `ra_ap_syntax`, `ra_ap_text_edit`, and `rustc`/`cargo clippy --message-format=json`.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `CrateRootAttributeSanitizer` encapsulates typed domain state attributes `quantity : Integer` alongside operational lifecycle status.
+Classifier `CrateRootAttributeSanitizer` encapsulates typed domain state attributes `quantity : Integer` alongside operational lifecycle status. Enforces Contract A (full OMG SysML v2.0 + KerML 1.0 Definition and Usage grammar coverage with zero 16-construct caps) and Contract B lossless CST and span-edit models (`ra_ap_syntax`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, `syn`, `proc-macro2`, `quote`, `prettyplease`).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `CrateRootAttributeSanitizer` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `CrateRootAttributeSanitizer` governs stateless structural transition evaluation using `ra_ap_syntax` (`ast::Attr`, `ast::HasAttrs`), `ra_ap_text_edit`, and `rustc`/`cargo clippy --message-format=json` to sanitize crate-root and module-level lint suppressions and enforce semantic type aliases (`ExtractedMethodSignature`, `ComponentMethodTable`) with zero hand-rolled text-scanner lint mandates. Targets `< 380`-SLOC submodules (`crates/verify-baseline/src/clippy_forbid/` and `crates/deap-core/src/rust_cst/`) with explicit legacy hand-rolled scanner deletion (`source_ast.rs`, `structural.rs`).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `CrateRootAttributeSanitizer` binds external and behavioral interfaces across port `in cmd_in : String`, port `out status_out : String`.
+Classifier `CrateRootAttributeSanitizer` binds external and behavioral interfaces across port `in cmd_in : String`, port `out status_out : String`, emitting deterministic `ra_ap_text_edit` span diffs and `ariadne` diagnostics via `ra_ap_line_index`.
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `CrateRootAttributeSanitizer` initialization inputs for `quantity` (`Integer`) (no additional constraints specified in schema), When `CrateRootAttributeSanitizer` commits typed domain state, Then declared state attributes hold verified values.

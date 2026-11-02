@@ -67,19 +67,19 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `type` | `String` | Default `"Subcomponent"` |
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `FailClosedRecursiveDescentParser` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
+Structural composition and boundary topology for classifier `FailClosedRecursiveDescentParser` organize no nested subparts declared in schema paired with no external boundary ports declared in schema, operating within the lossless `deap_core::sysml_cst` (`logos` + `rowan` Red/Green CST) and `salsa` incremental query database pipeline.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for FailClosedRecursiveDescentParser.
+Operational lifecycle events and discrete state transitions for `FailClosedRecursiveDescentParser` (`RecursiveDescentParsing -> CanonicalSerialization` on `packageDefConstructed` or `RejectedE0200` on `unexpectedInnerBlockToken`), enforcing `silent_skip_branch_count == 0` with zero `skip_until_semi_or_brace` silent-erasure branches.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `FailClosedRecursiveDescentParser` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status.
+Classifier `FailClosedRecursiveDescentParser` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status, parsing 100% of the normative OMG SysML v2.0 + KerML 1.0 BNF grammar across all 6 clauses (zero 16-construct artificial caps): (1) Namespaces & Metadata (`package`, `library package`, `standard library package`, `import`, `alias`, `doc`, `comment`, `rep`, `dependency`, `metadata def`/`metadata`/`@Metadata`/`#user_keyword` for `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` plus backward-compatible `hazard def`, `risk def`, `capability def`), (2) Structural & Data Types (`attribute def`/`attribute`, `enum def`/`enum`, `item def`/`item`, `part def`/`part`, `port def`/`port`, `connection def`/`connection`, `interface def`/`interface`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`), (3) Behavioral & State (`action def`/`action`, `state def`/`state`), (4) Calculations, Constraints & Requirements (`calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`), (5) Use Cases, Analysis, Verification & Views (`use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`), and (6) KerML 1.0 Specialization, Multiplicity & Expressions (`:`, `:>`, `:>>`, `::>`, `~`, `ref`, `abstract`, `readonly`, `derived`, `end`, `default`, `:=`, `[lo..hi]`, `[*]`, `{ordered, nonunique}`, `implies`, `xor`, `??`, `->`, `collect`, `select`, `forAll`, `exists`, `ISQ`/`SI`/`ScalarValues`).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `FailClosedRecursiveDescentParser` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `FailClosedRecursiveDescentParser` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema while building lossless `rowan` Red/Green `SyntaxNode` trees (`deap_core::sysml_cst`) and `salsa`-tracked HIR/AST projections (`parse_package_or_file`, `ParseTypeExprAndParseTransition`) from `logos` token streams with zero hand-rolled scanners. Implementation is bounded inside `< 380` exec SLOC submodules (`./crates/deap-core/src/sysml_cst/` and `./crates/compile-sysml/src/roundtrip/`) with explicit deletion of legacy hand-rolled recursive-descent parser monoliths (`-2,400+` SLOC retired).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `FailClosedRecursiveDescentParser` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
+Classifier `FailClosedRecursiveDescentParser` exposes an internal structural boundary with no external ports, operations, or actions declared in schema, emitting `ariadne` span-exact syntax diagnostics (`E0200`) through `SysmlBijectiveRoundtripCompilerGate` on any unrecognized inner statement.
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `FailClosedRecursiveDescentParser` initialization inputs for `quantity` (`Integer`), `type` (`String`) (no additional constraints specified in schema), When `FailClosedRecursiveDescentParser` commits typed domain state, Then declared state attributes hold verified values.

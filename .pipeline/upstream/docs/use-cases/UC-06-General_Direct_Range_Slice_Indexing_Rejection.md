@@ -35,11 +35,11 @@ graph TD
 - ./target/release/verify-baseline . --no-domain executes Check 34 (C-PURITY-01).
 
 ## 4. Main Success Scenario
-1. `VerifyBaselineCLI` invokes `check_compiler_ast_purity` on `Check34AstPurityAndAntiGamingGate`, streaming non-test workspace Rust source files through `WorkspaceRustCstPort`.
-2. `Check34AstPurityAndAntiGamingGate` invokes `mask_literals_and_comments` via `deap_core_rust_cst` (`ra_ap_syntax`, `logos`, and `rowan`) to blank out string literals, raw strings, character literals, and comments while preserving line numbering.
-3. `RangeSliceAstDetector` executes `contains_direct_range_slice` across each masked source line to inspect bracketed expressions for `..` or `..=` range operators outside `.get(..)` and `.get_mut(..)` calls.
-4. `RangeSliceAstDetector` detects a direct range-slice indexing expression (`expr[a..b]`, `expr[..idx]`, `expr[start..]`, or `expr[..=end]`) and increments `direct_range_slice_count`.
-5. `Check34AstPurityAndAntiGamingGate` emits a sorted file-and-line `ariadne` / `miette` diagnostic on `PurityViolationDiagnosticPort` instructing the caller to use fallible `.get(..)`, outputs `1` on `Check34GateStatusPort`, and exits fail-closed with code 1.
+1. `VerifyBaselineCLI` resolves workspace crate manifests via `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` (Contract B, zero hand-rolled scanners) and invokes `check_compiler_ast_purity` on `Check34AstPurityAndAntiGamingGate`, streaming non-test workspace Rust source files through `WorkspaceRustCstPort` across full OMG SysML v2.0 + KerML 1.0 grammar definitions and usages (Contract A, zero 16-construct caps).
+2. `Check34AstPurityAndAntiGamingGate` invokes `mask_literals_and_comments` via `deap_core_rust_cst` (`ra_ap_syntax`, `logos`, and `rowan`) to strip string literals, raw strings, character literals, and comments while preserving line numbering and typed `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr, IndexExpr}` CST spans inside `< 380`-SLOC submodules with explicit legacy hand-rolled scanner deletion.
+3. `RangeSliceAstDetector` executes `contains_direct_range_slice` using typed `ra_ap_syntax` CST/AST inspection (`ast::{IndexExpr, CallExpr, MethodCallExpr, MatchExpr, MatchArmList, TryExpr}`) to detect bracketed `..` or `..=` range operators outside fallible `.get(..)` and `.get_mut(..)` calls.
+4. `RangeSliceAstDetector` detects a direct range-slice indexing expression (`expr[a..b]`, `expr[..idx]`, `expr[start..]`, or `expr[..=end]`) and increments `direct_range_slice_count` (Layer 1 Domain State, Layer 2 Logic & State Management).
+5. `Check34AstPurityAndAntiGamingGate` emits a sorted file-and-line `ariadne` / `miette` diagnostic on `PurityViolationDiagnosticPort` (Layer 3 Interface Binding) instructing the caller to use fallible `.get(..)`, outputs `1` on `Check34GateStatusPort`, and exits fail-closed with code 1.
 
 ## 5. Alternate and Exception Flows
 - 3a. Source file read or UTF-8 decoding failure on `WorkspaceRustCstPort`:

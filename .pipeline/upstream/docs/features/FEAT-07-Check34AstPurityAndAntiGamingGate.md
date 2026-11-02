@@ -135,19 +135,19 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Port | `Check34GateStatusPort` | `out Integer` | Boundary interface contract |
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `Check34AstPurityAndAntiGamingGate` organize no nested subparts declared in schema paired with boundary ports `in WorkspaceRustCstPort : String`, `in TestFunctionAstStreamPort : String`, `out PurityViolationDiagnosticPort : String`, `out Check34GateStatusPort : Integer`.
+Structural composition and boundary topology for classifier `Check34AstPurityAndAntiGamingGate` organize no nested subparts declared in schema paired with boundary ports `in WorkspaceRustCstPort : String`, `in TestFunctionAstStreamPort : String`, `out PurityViolationDiagnosticPort : String`, `out Check34GateStatusPort : Integer`, partitioned into `< 380`-SLOC submodules under `./crates/verify-baseline/src/ast_purity/` and `./crates/deap-core/src/rust_cst/` with explicit legacy hand-rolled scanner deletion.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for Check34AstPurityAndAntiGamingGate.
+Operational lifecycle events and discrete state transitions for `Check34AstPurityAndAntiGamingGate` enforcing Contract A (full OMG SysML v2.0 + KerML 1.0 grammar coverage, zero 16-construct caps) and Contract B (`ra_ap_syntax` typed `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}` I/O purity + `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, zero hand-rolled scanner mandates).
 
 ### Layer 1: Domain State & Signal Model
-Classifier `Check34AstPurityAndAntiGamingGate` encapsulates typed domain state attributes `direct_range_slice_count : Integer`, `fail_open_io_site_count : Integer`, `vacuous_test_count : Integer`, `duplicate_sha256_impl_count : Integer`, `duplicate_lexer_impl_count : Integer` alongside operational lifecycle status.
+Classifier `Check34AstPurityAndAntiGamingGate` encapsulates typed domain state attributes `direct_range_slice_count : Integer`, `fail_open_io_site_count : Integer`, `vacuous_test_count : Integer`, `duplicate_sha256_impl_count : Integer`, `duplicate_lexer_impl_count : Integer` alongside operational lifecycle status, lossless `ra_ap_syntax` (`ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr, IndexExpr, Fn}`) CST trees, `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` manifest models, and full OMG SysML v2.0 + KerML 1.0 AST coverage (zero 16-construct caps).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `Check34AstPurityAndAntiGamingGate` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `Check34AstPurityAndAntiGamingGate` governs stateless structural transition evaluation enforcing `Invariant_REQ_0602_SC_01` and `Invariant_REQ_0602_SC_02` via typed `ra_ap_syntax` CST/AST visitors (`ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}`) with zero hand-rolled scanners, targeting `< 380`-SLOC submodules and explicit legacy hand-rolled scanner deletion.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `Check34AstPurityAndAntiGamingGate` binds external and behavioral interfaces across port `in WorkspaceRustCstPort : String`, port `in TestFunctionAstStreamPort : String`, port `out PurityViolationDiagnosticPort : String`, port `out Check34GateStatusPort : Integer`.
+Classifier `Check34AstPurityAndAntiGamingGate` binds external and behavioral interfaces across port `in WorkspaceRustCstPort : String`, port `in TestFunctionAstStreamPort : String`, port `out PurityViolationDiagnosticPort : String`, port `out Check34GateStatusPort : Integer`, emitting deterministic `ariadne` / `miette` diagnostics and fail-closed status codes.
 
 ### Associated Use Cases & User Stories
 

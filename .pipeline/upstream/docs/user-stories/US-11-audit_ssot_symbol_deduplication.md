@@ -19,14 +19,14 @@ As a `VerifyBaselineCLI`, I want to invoke `audit_ssot_symbol_deduplication()` o
 
 ### Layer 1: Domain State & Data Model
 - Domain state attributes on `Check34AstPurityAndAntiGamingGate`: `direct_range_slice_count: Integer`, `fail_open_io_site_count: Integer`, `vacuous_test_count: Integer`, `duplicate_sha256_impl_count: Integer`, `duplicate_lexer_impl_count: Integer`.
-- Action `audit_ssot_symbol_deduplication` invocation message envelope bound to `Check34AstPurityAndAntiGamingGate` typed domain schema.
+- Action `audit_ssot_symbol_deduplication` invocation message envelope bound to `Check34AstPurityAndAntiGamingGate` typed domain schema, enforcing Contract A (full OMG SysML v2.0 + KerML 1.0 grammar coverage with Definition/Usage symmetry, zero 16-construct caps) and Contract B (`ra_ap_syntax` typed `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}` I/O purity + `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, zero hand-rolled scanner mandates).
 - Declared lifecycle state model: `BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint_LifecycleState`, `AntiGamingTestBodyAuditor_State`, `Check34AstPurityAndAntiGamingGate_State`, `FailClosedIoAstVerifier_State`.
 
 ### Layer 2: Logic & State Management
-- Behavioral execution contract: invokes `audit_ssot_symbol_deduplication()` on `Check34AstPurityAndAntiGamingGate` with atomic precondition verification.
+- Behavioral execution contract: invokes `audit_ssot_symbol_deduplication()` on `Check34AstPurityAndAntiGamingGate` with atomic precondition verification across typed `ra_ap_syntax` (`ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}`) CSTs and `cargo_metadata` / `cargo-lock` / `cargo-util-schemas` / `cargo-platform` / `toml_edit` crate graphs.
 - State transition management: `AntiGamingTestBodyAuditor_State -> Check34AstPurityAndAntiGamingGate_State` (trigger `check_compiler_ast_purity`).
 - Formal constraints and requirements enforced: `REQ-0602 (REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint)`.
-- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/verify-baseline/src/ast_purity/` and `crates/deap-core/src/rust_cst/`) while retiring ad-hoc string/slice checks and ratcheting Check 34 violation ceilings to zero.
+- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`./crates/verify-baseline/src/ast_purity/` and `./crates/deap-core/src/rust_cst/`) with explicit legacy hand-rolled scanner deletion while retiring ad-hoc string/slice checks and ratcheting Check 34 violation ceilings to zero.
 
 ### Layer 3: Presentation & Actuator Interface Binding
 - Component port bindings on `Check34AstPurityAndAntiGamingGate`: `WorkspaceRustCstPort: String (in)`, `TestFunctionAstStreamPort: String (in)`, `PurityViolationDiagnosticPort: String (out)`, `Check34GateStatusPort: Integer (out)`.

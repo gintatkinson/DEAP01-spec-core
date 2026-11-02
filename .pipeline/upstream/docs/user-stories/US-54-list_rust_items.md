@@ -17,20 +17,21 @@ As a `AirGappedCargoLockGovernor`, I want to invoke `list_rust_items()` on `Loss
 ## Architectural Realization (3-Layer Definition of Done)
 
 ### Layer 1: Domain State & Data Model
-- Domain state attributes on `LosslessRustCstAnalyzer`: `max_fn_exec_sloc: Integer`, `max_fn_param_count: Integer`, `max_mut_bool_flags: Integer`, `max_predicate_arity: Integer`, `lossless_roundtrip_required: Boolean`, `deterministic_uuid: String`, `Blueprint_ID: String`, `Requirement_ID: String`, `Title: String`, `Status: String`, `Target_Crates: String`, `Tracked_Issues: String`, `Generation_Mode: String`, `Specification_Source: String`, `crates_deap_core_src_rust_cst_vfs_rs: String`, `crates_deap_core_src_rust_cst_parse_rs: String`, `crates_deap_core_src_rust_cst_items_rs: String`, `crates_deap_core_src_rust_cst_extract_module_rs: String`, `crates_deap_core_src_rust_cst_doc_edit_rs: String`, `crates_deap_core_src_rust_cst_diagnostics_ndjson_rs: String`, `crates_deap_core_src_rust_cst_mod_rs: String`, `crates_compile_sysml_src_docstring_rs: String`, `crates_verify_baseline_src_checks_docstring_tier_rules_rs: String`, `crates_verify_baseline_src_checks_structural_rs: String`, `crates_deap_core_src_workspace_rs: String`, `crates_verify_baseline_src_ratchet_table_rs: String`, `max_fn_exec_sloc: Real`, `max_fn_param_count: Real`, `max_mut_bool_flags: Real`, `stage_fixed_point_mismatch_files: Real`, `runtime_llm_token_count: Real`, `tier_bc_max_doc_lines: Real`.
-- Action `list_rust_items` invocation message envelope bound to `LosslessRustCstAnalyzer` typed domain schema.
-- Declared lifecycle state model: `BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics_LifecycleState`, `Idle`, `ParsingLosslessCst`, `AnalyzingMetricsAndTiers`, `ValidatingDisjointSpans`, `EmittingJsonDiagnostics`, `SplicingAndFormatting`, `RewritingCheck37Paths`, `VerifyingSelfHostFixedPoint`, `VerifiedClean`.
+- Domain state attributes on `LosslessRustCstAnalyzer`: `max_fn_exec_sloc: Integer`, `max_fn_param_count: Integer`, `max_mut_bool_flags: Integer`, `max_predicate_arity: Integer`, `lossless_roundtrip_required: Boolean`, `deterministic_uuid: String`.
+- **Contract A (100% Normative OMG SysML v2.0 + KerML 1.0 Grammar Coverage)**: Preserves full Definition and Usage symmetry across the OMG SysML v2.0 and KerML 1.0 textual grammar with zero 16-construct artificial caps.
+- **Contract B CST Inventory Data Model**: Immutable `ra_ap_syntax::SourceFile` / `rowan::GreenNode` syntax tree, `ra_ap_vfs::Vfs`, `ra_ap_paths::AbsPathBuf` / `camino::Utf8PathBuf`, `ra_ap_line_index::LineIndex`, and `BTreeMap`-ordered `RustItemInventory` (`DocTier::RustTierA` / `DocTier::RustTierBC` with composite `rowan::TextRange` spans including leading `///` docblocks and outer attributes) bound to `list_rust_items(path: String)`.
+- Declared lifecycle state model: `BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics_LifecycleState` (`Idle`, `ParsingLosslessCst`, `AnalyzingMetricsAndTiers`, `ValidatingDisjointSpans`, `EmittingJsonDiagnostics`, `SplicingAndFormatting`, `RewritingCheck37Paths`, `VerifyingSelfHostFixedPoint`, `VerifiedClean`).
 
 ### Layer 2: Logic & State Management
-- Behavioral execution contract: invokes `list_rust_items()` on `LosslessRustCstAnalyzer` with atomic precondition verification.
+- Behavioral execution contract: invokes `list_rust_items(path)` on `LosslessRustCstAnalyzer` via `ra_ap_syntax`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `rowan`, `camino`, and `ignore` with atomic precondition and lossless roundtrip verification (`Invariant_REQ_0608_SC_01`).
 - State transition management: `Idle -> ParsingLosslessCst` (trigger `parseRustCst`).
 - Formal constraints and requirements enforced: `C_CST_01 (max_fn_exec_sloc >= 1 and max_fn_exec_sloc <= 50)`, `C_CST_02 (max_fn_param_count >= 0 and max_fn_param_count <= 5)`, `C_CST_03 (max_mut_bool_flags >= 0 and max_mut_bool_flags <= 0)`, `C_CST_04 (stage_fixed_point_mismatch_files >= 0 and stage_fixed_point_mismatch_files <= 0)`, `C_CST_05 (runtime_llm_token_count >= 0 and runtime_llm_token_count <= 0)`, `C_CST_06 (tier_bc_max_doc_lines >= 2 and tier_bc_max_doc_lines <= 2)`, `REQ-0608 (REQ_0608_BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics)`.
-- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/deap-core/src/rust_cst/`, `crates/deap-core/src/json_diag/`, `crates/compile-sysml/src/codemod/`) while retiring unstructured multi-line diagnostic formatters and reducing Check 34 ratchet ceilings.
+- Modularity & net-negative scanner deletion target: bounds implementation inside `< 380` exec SLOC submodules (`crates/deap-core/src/rust_cst/{mod,vfs,parse,items}.rs`) while executing explicit net-negative deletion of ~19,700+ lines of hand-rolled scanners (`crates/deap-core/src/rust_cst.rs` (599 lines), `crates/compile-sysml/src/docstring.rs` (549 lines), `crates/verify-baseline/src/checks/docstring_tier_rules.rs` (729 lines), `crates/verify-baseline/src/checks/structural.rs` (980 lines), `crates/deap-core/src/workspace.rs` (356 lines), and `crates/verify-baseline/src/ratchet_table.rs`).
 
 ### Layer 3: Presentation & Actuator Interface Binding
 - Component port bindings on `LosslessRustCstAnalyzer`: `rust_source_in: String (in)`, `item_inventory_out: String (out)`, `metrics_report_out: String (out)`.
 - Interaction binding (`BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics_SequenceInteraction`): routes `list_rust_items` invocation from `AirGappedCargoLockGovernor` to `LosslessRustCstAnalyzer` and returns `reply_SupplyChainReceipt`.
-- Diagnostic fault surface: reports deterministic rejection diagnostics to `AirGappedCargoLockGovernor` across the declared interface boundary when guard or invariant checks fail.
+- Diagnostic fault surface: emits deterministic single-line `rustc`-compatible NDJSON diagnostics (`DEAP-E0803`) when CST roundtrip or invariant checks fail.
 
 ## UML Sequence Diagram
 
@@ -40,10 +41,21 @@ sequenceDiagram
     actor Operator
     participant AirGappedCargoLockGovernor
     participant LosslessRustCstAnalyzer
-    Operator->>AirGappedCargoLockGovernor: list_rust_items()
-    AirGappedCargoLockGovernor->>LosslessRustCstAnalyzer: list_rust_items()
-    LosslessRustCstAnalyzer-->>AirGappedCargoLockGovernor: reply_SupplyChainReceipt
-    AirGappedCargoLockGovernor-->>Operator: StatusReport
+    Operator->>AirGappedCargoLockGovernor: list_rust_items(path)
+    AirGappedCargoLockGovernor->>LosslessRustCstAnalyzer: list_rust_items(path)
+    LosslessRustCstAnalyzer-->AirGappedCargoLockGovernor: reply_SupplyChainReceipt : String
+    AirGappedCargoLockGovernor-->Operator: itemInventoryReport : String
+```
+
+## Formal SysML Test Case & Verification Binding
+```sysml
+test case def Test_list_rust_items {
+    subject LosslessRustCstAnalyzer;
+    verify requirement REQ_0608_BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics;
+    objective "Verify deterministic BTreeMap-ordered RustItemInventory and DocTier classification with exact rowan::TextRange spans via ra_ap_syntax.";
+    step invoke_list_rust_items;
+    step assert_btreemap_item_inventory_and_roundtrip;
+}
 ```
 
 ## Acceptance Criteria (BDD)
@@ -57,8 +69,8 @@ sequenceDiagram
 - [ ] AC-US-54-08: Given violated formal constraint `C_CST_01 (max_fn_exec_sloc >= 1 and max_fn_exec_sloc <= 50)`, When `AirGappedCargoLockGovernor` invokes `list_rust_items` on `LosslessRustCstAnalyzer`, Then `LosslessRustCstAnalyzer` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic fault diagnostic across the interface binding.
 
 ## Required Features
-- [ ] [Feature 36: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] AirGappedCargoLockGovernor](../features/FEAT-36-AirGappedCargoLockGovernor.md)
-- [ ] [Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer](../features/FEAT-37-LosslessRustCstAnalyzer.md)
+- [ ] #743 - [Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer](../features/FEAT-37-LosslessRustCstAnalyzer.md) (parses `.rs` files into `ra_ap_syntax` + `rowan` syntax trees and emits `BTreeMap`-ordered `RustItemInventory`)
+- [ ] #742 - [Feature 36: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] AirGappedCargoLockGovernor](../features/FEAT-36-AirGappedCargoLockGovernor.md) (enforces `Invariant_REQ_0608_SC_01` and `REQ-0608` governance invariants)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:

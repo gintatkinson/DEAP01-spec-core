@@ -67,19 +67,19 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `type` | `String` | Default `"Subcomponent"` |
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `FailClosedIoAstVerifier` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
+Structural composition and boundary topology for classifier `FailClosedIoAstVerifier` organize no nested subparts declared in schema paired with no external boundary ports declared in schema, structured inside `< 380`-SLOC submodules (`./crates/verify-baseline/src/ast_purity/`) with explicit deletion of legacy hand-rolled I/O pattern substring scanners.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for FailClosedIoAstVerifier.
+Operational lifecycle events and discrete state transitions for `FailClosedIoAstVerifier` under Contract A (full OMG SysML v2.0 + KerML 1.0 grammar coverage, zero 16-construct caps) and Contract B (`ra_ap_syntax` typed `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}` I/O purity + `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, zero hand-rolled scanner mandates).
 
 ### Layer 1: Domain State & Signal Model
-Classifier `FailClosedIoAstVerifier` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status.
+Classifier `FailClosedIoAstVerifier` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status, typed `ra_ap_syntax` `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}` syntax nodes, `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` workspace descriptors, and full OMG SysML v2.0 + KerML 1.0 CST/AST models (zero 16-construct caps).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `FailClosedIoAstVerifier` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `FailClosedIoAstVerifier` governs stateless structural transition evaluation enforcing `C-PURITY-02` (`Invariant_REQ_0602_SC_01`, `Invariant_REQ_0602_SC_02`) by inspecting typed `ra_ap_syntax` `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}` nodes for fail-open `.flatten()`, `.filter_map(Result::ok)`, `.unwrap_or_default()`, and discarded `let _ = fs::...` calls inside `< 380`-SLOC submodules with explicit legacy hand-rolled scanner deletion.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `FailClosedIoAstVerifier` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
+Classifier `FailClosedIoAstVerifier` exposes an internal structural boundary coupled to `Check34AstPurityAndAntiGamingGate`, reporting `fail_open_io_site_count` increments and `ariadne` / `miette` span diagnostics across `PurityViolationDiagnosticPort` and `Check34GateStatusPort`.
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `FailClosedIoAstVerifier` initialization inputs for `quantity` (`Integer`), `type` (`String`) (no additional constraints specified in schema), When `FailClosedIoAstVerifier` commits typed domain state, Then declared state attributes hold verified values.

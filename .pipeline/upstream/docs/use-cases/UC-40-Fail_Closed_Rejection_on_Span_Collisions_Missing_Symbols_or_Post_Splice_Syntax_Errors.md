@@ -13,16 +13,27 @@
 
 ## UML Diagrams
 
+### Use Case Diagram
 ```mermaid
 graph TD
-    subgraph "AirGappedCargoLockGovernor System Boundary"
-        UC_Main(["Fail Closed Rejection on Span Collisions Missing Symbols ..."])
-        UC_Step01(["ZeroTokenRustSpanCodemodEngine or UnifiedRustcJsonDiagnos..."])
-        UC_Step02(["Execution fails closed with exit code 1, emits a single-l..."])
+    subgraph "ZeroTokenRustSpanCodemodEngine System Boundary"
+        UC_Main(["Fail Closed Rejection on Span Collisions Missing Symbols or Post Splice Syntax Errors"])
+        UC_Step01(["Validate Pairwise TextRange Disjointness and Post Splice CST Syntax"])
+        UC_Step02(["Abort In Memory Splice Transaction and Emit Single Line NDJSON Diagnostic"])
     end
     Operator(("Operator")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
+```
+
+### State Machine Diagram
+```mermaid
+stateDiagram-v2
+    [*] --> ValidatingDisjointSpans
+    ValidatingDisjointSpans --> EmittingJsonDiagnostics : "rejectSpanCollisionOrMissingSymbol"
+    ValidatingDisjointSpans --> SplicingAndFormatting : "disjointUtf8SpansVerified"
+    SplicingAndFormatting --> EmittingJsonDiagnostics : "rejectPostSpliceSyntaxError"
+    EmittingJsonDiagnostics --> [*]
 ```
 
 ## 1. Actors
@@ -50,13 +61,32 @@ graph TD
   - `ZeroTokenRustSpanCodemodEngine` discards the in-memory candidate buffer, emits `DEAP-E0803` on `codemod_error_out`, preserves prior verified state, and exits with code 1.
 
 ## 6. Postconditions
-- Execution fails closed with exit code 1, emits a single-line `rustc`-compatible JSON diagnostic (`DEAP-E0801`, `DEAP-E0802`, or `DEAP-E0803`), and leaves all workspace files bit-for-bit unchanged.
+- **Success Guarantee:** Valid disjoint `SpanSpliceEdit` transactions that re-parse cleanly via `ra_ap_syntax::SourceFile::parse` commit atomically.
+- **Failure Guarantee:** Execution fails closed with exit code 1, emits a single-line `rustc`-compatible JSON diagnostic (`DEAP-E0801`, `DEAP-E0802`, or `DEAP-E0803`), and leaves all workspace files bit-for-bit unchanged.
+
+## 7. Operational Context
+- **Contract A (100% Normative OMG SysML v2.0 + KerML 1.0 Grammar Coverage)**: Preserves full Definition and Usage symmetry across the OMG SysML v2.0 and KerML 1.0 textual grammar with zero 16-construct caps.
+- **Contract B (Official Rust Compiler, Cargo, `rust-analyzer` & Markdown AST Crate Stack)**: Uses `ra_ap_syntax`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, `pulldown-cmark`, `pulldown-cmark-to-cmark`, `cargo-lock`, `cargo_metadata`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` with explicit net-negative deletion of ~19,700+ lines of hand-rolled scanners.
+- **3-Layer Definition of Done (DoD)**:
+  - **Layer 1 (Domain State & Data Model)**: `SpanSpliceEdit` (`rowan::TextRange` + `ra_ap_text_edit::TextEdit`) and `RustcJsonEnvelope` (`DEAP-E0801..E0803`).
+  - **Layer 2 (Logic & State Management)**: Pairwise interval disjointness (`b_i <= a_j` or `b_j <= a_i`), UTF-8 char boundary checks, and post-splice `ra_ap_syntax::SourceFile::parse` validation under `Invariant_REQ_0608_SC_02` inside `< 380`-SLOC submodules (`crates/deap-core/src/rust_cst/{extract_module,diagnostics_ndjson}.rs`).
+  - **Layer 3 (Presentation & Actuator Interface Binding)**: Routes codemod errors across `BP_08_CodemodToDiagnosticEmitterConnection` (`codemod_error_out -> finding_in`) to emit single-line NDJSON on `ndjson_out`.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **TBD** | User Story | [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) |
-| **TBD** | Feature | [Feature 36: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] AirGappedCargoLockGovernor](../features/FEAT-36-AirGappedCargoLockGovernor.md) |
+| **#804** | User Story | [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) |
+| **#806** | User Story | [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) |
+| **#746** | Feature | [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) |
+| **#745** | Feature | [Feature 39: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] UnifiedRustcJsonDiagnosticEmitter](../features/FEAT-39-UnifiedRustcJsonDiagnosticEmitter.md) |
+
+### Required User Stories
+- [ ] #804 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (validates symbol presence, pairwise `TextRange` disjointness, and post-splice CST syntax during module extraction)
+- [ ] #806 - [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) (serializes `DEAP-E0801`, `DEAP-E0802`, and `DEAP-E0803` rejections as single-line NDJSON diagnostics)
+
+### Required Features
+- [ ] #746 - [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) (enforces atomic in-memory splice rollback under `Invariant_REQ_0608_SC_02`)
+- [ ] #745 - [Feature 39: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] UnifiedRustcJsonDiagnosticEmitter](../features/FEAT-39-UnifiedRustcJsonDiagnosticEmitter.md) (formats and emits fail-closed `rustc`-compatible NDJSON diagnostics)
 
 ## Source References
 Use case operational flows and lifecycle activity references:

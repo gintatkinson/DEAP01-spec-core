@@ -67,19 +67,19 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `type` | `String` | Default `"Component"` |
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `ScopedSchemaContextResolver` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
+Structural composition and boundary topology for classifier `ScopedSchemaContextResolver` organize recursive AST context resolution across `< 380`-SLOC submodules (`./crates/compile-sysml/src/safety_docstrings/`, `./crates/deap-core/src/rust_cst/`, `./crates/deap-core/src/dart_cst/`).
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for ScopedSchemaContextResolver.
+Operational lifecycle events and discrete state transitions for `ScopedSchemaContextResolver` under `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState`.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `ScopedSchemaContextResolver` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status.
+Classifier `ScopedSchemaContextResolver` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside lossless `deap_core::sysml_cst` (`logos` + `rowan` + `salsa`) AST structures spanning 100% of the normative OMG SysML v2.0 + KerML 1.0 textual grammar (`package`/`library package`/`standard library package`, `import`, `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port`, `connection def`/`connection`, `interface def`/`interface`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, `metadata def`/`@Metadata`/`#user_keyword` (`#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls`), and KerML specialization `:`, `:>`, `:>>`, `::>`, `~`, `ISQ`/`SI`/`ScalarValues`, zero 16-construct caps).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `ScopedSchemaContextResolver` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `ScopedSchemaContextResolver` governs recursive part and namespace traversal (`collect_all_parts` without `.first()` fallback pollution) pairing `deap_core::sysml_cst` with `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `ra_ap_text_edit`, and `ra_ap_line_index` to bind `<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` docstrings and explicit `[DOC-TIER: A]` entrypoints inside `< 380`-SLOC submodules while explicitly deleting legacy hand-rolled lexical scanners (`-800+` SLOC retired).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `ScopedSchemaContextResolver` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
+Classifier `ScopedSchemaContextResolver` binds `BP_05_ContextToDocstringGeneratorConnection` (`resolved_context_out` to `SevenSectionDocstringGenerator.schema_context_in`) and emits deterministic `ariadne`/`miette` byte-span diagnostics.
 
 ### Associated Use Cases & User Stories
 

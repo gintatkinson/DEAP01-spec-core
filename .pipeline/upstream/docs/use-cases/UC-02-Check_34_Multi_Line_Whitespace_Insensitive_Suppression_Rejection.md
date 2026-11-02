@@ -29,17 +29,17 @@ graph TD
 - `Compiler_Engineer_CI`
 
 ## 2. Preconditions
-- The Check 34 zero-regex token-stream CST/AST verifier scan_clippy_allow_tokens in crates/verify-baseline/src/checks/structural.rs.
+- The Check 34 zero-regex attribute CST verifier `scan_clippy_allow_tokens` in `< 380`-SLOC submodules (`crates/verify-baseline/src/clippy_forbid/` and `crates/deap-core/src/rust_cst/`) backed by Contract A (full OMG SysML v2.0 + KerML 1.0 grammar coverage, zero 16-construct caps) and Contract B (`rustc`/`cargo clippy --message-format=json` + `ra_ap_syntax` attr CST verification, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, zero text-scanner lint mandates), with explicit deletion of legacy hand-rolled scanners (`source_ast.rs`, `structural.rs`).
 
 ## 3. Trigger
 - A Rust file contains a single-line or multi-line whitespace-split attribute such as allow ( clippy :: expect_used ) or cfg_attr ( test , allow ( clippy :: panic ) ).
 
 ## 4. Main Success Scenario
-1. `Compiler_Engineer_CI` invokes `ExecuteVerifyBaselineNoDomain` on `CompilerLintEnforcementGate` to audit all workspace Rust files via `RustSourceTokenStreamPort`.
-2. `ClippyAttributeCstParser` executes `RunScanClippyAllowTokensOn` using `ra_ap_syntax`, `rowan`, and `syn` lossless token streams to transition from `ScanningSource` to `InspectingAttribute` upon detecting a `#` token outside comments and string literals.
+1. `Compiler_Engineer_CI` invokes `ExecuteVerifyBaselineNoDomain` on `CompilerLintEnforcementGate` to audit all workspace Rust files via `RustSourceTokenStreamPort` using `camino`, `ignore`, `ra_ap_vfs`, and `ra_ap_paths` (Layer 1 Domain State & Data Model).
+2. `ClippyAttributeCstParser` executes `RunScanClippyAllowTokensOn` inside `< 380`-SLOC submodules (`crates/verify-baseline/src/clippy_forbid/` and `crates/deap-core/src/rust_cst/`, replacing deleted legacy `source_ast.rs` and `structural.rs`) using `ra_ap_syntax` (`ast::Attr`, `ast::HasAttrs`) and `rowan` lossless CST nodes to transition from `ScanningSource` to `InspectingAttribute` outside comments and string literals (Layer 2 Logic & State Management).
 3. A Rust source file contains a single-line or multi-line whitespace-split attribute such as `allow ( clippy :: expect_used )` or `cfg_attr ( test , allow ( clippy :: panic ) )`.
-4. `ClippyAttributeCstParser` transitions to `NormalizingBracketBody`, strips trivia tokens across line boundaries, matches the forbidden `allow(clippy::` sequence, and transitions to `ViolationRecorded`.
-5. `./target/release/verify-baseline . --no-domain` emits a deterministic `ariadne` / `miette` diagnostic via `CompilerDiagnosticOutputPort` with the exact file path and starting 1-based line number, sets `BaselineGateVerdictPort` to `false`, and fails closed with exit code 1.
+4. `ClippyAttributeCstParser` transitions to `NormalizingBracketBody`, inspects the lossless `ra_ap_syntax` attribute token tree across line boundaries without hand-rolled text scanners, matches the forbidden `allow(clippy::` sequence, and transitions to `ViolationRecorded`.
+5. `./target/release/verify-baseline . --no-domain` and `rustc`/`cargo clippy --message-format=json` emit a deterministic `ariadne` / `ra_ap_line_index` diagnostic via `CompilerDiagnosticOutputPort` with the exact file path and starting 1-based line number, set `BaselineGateVerdictPort` to `false`, and fail closed with exit code 1 (Layer 3 Presentation & Actuator Interface Binding).
 
 ## 5. Alternate and Exception Flows
 - 3a. Unreadable source file or invalid UTF-8 stream on `RustSourceTokenStreamPort`:

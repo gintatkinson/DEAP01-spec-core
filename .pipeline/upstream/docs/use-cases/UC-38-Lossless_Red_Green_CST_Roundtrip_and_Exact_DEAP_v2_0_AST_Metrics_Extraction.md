@@ -13,16 +13,29 @@
 
 ## UML Diagrams
 
+### Use Case Diagram
 ```mermaid
 graph TD
-    subgraph "AirGappedCargoLockGovernor System Boundary"
-        UC_Main(["Lossless Red Green CST Roundtrip and Exact DEAP v2 0 AST ..."])
-        UC_Step01(["LosslessRustCstAnalyzer parses both fixtures into ra_ap_s..."])
-        UC_Step02(["Root."])
+    subgraph "LosslessRustCstAnalyzer System Boundary"
+        UC_Main(["Lossless Red Green CST Roundtrip and Exact DEAP v2 0 AST Metrics Extraction"])
+        UC_Step01(["Parse Rust Fixtures via ra_ap_syntax and rowan Red Green Trees"])
+        UC_Step02(["Compute DEAP v2 0 AST Metrics and DocTier Classifications"])
     end
     Operator(("Operator")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
+```
+
+### State Machine Diagram
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> ParsingLosslessCst : "parseRustCst"
+    ParsingLosslessCst --> AnalyzingMetricsAndTiers : "losslessRedGreenTreeReady"
+    AnalyzingMetricsAndTiers --> EmittingJsonDiagnostics : "rejectCstMetricViolation"
+    AnalyzingMetricsAndTiers --> VerifiedClean : "metricsAndRoundtripVerified"
+    EmittingJsonDiagnostics --> [*]
+    VerifiedClean --> [*]
 ```
 
 ## 1. Actors
@@ -50,13 +63,32 @@ graph TD
   - `AirGappedCargoLockGovernor` aborts execution without partial state mutation, preserves prior verified state, and reports diagnostic status to `Operator`.
 
 ## 6. Postconditions
-- Root `rowan::GreenNode` text equals the input `.rs` buffer bit-for-bit, and `DeapV2AstMetrics` accurately reports `DocTier` classifications, `production_exec_sloc`, parameter counts, mutable bool flags, and predicate arity.
+- **Success Guarantee:** Root `rowan::GreenNode` text equals the input `.rs` buffer bit-for-bit, and `DeapV2AstMetrics` accurately reports `DocTier` classifications, `production_exec_sloc`, parameter counts, mutable bool flags, and predicate arity across `< 380`-SLOC submodules (`crates/deap-core/src/rust_cst/`).
+- **Failure Guarantee:** Execution fails closed with exit code 1, emits single-line `rustc`-compatible NDJSON diagnostic `DEAP-E0803`, and preserves prior verified state without partial mutation.
+
+## 7. Operational Context
+- **Contract A (100% Normative OMG SysML v2.0 + KerML 1.0 Grammar Coverage)**: Enforces full Definition and Usage symmetry across all OMG SysML v2.0 and KerML 1.0 constructs (`package`, `library package`, `standard library package`, `import`, `metadata def` / `@Metadata` / `#capability` / `#hazard` / `#risk` / `#rt_loop` / `#dal` / `#fls`, `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port`, `interface def`/`interface`, `connection def`/`connection`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, and KerML specialization/expressions with zero 16-construct artificial caps).
+- **Contract B (Official Rust Compiler, Cargo & `rust-analyzer` Crate Stack)**: Uses `ra_ap_syntax` (`ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr, Fn, HasDocComments, HasAttrs}`), `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, `cargo-lock`, `cargo_metadata`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, `pulldown-cmark`, and `pulldown-cmark-to-cmark` with explicit net-negative deletion of ~19,700+ lines of hand-rolled scanners (deleting `crates/deap-core/src/rust_cst.rs` (599 lines), `crates/compile-sysml/src/docstring.rs` (549 lines), `crates/verify-baseline/src/checks/docstring_tier_rules.rs` (729 lines), `crates/verify-baseline/src/checks/structural.rs` (980 lines), `crates/deap-core/src/workspace.rs` (356 lines), and `crates/verify-baseline/src/ratchet_table.rs`).
+- **3-Layer Definition of Done (DoD)**:
+  - **Layer 1 (Domain State & Data Model)**: `rowan::GreenNode` / `ra_ap_syntax::SourceFile`, `ra_ap_line_index::LineIndex`, `RustItemInventory`, and `DeapV2AstMetrics`.
+  - **Layer 2 (Logic & State Management)**: Enforces `C_CST_01` (`1 <= max_fn_exec_sloc <= 50`), `C_CST_02` (`0 <= max_fn_param_count <= 5`), `C_CST_03` (`max_mut_bool_flags == 0`), and `Invariant_REQ_0608_SC_01` inside `< 380`-SLOC submodules (`crates/deap-core/src/rust_cst/{mod,vfs,parse,items}.rs`).
+  - **Layer 3 (Presentation & Actuator Interface Binding)**: Binds `rust_source_in`, `item_inventory_out`, and `metrics_report_out` on `LosslessRustCstAnalyzer` to `UnifiedRustcJsonDiagnosticEmitter`.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **TBD** | User Story | [User Story 53: verify offline locked build](../user-stories/US-53-verify_offline_locked_build.md) |
-| **TBD** | Feature | [Feature 36: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] AirGappedCargoLockGovernor](../features/FEAT-36-AirGappedCargoLockGovernor.md) |
+| **#803** | User Story | [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) |
+| **#807** | User Story | [User Story 58: analyze metrics](../user-stories/US-58-analyze_metrics.md) |
+| **#743** | Feature | [Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer](../features/FEAT-37-LosslessRustCstAnalyzer.md) |
+| **#742** | Feature | [Feature 36: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] AirGappedCargoLockGovernor](../features/FEAT-36-AirGappedCargoLockGovernor.md) |
+
+### Required User Stories
+- [ ] #803 - [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) (classifies `DocTier::RustTierA` and `DocTier::RustTierBC` items with exact `TextRange` byte/line spans)
+- [ ] #807 - [User Story 58: analyze metrics](../user-stories/US-58-analyze_metrics.md) (computes `DeapV2AstMetrics` enforcing `C_CST_01`, `C_CST_02`, and `C_CST_03` via `ra_ap_syntax` and `rowan`)
+
+### Required Features
+- [ ] #743 - [Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer](../features/FEAT-37-LosslessRustCstAnalyzer.md) (provides the lossless `ra_ap_syntax` + `rowan` CST parser and AST metrics analyzer)
+- [ ] #742 - [Feature 36: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] AirGappedCargoLockGovernor](../features/FEAT-36-AirGappedCargoLockGovernor.md) (enforces `Invariant_REQ_0608_SC_01` and `REQ-0608` governance invariants)
 
 ## Source References
 Use case operational flows and lifecycle activity references:

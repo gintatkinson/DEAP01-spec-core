@@ -67,7 +67,7 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `type` | `String` | Default `"Subcomponent"` |
 | Constraint | `Invariant_REQ_0602_SC_01` | Invariant (`REQ-0602 (REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint)`) | Declared structural invariant |
 | Constraint | `Invariant_REQ_0602_SC_02` | Invariant (`REQ-0602 (REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint)`) | Declared structural invariant |
-| Requirement | `REQ-0602 (REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint)` | Allocated Requirement | During iterative compiler hardening across the Digital Engineering Agent Platform (DEAP) specification core (DEAP01-spec-core), delegating self-audit unit tests and structural safety checks to LLM subagents produced systematic test gaming, narrow literal checks, and fail-open error handling. Under |
+| Requirement | `REQ-0602 (REQ_0602_BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint)` | Allocated Requirement | During iterative compiler hardening across the Digital Engineering Agent Platform (DEAP) specification core (DEAP01-spec-core), delegating self-audit unit tests and structural safety checks to LLM subagents produced systematic test gaming, narrow literal checks, and fail-open error handling. Under Contract A (full OMG SysML v2.0 + KerML 1.0 grammar coverage, zero 16-construct caps) and Contract B (`ra_ap_syntax` typed `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}` I/O purity + `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, zero hand-rolled scanner mandates), `AntiGamingTestBodyAuditor` enforces non-vacuous test AST verification and `< 380`-SLOC submodule modularity. |
 
 ```sysml
 constraint Invariant_REQ_0602_SC_01 {}
@@ -75,19 +75,19 @@ constraint Invariant_REQ_0602_SC_02 {}
 ```
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `AntiGamingTestBodyAuditor` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
+Structural composition and boundary topology for classifier `AntiGamingTestBodyAuditor` organize no nested subparts declared in schema paired with no external boundary ports declared in schema, decomposed into `< 380`-SLOC submodules under `./crates/verify-baseline/src/ast_purity/` with explicit deletion of legacy hand-rolled string and line scanners.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for AntiGamingTestBodyAuditor.
+Operational lifecycle events and discrete state transitions for `AntiGamingTestBodyAuditor` across `BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint_LifecycleState`.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `AntiGamingTestBodyAuditor` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status.
+Classifier `AntiGamingTestBodyAuditor` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status, lossless `ra_ap_syntax` (`ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr, Fn, HasDocComments, HasAttrs}`) CST nodes, `cargo_metadata` / `cargo-lock` / `cargo-util-schemas` / `cargo-platform` / `toml_edit` workspace metadata, and full OMG SysML v2.0 + KerML 1.0 grammar AST projections (zero 16-construct caps).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `AntiGamingTestBodyAuditor` governs stateless structural transition evaluation enforcing invariant obligations `Invariant_REQ_0602_SC_01`, `Invariant_REQ_0602_SC_02`.
+Classifier `AntiGamingTestBodyAuditor` governs stateless structural transition evaluation enforcing invariant obligations `Invariant_REQ_0602_SC_01`, `Invariant_REQ_0602_SC_02` via typed `ra_ap_syntax` AST traversal (`ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}`) with zero hand-rolled scanners, targeting `< 380`-SLOC submodules and explicit legacy hand-rolled scanner deletion.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `AntiGamingTestBodyAuditor` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
+Classifier `AntiGamingTestBodyAuditor` exposes an internal structural boundary coupled to `Check34AstPurityAndAntiGamingGate` via `BP_02_AuditorToPurityGateConnection`, routing `ariadne` / `miette` diagnostics for vacuous `#[test]` bodies, `std::mem::size_of` tautologies, conditional `.exists()` skips, and non-RAII `std::env::temp_dir()` paths.
 
 ### Associated Use Cases & User Stories
 

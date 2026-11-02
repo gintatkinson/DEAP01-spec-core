@@ -127,19 +127,19 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Port | `BijectiveDiffDiagnosticPort` | `out String` | Boundary interface contract |
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `SysmlBijectiveRoundtripCompilerGate` organize no nested subparts declared in schema paired with boundary ports `in RawSysmlSourceInputPort : String`, `inout TokenStreamChannelPort : String`, `out SerializedSysmlOutputPort : String`, `out BijectiveDiffDiagnosticPort : String`.
+Structural composition and boundary topology for classifier `SysmlBijectiveRoundtripCompilerGate` organize no nested subparts declared in schema paired with boundary ports `in RawSysmlSourceInputPort : String`, `inout TokenStreamChannelPort : String`, `out SerializedSysmlOutputPort : String`, `out BijectiveDiffDiagnosticPort : String` orchestrating `deap_core::sysml_cst` (`logos` + `rowan` lossless Red/Green CST) and `salsa` incremental query evaluation.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for SysmlBijectiveRoundtripCompilerGate.
+Operational lifecycle events and discrete state transitions for `SysmlBijectiveRoundtripCompilerGate` across `BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_LifecycleState` (`LexicalScanning -> RecursiveDescentParsing -> CanonicalSerialization -> RoundtripReparsing -> AstStructuralEqualityCheck -> VerifiedBijectiveAst` or fail-closed `RejectedE0100` / `RejectedE0200` / `RejectedE0400`).
 
 ### Layer 1: Domain State & Signal Model
-Classifier `SysmlBijectiveRoundtripCompilerGate` encapsulates typed domain state attributes `span_offset_drift_bytes : Integer`, `silent_skip_branch_count : Integer`, `dropped_ast_field_count : Integer`, `roundtrip_ast_mismatch_count : Integer` alongside operational lifecycle status.
+Classifier `SysmlBijectiveRoundtripCompilerGate` encapsulates typed domain state attributes `span_offset_drift_bytes : Integer`, `silent_skip_branch_count : Integer`, `dropped_ast_field_count : Integer`, `roundtrip_ast_mismatch_count : Integer` alongside operational lifecycle status, enforcing 100% normative OMG SysML v2.0 + KerML 1.0 BNF grammar coverage across all 6 clauses (zero 16-construct artificial caps), including `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` `metadata def` annotations and backward-compatible `hazard def`, `risk def`, `capability def` declarations.
 
 ### Layer 2: Logic & Safety State Management
-Classifier `SysmlBijectiveRoundtripCompilerGate` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `SysmlBijectiveRoundtripCompilerGate` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema while coordinating `logos` + `rowan` lossless Red/Green CST construction (`deap_core::sysml_cst`), `salsa` incremental query memoization (`salsa::input`, `salsa::tracked`), and Stage-1 == Stage-2 bijective round-trip verification (`parse_sysml(to_sysml(ast_orig)) == ast_orig`) with zero hand-rolled scanners. Implementation is bounded inside `< 380` exec SLOC submodules (`./crates/deap-core/src/sysml_cst/` and `./crates/compile-sysml/src/roundtrip/`) with explicit deletion of legacy hand-rolled scanner/parser monoliths (`-2,400+` SLOC retired).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `SysmlBijectiveRoundtripCompilerGate` binds external and behavioral interfaces across port `in RawSysmlSourceInputPort : String`, port `inout TokenStreamChannelPort : String`, port `out SerializedSysmlOutputPort : String`, port `out BijectiveDiffDiagnosticPort : String`.
+Classifier `SysmlBijectiveRoundtripCompilerGate` binds external and behavioral interfaces across port `in RawSysmlSourceInputPort : String`, port `inout TokenStreamChannelPort : String`, port `out SerializedSysmlOutputPort : String`, port `out BijectiveDiffDiagnosticPort : String`, rendering `ariadne` source-span diagnostics (`E0100`, `E0200`, `E0300`, `E0400`).
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `SysmlBijectiveRoundtripCompilerGate` initialization inputs for `span_offset_drift_bytes` (`Integer`), `silent_skip_branch_count` (`Integer`), `dropped_ast_field_count` (`Integer`), `roundtrip_ast_mismatch_count` (`Integer`) (no additional constraints specified in schema), When `SysmlBijectiveRoundtripCompilerGate` commits typed domain state, Then declared state attributes hold verified values.

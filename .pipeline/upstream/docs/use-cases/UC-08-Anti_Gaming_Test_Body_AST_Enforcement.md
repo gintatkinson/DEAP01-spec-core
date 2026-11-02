@@ -35,11 +35,11 @@ graph TD
 - Check 34 executes audit_test_integrity_and_anti_gaming (C-PURITY-03).
 
 ## 4. Main Success Scenario
-1. `VerifyBaselineCLI` invokes `check_compiler_ast_purity` on `Check34AstPurityAndAntiGamingGate`, which extracts Rust `test` attribute function AST blocks via `deap_core_rust_cst` (`syn` and `ra_ap_syntax`) and routes them to `TestFunctionAstStreamPort`.
-2. `AntiGamingTestBodyAuditor` receives the parsed test function stream via `BP_02_AuditorToPurityGateConnection` and executes `audit_test_integrity_and_anti_gaming` (constraint `C-PURITY-03`).
-3. `AntiGamingTestBodyAuditor` inspects each test body AST for assertion macro invocations (`assert!`, `assert_eq!`, `assert_ne!`, `matches!`), tautological `std::mem::size_of::<T>() > 0` checks, unguarded `if Path::new(...).exists()` skips, and non-RAII `std::env::temp_dir().join(...)` paths.
-4. `AntiGamingTestBodyAuditor` identifies a vacuous or un-isolated test function and increments `vacuous_test_count` on `Check34AstPurityAndAntiGamingGate`.
-5. `Check34AstPurityAndAntiGamingGate` emits a file-and-line `ariadne` / `miette` diagnostic on `PurityViolationDiagnosticPort`, sets `Check34GateStatusPort` to `1`, and halts baseline verification fail-closed with exit code 1.
+1. `VerifyBaselineCLI` enumerates workspace packages via `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` (Contract B, zero hand-rolled scanners) and invokes `check_compiler_ast_purity` on `Check34AstPurityAndAntiGamingGate`, extracting Rust `test` attribute function AST blocks via `deap_core_rust_cst` (`ra_ap_syntax` `ast::{Fn, HasAttrs, MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}` and `syn`) across full OMG SysML v2.0 + KerML 1.0 grammar models (Contract A, zero 16-construct caps) and routing them to `TestFunctionAstStreamPort`.
+2. `AntiGamingTestBodyAuditor` receives the parsed test function stream via `BP_02_AuditorToPurityGateConnection` and executes `audit_test_integrity_and_anti_gaming` (constraint `C-PURITY-03`) inside `< 380`-SLOC submodules with explicit legacy hand-rolled scanner deletion.
+3. `AntiGamingTestBodyAuditor` inspects each typed test body AST (`ra_ap_syntax` `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}`) for assertion macro invocations (`assert!`, `assert_eq!`, `assert_ne!`, `matches!`), tautological `std::mem::size_of::<T>() > 0` checks, unguarded `if Path::new(...).exists()` skips, and non-RAII `std::env::temp_dir().join(...)` paths.
+4. `AntiGamingTestBodyAuditor` identifies a vacuous or un-isolated test function and increments `vacuous_test_count` on `Check34AstPurityAndAntiGamingGate` (Layer 1 Domain State, Layer 2 Logic & State Management).
+5. `Check34AstPurityAndAntiGamingGate` emits a file-and-line `ariadne` / `miette` diagnostic on `PurityViolationDiagnosticPort` (Layer 3 Interface Binding), sets `Check34GateStatusPort` to `1`, and halts baseline verification fail-closed with exit code 1.
 
 ## 5. Alternate and Exception Flows
 - 3a. Malformed Rust `test` attribute function body or unbalanced brace block on `TestFunctionAstStreamPort`:

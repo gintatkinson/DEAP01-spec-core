@@ -29,17 +29,17 @@ graph TD
 - `Compiler_Engineer_CI`
 
 ## 2. Preconditions
-- [workspace.lints.clippy] in root Cargo.toml configures unwrap_used = \"forbid\", expect_used = \"forbid\", panic = \"forbid\", indexing_slicing = \"forbid\", disallowed_types = \"forbid\", and type_complexity = \"forbid\".
+- `[workspace.lints.clippy]` in root `Cargo.toml` configures `unwrap_used = "forbid"`, `expect_used = "forbid"`, `panic = "forbid"`, `indexing_slicing = "forbid"`, `disallowed_types = "forbid"`, and `type_complexity = "forbid"` under Contract A (full OMG SysML v2.0 + KerML 1.0 grammar coverage, zero 16-construct caps) and Contract B (`rustc`/`cargo clippy --message-format=json` + `ra_ap_syntax` attr CST verification, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, zero text-scanner lint mandates).
 
 ## 3. Trigger
 - Any production or test module in crates/ introduces inner allow(clippy::unwrap_used) or outer allow(clippy::indexing_slicing).
 
 ## 4. Main Success Scenario
-1. `Compiler_Engineer_CI` invokes `ExecuteCargoClippyWorkspaceAllTargets` on `CompilerLintEnforcementGate` across all workspace crates using `cargo_metadata` and `toml_edit` to load root `Cargo.toml` via `CargoManifestInputPort`.
-2. `WorkspaceManifestForbidGate` executes `ReadWorkspaceLintsClippyForbidTable` to verify that `forbid_unwrap_used`, `forbid_expect_used`, `forbid_panic`, `forbid_indexing_slicing`, `forbid_disallowed_types`, and `forbid_type_complexity` are set to `true` across all `crates_enforced_count = 6` member manifests.
-3. `CompilerLintEnforcementGate` streams production and test Rust source files through `RustSourceTokenStreamPort` into `ClippyAttributeCstParser` using `ra_ap_syntax` and `syn` AST inspection.
+1. `Compiler_Engineer_CI` invokes `ExecuteCargoClippyWorkspaceAllTargets` on `CompilerLintEnforcementGate` across all workspace crates using `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` to load root `Cargo.toml` via `CargoManifestInputPort` (Layer 1 Domain State & Data Model).
+2. `WorkspaceManifestForbidGate` executes `ReadWorkspaceLintsClippyForbidTable` inside `< 380`-SLOC submodules (`crates/verify-baseline/src/clippy_forbid/` and `crates/deap-core/src/rust_cst/`, replacing deleted legacy `source_ast.rs` and `structural.rs` scanners) to verify that `forbid_unwrap_used`, `forbid_expect_used`, `forbid_panic`, `forbid_indexing_slicing`, `forbid_disallowed_types`, and `forbid_type_complexity` are set to `true` across all `crates_enforced_count = 6` member manifests (Layer 2 Logic & State Management).
+3. `CompilerLintEnforcementGate` streams production and test Rust source files through `RustSourceTokenStreamPort` into `ClippyAttributeCstParser` using `ra_ap_syntax` (`ast::Attr`, `ast::HasAttrs`), `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, and `ignore` CST inspection with zero hand-rolled text scanners.
 4. A production or test module in `crates/` introduces inner `allow(clippy::unwrap_used)` or outer `allow(clippy::indexing_slicing)` in conflict with the inherited workspace `forbid` lint table.
-5. `cargo check --workspace --all-targets` and `cargo clippy --workspace --all-targets` fail closed with non-zero exit status and emit `error[E0453]` diagnostics via `CompilerDiagnosticOutputPort` and `ariadne` / `miette` span reporting.
+5. `rustc` and `cargo clippy --workspace --all-targets --message-format=json` fail closed with non-zero exit status and emit structured `error[E0453]` diagnostics via `CompilerDiagnosticOutputPort` and `ariadne` / `ra_ap_line_index` span reporting (Layer 3 Presentation & Actuator Interface Binding).
 
 ## 5. Alternate and Exception Flows
 - 3a. Precondition or manifest parse failure in `WorkspaceManifestForbidGate`:

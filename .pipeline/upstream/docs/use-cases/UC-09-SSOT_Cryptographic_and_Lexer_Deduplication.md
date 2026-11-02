@@ -35,11 +35,11 @@ graph TD
 - Check 34 executes audit_ssot_symbol_deduplication (C-PURITY-04 and C-PURITY-05).
 
 ## 4. Main Success Scenario
-1. `VerifyBaselineCLI` invokes `check_compiler_ast_purity` on `Check34AstPurityAndAntiGamingGate` to audit all workspace Rust modules via `WorkspaceRustCstPort`.
-2. `Check34AstPurityAndAntiGamingGate` invokes `mask_literals_and_comments` via `deap_core_rust_cst` (`ra_ap_syntax`, `logos`, and `rowan`) and delegates SSOT symbol verification to `SsotSymbolDeduplicationGate`.
-3. `SsotSymbolDeduplicationGate` executes `audit_ssot_symbol_deduplication` (constraints `C-PURITY-04` and `C-PURITY-05`) across every workspace relative path and masked token stream.
-4. `SsotSymbolDeduplicationGate` detects SHA-256 round constant `0x428a2f98` outside `crates/deap-core/src/digest.rs` (`duplicate_sha256_impl_count > 0`) or a duplicate Rust lexical state machine outside `crates/deap-core/src/rust_cst.rs` (`duplicate_lexer_impl_count > 0`).
-5. `Check34AstPurityAndAntiGamingGate` emits a sorted SSOT duplication diagnostic via `ariadne` / `miette` on `PurityViolationDiagnosticPort`, sets `Check34GateStatusPort` to `1`, and exits fail-closed with status code 1.
+1. `VerifyBaselineCLI` resolves workspace members using `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` (Contract B, zero hand-rolled scanners) and invokes `check_compiler_ast_purity` on `Check34AstPurityAndAntiGamingGate` to audit all workspace Rust modules via `WorkspaceRustCstPort` under full OMG SysML v2.0 + KerML 1.0 grammar coverage (Contract A, zero 16-construct caps).
+2. `Check34AstPurityAndAntiGamingGate` invokes `mask_literals_and_comments` via `deap_core_rust_cst` (`ra_ap_syntax` typed `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}`, `logos`, and `rowan`) and delegates SSOT symbol verification to `SsotSymbolDeduplicationGate` inside `< 380`-SLOC submodules with explicit legacy hand-rolled scanner deletion.
+3. `SsotSymbolDeduplicationGate` executes `audit_ssot_symbol_deduplication` (constraints `C-PURITY-04` and `C-PURITY-05`) across every workspace relative path and lossless CST token stream.
+4. `SsotSymbolDeduplicationGate` detects SHA-256 round constant `0x428a2f98` outside `./crates/deap-core/src/digest.rs` (`duplicate_sha256_impl_count > 0`) or a duplicate Rust lexical state machine outside `./crates/deap-core/src/rust_cst.rs` (`duplicate_lexer_impl_count > 0`) across Layer 1 Domain State and Layer 2 Logic & State Management.
+5. `Check34AstPurityAndAntiGamingGate` emits a sorted SSOT duplication diagnostic via `ariadne` / `miette` on `PurityViolationDiagnosticPort` (Layer 3 Interface Binding), sets `Check34GateStatusPort` to `1`, and exits fail-closed with status code 1.
 
 ## 5. Alternate and Exception Flows
 - 3a. Unreadable source file or path canonicalization failure during workspace walk:

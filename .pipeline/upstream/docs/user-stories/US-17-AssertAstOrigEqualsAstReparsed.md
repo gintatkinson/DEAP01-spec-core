@@ -21,17 +21,18 @@ As a `Compiler_CLI_Caller`, I want to invoke `AssertAstOrigEqualsAstReparsed()` 
 - Domain state attributes on `NativeSigilAndLifetimeLexer`: `quantity: Integer`, `type: String`.
 - Action `AssertAstOrigEqualsAstReparsed` invocation message envelope bound to `NativeSigilAndLifetimeLexer` typed domain schema.
 - Declared lifecycle state model: `BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_LifecycleState`, `LexicalScanning`, `RecursiveDescentParsing`, `RejectedE0100`, `CanonicalSerialization`, `RejectedE0200`, `RoundtripReparsing`, `AstStructuralEqualityCheck`, `RejectedE0400`, `VerifiedBijectiveAst`.
+- Contract A structural AST equality domain coverage: compares Stage-1 and Stage-2 `PackageDef` trees across 100% of the normative OMG SysML v2.0 + KerML 1.0 BNF grammar across all 6 clauses (Namespaces & Metadata, Structural & Data Types, Behavioral & State, Calculations/Constraints/Requirements, Use Cases/Analysis/Verification/Views, and KerML 1.0 Specialization/Multiplicity/Expressions) with zero 16-construct artificial caps, including `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` `metadata def` (`@Metadata` / `#user_keyword`) alongside backward-compatible `hazard def`, `risk def`, and `capability def` declarations (`roundtrip_ast_mismatch_count == 0`).
 
 ### Layer 2: Logic & State Management
-- Behavioral execution contract: invokes `AssertAstOrigEqualsAstReparsed()` on `NativeSigilAndLifetimeLexer` with atomic precondition verification.
+- Behavioral execution contract: invokes `AssertAstOrigEqualsAstReparsed()` on `NativeSigilAndLifetimeLexer` with atomic precondition verification over `logos` + `rowan` lossless Red/Green CSTs (`deap_core::sysml_cst`), `salsa` incremental query caches (`salsa::input`, `salsa::tracked`), and the Stage-1 == Stage-2 bijective round-trip gate (`ast_orig == ast_reparsed`) with zero hand-rolled scanners.
 - State transition management: `LexicalScanning -> RecursiveDescentParsing` (trigger `zeroDriftTokenStream`).
 - Formal constraints and requirements enforced: `REQ-0603 (REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint)`.
-- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/deap-core/src/sysml_cst/` and `crates/compile-sysml/src/roundtrip/`) while retiring legacy hand-rolled recursive-descent parser monoliths (`-2,400+` SLOC).
+- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`./crates/deap-core/src/sysml_cst/` and `./crates/compile-sysml/src/roundtrip/`) while explicitly deleting legacy hand-rolled scanner and recursive-descent parser monoliths (`-2,400+` SLOC).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-- Component interface endpoints: binds `NativeSigilAndLifetimeLexer` command ingress and completion notification egress channels.
+- Component interface endpoints: binds `NativeSigilAndLifetimeLexer` command ingress and completion notification egress (`BijectiveDiffDiagnosticPort`) channels.
 - Interaction binding (`BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_SequenceInteraction`): routes `AssertAstOrigEqualsAstReparsed` invocation from `Compiler_CLI_Caller` to `NativeSigilAndLifetimeLexer` and returns `reply_VecOfTokenWithZeroSpan`.
-- Diagnostic fault surface: reports deterministic rejection diagnostics to `Compiler_CLI_Caller` across the declared interface boundary when guard or invariant checks fail.
+- Diagnostic fault surface: reports deterministic `ariadne` field-level AST diff rejection diagnostics (`E0400`) to `Compiler_CLI_Caller` across the declared interface boundary when guard or invariant checks fail.
 
 ## UML Sequence Diagram
 

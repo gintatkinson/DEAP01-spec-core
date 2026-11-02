@@ -21,17 +21,18 @@ As a `Compiler_Engineer_CI`, I want to invoke `ReadWorkspaceLintsClippyForbidTab
 - Domain state attributes on `WorkspaceManifestForbidGate`: `quantity: Integer`.
 - Action `ReadWorkspaceLintsClippyForbidTable` invocation message envelope bound to `WorkspaceManifestForbidGate` typed domain schema.
 - Declared lifecycle state model: `BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_LifecycleState`, `ScanningSource`, `SkippingLineComment`, `SkippingBlockComment`, `InspectingAttribute`, `NormalizingBracketBody`, `ViolationRecorded`.
+- Contract A & B domain model: enforces full OMG SysML v2.0 + KerML 1.0 grammar coverage (zero 16-construct caps) and typed manifest/CST models via `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, `ra_ap_syntax` (`ast::Attr`, `ast::HasAttrs`), `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, and `ignore`.
 
 ### Layer 2: Logic & State Management
-- Behavioral execution contract: invokes `ReadWorkspaceLintsClippyForbidTable()` on `WorkspaceManifestForbidGate` with atomic precondition verification.
+- Behavioral execution contract: invokes `ReadWorkspaceLintsClippyForbidTable()` on `WorkspaceManifestForbidGate` with atomic precondition verification via `cargo_metadata`, `toml_edit`, `rustc`/`cargo clippy --message-format=json`, and `ra_ap_syntax` attr CST verification (zero text-scanner lint mandates).
 - State transition management: `ScanningSource -> SkippingLineComment` (trigger `slashSlashDetected`).
 - Formal constraints and requirements enforced: `REQ-0601 (REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint)`.
-- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/verify-baseline/src/clippy_forbid/` and `crates/deap-core/src/rust_cst/`) while retiring hand-rolled attribute line-parsers and reducing Check 34 ratchet ceilings.
+- Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`crates/verify-baseline/src/clippy_forbid/` and `crates/deap-core/src/rust_cst/`) with explicit legacy hand-rolled scanner deletion (`source_ast.rs`, `structural.rs`) and reduced Check 34 ratchet ceilings.
 
 ### Layer 3: Presentation & Actuator Interface Binding
 - Component port bindings on `WorkspaceManifestForbidGate`: `cmd_in: String (in)`, `status_out: String (out)`.
 - Interaction binding (`BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_SequenceInteraction`): routes `ReadWorkspaceLintsClippyForbidTable` invocation from `Compiler_Engineer_CI` to `WorkspaceManifestForbidGate` and returns `ReadWorkspaceLintsClippyForbidTable`.
-- Diagnostic fault surface: reports deterministic rejection diagnostics to `Compiler_Engineer_CI` across the declared interface boundary when guard or invariant checks fail.
+- Diagnostic fault surface: reports deterministic `rustc`/`cargo clippy --message-format=json` and `ariadne` byte-span rejection diagnostics resolved via `ra_ap_line_index` to `Compiler_Engineer_CI` across the declared interface boundary when guard or invariant checks fail.
 
 ## UML Sequence Diagram
 

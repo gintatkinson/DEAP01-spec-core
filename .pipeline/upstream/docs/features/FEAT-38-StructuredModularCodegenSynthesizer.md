@@ -20,6 +20,7 @@ classDiagram
         +String formatted_rust_out (out)
         +Integer stage_fixed_point_mismatch_files
         +Boolean in_process_prettyplease
+        +Boolean verify_stage_fixed_point(String stage1_digest)
     }
 ```
 
@@ -87,21 +88,33 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `in_process_prettyplease` | `Boolean` | Default `true` |
 | Port | `lowered_ir_in` | `in String` | Boundary interface contract |
 | Port | `formatted_rust_out` | `out String` | Boundary interface contract |
+| Constraint | `C_CST_04` | `stage_fixed_point_mismatch_files >= 0 and stage_fixed_point_mismatch_files <= 0` | Enforces `SHA-256(Stage 1) == SHA-256(Stage 2)` across all generated Rust compilation units |
+| Constraint | `Invariant_REQ_0608_SC_03` | Invariant (`REQ-0608`) | Metacircular Stage-1/Stage-2 fixed-point identity and strict separation between `prettyplease` codegen and `ra_ap_syntax` codemods |
+| Requirement | `REQ-0608` | Allocated Requirement | `REQ_0608_BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics` (`DEAP-BP-DET-08`) |
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `StructuredModularCodegenSynthesizer` organize no nested subparts declared in schema paired with boundary ports `in lowered_ir_in : String`, `out formatted_rust_out : String`.
+Structural composition and boundary topology for classifier `StructuredModularCodegenSynthesizer` organize `< 380`-SLOC submodules (`crates/compile-sysml/src/modular_codegen/`) paired with boundary ports `in lowered_ir_in : String`, `out formatted_rust_out : String`.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for StructuredModularCodegenSynthesizer.
+Operational lifecycle events and discrete state transitions for `StructuredModularCodegenSynthesizer` (`RewritingCheck37Paths -> VerifyingSelfHostFixedPoint -> VerifiedClean`).
 
 ### Layer 1: Domain State & Signal Model
-Classifier `StructuredModularCodegenSynthesizer` encapsulates typed domain state attributes `stage_fixed_point_mismatch_files : Integer`, `in_process_prettyplease : Boolean` alongside operational lifecycle status.
+Classifier `StructuredModularCodegenSynthesizer` encapsulates typed domain state attributes `stage_fixed_point_mismatch_files : Integer`, `in_process_prettyplease : Boolean` alongside `proc_macro2::TokenStream` IR buffers, `syn::File` AST structures, and Stage-1/Stage-2 SHA-256 tree manifests. Upholds **Contract A** across the full OMG SysML v2.0 + KerML 1.0 textual grammar (`package`, `library package`, `standard library package`, `import`, `metadata def` / `@Metadata` / `#capability` / `#hazard` / `#risk` / `#rt_loop` / `#dal` / `#fls`, `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port`, `interface def`/`interface`, `connection def`/`connection`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, and KerML specialization/expressions with zero 16-construct caps).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `StructuredModularCodegenSynthesizer` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `StructuredModularCodegenSynthesizer` governs deterministic AST lowering via `syn`, `proc-macro2`, `quote`, and in-process `prettyplease::unparse` enforcing `C_CST_04` (`stage_fixed_point_mismatch_files == 0`) and `Invariant_REQ_0608_SC_03` under **Contract B** (`cargo-lock`, `cargo_metadata`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, `ra_ap_syntax`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, `pulldown-cmark`, `pulldown-cmark-to-cmark`, `syn`, `proc-macro2`, `quote`, `prettyplease`). Bounds implementation strictly within `< 380`-SLOC submodules (`crates/compile-sysml/src/modular_codegen/`) and enforces explicit net-negative deletion of ~19,700+ lines of hand-rolled scanners.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `StructuredModularCodegenSynthesizer` binds external and behavioral interfaces across port `in lowered_ir_in : String`, port `out formatted_rust_out : String`.
+Classifier `StructuredModularCodegenSynthesizer` binds external and behavioral interfaces across port `in lowered_ir_in : String`, port `out formatted_rust_out : String`, and operation `+verify_stage_fixed_point(in stage1_digest: String) : Boolean`.
+
+### Associated Use Cases & User Stories
+
+#### Associated Use Cases
+- [ ] #770 - [Use Case 42: Structured Codegen Boundary Preserving Stage 1 to Stage 2 Metacircular SHA 256 Fixed Point](../use-cases/UC-42-Structured_Codegen_Boundary_Preserving_Stage_1_to_Stage_2_Metacircular_SHA_256_Fixed_Point.md) (directly exercises `StructuredModularCodegenSynthesizer` `syn` + `quote` + `prettyplease` codegen and `SHA-256(Stage 1) == SHA-256(Stage 2)` verification)
+- [ ] #769 - [Use Case 41: Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules](../use-cases/UC-41-Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules.md) (preserves Stage-1 `generated/` fixed-point modules emitted by `StructuredModularCodegenSynthesizer`)
+
+#### Associated User Stories
+- [ ] #805 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (directly invokes `verify_stage_fixed_point(stage1_digest)` on `StructuredModularCodegenSynthesizer`)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `StructuredModularCodegenSynthesizer` initialization inputs for `stage_fixed_point_mismatch_files` (`Integer`), `in_process_prettyplease` (`Boolean`) (no additional constraints specified in schema), When `StructuredModularCodegenSynthesizer` commits typed domain state, Then declared state attributes hold verified values.

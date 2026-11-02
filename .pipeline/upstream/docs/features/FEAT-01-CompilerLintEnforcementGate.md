@@ -167,7 +167,7 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Port | `BaselineGateVerdictPort` | `out Boolean` | Boundary interface contract |
 | Constraint | `Invariant_REQ_0601_C_LINT_03` | Invariant (`REQ-0601 (REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint)`) | Declared structural invariant |
 | Constraint | `Invariant_REQ_0601_FormalInvariant` | Invariant (`REQ-0601 (REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint)`) | Declared structural invariant |
-| Requirement | `REQ-0601 (REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint)` | Allocated Requirement | The Digital Engineering Agent Platform (DEAP) specification and verification compiler (CompilerLintEnforcementGate, legacy blueprint reference DEAP-BP-DET-01, UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c1, Complexity Class P, diagnostic bindings **E0453**, **E0100**, **E0304**, governed by DO-178C |
+| Requirement | `REQ-0601 (REQ_0601_BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint)` | Allocated Requirement | The Digital Engineering Agent Platform (DEAP) specification and verification compiler (`CompilerLintEnforcementGate`, legacy blueprint reference DEAP-BP-DET-01, UUIDv5 6ba7b810-9dad-11d1-80b4-00c04fd430c1, Complexity Class P, diagnostic bindings **E0453**, **E0100**, **E0304**, governed by DO-178C / DO-330 TQL-5) enforces Contract A (full OMG SysML v2.0 + KerML 1.0 grammar coverage with zero 16-construct caps) and Contract B (`rustc`/`cargo clippy --message-format=json` + `ra_ap_syntax` attr CST verification, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, zero text-scanner lint mandates). |
 
 ```sysml
 constraint Invariant_REQ_0601_C_LINT_03 {}
@@ -178,16 +178,16 @@ constraint Invariant_REQ_0601_FormalInvariant {}
 Structural composition and boundary topology for classifier `CompilerLintEnforcementGate` organize no nested subparts declared in schema paired with boundary ports `in CargoManifestInputPort : String`, `in RustSourceTokenStreamPort : String`, `out CompilerDiagnosticOutputPort : String`, `out BaselineGateVerdictPort : Boolean`.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for CompilerLintEnforcementGate.
+Operational lifecycle events and discrete state transitions for `CompilerLintEnforcementGate` across `rustc`/`cargo clippy --message-format=json` and `ra_ap_syntax` (`ast::Attr`, `ast::HasAttrs`) attribute CST verification.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `CompilerLintEnforcementGate` encapsulates typed domain state attributes `forbid_unwrap_used : Boolean`, `forbid_expect_used : Boolean`, `forbid_panic : Boolean`, `forbid_indexing_slicing : Boolean`, `forbid_disallowed_types : Boolean`, `forbid_type_complexity : Boolean`, `allowed_suppression_count : Integer`, `forbid_rule_coverage : Integer`, `crates_enforced_count : Integer` alongside operational lifecycle status.
+Classifier `CompilerLintEnforcementGate` encapsulates typed domain state attributes `forbid_unwrap_used : Boolean`, `forbid_expect_used : Boolean`, `forbid_panic : Boolean`, `forbid_indexing_slicing : Boolean`, `forbid_disallowed_types : Boolean`, `forbid_type_complexity : Boolean`, `allowed_suppression_count : Integer`, `forbid_rule_coverage : Integer`, `crates_enforced_count : Integer` alongside operational lifecycle status. Enforces Contract A (full OMG SysML v2.0 + KerML 1.0 Definition and Usage grammar coverage with zero 16-construct caps) and Contract B typed workspace/VFS domain models (`cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, `ra_ap_syntax`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `CompilerLintEnforcementGate` governs stateless structural transition evaluation enforcing invariant obligations `Invariant_REQ_0601_C_LINT_03`, `Invariant_REQ_0601_FormalInvariant`.
+Classifier `CompilerLintEnforcementGate` governs stateless structural transition evaluation enforcing invariant obligations `Invariant_REQ_0601_C_LINT_03`, `Invariant_REQ_0601_FormalInvariant` via `rustc`/`cargo clippy --workspace --all-targets --message-format=json` (`E0453`) and `ra_ap_syntax::ast::HasAttrs` attribute CST inspection with zero hand-rolled text-scanner lint mandates. Targets `< 380`-SLOC submodules (`crates/verify-baseline/src/clippy_forbid/` and `crates/deap-core/src/rust_cst/`) with explicit legacy hand-rolled scanner deletion (`source_ast.rs`, `structural.rs`).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `CompilerLintEnforcementGate` binds external and behavioral interfaces across port `in CargoManifestInputPort : String`, port `in RustSourceTokenStreamPort : String`, port `out CompilerDiagnosticOutputPort : String`, port `out BaselineGateVerdictPort : Boolean`.
+Classifier `CompilerLintEnforcementGate` binds external and behavioral interfaces across port `in CargoManifestInputPort : String`, port `in RustSourceTokenStreamPort : String`, port `out CompilerDiagnosticOutputPort : String`, port `out BaselineGateVerdictPort : Boolean`, emitting structured `rustc`-compatible JSON and `ariadne` byte-span diagnostics resolved via `ra_ap_line_index`.
 
 ### Associated Use Cases & User Stories
 

@@ -17,8 +17,8 @@
 graph TD
     subgraph "Check36AstCompletenessVerifier System Boundary"
         UC_Main(["Dogfood Ingestion and SysML v2 Compilation of REQ 0605"])
-        UC_Step01(["./target/release/verify-baseline check-blueprint docs/des..."])
-        UC_Step02(["The translator parses **REQ-0605**, UnifiedSafetyDocstrin..."])
+        UC_Step01(["Validate blueprint-05 via verify-baseline check-blueprint"])
+        UC_Step02(["Compile REQ-0605 into full OMG SysML v2.0 and KerML 1.0 AST"])
     end
     Compiler_CLI_CI_Pipeline(("Compiler_CLI_CI_Pipeline")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
@@ -29,16 +29,16 @@ graph TD
 - `Compiler_CLI_CI_Pipeline`
 
 ## 2. Preconditions
-- This blueprint specification docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md.
+- Engineering blueprint specification `./.pipeline/upstream/docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md` (`docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md`).
 
 ## 3. Trigger
-- ./target/release/verify-baseline check-blueprint docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --dry-run and ./target/release/ingest-sysml --schema docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --format markdown are executed.
+- `./target/release/verify-baseline check-blueprint docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --dry-run` and `./target/release/ingest-sysml --schema docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --format markdown` are executed.
 
 ## 4. Main Success Scenario
-1. `Compiler_CLI_CI_Pipeline` executes `./target/release/verify-baseline check-blueprint docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --dry-run` using `pulldown-cmark` to validate the 8-part engineering blueprint.
-2. `Check36AstCompletenessVerifier` verifies all 12 mechanical blueprint gates, including KaTeX complexity and idempotency bounds, Mermaid state and sequence diagrams, and 5-column STPA/FMECA tables.
-3. `Compiler_CLI_CI_Pipeline` invokes `RunIngestSysmlSchemaBlueprint05` (`./target/release/ingest-sysml --schema docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --format markdown`) using `logos` and `rowan`.
-4. `ingest_sysml` parses `REQ-0605` (`REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint`), `UnifiedSafetyDocstringSynthesizer`, `Check36AstCompletenessVerifier`, `ScopedSchemaContextResolver`, `SevenSectionDocstringGenerator`, `UnifiedRustDartCstParser`, `BP_05_SafetyDocstringPortDef`, and `BP_05_ContextToDocstringGeneratorConnection` into canonical SysML v2.
+1. `Compiler_CLI_CI_Pipeline` executes `./target/release/verify-baseline check-blueprint docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --dry-run` using `pulldown-cmark` to validate the 8-part engineering blueprint with zero hand-rolled scanners.
+2. `Check36AstCompletenessVerifier` verifies all 12 mechanical blueprint gates, including KaTeX complexity and idempotency bounds, Mermaid state and sequence diagrams, 5-column STPA/FMECA tables, and Contract B `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`) + `ra_ap_text_edit` + `ra_ap_line_index` tiered docstring specifications (`<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` and `[DOC-TIER: A]`).
+3. `Compiler_CLI_CI_Pipeline` invokes `RunIngestSysmlSchemaBlueprint05` (`./target/release/ingest-sysml --schema docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --format markdown`) using `deap_core::sysml_cst` (`logos` + `rowan` + `salsa` + `ariadne`).
+4. `ingest_sysml` parses `REQ-0605` (`REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint`), `UnifiedSafetyDocstringSynthesizer`, `Check36AstCompletenessVerifier`, `ScopedSchemaContextResolver`, `SevenSectionDocstringGenerator`, `UnifiedRustDartCstParser`, `BP_05_SafetyDocstringPortDef`, and `BP_05_ContextToDocstringGeneratorConnection` into canonical OMG SysML v2.0 + KerML 1.0 (`package`/`library package`/`standard library package`, `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port`, `connection def`/`connection`, `interface def`/`interface`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, `metadata def`/`@Metadata`/`#user_keyword` (`#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls`), and KerML specialization `:`, `:>`, `:>>`, `::>`, `~`, `ISQ`/`SI`/`ScalarValues`, zero 16-construct caps).
 5. `Check36AstCompletenessVerifier` confirms bijective AST roundtrip parity with `schema/model.sysml` and exits with code 0.
 
 ## 5. Alternate and Exception Flows
@@ -50,7 +50,12 @@ graph TD
   - `Check36AstCompletenessVerifier` aborts execution, preserves prior verified state, and notifies `Compiler_CLI_CI_Pipeline` with fail-closed exit code 1.
 
 ## 6. Postconditions
-- The translator parses **REQ-0605**, UnifiedSafetyDocstringSynthesizer, all four BOM subcomponents, all four interface ports, all four state attributes, all four parametric.
+- **Success Guarantee**: The translator parses **REQ-0605**, `UnifiedSafetyDocstringSynthesizer`, all four BOM subcomponents, all four interface ports, all four state attributes, all four parametric constraints, and all behavioral state/sequence/test-case constructs into canonical OMG SysML v2.0 + KerML 1.0 (zero 16-construct caps) with zero hand-rolled scanners.
+- **Failure Guarantee**: Any blueprint gate or SysML v2 roundtrip failure preserves prior verified `schema/model.sysml` state and exits with code 1.
+- **3-Layer Definition of Done (DoD)**:
+  - **Layer 1 (Domain State & Data Model)**: Lossless `pulldown-cmark` Markdown AST and `deap_core::sysml_cst` (`logos` + `rowan` + `salsa`) AST with 100% OMG SysML v2.0 + KerML 1.0 grammar coverage.
+  - **Layer 2 (Logic & State Management)**: Blueprint validation, SysML v2 compilation, and `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`) + `ra_ap_text_edit` + `ra_ap_line_index` tiered docstring synthesis (`<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` and `[DOC-TIER: A]`) inside `< 380`-SLOC submodules (`./crates/compile-sysml/src/safety_docstrings/`, `./crates/deap-core/src/rust_cst/`, `./crates/deap-core/src/dart_cst/`) with explicit deletion of legacy hand-rolled scanners (`-800+` SLOC retired).
+  - **Layer 3 (Presentation & Actuator Interface Binding)**: CLI bindings (`verify-baseline check-blueprint`, `ingest-sysml`) and `ariadne`/`miette` diagnostics.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |

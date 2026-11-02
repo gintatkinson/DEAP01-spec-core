@@ -66,26 +66,26 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `quantity` | `Integer` | Default `1` |
 | Attribute | `type` | `String` | Default `"Component"` |
 | Constraint | `Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lexical_scanning_schema_context_resolution_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds` | Invariant (`REQ-0605 (REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint)`) | Declared structural invariant |
-| Requirement | `REQ-0605 (REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint)` | Allocated Requirement | The Digital Engineering Agent Platform (DEAP) requires 100% of production Rust (.rs) and Dart (.dart) declarations to carry complete, non-placeholder 7-section high-assurance safety docstrings (## 1. Safety Intent & Regulatory Scope through ## 7. Realization & Traceability) bound to formal SysML v2 |
+| Requirement | `REQ-0605 (REQ_0605_BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint)` | Allocated Requirement | The Digital Engineering Agent Platform (DEAP) requires 100% of production Rust (`.rs`) and Dart (`.dart`) declarations to carry non-placeholder safety docstrings bound to formal OMG SysML v2.0 + KerML 1.0 CST/AST nodes (zero 16-construct caps) via `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `ra_ap_text_edit`, `ra_ap_line_index`, and `deap_core::dart_cst` (`logos` + `rowan` + `salsa` + `ariadne`), enforcing `<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` docstrings on internal declarations and explicit `[DOC-TIER: A]` 7-section safety docstrings (`## 1. Safety Intent & Regulatory Scope` through `## 7. Realization & Traceability`) on `pub` crate entrypoints and `unsafe`/`extern` blocks with zero hand-rolled lexical scanners. |
 
 ```sysml
 constraint Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lexical_scanning_schema_context_resolution_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds {}
 ```
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `Check36AstCompletenessVerifier` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
+Structural composition and boundary topology for classifier `Check36AstCompletenessVerifier` organize lossless CST verification across `< 380`-SLOC submodules (`./crates/compile-sysml/src/safety_docstrings/`, `./crates/deap-core/src/rust_cst/`, `./crates/deap-core/src/dart_cst/`).
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for Check36AstCompletenessVerifier.
+Operational lifecycle events and discrete state transitions for `Check36AstCompletenessVerifier` under `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState`.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `Check36AstCompletenessVerifier` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status.
+Classifier `Check36AstCompletenessVerifier` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside lossless CST token/trivia models (`ra_ap_syntax` `ast::HasDocComments`, `ast::HasAttrs`, `ra_ap_line_index`, `deap_core::sysml_cst`, `deap_core::dart_cst` via `logos` + `rowan` + `salsa`) covering 100% of the normative OMG SysML v2.0 + KerML 1.0 textual grammar (`package`/`library package`/`standard library package`, `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port`, `connection def`/`connection`, `interface def`/`interface`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, `metadata def`/`@Metadata`/`#user_keyword` (`#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls`), and KerML specialization `:`, `:>`, `:>>`, `::>`, `~`, `ISQ`/`SI`/`ScalarValues`, zero 16-construct caps).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `Check36AstCompletenessVerifier` governs stateless structural transition evaluation enforcing invariant obligations `Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lexical_scanning_schema_context_resolution_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds`.
+Classifier `Check36AstCompletenessVerifier` governs structural transition evaluation enforcing invariant obligations `Invariant_REQ_0605_Under_REQ_0605_and_parametric_constraints_C_DOC_01_through_C_DOC_04_lexical_scanning_schema_context_resolution_and_forward_docstring_injection_satisfy_the_following_linear_complexity_and_idempotency_bounds` using `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `ra_ap_text_edit`, `ra_ap_line_index`, and `pulldown-cmark` to verify `<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` docstrings and explicit `[DOC-TIER: A]` 7-section entrypoints inside `< 380`-SLOC submodules with explicit deletion of legacy hand-rolled line/char-by-char lexical scanners (`-800+` SLOC retired).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `Check36AstCompletenessVerifier` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
+Classifier `Check36AstCompletenessVerifier` binds CLI verification (`verify-baseline . --no-domain` Check 36 and Check 34) and emits deterministic `ariadne`/`miette` byte-span diagnostics across its structural boundary.
 
 ### Associated Use Cases & User Stories
 

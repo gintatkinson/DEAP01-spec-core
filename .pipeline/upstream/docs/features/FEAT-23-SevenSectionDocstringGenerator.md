@@ -67,19 +67,19 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `type` | `String` | Default `"Component"` |
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `SevenSectionDocstringGenerator` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
+Structural composition and boundary topology for classifier `SevenSectionDocstringGenerator` organize tiered safety docstring synthesis across `< 380`-SLOC submodules (`./crates/compile-sysml/src/safety_docstrings/`, `./crates/deap-core/src/rust_cst/`, `./crates/deap-core/src/dart_cst/`).
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for SevenSectionDocstringGenerator.
+Operational lifecycle events and discrete state transitions for `SevenSectionDocstringGenerator` under `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState`.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `SevenSectionDocstringGenerator` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status.
+Classifier `SevenSectionDocstringGenerator` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside lossless `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `ra_ap_line_index`, `deap_core::dart_cst`, and `deap_core::sysml_cst` (`logos` + `rowan` + `salsa`) AST structures covering 100% of the normative OMG SysML v2.0 + KerML 1.0 grammar (`package`/`library package`/`standard library package`, `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port`, `connection def`/`connection`, `interface def`/`interface`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, `metadata def`/`@Metadata`/`#user_keyword` (`#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls`), and KerML specialization `:`, `:>`, `:>>`, `::>`, `~`, `ISQ`/`SI`/`ScalarValues`, zero 16-construct caps).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `SevenSectionDocstringGenerator` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `SevenSectionDocstringGenerator` governs deterministic docstring synthesis using `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `ra_ap_text_edit`, `ra_ap_line_index`, `syn`, `quote`, and `prettyplease` to emit `<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` docstrings on internal declarations and explicit `[DOC-TIER: A]` 7-section docstrings (`## 1. Safety Intent & Regulatory Scope` through `## 7. Realization & Traceability`) on `pub` crate entrypoints and `unsafe`/`extern` blocks inside `< 380`-SLOC submodules with explicit deletion of legacy hand-rolled line/char-by-char docblock injectors (`-800+` SLOC retired).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `SevenSectionDocstringGenerator` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
+Classifier `SevenSectionDocstringGenerator` binds `schema_context_in` from `ScopedSchemaContextResolver`, applies atomic `ra_ap_text_edit` codemods for `compile-sysml --inject-safety-docstrings`, and emits deterministic `ariadne`/`miette` diagnostics.
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `SevenSectionDocstringGenerator` initialization inputs for `quantity` (`Integer`), `type` (`String`) (no additional constraints specified in schema), When `SevenSectionDocstringGenerator` commits typed domain state, Then declared state attributes hold verified values.

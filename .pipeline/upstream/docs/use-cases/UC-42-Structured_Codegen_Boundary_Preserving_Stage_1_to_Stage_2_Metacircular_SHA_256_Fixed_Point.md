@@ -13,16 +13,28 @@
 
 ## UML Diagrams
 
+### Use Case Diagram
 ```mermaid
 graph TD
-    subgraph "AirGappedCargoLockGovernor System Boundary"
-        UC_Main(["Structured Codegen Boundary Preserving Stage 1 to Stage 2..."])
-        UC_Step01(["Stage-1 generated sources under crates/compile-sysml/src/..."])
-        UC_Step02(["SHA-256(Stage 1) == SHA-256(Stage 2) holds across all gen..."])
+    subgraph "StructuredModularCodegenSynthesizer System Boundary"
+        UC_Main(["Structured Codegen Boundary Preserving Stage 1 to Stage 2 Metacircular SHA 256 Fixed Point"])
+        UC_Step01(["Synthesize Stage 2 Rust Compilation Units via syn quote and prettyplease"])
+        UC_Step02(["Verify Stage 1 Equals Stage 2 SHA 256 Digest Tree Parity"])
     end
     Operator(("Operator")) --- UC_Main
     UC_Main -. "<<include>>" .-> UC_Step01
     UC_Main -. "<<include>>" .-> UC_Step02
+```
+
+### State Machine Diagram
+```mermaid
+stateDiagram-v2
+    [*] --> RewritingCheck37Paths
+    RewritingCheck37Paths --> VerifyingSelfHostFixedPoint : "atomicFilesCommitted"
+    VerifyingSelfHostFixedPoint --> EmittingJsonDiagnostics : "rejectFixedPointDriftE0705"
+    VerifyingSelfHostFixedPoint --> VerifiedClean : "stage1EqualsStage2Sha256"
+    EmittingJsonDiagnostics --> [*]
+    VerifiedClean --> [*]
 ```
 
 ## 1. Actors
@@ -50,13 +62,30 @@ graph TD
   - `ZeroTokenRustSpanCodemodEngine` enforces `skip_generated_tree = true`, preserves Stage-1 fixed-point identity, and reports status to `Operator`.
 
 ## 6. Postconditions
-- SHA-256(Stage 1) == SHA-256(Stage 2) holds across all generated relative paths (**C-CST-04** stage_fixed_point_mismatch_files == 0), whereas any injected formatting or AST divergence fails closed.
+- **Success Guarantee:** `SHA-256(Stage 1) == SHA-256(Stage 2)` holds across all generated relative paths (`C_CST_04` `stage_fixed_point_mismatch_files == 0`) inside `< 380`-SLOC submodules (`crates/compile-sysml/src/modular_codegen/`).
+- **Failure Guarantee:** Any injected formatting mutation or AST divergence (`stage_fixed_point_mismatch_files > 0`) fails closed with exit code 1 and emits diagnostic `E0705`.
+
+## 7. Operational Context
+- **Contract A (100% Normative OMG SysML v2.0 + KerML 1.0 Grammar Coverage)**: Lowers the full OMG SysML v2.0 and KerML 1.0 grammar (`package`, `library package`, `standard library package`, `import`, `metadata def` / `@Metadata` / `#capability` / `#hazard` / `#risk` / `#rt_loop` / `#dal` / `#fls`, `part def`/`part`, `item def`/`item`, `attribute def`/`attribute`, `enum def`/`enum`, `port def`/`port`, `interface def`/`interface`, `connection def`/`connection`, `flow def`/`flow`, `allocation def`/`allocation`, `occurrence def`/`occurrence`, `action def`/`action`, `state def`/`state`, `calc def`/`calc`, `constraint def`/`constraint`, `requirement def`/`requirement`, `concern def`/`concern`, `use case def`/`use case`, `analysis def`/`analysis`, `verification def`/`verification`, `test case def`/`test case`, `interaction def`/`interaction`, `view def`/`view`, `viewpoint def`/`viewpoint`, `rendering def`/`rendering`, `variation`/`variant`, and KerML specialization/expressions with zero 16-construct caps).
+- **Contract B (Official Rust Compiler, Codegen & `rust-analyzer` Crate Stack)**: Enforces a strict boundary between `syn`, `proc-macro2`, `quote`, and `prettyplease` (for deterministic codegen from `.sysml` IR) and `ra_ap_syntax`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`, `pulldown-cmark`, `pulldown-cmark-to-cmark`, `cargo-lock`, `cargo_metadata`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` (for hand-authored CST codemods), alongside explicit net-negative deletion of ~19,700+ lines of hand-rolled scanners.
+- **3-Layer Definition of Done (DoD)**:
+  - **Layer 1 (Domain State & Data Model)**: `proc_macro2::TokenStream`, `syn::File`, and Stage-1/Stage-2 SHA-256 tree manifests.
+  - **Layer 2 (Logic & State Management)**: In-process `prettyplease::unparse` formatting and `verify_stage_fixed_point` evaluation (`C_CST_04` `stage_fixed_point_mismatch_files == 0`, `Invariant_REQ_0608_SC_03`) inside `< 380`-SLOC submodules (`crates/compile-sysml/src/modular_codegen/`).
+  - **Layer 3 (Presentation & Actuator Interface Binding)**: Binds `lowered_ir_in` and `formatted_rust_out` on `StructuredModularCodegenSynthesizer`.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **TBD** | User Story | [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) |
-| **TBD** | Feature | [Feature 36: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] AirGappedCargoLockGovernor](../features/FEAT-36-AirGappedCargoLockGovernor.md) |
+| **#805** | User Story | [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) |
+| **#744** | Feature | [Feature 38: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] StructuredModularCodegenSynthesizer](../features/FEAT-38-StructuredModularCodegenSynthesizer.md) |
+| **#746** | Feature | [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) |
+
+### Required User Stories
+- [ ] #805 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (verifies `SHA-256(Stage 1) == SHA-256(Stage 2)` fixed-point parity across generated Rust modules)
+
+### Required Features
+- [ ] #744 - [Feature 38: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] StructuredModularCodegenSynthesizer](../features/FEAT-38-StructuredModularCodegenSynthesizer.md) (synthesizes Stage-1/Stage-2 modules via `syn`, `proc-macro2`, `quote`, and `prettyplease`)
+- [ ] #746 - [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) (enforces `skip_generated_tree = true` so codemods never mutate Stage-1 generated sources)
 
 ## Source References
 Use case operational flows and lifecycle activity references:

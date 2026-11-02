@@ -29,16 +29,16 @@ graph TD
 - `Compiler_CLI_Caller`
 
 ## 2. Preconditions
-- A SysML v2 model containing reference type sigils (&), optionality sigils (?), lifetime annotations ('a), qualified paths (::), and logical && expressions (#495).
+- A SysML v2 model containing reference type sigils (`&`), optionality sigils (`?`), lifetime annotations (`'a`), qualified paths (`::`), logical `&&` expressions (#495), and any construct across all 6 normative clauses of the OMG SysML v2.0 + KerML 1.0 BNF grammar (zero 16-construct artificial caps), including `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` `metadata def` (`@Metadata` / `#user_keyword`) and backward-compatible `hazard def`, `risk def`, and `capability def` declarations.
 
 ## 3. Trigger
 - logos_lexer::scan_all tokenizes the raw source buffer without invoking normalize_type_sigils.
 
 ## 4. Main Success Scenario
-1. `Compiler_CLI_Caller` feeds unmodified UTF-8 SysML v2 source text into `SysmlBijectiveRoundtripCompilerGate` via `RawSysmlSourceInputPort` without invoking pre-lexer string rewriting (`normalize_type_sigils`).
-2. `NativeSigilAndLifetimeLexer` transitions `BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_LifecycleState` to `LexicalScanning` and executes `scan_all` using `logos` and `rowan`.
-3. `NativeSigilAndLifetimeLexer` tokenizes reference type sigils (`&`), optionality sigils (`?`), lifetime annotations (`'a`), qualified paths (`::`), and logical `&&` expressions directly from the UTF-8 byte buffer.
-4. `NativeSigilAndLifetimeLexer` emits `TokenKind::Ampersand`, `TokenKind::Question`, `TokenKind::Lifetime`, `TokenKind::DoubleColon`, and `TokenKind::AmpAmp` onto `TokenStreamChannelPort` with exact 1:1 byte and column offsets (`span_offset_drift_bytes == 0`).
+1. `Compiler_CLI_Caller` feeds unmodified UTF-8 SysML v2 source text into `SysmlBijectiveRoundtripCompilerGate` via `RawSysmlSourceInputPort` without invoking pre-lexer string rewriting (`normalize_type_sigils`) or hand-rolled character scanners.
+2. `NativeSigilAndLifetimeLexer` transitions `BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_LifecycleState` to `LexicalScanning` and executes `scan_all` using `logos` DFA tokenization, `rowan` lossless Red/Green CST trivia preservation (`deap_core::sysml_cst`), and `salsa` incremental query caching (`salsa::input`, `salsa::tracked`).
+3. `NativeSigilAndLifetimeLexer` tokenizes reference type sigils (`&`), optionality sigils (`?`), lifetime annotations (`'a`), qualified paths (`::`), logical `&&` expressions, and all 6 normative OMG SysML v2.0 + KerML 1.0 BNF clauses (including `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` `metadata def` and backward-compatible `hazard def`/`risk def`/`capability def`) directly from the UTF-8 byte buffer.
+4. `NativeSigilAndLifetimeLexer` emits `TokenKind::Ampersand`, `TokenKind::Question`, `TokenKind::Lifetime`, `TokenKind::DoubleColon`, and `TokenKind::AmpAmp` onto `TokenStreamChannelPort` with exact 1:1 byte and column offsets (`span_offset_drift_bytes == 0`), closing the 3-Layer DoD (Layer 1 CST/HIR Domain State, Layer 2 `< 380`-SLOC Logic Submodules in `./crates/deap-core/src/sysml_cst/` and `./crates/compile-sysml/src/roundtrip/` with explicit legacy hand-rolled scanner deletion, Layer 3 Port & `ariadne` Diagnostic Binding).
 5. `SysmlBijectiveRoundtripCompilerGate` transitions to `RecursiveDescentParsing` on `zeroDriftTokenStream` and returns the span-exact token vector to `Compiler_CLI_Caller`.
 
 ## 5. Alternate and Exception Flows
@@ -50,7 +50,7 @@ graph TD
   - `BijectiveSysmlSerializer` aborts execution without partial state mutation, preserves prior verified state, and notifies `Compiler_CLI_Caller` with fail-closed status code 1.
 
 ## 6. Postconditions
-- The lexer emits TokenKind::Ampersand, TokenKind::Question, TokenKind::Lifetime, TokenKind::DoubleColon, and TokenKind::AmpAmp with exact 1:1 byte and column offsets (span_offset_drift_bytes == 0).
+- The `logos` + `rowan` lexer (`deap_core::sysml_cst`) emits `TokenKind::Ampersand`, `TokenKind::Question`, `TokenKind::Lifetime`, `TokenKind::DoubleColon`, and `TokenKind::AmpAmp` across all 6 OMG SysML v2.0 + KerML 1.0 BNF clauses with exact 1:1 byte and column offsets (`span_offset_drift_bytes == 0`), feeding the Stage-1 == Stage-2 bijective round-trip gate with zero hand-rolled scanners.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |

@@ -87,21 +87,34 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `check13bCompliant` | `Boolean` | Default `true` |
 | Port | `umlSpecInPort` | `in String` | Boundary interface contract |
 | Port | `mermaidBlockOutPort` | `out String` | Boundary interface contract |
+| Constraint | `Invariant_REQ_0606_SC_01` | Invariant (`REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`) | Enforces Check 13B Rules E1--E5 and `forbidSemicolons == true && check13bCompliant == true` |
+| Constraint | `Invariant_REQ_0606_SC_02` | Invariant (`REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)`) | Enforces deterministic AST-backed Mermaid synthesis with zero hand-rolled scanners |
+| Requirement | `REQ-0606 (REQ_0606_BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint)` | Allocated Requirement | Synthesizes Section 4 Mermaid `sequenceDiagram` and `classDiagram` blocks from `ra_ap_syntax`, Stage-2 `./lints/deap-dylint-mir/` `rustc_middle::mir` (`TyCtxt`), and `deap_core::dart_cst` (`logos` + `rowan`) call/type graphs under Contract A and Contract B |
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `MermaidUmlDiagramGenerator` organize no nested subparts declared in schema paired with boundary ports `in umlSpecInPort : String`, `out mermaidBlockOutPort : String`.
+Structural composition and boundary topology for classifier `MermaidUmlDiagramGenerator` organize no nested subparts declared in schema paired with boundary ports `in umlSpecInPort : String`, `out mermaidBlockOutPort : String`. Enforces Contract A (100% normative OMG SysML v2.0 + KerML 1.0 grammar coverage with zero 16-construct caps) and Contract B (typed AST/MIR call-graph and classifier projection from `ra_ap_syntax`, Stage-2 `./lints/deap-dylint-mir/` `rustc_middle::mir` (`TyCtxt`), and `deap_core::dart_cst` (`logos` + `rowan`), with complete deletion of `source_ast.rs` and zero hand-rolled scanners).
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for MermaidUmlDiagramGenerator.
+Operational lifecycle events and discrete state transitions for `MermaidUmlDiagramGenerator` during `SynthesizingDossier` and `Validating12Gates` within `BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_LifecycleState`.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `MermaidUmlDiagramGenerator` encapsulates typed domain state attributes `forbidSemicolons : Boolean`, `check13bCompliant : Boolean` alongside operational lifecycle status.
+Classifier `MermaidUmlDiagramGenerator` encapsulates typed domain state attributes `forbidSemicolons : Boolean` (default `true`) and `check13bCompliant : Boolean` (default `true`), along with structured UML lifeline, message, and class descriptors derived from `ra_ap_syntax` and `rustc_middle::mir` (`TyCtxt`) findings.
 
 ### Layer 2: Logic & Safety State Management
-Classifier `MermaidUmlDiagramGenerator` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `MermaidUmlDiagramGenerator` governs deterministic Section 4 Mermaid diagram synthesis enforcing Check 13B Rules E1 through E5 (valid diagram header, newline closing fence, zero semicolons, zero curly braces or secondary colons in class members, double-quoted special labels, and open return arrows `-->`) and invariant obligations `Invariant_REQ_0606_SC_01` and `Invariant_REQ_0606_SC_02`. Implemented inside `< 380`-SLOC submodules under `./crates/verify-baseline/src/defect_dossier/` with `./crates/deap-core/src/source_ast.rs` (`source_ast.rs`) and all legacy hand-rolled scanners permanently deleted.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `MermaidUmlDiagramGenerator` binds external and behavioral interfaces across port `in umlSpecInPort : String`, port `out mermaidBlockOutPort : String`.
+Classifier `MermaidUmlDiagramGenerator` binds external and behavioral interfaces across port `in umlSpecInPort : String` and port `out mermaidBlockOutPort : String`, delivering Check 13B verified Mermaid code blocks to `DeterministicDossierSynthesizer` and emitting `ariadne` / `miette` diagnostics (`E0602`) on syntax or rule violations.
+
+### Associated Use Cases & User Stories
+
+#### Associated Use Cases
+- [ ] #650 - [Use Case 27: Deterministic Seven Section Dossier and Mermaid Synthesis](../use-cases/UC-27-Deterministic_Seven_Section_Dossier_and_Mermaid_Synthesis.md)
+- [ ] #653 - [Use Case 30: Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence](../use-cases/UC-30-Fail_Closed_Rejection_on_Malformed_Dossier_Schema_Ephemeral_Paths_or_Payload_Divergence.md)
+
+#### Associated User Stories
+- [ ] #615 - [User Story 40: synthesize defect dossier markdown](../user-stories/US-40-synthesize_defect_dossier_markdown.md)
+- [ ] #729 - [User Story 42: Execute12 Check Validate Defect Dossier](../user-stories/US-42-Execute12CheckValidateDefectDossier.md)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `MermaidUmlDiagramGenerator` initialization inputs for `forbidSemicolons` (`Boolean`), `check13bCompliant` (`Boolean`) (no additional constraints specified in schema), When `MermaidUmlDiagramGenerator` commits typed domain state, Then declared state attributes hold verified values.

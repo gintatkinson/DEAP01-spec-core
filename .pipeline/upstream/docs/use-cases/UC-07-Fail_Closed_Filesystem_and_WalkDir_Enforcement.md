@@ -35,11 +35,11 @@ graph TD
 - Check 34 executes audit_fail_closed_io_patterns (C-PURITY-02).
 
 ## 4. Main Success Scenario
-1. `VerifyBaselineCLI` invokes `check_compiler_ast_purity` on `Check34AstPurityAndAntiGamingGate`, feeding workspace Rust CST streams through `WorkspaceRustCstPort`.
-2. `Check34AstPurityAndAntiGamingGate` invokes `mask_literals_and_comments` via `deap_core_rust_cst` (`ra_ap_syntax`, `syn`, and `rowan`) to strip comments and string literals before structural inspection.
-3. `FailClosedIoAstVerifier` executes `audit_fail_closed_io_patterns` (constraint `C-PURITY-02`) across all non-test source lines in `crates/*/src/**/*.rs`.
-4. `FailClosedIoAstVerifier` detects fail-open error-swallowing patterns including `.into_iter().flatten()`, `.filter_map(Result::ok)`, `fs::read_to_string(...).unwrap_or_default()`, or `let _ = fs::remove_dir_all(...)`, incrementing `fail_open_io_site_count`.
-5. `Check34AstPurityAndAntiGamingGate` emits sorted file-and-line `ariadne` / `miette` diagnostics via `PurityViolationDiagnosticPort`, writes `1` to `Check34GateStatusPort`, and terminates fail-closed with exit code 1.
+1. `VerifyBaselineCLI` resolves workspace crate targets via `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` (Contract B, zero hand-rolled scanners) and invokes `check_compiler_ast_purity` on `Check34AstPurityAndAntiGamingGate`, feeding workspace Rust CST streams through `WorkspaceRustCstPort` under full OMG SysML v2.0 + KerML 1.0 grammar coverage (Contract A, zero 16-construct caps).
+2. `Check34AstPurityAndAntiGamingGate` invokes `mask_literals_and_comments` via `deap_core_rust_cst` (`ra_ap_syntax`, `syn`, and `rowan`) to construct lossless syntax trees inside `< 380`-SLOC submodules with explicit legacy hand-rolled scanner deletion.
+3. `FailClosedIoAstVerifier` executes `audit_fail_closed_io_patterns` (constraint `C-PURITY-02`) by traversing typed `ra_ap_syntax` `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}` nodes across all non-test modules in `./crates/*/src/**/*.rs`.
+4. `FailClosedIoAstVerifier` detects fail-open error-swallowing patterns including `.into_iter().flatten()`, `.filter_map(Result::ok)`, `fs::read_to_string(...).unwrap_or_default()`, or `let _ = fs::remove_dir_all(...)`, incrementing `fail_open_io_site_count` (Layer 1 Domain State, Layer 2 Logic & State Management).
+5. `Check34AstPurityAndAntiGamingGate` emits sorted file-and-line `ariadne` / `miette` diagnostics via `PurityViolationDiagnosticPort` (Layer 3 Interface Binding), writes `1` to `Check34GateStatusPort`, and terminates fail-closed with exit code 1.
 
 ## 5. Alternate and Exception Flows
 - 3a. Directory traversal or filesystem metadata error while enumerating `crates/*/src/**/*.rs`:

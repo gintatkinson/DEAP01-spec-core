@@ -67,19 +67,19 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 | Attribute | `type` | `String` | Default `"Subcomponent"` |
 
 ### 3. Visual Layout & Arrangement
-Structural composition and boundary topology for classifier `SsotSymbolDeduplicationGate` organize no nested subparts declared in schema paired with no external boundary ports declared in schema.
+Structural composition and boundary topology for classifier `SsotSymbolDeduplicationGate` organize no nested subparts declared in schema paired with no external boundary ports declared in schema, partitioned into `< 380`-SLOC submodules (`./crates/verify-baseline/src/ast_purity/` and `./crates/deap-core/src/rust_cst/`) with explicit legacy hand-rolled scanner deletion.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for SsotSymbolDeduplicationGate.
+Operational lifecycle events and discrete state transitions for `SsotSymbolDeduplicationGate` under Contract A (full OMG SysML v2.0 + KerML 1.0 grammar coverage, zero 16-construct caps) and Contract B (`ra_ap_syntax` typed `ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}` I/O purity + `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, zero hand-rolled scanner mandates).
 
 ### Layer 1: Domain State & Signal Model
-Classifier `SsotSymbolDeduplicationGate` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status.
+Classifier `SsotSymbolDeduplicationGate` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status, `ra_ap_syntax` (`ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr, Fn}`) CST/AST nodes, `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit` crate graph descriptors, and full OMG SysML v2.0 + KerML 1.0 grammar structures (zero 16-construct caps).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `SsotSymbolDeduplicationGate` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `SsotSymbolDeduplicationGate` governs stateless structural transition evaluation enforcing `C-PURITY-04` and `C-PURITY-05` (`Invariant_REQ_0602_SC_01`, `Invariant_REQ_0602_SC_02`) by auditing workspace Rust CSTs for unauthorized SHA-256 constant definitions outside `./crates/deap-core/src/digest.rs` and duplicate lexer/parser implementations outside `./crates/deap-core/src/rust_cst.rs` and `./crates/deap-core/src/sysml_cst.rs`, targeting `< 380`-SLOC submodules and explicit legacy hand-rolled scanner deletion.
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `SsotSymbolDeduplicationGate` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.
+Classifier `SsotSymbolDeduplicationGate` exposes an internal structural boundary bound to `Check34AstPurityAndAntiGamingGate`, reporting `duplicate_sha256_impl_count` and `duplicate_lexer_impl_count` violations via `ariadne` / `miette` diagnostics on `PurityViolationDiagnosticPort` and `Check34GateStatusPort`.
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `SsotSymbolDeduplicationGate` initialization inputs for `quantity` (`Integer`), `type` (`String`) (no additional constraints specified in schema), When `SsotSymbolDeduplicationGate` commits typed domain state, Then declared state attributes hold verified values.

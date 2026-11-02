@@ -84,16 +84,16 @@ Declared structural attributes, boundary ports, invariants, and allocated requir
 Structural composition and boundary topology for classifier `ClippyAttributeCstParser` organize no nested subparts declared in schema paired with boundary ports `in cmd_in : String`, `out status_out : String`.
 
 ### 4. Interactive Flow & States
-Operational lifecycle events and discrete state transitions for ClippyAttributeCstParser.
+Operational lifecycle events and discrete state transitions for `ClippyAttributeCstParser` over `ra_ap_syntax` (`ast::Attr`, `ast::HasAttrs`) and `rowan` lossless CST nodes.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `ClippyAttributeCstParser` encapsulates typed domain state attributes `quantity : Integer` alongside operational lifecycle status.
+Classifier `ClippyAttributeCstParser` encapsulates typed domain state attributes `quantity : Integer` alongside operational lifecycle status. Enforces Contract A (full OMG SysML v2.0 + KerML 1.0 Definition and Usage grammar coverage with zero 16-construct caps) and Contract B lossless Rust CST and VFS models (`ra_ap_syntax`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `ra_ap_text_edit`, `rowan`, `camino`, `ignore`).
 
 ### Layer 2: Logic & Safety State Management
-Classifier `ClippyAttributeCstParser` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema.
+Classifier `ClippyAttributeCstParser` governs stateless structural transition evaluation over `rustc`/`cargo clippy --message-format=json` and `ra_ap_syntax` (`ast::Attr`, `ast::HasAttrs`) attribute CST nodes to reject inner/outer `allow(clippy::...)` and `cfg_attr(..., allow(clippy::...))` suppressions with zero hand-rolled text-scanner lint mandates. Targets `< 380`-SLOC submodules (`crates/verify-baseline/src/clippy_forbid/` and `crates/deap-core/src/rust_cst/`) with explicit legacy hand-rolled scanner deletion (`source_ast.rs`, `structural.rs`).
 
 ### Layer 3: Presentation & Actuator Interface Binding
-Classifier `ClippyAttributeCstParser` binds external and behavioral interfaces across port `in cmd_in : String`, port `out status_out : String`.
+Classifier `ClippyAttributeCstParser` binds external and behavioral interfaces across port `in cmd_in : String`, port `out status_out : String`, emitting exact byte-span diagnostics via `ra_ap_line_index` and `ariadne`.
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `ClippyAttributeCstParser` initialization inputs for `quantity` (`Integer`) (no additional constraints specified in schema), When `ClippyAttributeCstParser` commits typed domain state, Then declared state attributes hold verified values.
