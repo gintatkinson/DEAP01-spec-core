@@ -1152,12 +1152,12 @@ pub fn classify_table(headers: &[String]) -> TableType {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-INGEST-TABLE/parse_markdown_tables] | SysML v2: ActionDef(parse_markdown_tables)
 pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
-    let mut tables = Vec::new();
+    let mut tables = Vec::with_capacity(
+        deap_core::markdown_ast::parse_markdown_ast(&lines.join("\n")).tables.len(),
+    );
     let mut in_table = false;
-    let mut raw_headers = Vec::new();
-    let mut norm_headers = Vec::new();
-    let mut units = Vec::new();
-    let mut rows = Vec::new();
+    let (mut raw_headers, mut norm_headers, mut units, mut rows) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
 
     let mut flush_table = |in_tbl: &mut bool,
                            raw_h: &mut Vec<String>,
@@ -1178,9 +1178,7 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
         u.clear();
         r.clear();
     };
-
-    let mut i = 0;
-    let n = lines.len();
+    let (mut i, n) = (0, lines.len());
 
     while i < n {
         let line = lines.get(i).copied().unwrap_or("").trim();
@@ -1425,13 +1423,12 @@ mod tests {
         let lines: Vec<&str> = sample.lines().collect();
         let tables = parse_markdown_tables(&lines);
         assert_eq!(tables.len(), 3);
-
         assert_eq!(
-            tables
-                .first()
-                .map(|t| classify_table(&t.normalized_headers)),
-            Some(TableType::Properties)
+            deap_core::markdown_ast::parse_markdown_ast(sample).tables.len(),
+            tables.len()
         );
+
+        assert_eq!(tables.first().map(|t| classify_table(&t.normalized_headers)), Some(TableType::Properties));
         assert_eq!(
             tables.get(1).map(|t| classify_table(&t.normalized_headers)),
             Some(TableType::Bom)

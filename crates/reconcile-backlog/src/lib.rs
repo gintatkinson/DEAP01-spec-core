@@ -439,17 +439,16 @@ pub fn load_specifications(workspace_root: &Path) -> Vec<LoadedSpec> {
             if path.is_file() && path.extension().map(|ext| ext == "md").unwrap_or(false) {
                 match fs::read_to_string(path) {
                     Ok(content) => {
-                        if let Some(fm) = parse_frontmatter(&content) {
+                        let cmark_ok = !deap_core::markdown_ast::parse_markdown_ast(&content).sections.is_empty()
+                            || deap_core::markdown_ast::format_markdown_cmark(&content).is_ok();
+                        if let Some(fm) = parse_frontmatter(&content).filter(|_| cmark_ok) {
                             let rel = path
                                 .strip_prefix(workspace_root)
                                 .unwrap_or(path)
                                 .display()
                                 .to_string();
                             specs.push(LoadedSpec {
-                                path: path.to_path_buf(),
-                                rel_path: rel,
-                                frontmatter: fm,
-                                content,
+                                path: path.to_path_buf(), rel_path: rel, frontmatter: fm, content
                             });
                         }
                     }

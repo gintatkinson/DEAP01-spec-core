@@ -42,6 +42,7 @@ pub mod markdown;
 pub mod markdown_ast;
 pub mod rules;
 pub mod rust_cst;
+pub mod salsa_db;
 pub mod source_ast;
 pub mod sysml_ast;
 pub mod workspace;

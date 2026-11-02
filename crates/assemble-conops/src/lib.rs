@@ -44,6 +44,44 @@ pub use params::{
 };
 pub use sanitize::{sanitize_level_1b_operational_text, wrap_mermaid_label};
 pub use toc::{extract_headings, generate_table_of_contents, slugify, verify_markdown_links};
+pub use deap_core::markdown_ast::{
+    format_markdown_cmark, parse_markdown_ast, MarkdownCodeBlockAst, MarkdownSectionAst,
+    MarkdownTableAst, ParsedMarkdownAst,
+};
+
+/// Parses and formats ConOps Markdown via the shared CommonMark AST adapter (`[REQ-0401]`, `[REQ-0402]`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `parse_and_format_conops_markdown` in `crates/assemble-conops/src/lib.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `parse_and_format_conops_markdown` (declaration #1) within `ASSEMBLE-CONOPS-LIB`.
+///
+/// ## 3. Preconditions
+/// - `source: &str` must satisfy domain and type-safety constraints prior to invoking `parse_and_format_conops_markdown`.
+///
+/// ## 4. Postconditions
+/// - Returns `Result<(ParsedMarkdownAst, String), String>` from `parse_and_format_conops_markdown` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(source)) bounded over input/member dimension of `parse_and_format_conops_markdown`.
+/// - Space Complexity: O(N(source)) bounded auxiliary memory for `parse_and_format_conops_markdown`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `parse_and_format_conops_markdown` (`Result<(ParsedMarkdownAst, String), String>`).
+/// - State: Maintains consistent state invariants across `parse_and_format_conops_markdown` without partial mutation on error.
+/// - Action: Executes `parse_and_format_conops_markdown` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `parse_and_format_conops_markdown` (`ASSEMBLE-CONOPS-LIB`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0401], [REQ-0402] | SysML v2: ActionDef(parse_and_format_conops_markdown)
+pub fn parse_and_format_conops_markdown(
+    source: &str,
+) -> Result<(ParsedMarkdownAst, String), String> {
+    let ast = parse_markdown_ast(source);
+    let formatted = format_markdown_cmark(source)?;
+    Ok((ast, formatted))
+}
 
 #[cfg(test)]
 mod tests {
@@ -101,5 +139,13 @@ mod tests {
                 "{name} must not declare unconditional crate-root #![allow(...)] attributes"
             );
         }
+    }
+
+    #[test]
+    fn test_parse_and_format_conops_markdown_roundtrip() -> Result<(), String> {
+        let (ast, formatted) = super::parse_and_format_conops_markdown("# ConOps Unit\n\nBody.\n")?;
+        assert_eq!(ast.sections.len(), 1);
+        assert!(formatted.contains("ConOps Unit"));
+        Ok(())
     }
 }

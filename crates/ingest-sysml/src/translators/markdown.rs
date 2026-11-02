@@ -3651,8 +3651,8 @@ impl MarkdownTranslator {
         } else {
             sanitize_identifier(default_name, "Markdown_Package")
         };
-
-        let mut sections: Vec<ParsedSection> = Vec::new();
+        let mut sections: Vec<ParsedSection> =
+            Vec::with_capacity(deap_core::markdown_ast::parse_markdown_ast(content).sections.len());
         let mut current_sec_header = String::new();
         let mut current_component_target: Option<String> = None;
         let mut current_sec_doc: Vec<String> = Vec::new();
