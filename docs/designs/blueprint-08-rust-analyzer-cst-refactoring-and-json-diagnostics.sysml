@@ -8,6 +8,30 @@ package BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON
     attribute Tracked_Issues : String = "#742";
     attribute Generation_Mode : String = "subagent";
     attribute Specification_Source : String = "crates/deap-core/src/source_ast.rs:1-80";
+    doc /* `ra_ap_vfs` and `camino::Utf8Path` cross-platform virtual file system with CRLF/LF normalization. */
+    attribute crates_deap_core_src_rust_cst_vfs_rs : String = "**New `< 380` SLOC**";
+    doc /* Lossless Red/Green CST parser wrapping `ra_ap_syntax::SourceFile` with zero syntax-tree text-contains scans. */
+    attribute crates_deap_core_src_rust_cst_parse_rs : String = "**New `< 380` SLOC**";
+    doc /* Deterministic `BTreeMap`-ordered AST item inventory and DEAP v2.0 metrics extraction. */
+    attribute crates_deap_core_src_rust_cst_items_rs : String = "**New `< 380` SLOC**";
+    doc /* Atomic module partitioner with CST byte-span splicing and Check-37 blueprint path updates. */
+    attribute crates_deap_core_src_rust_cst_extract_module_rs : String = "**New `< 380` SLOC**";
+    doc /* Lossless `DocTier` classifier and 2-line docblock compactor (`--compact-tier-bc`). */
+    attribute crates_deap_core_src_rust_cst_doc_edit_rs : String = "**New `< 380` SLOC**";
+    doc /* Single-line `rustc`-compatible NDJSON diagnostic emitter and `MachineApplicable` fix engine. */
+    attribute crates_deap_core_src_rust_cst_diagnostics_ndjson_rs : String = "**New `< 380` SLOC**";
+    doc /* Completely deleted and superseded by typed `rust_cst` modules. */
+    attribute crates_deap_core_src_source_ast_rs : String = "**Complete Deletion `-1,049` SLOC**";
+    doc /* Replaced by `deap_core::rust_cst::doc_edit` CST docblock operations. */
+    attribute crates_compile_sysml_src_docstring_rs : String = "**Net Deletion `-4,900+` SLOC**";
+    doc /* Migrated from hand-rolled line scanners to `DocTier` AST metrics. */
+    attribute crates_verify_baseline_src_checks_docstring_gate_rs : String = "**Net Deletion `-3,300+` SLOC**";
+    doc /* Migrated from regex/token heuristics to exact `ra_ap_syntax` item traversal. */
+    attribute crates_verify_baseline_src_checks_structural_rs : String = "**Net Deletion `-4,200+` SLOC**";
+    doc /* Migrated workspace directory traversal to `camino` + `ignore` + `ra_ap_vfs`. */
+    attribute crates_deap_core_src_workspace_rs : String = "**Net Deletion `-620+` SLOC**";
+    doc /* Downward ratchet converges strictly to `0` scanner exemptions across all crates. */
+    attribute crates_verify_baseline_src_ratchet_table_rs : String = "**Ratchet Convergence to `0`**";
     doc /* [unit: `SLOC`] */
     attribute max_fn_exec_sloc : Real;
     doc /* [unit: `params`] */
@@ -20,18 +44,18 @@ package BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON
     attribute runtime_llm_token_count : Real;
     doc /* [unit: `lines`] */
     attribute tier_bc_max_doc_lines : Real;
-    doc /* verifyOfflineLockedBuild(lockPath) */
-    action def verifyOfflineLockedBuild;
-    doc /* listRustItems(path) */
-    action def listRustItems;
-    doc /* extractRustModule(fromPath, toPath, itemsCsv) */
-    action def extractRustModule;
-    doc /* verifyStageFixedPoint(stage1Digest) */
-    action def verifyStageFixedPoint;
-    doc /* formatNdjsonLine(msg) */
-    action def formatNdjsonLine;
-    doc /* analyzeMetrics(source) */
-    action def analyzeMetrics;
+    doc /* verify_offline_locked_build(lock_path) */
+    action def verify_offline_locked_build;
+    doc /* list_rust_items(path) */
+    action def list_rust_items;
+    doc /* extract_rust_module(from_path, to_path, items_csv) */
+    action def extract_rust_module;
+    doc /* verify_stage_fixed_point(stage1_digest) */
+    action def verify_stage_fixed_point;
+    doc /* format_ndjson_line(msg) */
+    action def format_ndjson_line;
+    doc /* analyze_metrics(source) */
+    action def analyze_metrics;
     doc /* [unit: `SLOC`] */
     assert constraint C_CST_01 {
         max_fn_exec_sloc >= 1 and max_fn_exec_sloc <= 50;
@@ -159,15 +183,15 @@ package BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON
         lifeline ZeroTokenRustSpanCodemodEngine : ZeroTokenRustSpanCodemodEngine;
         lifeline StructuredModularCodegenSynthesizer : StructuredModularCodegenSynthesizer;
         lifeline UnifiedRustcJsonDiagnosticEmitter : UnifiedRustcJsonDiagnosticEmitter;
-        message verifyOfflineLockedBuild from AirGappedCargoLockGovernor to LosslessRustCstAnalyzer;
-        message reply_SupplyChainVerificationReceipt from LosslessRustCstAnalyzer to AirGappedCargoLockGovernor;
-        message listRustItems from ZeroTokenRustSpanCodemodEngine to LosslessRustCstAnalyzer;
+        message verify_offline_locked_build from AirGappedCargoLockGovernor to LosslessRustCstAnalyzer;
+        message reply_SupplyChainReceipt from LosslessRustCstAnalyzer to AirGappedCargoLockGovernor;
+        message list_rust_items from ZeroTokenRustSpanCodemodEngine to LosslessRustCstAnalyzer;
         message reply_RustItemInventory from LosslessRustCstAnalyzer to ZeroTokenRustSpanCodemodEngine;
-        message extractRustModule from ZeroTokenRustSpanCodemodEngine to ZeroTokenRustSpanCodemodEngine;
-        message verifyStageFixedPoint from StructuredModularCodegenSynthesizer to StructuredModularCodegenSynthesizer;
-        message formatNdjsonLine from ZeroTokenRustSpanCodemodEngine to UnifiedRustcJsonDiagnosticEmitter;
-        message reply_RustcNdjsonLineStream from UnifiedRustcJsonDiagnosticEmitter to ZeroTokenRustSpanCodemodEngine;
-        message analyzeMetrics from UnifiedRustcJsonDiagnosticEmitter to LosslessRustCstAnalyzer;
+        message extract_rust_module from ZeroTokenRustSpanCodemodEngine to ZeroTokenRustSpanCodemodEngine;
+        message verify_stage_fixed_point from StructuredModularCodegenSynthesizer to StructuredModularCodegenSynthesizer;
+        message format_ndjson_line from ZeroTokenRustSpanCodemodEngine to UnifiedRustcJsonDiagnosticEmitter;
+        message reply_String from UnifiedRustcJsonDiagnosticEmitter to ZeroTokenRustSpanCodemodEngine;
+        message analyze_metrics from UnifiedRustcJsonDiagnosticEmitter to LosslessRustCstAnalyzer;
         message reply_DeapV2AstMetrics from LosslessRustCstAnalyzer to UnifiedRustcJsonDiagnosticEmitter;
     }
     doc /* Mandates reproducible `--offline --locked` workspace builds against pinned `Cargo.lock` dependency checksums. [unit: flag] */
