@@ -130,12 +130,11 @@ fn parse_idl_op_params(params_raw: &str) -> (Vec<AttributeDef>, Vec<AttributeDef
         groups.push(cur);
     }
     for group in groups {
-        let Some(&(_, raw_name)) = group.last() else { continue };
-        let prefix = &group[..group.len().saturating_sub(1)];
-        let (direction, type_tokens) = match prefix.first() {
-            Some(&(_, dir @ ("in" | "out" | "inout"))) if prefix.len() >= 2 => (dir, &prefix[1..]),
-            _ if !prefix.is_empty() => ("in", prefix),
-            _ => continue,
+        let Some((&(_, raw_name), prefix)) = group.split_last() else { continue };
+        let (direction, type_tokens) = match prefix.split_first() {
+            Some((&(_, dir @ ("in" | "out" | "inout")), rest)) if !rest.is_empty() => (dir, rest),
+            Some(_) => ("in", prefix),
+            None => continue,
         };
         let Some(type_name) = join_idl_type_tokens(type_tokens) else { continue };
         let attr = AttributeDef {
@@ -270,9 +269,9 @@ fn scan_interface_ops(if_body: &str) -> Vec<(String, String)> {
                 let open_pos = stmt_tokens.iter().position(|&(t, _, s)| t == IdlToken::Punct && s == "(");
                 let close_pos = stmt_tokens.iter().rposition(|&(t, _, s)| t == IdlToken::Punct && s == ")");
                 if let (Some(o_idx), Some(c_idx)) = (open_pos, close_pos) {
-                    if o_idx >= 2 && c_idx > o_idx && matches!(stmt_tokens[o_idx - 1].0, IdlToken::Ident | IdlToken::Keyword) {
-                        if let Some(params_raw) = if_body.get(stmt_tokens[o_idx].1.end..stmt_tokens[c_idx].1.start) {
-                            ops.push((stmt_tokens[o_idx - 1].2.to_string(), params_raw.trim().to_string()));
+                    if let (Some(&(IdlToken::Ident | IdlToken::Keyword, _, op_name)), Some((_, o_sp, _)), Some((_, c_sp, _))) = (o_idx.checked_sub(1).filter(|&i| i >= 1 && c_idx > o_idx).and_then(|i| stmt_tokens.get(i)), stmt_tokens.get(o_idx), stmt_tokens.get(c_idx)) {
+                        if let Some(params_raw) = if_body.get(o_sp.end..c_sp.start) {
+                            ops.push((op_name.to_string(), params_raw.trim().to_string()));
                         }
                     }
                 }

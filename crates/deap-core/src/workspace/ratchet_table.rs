@@ -174,10 +174,10 @@ pub const LEGACY_RATCHET_MAX_LINES: &[RatchetPair] = &[
     ("./crates/ingest-sysml/src/main.rs", 974),
     ("./crates/ingest-sysml/src/table.rs", 446),
     ("./crates/ingest-sysml/src/translators/code.rs", 231),
-    ("./crates/ingest-sysml/src/translators/idl.rs", 358),
+    ("./crates/ingest-sysml/src/translators/idl.rs", 357),
     ("./crates/ingest-sysml/src/translators/markdown.rs", 6569),
     ("./crates/ingest-sysml/src/translators/openapi.rs", 394),
-    ("./crates/ingest-sysml/src/translators/yang.rs", 2002),
+    ("./crates/ingest-sysml/src/translators/yang.rs", 475),
     ("./crates/ingest-sysml/tests/code_ingestion_tests.rs", 769),
     ("./crates/ingest-sysml/tests/code_realization_scoping_tests.rs", 413),
     ("./crates/ingest-sysml/tests/reproducer_tests.rs", 611),
@@ -224,6 +224,19 @@ pub const LEGACY_RATCHET_MAX_LINES: &[RatchetPair] = &[
 
 /// Indicates that zero new unratcheted `> 500`-line modules are permitted in the workspace (`[REQ-0601]`, `[REQ-0801]`).
 pub const ZERO_NEW_RATCHET_ENFORCED: bool = true;
+
+/// Canonical forbidden dummy CST pattern entry type (`[REQ-0601]`, `[REQ-0608]`).
+/// Realises: [REQ-0601], [REQ-0608]
+pub type ForbiddenDummyPattern = &'static str;
+
+/// Forbidden hand-rolled scanner and dummy CST discard patterns (`[REQ-0601]`, `[REQ-0608]`).
+/// Realises: [REQ-0601], [REQ-0608]
+pub const FORBIDDEN_DUMMY_CST_PATTERNS: &[ForbiddenDummyPattern] = &[
+    "let _ = parse_",
+    "let _cst =",
+    "scan_quoted_string",
+    "tokenize_yang",
+];
 
 /// Counts entries in [`LEGACY_RATCHET_MAX_LINES`] whose line ceiling exceeds `500` (`[REQ-0601]`, `[REQ-0801]`).
 #[must_use]

@@ -49,7 +49,7 @@ pub enum YangToken {
     Keyword,
     #[regex(r"[A-Za-z_][A-Za-z0-9_\-:\.]*", priority = 2)]
     Ident,
-    #[regex(r#""([^"\\]|\\.)*"|'[^']*'"#, allow_greedy = true)]
+    #[regex(r#""([^"\\]|\\(.|\n))*"|'[^']*'"#, allow_greedy = true)]
     StringLit,
     #[regex(r"-?[0-9]+(\.[0-9]+)?")]
     NumberLit,
@@ -133,6 +133,60 @@ pub struct ParsedYangCst {
     pub lossless_roundtrip_eq: bool,
 }
 
+/// Maps a lexical `YangToken` into its corresponding `YangSyntaxKind`. Realises: [REQ-0201]
+const fn token_syntax_kind(tok: YangToken) -> YangSyntaxKind {
+    match tok {
+        YangToken::Whitespace => YangSyntaxKind::Whitespace,
+        YangToken::LineComment => YangSyntaxKind::LineComment,
+        YangToken::BlockComment => YangSyntaxKind::BlockComment,
+        YangToken::Keyword => YangSyntaxKind::Keyword,
+        YangToken::Ident => YangSyntaxKind::Ident,
+        YangToken::StringLit => YangSyntaxKind::StringLit,
+        YangToken::NumberLit => YangSyntaxKind::NumberLit,
+        YangToken::Punct => YangSyntaxKind::Punct,
+        YangToken::Error => YangSyntaxKind::Error,
+    }
+}
+
+/// Emits a statement delimiter (`;`, `{`, `}`) into the `rowan` CST builder while maintaining statement nesting. Realises: [REQ-0201]
+fn emit_cst_punct(
+    builder: &mut GreenNodeBuilder<'static>,
+    slice: &str,
+    raw_kind: SyntaxKind,
+    in_stmt_header: &mut bool,
+    open_blocks: &mut usize,
+) {
+    match slice {
+        ";" => {
+            if !*in_stmt_header {
+                builder.start_node(YangLanguage::kind_to_raw(YangSyntaxKind::Statement));
+            }
+            builder.token(raw_kind, slice);
+            builder.finish_node();
+            *in_stmt_header = false;
+        }
+        "{" => {
+            if !*in_stmt_header {
+                builder.start_node(YangLanguage::kind_to_raw(YangSyntaxKind::Statement));
+            }
+            builder.token(raw_kind, slice);
+            *open_blocks += 1;
+            *in_stmt_header = false;
+        }
+        _ => {
+            if *in_stmt_header {
+                builder.finish_node();
+                *in_stmt_header = false;
+            }
+            builder.token(raw_kind, slice);
+            if *open_blocks > 0 {
+                *open_blocks -= 1;
+                builder.finish_node();
+            }
+        }
+    }
+}
+
 /// Parses a YANG source string into a lossless `rowan` CST and statement summary list. Realises: [REQ-0201]
 #[must_use]
 pub fn parse_yang_cst(source: &str) -> ParsedYangCst {
@@ -141,23 +195,15 @@ pub fn parse_yang_cst(source: &str) -> ParsedYangCst {
     let mut statements = Vec::new();
     let mut pending: Option<(String, String, usize)> = None;
     let mut at_stmt_start = true;
+    let mut in_stmt_header = false;
+    let mut open_blocks = 0usize;
 
     for (res, span) in YangToken::lexer(source).spanned() {
-        let slice = &source[span.clone()];
+        let Some(slice) = source.get(span.clone()) else { continue };
         let tok = res.unwrap_or(YangToken::Error);
-        let kind = match tok {
-            YangToken::Whitespace => YangSyntaxKind::Whitespace,
-            YangToken::LineComment => YangSyntaxKind::LineComment,
-            YangToken::BlockComment => YangSyntaxKind::BlockComment,
-            YangToken::Keyword => YangSyntaxKind::Keyword,
-            YangToken::Ident => YangSyntaxKind::Ident,
-            YangToken::StringLit => YangSyntaxKind::StringLit,
-            YangToken::NumberLit => YangSyntaxKind::NumberLit,
-            YangToken::Punct => YangSyntaxKind::Punct,
-            YangToken::Error => YangSyntaxKind::Error,
-        };
-        builder.token(YangLanguage::kind_to_raw(kind), slice);
+        let raw_kind = YangLanguage::kind_to_raw(token_syntax_kind(tok));
         if matches!(tok, YangToken::Whitespace | YangToken::LineComment | YangToken::BlockComment) {
+            builder.token(raw_kind, slice);
             continue;
         }
         if tok == YangToken::Punct && matches!(slice, "{" | "}" | ";") {
@@ -165,7 +211,15 @@ pub fn parse_yang_cst(source: &str) -> ParsedYangCst {
                 statements.push(YangNodeSummary { keyword, argument, span_start, span_end: span.end });
             }
             at_stmt_start = true;
-        } else if at_stmt_start {
+            emit_cst_punct(&mut builder, slice, raw_kind, &mut in_stmt_header, &mut open_blocks);
+            continue;
+        }
+        if !in_stmt_header {
+            builder.start_node(YangLanguage::kind_to_raw(YangSyntaxKind::Statement));
+            in_stmt_header = true;
+        }
+        builder.token(raw_kind, slice);
+        if at_stmt_start {
             at_stmt_start = false;
             if tok == YangToken::Keyword {
                 pending = Some((slice.to_string(), String::new(), span.start));
@@ -178,6 +232,13 @@ pub fn parse_yang_cst(source: &str) -> ParsedYangCst {
     }
     if let Some((keyword, argument, span_start)) = pending {
         statements.push(YangNodeSummary { keyword, argument, span_start, span_end: source.len() });
+    }
+    if in_stmt_header {
+        builder.finish_node();
+    }
+    while open_blocks > 0 {
+        open_blocks -= 1;
+        builder.finish_node();
     }
     builder.finish_node();
     let green = builder.finish();
