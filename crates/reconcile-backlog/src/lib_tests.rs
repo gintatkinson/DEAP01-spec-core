@@ -254,20 +254,8 @@ fn test_run_reconciliation_updates_frontmatter_and_checklists_and_syncs_body(
     )?;
 
     let tracker = MockTracker::new(vec![
-        Issue {
-            number: 10,
-            title: "EPIC-001: Platform".to_string(),
-            state: "OPEN".to_string(),
-            labels: vec!["type:epic".to_string()],
-            body: "Old epic body".to_string(),
-        },
-        Issue {
-            number: 20,
-            title: "FEAT-001: Login".to_string(),
-            state: "CLOSED".to_string(),
-            labels: vec!["type:feature".to_string()],
-            body: "Old feat body".to_string(),
-        },
+        Issue { number: 10, title: "EPIC-001: Platform".to_string(), state: "OPEN".to_string(), labels: vec!["type:epic".to_string()], body: "Old epic body".to_string() },
+        Issue { number: 20, title: "FEAT-001: Login".to_string(), state: "CLOSED".to_string(), labels: vec!["type:feature".to_string()], body: "Old feat body".to_string() },
     ]);
 
     let options = ReconcileOptions {
@@ -301,11 +289,8 @@ fn test_run_reconciliation_dry_run_makes_no_writes() -> Result<(), Box<dyn std::
     fs::write(&epic_path, original)?;
 
     let tracker = MockTracker::new(vec![Issue {
-        number: 10,
-        title: "EPIC-001: Platform".to_string(),
-        state: "OPEN".to_string(),
-        labels: vec!["type:epic".to_string()],
-        body: String::new(),
+        number: 10, title: "EPIC-001: Platform".to_string(), state: "OPEN".to_string(),
+        labels: vec!["type:epic".to_string()], body: String::new(),
     }]);
 
     let options = ReconcileOptions {
@@ -322,5 +307,69 @@ fn test_run_reconciliation_dry_run_makes_no_writes() -> Result<(), Box<dyn std::
     assert_eq!(summary.frontmatters_updated, 1);
     assert_eq!(fs::read_to_string(&epic_path)?, original);
     assert!(tracker.edited_bodies.borrow().is_empty());
+    Ok(())
+}
+
+#[test]
+fn test_issue_759_reconcile_invalidates_colliding_and_missing_frontmatter_issues(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempdir()?;
+    let epics_dir = dir.path().join("docs/epics");
+    let feats_dir = dir.path().join("docs/features");
+    fs::create_dir_all(&epics_dir)?;
+    fs::create_dir_all(&feats_dir)?;
+
+    let epic_path = epics_dir.join("EPIC-07-Blueprint.md");
+    fs::write(
+        &epic_path,
+        "| Attribute | Specification Detail |\n| :--- | :--- |\n| **Issue ID** | #732 |\n| **Title** | Epic 07: BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint |\n| **Type** | epic |\n\n# Epic 07: BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint\n\n## 2. Requirements & Checklist\n- [ ] #737 - [Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitioner](../features/FEAT-31-FourLevelAstPartitioner.md) (partitioner)\n- [ ] #742 - [Feature 36: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] DagVerifier](../features/FEAT-36-DagVerifier.md) (verifier)\n",
+    )?;
+    let feat31_path = feats_dir.join("FEAT-31-FourLevelAstPartitioner.md");
+    fs::write(
+        &feat31_path,
+        "| Attribute | Specification Detail |\n| :--- | :--- |\n| **Issue ID** | #737 |\n| **Title** | Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitioner |\n| **Type** | feature |\n| **Parent Epic** | [EPIC-07-Blueprint](../epics/EPIC-07-Blueprint.md) |\n\n# Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitioner\n\n## Overview\nPartitioner.\n",
+    )?;
+    let feat36_path = feats_dir.join("FEAT-36-DagVerifier.md");
+    fs::write(
+        &feat36_path,
+        "| Attribute | Specification Detail |\n| :--- | :--- |\n| **Issue ID** | #742 |\n| **Title** | Feature 36: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] DagVerifier |\n| **Type** | feature |\n| **Parent Epic** | [EPIC-07-Blueprint](../epics/EPIC-07-Blueprint.md) |\n\n# Feature 36: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] DagVerifier\n\n## Overview\nVerifier.\n",
+    )?;
+
+    let tracker = MockTracker::new(vec![
+        Issue { number: 732, title: "[AUDIT] [parser.rs]: Unchecked slice index".to_string(), state: "OPEN".to_string(), labels: vec!["bug".to_string()], body: "Original audit 732 body".to_string() },
+        Issue { number: 737, title: "[AUDIT] [driver.rs]: Resolved audit defect".to_string(), state: "CLOSED".to_string(), labels: vec!["bug".to_string(), "status:fixed-resolved".to_string()], body: "Original audit 737 body".to_string() },
+        Issue { number: 742, title: "BP-07: Self-Hosting 4-Level Modular Multi-File Code Generator Blueprint".to_string(), state: "OPEN".to_string(), labels: vec!["enhancement".to_string()], body: "Original BP-07 tracker body".to_string() },
+    ]);
+    *tracker.next_id.borrow_mut() = 761;
+
+    let options = ReconcileOptions {
+        workspace_root: dir.path().to_path_buf(), offline: false, dry_run: false,
+        provider: "github".to_string(), sync_bodies: true,
+        repo: Some("org/repo".to_string()), default_branch: Some("main".to_string()),
+    };
+
+    let mut summary = ReconcileSummary::default();
+    let index = IssueIndex::from_issues(tracker.fetch_all_issues(Some("org/repo"))?);
+    let discovered = discover_and_reconcile_frontmatters(
+        &[epic_path.clone(), feat31_path.clone(), feat36_path.clone()],
+        &options, Some("org/repo"), &index, &mut summary,
+    )?;
+    assert!(discovered.iter().all(|d| d.issue_number.is_none()));
+    assert!(fs::read_to_string(&epic_path)?.contains("| **Issue ID** | TBD |"));
+
+    let summary = run_reconciliation(&tracker, &options)?;
+    assert_eq!(summary.issues_registered, 3);
+
+    let epic_after = fs::read_to_string(&epic_path)?;
+    assert!(epic_after.contains("| **Issue ID** | [#763](https://github.com/org/repo/issues/763) |"));
+    assert!(!epic_after.contains("#732"));
+    assert!(epic_after.contains("- [ ] #761 - [Feature 31:"));
+    assert!(epic_after.contains("- [ ] #762 - [Feature 36:"));
+    assert!(!epic_after.contains("#737 -"));
+    assert!(!epic_after.contains("#742 -"));
+
+    let issues = tracker.issues.borrow();
+    let i732 = issues.iter().find(|i| i.number == 732).ok_or("missing 732")?;
+    assert_eq!(i732.body, "Original audit 732 body");
     Ok(())
 }

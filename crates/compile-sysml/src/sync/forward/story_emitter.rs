@@ -178,8 +178,7 @@ fn render_single_user_story_spec(
     let story_slug = sanitize_id(&s_meta.action_name);
     let rel_path = format!("user-stories/US-{:02}-{}.md", s_num, story_slug);
     let _us_date = resolve_date(&index.target_out_dir, &rel_path, index.today_iso);
-    let us_issue_id =
-        format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &rel_path));
+    let us_issue_id = format_issue_id_cell(resolve_verified_issue_id(index, &rel_path));
     let us_display_title = index
         .story_display_titles
         .get(&s_num)

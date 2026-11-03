@@ -205,13 +205,95 @@ fn merge_and_persist_specs(
     Ok(())
 }
 
+/// Resolves a verified tracker issue ID for `rel_path`, returning `None` (`TBD`) when `rel_path` belongs to a rejected top-down sequential fake `#NNN` block.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-RESOLVE-ISSUE-ID]
+pub(crate) fn resolve_verified_issue_id(
+    index: &ForwardSyncIndex<'_>,
+    rel_path: &str,
+) -> Option<usize> {
+    if index.rejected_fake_issue_paths.contains(rel_path) {
+        None
+    } else {
+        resolve_existing_issue_id(&index.target_out_dir, rel_path)
+    }
+}
+
+/// Collects specification relative paths belonging to top-down sequential fake `#NNN` blocks where a parent Epic's bare `#NNN` is smaller than its child Feature, Use Case, and User Story bare `#NNN` values.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
+fn populate_rejected_fake_issue_paths(pkg: &PackageDef, index: &mut ForwardSyncIndex<'_>) {
+    for (idx, p) in index.ordered_packages.iter().enumerate() {
+        let epic_num = idx.saturating_add(1);
+        let is_root = p.name == "SysML_Model" || p.name == pkg.name;
+        let is_conops = p.name == "ConOps";
+        let epic_rel_path = if is_conops && !is_root {
+            "epics/EPIC-02-ConOps.md".to_string()
+        } else {
+            format!("epics/EPIC-{:02}-{}.md", epic_num, p.name)
+        };
+
+        let mut child_paths: Vec<String> = Vec::new();
+        for (f_idx, part_ctx) in index.part_contexts.iter().enumerate() {
+            let is_match = part_ctx.pkg_name == p.name
+                || (is_conops && part_ctx.pkg_name == "ConOps")
+                || (is_root
+                    && (part_ctx.pkg_name == pkg.name || part_ctx.pkg_name == "SysML_Model"));
+            if is_match {
+                child_paths.push(format!(
+                    "features/FEAT-{:02}-{}.md",
+                    f_idx.saturating_add(1),
+                    part_ctx.part.name
+                ));
+            }
+        }
+        for uc_m in index
+            .uc_metas
+            .iter()
+            .filter(|m| m.pkg_name == p.name || (is_conops && !index.has_conops_uc))
+        {
+            let clean_name = strip_use_case_prefix(&uc_m.uc.name);
+            child_paths.push(format!(
+                "use-cases/UC-{:02}-{}.md",
+                uc_m.u_num,
+                sanitize_id(clean_name)
+            ));
+        }
+        for s_m in index
+            .story_metas
+            .iter()
+            .filter(|m| m.pkg_name == p.name || (is_conops && !index.has_conops_us))
+        {
+            child_paths.push(format!(
+                "user-stories/US-{:02}-{}.md",
+                s_m.s_num,
+                sanitize_id(&s_m.action_name)
+            ));
+        }
+
+        let epic_id =
+            resolve_existing_issue_id_with_provenance(&index.target_out_dir, &epic_rel_path);
+        let child_ids: Vec<Option<ParsedIssueId>> = child_paths
+            .iter()
+            .map(|cp| resolve_existing_issue_id_with_provenance(&index.target_out_dir, cp))
+            .collect();
+        if filter_top_down_fake_issue_ids(epic_id, &child_ids) {
+            index.rejected_fake_issue_paths.insert(epic_rel_path);
+            for (cp, cid) in child_paths.into_iter().zip(child_ids) {
+                if cid.is_some_and(|c| !c.has_tracker_url) {
+                    index.rejected_fake_issue_paths.insert(cp);
+                }
+            }
+        }
+    }
+}
+
 /// Executes forward synchronization from the SysML v2 `PackageDef` model to Markdown specifications.
 /// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
 pub fn forward_sync_sysml_to_specs(
     pkg: &PackageDef,
     opts: &ForwardSyncOptions,
 ) -> Result<BTreeMap<String, String>, String> {
-    let index = build_forward_sync_index(pkg, opts);
+    let mut index = build_forward_sync_index(pkg, opts);
+    populate_rejected_fake_issue_paths(pkg, &mut index);
     let mut generated_files = BTreeMap::new();
 
     emit_epic_specs(pkg, &index, &mut generated_files);

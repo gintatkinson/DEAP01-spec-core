@@ -84,8 +84,7 @@ fn build_epic_feature_checklist(ctx: &EpicRenderCtx<'_>, index: &ForwardSyncInde
     for (f_idx, part_ctx) in index.part_contexts.iter().enumerate() {
         let f_num = f_idx.saturating_add(1);
         let f_path = format!("features/FEAT-{:02}-{}.md", f_num, part_ctx.part.name);
-        let f_issue =
-            format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &f_path));
+        let f_issue = format_issue_id_cell(resolve_verified_issue_id(index, &f_path));
         let is_match = part_ctx.pkg_name == ctx.pkg.name
             || (ctx.is_conops && part_ctx.pkg_name == "ConOps")
             || (ctx.is_root
@@ -138,8 +137,7 @@ fn build_epic_associated_backlog(
         let clean_name = strip_use_case_prefix(&uc_m.uc.name);
         let uc_slug = sanitize_id(clean_name);
         let uc_path = format!("use-cases/UC-{:02}-{}.md", uc_m.u_num, uc_slug);
-        let uc_issue =
-            format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &uc_path));
+        let uc_issue = format_issue_id_cell(resolve_verified_issue_id(index, &uc_path));
         assoc_uc.push(format!(
             "- [ ] {} - [Use Case {:02}: {}](../use-cases/UC-{:02}-{}.md)",
             uc_issue,
@@ -158,8 +156,7 @@ fn build_epic_associated_backlog(
     {
         let us_slug = sanitize_id(&s_m.action_name);
         let us_path = format!("user-stories/US-{:02}-{}.md", s_m.s_num, us_slug);
-        let us_issue =
-            format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &us_path));
+        let us_issue = format_issue_id_cell(resolve_verified_issue_id(index, &us_path));
         let us_display_title = index
             .story_display_titles
             .get(&s_m.s_num)
@@ -230,8 +227,7 @@ fn render_single_epic_spec(
     let p = ctx.pkg;
     let (title, rel_path) = resolve_epic_title_and_path(ctx);
     let _epic_date = resolve_date(&index.target_out_dir, &rel_path, index.today_iso);
-    let epic_issue_id =
-        format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &rel_path));
+    let epic_issue_id = format_issue_id_cell(resolve_verified_issue_id(index, &rel_path));
     let primary_engine = select_default_package_engine(p);
 
     let feat_checklist_text = build_epic_feature_checklist(ctx, index);

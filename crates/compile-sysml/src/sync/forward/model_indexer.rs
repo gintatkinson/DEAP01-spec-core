@@ -62,6 +62,7 @@ pub(crate) struct ForwardSyncIndex<'a> {
     pub(crate) story_ast_contexts: Vec<StoryAstContext<'a>>,
     pub(crate) story_display_titles: BTreeMap<usize, String>,
     pub(crate) uc_metas: Vec<UseCaseMeta<'a>>,
+    pub(crate) rejected_fake_issue_paths: BTreeSet<String>,
 }
 
 /// Selects the canonical root `PackageDef` from `all_packages` for `pkg`.
@@ -345,5 +346,6 @@ pub(crate) fn build_forward_sync_index<'a>(
         story_ast_contexts,
         story_display_titles,
         uc_metas,
+        rejected_fake_issue_paths: BTreeSet::new(),
     }
 }

@@ -74,6 +74,7 @@ pub fn infer_spec_type_from_title(title: &str) -> Option<String> {
         || s.starts_with("FEATURE-")
         || s.starts_with("FEAT ")
         || s.starts_with("FEATURE:")
+        || s.starts_with("FEATURE ")
     {
         Some("feature".to_string())
     } else if s.starts_with("US-")
@@ -91,6 +92,15 @@ pub fn infer_spec_type_from_title(title: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// [DOC-TIER: A] Checks whether an issue title carries an `[AUDIT]` defect prefix.
+/// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-TRACKER]
+/// Contract: Returns `true` if `title` starts with `[AUDIT]` or `[audit]` after leading whitespace.
+/// Bounds & Faults: Time O(N), Space O(1) where N is `title.len()`.
+pub fn is_audit_issue_title(title: &str) -> bool {
+    let trimmed = title.trim_start();
+    trimmed.starts_with("[AUDIT]") || trimmed.starts_with("[audit]")
 }
 
 /// [DOC-TIER: A] Normalizes a specification or issue title for deterministic comparison.
@@ -125,21 +135,31 @@ pub fn normalize_title(title: &str) -> String {
 
 /// [DOC-TIER: A] Extracts the canonical `(prefix, numeric_ordinal)` from a specification title (e.g. `("feat", 1)`).
 /// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-TRACKER-EXTRACT-SPEC-ORDINAL]
-/// Contract: Recognizes `EPIC-001`, `FEAT-02`, `US-10`, `UC-003` and normalizes prefix aliases.
+/// Contract: Recognizes `EPIC-001`, `FEAT-02`, `US-10`, `UC-003`, `Use Case 32`, `User Story 45` and normalizes prefix aliases.
 /// Bounds & Faults: Time O(N), Space O(N) where N is `title.len()`.
 pub fn extract_spec_ordinal(title: &str) -> Option<(String, u64)> {
     let norm = normalize_title(title);
     let parts: Vec<&str> = norm.split_whitespace().collect();
     if let (Some(&first), Some(&second)) = (parts.first(), parts.get(1)) {
-        let prefix = match first {
+        let single_prefix = match first {
             "epic" => Some("epic"),
             "feat" | "feature" => Some("feat"),
             "us" | "story" => Some("us"),
             "uc" => Some("uc"),
             _ => None,
         };
-        if let Some(p) = prefix {
+        if let Some(p) = single_prefix {
             if let Ok(num) = second.parse::<u64>() {
+                return Some((p.to_string(), num));
+            }
+        }
+        let two_word_prefix = match (first, second) {
+            ("use", "case") => Some("uc"),
+            ("user", "story") => Some("us"),
+            _ => None,
+        };
+        if let (Some(p), Some(&third)) = (two_word_prefix, parts.get(2)) {
+            if let Ok(num) = third.parse::<u64>() {
                 return Some((p.to_string(), num));
             }
         }
@@ -149,12 +169,13 @@ pub fn extract_spec_ordinal(title: &str) -> Option<(String, u64)> {
 
 /// [DOC-TIER: A] Checks whether two titles have compatible specification ordinals (`EPIC-001` vs `EPIC-002`).
 /// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-TRACKER-ORDINAL-COMPATIBLE]
-/// Contract: Returns `false` if both titles carry ordinals that differ; returns `true` otherwise.
+/// Contract: Returns `true` only when both carry identical ordinals or neither carries an ordinal.
 /// Bounds & Faults: Time O(N), Space O(N) over title lengths.
 pub fn ordinal_compatible(title_a: &str, title_b: &str) -> bool {
     match (extract_spec_ordinal(title_a), extract_spec_ordinal(title_b)) {
         (Some(ord_a), Some(ord_b)) => ord_a == ord_b,
-        _ => true,
+        (None, None) => true,
+        _ => false,
     }
 }
 

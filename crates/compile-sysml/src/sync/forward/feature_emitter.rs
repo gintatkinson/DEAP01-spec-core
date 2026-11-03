@@ -145,8 +145,7 @@ fn render_single_feature_spec(
     let part_name = &ctx.part.name;
     let rel_path = format!("features/FEAT-{:02}-{}.md", f_num, part_name);
     let _feat_date = resolve_date(&index.target_out_dir, &rel_path, index.today_iso);
-    let feat_issue_id =
-        format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &rel_path));
+    let feat_issue_id = format_issue_id_cell(resolve_verified_issue_id(index, &rel_path));
     let title = format!(
         "Feature {:02}: [{}] {}",
         f_num, ctx.subsys_display, part_name

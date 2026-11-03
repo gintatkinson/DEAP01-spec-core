@@ -19,6 +19,31 @@ use crate::tracker::IssueIndex;
 use crate::ReconcileError;
 use pulldown_cmark::{Event, Options, Parser, Tag};
 
+/// Strips a leading `#<num> - ` or `#<num> -- ` prefix from `after_checkbox` if present.
+/// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-EXTRACT-CHECKLIST-TITLE-AND-ISSUE]
+fn strip_leading_issue_prefix(after_checkbox: &str) -> (Option<u64>, &str) {
+    if let Some(after_hash) = after_checkbox.strip_prefix('#') {
+        let digit_len = after_hash.chars().take_while(|c| c.is_ascii_digit()).count();
+        if digit_len > 0 {
+            let digits = after_hash.get(..digit_len).unwrap_or("");
+            if let Ok(num) = digits.parse::<u64>() {
+                if num > 0 {
+                    let rest = after_hash.get(digit_len..).unwrap_or("").trim_start();
+                    let stripped = rest
+                        .strip_prefix("-- ")
+                        .or_else(|| rest.strip_prefix("- "))
+                        .unwrap_or(rest)
+                        .trim_start();
+                    if !stripped.is_empty() {
+                        return (Some(num), stripped);
+                    }
+                }
+            }
+        }
+    }
+    (None, after_checkbox)
+}
+
 /// [DOC-TIER: A] Extracts `(title, Option<issue_number>)` from a Markdown checklist line using `pulldown-cmark`.
 /// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-EXTRACT-CHECKLIST-TITLE-AND-ISSUE]
 /// Contract: Parses `- [ ]` / `- [x]` task list lines and extracts link title and issue ID via `Tag::Link`.
@@ -38,28 +63,43 @@ pub fn extract_checklist_title_and_issue(line: &str) -> Option<(String, Option<u
         return None;
     }
 
-    if after_checkbox.starts_with('[') {
-        for (event, range) in Parser::new_ext(after_checkbox, Options::all()).into_offset_iter() {
+    let (leading_issue, candidate) = strip_leading_issue_prefix(after_checkbox);
+
+    if candidate.starts_with('[') {
+        for (event, range) in Parser::new_ext(candidate, Options::all()).into_offset_iter() {
             if let Event::Start(Tag::Link { dest_url, .. }) = event {
                 if range.start == 0 {
-                    let link_slice = after_checkbox.get(range.clone()).unwrap_or("");
+                    let link_slice = candidate.get(range.clone()).unwrap_or("");
                     if let Some(sep_idx) = link_slice.rfind("](") {
                         let title = link_slice.get(1..sep_idx).unwrap_or("").trim().to_string();
                         if !title.is_empty() {
                             let url_issue = extract_issue_number(&dest_url);
-                            let rest_after = after_checkbox.get(range.end..).unwrap_or("").trim();
+                            let rest_after = candidate.get(range.end..).unwrap_or("").trim();
                             let trailing_issue = extract_trailing_issue_ref(rest_after);
-                            return Some((title, url_issue.or(trailing_issue)));
+                            return Some((title, url_issue.or(leading_issue).or(trailing_issue)));
                         }
                     }
                 }
                 break;
             }
         }
+        if let Some(sep_idx) = candidate.find("](") {
+            let after_sep = candidate.get(sep_idx + 2..).unwrap_or("");
+            if let Some(close_paren) = after_sep.find(')') {
+                let title = candidate.get(1..sep_idx).unwrap_or("").trim().to_string();
+                let dest_url = after_sep.get(..close_paren).unwrap_or("");
+                let rest_after = after_sep.get(close_paren + 1..).unwrap_or("").trim();
+                if !title.is_empty() {
+                    let url_issue = extract_issue_number(dest_url);
+                    let trailing_issue = extract_trailing_issue_ref(rest_after);
+                    return Some((title, url_issue.or(leading_issue).or(trailing_issue)));
+                }
+            }
+        }
     }
 
-    let issue_num = extract_trailing_issue_ref(after_checkbox);
-    let mut clean_title = after_checkbox.to_string();
+    let issue_num = leading_issue.or_else(|| extract_trailing_issue_ref(candidate));
+    let mut clean_title = candidate.to_string();
 
     if let Some(paren_idx) = clean_title.rfind("(#") {
         clean_title = clean_title.get(..paren_idx).unwrap_or("").trim().to_string();
@@ -125,6 +165,46 @@ fn update_checkbox_state_on_line(line: &str, should_be_checked: bool) -> Option<
     Some(format!("{}{} {} {}", indent, bullet_char, new_box, after_box))
 }
 
+/// Replaces exact token occurrences of `<prefix><old_num>` (not followed by an ASCII digit) with `<prefix><new_num>`.
+/// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-RECONCILE-CHECKLISTS-IN-CONTENT]
+fn replace_issue_token_with_prefix(s: &str, prefix: &str, old_num: u64, new_num: u64) -> String {
+    let needle = format!("{}{}", prefix, old_num);
+    let replacement = format!("{}{}", prefix, new_num);
+    let mut out = String::with_capacity(s.len());
+    let mut rem = s;
+    while let Some(pos) = rem.find(&needle) {
+        out.push_str(rem.get(..pos).unwrap_or(""));
+        let after = rem.get(pos + needle.len()..).unwrap_or("");
+        if after.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+            out.push_str(&needle);
+        } else {
+            out.push_str(&replacement);
+        }
+        rem = after;
+    }
+    out.push_str(rem);
+    out
+}
+
+/// Replaces a stale issue number (`#old_num` or `/issues/old_num`) in `line` with `new_num`.
+/// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-RECONCILE-CHECKLISTS-IN-CONTENT]
+pub(crate) fn replace_stale_issue_in_checklist_line(
+    line: &str,
+    old_num: u64,
+    new_num: u64,
+) -> Option<String> {
+    if old_num == new_num {
+        return None;
+    }
+    let step1 = replace_issue_token_with_prefix(line, "#", old_num, new_num);
+    let step2 = replace_issue_token_with_prefix(&step1, "/issues/", old_num, new_num);
+    if step2 != line {
+        Some(step2)
+    } else {
+        None
+    }
+}
+
 /// [DOC-TIER: A] Reconciles checklist items in `content` and returns `(reconciled_content, items_updated_count)`.
 /// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-RECONCILE-CHECKLISTS-IN-CONTENT]
 /// Contract: Purges unpopulated placeholders and updates `- [ ]` / `- [x]` checkboxes outside code blocks.
@@ -148,21 +228,42 @@ pub fn reconcile_checklists_in_content(
 
         if !in_code {
             if let Some((title, issue_num)) = extract_checklist_title_and_issue(line) {
-                let resolved_opt = if let Some(num) = issue_num {
-                    index.is_issue_resolved(num)
-                } else {
-                    index
-                        .find_issue_for_spec(&title, None)
-                        .and_then(|num| index.is_issue_resolved(num))
+                let mut effective_line = line.to_string();
+                let mut line_changed = false;
+                let effective_issue = match issue_num {
+                    Some(num) if index.is_issue_valid_for_spec(num, &title, None) => Some(num),
+                    Some(stale_num) => {
+                        let found = index.find_issue_for_spec(&title, None);
+                        if let Some(new_num) = found {
+                            if let Some(repatched) = replace_stale_issue_in_checklist_line(
+                                &effective_line,
+                                stale_num,
+                                new_num,
+                            ) {
+                                effective_line = repatched;
+                                line_changed = true;
+                            }
+                        }
+                        found
+                    }
+                    None => index.find_issue_for_spec(&title, None),
                 };
 
-                if let Some(should_be_checked) = resolved_opt {
-                    if let Some(rewritten) = update_checkbox_state_on_line(line, should_be_checked) {
-                        out_lines.push(rewritten);
-                        updated_count += 1;
-                        byte_offset = byte_offset.saturating_add(line_len).saturating_add(1);
-                        continue;
+                if let Some(should_be_checked) =
+                    effective_issue.and_then(|num| index.is_issue_resolved(num))
+                {
+                    if let Some(rewritten) =
+                        update_checkbox_state_on_line(&effective_line, should_be_checked)
+                    {
+                        effective_line = rewritten;
+                        line_changed = true;
                     }
+                }
+                if line_changed {
+                    out_lines.push(effective_line);
+                    updated_count += 1;
+                    byte_offset = byte_offset.saturating_add(line_len).saturating_add(1);
+                    continue;
                 }
             }
         }

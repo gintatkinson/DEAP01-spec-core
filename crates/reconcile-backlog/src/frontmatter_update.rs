@@ -72,6 +72,22 @@ struct FrontmatterScanPositions {
     h1_line_idx: Option<usize>,
 }
 
+/// Checks whether two normalized frontmatter table keys refer to the same logical field (including issue ID aliases).
+/// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-UPDATE-FRONTMATTER-FIELDS-BATCH]
+fn frontmatter_keys_match(raw_key: &str, target_key: &str) -> bool {
+    let target = target_key.trim().to_lowercase();
+    if raw_key == target {
+        return true;
+    }
+    let is_issue_alias = |k: &str| {
+        matches!(
+            k,
+            "github issue" | "issue" | "tracker issue" | "issue id" | "github"
+        )
+    };
+    is_issue_alias(raw_key) && is_issue_alias(&target)
+}
+
 /// Scans `content` lines before the first AST H2 section, updating matching frontmatter rows in place.
 /// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-UPDATE-FRONTMATTER-FIELDS-BATCH]
 fn scan_and_update_frontmatter_lines(
@@ -116,7 +132,7 @@ fn scan_and_update_frontmatter_lines(
                     positions.last_table_line_idx = Some(out_lines.len());
                 }
                 for ((field_name, new_value), flag) in updates.iter().zip(updated_flags.iter_mut()) {
-                    if !*flag && raw_key == field_name.trim().to_lowercase() {
+                    if !*flag && frontmatter_keys_match(&raw_key, field_name) {
                         let key_cell = first_cell.trim();
                         let display_key = if key_cell.starts_with("**") && key_cell.ends_with("**") {
                             key_cell.to_string()

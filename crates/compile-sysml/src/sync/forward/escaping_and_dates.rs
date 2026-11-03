@@ -79,14 +79,21 @@ pub(crate) fn resolve_date(target_out_dir: &Path, rel_path: &str, fallback_iso: 
     fallback_iso.to_string()
 }
 
+/// Extracted issue ID metadata from an existing specification file on disk.
+/// Realises: [REQ-0604] [REQ-SYNC-FORWARD-PARSE-ISSUE-ID-FROM-CONTENT]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ParsedIssueId {
+    pub(crate) id: usize,
+    pub(crate) has_tracker_url: bool,
+}
+
 /// Parses a positive tracker issue ID from the leading YAML frontmatter or Markdown metadata table of `content`.
 /// Realises: [REQ-0604] [REQ-SYNC-FORWARD-PARSE-ISSUE-ID-FROM-CONTENT]
 pub(crate) fn parse_issue_id_from_content(content: &str) -> Option<usize> {
     for line in content.lines().take(25) {
         let trimmed = line.trim();
-        if trimmed.starts_with("issue_id:") {
-            let d = trimmed
-                .trim_start_matches("issue_id:")
+        if let Some(rest) = trimmed.strip_prefix("issue_id:") {
+            let d = rest
                 .trim()
                 .trim_matches('"')
                 .trim_matches('\'')
@@ -107,16 +114,20 @@ pub(crate) fn parse_issue_id_from_content(content: &str) -> Option<usize> {
                     }
                 }
                 let key = key.trim().to_lowercase().replace([' ', '-'], "_");
-                if key == "issue_id" || key == "issue" || key == "id" {
-                    let d = value_cell
-                        .trim()
-                        .trim_matches('*')
-                        .trim_matches('`')
-                        .trim_matches('"')
-                        .trim_matches('\'')
-                        .trim_start_matches('#')
-                        .trim();
-                    if let Ok(parsed) = d.parse::<usize>() {
+                if key == "issue_id" || key == "issue" || key == "id" || key == "github_issue" {
+                    let raw_num = if let Some((_, after_hash)) = value_cell.split_once('#') {
+                        after_hash
+                            .chars()
+                            .take_while(char::is_ascii_digit)
+                            .collect::<String>()
+                    } else {
+                        value_cell
+                            .trim()
+                            .trim_matches(|c: char| matches!(c, '*' | '`' | '"' | '\''))
+                            .trim()
+                            .to_string()
+                    };
+                    if let Ok(parsed) = raw_num.parse::<usize>() {
                         if parsed > 0 {
                             return Some(parsed);
                         }
@@ -128,36 +139,94 @@ pub(crate) fn parse_issue_id_from_content(content: &str) -> Option<usize> {
     None
 }
 
-/// Resolves an existing positive tracker issue ID from `rel_path` or a same-prefix renamed `.md` sibling on disk without inventing fallback IDs.
+/// Parses a positive tracker issue ID and whether it carries an explicit tracker URL or verified completion state from `content`.
+/// Realises: [REQ-0604] [REQ-SYNC-FORWARD-PARSE-ISSUE-ID-FROM-CONTENT]
+pub(crate) fn parse_issue_id_with_provenance(content: &str) -> Option<ParsedIssueId> {
+    let id = parse_issue_id_from_content(content)?;
+    let id_token = format!("#{id}");
+    let has_url_on_issue_line = content.lines().take(25).any(|l| {
+        l.contains(&id_token) && (l.contains("https://") || l.contains("http://"))
+    });
+    let has_checked_item = content.lines().any(|l| {
+        let t = l.trim_start();
+        t.starts_with("- [x] #") || t.starts_with("- [X] #")
+    });
+    Some(ParsedIssueId {
+        id,
+        has_tracker_url: has_url_on_issue_line || has_checked_item,
+    })
+}
+
+/// Rejects bare (non-URL) issue IDs on an Epic and its child Features, Use Cases, and User Stories when the Epic's bare `#NNN` is smaller than its children's bare `#NNN` values (indicating a top-down sequential fake block rather than bottom-up tracker allocation).
 /// Realises: [REQ-0604] [REQ-SYNC-FORWARD-RESOLVE-ISSUE-ID]
-pub(crate) fn resolve_existing_issue_id(target_out_dir: &Path, rel_path: &str) -> Option<usize> {
-    let full = target_out_dir.join(rel_path);
-    if let Ok(content) = fs::read_to_string(&full) {
-        if let Some(id) = parse_issue_id_from_content(&content) {
-            return Some(id);
+pub(crate) fn filter_top_down_fake_issue_ids(
+    epic_id: Option<ParsedIssueId>,
+    child_ids: &[Option<ParsedIssueId>],
+) -> bool {
+    let Some(epic_parsed) = epic_id else {
+        return false;
+    };
+    if epic_parsed.has_tracker_url {
+        return false;
+    }
+    let mut bare_children_gt_epic = 0usize;
+    let mut bare_children_lt_epic = 0usize;
+    for child in child_ids.iter().flatten() {
+        if !child.has_tracker_url {
+            if child.id > epic_parsed.id {
+                bare_children_gt_epic = bare_children_gt_epic.saturating_add(1);
+            } else if child.id < epic_parsed.id {
+                bare_children_lt_epic = bare_children_lt_epic.saturating_add(1);
+            }
         }
     }
-    if let Some(parent) = Path::new(rel_path).parent() {
-        if let Some(file_name) = Path::new(rel_path).file_name().and_then(|f| f.to_str()) {
-            if let Some(prefix) = extract_id_prefix(file_name) {
-                let dir_path = target_out_dir.join(parent);
-                if let Ok(entries) = fs::read_dir(&dir_path) {
-                    for entry in entries.flatten() {
-                        let name = entry.file_name();
-                        let name_str = name.to_string_lossy();
-                        if name_str.starts_with(prefix) && name_str.ends_with(".md") {
-                            if let Ok(content) = fs::read_to_string(entry.path()) {
-                                if let Some(id) = parse_issue_id_from_content(&content) {
-                                    return Some(id);
-                                }
-                            }
-                        }
-                    }
-                }
+    bare_children_gt_epic > 0 && bare_children_lt_epic == 0
+}
+
+/// Resolves an existing positive tracker issue ID with provenance from `rel_path` or a deterministically sorted 2-dash prefix `.md` sibling on disk.
+/// Realises: [REQ-0604] [REQ-SYNC-FORWARD-RESOLVE-ISSUE-ID]
+pub(crate) fn resolve_existing_issue_id_with_provenance(
+    target_out_dir: &Path,
+    rel_path: &str,
+) -> Option<ParsedIssueId> {
+    let full = target_out_dir.join(rel_path);
+    if let Ok(content) = fs::read_to_string(&full) {
+        if let Some(parsed) = parse_issue_id_with_provenance(&content) {
+            return Some(parsed);
+        }
+    }
+    let parent = Path::new(rel_path).parent()?;
+    let file_name = Path::new(rel_path).file_name().and_then(|f| f.to_str())?;
+    let prefix = extract_id_prefix(file_name)?;
+    let dir_path = target_out_dir.join(parent);
+    let entries = fs::read_dir(&dir_path).ok()?;
+    let mut matching_paths: Vec<PathBuf> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if name_str.starts_with(prefix) && name_str.ends_with(".md") {
+                Some(entry.path())
+            } else {
+                None
+            }
+        })
+        .collect();
+    matching_paths.sort();
+    for path in matching_paths {
+        if let Ok(content) = fs::read_to_string(&path) {
+            if let Some(parsed) = parse_issue_id_with_provenance(&content) {
+                return Some(parsed);
             }
         }
     }
     None
+}
+
+/// Resolves an existing positive tracker issue ID from `rel_path` or a same-prefix renamed `.md` sibling on disk without inventing fallback IDs.
+/// Realises: [REQ-0604] [REQ-SYNC-FORWARD-RESOLVE-ISSUE-ID]
+pub(crate) fn resolve_existing_issue_id(target_out_dir: &Path, rel_path: &str) -> Option<usize> {
+    resolve_existing_issue_id_with_provenance(target_out_dir, rel_path).map(|p| p.id)
 }
 
 /// Formats an optional resolved tracker issue ID as `"#<id>"` when positive or `"TBD"` when unallocated.

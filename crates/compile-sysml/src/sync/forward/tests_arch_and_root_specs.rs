@@ -235,25 +235,9 @@ fn test_issue_447_forward_sync_root_package_specs_actions_and_linked_checklists(
     };
 
     let generated = forward_sync_sysml_to_specs(&root, &opts)?;
-
-    assert!(
-        generated
-            .keys()
-            .any(|k| k.contains("US-01") && k.contains("DetectTrackAction")),
-        "User Story 01 for root package action must be generated"
-    );
-    assert!(
-        generated
-            .keys()
-            .any(|k| k.contains("US-02") && k.contains("EngageThreatAction")),
-        "User Story 02 for root package second action must be generated without truncation"
-    );
-    assert!(
-        generated
-            .keys()
-            .any(|k| k.contains("UC-01") && k.contains("DetectTargetUseCase")),
-        "Use Case 01 for root package use case def must be generated"
-    );
+    assert!(generated.keys().any(|k| k.contains("US-01") && k.contains("DetectTrackAction")));
+    assert!(generated.keys().any(|k| k.contains("US-02") && k.contains("EngageThreatAction")));
+    assert!(generated.keys().any(|k| k.contains("UC-01") && k.contains("DetectTargetUseCase")));
 
     let epic_content = generated
         .iter()
@@ -261,36 +245,64 @@ fn test_issue_447_forward_sync_root_package_specs_actions_and_linked_checklists(
         .map(|(_, v)| v)
         .ok_or("EPIC-01-SysML_Model.md must be generated")?;
 
-    assert!(
-        !epic_content
-            .contains("Feature 01: Subsystem capability implementation for System Architecture."),
-        "Epic must not emit degenerate unlinked placeholder feature checklist"
-    );
-    assert!(
-        epic_content.contains(
-            "[Feature 01: [System Architecture] TrackingRadar](../features/FEAT-01-TrackingRadar.md)"
-        ),
-        "Epic feature checklist must contain linked Feature 01"
-    );
-    assert!(
-        epic_content.contains(
-            "[Feature 02: [System Architecture] MitigationEffector](../features/FEAT-02-MitigationEffector.md)"
-        ),
-        "Epic feature checklist must contain linked Feature 02"
-    );
-    assert!(
-        epic_content.contains(
-            "[User Story 01: Detect Track Action](../user-stories/US-01-DetectTrackAction.md)"
-        ),
-        "Epic must associate generated User Story 01"
-    );
-    assert!(
-        epic_content.contains(
-            "[Use Case 01: Detect Target Use Case](../use-cases/UC-01-DetectTargetUseCase.md)"
-        ),
-        "Epic must associate generated Use Case 01"
-    );
+    assert!(!epic_content.contains("Feature 01: Subsystem capability implementation for System Architecture."));
+    assert!(epic_content.contains("[Feature 01: [System Architecture] TrackingRadar](../features/FEAT-01-TrackingRadar.md)"));
+    assert!(epic_content.contains("[Feature 02: [System Architecture] MitigationEffector](../features/FEAT-02-MitigationEffector.md)"));
+    assert!(epic_content.contains("[User Story 01: Detect Track Action](../user-stories/US-01-DetectTrackAction.md)"));
+    assert!(epic_content.contains("[Use Case 01: Detect Target Use Case](../use-cases/UC-01-DetectTargetUseCase.md)"));
+    Ok(())
+}
 
+/// Verifies Issue `#760`: `forward_sync_sysml_to_specs` rejects top-down sequential fake `#NNN` blocks (`#732..#794`) back to `TBD` while preserving bottom-up tracker allocations (`#680 < #690`).
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-RESOLVE-ISSUE-ID]
+#[test]
+fn test_issue_760_rejects_top_down_sequential_fake_issue_ids(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let tmp_dir = std::env::temp_dir().join(format!("deap_issue_760_fwd_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&tmp_dir);
+    for sub in ["epics", "features", "use-cases", "user-stories"] {
+        fs::create_dir_all(tmp_dir.join(sub))?;
+    }
+    fs::write(tmp_dir.join("epics/EPIC-01-VerifiedBottomUpPkg.md"), "| Attribute | Specification Detail |\n| :--- | :--- |\n| **Issue ID** | #690 |\n")?;
+    fs::write(tmp_dir.join("features/FEAT-01-VerifiedEngine.md"), "| Attribute | Specification Detail |\n| :--- | :--- |\n| **Issue ID** | #680 |\n")?;
+    fs::write(tmp_dir.join("epics/EPIC-02-TopDownFakePkg.md"), "| Attribute | Specification Detail |\n| :--- | :--- |\n| **Issue ID** | #732 |\n")?;
+    fs::write(tmp_dir.join("features/FEAT-02-FakePartitioner.md"), "| Attribute | Specification Detail |\n| :--- | :--- |\n| **Issue ID** | #737 |\n")?;
+    fs::write(tmp_dir.join("use-cases/UC-01-FakeCycleCheck.md"), "| Attribute | Specification Detail |\n| :--- | :--- |\n| **Issue ID** | #760 |\n")?;
+    fs::write(tmp_dir.join("user-stories/US-01-FakeVerifyDagAction.md"), "| Attribute | Specification Detail |\n| :--- | :--- |\n| **Issue ID** | #794 |\n")?;
+
+    let root = PackageDef {
+        name: "VerifiedBottomUpPkg".to_string(),
+        part_defs: vec![PartDef { name: "VerifiedEngine".to_string(), ..Default::default() }],
+        packages: vec![PackageDef {
+            name: "TopDownFakePkg".to_string(),
+            part_defs: vec![PartDef { name: "FakePartitioner".to_string(), ..Default::default() }],
+            action_defs: vec![ActionDef { name: "FakeVerifyDagAction".to_string(), ..Default::default() }],
+            use_case_defs: vec![UseCaseDef { name: "FakeCycleCheck".to_string(), ..Default::default() }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let opts = ForwardSyncOptions {
+        schema_path: tmp_dir.join("schema/model.sysml"),
+        docs_dir: tmp_dir.clone(),
+        out_dir: Some(tmp_dir.clone()),
+        dry_run: true,
+        force: true,
+    };
+    let gen = forward_sync_sysml_to_specs(&root, &opts)?;
+    let _ = fs::remove_dir_all(&tmp_dir);
+
+    let epic1 = gen.get("epics/EPIC-01-VerifiedBottomUpPkg.md").ok_or("missing EPIC-01")?;
+    assert!(epic1.contains("| **Issue ID** | #690 |") && epic1.contains("- [ ] #680 - [Feature 01:"));
+    let epic2 = gen.get("epics/EPIC-02-TopDownFakePkg.md").ok_or("missing EPIC-02")?;
+    assert!(epic2.contains("| **Issue ID** | TBD |") && !epic2.contains("#732") && !epic2.contains("#737") && !epic2.contains("#760") && !epic2.contains("#794"));
+    let uc1 = gen.get("use-cases/UC-01-FakeCycleCheck.md").ok_or("missing UC-01")?;
+    assert!(uc1.contains("| **Issue ID** | TBD |") && uc1.contains("| **TBD** | User Story |") && uc1.contains("| **TBD** | Feature |"));
+    assert_eq!(parse_issue_id_from_content("| **Issue ID** | #690 |\n"), Some(690));
+    assert_eq!(
+        parse_issue_id_with_provenance("| **Issue ID** | [#690](https://github.com/org/repo/issues/690) |\n"),
+        Some(ParsedIssueId { id: 690, has_tracker_url: true })
+    );
     Ok(())
 }
 

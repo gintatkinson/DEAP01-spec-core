@@ -4,8 +4,8 @@
 
 pub use crate::tracker_github::GitHubTracker;
 pub use crate::tracker_normalize::{
-    canonicalize_spec_type, extract_spec_ordinal, infer_spec_type_from_title, is_resolved_label,
-    normalize_label, normalize_title, ordinal_compatible,
+    canonicalize_spec_type, extract_spec_ordinal, infer_spec_type_from_title,
+    is_audit_issue_title, is_resolved_label, normalize_label, normalize_title, ordinal_compatible,
 };
 use crate::tracker_normalize::titles_match_fuzzy;
 
@@ -180,7 +180,7 @@ impl IssueIndex {
         let num = issue.number;
         let norm_title = normalize_title(&issue.title);
 
-        if !norm_title.is_empty() {
+        if !norm_title.is_empty() && !is_audit_issue_title(&issue.title) {
             let list = self.by_title_only.entry(norm_title.clone()).or_default();
             if !list.contains(&num) {
                 list.push(num);
@@ -225,6 +225,54 @@ impl IssueIndex {
     /// Bounds & Faults: Time O(log I + L), Space O(1).
     pub fn is_issue_resolved(&self, number: u64) -> Option<bool> {
         self.by_number.get(&number).map(|i| i.is_resolved())
+    }
+
+    /// [DOC-TIER: A] Validates whether `number` exists in `IssueIndex` and is semantically compatible with `(spec_title, spec_type)`.
+    /// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-TRACKER-FIND-ISSUE-FOR-SPEC]
+    /// Contract: Rejects missing issues, `[AUDIT]` issues, mismatched spec types, and mismatched spec ordinals.
+    /// Bounds & Faults: Time O(log I + T), Space O(T) where I is issue count and T is title length.
+    pub fn is_issue_valid_for_spec(
+        &self,
+        number: u64,
+        spec_title: &str,
+        spec_type: Option<&str>,
+    ) -> bool {
+        let Some(remote_issue) = self.get_issue(number) else {
+            return false;
+        };
+        if is_audit_issue_title(&remote_issue.title) {
+            return false;
+        }
+        let canonical_spec_type = spec_type
+            .map(canonicalize_spec_type)
+            .filter(|s| !s.is_empty())
+            .or_else(|| infer_spec_type_from_title(spec_title));
+        if let (Some(ref exp_st), Some(rem_st)) = (
+            &canonical_spec_type,
+            infer_spec_type_from_title(&remote_issue.title),
+        ) {
+            if exp_st != &rem_st {
+                return false;
+            }
+        }
+        if !ordinal_compatible(spec_title, &remote_issue.title) {
+            return false;
+        }
+        if let (Some(ord_spec), Some(ord_remote)) = (
+            extract_spec_ordinal(spec_title),
+            extract_spec_ordinal(&remote_issue.title),
+        ) {
+            if ord_spec == ord_remote {
+                return true;
+            }
+        }
+        let norm_spec = normalize_title(spec_title);
+        let norm_remote = normalize_title(&remote_issue.title);
+        !norm_spec.is_empty()
+            && !norm_remote.is_empty()
+            && (norm_spec == norm_remote
+                || norm_remote.contains(&norm_spec)
+                || norm_spec.contains(&norm_remote))
     }
 
     /// [DOC-TIER: A] Finds a matching issue number for a specification by title and optional spec type.

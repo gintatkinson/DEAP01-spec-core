@@ -3,7 +3,8 @@
 
 use crate::checklist::{
     clean_unpopulated_placeholders_counted, contains_unpopulated_placeholders,
-    extract_checklist_title_and_issue, synthesize_and_reconcile_hierarchy, DiscoveredSpec,
+    extract_checklist_title_and_issue, replace_stale_issue_in_checklist_line,
+    synthesize_and_reconcile_hierarchy, DiscoveredSpec,
 };
 use crate::error::{write_atomic, ReconcileError};
 use crate::frontmatter::{
@@ -87,12 +88,16 @@ pub fn build_spec_path_to_issue_map(specs: &[DiscoveredSpec]) -> BTreeMap<String
                     map.insert(id_trim.to_lowercase(), num);
                 }
             }
+            let title_trim = spec.title.trim();
+            if !title_trim.is_empty() {
+                map.insert(title_trim.to_lowercase(), num);
+            }
         }
     }
     map
 }
 
-/// Backpatches a single frontmatter `Parent Epic` or `Parent Feature` table row if its issue ref is missing.
+/// Backpatches a single frontmatter `Parent Epic` or `Parent Feature` table row if its issue ref is missing or stale.
 /// Realises: [REQ-RECONCILE-BACKLOG-LIB-BACKPATCH-SPEC-REFERENCES-IN-CONTENT]
 fn try_backpatch_parent_row(
     trimmed: &str,
@@ -112,22 +117,22 @@ fn try_backpatch_parent_row(
         return None;
     }
     let val_cell = second_cell.trim();
-    if extract_issue_number(val_cell).is_some() {
-        return None;
-    }
     let val_lower = val_cell.to_lowercase();
-    for (k, &issue_num) in path_to_issue {
-        if k.len() >= 4 && val_lower.contains(&k.to_lowercase()) {
-            let issue_link = format_issue_link(issue_num, repo);
-            let new_val = if val_cell.is_empty() || val_cell.eq_ignore_ascii_case("pending") {
-                issue_link
-            } else {
-                format!("{} ({})", val_cell, issue_link)
-            };
-            return Some(format!("| {} | {} |", first_cell.trim(), new_val));
-        }
+    let issue_num = path_to_issue
+        .iter()
+        .filter(|(k, _)| k.len() >= 4 && val_lower.contains(&k.to_lowercase()))
+        .max_by_key(|(k, _)| k.len())
+        .map(|(_, &num)| num)?;
+    if let Some(old_num) = extract_issue_number(val_cell) {
+        return replace_stale_issue_in_checklist_line(trimmed, old_num, issue_num);
     }
-    None
+    let issue_link = format_issue_link(issue_num, repo);
+    let new_val = if val_cell.is_empty() || val_cell.eq_ignore_ascii_case("pending") {
+        issue_link
+    } else {
+        format!("{} ({})", val_cell, issue_link)
+    };
+    Some(format!("| {} | {} |", first_cell.trim(), new_val))
 }
 
 /// Backpatches a single checklist line with an allocated issue link if it matches `path_to_issue`.
@@ -138,17 +143,18 @@ fn try_backpatch_checklist_line(
     repo: Option<&str>,
 ) -> Option<String> {
     let (title, existing_issue) = extract_checklist_title_and_issue(line)?;
-    if existing_issue.is_some() {
-        return None;
-    }
     let line_lower = line.to_lowercase();
     let title_lower = title.to_lowercase();
     let matched_num = path_to_issue
         .iter()
-        .find(|(k, _)| {
+        .filter(|(k, _)| {
             k.len() >= 4 && (line_lower.contains(&k.to_lowercase()) || title_lower.starts_with(&k.to_lowercase()))
         })
+        .max_by_key(|(k, _)| k.len())
         .map(|(_, &num)| num)?;
+    if let Some(old_num) = existing_issue {
+        return replace_stale_issue_in_checklist_line(line, old_num, matched_num);
+    }
 
     let trimmed_start = line.trim_start();
     let indent = line.get(..line.len().saturating_sub(trimmed_start.len())).unwrap_or("");

@@ -90,9 +90,20 @@ fn discover_and_reconcile_frontmatters(
         });
 
         let mut issue_num = fm.github_issue.as_deref().and_then(extract_issue_number);
-        let had_placeholder_issue = fm.github_issue.as_deref().is_none_or(is_placeholder_issue_id);
-        if issue_num.is_none() && !options.offline {
-            issue_num = index.find_issue_for_spec(&title, Some(&spec_type));
+        let mut had_placeholder_issue =
+            fm.github_issue.as_deref().is_none_or(is_placeholder_issue_id);
+        let mut had_invalid_remote_issue = false;
+        if !options.offline {
+            if let Some(num) = issue_num {
+                if !index.is_issue_valid_for_spec(num, &title, Some(&spec_type)) {
+                    issue_num = None;
+                    had_placeholder_issue = true;
+                    had_invalid_remote_issue = true;
+                }
+            }
+            if issue_num.is_none() {
+                issue_num = index.find_issue_for_spec(&title, Some(&spec_type));
+            }
         }
 
         let (mut current_content, purged_count) = clean_unpopulated_placeholders_counted(&raw_content);
@@ -107,6 +118,12 @@ fn discover_and_reconcile_frontmatters(
                     current_content = updated;
                     summary.frontmatters_updated += 1;
                 }
+            }
+        } else if had_invalid_remote_issue {
+            let updated = update_frontmatter_field(&current_content, "GitHub Issue", "TBD")?;
+            if updated != current_content {
+                current_content = updated;
+                summary.frontmatters_updated += 1;
             }
         }
 
@@ -157,7 +174,9 @@ fn reconcile_checklists_and_sync_remote(
 
         if !options.offline && options.sync_bodies {
             if let Some(issue_num) = spec.issue_number {
-                if issue_num > 0 {
+                if issue_num > 0
+                    && index.is_issue_valid_for_spec(issue_num, &spec.title, Some(&spec.spec_type))
+                {
                     let projected = project_body_for_tracker_with_prefix(
                         &backpatched,
                         &spec.rel_path,

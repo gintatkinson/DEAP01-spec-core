@@ -154,8 +154,8 @@ fn build_use_case_realization_and_sources(
     let feat_link_num = uc_m.engine_feat_num;
     let feat_part = &uc_m.engine_name;
     let feat_subsys = to_display_name(&uc_m.pkg_name);
-    let feat_issue = format_issue_id_cell(resolve_existing_issue_id(
-        &index.target_out_dir,
+    let feat_issue = format_issue_id_cell(resolve_verified_issue_id(
+        index,
         &format!("features/FEAT-{:02}-{}.md", feat_link_num, feat_part),
     ));
 
@@ -174,8 +174,8 @@ fn build_use_case_realization_and_sources(
             .get(&us_link_num)
             .cloned()
             .unwrap_or_else(|| to_display_name(&story.action_name));
-        let us_issue = format_issue_id_cell(resolve_existing_issue_id(
-            &index.target_out_dir,
+        let us_issue = format_issue_id_cell(resolve_verified_issue_id(
+            index,
             &format!("user-stories/US-{:02}-{}.md", us_link_num, us_slug),
         ));
         format!(
@@ -214,8 +214,7 @@ fn render_single_use_case_spec(
     let uc_slug = sanitize_id(clean_name);
     let rel_path = format!("use-cases/UC-{:02}-{}.md", u_num, uc_slug);
     let _uc_date = resolve_date(&index.target_out_dir, &rel_path, index.today_iso);
-    let uc_issue_id =
-        format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &rel_path));
+    let uc_issue_id = format_issue_id_cell(resolve_verified_issue_id(index, &rel_path));
     let title = format!("Use Case {:02}: {}", u_num, clean_display);
 
     let parsed_doc = parse_use_case_doc(uc_m.uc.doc.as_deref());
