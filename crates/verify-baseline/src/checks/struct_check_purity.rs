@@ -8,8 +8,8 @@ use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
 
+use super::clippy_ndjson_gate::{scan_cargo_toml_file, WorkspaceManifestForbidGate};
 use super::struct_check_audit::audit_source_purity;
-use super::struct_check_clippy::{scan_cargo_toml_file, WorkspaceManifestForbidGate};
 use super::struct_check_grounding::contains_bounded_token;
 
 /// Zero-allocation `(prefix, suffix)` token pair for self-hosting Check 34 source scans.

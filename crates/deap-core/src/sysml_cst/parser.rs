@@ -37,8 +37,11 @@
 //! ### 7. Safety & Concurrency
 //! Pure safe Rust (`Send + Sync` data types) with zero `unsafe` blocks.
 
-#![deny(clippy::all, clippy::pedantic, clippy::nursery)]
-#![allow(clippy::doc_markdown, clippy::missing_const_for_fn)]
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
 
 use rowan::GreenNodeBuilder;
 
@@ -98,41 +101,41 @@ impl ParsedSysmlCst {
 #[must_use]
 pub fn classify_keyword_kind(keyword: &str, is_def: bool) -> SysmlSyntaxKind {
     match keyword {
-        "package" | "library" => SysmlSyntaxKind::PACKAGE_DECL,
-        "import" => SysmlSyntaxKind::IMPORT_DECL,
-        "alias" => SysmlSyntaxKind::ALIAS_DECL,
-        "doc" | "comment" | "rep" => SysmlSyntaxKind::DOC_COMMENT_NODE,
-        "metadata" => select_kind(is_def, SysmlSyntaxKind::METADATA_DEF, SysmlSyntaxKind::METADATA_USAGE),
-        "attribute" => select_kind(is_def, SysmlSyntaxKind::ATTRIBUTE_DEF, SysmlSyntaxKind::ATTRIBUTE_USAGE),
-        "enum" => select_kind(is_def, SysmlSyntaxKind::ENUM_DEF, SysmlSyntaxKind::ENUM_USAGE),
-        "item" => select_kind(is_def, SysmlSyntaxKind::ITEM_DEF, SysmlSyntaxKind::ITEM_USAGE),
-        "part" => select_kind(is_def, SysmlSyntaxKind::PART_DEF, SysmlSyntaxKind::PART_USAGE),
-        "port" => select_kind(is_def, SysmlSyntaxKind::PORT_DEF, SysmlSyntaxKind::PORT_USAGE),
-        "connection" => select_kind(is_def, SysmlSyntaxKind::CONNECTION_DEF, SysmlSyntaxKind::CONNECTION_USAGE),
-        "interface" => select_kind(is_def, SysmlSyntaxKind::INTERFACE_DEF, SysmlSyntaxKind::INTERFACE_USAGE),
-        "flow" | "succession" => select_kind(is_def, SysmlSyntaxKind::FLOW_DEF, SysmlSyntaxKind::FLOW_USAGE),
-        "allocation" | "allocate" => select_kind(is_def, SysmlSyntaxKind::ALLOCATION_DEF, SysmlSyntaxKind::ALLOCATION_USAGE),
+        "package" | "library" => SysmlSyntaxKind::PackageDecl,
+        "import" => SysmlSyntaxKind::ImportDecl,
+        "alias" => SysmlSyntaxKind::AliasDecl,
+        "doc" | "comment" | "rep" => SysmlSyntaxKind::DocCommentNode,
+        "metadata" => select_kind(is_def, SysmlSyntaxKind::MetadataDef, SysmlSyntaxKind::MetadataUsage),
+        "attribute" => select_kind(is_def, SysmlSyntaxKind::AttributeDef, SysmlSyntaxKind::AttributeUsage),
+        "enum" => select_kind(is_def, SysmlSyntaxKind::EnumDef, SysmlSyntaxKind::EnumUsage),
+        "item" => select_kind(is_def, SysmlSyntaxKind::ItemDef, SysmlSyntaxKind::ItemUsage),
+        "part" => select_kind(is_def, SysmlSyntaxKind::PartDef, SysmlSyntaxKind::PartUsage),
+        "port" => select_kind(is_def, SysmlSyntaxKind::PortDef, SysmlSyntaxKind::PortUsage),
+        "connection" => select_kind(is_def, SysmlSyntaxKind::ConnectionDef, SysmlSyntaxKind::ConnectionUsage),
+        "interface" => select_kind(is_def, SysmlSyntaxKind::InterfaceDef, SysmlSyntaxKind::InterfaceUsage),
+        "flow" | "succession" => select_kind(is_def, SysmlSyntaxKind::FlowDef, SysmlSyntaxKind::FlowUsage),
+        "allocation" | "allocate" => select_kind(is_def, SysmlSyntaxKind::AllocationDef, SysmlSyntaxKind::AllocationUsage),
         "occurrence" | "individual" | "snapshot" | "timeslice" => {
-            select_kind(is_def, SysmlSyntaxKind::OCCURRENCE_DEF, SysmlSyntaxKind::OCCURRENCE_USAGE)
+            select_kind(is_def, SysmlSyntaxKind::OccurrenceDef, SysmlSyntaxKind::OccurrenceUsage)
         }
-        "action" => select_kind(is_def, SysmlSyntaxKind::ACTION_DEF, SysmlSyntaxKind::ACTION_USAGE),
-        "state" | "exhibit" => select_kind(is_def, SysmlSyntaxKind::STATE_DEF, SysmlSyntaxKind::STATE_USAGE),
-        "transition" => SysmlSyntaxKind::TRANSITION_DECL,
-        "calc" => select_kind(is_def, SysmlSyntaxKind::CALC_DEF, SysmlSyntaxKind::CALC_USAGE),
-        "constraint" => select_kind(is_def, SysmlSyntaxKind::CONSTRAINT_DEF, SysmlSyntaxKind::CONSTRAINT_USAGE),
+        "action" => select_kind(is_def, SysmlSyntaxKind::ActionDef, SysmlSyntaxKind::ActionUsage),
+        "state" | "exhibit" => select_kind(is_def, SysmlSyntaxKind::StateDef, SysmlSyntaxKind::StateUsage),
+        "transition" => SysmlSyntaxKind::TransitionDecl,
+        "calc" => select_kind(is_def, SysmlSyntaxKind::CalcDef, SysmlSyntaxKind::CalcUsage),
+        "constraint" => select_kind(is_def, SysmlSyntaxKind::ConstraintDef, SysmlSyntaxKind::ConstraintUsage),
         "requirement" | "hazard" | "risk" | "capability" => {
-            select_kind(is_def, SysmlSyntaxKind::REQUIREMENT_DEF, SysmlSyntaxKind::REQUIREMENT_USAGE)
+            select_kind(is_def, SysmlSyntaxKind::RequirementDef, SysmlSyntaxKind::RequirementUsage)
         }
-        "concern" => select_kind(is_def, SysmlSyntaxKind::CONCERN_DEF, SysmlSyntaxKind::CONCERN_USAGE),
-        "use" => select_kind(is_def, SysmlSyntaxKind::USE_CASE_DEF, SysmlSyntaxKind::USE_CASE_USAGE),
-        "analysis" => select_kind(is_def, SysmlSyntaxKind::ANALYSIS_DEF, SysmlSyntaxKind::ANALYSIS_USAGE),
-        "verification" => select_kind(is_def, SysmlSyntaxKind::VERIFICATION_DEF, SysmlSyntaxKind::VERIFICATION_USAGE),
-        "view" => select_kind(is_def, SysmlSyntaxKind::VIEW_DEF, SysmlSyntaxKind::VIEW_USAGE),
-        "viewpoint" => select_kind(is_def, SysmlSyntaxKind::VIEWPOINT_DEF, SysmlSyntaxKind::VIEWPOINT_USAGE),
-        "rendering" => select_kind(is_def, SysmlSyntaxKind::RENDERING_DEF, SysmlSyntaxKind::RENDERING_USAGE),
-        "variation" => SysmlSyntaxKind::VARIATION_DECL,
-        "variant" => SysmlSyntaxKind::VARIANT_USAGE,
-        _ => SysmlSyntaxKind::ERROR_NODE,
+        "concern" => select_kind(is_def, SysmlSyntaxKind::ConcernDef, SysmlSyntaxKind::ConcernUsage),
+        "use" => select_kind(is_def, SysmlSyntaxKind::UseCaseDef, SysmlSyntaxKind::UseCaseUsage),
+        "analysis" => select_kind(is_def, SysmlSyntaxKind::AnalysisDef, SysmlSyntaxKind::AnalysisUsage),
+        "verification" => select_kind(is_def, SysmlSyntaxKind::VerificationDef, SysmlSyntaxKind::VerificationUsage),
+        "view" => select_kind(is_def, SysmlSyntaxKind::ViewDef, SysmlSyntaxKind::ViewUsage),
+        "viewpoint" => select_kind(is_def, SysmlSyntaxKind::ViewpointDef, SysmlSyntaxKind::ViewpointUsage),
+        "rendering" => select_kind(is_def, SysmlSyntaxKind::RenderingDef, SysmlSyntaxKind::RenderingUsage),
+        "variation" => SysmlSyntaxKind::VariationDecl,
+        "variant" => SysmlSyntaxKind::VariantUsage,
+        _ => SysmlSyntaxKind::ErrorNode,
     }
 }
 
@@ -153,7 +156,7 @@ pub fn parse_sysml_cst(source: &str) -> ParsedSysmlCst {
     let mut diagnostics = Vec::new();
     let mut open_braces: Vec<(usize, usize)> = Vec::new();
 
-    builder.start_node(SysmlSyntaxKind::SOURCE_FILE.into());
+    builder.start_node(SysmlSyntaxKind::SourceFile.into());
     for lexed in &tokens {
         let kind = token_to_syntax_kind(lexed.token);
         builder.token(kind.into(), lexed.slice);
@@ -212,7 +215,7 @@ fn extract_constructs(tokens: &[LexedSysmlToken<'_>]) -> Vec<SysmlConstructSumma
     let mut idx = 0;
     while let Some(&tok) = non_trivia.get(idx) {
         let base_kind = classify_keyword_kind(tok.slice, false);
-        if base_kind == SysmlSyntaxKind::ERROR_NODE {
+        if base_kind == SysmlSyntaxKind::ErrorNode {
             idx += 1;
             continue;
         }

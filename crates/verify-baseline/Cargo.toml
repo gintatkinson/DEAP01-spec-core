@@ -10,6 +10,7 @@ ingest-sysml = { path = "../ingest-sysml" }
 compile-sysml = { path = "../compile-sysml" }
 ariadne = { workspace = true }
 camino = { workspace = true }
+cargo_metadata = { workspace = true }
 ra_ap_line_index = { workspace = true }
 ra_ap_syntax = { workspace = true }
 ra_ap_text_edit = { workspace = true }

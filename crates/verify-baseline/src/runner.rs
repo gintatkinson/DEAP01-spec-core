@@ -59,7 +59,6 @@ pub struct BaselineOptions {
 
 /// Executes all baseline verification checks (Checks 10 through 42), platform gates, and spec audits.
 /// Realises: [REQ-RUNNER-EXECUTE-ALL-CHECKS]
-#[allow(clippy::result_unit_err)]
 pub fn run(options: &BaselineOptions) -> Result<(), ()> {
     let repo_root = options
         .destination
@@ -100,7 +99,6 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
 
 /// Executes Checks 28 through 30 sequentially.
 /// Realises: [REQ-RUNNER-EXECUTE-ALL-CHECKS]
-#[allow(clippy::result_unit_err)]
 fn run_checks_28_to_30(
     repo_root: &Path,
     effective_allow_missing: bool,
@@ -167,7 +165,6 @@ fn run_checks_28_to_30(
 
 /// Executes Checks 30A through 30C sequentially.
 /// Realises: [REQ-RUNNER-EXECUTE-ALL-CHECKS]
-#[allow(clippy::result_unit_err)]
 fn run_checks_30a_to_30c(
     repo_root: &Path,
     effective_allow_missing: bool,
@@ -233,7 +230,6 @@ fn run_checks_30a_to_30c(
 
 /// Executes Checks 31 through 35 sequentially.
 /// Realises: [REQ-RUNNER-EXECUTE-ALL-CHECKS]
-#[allow(clippy::result_unit_err)]
 fn run_checks_31_to_35(repo_root: &Path) -> Result<(), ()> {
     match check_dual_schema_ssot_parity(repo_root) {
         Ok(ParityOutcome::DualSchemaSingleOrClean) => {

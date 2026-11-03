@@ -29,10 +29,12 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-VERIFY-BASELINE-CHECKS-MOD], [DO-330-TQL-4-CHECKS-MOD]
 
+pub mod clippy_ndjson_gate;
 pub mod codebase;
 pub mod codebase_gesture_gate;
 pub mod codebase_mock_gate;
 pub mod codebase_solver_gate;
+pub mod cst_attr_gate;
 #[cfg(test)]
 mod codebase_tests_a;
 #[cfg(test)]
@@ -93,7 +95,6 @@ pub(crate) mod struct_check_audit;
 mod struct_check_b_tests;
 #[cfg(test)]
 mod struct_check_c_tests;
-pub(crate) mod struct_check_clippy;
 #[cfg(test)]
 mod struct_check_d_tests;
 #[cfg(test)]

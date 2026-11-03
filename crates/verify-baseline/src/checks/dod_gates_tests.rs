@@ -192,3 +192,19 @@ fn current_repository_passes_dod_gates_with_zero_findings() -> Result<(), String
     let root = workspace_root()?;
     check_dod_gates(&root).map_err(|errs| format!("current repo failed dod_gates ({} findings): {errs:#?}", errs.len()))
 }
+
+/// Verifies `struct_check_clippy.rs` is retired and `check_dod_gates` rejects `#[allow]`/`#[expect]` CST attributes (`[REQ-0601]`).
+#[test]
+fn bp01_retired_struct_check_clippy_and_cst_attr_ban_red_green() -> Result<(), String> {
+    let root = workspace_root()?;
+    if root.join("crates/verify-baseline/src/checks/struct_check_clippy.rs").exists() {
+        return Err(String::from("struct_check_clippy.rs must be retired (BP-01)"));
+    }
+    let ws = ScopedTempDir::new("bp01_dod")?;
+    let kw = format!("{}{}", "allow(", "clippy::unwrap_used)");
+    ws.write_rel("crates/demo/src/lib.rs", &format!("#[{kw}]\npub fn f() {{}}\n"))?;
+    if check_dod_gates(&ws.path).is_ok() {
+        return Err(String::from("expected #[allow(...)] CST attribute to fail check_dod_gates"));
+    }
+    Ok(())
+}

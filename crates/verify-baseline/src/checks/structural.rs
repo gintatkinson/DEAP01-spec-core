@@ -15,12 +15,15 @@ use deap_core::workspace::{
 };
 use std::path::{Path, PathBuf};
 
-pub use super::domain_cleanliness_gate::check_domain_agnostic_ast_cleanliness;
-pub use super::struct_check_audit::audit_source_purity;
-pub use super::struct_check_clippy::{
-    scan_clippy_allow_tokens, ClippySuppressionViolation, RequiredClippyForbidLint,
+pub use super::clippy_ndjson_gate::{
+     verify_clippy_ndjson_stream, ClippyNdjsonDiagnostic, RequiredClippyForbidLint,
     WorkspaceManifestForbidGate,
 };
+pub use super::cst_attr_gate::{
+    check_cst_attr_gate, scan_clippy_allow_tokens, ClippySuppressionViolation,
+};
+pub use super::domain_cleanliness_gate::check_domain_agnostic_ast_cleanliness;
+pub use super::struct_check_audit::audit_source_purity;
 pub use super::struct_check_feat42::{
     check_compiler_ast_purity, check_feat42_design_blueprint_compliance,
 };

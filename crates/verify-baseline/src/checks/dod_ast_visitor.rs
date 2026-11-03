@@ -64,6 +64,9 @@ pub(crate) fn audit_non_ratcheted_source(
     }
     let has_logos = file_derives_logos(&ast);
     let in_test_scope = attrs_have_test_cfg(&ast.attrs);
+    for v in crate::checks::cst_attr_gate::scan_clippy_allow_tokens(content, rel_path) {
+        findings.push(format!("{}:L{}: forbidden attribute `{}` (BP-01)", v.file, v.line, v.attribute));
+    }
     DodAstVisitor {
         rel_path,
         has_logos,

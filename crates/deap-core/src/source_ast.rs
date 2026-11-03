@@ -268,7 +268,6 @@ pub fn ingest_source_directory(source_dir: &Path, language: SourceLanguage, pack
 }
 
 #[cfg(test)]
-#[allow(clippy::pedantic, clippy::nursery)]
 mod tests {
     use super::*;
     use crate::rust_cst::*;

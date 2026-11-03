@@ -4,7 +4,7 @@
 //! Contract: Audits Rust source strings for regex, static string-slice arrays, hollow stubs, fail-open patterns, and Rustdoc.
 //! Bounds & Faults: Single-pass O(L) line analysis; fails closed with sorted, deduplicated violations.
 
-use super::struct_check_clippy::{scan_clippy_allow_tokens, RequiredClippyForbidLint};
+use super::cst_attr_gate::scan_clippy_allow_tokens;
 use super::struct_check_mask::{
     audit_tier_a_module_docblocks, contains_direct_range_index,
     mask_comments_and_literals_preserving_lines,
@@ -132,19 +132,14 @@ pub fn audit_source_purity(
     }
 }
 
-/// Appends violations for any `#[allow(clippy::...)]` suppressing a `RequiredClippyForbidLint`.
+/// Appends violations for any `#[allow(...)]`, `#[expect(...)]`, or `#![feature(rustc_private)]` attribute node.
 /// Realises: [REQ-CHECK-34-CLIPPY-ALLOW-TOKEN-SCAN]
 fn collect_forbidden_clippy_allows(source: &str, file_rel: &str, violations: &mut Vec<String>) {
     for clippy_viol in scan_clippy_allow_tokens(source, file_rel) {
-        let is_forbidden = RequiredClippyForbidLint::ALL
-            .iter()
-            .any(|lint| clippy_viol.attribute.contains(lint.as_str()));
-        if is_forbidden {
-            violations.push(format!(
-                "{}:{}: forbidden clippy allow attribute detected: {}",
-                clippy_viol.file, clippy_viol.line, clippy_viol.attribute
-            ));
-        }
+        violations.push(format!(
+            "{}:{}: forbidden clippy allow attribute detected: {}",
+            clippy_viol.file, clippy_viol.line, clippy_viol.attribute
+        ));
     }
 }
 

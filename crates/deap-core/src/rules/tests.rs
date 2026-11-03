@@ -1,6 +1,5 @@
 //! Unit tests covering codebase rules, catalogs, and blueprint verification.
 #[cfg(test)]
-#[allow(clippy::module_inception)]
 mod tests {
 use super::super::*;
 use std::path::Path;

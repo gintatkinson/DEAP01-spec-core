@@ -39,6 +39,9 @@ pub fn check_dod_gates(repo_root: &Path) -> Result<(), Vec<String>> {
         return Ok(());
     }
     let mut findings = Vec::new();
+    if crates_dir.join("verify-baseline/src/checks/struct_check_clippy.rs").exists() {
+        findings.push("crates/verify-baseline/src/checks/struct_check_clippy.rs: retired module must be removed (BP-01)".to_string());
+    }
     for (rel_path, disk_path) in collect_crate_rs_files(repo_root, &crates_dir, &mut findings) {
         let Ok(raw) = fs::read_to_string(&disk_path)
             .map_err(|e| findings.push(format!("{rel_path}: {e}")))

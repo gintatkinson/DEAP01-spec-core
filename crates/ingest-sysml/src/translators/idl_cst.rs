@@ -34,18 +34,17 @@ pub enum IdlToken {
 /// IDL syntax kind for Rowan CST. Realises: [REQ-0201]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u16)]
-#[allow(non_camel_case_types)]
 pub enum IdlSyntaxKind {
-    WHITESPACE = 0,
-    LINE_COMMENT,
-    BLOCK_COMMENT,
-    KEYWORD,
-    IDENT,
-    NUMBER_LIT,
-    STRING_LIT,
-    PUNCT,
-    ERROR_TOKEN,
-    SOURCE_FILE,
+    Whitespace = 0,
+    LineComment,
+    BlockComment,
+    Keyword,
+    Ident,
+    NumberLit,
+    StringLit,
+    Punct,
+    ErrorToken,
+    SourceFile,
 }
 
 /// IDL Rowan language definition. Realises: [REQ-0201]
@@ -58,32 +57,32 @@ impl rowan::Language for IdlLanguage {
     /// Maps raw syntax kind to `IdlSyntaxKind`. Realises: [REQ-0201]
     fn kind_from_raw(raw: rowan::SyntaxKind) -> Self::Kind {
         match raw.0 {
-            0 => IdlSyntaxKind::WHITESPACE,
-            1 => IdlSyntaxKind::LINE_COMMENT,
-            2 => IdlSyntaxKind::BLOCK_COMMENT,
-            3 => IdlSyntaxKind::KEYWORD,
-            4 => IdlSyntaxKind::IDENT,
-            5 => IdlSyntaxKind::NUMBER_LIT,
-            6 => IdlSyntaxKind::STRING_LIT,
-            7 => IdlSyntaxKind::PUNCT,
-            9 => IdlSyntaxKind::SOURCE_FILE,
-            _ => IdlSyntaxKind::ERROR_TOKEN,
+            0 => IdlSyntaxKind::Whitespace,
+            1 => IdlSyntaxKind::LineComment,
+            2 => IdlSyntaxKind::BlockComment,
+            3 => IdlSyntaxKind::Keyword,
+            4 => IdlSyntaxKind::Ident,
+            5 => IdlSyntaxKind::NumberLit,
+            6 => IdlSyntaxKind::StringLit,
+            7 => IdlSyntaxKind::Punct,
+            9 => IdlSyntaxKind::SourceFile,
+            _ => IdlSyntaxKind::ErrorToken,
         }
     }
 
     /// Maps `IdlSyntaxKind` to raw syntax kind. Realises: [REQ-0201]
     fn kind_to_raw(kind: Self::Kind) -> rowan::SyntaxKind {
         match kind {
-            IdlSyntaxKind::WHITESPACE => rowan::SyntaxKind(0),
-            IdlSyntaxKind::LINE_COMMENT => rowan::SyntaxKind(1),
-            IdlSyntaxKind::BLOCK_COMMENT => rowan::SyntaxKind(2),
-            IdlSyntaxKind::KEYWORD => rowan::SyntaxKind(3),
-            IdlSyntaxKind::IDENT => rowan::SyntaxKind(4),
-            IdlSyntaxKind::NUMBER_LIT => rowan::SyntaxKind(5),
-            IdlSyntaxKind::STRING_LIT => rowan::SyntaxKind(6),
-            IdlSyntaxKind::PUNCT => rowan::SyntaxKind(7),
-            IdlSyntaxKind::ERROR_TOKEN => rowan::SyntaxKind(8),
-            IdlSyntaxKind::SOURCE_FILE => rowan::SyntaxKind(9),
+            IdlSyntaxKind::Whitespace => rowan::SyntaxKind(0),
+            IdlSyntaxKind::LineComment => rowan::SyntaxKind(1),
+            IdlSyntaxKind::BlockComment => rowan::SyntaxKind(2),
+            IdlSyntaxKind::Keyword => rowan::SyntaxKind(3),
+            IdlSyntaxKind::Ident => rowan::SyntaxKind(4),
+            IdlSyntaxKind::NumberLit => rowan::SyntaxKind(5),
+            IdlSyntaxKind::StringLit => rowan::SyntaxKind(6),
+            IdlSyntaxKind::Punct => rowan::SyntaxKind(7),
+            IdlSyntaxKind::ErrorToken => rowan::SyntaxKind(8),
+            IdlSyntaxKind::SourceFile => rowan::SyntaxKind(9),
         }
     }
 }
@@ -112,15 +111,15 @@ const TARGET_KEYWORDS: &[&str] = &[
 /// Maps token to syntax kind. Realises: [REQ-0201]
 const fn token_to_syntax_kind(token: IdlToken) -> IdlSyntaxKind {
     match token {
-        IdlToken::Whitespace => IdlSyntaxKind::WHITESPACE,
-        IdlToken::LineComment => IdlSyntaxKind::LINE_COMMENT,
-        IdlToken::BlockComment => IdlSyntaxKind::BLOCK_COMMENT,
-        IdlToken::Keyword => IdlSyntaxKind::KEYWORD,
-        IdlToken::Ident => IdlSyntaxKind::IDENT,
-        IdlToken::NumberLit => IdlSyntaxKind::NUMBER_LIT,
-        IdlToken::StringLit => IdlSyntaxKind::STRING_LIT,
-        IdlToken::Punct => IdlSyntaxKind::PUNCT,
-        IdlToken::Error => IdlSyntaxKind::ERROR_TOKEN,
+        IdlToken::Whitespace => IdlSyntaxKind::Whitespace,
+        IdlToken::LineComment => IdlSyntaxKind::LineComment,
+        IdlToken::BlockComment => IdlSyntaxKind::BlockComment,
+        IdlToken::Keyword => IdlSyntaxKind::Keyword,
+        IdlToken::Ident => IdlSyntaxKind::Ident,
+        IdlToken::NumberLit => IdlSyntaxKind::NumberLit,
+        IdlToken::StringLit => IdlSyntaxKind::StringLit,
+        IdlToken::Punct => IdlSyntaxKind::Punct,
+        IdlToken::Error => IdlSyntaxKind::ErrorToken,
     }
 }
 
@@ -128,7 +127,7 @@ const fn token_to_syntax_kind(token: IdlToken) -> IdlSyntaxKind {
 #[must_use]
 pub fn parse_idl_cst(source: &str) -> ParsedIdlCst {
     let mut builder = rowan::GreenNodeBuilder::new();
-    builder.start_node(<IdlLanguage as rowan::Language>::kind_to_raw(IdlSyntaxKind::SOURCE_FILE));
+    builder.start_node(<IdlLanguage as rowan::Language>::kind_to_raw(IdlSyntaxKind::SourceFile));
 
     let mut nodes = Vec::new();
     let mut pending_kw: Option<(String, usize)> = None;
@@ -136,7 +135,7 @@ pub fn parse_idl_cst(source: &str) -> ParsedIdlCst {
     for (token_res, span) in logos::Logos::lexer(source).spanned() {
         let token = token_res.unwrap_or(IdlToken::Error);
         let syntax_kind = token_to_syntax_kind(token);
-        let slice = &source[span.clone()];
+        let slice = source.get(span.clone()).unwrap_or("");
         builder.token(<IdlLanguage as rowan::Language>::kind_to_raw(syntax_kind), slice);
 
         match token {

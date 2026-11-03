@@ -39,8 +39,11 @@
 //! ### 7. Safety & Concurrency
 //! Pure safe Rust (`#![forbid(unsafe_code)]` compatible) across all submodules.
 
-#![deny(clippy::all, clippy::pedantic, clippy::nursery)]
-#![allow(clippy::doc_markdown, clippy::missing_const_for_fn)]
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
 
 pub mod lexer;
 pub mod parser;
@@ -106,26 +109,26 @@ mod tests {
         assert_eq!(parsed.syntax().text().to_string(), NORMATIVE_SYSML_SNIPPET);
 
         let kinds: Vec<SysmlSyntaxKind> = parsed.constructs.iter().map(|c| c.kind).collect();
-        assert!(kinds.contains(&SysmlSyntaxKind::PACKAGE_DECL));
-        assert!(kinds.contains(&SysmlSyntaxKind::METADATA_DEF));
-        assert!(kinds.contains(&SysmlSyntaxKind::PART_DEF));
-        assert!(kinds.contains(&SysmlSyntaxKind::PART_USAGE));
-        assert!(kinds.contains(&SysmlSyntaxKind::PORT_DEF));
-        assert!(kinds.contains(&SysmlSyntaxKind::PORT_USAGE));
-        assert!(kinds.contains(&SysmlSyntaxKind::ACTION_DEF));
-        assert!(kinds.contains(&SysmlSyntaxKind::ACTION_USAGE));
-        assert!(kinds.contains(&SysmlSyntaxKind::STATE_DEF));
-        assert!(kinds.contains(&SysmlSyntaxKind::STATE_USAGE));
-        assert!(kinds.contains(&SysmlSyntaxKind::CONSTRAINT_DEF));
-        assert!(kinds.contains(&SysmlSyntaxKind::CONSTRAINT_USAGE));
-        assert!(kinds.contains(&SysmlSyntaxKind::REQUIREMENT_DEF));
-        assert!(kinds.contains(&SysmlSyntaxKind::REQUIREMENT_USAGE));
-        assert!(kinds.contains(&SysmlSyntaxKind::USE_CASE_DEF));
-        assert!(kinds.contains(&SysmlSyntaxKind::USE_CASE_USAGE));
-        assert!(kinds.contains(&SysmlSyntaxKind::VERIFICATION_DEF));
-        assert!(kinds.contains(&SysmlSyntaxKind::VERIFICATION_USAGE));
-        assert!(kinds.contains(&SysmlSyntaxKind::VARIATION_DECL));
-        assert!(kinds.contains(&SysmlSyntaxKind::VARIANT_USAGE));
+        assert!(kinds.contains(&SysmlSyntaxKind::PackageDecl));
+        assert!(kinds.contains(&SysmlSyntaxKind::MetadataDef));
+        assert!(kinds.contains(&SysmlSyntaxKind::PartDef));
+        assert!(kinds.contains(&SysmlSyntaxKind::PartUsage));
+        assert!(kinds.contains(&SysmlSyntaxKind::PortDef));
+        assert!(kinds.contains(&SysmlSyntaxKind::PortUsage));
+        assert!(kinds.contains(&SysmlSyntaxKind::ActionDef));
+        assert!(kinds.contains(&SysmlSyntaxKind::ActionUsage));
+        assert!(kinds.contains(&SysmlSyntaxKind::StateDef));
+        assert!(kinds.contains(&SysmlSyntaxKind::StateUsage));
+        assert!(kinds.contains(&SysmlSyntaxKind::ConstraintDef));
+        assert!(kinds.contains(&SysmlSyntaxKind::ConstraintUsage));
+        assert!(kinds.contains(&SysmlSyntaxKind::RequirementDef));
+        assert!(kinds.contains(&SysmlSyntaxKind::RequirementUsage));
+        assert!(kinds.contains(&SysmlSyntaxKind::UseCaseDef));
+        assert!(kinds.contains(&SysmlSyntaxKind::UseCaseUsage));
+        assert!(kinds.contains(&SysmlSyntaxKind::VerificationDef));
+        assert!(kinds.contains(&SysmlSyntaxKind::VerificationUsage));
+        assert!(kinds.contains(&SysmlSyntaxKind::VariationDecl));
+        assert!(kinds.contains(&SysmlSyntaxKind::VariantUsage));
     }
 
     #[test]

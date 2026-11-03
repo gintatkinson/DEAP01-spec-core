@@ -6,8 +6,8 @@
 //! defect-free Agile specification hierarchy across Epics, Features, User Stories, and Use Cases.
 //!
 //! ## 2. Invariants & Mathematical Properties
-//! - Exact cardinality invariant: $|Epics| = 11 \land |Features| = 53 \land |UserStories| = 78 \land |UseCases| = 65$,
-//!   yielding $|Specs_{total}| = 207$.
+//! - Exact cardinality invariant: $|Epics| = 15 \land |Features| = 58 \land |UserStories| = 79 \land |UseCases| = 65$,
+//!   yielding $|Specs_{total}| = 217$.
 //! - Link closure invariant: $\forall d \in Specs_{total}, \forall l \in Links_{rel}(d): \text{exists}(\text{dir}(d) \oplus l) = \text{true}$.
 //! - Local purity invariant: $\forall d \in Specs_{total}: \text{https://github.com/} \notin d$.
 //! - Anti-stutter invariant: $\forall d \in Specs_{total}: \text{UC\_AC\_} \notin \text{name}(d) \land \text{US\_AC\_} \notin \text{name}(d)$.
@@ -252,23 +252,26 @@ fn test_upstream_blueprint_to_spec_and_github_projection_zero_defects(
     let use_case_files = collect_sorted_md_files(&temp_ws.root.join("docs/use-cases"))?;
 
     for (label, count, expected) in [
-        ("Epics", epic_files.len(), 11usize),
-        ("Features", feature_files.len(), 53),
-        ("User Stories", story_files.len(), 78),
+        ("Epics", epic_files.len(), 15usize),
+        ("Features", feature_files.len(), 58),
+        ("User Stories", story_files.len(), 79),
         ("Use Cases", use_case_files.len(), 65),
     ] {
         if count != expected {
-            return Err(format!("Expected {expected} {label}, found {count}").into());
+            return Err(format!(
+                "Expected {expected} {label}, found {count} (totals: epics={}, features={}, stories={}, ucs={})",
+                epic_files.len(), feature_files.len(), story_files.len(), use_case_files.len()
+            ).into());
         }
     }
 
-    let mut all_files = Vec::with_capacity(208);
+    let mut all_files = Vec::with_capacity(218);
     all_files.extend(epic_files);
     all_files.extend(feature_files);
     all_files.extend(story_files);
     all_files.extend(use_case_files);
-    if all_files.len() != 207 {
-        return Err(format!("Expected total of 207 specification files, found {}", all_files.len()).into());
+    if all_files.len() != 217 {
+        return Err(format!("Expected total of 217 specification files, found {}", all_files.len()).into());
     }
 
     for md_path in &all_files {

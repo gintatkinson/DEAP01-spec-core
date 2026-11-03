@@ -1743,6 +1743,7 @@ version = "0.1.0"
 dependencies = [
  "ariadne",
  "camino",
+ "cargo_metadata",
  "chrono",
  "clap",
  "compile-sysml",

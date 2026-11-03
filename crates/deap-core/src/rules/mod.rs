@@ -38,4 +38,5 @@ pub use excluded_dirs::{ExcludedDir, ExcludedDirsCatalog, EXCLUDED_DIRS};
 pub use master_blueprints::{MasterBlueprint, MasterBlueprintsCatalog, MASTER_BLUEPRINTS};
 
 #[cfg(test)]
-mod tests;
+#[path = "tests.rs"]
+mod unit_tests;

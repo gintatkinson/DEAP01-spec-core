@@ -37,8 +37,11 @@
 //! ### 7. Safety & Concurrency
 //! Pure safe Rust (`#![forbid(unsafe_code)]` compatible) using `Arc` for shared immutable trees.
 
-#![deny(clippy::all, clippy::pedantic, clippy::nursery)]
-#![allow(clippy::doc_markdown, clippy::missing_const_for_fn)]
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -189,7 +192,7 @@ fn hash_canonical_cst(parsed: &ParsedSysmlCst) -> String {
     let mut buffer = Vec::new();
     for element in parsed.syntax().descendants_with_tokens() {
         if let NodeOrToken::Token(token) = element {
-            if token.kind() != SysmlSyntaxKind::WHITESPACE {
+            if token.kind() != SysmlSyntaxKind::Whitespace {
                 buffer.extend_from_slice(&u16::from(token.kind()).to_le_bytes());
                 buffer.extend_from_slice(token.text().as_bytes());
                 buffer.push(0xff);
