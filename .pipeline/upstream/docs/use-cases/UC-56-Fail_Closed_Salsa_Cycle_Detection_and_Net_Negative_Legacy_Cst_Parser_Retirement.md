@@ -64,8 +64,8 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#820** | User Story | [User Story 70: evaluate hir early cutoff](../user-stories/US-70-evaluate_hir_early_cutoff.md) |
-| **#822** | User Story | [User Story 72: render ariadne diagnostic](../user-stories/US-72-render_ariadne_diagnostic.md) |
+| **#820** | User Story | [User Story 70: Evaluate Hir Early Cutoff](../user-stories/US-70-evaluate_hir_early_cutoff.md) |
+| **#822** | User Story | [User Story 72: Render Ariadne Diagnostic](../user-stories/US-72-render_ariadne_diagnostic.md) |
 | **#846** | Feature | [Feature 48: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] SalsaIncrementalCompilerDatabase](../features/FEAT-48-SalsaIncrementalCompilerDatabase.md) |
 | **#844** | Feature | [Feature 46: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] FormattingPreservingSyncSplicer](../features/FEAT-46-FormattingPreservingSyncSplicer.md) |
 

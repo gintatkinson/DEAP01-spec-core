@@ -136,13 +136,13 @@ Classifier `MultiStageVerificationOrchestrator` binds external and behavioral in
 - [ ] #780 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Directly realizes cross-platform runtime `PATH` driver discovery and `--require-formal-toolchains` fail-closed `DEAP-E0905` enforcement)
 
 #### Associated User Stories
-- [ ] #809 - [User Story 59: probe formal toolchain](../user-stories/US-59-probe_formal_toolchain.md) (Invokes `probe_formal_toolchain(config)` for cross-platform runtime `PATH` discovery)
-- [ ] #810 - [User Story 60: verify clippy policy](../user-stories/US-60-verify_clippy_policy.md) (Dispatches Stage 1 Clippy policy verification)
-- [ ] #811 - [User Story 61: evaluate stage2 dylint mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Dispatches Stage 2 isolated Dylint MIR evaluation)
-- [ ] #812 - [User Story 62: verify in process cst syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Dispatches in-process `ra_ap_syntax` CST and `< 380`-SLOC verification)
-- [ ] #813 - [User Story 63: guard inbound frb f64](../user-stories/US-63-guard_inbound_frb_f64.md) (Dispatches Stage 3 `flutter_rust_bridge` inbound `f64` boundary guard verification)
-- [ ] #814 - [User Story 64: validate kani harness spec](../user-stories/US-64-validate_kani_harness_spec.md) (Dispatches Stage 4 Kani `outer kani::proof` harness validation and synthesis)
-- [ ] #815 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Executes `evaluate_four_stage_gatekeeper(receipts)` across all stages)
+- [ ] #809 - [User Story 59: Probe Formal Toolchain](../user-stories/US-59-probe_formal_toolchain.md) (Invokes `probe_formal_toolchain(config)` for cross-platform runtime `PATH` discovery)
+- [ ] #810 - [User Story 60: Verify Clippy Policy](../user-stories/US-60-verify_clippy_policy.md) (Dispatches Stage 1 Clippy policy verification)
+- [ ] #811 - [User Story 61: Evaluate Stage2 Dylint Mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Dispatches Stage 2 isolated Dylint MIR evaluation)
+- [ ] #812 - [User Story 62: Verify In Process Cst Syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Dispatches in-process `ra_ap_syntax` CST and `< 380`-SLOC verification)
+- [ ] #813 - [User Story 63: Guard Inbound Frb F64](../user-stories/US-63-guard_inbound_frb_f64.md) (Dispatches Stage 3 `flutter_rust_bridge` inbound `f64` boundary guard verification)
+- [ ] #814 - [User Story 64: Validate Kani Harness Spec](../user-stories/US-64-validate_kani_harness_spec.md) (Dispatches Stage 4 Kani `outer kani::proof` harness validation and synthesis)
+- [ ] #815 - [User Story 65: Evaluate Four Stage Gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Executes `evaluate_four_stage_gatekeeper(receipts)` across all stages)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `MultiStageVerificationOrchestrator` initialization inputs for `verification_stage_count` (`Integer`), `fail_closed_short_circuit` (`Boolean`), `require_formal_toolchains` (`Boolean`) satisfying `C_VER_07` and `C_VER_08`, When `MultiStageVerificationOrchestrator` commits typed domain state, Then declared state attributes hold verified values and formal drivers are probed dynamically via runtime `PATH` without hardcoded host paths.

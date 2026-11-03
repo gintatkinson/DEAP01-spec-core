@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #806 |
-| **Title** | User Story 56: verify stage fixed point |
+| **Title** | User Story 56: Verify Stage Fixed Point |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics](../epics/EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics.md) |
 | **SysML Interaction** | `BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 56: verify stage fixed point
+# User Story 56: Verify Stage Fixed Point
 
 ## User Story
 As a `AirGappedCargoLockGovernor`, I want to invoke `verify_stage_fixed_point()` on `LosslessRustCstAnalyzer`, so that verify_stage_fixed_point(stage1_digest).

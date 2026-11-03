@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #824 |
-| **Title** | User Story 74: verify dual toolchain parity |
+| **Title** | User Story 74: Verify Dual Toolchain Parity |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-11-BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture](../epics/EPIC-11-BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture.md) |
 | **SysML Interaction** | `BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 74: verify dual toolchain parity
+# User Story 74: Verify Dual Toolchain Parity
 
 ## User Story
 As a `DualModeFerroceneToolchainGate`, I want to invoke `verify_dual_toolchain_parity()` on `ThreeRingAssurancePartitionCompiler`, so that `verify_dual_toolchain_parity(spec)` enforces DO-178C / DO-330 `criticalup.toml` + `rust-toolchain.toml` semantic version and target-triple parity (`max_toolchain_version_drift == 0`, `C_CERT_01`) and Stage-1 == Stage-2 self-hosted modular codegen SHA-256 fixed-point identity (`stage_fixed_point_mismatch_files == 0`, `C_CERT_02`) via `toml_edit`, `cargo-platform`, `cargo_metadata`, `cargo-lock`, and `cargo-util-schemas` with zero hand-rolled scanners.

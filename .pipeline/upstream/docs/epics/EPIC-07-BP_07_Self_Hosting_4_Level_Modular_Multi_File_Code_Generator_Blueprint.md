@@ -27,6 +27,11 @@ Subsystem package `BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_
 - [ ] #831 - [Feature 33: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] ModularRustMultiFileEmitter](../features/FEAT-33-ModularRustMultiFileEmitter.md) (`proc-macro2` + `quote` + `syn::File` + `prettyplease` deterministic Rust multi-file emitter and Stage-1 == Stage-2 SHA-256 fixed-point verifier retiring legacy `driver.rs` string templates)
 - [ ] #832 - [Feature 34: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] SelfHostingModularCodegenCompiler](../features/FEAT-34-SelfHostingModularCodegenCompiler.md) (top-level self-hosting modular codegen compiler orchestrating transactional multi-file emission and `C_MOD_01..05` governance)
 - [ ] #833 - [Feature 35: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] TopologicalLayerDagVerifier](../features/FEAT-35-TopologicalLayerDagVerifier.md) (iterative zero-recursion Kahn topological sorter and `@Layer` monotonicity verifier enforcing `E0702`/`E0703` fail-closed guards)
+- [ ] #857 - [Feature 54: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] ModularityBoundsSpec](../features/FEAT-54-ModularityBoundsSpec.md) (compilation-unit modularity envelope specification enforcing `ValidBoundsEnvelope` across `max_file_lines`, `max_items_per_file`, `max_cyclomatic_complexity`, `max_action_steps_per_stage`, and `max_transitions_per_handler`)
+- [ ] #858 - [Feature 55: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] LayerHierarchySpec](../features/FEAT-55-LayerHierarchySpec.md) (4-tier architectural layer hierarchy specification enforcing `NonUpwardLayerImport` across `domain_tier`, `application_tier`, and `presentation_tier`)
+- [ ] #859 - [Feature 56: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] CompilationUnitSpec](../features/FEAT-56-CompilationUnitSpec.md) (emitted compilation-unit metadata and budget contract enforcing `UnitObeysBounds` across `relative_path`, `layer_tier`, `item_count`, `line_count`, and `max_function_vg`)
+- [ ] #860 - [Feature 57: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelLoweringEngineSpec](../features/FEAT-57-FourLevelLoweringEngineSpec.md) (4-level modular lowering engine specification enforcing `LoweringLevelsComplete` across `schema_in`, `graph_out`, `bounds_ref`, and `layer_ref`)
+- [ ] #861 - [Feature 58: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] ModularEmitterSuiteSpec](../features/FEAT-58-ModularEmitterSuiteSpec.md) (multi-file Rust and Dart emitter suite specification enforcing `FixedPointBootstrapParity` across `rust_tree_out`, `flutter_tree_out`, and `engine_ref`)
 
 ### Associated Use Cases & User Stories
 
@@ -39,14 +44,15 @@ Subsystem package `BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_
 - [ ] #766 - [Use Case 37: Dogfood SysML v2 Blueprint Ingestion and Twelve Gate Closed Loop Conformance](../use-cases/UC-37-Dogfood_SysML_v2_Blueprint_Ingestion_and_Twelve_Gate_Closed_Loop_Conformance.md) (verifies 12-gate blueprint conformance and bijective SysML v2 round-trip compilation for `BP-07`)
 
 #### Associated User Stories
-- [ ] #795 - [User Story 45: verify dag and layers](../user-stories/US-45-verify_dag_and_layers.md) (executes iterative Kahn DAG topological sorting and `@Layer` monotonicity verification via `verify_dag_and_layers`)
-- [ ] #796 - [User Story 46: partition and hoist](../user-stories/US-46-partition_and_hoist.md) (lowers full SysML v2.0 + KerML 1.0 packages across 4 modularity levels via `partition_and_hoist`)
-- [ ] #797 - [User Story 47: synthesize module tokens](../user-stories/US-47-synthesize_module_tokens.md) (synthesizes `proc-macro2::TokenStream` units via `quote::quote!` in `synthesize_module_tokens` with zero string concatenation)
-- [ ] #798 - [User Story 48: build syn file](../user-stories/US-48-build_syn_file.md) (validates synthesized token streams into typed `syn::File` ASTs via `syn::parse2::<syn::File>` in `build_syn_file`)
-- [ ] #799 - [User Story 49: format pretty syn file](../user-stories/US-49-format_pretty_syn_file.md) (formats validated `syn::File` ASTs into canonical LF Rust source via `prettyplease::unparse` in `format_pretty_syn_file`)
-- [ ] #800 - [User Story 50: emit modular rust tree](../user-stories/US-50-emit_modular_rust_tree.md) (atomically persists multi-file Rust module trees and `mod.rs` barrels via `emit_modular_rust_tree`)
+- [ ] #795 - [User Story 45: Verify Dag And Layers](../user-stories/US-45-verify_dag_and_layers.md) (executes iterative Kahn DAG topological sorting and `@Layer` monotonicity verification via `verify_dag_and_layers`)
+- [ ] #796 - [User Story 46: Partition And Hoist](../user-stories/US-46-partition_and_hoist.md) (lowers full SysML v2.0 + KerML 1.0 packages across 4 modularity levels via `partition_and_hoist`)
+- [ ] #797 - [User Story 47: Synthesize Module Tokens](../user-stories/US-47-synthesize_module_tokens.md) (synthesizes `proc-macro2::TokenStream` units via `quote::quote!` in `synthesize_module_tokens` with zero string concatenation)
+- [ ] #798 - [User Story 48: Build Syn File](../user-stories/US-48-build_syn_file.md) (validates synthesized token streams into typed `syn::File` ASTs via `syn::parse2::<syn::File>` in `build_syn_file`)
+- [ ] #799 - [User Story 49: Format Pretty Syn File](../user-stories/US-49-format_pretty_syn_file.md) (formats validated `syn::File` ASTs into canonical LF Rust source via `prettyplease::unparse` in `format_pretty_syn_file`)
+- [ ] #800 - [User Story 50: Emit Modular Rust Tree](../user-stories/US-50-emit_modular_rust_tree.md) (atomically persists multi-file Rust module trees and `mod.rs` barrels via `emit_modular_rust_tree`)
 - [ ] #801 - [User Story 51: emit modular_flutter_tree](../user-stories/US-51-emit_modular_flutter_tree.md) (atomically persists per-package `.g.dart` contracts and `<= 80`-LOC barrel facades via `emit_modular_flutter_tree`)
-- [ ] #802 - [User Story 52: verify fixed point digest](../user-stories/US-52-verify_fixed_point_digest.md) (verifies Stage-1 == Stage-2 SHA-256 fixed-point identity across `GeneratedTreeManifest` digests via `verify_fixed_point_digest`)
+- [ ] #802 - [User Story 52: Verify Fixed Point Digest](../user-stories/US-52-verify_fixed_point_digest.md) (verifies Stage-1 == Stage-2 SHA-256 fixed-point identity across `GeneratedTreeManifest` digests via `verify_fixed_point_digest`)
+- [ ] #862 - [User Story 79: Execute Four Level Lowering Pipeline](../user-stories/US-79-ExecuteFourLevelLoweringPipeline.md) (executes the 12-step 4-level modular lowering pipeline via `ExecuteFourLevelLoweringPipeline`)
 
 ## 3. Architecture
 

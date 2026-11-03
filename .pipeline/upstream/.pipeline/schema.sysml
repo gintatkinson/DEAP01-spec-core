@@ -1496,6 +1496,9 @@ package BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint {
     test case def Test_verify_fixed_point_digest {
         verify requirement REQ_0607;
     }
+    test case def Test_ExecuteFourLevelLoweringPipeline {
+        verify requirement REQ_0607;
+    }
     doc /* Extracted from Mermaid sequenceDiagram specification. */
     interaction def BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint_SequenceInteraction {
         lifeline Compiler : SelfHostingModularCodegenCompiler;

@@ -148,7 +148,7 @@ Classifier `FormattingPreservingSyncSplicer` binds external and behavioral inter
 - [ ] #787 - [Use Case 58: Twelve Gate Blueprint Verification and Baseline Cleanliness Gate Conformance](../use-cases/UC-58-Twelve_Gate_Blueprint_Verification_and_Baseline_Cleanliness_Gate_Conformance.md) (verifies 12-gate blueprint and baseline cleanliness conformance)
 
 #### Associated User Stories
-- [ ] #821 - [User Story 71: apply formatting preserving splices](../user-stories/US-71-apply_formatting_preserving_splices.md) (binds pairwise-disjoint `Utf8TextRange` CST splicing and post-splice verification)
+- [ ] #821 - [User Story 71: Apply Formatting Preserving Splices](../user-stories/US-71-apply_formatting_preserving_splices.md) (binds pairwise-disjoint `Utf8TextRange` CST splicing and post-splice verification)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `FormattingPreservingSyncSplicer` inputs satisfying `Invariant_REQ_0610_SC_01` [Req `REQ-0610 (REQ_0610_BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine)`], When `FormattingPreservingSyncSplicer` evaluates invariant `Invariant_REQ_0610_SC_01`, Then the invariant holds and verified state is committed.

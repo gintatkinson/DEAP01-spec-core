@@ -125,6 +125,13 @@ fn test_dual_schema_parity_multi_file_passes() -> Result<(), Box<dyn std::error:
         check_dual_schema_ssot_parity(&tmp.path),
         Ok(ParityOutcome::DualSchemaIdentical)
     );
+
+    fs::write(tmp.path.join("schema").join("model.sysml"), &combined)?;
+    assert_eq!(
+        check_dual_schema_ssot_parity(&tmp.path),
+        Ok(ParityOutcome::DualSchemaIdentical),
+        "Check 31 must deduplicate identical AST defs when schema/model.sysml aggregates sibling schema/*.sysml files"
+    );
     Ok(())
 }
 

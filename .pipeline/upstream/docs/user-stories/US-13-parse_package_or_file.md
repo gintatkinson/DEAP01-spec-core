@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #579 |
-| **Title** | User Story 13: parse package or file |
+| **Title** | User Story 13: Parse Package Or File |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-03-BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint](../epics/EPIC-03-BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint.md) |
 | **SysML Interaction** | `BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 13: parse package or file
+# User Story 13: Parse Package Or File
 
 ## User Story
 
@@ -24,7 +24,7 @@ As a `Compiler_CLI_Caller`, I want to invoke `parse_package_or_file()` on `Nativ
 - Contract A CST/HIR domain coverage: parses 100% of the normative OMG SysML v2.0 + KerML 1.0 BNF grammar across all 6 clauses (Namespaces & Metadata, Structural & Data Types, Behavioral & State, Calculations/Constraints/Requirements, Use Cases/Analysis/Verification/Views, and KerML 1.0 Specialization/Multiplicity/Expressions) with zero 16-construct artificial caps, supporting `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` `metadata def` (`@Metadata` / `#user_keyword`) alongside backward-compatible `hazard def`, `risk def`, and `capability def` declarations.
 
 ### Layer 2: Logic & State Management
-- Behavioral execution contract: invokes `parse_package_or_file()` on `NativeSigilAndLifetimeLexer` with atomic precondition verification using `logos` + `rowan` lossless Red/Green CST construction (`deap_core::sysml_cst`), `salsa` incremental query evaluation (`salsa::input`, `salsa::tracked`), and Stage-1 == Stage-2 bijective round-trip enforcement (`silent_skip_branch_count == 0`, zero `skip_until_semi_or_brace` silent-erasure branches, zero hand-rolled scanners).
+- Contract B behavioral execution contract: invokes `parse_package_or_file()` on `NativeSigilAndLifetimeLexer` with atomic precondition verification using `logos` + `rowan` lossless Red/Green CST construction (`deap_core::sysml_cst`), `salsa` incremental query evaluation (`salsa::input`, `salsa::tracked`), and Stage-1 == Stage-2 bijective round-trip enforcement (`silent_skip_branch_count == 0`, zero `skip_until_semi_or_brace` silent-erasure branches, zero hand-rolled scanners).
 - State transition management: `LexicalScanning -> RecursiveDescentParsing` (trigger `zeroDriftTokenStream`).
 - Formal constraints and requirements enforced: `REQ-0603 (REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint)`.
 - Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`./crates/deap-core/src/sysml_cst/` and `./crates/compile-sysml/src/roundtrip/`) while explicitly deleting legacy hand-rolled scanner and recursive-descent parser monoliths (`-2,400+` SLOC).

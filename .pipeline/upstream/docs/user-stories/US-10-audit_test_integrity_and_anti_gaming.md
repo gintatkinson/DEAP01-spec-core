@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #572 |
-| **Title** | User Story 10: audit test integrity and anti gaming |
+| **Title** | User Story 10: Audit Test Integrity And Anti Gaming |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-02-BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint](../epics/EPIC-02-BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint.md) |
 | **SysML Interaction** | `BP_02_Check_34_AST_Purity_Fail_Closed_IO_and_Anti_Gaming_Test_Gate_Blueprint_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 10: audit test integrity and anti gaming
+# User Story 10: Audit Test Integrity And Anti Gaming
 
 ## User Story
 

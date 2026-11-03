@@ -55,7 +55,7 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#571** | User Story | [User Story 09: audit fail closed io patterns](../user-stories/US-09-audit_fail_closed_io_patterns.md) |
+| **#571** | User Story | [User Story 09: Audit Fail Closed Io Patterns](../user-stories/US-09-audit_fail_closed_io_patterns.md) |
 | **#662** | Feature | [Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] AntiGamingTestBodyAuditor](../features/FEAT-06-AntiGamingTestBodyAuditor.md) |
 
 ## Source References

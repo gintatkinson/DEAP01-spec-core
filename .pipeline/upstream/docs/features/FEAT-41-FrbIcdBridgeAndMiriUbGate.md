@@ -165,8 +165,8 @@ Classifier `FrbIcdBridgeAndMiriUbGate` binds external and behavioral interfaces 
 - [ ] #780 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Enforces `< 380`-SLOC submodule modularity and cross-platform `miri`/`dart` runtime `PATH` discovery)
 
 #### Associated User Stories
-- [ ] #813 - [User Story 63: guard inbound frb f64](../user-stories/US-63-guard_inbound_frb_f64.md) (Executes `guard_inbound_frb_f64(spec, raw_value, active_fsm_state)` across inbound `flutter_rust_bridge` FFI entrypoints)
-- [ ] #815 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Consolidates Stage 3 Miri and `dart analyze` receipts into the 4-stage gatekeeper verdict)
+- [ ] #813 - [User Story 63: Guard Inbound Frb F64](../user-stories/US-63-guard_inbound_frb_f64.md) (Executes `guard_inbound_frb_f64(spec, raw_value, active_fsm_state)` across inbound `flutter_rust_bridge` FFI entrypoints)
+- [ ] #815 - [User Story 65: Evaluate Four Stage Gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Consolidates Stage 3 Miri and `dart analyze` receipts into the 4-stage gatekeeper verdict)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `FrbIcdBridgeAndMiriUbGate` inputs satisfying `Invariant_REQ_0609_SC_01` [Req `REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`], When `FrbIcdBridgeAndMiriUbGate` evaluates invariant `Invariant_REQ_0609_SC_01`, Then the invariant holds and verified state is committed.

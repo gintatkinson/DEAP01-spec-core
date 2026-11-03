@@ -58,8 +58,8 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#797** | User Story | [User Story 47: synthesize module tokens](../user-stories/US-47-synthesize_module_tokens.md) (synthesizes deterministic `proc-macro2::TokenStream` units) |
-| **#802** | User Story | [User Story 52: verify fixed point digest](../user-stories/US-52-verify_fixed_point_digest.md) (verifies Stage-1 == Stage-2 SHA-256 fixed-point equality) |
+| **#797** | User Story | [User Story 47: Synthesize Module Tokens](../user-stories/US-47-synthesize_module_tokens.md) (synthesizes deterministic `proc-macro2::TokenStream` units) |
+| **#802** | User Story | [User Story 52: Verify Fixed Point Digest](../user-stories/US-52-verify_fixed_point_digest.md) (verifies Stage-1 == Stage-2 SHA-256 fixed-point equality) |
 | **#829** | Feature | [Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitionerAndHoister](../features/FEAT-31-FourLevelAstPartitionerAndHoister.md) (enforces `Invariant_REQ_0607_SC_03` fixed-point lowering contract) |
 | **#831** | Feature | [Feature 33: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] ModularRustMultiFileEmitter](../features/FEAT-33-ModularRustMultiFileEmitter.md) (executes Stage-2 emission and `fixed_point_sha256_verification`) |
 | **#832** | Feature | [Feature 34: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] SelfHostingModularCodegenCompiler](../features/FEAT-34-SelfHostingModularCodegenCompiler.md) (enforces `stage_fixed_point_mismatch_files == 0` and `runtime_llm_subagent_count == 0`) |

@@ -29,10 +29,10 @@ graph TD
 - `Compiler_CLI_CI_Pipeline`
 
 ## 2. Preconditions
-- `.rs` and `.dart` source files containing nested block comments, hashed raw strings `r#"..."#` and `r##"..."##`, Rust string literals containing `"{"`, Dart interpolated strings `"value: ${map['key']}"` containing nested quotes and comments, multi-byte UTF-8 character literals `'↑'`, and multiple short lifetimes `fn foo<'a, 'b>(x: &'a str, y: &'b str)` bound to a full OMG SysML v2.0 + KerML 1.0 model (zero 16-construct caps).
+- `.rs` and `.dart` source files containing nested block comments, hashed raw strings `r#"..."#` and `r##"..."##`, Rust string literals containing `"{"`, Dart interpolated strings `"value: ${map['key']}"` containing nested quotes and comments, multi-byte UTF-8 character literals `'↑'`, and multiple short lifetimes `fn foo<'a, 'b>(x: &'a str, y: &'b str)` bound under **Contract A (100% Normative OMG SysML v2.0 + KerML 1.0 Grammar Coverage -- Zero 16-Construct Caps)** to a full OMG SysML v2.0 + KerML 1.0 model.
 
 ## 3. Trigger
-- `deap_core::rust_cst` (`ra_ap_syntax` `ast::HasDocComments`, `ast::HasAttrs`, `ra_ap_line_index`, `ra_ap_text_edit`), `deap_core::dart_cst` (`logos` + `rowan` + `salsa` + `ariadne`), `compile-sysml --inject-safety-docstrings`, and `verify-baseline` Check 36 parse the files with zero hand-rolled scanners.
+- Under **Contract B (Official Rust Compiler & `rust-analyzer` Crate Stack -- Zero Hand-Rolled Scanners)**, `deap_core::rust_cst` (`ra_ap_syntax` `ast::HasDocComments`, `ast::HasAttrs`, `ra_ap_line_index`, `ra_ap_text_edit`), `deap_core::dart_cst` (`logos` + `rowan` + `salsa` + `ariadne`), `compile-sysml --inject-safety-docstrings`, and `verify-baseline` Check 36 parse the files with zero hand-rolled scanners.
 
 ## 4. Main Success Scenario
 1. `Compiler_CLI_CI_Pipeline` invokes `RunCompileSysmlInjectSafetyDocstrings` and `RunVerifyBaselineNoDomain` across `.rs` and `.dart` source files containing nested block comments, hashed raw strings, interpolated Dart strings, multi-byte UTF-8 character literals, and multiple lifetimes.

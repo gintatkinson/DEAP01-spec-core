@@ -155,12 +155,12 @@ Classifier `Check34AstPurityAndAntiGamingGate` binds external and behavioral int
 - None allocated (structural subsystem component)
 
 #### Associated User Stories
-- [ ] #567 - [User Story 06: check compiler ast purity](../user-stories/US-06-check_compiler_ast_purity.md)
-- [ ] #568 - [User Story 07: mask literals and comments](../user-stories/US-07-mask_literals_and_comments.md)
-- [ ] #570 - [User Story 08: contains direct range slice](../user-stories/US-08-contains_direct_range_slice.md)
-- [ ] #571 - [User Story 09: audit fail closed io patterns](../user-stories/US-09-audit_fail_closed_io_patterns.md)
-- [ ] #572 - [User Story 10: audit test integrity and anti gaming](../user-stories/US-10-audit_test_integrity_and_anti_gaming.md)
-- [ ] #574 - [User Story 11: audit ssot symbol deduplication](../user-stories/US-11-audit_ssot_symbol_deduplication.md)
+- [ ] #567 - [User Story 06: Check Compiler Ast Purity](../user-stories/US-06-check_compiler_ast_purity.md)
+- [ ] #568 - [User Story 07: Mask Literals And Comments](../user-stories/US-07-mask_literals_and_comments.md)
+- [ ] #570 - [User Story 08: Contains Direct Range Slice](../user-stories/US-08-contains_direct_range_slice.md)
+- [ ] #571 - [User Story 09: Audit Fail Closed Io Patterns](../user-stories/US-09-audit_fail_closed_io_patterns.md)
+- [ ] #572 - [User Story 10: Audit Test Integrity And Anti Gaming](../user-stories/US-10-audit_test_integrity_and_anti_gaming.md)
+- [ ] #574 - [User Story 11: Audit Ssot Symbol Deduplication](../user-stories/US-11-audit_ssot_symbol_deduplication.md)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `Check34AstPurityAndAntiGamingGate` initialization inputs for `direct_range_slice_count` (`Integer`), `fail_open_io_site_count` (`Integer`), `vacuous_test_count` (`Integer`), `duplicate_sha256_impl_count` (`Integer`), `duplicate_lexer_impl_count` (`Integer`) (no additional constraints specified in schema), When `Check34AstPurityAndAntiGamingGate` commits typed domain state, Then declared state attributes hold verified values.

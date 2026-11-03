@@ -29,10 +29,10 @@ graph TD
 - `Compiler_CLI_CI_Pipeline`
 
 ## 2. Preconditions
-- A Rust module containing `outer cfg(test) mod tests { ... }` followed by a production `pub unsafe fn post_test_api()`, a `outer cfg(test) impl MockHelper { ... }` block, an `impl<F: Fn(u32) -> bool> FilterEngine<F>` block, and a Dart class method preceded by a multi-line `@pragma('vm:prefer-inline')` annotation bound to a full OMG SysML v2.0 + KerML 1.0 model (zero 16-construct caps).
+- A Rust module containing `outer cfg(test) mod tests { ... }` followed by a production `pub unsafe fn post_test_api()`, a `outer cfg(test) impl MockHelper { ... }` block, an `impl<F: Fn(u32) -> bool> FilterEngine<F>` block, and a Dart class method preceded by a multi-line `@pragma('vm:prefer-inline')` annotation bound under **Contract A (100% Normative OMG SysML v2.0 + KerML 1.0 Grammar Coverage -- Zero 16-Construct Caps)** to a full OMG SysML v2.0 + KerML 1.0 model.
 
 ## 3. Trigger
-- `compile-sysml --inject-safety-docstrings` and `verify-baseline` Check 36 inspect the files using `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `ra_ap_text_edit`, `ra_ap_line_index`, and `deap_core::dart_cst` (`logos` + `rowan` + `salsa` + `ariadne`) with zero hand-rolled scanners.
+- Under **Contract B (Official Rust Compiler & `rust-analyzer` Crate Stack -- Zero Hand-Rolled Scanners)**, `compile-sysml --inject-safety-docstrings` and `verify-baseline` Check 36 inspect the files using `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `ra_ap_text_edit`, `ra_ap_line_index`, and `deap_core::dart_cst` (`logos` + `rowan` + `salsa` + `ariadne`) with zero hand-rolled scanners.
 
 ## 4. Main Success Scenario
 1. `Compiler_CLI_CI_Pipeline` invokes `RunCompileSysmlInjectSafetyDocstrings` and `RunVerifyBaselineNoDomain` on `Check36AstCompletenessVerifier` and `UnifiedRustDartCstParser`.

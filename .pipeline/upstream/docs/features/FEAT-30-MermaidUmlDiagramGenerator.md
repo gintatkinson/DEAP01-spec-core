@@ -113,7 +113,7 @@ Classifier `MermaidUmlDiagramGenerator` binds external and behavioral interfaces
 - [ ] #653 - [Use Case 30: Fail Closed Rejection on Malformed Dossier Schema Ephemeral Paths or Payload Divergence](../use-cases/UC-30-Fail_Closed_Rejection_on_Malformed_Dossier_Schema_Ephemeral_Paths_or_Payload_Divergence.md)
 
 #### Associated User Stories
-- [ ] #615 - [User Story 40: synthesize defect dossier markdown](../user-stories/US-40-synthesize_defect_dossier_markdown.md)
+- [ ] #615 - [User Story 40: Synthesize Defect Dossier Markdown](../user-stories/US-40-synthesize_defect_dossier_markdown.md)
 - [ ] #729 - [User Story 42: Execute12 Check Validate Defect Dossier](../user-stories/US-42-Execute12CheckValidateDefectDossier.md)
 
 ## Acceptance Criteria (BDD)

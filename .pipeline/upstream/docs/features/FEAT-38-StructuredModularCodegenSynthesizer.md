@@ -114,7 +114,7 @@ Classifier `StructuredModularCodegenSynthesizer` binds external and behavioral i
 - [ ] #770 - [Use Case 41: Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules](../use-cases/UC-41-Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules.md) (preserves Stage-1 `generated/` fixed-point modules emitted by `StructuredModularCodegenSynthesizer`)
 
 #### Associated User Stories
-- [ ] #806 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (directly invokes `verify_stage_fixed_point(stage1_digest)` on `StructuredModularCodegenSynthesizer`)
+- [ ] #806 - [User Story 56: Verify Stage Fixed Point](../user-stories/US-56-verify_stage_fixed_point.md) (directly invokes `verify_stage_fixed_point(stage1_digest)` on `StructuredModularCodegenSynthesizer`)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `StructuredModularCodegenSynthesizer` initialization inputs for `stage_fixed_point_mismatch_files` (`Integer`), `in_process_prettyplease` (`Boolean`) (no additional constraints specified in schema), When `StructuredModularCodegenSynthesizer` commits typed domain state, Then declared state attributes hold verified values.

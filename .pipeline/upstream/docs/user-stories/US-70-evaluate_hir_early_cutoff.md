@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #820 |
-| **Title** | User Story 70: evaluate hir early cutoff |
+| **Title** | User Story 70: Evaluate Hir Early Cutoff |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) |
 | **SysML Interaction** | `BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 70: evaluate hir early cutoff
+# User Story 70: Evaluate Hir Early Cutoff
 
 ## User Story
 As a `TypedPolyglotIngestionFrontend`, I want to invoke `evaluate_hir_early_cutoff()` on `SalsaIncrementalCompilerDatabase`, so that `evaluate_hir_early_cutoff(previous_hir, current_hir)` compares trivia-erased `HirPackageSummary` projections across 100% of normative OMG SysML v2.0 + KerML 1.0 constructs (`C_INC_04`, `C_INC_05`) and short-circuits downstream semantic, STPA/FMECA, and Kani recomputations (`trivia_edit_downstream_recomputations == 0`) when edits alter only comments or whitespace.

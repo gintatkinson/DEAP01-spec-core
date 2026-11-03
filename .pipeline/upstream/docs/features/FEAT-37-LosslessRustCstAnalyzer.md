@@ -162,12 +162,12 @@ Classifier `LosslessRustCstAnalyzer` binds external and behavioral interfaces ac
 - [ ] #770 - [Use Case 41: Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules](../use-cases/UC-41-Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules.md) (classifies `DocTier::RustTierA` vs `DocTier::RustTierBC` items via `LosslessRustCstAnalyzer`)
 
 #### Associated User Stories
-- [ ] #803 - [User Story 53: verify offline locked build](../user-stories/US-53-verify_offline_locked_build.md) (coordinates workspace verification with `LosslessRustCstAnalyzer` invariant gates)
-- [ ] #804 - [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) (directly invokes `list_rust_items(path)` on `LosslessRustCstAnalyzer`)
-- [ ] #805 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (queries `LosslessRustCstAnalyzer` item spans and post-splice CST parse validation)
-- [ ] #806 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (verifies CST structural invariants alongside Stage-1/Stage-2 fixed-point digests)
-- [ ] #807 - [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) (projects `ra_ap_line_index::LineIndex` byte/line/col spans from `LosslessRustCstAnalyzer` into single-line NDJSON diagnostics)
-- [ ] #808 - [User Story 58: analyze metrics](../user-stories/US-58-analyze_metrics.md) (directly invokes `analyze_metrics(source)` on `LosslessRustCstAnalyzer` enforcing `C_CST_01..C_CST_03`)
+- [ ] #803 - [User Story 53: Verify Offline Locked Build](../user-stories/US-53-verify_offline_locked_build.md) (coordinates workspace verification with `LosslessRustCstAnalyzer` invariant gates)
+- [ ] #804 - [User Story 54: List Rust Items](../user-stories/US-54-list_rust_items.md) (directly invokes `list_rust_items(path)` on `LosslessRustCstAnalyzer`)
+- [ ] #805 - [User Story 55: Extract Rust Module](../user-stories/US-55-extract_rust_module.md) (queries `LosslessRustCstAnalyzer` item spans and post-splice CST parse validation)
+- [ ] #806 - [User Story 56: Verify Stage Fixed Point](../user-stories/US-56-verify_stage_fixed_point.md) (verifies CST structural invariants alongside Stage-1/Stage-2 fixed-point digests)
+- [ ] #807 - [User Story 57: Format Ndjson Line](../user-stories/US-57-format_ndjson_line.md) (projects `ra_ap_line_index::LineIndex` byte/line/col spans from `LosslessRustCstAnalyzer` into single-line NDJSON diagnostics)
+- [ ] #808 - [User Story 58: Analyze Metrics](../user-stories/US-58-analyze_metrics.md) (directly invokes `analyze_metrics(source)` on `LosslessRustCstAnalyzer` enforcing `C_CST_01..C_CST_03`)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `LosslessRustCstAnalyzer` initialization inputs for `max_fn_exec_sloc` (`Integer`), `max_fn_param_count` (`Integer`), `max_mut_bool_flags` (`Integer`), `max_predicate_arity` (`Integer`), `lossless_roundtrip_required` (`Boolean`), `deterministic_uuid` (`String`) (no additional constraints specified in schema), When `LosslessRustCstAnalyzer` commits typed domain state, Then declared state attributes hold verified values.

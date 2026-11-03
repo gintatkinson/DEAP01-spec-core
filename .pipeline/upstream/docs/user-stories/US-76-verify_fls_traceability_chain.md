@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #826 |
-| **Title** | User Story 76: verify fls traceability chain |
+| **Title** | User Story 76: Verify Fls Traceability Chain |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-11-BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture](../epics/EPIC-11-BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture.md) |
 | **SysML Interaction** | `BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 76: verify fls traceability chain
+# User Story 76: Verify Fls Traceability Chain
 
 ## User Story
 As a `DualModeFerroceneToolchainGate`, I want to invoke `verify_fls_traceability_chain()` on `ThreeRingAssurancePartitionCompiler`, so that `verify_fls_traceability_chain(records, pinned_fls_catalog)` audits the 5-link normative Ferrocene Language Specification (`[FLS: fls_*]`) traceability chain (`REQ-*` -> `SC-*` -> `RustItem` -> `fls_*` -> `KaniAndCoverage`, `unmapped_fls_item_count == 0`, `trace_chain_depth == 5`, `C_CERT_03`) across Ring-1 docstrings and Ring-2 `// SAFETY: [SC-*] [FLS: fls_*]` blocks via `syn` + `proc-macro2` + `quote` + `prettyplease` and `ra_ap_syntax` with zero hand-rolled scanners.

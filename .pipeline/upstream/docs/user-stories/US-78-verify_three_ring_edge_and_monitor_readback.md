@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #828 |
-| **Title** | User Story 78: verify three ring edge and monitor readback |
+| **Title** | User Story 78: Verify Three Ring Edge And Monitor Readback |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-11-BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture](../epics/EPIC-11-BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture.md) |
 | **SysML Interaction** | `BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 78: verify three ring edge and monitor readback
+# User Story 78: Verify Three Ring Edge And Monitor Readback
 
 ## User Story
 As a `DualModeFerroceneToolchainGate`, I want to invoke `verify_three_ring_edge_and_monitor_readback()` on `ThreeRingAssurancePartitionCompiler`, so that `verify_three_ring_edge_and_monitor_readback(from_ring, to_ring, envelope)` enforces Ring-1 `SafetyMonitor` two-step challenge-response command interlocks (`hat_eta_t == eta_t`) and FIPS 180-4 SHA-256 `TelemetryFrame` digest readback (`hat_h_t == h_t`, `hat_seq_t == seq_t`) isolating DAL-A/B Ring 1 (`safety_kernel/`) from untrusted DAL-D/E Ring 3 (`app_flutter/`) display corruption or spurious command injection with zero hand-rolled scanners.

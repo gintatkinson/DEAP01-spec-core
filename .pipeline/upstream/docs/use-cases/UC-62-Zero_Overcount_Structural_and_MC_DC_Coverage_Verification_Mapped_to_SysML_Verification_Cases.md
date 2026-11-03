@@ -62,13 +62,13 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#826** | User Story | [User Story 76: verify fls traceability chain](../user-stories/US-76-verify_fls_traceability_chain.md) |
-| **#827** | User Story | [User Story 77: verify certified core and table a7 coverage](../user-stories/US-77-verify_certified_core_and_table_a7_coverage.md) |
+| **#826** | User Story | [User Story 76: Verify Fls Traceability Chain](../user-stories/US-76-verify_fls_traceability_chain.md) |
+| **#827** | User Story | [User Story 77: Verify Certified Core And Table A7 Coverage](../user-stories/US-77-verify_certified_core_and_table_a7_coverage.md) |
 | **#848** | Feature | [Feature 50: [BP 11 Ferrocene Qualified Toolchain FLS Traceability Structural Coverage and 3 Ring Rust_Flutter DO 178 C DO 330 Certification Architecture] CertifiedCoreSubsetAndCoverageGate](../features/FEAT-50-CertifiedCoreSubsetAndCoverageGate.md) |
 
 ### Required User Stories
-- [ ] #826 - [User Story 76: verify fls traceability chain](../user-stories/US-76-verify_fls_traceability_chain.md)
-- [ ] #827 - [User Story 77: verify certified core and table a7 coverage](../user-stories/US-77-verify_certified_core_and_table_a7_coverage.md)
+- [ ] #826 - [User Story 76: Verify Fls Traceability Chain](../user-stories/US-76-verify_fls_traceability_chain.md)
+- [ ] #827 - [User Story 77: Verify Certified Core And Table A7 Coverage](../user-stories/US-77-verify_certified_core_and_table_a7_coverage.md)
 
 ### Required Features
 - [ ] #848 - [Feature 50: [BP 11 Ferrocene Qualified Toolchain FLS Traceability Structural Coverage and 3 Ring Rust_Flutter DO 178 C DO 330 Certification Architecture] CertifiedCoreSubsetAndCoverageGate](../features/FEAT-50-CertifiedCoreSubsetAndCoverageGate.md)

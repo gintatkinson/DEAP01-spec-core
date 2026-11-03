@@ -51,11 +51,15 @@ graph TD
 
 ## 6. Postconditions
 - The blueprint verifier passes all 12 mechanical gates, extracts Check34AstPurityAndAntiGamingGate, its subcomponents, 4 typed ports, 5 state attributes, 5 formal constraints (C-PURITY-01 through C-PURITY-05), and 5 BDD acceptance criteria into valid SysML v2, and exits with code 0.
+- **3-Layer Definition of Done (DoD)**:
+  - **Layer 1 (Domain State & Data Model)**: Lossless `deap_core::sysml_cst` (`logos` + `rowan` + `salsa`) AST and `ra_ap_syntax` (`ast::{MatchExpr, MatchArmList, CallExpr, MethodCallExpr, TryExpr}`) CST models under **Contract A** (100% normative OMG SysML v2.0 + KerML 1.0 grammar coverage, zero 16-construct caps).
+  - **Layer 2 (Logic & State Management)**: Blueprint verification and SysML v2 dogfood ingestion under **Contract B** (`pulldown-cmark`, `ra_ap_syntax`, `cargo_metadata`, `cargo-lock`, `cargo-util-schemas`, `cargo-platform`, `toml_edit`, zero hand-rolled scanners) inside `< 380`-SLOC submodules (`./crates/verify-baseline/src/ast_purity/` and `./crates/deap-core/src/rust_cst/`) with explicit deletion of legacy hand-rolled scanners.
+  - **Layer 3 (Presentation & Actuator Interface Binding)**: CLI bindings (`verify-baseline check-blueprint`, `ingest-sysml`) and `ariadne`/`miette` diagnostics across `PurityViolationDiagnosticPort` and `Check34GateStatusPort`.
 
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#572** | User Story | [User Story 10: audit test integrity and anti gaming](../user-stories/US-10-audit_test_integrity_and_anti_gaming.md) |
+| **#572** | User Story | [User Story 10: Audit Test Integrity And Anti Gaming](../user-stories/US-10-audit_test_integrity_and_anti_gaming.md) |
 | **#662** | Feature | [Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] AntiGamingTestBodyAuditor](../features/FEAT-06-AntiGamingTestBodyAuditor.md) |
 
 ## Source References

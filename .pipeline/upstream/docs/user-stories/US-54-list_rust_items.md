@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #804 |
-| **Title** | User Story 54: list rust items |
+| **Title** | User Story 54: List Rust Items |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics](../epics/EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics.md) |
 | **SysML Interaction** | `BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 54: list rust items
+# User Story 54: List Rust Items
 
 ## User Story
 As a `AirGappedCargoLockGovernor`, I want to invoke `list_rust_items()` on `LosslessRustCstAnalyzer`, so that list_rust_items(path).

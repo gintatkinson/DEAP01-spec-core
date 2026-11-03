@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #816 |
-| **Title** | User Story 66: resolve polyglot backend |
+| **Title** | User Story 66: Resolve Polyglot Backend |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) |
 | **SysML Interaction** | `BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 66: resolve polyglot backend
+# User Story 66: Resolve Polyglot Backend
 
 ## User Story
 As a `TypedPolyglotIngestionFrontend`, I want to invoke `resolve_polyglot_backend()` on `SalsaIncrementalCompilerDatabase`, so that `resolve_polyglot_backend(format)` deterministically dispatches all 6 polyglot specification formats (`ra_ap_syntax` Rust CST, `deap_core::dart_cst` Dart CST, typed `serde_json` OpenAPI/JSON-Schema AST, `logos` + `rowan` OMG IDL and IETF YANG CSTs in `ingest_sysml::cst::{idl_cst, yang_cst}`, and `pulldown-cmark` + `pulldown-cmark-to-cmark` Markdown AST) into 100% normative OMG SysML v2.0 + KerML 1.0 HIR with zero 16-construct caps and zero hand-rolled scanners.

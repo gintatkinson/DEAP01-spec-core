@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #813 |
-| **Title** | User Story 63: guard inbound frb f64 |
+| **Title** | User Story 63: Guard Inbound Frb F64 |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
 | **SysML Interaction** | `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 63: guard inbound frb f64
+# User Story 63: Guard Inbound Frb F64
 
 ## User Story
 As a `MultiStageVerificationOrchestrator`, I want to invoke `guard_inbound_frb_f64(spec, raw_value, active_fsm_state)` on `FrbIcdBridgeAndMiriUbGate`, so that every inbound `flutter_rust_bridge` FFI signal is checked for IEEE 754 finiteness (`is_finite()`), closed `[min..max]` interval bounds, and admissible `state def` operational modes before entering `inner forbid(unsafe_code)` domain logic, while Stage 3 Miri `-Zmiri-tree-borrows` and `dart analyze --fatal-infos` verify zero undefined behavior (`C_VER_04`).

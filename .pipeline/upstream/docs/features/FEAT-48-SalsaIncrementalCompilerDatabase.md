@@ -140,13 +140,13 @@ Classifier `SalsaIncrementalCompilerDatabase` binds external and behavioral inte
 - [ ] #785 - [Use Case 56: Fail Closed Salsa Cycle Detection and Net Negative Legacy Cst Parser Retirement](../use-cases/UC-56-Fail_Closed_Salsa_Cycle_Detection_and_Net_Negative_Legacy_Cst_Parser_Retirement.md) (verifies fail-closed `salsa` cycle recovery `DEAP-E1004` and legacy hand-rolled parser retirement)
 
 #### Associated User Stories
-- [ ] #816 - [User Story 66: resolve polyglot backend](../user-stories/US-66-resolve_polyglot_backend.md) (binds polyglot CST/AST backend dispatch into `SalsaIncrementalCompilerDatabase`)
-- [ ] #817 - [User Story 67: normalize line endings](../user-stories/US-67-normalize_line_endings.md) (binds CRLF-to-LF normalization in `SourceDatabase`)
-- [ ] #818 - [User Story 68: parse lossless sysml cst](../user-stories/US-68-parse_lossless_sysml_cst.md) (binds `CstDatabase` lossless `logos` + `rowan` CST parsing)
-- [ ] #819 - [User Story 69: verify lossless cst invariants](../user-stories/US-69-verify_lossless_cst_invariants.md) (binds `CstDatabase` byte-for-byte roundtrip and depth verification)
-- [ ] #820 - [User Story 70: evaluate hir early cutoff](../user-stories/US-70-evaluate_hir_early_cutoff.md) (binds `HirDatabase` trivia-erased `HirPackageSummary` early-cutoff evaluation)
-- [ ] #821 - [User Story 71: apply formatting preserving splices](../user-stories/US-71-apply_formatting_preserving_splices.md) (binds formatting-preserving CST splicing across `HirSourceMap` spans)
-- [ ] #822 - [User Story 72: render ariadne diagnostic](../user-stories/US-72-render_ariadne_diagnostic.md) (binds deterministic `ariadne` and NDJSON diagnostic rendering)
+- [ ] #816 - [User Story 66: Resolve Polyglot Backend](../user-stories/US-66-resolve_polyglot_backend.md) (binds polyglot CST/AST backend dispatch into `SalsaIncrementalCompilerDatabase`)
+- [ ] #817 - [User Story 67: Normalize Line Endings](../user-stories/US-67-normalize_line_endings.md) (binds CRLF-to-LF normalization in `SourceDatabase`)
+- [ ] #818 - [User Story 68: Parse Lossless Sysml Cst](../user-stories/US-68-parse_lossless_sysml_cst.md) (binds `CstDatabase` lossless `logos` + `rowan` CST parsing)
+- [ ] #819 - [User Story 69: Verify Lossless Cst Invariants](../user-stories/US-69-verify_lossless_cst_invariants.md) (binds `CstDatabase` byte-for-byte roundtrip and depth verification)
+- [ ] #820 - [User Story 70: Evaluate Hir Early Cutoff](../user-stories/US-70-evaluate_hir_early_cutoff.md) (binds `HirDatabase` trivia-erased `HirPackageSummary` early-cutoff evaluation)
+- [ ] #821 - [User Story 71: Apply Formatting Preserving Splices](../user-stories/US-71-apply_formatting_preserving_splices.md) (binds formatting-preserving CST splicing across `HirSourceMap` spans)
+- [ ] #822 - [User Story 72: Render Ariadne Diagnostic](../user-stories/US-72-render_ariadne_diagnostic.md) (binds deterministic `ariadne` and NDJSON diagnostic rendering)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `SalsaIncrementalCompilerDatabase` initialization inputs for `query_layer_count` (`Integer == 4`, `C_INC_04`), `trivia_edit_downstream_recomputations` (`Integer == 0`, `C_INC_05`), `pure_deterministic_btreemap` (`Boolean == true`), `cycle_recovery_fail_closed` (`Boolean == true`) across 100% of normative OMG SysML v2.0 + KerML 1.0 constructs (Contract A: zero 16-construct caps), When `SalsaIncrementalCompilerDatabase` commits typed domain state inside `< 380`-SLOC submodules (`./crates/compile-sysml/src/salsa_db/`), Then declared state attributes hold verified values and trivia-only edits trigger `0` downstream recomputations.

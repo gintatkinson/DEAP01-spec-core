@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #814 |
-| **Title** | User Story 64: validate kani harness spec |
+| **Title** | User Story 64: Validate Kani Harness Spec |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
 | **SysML Interaction** | `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 64: validate kani harness spec
+# User Story 64: Validate Kani Harness Spec
 
 ## User Story
 As a `MultiStageVerificationOrchestrator`, I want to invoke `validate_kani_harness_spec(spec)` on `KaniCbmcProofSynthesizer`, so that SysML v2.0 + KerML 1.0 safety constraints and STPA `UCA-*` / `SC-*` invariants are validated for non-empty `kani::assume(...)` domains and bounded unwind ceilings (`C_VER_06: 1 <= default_kani_unwind_bound <= 64`), lowered into byte-deterministic `outer cfg(kani)` `outer kani::proof` harnesses via `syn` + `proc-macro2` + `quote` + `prettyplease`, and proved `UNSAT` (`C_VER_05: max_kani_counterexamples == 0`) by `cargo kani`.

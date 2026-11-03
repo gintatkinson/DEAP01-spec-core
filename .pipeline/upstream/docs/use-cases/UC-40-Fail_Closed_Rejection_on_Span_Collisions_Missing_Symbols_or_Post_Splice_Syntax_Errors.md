@@ -75,14 +75,14 @@ stateDiagram-v2
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#805** | User Story | [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) |
-| **#807** | User Story | [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) |
+| **#805** | User Story | [User Story 55: Extract Rust Module](../user-stories/US-55-extract_rust_module.md) |
+| **#807** | User Story | [User Story 57: Format Ndjson Line](../user-stories/US-57-format_ndjson_line.md) |
 | **#838** | Feature | [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) |
 | **#837** | Feature | [Feature 39: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] UnifiedRustcJsonDiagnosticEmitter](../features/FEAT-39-UnifiedRustcJsonDiagnosticEmitter.md) |
 
 ### Required User Stories
-- [ ] #805 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (validates symbol presence, pairwise `TextRange` disjointness, and post-splice CST syntax during module extraction)
-- [ ] #807 - [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) (serializes `DEAP-E0801`, `DEAP-E0802`, and `DEAP-E0803` rejections as single-line NDJSON diagnostics)
+- [ ] #805 - [User Story 55: Extract Rust Module](../user-stories/US-55-extract_rust_module.md) (validates symbol presence, pairwise `TextRange` disjointness, and post-splice CST syntax during module extraction)
+- [ ] #807 - [User Story 57: Format Ndjson Line](../user-stories/US-57-format_ndjson_line.md) (serializes `DEAP-E0801`, `DEAP-E0802`, and `DEAP-E0803` rejections as single-line NDJSON diagnostics)
 
 ### Required Features
 - [ ] #838 - [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) (enforces atomic in-memory splice rollback under `Invariant_REQ_0608_SC_02`)

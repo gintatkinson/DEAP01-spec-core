@@ -29,7 +29,7 @@ graph TD
 - `Compiler_CLI_CI_Pipeline`
 
 ## 2. Preconditions
-- Engineering blueprint specification `./.pipeline/upstream/docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md` (`docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md`).
+- Engineering blueprint specification `./.pipeline/upstream/docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md` (`docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md`) modeling **Contract A (100% Normative OMG SysML v2.0 + KerML 1.0 Grammar Coverage -- Zero 16-Construct Caps)** and **Contract B (Official Rust Compiler & `rust-analyzer` Crate Stack -- Zero Hand-Rolled Scanners)**.
 
 ## 3. Trigger
 - `./target/release/verify-baseline check-blueprint docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --dry-run` and `./target/release/ingest-sysml --schema docs/designs/blueprint-05-deterministic-safety-docstring-synthesizer.md --format markdown` are executed.

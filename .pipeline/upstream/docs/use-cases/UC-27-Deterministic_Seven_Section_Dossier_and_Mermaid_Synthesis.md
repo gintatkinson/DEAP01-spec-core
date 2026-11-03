@@ -42,7 +42,7 @@ graph TD
 1. `FivePillarStaticAstAnalyzer` emits a line-exact `AuditFinding` record onto `findingInPort` and `umlSpecInPort`, transitioning `BP_06_Deterministic_Static_5_Pillar_Code_Auditor_and_Defect_Dossier_Synthesizer_Blueprint_LifecycleState` to `SynthesizingDossier`.
 2. `DeterministicDossierSynthesizer` invokes `synthesize_defect_dossier_markdown` (`mandatorySectionCount = 7`, `whysChainDepth = 5`) using `pulldown-cmark`, `pulldown-cmark-to-cmark`, `ra_ap_syntax` typed AST span metadata, Stage-2 `./lints/deap-dylint-mir/` `rustc_middle::mir` (`TyCtxt`) control-flow provenance, and `deap_core::dart_cst` (`logos` + `rowan`) spans.
 3. `DeterministicDossierSynthesizer` synthesizes all 7 canonical dossier sections starting with `## 1. Context and References`, a 5-step causal `Why ...? Because ...` root-cause chain in Section 2, workspace-relative file locators (zero hardcoded OS/user/machine paths and zero Unicode em dashes), and the `## Audit Source` footer.
-4. `MermaidUmlDiagramGenerator` synthesizes a Section 4 Mermaid diagram on `mermaidBlockOutPort` with `forbidSemicolons = true` and `check13bCompliant = true` (or a severity-scoped `N/A --` declaration).
+4. `MermaidUmlDiagramGenerator` synthesizes a Section 4 Mermaid diagram on `mermaidBlockOutPort` with `forbidSemicolons = true` and `check13bCompliant = true` (or a severity-scoped non-applicable rationale declaration).
 5. `DeterministicDossierSynthesizer` emits the complete 7-section Markdown payload via `dossierMarkdownOutPort` across `BP_06_DossierToPublisherGateConnection` to `ClosedLoopDefectPublisherGate.dossierCandidateInPort` and transitions to `Validating12Gates`.
 
 ## 5. Alternate and Exception Flows
@@ -62,7 +62,7 @@ graph TD
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
 | **#727** | User Story | [User Story 38: Parse Rust Cst And Parse Dart Cst](../user-stories/US-38-ParseRustCstAndParseDartCst.md) |
-| **#615** | User Story | [User Story 40: synthesize defect dossier markdown](../user-stories/US-40-synthesize_defect_dossier_markdown.md) |
+| **#615** | User Story | [User Story 40: Synthesize Defect Dossier Markdown](../user-stories/US-40-synthesize_defect_dossier_markdown.md) |
 | **#680** | Feature | [Feature 26: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] ClosedLoopDefectPublisherGate](../features/FEAT-26-ClosedLoopDefectPublisherGate.md) |
 | **#681** | Feature | [Feature 27: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] DeterministicDossierSynthesizer](../features/FEAT-27-DeterministicDossierSynthesizer.md) |
 | **#684** | Feature | [Feature 30: [BP 06 Deterministic Static 5 Pillar Code Auditor and Defect Dossier Synthesizer Blueprint] MermaidUmlDiagramGenerator](../features/FEAT-30-MermaidUmlDiagramGenerator.md) |

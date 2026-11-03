@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #818 |
-| **Title** | User Story 68: parse lossless sysml cst |
+| **Title** | User Story 68: Parse Lossless Sysml Cst |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) |
 | **SysML Interaction** | `BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 68: parse lossless sysml cst
+# User Story 68: Parse Lossless Sysml Cst
 
 ## User Story
 As a `TypedPolyglotIngestionFrontend`, I want to invoke `parse_lossless_sysml_cst()` on `SalsaIncrementalCompilerDatabase`, so that `parse_lossless_sysml_cst(input)` lexes `.sysml` input via `logos` linear-time DFA and constructs a lossless `rowan::GreenNode` Red/Green CST across 100% of normative OMG SysML v2.0 + KerML 1.0 Definition and Usage constructs with zero 16-construct caps, resilient `ErrorNode` recovery, and `MAX_AST_DEPTH = 64` recursion protection.

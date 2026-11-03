@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #802 |
-| **Title** | User Story 52: verify fixed point digest |
+| **Title** | User Story 52: Verify Fixed Point Digest |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint](../epics/EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint.md) |
 | **SysML Interaction** | `BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 52: verify fixed point digest
+# User Story 52: Verify Fixed Point Digest
 
 ## User Story
 As a `SelfHostingModularCodegenCompiler`, I want to invoke `verify_fixed_point_digest()` on `TopologicalLayerDagVerifier`, so that `verify_fixed_point_digest(stage1, stage2)` verifies metacircular bootstrap fixed-point convergence (`SHA-256(Stage 1) == SHA-256(Stage 2)`, `stage_fixed_point_mismatch_files == 0`) across 100% of generated file paths and contents.
@@ -58,8 +58,8 @@ sequenceDiagram
 - [ ] AC-US-52-08: Given violated formal constraint `C_MOD_01 (max_file_lines >= 50 and max_file_lines <= 400)`, When `SelfHostingModularCodegenCompiler` invokes `verify_fixed_point_digest` on `TopologicalLayerDagVerifier`, Then `TopologicalLayerDagVerifier` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic fault diagnostic across the interface binding.
 
 ## Required Features
-- [ ] [Feature 34: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] SelfHostingModularCodegenCompiler](../features/FEAT-34-SelfHostingModularCodegenCompiler.md)
-- [ ] [Feature 35: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] TopologicalLayerDagVerifier](../features/FEAT-35-TopologicalLayerDagVerifier.md)
+- [ ] #832 - [Feature 34: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] SelfHostingModularCodegenCompiler](../features/FEAT-34-SelfHostingModularCodegenCompiler.md)
+- [ ] #833 - [Feature 35: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] TopologicalLayerDagVerifier](../features/FEAT-35-TopologicalLayerDagVerifier.md)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:

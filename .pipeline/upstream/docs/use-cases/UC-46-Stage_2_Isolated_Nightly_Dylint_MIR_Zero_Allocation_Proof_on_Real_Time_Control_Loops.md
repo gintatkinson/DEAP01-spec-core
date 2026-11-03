@@ -77,16 +77,16 @@ stateDiagram-v2
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#810** | User Story | [User Story 60: verify clippy policy](../user-stories/US-60-verify_clippy_policy.md) |
-| **#811** | User Story | [User Story 61: evaluate stage2 dylint mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) |
-| **#812** | User Story | [User Story 62: verify in process cst syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) |
+| **#810** | User Story | [User Story 60: Verify Clippy Policy](../user-stories/US-60-verify_clippy_policy.md) |
+| **#811** | User Story | [User Story 61: Evaluate Stage2 Dylint Mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) |
+| **#812** | User Story | [User Story 62: Verify In Process Cst Syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) |
 | **#839** | Feature | [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) |
 | **#840** | Feature | [Feature 42: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] IsolatedDylintMirAllocationGate](../features/FEAT-42-IsolatedDylintMirAllocationGate.md) |
 
 ### Required User Stories
-- [ ] #810 - [User Story 60: verify clippy policy](../user-stories/US-60-verify_clippy_policy.md) (Supplies verified Stage 1 manifest and total-function preconditions)
-- [ ] #811 - [User Story 61: evaluate stage2 dylint mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Executes transitive `rustc_middle::mir::Body` zero-allocation analysis across `#rt_loop` functions)
-- [ ] #812 - [User Story 62: verify in process cst syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Enforces lossless `ra_ap_syntax` CST validation and `<= 380` exec SLOC per submodule)
+- [ ] #810 - [User Story 60: Verify Clippy Policy](../user-stories/US-60-verify_clippy_policy.md) (Supplies verified Stage 1 manifest and total-function preconditions)
+- [ ] #811 - [User Story 61: Evaluate Stage2 Dylint Mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Executes transitive `rustc_middle::mir::Body` zero-allocation analysis across `#rt_loop` functions)
+- [ ] #812 - [User Story 62: Verify In Process Cst Syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Enforces lossless `ra_ap_syntax` CST validation and `<= 380` exec SLOC per submodule)
 
 ### Required Features
 - [ ] #839 - [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) (Coordinates `Invariant_REQ_0609_SC_02` across the formal verification subsystem)

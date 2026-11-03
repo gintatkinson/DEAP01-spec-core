@@ -38,11 +38,11 @@ Subsystem package for BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Pa
 - [ ] #638 - [Use Case 15: Dogfood Markdown to SysML Ingestion and Baseline Verification](../use-cases/UC-15-Dogfood_Markdown_to_SysML_Ingestion_and_Baseline_Verification.md)
 
 #### Associated User Stories
-- [ ] #577 - [User Story 12: scan all](../user-stories/US-12-scan_all.md)
-- [ ] #579 - [User Story 13: parse package or file](../user-stories/US-13-parse_package_or_file.md)
+- [ ] #577 - [User Story 12: Scan All](../user-stories/US-12-scan_all.md)
+- [ ] #579 - [User Story 13: Parse Package Or File](../user-stories/US-13-parse_package_or_file.md)
 - [ ] #705 - [User Story 14: Parse Type Expr And Parse Transition](../user-stories/US-14-ParseTypeExprAndParseTransition.md)
-- [ ] #582 - [User Story 15: verify bijective ast roundtrip](../user-stories/US-15-verify_bijective_ast_roundtrip.md)
-- [ ] #583 - [User Story 16: ast orig to sysml](../user-stories/US-16-ast_orig_to_sysml.md)
+- [ ] #582 - [User Story 15: Verify Bijective Ast Roundtrip](../user-stories/US-15-verify_bijective_ast_roundtrip.md)
+- [ ] #583 - [User Story 16: Ast Orig To Sysml](../user-stories/US-16-ast_orig_to_sysml.md)
 - [ ] #706 - [User Story 17: Assert Ast Orig Equals Ast Reparsed](../user-stories/US-17-AssertAstOrigEqualsAstReparsed.md)
 
 ## 3. Architecture

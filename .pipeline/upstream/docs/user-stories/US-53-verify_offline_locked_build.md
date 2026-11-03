@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #803 |
-| **Title** | User Story 53: verify offline locked build |
+| **Title** | User Story 53: Verify Offline Locked Build |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics](../epics/EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics.md) |
 | **SysML Interaction** | `BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 53: verify offline locked build
+# User Story 53: Verify Offline Locked Build
 
 ## User Story
 As a `AirGappedCargoLockGovernor`, I want to invoke `verify_offline_locked_build()` on `LosslessRustCstAnalyzer`, so that verify_offline_locked_build(lock_path).

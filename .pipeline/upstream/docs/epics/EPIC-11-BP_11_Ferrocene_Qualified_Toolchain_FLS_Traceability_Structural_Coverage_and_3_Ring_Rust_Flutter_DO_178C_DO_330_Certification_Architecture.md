@@ -39,12 +39,12 @@ Subsystem package for `BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Stru
 - [ ] #794 - [Use Case 65: Cross Platform Execution Submodule Layout Conformance and Twelve Gate Blueprint Verification Gate](../use-cases/UC-65-Cross_Platform_Execution_Submodule_Layout_Conformance_and_Twelve_Gate_Blueprint_Verification_Gate.md)
 
 #### Associated User Stories
-- [ ] #823 - [User Story 73: probe criticalup toolchain](../user-stories/US-73-probe_criticalup_toolchain.md)
-- [ ] #824 - [User Story 74: verify dual toolchain parity](../user-stories/US-74-verify_dual_toolchain_parity.md)
-- [ ] #825 - [User Story 75: synthesize three ring workspace](../user-stories/US-75-synthesize_three_ring_workspace.md)
-- [ ] #826 - [User Story 76: verify fls traceability chain](../user-stories/US-76-verify_fls_traceability_chain.md)
-- [ ] #827 - [User Story 77: verify certified core and table a7 coverage](../user-stories/US-77-verify_certified_core_and_table_a7_coverage.md)
-- [ ] #828 - [User Story 78: verify three ring edge and monitor readback](../user-stories/US-78-verify_three_ring_edge_and_monitor_readback.md)
+- [ ] #823 - [User Story 73: Probe Criticalup Toolchain](../user-stories/US-73-probe_criticalup_toolchain.md)
+- [ ] #824 - [User Story 74: Verify Dual Toolchain Parity](../user-stories/US-74-verify_dual_toolchain_parity.md)
+- [ ] #825 - [User Story 75: Synthesize Three Ring Workspace](../user-stories/US-75-synthesize_three_ring_workspace.md)
+- [ ] #826 - [User Story 76: Verify Fls Traceability Chain](../user-stories/US-76-verify_fls_traceability_chain.md)
+- [ ] #827 - [User Story 77: Verify Certified Core And Table A7 Coverage](../user-stories/US-77-verify_certified_core_and_table_a7_coverage.md)
+- [ ] #828 - [User Story 78: Verify Three Ring Edge And Monitor Readback](../user-stories/US-78-verify_three_ring_edge_and_monitor_readback.md)
 
 ## 3. Architecture
 Classifiers: `CertifiedCoreSubsetAndCoverageGate` (ports: `in elf_and_profdata_in : String`, `out table_a7_evidence_out : String`, `out coverage_diag_out : String`); `DualModeFerroceneToolchainGate` (ports: `in toolchain_manifests_in : String`, `out qualification_dossier_out : String`, `out toolchain_diag_out : String`); `FlsParagraphTraceabilitySynthesizer` (ports: `in lowered_module_graph_in : String`, `out fls_annotated_units_out : String`, `out fls_diag_out : String`); `ThreeRingAssurancePartitionCompiler` (ports: `in sysml_assurance_ast_in : String`, `out partitioned_workspace_out : String`, `out partition_diag_out : String`). Package port definitions: `BP_11_FerroceneAssurancePortDef`. Structural connectors: `BP_11_PartitionToFlsTraceabilityConnection` (`ThreeRingAssurancePartitionCompiler.ThreeRingAssurancePartitionCompiler.partitioned_workspace_out -> FlsParagraphTraceabilitySynthesizer.FlsParagraphTraceabilitySynthesizer.lowered_module_graph_in`).

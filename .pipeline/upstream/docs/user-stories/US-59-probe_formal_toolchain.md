@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #809 |
-| **Title** | User Story 59: probe formal toolchain |
+| **Title** | User Story 59: Probe Formal Toolchain |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
 | **SysML Interaction** | `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 59: probe formal toolchain
+# User Story 59: Probe Formal Toolchain
 
 ## User Story
 As a `MultiStageVerificationOrchestrator`, I want to invoke `probe_formal_toolchain(config)` across `MultiStageVerificationOrchestrator` and `StableClippyTotalFunctionGate`, so that cross-platform formal verification drivers (`cargo-clippy`, `cargo-dylint`, `cargo-miri`, `cargo-kani`, and `dart`) are discovered dynamically via runtime `PATH`, `CARGO_HOME`, and `RUSTUP_HOME` using `std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}` and `camino::Utf8Path` without hardcoded host paths before transitioning to `RunningStage1Clippy` or failing closed in `--require-formal-toolchains` qualification mode.

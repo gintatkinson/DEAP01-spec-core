@@ -61,14 +61,14 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#823** | User Story | [User Story 73: probe criticalup toolchain](../user-stories/US-73-probe_criticalup_toolchain.md) |
-| **#824** | User Story | [User Story 74: verify dual toolchain parity](../user-stories/US-74-verify_dual_toolchain_parity.md) |
+| **#823** | User Story | [User Story 73: Probe Criticalup Toolchain](../user-stories/US-73-probe_criticalup_toolchain.md) |
+| **#824** | User Story | [User Story 74: Verify Dual Toolchain Parity](../user-stories/US-74-verify_dual_toolchain_parity.md) |
 | **#848** | Feature | [Feature 50: [BP 11 Ferrocene Qualified Toolchain FLS Traceability Structural Coverage and 3 Ring Rust_Flutter DO 178 C DO 330 Certification Architecture] CertifiedCoreSubsetAndCoverageGate](../features/FEAT-50-CertifiedCoreSubsetAndCoverageGate.md) |
 | **#849** | Feature | [Feature 51: [BP 11 Ferrocene Qualified Toolchain FLS Traceability Structural Coverage and 3 Ring Rust_Flutter DO 178 C DO 330 Certification Architecture] DualModeFerroceneToolchainGate](../features/FEAT-51-DualModeFerroceneToolchainGate.md) |
 
 ### Required User Stories
-- [ ] #823 - [User Story 73: probe criticalup toolchain](../user-stories/US-73-probe_criticalup_toolchain.md)
-- [ ] #824 - [User Story 74: verify dual toolchain parity](../user-stories/US-74-verify_dual_toolchain_parity.md)
+- [ ] #823 - [User Story 73: Probe Criticalup Toolchain](../user-stories/US-73-probe_criticalup_toolchain.md)
+- [ ] #824 - [User Story 74: Verify Dual Toolchain Parity](../user-stories/US-74-verify_dual_toolchain_parity.md)
 
 ### Required Features
 - [ ] #848 - [Feature 50: [BP 11 Ferrocene Qualified Toolchain FLS Traceability Structural Coverage and 3 Ring Rust_Flutter DO 178 C DO 330 Certification Architecture] CertifiedCoreSubsetAndCoverageGate](../features/FEAT-50-CertifiedCoreSubsetAndCoverageGate.md)

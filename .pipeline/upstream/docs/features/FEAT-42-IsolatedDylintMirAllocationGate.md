@@ -140,8 +140,8 @@ Classifier `IsolatedDylintMirAllocationGate` binds external and behavioral inter
 - [ ] #780 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Enforces `< 380`-SLOC submodule modularity via `verify_in_process_cst_syntax` and cross-platform `dylint` discovery)
 
 #### Associated User Stories
-- [ ] #811 - [User Story 61: evaluate stage2 dylint mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Executes `evaluate_stage2_dylint_mir(input)` over MIR call/drop graphs and `REQ-*` digest sets)
-- [ ] #812 - [User Story 62: verify in process cst syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Executes `verify_in_process_cst_syntax(module_path, max_exec_sloc)` via lossless `ra_ap_syntax`)
+- [ ] #811 - [User Story 61: Evaluate Stage2 Dylint Mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Executes `evaluate_stage2_dylint_mir(input)` over MIR call/drop graphs and `REQ-*` digest sets)
+- [ ] #812 - [User Story 62: Verify In Process Cst Syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Executes `verify_in_process_cst_syntax(module_path, max_exec_sloc)` via lossless `ra_ap_syntax`)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `IsolatedDylintMirAllocationGate` initialization inputs for `max_rt_heap_allocations` (`Integer`), `max_unverified_req_links` (`Integer`), `isolated_nightly_workspace` (`Boolean`), `plugin_toolchain_channel` (`String`) satisfying `C_VER_03` and `C_VER_07`, When `IsolatedDylintMirAllocationGate` commits typed domain state, Then declared state attributes hold verified values and `./lints/deap-dylint-mir/` remains isolated from the root stable `Cargo.toml`.

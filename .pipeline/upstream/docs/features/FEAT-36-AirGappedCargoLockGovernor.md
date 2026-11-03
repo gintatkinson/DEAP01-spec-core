@@ -128,12 +128,12 @@ Classifier `AirGappedCargoLockGovernor` binds external and behavioral interfaces
 - [ ] #773 - [Use Case 44: Air Gapped Offline Cargo Lock Reproducibility and Twelve Gate Blueprint Conformance](../use-cases/UC-44-Air_Gapped_Offline_Cargo_Lock_Reproducibility_and_Twelve_Gate_Blueprint_Conformance.md) (directly realizes air-gapped `--offline --locked` `Cargo.lock` verification and 12-gate blueprint conformance on `AirGappedCargoLockGovernor`)
 
 #### Associated User Stories
-- [ ] #803 - [User Story 53: verify offline locked build](../user-stories/US-53-verify_offline_locked_build.md) (invokes `verify_offline_locked_build(lock_path)` on `AirGappedCargoLockGovernor` via `cargo-lock` and `cargo_metadata`)
-- [ ] #804 - [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) (enumerates `BTreeMap`-ordered `RustItemInventory` via `ra_ap_syntax` and `rowan`)
-- [ ] #805 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (extracts submodules atomically via `ra_ap_text_edit` and rewrites Check 37 paths via `pulldown-cmark`)
-- [ ] #806 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (verifies Stage-1/Stage-2 SHA-256 fixed-point parity via `syn`, `quote`, and `prettyplease`)
-- [ ] #807 - [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) (serializes single-line `rustc`-compatible NDJSON diagnostics via `ra_ap_line_index`)
-- [ ] #808 - [User Story 58: analyze metrics](../user-stories/US-58-analyze_metrics.md) (evaluates DEAP v2.0 AST metrics `C_CST_01..C_CST_06` via `ra_ap_syntax`)
+- [ ] #803 - [User Story 53: Verify Offline Locked Build](../user-stories/US-53-verify_offline_locked_build.md) (invokes `verify_offline_locked_build(lock_path)` on `AirGappedCargoLockGovernor` via `cargo-lock` and `cargo_metadata`)
+- [ ] #804 - [User Story 54: List Rust Items](../user-stories/US-54-list_rust_items.md) (enumerates `BTreeMap`-ordered `RustItemInventory` via `ra_ap_syntax` and `rowan`)
+- [ ] #805 - [User Story 55: Extract Rust Module](../user-stories/US-55-extract_rust_module.md) (extracts submodules atomically via `ra_ap_text_edit` and rewrites Check 37 paths via `pulldown-cmark`)
+- [ ] #806 - [User Story 56: Verify Stage Fixed Point](../user-stories/US-56-verify_stage_fixed_point.md) (verifies Stage-1/Stage-2 SHA-256 fixed-point parity via `syn`, `quote`, and `prettyplease`)
+- [ ] #807 - [User Story 57: Format Ndjson Line](../user-stories/US-57-format_ndjson_line.md) (serializes single-line `rustc`-compatible NDJSON diagnostics via `ra_ap_line_index`)
+- [ ] #808 - [User Story 58: Analyze Metrics](../user-stories/US-58-analyze_metrics.md) (evaluates DEAP v2.0 AST metrics `C_CST_01..C_CST_06` via `ra_ap_syntax`)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `AirGappedCargoLockGovernor` inputs satisfying `Invariant_REQ_0608_SC_01` [Req `REQ-0608 (REQ_0608_BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics)`], When `AirGappedCargoLockGovernor` evaluates invariant `Invariant_REQ_0608_SC_01`, Then the invariant holds and verified state is committed.

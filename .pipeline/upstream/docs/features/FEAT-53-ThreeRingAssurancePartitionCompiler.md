@@ -140,12 +140,12 @@ Classifier `ThreeRingAssurancePartitionCompiler` binds external and behavioral i
 - [ ] #793 - [Use Case 64: Ring 1 Challenge Response Command Interlock and Telemetry Frame Digest Readback Safety Monitor Against Ring 3 Faults](../use-cases/UC-64-Ring_1_Challenge_Response_Command_Interlock_and_TelemetryFrame_Digest_Readback_SafetyMonitor_Against_Ring_3_Faults.md)
 
 #### Associated User Stories
-- [ ] #823 - [User Story 73: probe criticalup toolchain](../user-stories/US-73-probe_criticalup_toolchain.md)
-- [ ] #824 - [User Story 74: verify dual toolchain parity](../user-stories/US-74-verify_dual_toolchain_parity.md)
-- [ ] #825 - [User Story 75: synthesize three ring workspace](../user-stories/US-75-synthesize_three_ring_workspace.md)
-- [ ] #826 - [User Story 76: verify fls traceability chain](../user-stories/US-76-verify_fls_traceability_chain.md)
-- [ ] #827 - [User Story 77: verify certified core and table a7 coverage](../user-stories/US-77-verify_certified_core_and_table_a7_coverage.md)
-- [ ] #828 - [User Story 78: verify three ring edge and monitor readback](../user-stories/US-78-verify_three_ring_edge_and_monitor_readback.md)
+- [ ] #823 - [User Story 73: Probe Criticalup Toolchain](../user-stories/US-73-probe_criticalup_toolchain.md)
+- [ ] #824 - [User Story 74: Verify Dual Toolchain Parity](../user-stories/US-74-verify_dual_toolchain_parity.md)
+- [ ] #825 - [User Story 75: Synthesize Three Ring Workspace](../user-stories/US-75-synthesize_three_ring_workspace.md)
+- [ ] #826 - [User Story 76: Verify Fls Traceability Chain](../user-stories/US-76-verify_fls_traceability_chain.md)
+- [ ] #827 - [User Story 77: Verify Certified Core And Table A7 Coverage](../user-stories/US-77-verify_certified_core_and_table_a7_coverage.md)
+- [ ] #828 - [User Story 78: Verify Three Ring Edge And Monitor Readback](../user-stories/US-78-verify_three_ring_edge_and_monitor_readback.md)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `ThreeRingAssurancePartitionCompiler` initialization inputs for `assurance_ring_count` (`Integer`), `max_ring1_heap_allocations` (`Integer`), `max_unguarded_ffi_entrypoints` (`Integer`), `enable_ring1_safety_monitor` (`Boolean`) satisfying `C_CERT_06` (`assurance_ring_count == 3`, `max_ring1_heap_allocations == 0`, `max_unguarded_ffi_entrypoints == 0`, `enable_ring1_safety_monitor == true`) and `Invariant_REQ_0611_SC_04`, When `ThreeRingAssurancePartitionCompiler` synthesizes the 3-Ring DAL-A..E `Rust_Flutter` workspace (`safety_kernel/`, `ffi_guard_bridge/`, `app_flutter/`) and commits typed domain state, Then declared state attributes hold verified values with strict one-way ring dependency isolation.

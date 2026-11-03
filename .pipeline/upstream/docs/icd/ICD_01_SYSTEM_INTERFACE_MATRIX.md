@@ -217,6 +217,14 @@ flowchart TD
 | `PORT-BP07-CODEGEN_DIAG_OUT` | `SelfHostingModularCodegenCompiler` | `diagnostic_out` | OUT | TelemetryPort | 1 | AsyncEvent |
 | `PORT-BP07-DEP_EDGES_IN` | `TopologicalLayerDagVerifier` | `dependency_edges_in` | IN | DataPort | 1 | RealTimeSync |
 | `PORT-BP07-TOPO_ORDER_OUT` | `TopologicalLayerDagVerifier` | `topological_order_out` | OUT | DataPort | 1 | RealTimeSync |
+| `PORT-BP07-SCHEMA_AST_DEF` | `ModularCodegen::lowering` | `SchemaPackageAstPort` | IN | DataPort | 1 | RealTimeSync |
+| `PORT-BP07-VERIFIED_GRAPH_DEF` | `ModularCodegen::lowering` | `VerifiedModuleGraphPort` | OUT | DataPort | 1 | RealTimeSync |
+| `PORT-BP07-RUST_EMIT_DEF` | `ModularCodegen::emitters` | `ModularRustEmitPort` | OUT | DataPort | 1 | RealTimeSync |
+| `PORT-BP07-FLUTTER_EMIT_DEF` | `ModularCodegen::emitters` | `ModularFlutterEmitPort` | OUT | DataPort | 1 | RealTimeSync |
+| `PORT-BP07-MOD_SCHEMA_IN` | `FourLevelLoweringEngineSpec` | `schema_in` | IN | SchemaPackageAstPort | 1 | RealTimeSync |
+| `PORT-BP07-MOD_GRAPH_OUT` | `FourLevelLoweringEngineSpec` | `graph_out` | OUT | VerifiedModuleGraphPort | 1 | RealTimeSync |
+| `PORT-BP07-MOD_RUST_OUT` | `ModularEmitterSuiteSpec` | `rust_tree_out` | OUT | ModularRustEmitPort | 1 | RealTimeSync |
+| `PORT-BP07-MOD_FLUTTER_OUT` | `ModularEmitterSuiteSpec` | `flutter_tree_out` | OUT | ModularFlutterEmitPort | 1 | RealTimeSync |
 | `PORT-BP08-RUST_CST_DEF` | `BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics` | `BP_08_LosslessRustCstPortDef` | INOUT | DataPort | 1 | RealTimeSync |
 | `PORT-BP08-LOCK_IN` | `AirGappedCargoLockGovernor` | `manifest_lock_in` | IN | DataPort | 1 | RealTimeSync |
 | `PORT-BP08-LOCK_OUT` | `AirGappedCargoLockGovernor` | `lock_receipt_out` | OUT | TelemetryPort | 1 | RealTimeSync |

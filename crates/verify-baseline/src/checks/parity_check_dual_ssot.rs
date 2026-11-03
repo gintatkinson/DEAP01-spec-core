@@ -149,68 +149,49 @@ impl ScopedAstDefs {
         let mut defs = Self::default();
         for (pkg, body) in bodies {
             for p in parse_part_defs(body) {
-                defs.parts
-                    .entry(Self::qualify(pkg, &p.name))
-                    .or_default()
-                    .push(p);
+                let v = defs.parts.entry(Self::qualify(pkg, &p.name)).or_default();
+                if !v.contains(&p) { v.push(p); }
             }
             for p in parse_port_defs(body) {
-                defs.ports
-                    .entry(Self::qualify(pkg, &p.name))
-                    .or_default()
-                    .push(p);
+                let v = defs.ports.entry(Self::qualify(pkg, &p.name)).or_default();
+                if !v.contains(&p) { v.push(p); }
             }
             for a in parse_action_defs(body) {
-                defs.actions
-                    .entry(Self::qualify(pkg, &a.name))
-                    .or_default()
-                    .push(a);
+                let v = defs.actions.entry(Self::qualify(pkg, &a.name)).or_default();
+                if !v.contains(&a) { v.push(a); }
             }
             for r in parse_requirement_defs(body) {
-                defs.reqs
-                    .entry(Self::qualify(pkg, &r.name))
-                    .or_default()
-                    .push(r);
+                let v = defs.reqs.entry(Self::qualify(pkg, &r.name)).or_default();
+                if !v.contains(&r) { v.push(r); }
             }
             for c in parse_constraint_defs(body) {
-                defs.constraints
-                    .entry(Self::qualify(pkg, &c.name))
-                    .or_default()
-                    .push(c);
+                let v = defs.constraints.entry(Self::qualify(pkg, &c.name)).or_default();
+                if !v.contains(&c) { v.push(c); }
             }
             for s in parse_state_defs(body) {
-                defs.states
-                    .entry(Self::qualify(pkg, &s.name))
-                    .or_default()
-                    .push(s);
+                let v = defs.states.entry(Self::qualify(pkg, &s.name)).or_default();
+                if !v.contains(&s) { v.push(s); }
             }
             for c in parse_calc_defs(body) {
-                defs.calcs
-                    .entry(Self::qualify(pkg, &c.name))
-                    .or_default()
-                    .push(c);
+                let v = defs.calcs.entry(Self::qualify(pkg, &c.name)).or_default();
+                if !v.contains(&c) { v.push(c); }
             }
             for c in parse_connection_defs(body) {
-                defs.conns
-                    .entry(Self::qualify(pkg, &c.name))
-                    .or_default()
-                    .push(c);
+                let v = defs.conns.entry(Self::qualify(pkg, &c.name)).or_default();
+                if !v.contains(&c) { v.push(c); }
             }
             for t in parse_test_case_defs(body) {
-                defs.tests
-                    .entry(Self::qualify(pkg, &t.name))
-                    .or_default()
-                    .push(t);
+                let v = defs.tests.entry(Self::qualify(pkg, &t.name)).or_default();
+                if !v.contains(&t) { v.push(t); }
             }
             for a in parse_attribute_defs(body) {
-                defs.attrs
-                    .entry(Self::qualify(pkg, &a.name))
-                    .or_default()
-                    .push(a);
+                let v = defs.attrs.entry(Self::qualify(pkg, &a.name)).or_default();
+                if !v.contains(&a) { v.push(a); }
             }
             for (uc_name, uc_body) in parse_use_case_defs(body) {
-                let qual = Self::qualify(pkg, &uc_name);
-                defs.use_cases.entry(qual).or_default().push((uc_name, uc_body));
+                let v = defs.use_cases.entry(Self::qualify(pkg, &uc_name)).or_default();
+                let item = (uc_name, uc_body);
+                if !v.contains(&item) { v.push(item); }
             }
         }
         defs

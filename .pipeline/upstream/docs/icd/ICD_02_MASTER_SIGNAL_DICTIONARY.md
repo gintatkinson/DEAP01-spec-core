@@ -166,6 +166,10 @@ All signal producers and consumers across `BP-01..11` execute on the official Ru
 | `SIG-BP11-129` | `SysmlAssuranceAstInSignal` | `PORT-BP09-UNIFIED_NDJSON_OUT` | `PORT-BP11-ASSURANCE_AST_IN` | String | dimensionless | [1, 1048576] bytes | Aperiodic [2, 30] ms | `"MISSING_DAL_METADATA"` | `schema/model.sysml#L2872` |
 | `SIG-BP11-130` | `PartitionedWorkspaceOutSignal` | `PORT-BP11-PART_OUT` | `PORT-BP11-MOD_GRAPH_IN` | String | dimensionless | [1, 2097152] bytes | Aperiodic [2, 30] ms | `"RING1_FORBID_VIOLATION"` | `schema/model.sysml#L2876` |
 | `SIG-BP11-131` | `PartitionDiagnosticOutSignal` | `PORT-BP11-PART_DIAG_OUT` | `PORT-BP08-FINDING_IN` | String | dimensionless | [0, 262144] bytes | Aperiodic [2, 30] ms | `"UPWARD_DAL_CALL_DETECTED"` | `schema/model.sysml#L2880` |
+| `SIG-BP07-132` | `SchemaPackageAstPortFlow` | `PORT-BP07-SCHEMA_AST_DEF` | `PORT-BP07-MOD_SCHEMA_IN` | String | dimensionless | [1, 2097152] bytes | Aperiodic [5, 40] ms | `"INVALID_SCHEMA_PACKAGE_AST"` | `schema/modular_codegen.sysml#L83` |
+| `SIG-BP07-133` | `VerifiedModuleGraphPortFlow` | `PORT-BP07-MOD_GRAPH_OUT` | `PORT-BP07-VERIFIED_GRAPH_DEF` | String | dimensionless | [1, 2097152] bytes | Aperiodic [5, 40] ms | `"UNVERIFIED_MODULE_GRAPH"` | `schema/modular_codegen.sysml#L88` |
+| `SIG-BP07-134` | `ModularRustEmitPortFlow` | `PORT-BP07-MOD_RUST_OUT` | `PORT-BP07-RUST_EMIT_DEF` | String | dimensionless | [64, 65536] bytes | Aperiodic [5, 40] ms | `"FIXED_POINT_DRIFT_E0705"` | `schema/modular_codegen.sysml#L159` |
+| `SIG-BP07-135` | `ModularFlutterEmitPortFlow` | `PORT-BP07-MOD_FLUTTER_OUT` | `PORT-BP07-FLUTTER_EMIT_DEF` | String | dimensionless | [64, 65536] bytes | Aperiodic [5, 40] ms | `"FLUTTER_BARREL_CAP_ERR"` | `schema/modular_codegen.sysml#L164` |
 
 ## 3. Mathematical Formulations & Safety Invariants
 

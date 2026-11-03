@@ -78,14 +78,14 @@ stateDiagram-v2
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#813** | User Story | [User Story 63: guard inbound frb f64](../user-stories/US-63-guard_inbound_frb_f64.md) |
-| **#815** | User Story | [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) |
+| **#813** | User Story | [User Story 63: Guard Inbound Frb F64](../user-stories/US-63-guard_inbound_frb_f64.md) |
+| **#815** | User Story | [User Story 65: Evaluate Four Stage Gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) |
 | **#839** | Feature | [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) |
 | **#843** | Feature | [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) |
 
 ### Required User Stories
-- [ ] #813 - [User Story 63: guard inbound frb f64](../user-stories/US-63-guard_inbound_frb_f64.md) (Executes Stage 3 FFI boundary guard and Miri `-Zmiri-tree-borrows` verification)
-- [ ] #815 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Consolidates Stage 3 Miri receipts and short-circuits Stage 4 on `DEAP-E0903`)
+- [ ] #813 - [User Story 63: Guard Inbound Frb F64](../user-stories/US-63-guard_inbound_frb_f64.md) (Executes Stage 3 FFI boundary guard and Miri `-Zmiri-tree-borrows` verification)
+- [ ] #815 - [User Story 65: Evaluate Four Stage Gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Consolidates Stage 3 Miri receipts and short-circuits Stage 4 on `DEAP-E0903`)
 
 ### Required Features
 - [ ] #839 - [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) (Implements Stage 3 Miri `-Zmiri-tree-borrows` abstract-machine UB verification)

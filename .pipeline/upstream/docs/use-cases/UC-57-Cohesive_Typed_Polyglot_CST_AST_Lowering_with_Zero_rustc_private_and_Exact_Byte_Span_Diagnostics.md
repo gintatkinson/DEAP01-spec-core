@@ -64,8 +64,8 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#816** | User Story | [User Story 66: resolve polyglot backend](../user-stories/US-66-resolve_polyglot_backend.md) |
-| **#822** | User Story | [User Story 72: render ariadne diagnostic](../user-stories/US-72-render_ariadne_diagnostic.md) |
+| **#816** | User Story | [User Story 66: Resolve Polyglot Backend](../user-stories/US-66-resolve_polyglot_backend.md) |
+| **#822** | User Story | [User Story 72: Render Ariadne Diagnostic](../user-stories/US-72-render_ariadne_diagnostic.md) |
 | **#847** | Feature | [Feature 49: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] TypedPolyglotIngestionFrontend](../features/FEAT-49-TypedPolyglotIngestionFrontend.md) |
 | **#844** | Feature | [Feature 46: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] FormattingPreservingSyncSplicer](../features/FEAT-46-FormattingPreservingSyncSplicer.md) |
 

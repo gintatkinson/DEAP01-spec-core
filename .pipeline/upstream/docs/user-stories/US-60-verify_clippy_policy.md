@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #810 |
-| **Title** | User Story 60: verify clippy policy |
+| **Title** | User Story 60: Verify Clippy Policy |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
 | **SysML Interaction** | `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 60: verify clippy policy
+# User Story 60: Verify Clippy Policy
 
 ## User Story
 As a `MultiStageVerificationOrchestrator`, I want to invoke `verify_clippy_policy(policy, manifest_lints)` on `StableClippyTotalFunctionGate`, so that workspace `Cargo.toml` (`[workspace.lints.clippy]`) and root `clippy.toml` (`too-many-lines-threshold <= 80`, `too-many-arguments-threshold <= 5`, `disallowed-types`) are verified via `cargo_metadata` and `toml_edit` and `cargo clippy --workspace --all-targets --message-format=json` enforces all 14 total-function, arithmetic, cast, unsafe-doc, and complexity lints before promoting to Stage 2.

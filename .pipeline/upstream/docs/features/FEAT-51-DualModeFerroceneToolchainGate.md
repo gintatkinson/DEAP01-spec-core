@@ -150,12 +150,12 @@ Classifier `DualModeFerroceneToolchainGate` binds external and behavioral interf
 - [ ] #794 - [Use Case 65: Cross Platform Execution Submodule Layout Conformance and Twelve Gate Blueprint Verification Gate](../use-cases/UC-65-Cross_Platform_Execution_Submodule_Layout_Conformance_and_Twelve_Gate_Blueprint_Verification_Gate.md)
 
 #### Associated User Stories
-- [ ] #823 - [User Story 73: probe criticalup toolchain](../user-stories/US-73-probe_criticalup_toolchain.md)
-- [ ] #824 - [User Story 74: verify dual toolchain parity](../user-stories/US-74-verify_dual_toolchain_parity.md)
-- [ ] #825 - [User Story 75: synthesize three ring workspace](../user-stories/US-75-synthesize_three_ring_workspace.md)
-- [ ] #826 - [User Story 76: verify fls traceability chain](../user-stories/US-76-verify_fls_traceability_chain.md)
-- [ ] #827 - [User Story 77: verify certified core and table a7 coverage](../user-stories/US-77-verify_certified_core_and_table_a7_coverage.md)
-- [ ] #828 - [User Story 78: verify three ring edge and monitor readback](../user-stories/US-78-verify_three_ring_edge_and_monitor_readback.md)
+- [ ] #823 - [User Story 73: Probe Criticalup Toolchain](../user-stories/US-73-probe_criticalup_toolchain.md)
+- [ ] #824 - [User Story 74: Verify Dual Toolchain Parity](../user-stories/US-74-verify_dual_toolchain_parity.md)
+- [ ] #825 - [User Story 75: Synthesize Three Ring Workspace](../user-stories/US-75-synthesize_three_ring_workspace.md)
+- [ ] #826 - [User Story 76: Verify Fls Traceability Chain](../user-stories/US-76-verify_fls_traceability_chain.md)
+- [ ] #827 - [User Story 77: Verify Certified Core And Table A7 Coverage](../user-stories/US-77-verify_certified_core_and_table_a7_coverage.md)
+- [ ] #828 - [User Story 78: Verify Three Ring Edge And Monitor Readback](../user-stories/US-78-verify_three_ring_edge_and_monitor_readback.md)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `DualModeFerroceneToolchainGate` initialization inputs for `max_toolchain_version_drift` (`Integer`), `stage_fixed_point_mismatch_files` (`Integer`), `reproducible_ferrocene_lock` (`Boolean`), `require_formal_toolchains` (`Boolean`), `deterministic_uuid` (`String`) satisfying `C_CERT_01`, `C_CERT_02`, `C_CERT_07`, and `C_CERT_08` (`Invariant_REQ_0611_SC_01`, `Invariant_REQ_0611_SC_05`), When `DualModeFerroceneToolchainGate` commits typed domain state via `toml_edit` and `cargo-platform`, Then declared state attributes hold verified values with zero semantic version or target-triple drift.

@@ -78,9 +78,9 @@ stateDiagram-v2
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#809** | User Story | [User Story 59: probe formal toolchain](../user-stories/US-59-probe_formal_toolchain.md) |
-| **#812** | User Story | [User Story 62: verify in process cst syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) |
-| **#815** | User Story | [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) |
+| **#809** | User Story | [User Story 59: Probe Formal Toolchain](../user-stories/US-59-probe_formal_toolchain.md) |
+| **#812** | User Story | [User Story 62: Verify In Process Cst Syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) |
+| **#815** | User Story | [User Story 65: Evaluate Four Stage Gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) |
 | **#839** | Feature | [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) |
 | **#840** | Feature | [Feature 42: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] IsolatedDylintMirAllocationGate](../features/FEAT-42-IsolatedDylintMirAllocationGate.md) |
 | **#841** | Feature | [Feature 43: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] KaniCbmcProofSynthesizer](../features/FEAT-43-KaniCbmcProofSynthesizer.md) |
@@ -88,9 +88,9 @@ stateDiagram-v2
 | **#843** | Feature | [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) |
 
 ### Required User Stories
-- [ ] #809 - [User Story 59: probe formal toolchain](../user-stories/US-59-probe_formal_toolchain.md) (Probes cross-platform formal verification drivers dynamically via runtime `PATH`)
-- [ ] #812 - [User Story 62: verify in process cst syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Enforces lossless `ra_ap_syntax` CST parse integrity and `<= 380` exec SLOC submodule ceilings)
-- [ ] #815 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Orchestrates all 4 stages with fail-closed short-circuiting and Stage 5 Ferrocene readiness)
+- [ ] #809 - [User Story 59: Probe Formal Toolchain](../user-stories/US-59-probe_formal_toolchain.md) (Probes cross-platform formal verification drivers dynamically via runtime `PATH`)
+- [ ] #812 - [User Story 62: Verify In Process Cst Syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Enforces lossless `ra_ap_syntax` CST parse integrity and `<= 380` exec SLOC submodule ceilings)
+- [ ] #815 - [User Story 65: Evaluate Four Stage Gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Orchestrates all 4 stages with fail-closed short-circuiting and Stage 5 Ferrocene readiness)
 
 ### Required Features
 - [ ] #839 - [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) (Enforces Stage 3 FFI boundary guards and Miri `-Zmiri-tree-borrows`)

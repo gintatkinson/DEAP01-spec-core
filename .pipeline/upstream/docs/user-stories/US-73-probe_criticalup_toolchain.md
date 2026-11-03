@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #823 |
-| **Title** | User Story 73: probe criticalup toolchain |
+| **Title** | User Story 73: Probe Criticalup Toolchain |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-11-BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture](../epics/EPIC-11-BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture.md) |
 | **SysML Interaction** | `BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 73: probe criticalup toolchain
+# User Story 73: Probe Criticalup Toolchain
 
 ## User Story
 As a `DualModeFerroceneToolchainGate`, I want to invoke `probe_criticalup_toolchain()` on `ThreeRingAssurancePartitionCompiler`, so that `probe_criticalup_toolchain(config)` dynamically discovers qualified Ferrocene `criticalup` and `rustc` driver binaries across macOS, Linux, and Windows via runtime `PATH` probing (`std::env::consts::{DLL_PREFIX, DLL_SUFFIX, EXE_SUFFIX}`, `camino::Utf8Path`, `min_toolchain_discovery_probes` in `1..3`, `C_CERT_08`) with zero hardcoded OS/user/machine paths and zero hand-rolled scanners.

@@ -141,8 +141,8 @@ Classifier `KaniCbmcProofSynthesizer` binds external and behavioral interfaces a
 - [ ] #780 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Enforces `< 380`-SLOC submodule modularity in `./crates/compile-sysml/src/kani_synth/` and cross-platform `cargo-kani` runtime `PATH` discovery)
 
 #### Associated User Stories
-- [ ] #814 - [User Story 64: validate kani harness spec](../user-stories/US-64-validate_kani_harness_spec.md) (Executes `validate_kani_harness_spec(spec)` and synthesizes `outer kani::proof` harnesses via `syn` + `proc-macro2` + `quote` + `prettyplease`)
-- [ ] #815 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Verifies Stage 4 CBMC `UNSAT` proof receipts in the consolidated gatekeeper evaluation)
+- [ ] #814 - [User Story 64: Validate Kani Harness Spec](../user-stories/US-64-validate_kani_harness_spec.md) (Executes `validate_kani_harness_spec(spec)` and synthesizes `outer kani::proof` harnesses via `syn` + `proc-macro2` + `quote` + `prettyplease`)
+- [ ] #815 - [User Story 65: Evaluate Four Stage Gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Verifies Stage 4 CBMC `UNSAT` proof receipts in the consolidated gatekeeper evaluation)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `KaniCbmcProofSynthesizer` initialization inputs for `max_kani_counterexamples` (`Integer`), `default_kani_unwind_bound` (`Integer`), `structured_prettyplease_codegen` (`Boolean`) satisfying `C_VER_05`, `C_VER_06`, and `C_VER_07`, When `KaniCbmcProofSynthesizer` commits typed domain state, Then declared state attributes hold verified values and `outer cfg(kani)` `outer kani::proof` modules are formatted via `syn` + `proc-macro2` + `quote` + `prettyplease`.

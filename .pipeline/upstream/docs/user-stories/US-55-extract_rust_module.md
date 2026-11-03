@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #805 |
-| **Title** | User Story 55: extract rust module |
+| **Title** | User Story 55: Extract Rust Module |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics](../epics/EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics.md) |
 | **SysML Interaction** | `BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 55: extract rust module
+# User Story 55: Extract Rust Module
 
 ## User Story
 As a `AirGappedCargoLockGovernor`, I want to invoke `extract_rust_module()` on `LosslessRustCstAnalyzer`, so that extract_rust_module(from_path, to_path, items_csv).

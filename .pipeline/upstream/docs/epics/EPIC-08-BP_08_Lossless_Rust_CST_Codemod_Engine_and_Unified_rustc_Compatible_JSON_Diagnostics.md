@@ -49,12 +49,12 @@ All model ingestion, CST/AST querying, codemod projection, and diagnostic tracea
 - [ ] #773 - [Use Case 44: Air Gapped Offline Cargo Lock Reproducibility and Twelve Gate Blueprint Conformance](../use-cases/UC-44-Air_Gapped_Offline_Cargo_Lock_Reproducibility_and_Twelve_Gate_Blueprint_Conformance.md) (verifies air-gapped `--offline --locked` dependency governance via `cargo-lock` and `cargo_metadata` alongside 12-gate blueprint verification)
 
 #### Associated User Stories
-- [ ] #803 - [User Story 53: verify offline locked build](../user-stories/US-53-verify_offline_locked_build.md) (realizes `verify_offline_locked_build(lock_path)` on `AirGappedCargoLockGovernor` using `cargo-lock`, `cargo_metadata`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit`)
-- [ ] #804 - [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) (realizes `list_rust_items(path)` on `LosslessRustCstAnalyzer` using `ra_ap_syntax`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `rowan`, `camino`, and `ignore`)
-- [ ] #805 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (realizes `extract_rust_module(from_path, to_path, items_csv)` on `ZeroTokenRustSpanCodemodEngine` using `ra_ap_syntax`, `ra_ap_text_edit`, `rowan`, `pulldown-cmark`, and `pulldown-cmark-to-cmark`)
-- [ ] #806 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (realizes `verify_stage_fixed_point(stage1_digest)` on `StructuredModularCodegenSynthesizer` using `syn`, `proc-macro2`, `quote`, and `prettyplease`)
-- [ ] #807 - [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) (realizes `format_ndjson_line(msg)` on `UnifiedRustcJsonDiagnosticEmitter` using `ra_ap_line_index`, `ra_ap_text_edit`, and `serde_json`)
-- [ ] #808 - [User Story 58: analyze metrics](../user-stories/US-58-analyze_metrics.md) (realizes `analyze_metrics(source)` on `LosslessRustCstAnalyzer` enforcing `C_CST_01..C_CST_06` via `ra_ap_syntax` and `rowan`)
+- [ ] #803 - [User Story 53: Verify Offline Locked Build](../user-stories/US-53-verify_offline_locked_build.md) (realizes `verify_offline_locked_build(lock_path)` on `AirGappedCargoLockGovernor` using `cargo-lock`, `cargo_metadata`, `cargo-util-schemas`, `cargo-platform`, and `toml_edit`)
+- [ ] #804 - [User Story 54: List Rust Items](../user-stories/US-54-list_rust_items.md) (realizes `list_rust_items(path)` on `LosslessRustCstAnalyzer` using `ra_ap_syntax`, `ra_ap_vfs`, `ra_ap_paths`, `ra_ap_line_index`, `rowan`, `camino`, and `ignore`)
+- [ ] #805 - [User Story 55: Extract Rust Module](../user-stories/US-55-extract_rust_module.md) (realizes `extract_rust_module(from_path, to_path, items_csv)` on `ZeroTokenRustSpanCodemodEngine` using `ra_ap_syntax`, `ra_ap_text_edit`, `rowan`, `pulldown-cmark`, and `pulldown-cmark-to-cmark`)
+- [ ] #806 - [User Story 56: Verify Stage Fixed Point](../user-stories/US-56-verify_stage_fixed_point.md) (realizes `verify_stage_fixed_point(stage1_digest)` on `StructuredModularCodegenSynthesizer` using `syn`, `proc-macro2`, `quote`, and `prettyplease`)
+- [ ] #807 - [User Story 57: Format Ndjson Line](../user-stories/US-57-format_ndjson_line.md) (realizes `format_ndjson_line(msg)` on `UnifiedRustcJsonDiagnosticEmitter` using `ra_ap_line_index`, `ra_ap_text_edit`, and `serde_json`)
+- [ ] #808 - [User Story 58: Analyze Metrics](../user-stories/US-58-analyze_metrics.md) (realizes `analyze_metrics(source)` on `LosslessRustCstAnalyzer` enforcing `C_CST_01..C_CST_06` via `ra_ap_syntax` and `rowan`)
 
 ## 3. Architecture
 

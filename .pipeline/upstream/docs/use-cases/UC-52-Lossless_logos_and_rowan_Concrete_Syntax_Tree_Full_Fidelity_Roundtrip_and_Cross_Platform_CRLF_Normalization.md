@@ -62,9 +62,9 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#817** | User Story | [User Story 67: normalize line endings](../user-stories/US-67-normalize_line_endings.md) |
-| **#818** | User Story | [User Story 68: parse lossless sysml cst](../user-stories/US-68-parse_lossless_sysml_cst.md) |
-| **#819** | User Story | [User Story 69: verify lossless cst invariants](../user-stories/US-69-verify_lossless_cst_invariants.md) |
+| **#817** | User Story | [User Story 67: Normalize Line Endings](../user-stories/US-67-normalize_line_endings.md) |
+| **#818** | User Story | [User Story 68: Parse Lossless Sysml Cst](../user-stories/US-68-parse_lossless_sysml_cst.md) |
+| **#819** | User Story | [User Story 69: Verify Lossless Cst Invariants](../user-stories/US-69-verify_lossless_cst_invariants.md) |
 | **#845** | Feature | [Feature 47: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] LogosRowanSysmlCstEngine](../features/FEAT-47-LogosRowanSysmlCstEngine.md) |
 | **#844** | Feature | [Feature 46: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] FormattingPreservingSyncSplicer](../features/FEAT-46-FormattingPreservingSyncSplicer.md) |
 

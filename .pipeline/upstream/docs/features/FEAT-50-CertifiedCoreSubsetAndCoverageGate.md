@@ -159,7 +159,7 @@ Classifier `CertifiedCoreSubsetAndCoverageGate` binds external and behavioral in
 - [ ] #794 - [Use Case 65: Cross Platform Execution Submodule Layout Conformance and Twelve Gate Blueprint Verification Gate](../use-cases/UC-65-Cross_Platform_Execution_Submodule_Layout_Conformance_and_Twelve_Gate_Blueprint_Verification_Gate.md)
 
 #### Associated User Stories
-- [ ] #827 - [User Story 77: verify certified core and table a7 coverage](../user-stories/US-77-verify_certified_core_and_table_a7_coverage.md)
+- [ ] #827 - [User Story 77: Verify Certified Core And Table A7 Coverage](../user-stories/US-77-verify_certified_core_and_table_a7_coverage.md)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `CertifiedCoreSubsetAndCoverageGate` inputs satisfying `Invariant_REQ_0611_SC_01` [Req `REQ-0611 (REQ_0611_BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C)`], When `CertifiedCoreSubsetAndCoverageGate` evaluates invariant `Invariant_REQ_0611_SC_01`, Then the invariant holds and verified state is committed.

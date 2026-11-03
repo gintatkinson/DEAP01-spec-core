@@ -75,14 +75,14 @@ stateDiagram-v2
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#804** | User Story | [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) |
-| **#805** | User Story | [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) |
+| **#804** | User Story | [User Story 54: List Rust Items](../user-stories/US-54-list_rust_items.md) |
+| **#805** | User Story | [User Story 55: Extract Rust Module](../user-stories/US-55-extract_rust_module.md) |
 | **#838** | Feature | [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) |
 | **#835** | Feature | [Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer](../features/FEAT-37-LosslessRustCstAnalyzer.md) |
 
 ### Required User Stories
-- [ ] #804 - [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) (classifies `DocTier::RustTierA` vs `DocTier::RustTierBC` items and extracts outer docblock `TextRange` spans)
-- [ ] #805 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (applies reverse-byte-order `ra_ap_text_edit::TextEdit` splices with post-splice CST verification)
+- [ ] #804 - [User Story 54: List Rust Items](../user-stories/US-54-list_rust_items.md) (classifies `DocTier::RustTierA` vs `DocTier::RustTierBC` items and extracts outer docblock `TextRange` spans)
+- [ ] #805 - [User Story 55: Extract Rust Module](../user-stories/US-55-extract_rust_module.md) (applies reverse-byte-order `ra_ap_text_edit::TextEdit` splices with post-splice CST verification)
 
 ### Required Features
 - [ ] #838 - [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) (executes `--compact-tier-bc` enforcing `tier_bc_max_doc_lines == 2` and `skip_generated_tree = true`)

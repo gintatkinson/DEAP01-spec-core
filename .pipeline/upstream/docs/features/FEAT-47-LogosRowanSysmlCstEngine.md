@@ -139,10 +139,10 @@ Classifier `LogosRowanSysmlCstEngine` binds external and behavioral interfaces a
 - [ ] #782 - [Use Case 53: Resilient Error Recovery Parsing MAX AST DEPTH Guard and Deterministic Ariadne Byte Span Diagnostics](../use-cases/UC-53-Resilient_Error_Recovery_Parsing_MAX_AST_DEPTH_Guard_and_Deterministic_Ariadne_Byte_Span_Diagnostics.md) (verifies `ErrorNode` recovery, `MAX_AST_DEPTH = 64` guard `C_INC_01`, and `DEAP-E1001`/`DEAP-E1002` diagnostics)
 
 #### Associated User Stories
-- [ ] #817 - [User Story 67: normalize line endings](../user-stories/US-67-normalize_line_endings.md) (binds deterministic CRLF-to-LF line-ending normalization)
-- [ ] #818 - [User Story 68: parse lossless sysml cst](../user-stories/US-68-parse_lossless_sysml_cst.md) (binds lossless `logos` + `rowan` CST parsing across 100% of OMG SysML v2.0 + KerML 1.0 grammar constructs)
-- [ ] #819 - [User Story 69: verify lossless cst invariants](../user-stories/US-69-verify_lossless_cst_invariants.md) (binds byte-for-byte `GreenNode` roundtrip and `MAX_AST_DEPTH <= 64` invariant verification)
-- [ ] #822 - [User Story 72: render ariadne diagnostic](../user-stories/US-72-render_ariadne_diagnostic.md) (binds deterministic `ariadne` byte-span and NDJSON diagnostic rendering)
+- [ ] #817 - [User Story 67: Normalize Line Endings](../user-stories/US-67-normalize_line_endings.md) (binds deterministic CRLF-to-LF line-ending normalization)
+- [ ] #818 - [User Story 68: Parse Lossless Sysml Cst](../user-stories/US-68-parse_lossless_sysml_cst.md) (binds lossless `logos` + `rowan` CST parsing across 100% of OMG SysML v2.0 + KerML 1.0 grammar constructs)
+- [ ] #819 - [User Story 69: Verify Lossless Cst Invariants](../user-stories/US-69-verify_lossless_cst_invariants.md) (binds byte-for-byte `GreenNode` roundtrip and `MAX_AST_DEPTH <= 64` invariant verification)
+- [ ] #822 - [User Story 72: Render Ariadne Diagnostic](../user-stories/US-72-render_ariadne_diagnostic.md) (binds deterministic `ariadne` byte-span and NDJSON diagnostic rendering)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `LogosRowanSysmlCstEngine` initialization inputs for `max_ast_depth` (`Integer`), `lossless_trivia_preserved` (`Boolean`), `resilient_error_recovery` (`Boolean`), `deterministic_uuid` (`String`) across 100% of normative OMG SysML v2.0 + KerML 1.0 Definition and Usage constructs (Contract A: zero 16-construct caps), When `LogosRowanSysmlCstEngine` commits typed domain state inside `< 380`-SLOC submodules (`./crates/deap-core/src/sysml_cst/`), Then declared state attributes hold verified values and root `rowan::GreenNode` byte concatenation equals the LF-normalized input byte-for-byte.

@@ -77,14 +77,14 @@ stateDiagram-v2
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#804** | User Story | [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) |
-| **#808** | User Story | [User Story 58: analyze metrics](../user-stories/US-58-analyze_metrics.md) |
+| **#804** | User Story | [User Story 54: List Rust Items](../user-stories/US-54-list_rust_items.md) |
+| **#808** | User Story | [User Story 58: Analyze Metrics](../user-stories/US-58-analyze_metrics.md) |
 | **#835** | Feature | [Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer](../features/FEAT-37-LosslessRustCstAnalyzer.md) |
 | **#834** | Feature | [Feature 36: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] AirGappedCargoLockGovernor](../features/FEAT-36-AirGappedCargoLockGovernor.md) |
 
 ### Required User Stories
-- [ ] #804 - [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) (classifies `DocTier::RustTierA` and `DocTier::RustTierBC` items with exact `TextRange` byte/line spans)
-- [ ] #808 - [User Story 58: analyze metrics](../user-stories/US-58-analyze_metrics.md) (computes `DeapV2AstMetrics` enforcing `C_CST_01`, `C_CST_02`, and `C_CST_03` via `ra_ap_syntax` and `rowan`)
+- [ ] #804 - [User Story 54: List Rust Items](../user-stories/US-54-list_rust_items.md) (classifies `DocTier::RustTierA` and `DocTier::RustTierBC` items with exact `TextRange` byte/line spans)
+- [ ] #808 - [User Story 58: Analyze Metrics](../user-stories/US-58-analyze_metrics.md) (computes `DeapV2AstMetrics` enforcing `C_CST_01`, `C_CST_02`, and `C_CST_03` via `ra_ap_syntax` and `rowan`)
 
 ### Required Features
 - [ ] #835 - [Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer](../features/FEAT-37-LosslessRustCstAnalyzer.md) (provides the lossless `ra_ap_syntax` + `rowan` CST parser and AST metrics analyzer)

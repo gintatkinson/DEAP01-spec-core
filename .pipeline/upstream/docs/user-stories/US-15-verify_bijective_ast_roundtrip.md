@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #582 |
-| **Title** | User Story 15: verify bijective ast roundtrip |
+| **Title** | User Story 15: Verify Bijective Ast Roundtrip |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-03-BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint](../epics/EPIC-03-BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint.md) |
 | **SysML Interaction** | `BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 15: verify bijective ast roundtrip
+# User Story 15: Verify Bijective Ast Roundtrip
 
 ## User Story
 
@@ -24,7 +24,7 @@ As a `Compiler_CLI_Caller`, I want to invoke `verify_bijective_ast_roundtrip()` 
 - Contract A bijective round-trip domain coverage: verifies 100% of the normative OMG SysML v2.0 + KerML 1.0 BNF grammar across all 6 clauses (Namespaces & Metadata, Structural & Data Types, Behavioral & State, Calculations/Constraints/Requirements, Use Cases/Analysis/Verification/Views, and KerML 1.0 Specialization/Multiplicity/Expressions) with zero 16-construct artificial caps, including `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` `metadata def` (`@Metadata` / `#user_keyword`) alongside backward-compatible `hazard def`, `risk def`, and `capability def` declarations.
 
 ### Layer 2: Logic & State Management
-- Behavioral execution contract: invokes `verify_bijective_ast_roundtrip()` on `NativeSigilAndLifetimeLexer` with atomic precondition verification over `logos` + `rowan` lossless Red/Green CSTs (`deap_core::sysml_cst`), `salsa` incremental queries (`salsa::input`, `salsa::tracked`), and the Stage-1 == Stage-2 bijective round-trip verification gate (`parse_sysml(to_sysml(ast_orig)) == ast_orig`, `roundtrip_ast_mismatch_count == 0`, zero hand-rolled scanners).
+- Contract B behavioral execution contract: invokes `verify_bijective_ast_roundtrip()` on `NativeSigilAndLifetimeLexer` with atomic precondition verification over `logos` + `rowan` lossless Red/Green CSTs (`deap_core::sysml_cst`), `salsa` incremental queries (`salsa::input`, `salsa::tracked`), and the Stage-1 == Stage-2 bijective round-trip verification gate (`parse_sysml(to_sysml(ast_orig)) == ast_orig`, `roundtrip_ast_mismatch_count == 0`, zero hand-rolled scanners).
 - State transition management: `LexicalScanning -> RecursiveDescentParsing` (trigger `zeroDriftTokenStream`).
 - Formal constraints and requirements enforced: `REQ-0603 (REQ_0603_BP_03_SysML_v2_AST_Bijective_Roundtrip_and_Token_Stream_Parser_Gate_Blueprint)`.
 - Modularity & net-negative ratchet target: bounds implementation inside `< 380` exec SLOC submodules (`./crates/deap-core/src/sysml_cst/` and `./crates/compile-sysml/src/roundtrip/`) while explicitly deleting legacy hand-rolled scanner and recursive-descent parser monoliths (`-2,400+` SLOC).

@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #822 |
-| **Title** | User Story 72: render ariadne diagnostic |
+| **Title** | User Story 72: Render Ariadne Diagnostic |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) |
 | **SysML Interaction** | `BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 72: render ariadne diagnostic
+# User Story 72: Render Ariadne Diagnostic
 
 ## User Story
 As a `TypedPolyglotIngestionFrontend`, I want to invoke `render_ariadne_diagnostic()` on `SalsaIncrementalCompilerDatabase`, so that `render_ariadne_diagnostic(input, diag)` renders deterministic ANSI-free `ariadne` UTF-8 byte-span reports paired with single-line `--message-format=json` NDJSON objects (`DEAP-E1001..E1005`) across all SysML v2, KerML 1.0, and 6 polyglot CST/AST frontends.

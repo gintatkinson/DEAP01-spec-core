@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #821 |
-| **Title** | User Story 71: apply formatting preserving splices |
+| **Title** | User Story 71: Apply Formatting Preserving Splices |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) |
 | **SysML Interaction** | `BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 71: apply formatting preserving splices
+# User Story 71: Apply Formatting Preserving Splices
 
 ## User Story
 As a `TypedPolyglotIngestionFrontend`, I want to invoke `apply_formatting_preserving_splices()` on `SalsaIncrementalCompilerDatabase`, so that `apply_formatting_preserving_splices(file_id, source, patches)` splices only modified CST declaration spans (`Utf8TextRange`) across forward and reverse synchronization while preserving 100% of untouched comments, whitespace, and sibling declarations (`untouched_trivia_mutation_bytes == 0`, `C_INC_02`) and Stage-1 == Stage-2 fixed-point identity (`stage_fixed_point_mismatch_files == 0`, `C_INC_03`).

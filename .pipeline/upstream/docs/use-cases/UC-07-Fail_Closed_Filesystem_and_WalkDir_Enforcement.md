@@ -55,7 +55,7 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#568** | User Story | [User Story 07: mask literals and comments](../user-stories/US-07-mask_literals_and_comments.md) |
+| **#568** | User Story | [User Story 07: Mask Literals And Comments](../user-stories/US-07-mask_literals_and_comments.md) |
 | **#662** | Feature | [Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] AntiGamingTestBodyAuditor](../features/FEAT-06-AntiGamingTestBodyAuditor.md) |
 
 ## Source References

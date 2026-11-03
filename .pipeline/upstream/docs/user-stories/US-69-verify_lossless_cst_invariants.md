@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #819 |
-| **Title** | User Story 69: verify lossless cst invariants |
+| **Title** | User Story 69: Verify Lossless Cst Invariants |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) |
 | **SysML Interaction** | `BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 69: verify lossless cst invariants
+# User Story 69: Verify Lossless Cst Invariants
 
 ## User Story
 As a `TypedPolyglotIngestionFrontend`, I want to invoke `verify_lossless_cst_invariants()` on `SalsaIncrementalCompilerDatabase`, so that `verify_lossless_cst_invariants(source, parsed)` verifies that root `rowan::GreenNode` byte concatenation equals the LF-normalized `.sysml` input buffer byte-for-byte (`Invariant_REQ_0610_SC_01`) and enforces `MAX_AST_DEPTH <= 64` (`C_INC_01`, `Invariant_REQ_0610_SC_02`) across 100% of normative OMG SysML v2.0 + KerML 1.0 grammar constructs.

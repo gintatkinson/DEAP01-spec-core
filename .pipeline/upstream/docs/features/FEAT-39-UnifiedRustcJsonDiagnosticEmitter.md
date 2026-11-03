@@ -141,7 +141,7 @@ Classifier `UnifiedRustcJsonDiagnosticEmitter` binds external and behavioral int
 - [ ] #769 - [Use Case 40: Fail Closed Rejection on Span Collisions Missing Symbols or Post Splice Syntax Errors](../use-cases/UC-40-Fail_Closed_Rejection_on_Span_Collisions_Missing_Symbols_or_Post_Splice_Syntax_Errors.md) (emits `DEAP-E0801`, `DEAP-E0802`, and `DEAP-E0803` single-line NDJSON diagnostics via `UnifiedRustcJsonDiagnosticEmitter`)
 
 #### Associated User Stories
-- [ ] #807 - [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) (directly invokes `format_ndjson_line(msg)` on `UnifiedRustcJsonDiagnosticEmitter`)
+- [ ] #807 - [User Story 57: Format Ndjson Line](../user-stories/US-57-format_ndjson_line.md) (directly invokes `format_ndjson_line(msg)` on `UnifiedRustcJsonDiagnosticEmitter`)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `UnifiedRustcJsonDiagnosticEmitter` initialization inputs for `cli_binary_count` (`Integer`), `zero_ansi_in_json_mode` (`Boolean`), `machine_applicable_only` (`Boolean`), `envelope_reason` (`String`) (no additional constraints specified in schema), When `UnifiedRustcJsonDiagnosticEmitter` commits typed domain state, Then declared state attributes hold verified values.

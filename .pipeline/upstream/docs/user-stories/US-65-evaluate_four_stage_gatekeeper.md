@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #815 |
-| **Title** | User Story 65: evaluate four stage gatekeeper |
+| **Title** | User Story 65: Evaluate Four Stage Gatekeeper |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
 | **SysML Interaction** | `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 65: evaluate four stage gatekeeper
+# User Story 65: Evaluate Four Stage Gatekeeper
 
 ## User Story
 As a `MultiStageVerificationOrchestrator`, I want to invoke `evaluate_four_stage_gatekeeper(receipts)` across `StableClippyTotalFunctionGate`, `IsolatedDylintMirAllocationGate`, `FrbIcdBridgeAndMiriUbGate`, and `KaniCbmcProofSynthesizer`, so that the entire cross-platform formal verification pipeline short-circuits fail-closed on the first non-zero stage diagnostic (`DEAP-E0900`..`DEAP-E0905`) or transitions to `VerifiedAllFourStages` (`DEAP-0000`) ready for Stage 5 Ferrocene qualification when all stages pass.

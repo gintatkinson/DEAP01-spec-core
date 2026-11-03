@@ -79,14 +79,14 @@ stateDiagram-v2
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#814** | User Story | [User Story 64: validate kani harness spec](../user-stories/US-64-validate_kani_harness_spec.md) |
-| **#815** | User Story | [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) |
+| **#814** | User Story | [User Story 64: Validate Kani Harness Spec](../user-stories/US-64-validate_kani_harness_spec.md) |
+| **#815** | User Story | [User Story 65: Evaluate Four Stage Gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) |
 | **#839** | Feature | [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) |
 | **#841** | Feature | [Feature 43: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] KaniCbmcProofSynthesizer](../features/FEAT-43-KaniCbmcProofSynthesizer.md) |
 
 ### Required User Stories
-- [ ] #814 - [User Story 64: validate kani harness spec](../user-stories/US-64-validate_kani_harness_spec.md) (Validates `KaniProofHarnessSpec` and synthesizes `outer kani::proof` harnesses via `syn` + `proc-macro2` + `quote` + `prettyplease`)
-- [ ] #815 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Consolidates Stage 4 CBMC proof receipts into `VerifiedAllFourStages`)
+- [ ] #814 - [User Story 64: Validate Kani Harness Spec](../user-stories/US-64-validate_kani_harness_spec.md) (Validates `KaniProofHarnessSpec` and synthesizes `outer kani::proof` harnesses via `syn` + `proc-macro2` + `quote` + `prettyplease`)
+- [ ] #815 - [User Story 65: Evaluate Four Stage Gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Consolidates Stage 4 CBMC proof receipts into `VerifiedAllFourStages`)
 
 ### Required Features
 - [ ] #839 - [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) (Coordinates `Invariant_REQ_0609_SC_04` across the formal verification subsystem)

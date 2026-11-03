@@ -73,10 +73,10 @@ Structural composition and boundary topology for classifier `NativeSigilAndLifet
 Operational lifecycle events and discrete state transitions for `NativeSigilAndLifetimeLexer` (`LexicalScanning -> RecursiveDescentParsing` on `zeroDriftTokenStream` or `RejectedE0100` on `lexicalSpanError`), enforcing `span_offset_drift_bytes == 0` with zero `normalize_type_sigils` pre-lexer string rewriting.
 
 ### Layer 1: Domain State & Signal Model
-Classifier `NativeSigilAndLifetimeLexer` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status, tokenizing 100% of the normative OMG SysML v2.0 + KerML 1.0 BNF lexical grammar across all 6 clauses (zero 16-construct artificial caps), including reference sigils (`&`), optionality sigils (`?`), lifetime tokens (`'a`), qualified path separators (`::`), KerML operators (`:>`, `:>>`, `::>`, `~`, `:=`, `??`, `->`, `implies`, `xor`), and `#user_keyword` / `@Metadata` sigils for `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` `metadata def` annotations alongside backward-compatible `hazard def`, `risk def`, and `capability def` keywords.
+Classifier `NativeSigilAndLifetimeLexer` encapsulates typed domain state attributes `quantity : Integer`, `type : String` alongside operational lifecycle status. Under **Contract A (100% Normative OMG SysML v2.0 + KerML 1.0 BNF Grammar Coverage -- Zero 16-Construct Artificial Caps)**, `NativeSigilAndLifetimeLexer` tokenizes 100% of the normative OMG SysML v2.0 + KerML 1.0 BNF lexical grammar across all 6 clauses (zero 16-construct artificial caps), including reference sigils (`&`), optionality sigils (`?`), lifetime tokens (`'a`), qualified path separators (`::`), KerML operators (`:>`, `:>>`, `::>`, `~`, `:=`, `??`, `->`, `implies`, `xor`), and `#user_keyword` / `@Metadata` sigils for `#hazard`, `#risk`, `#capability`, `#rt_loop`, `#dal`, `#fls` `metadata def` annotations alongside backward-compatible `hazard def`, `risk def`, and `capability def` keywords.
 
 ### Layer 2: Logic & Safety State Management
-Classifier `NativeSigilAndLifetimeLexer` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema while executing `logos::Logos` DFA tokenization (`scan_all`) into lossless `rowan` Red/Green trivia-preserving token streams (`deap_core::sysml_cst`) and `salsa` query inputs (`salsa::input`, `salsa::tracked`) with zero hand-rolled string/line/char-by-char scanners. Implementation is bounded inside `< 380` exec SLOC submodules (`./crates/deap-core/src/sysml_cst/` and `./crates/compile-sysml/src/roundtrip/`) with explicit deletion of legacy hand-rolled character scanners and `normalize_type_sigils` string rewriters (`-2,400+` SLOC retired).
+Classifier `NativeSigilAndLifetimeLexer` governs stateless structural transition evaluation enforcing no additional invariant guards declared in schema while executing `logos::Logos` DFA tokenization (`scan_all`) into lossless `rowan` Red/Green trivia-preserving token streams (`deap_core::sysml_cst`) and `salsa` query inputs (`salsa::input`, `salsa::tracked`) under **Contract B (Lossless `logos` + `rowan` CST, `salsa` DB, `ariadne` Diagnostics & Stage-1 == Stage-2 Bijective Gate -- Zero Hand-Rolled Scanners)** and the **3-Layer Definition of Done (DoD)** with zero hand-rolled string/line/char-by-char scanners. Implementation is bounded inside `< 380` exec SLOC submodules (`./crates/deap-core/src/sysml_cst/` and `./crates/compile-sysml/src/roundtrip/`) with explicit deletion of legacy hand-rolled character scanners and `normalize_type_sigils` string rewriters (`-2,400+` SLOC retired).
 
 ### Layer 3: Presentation & Actuator Interface Binding
 Classifier `NativeSigilAndLifetimeLexer` exposes an internal structural boundary with no external ports, operations, or actions declared in schema, streaming zero-drift tokens onto `TokenStreamChannelPort` and routing `ariadne` lexical span diagnostics (`E0100`) through `SysmlBijectiveRoundtripCompilerGate`.
@@ -87,11 +87,11 @@ Classifier `NativeSigilAndLifetimeLexer` exposes an internal structural boundary
 - None allocated (structural subsystem component)
 
 #### Associated User Stories
-- [ ] #577 - [User Story 12: scan all](../user-stories/US-12-scan_all.md)
-- [ ] #579 - [User Story 13: parse package or file](../user-stories/US-13-parse_package_or_file.md)
+- [ ] #577 - [User Story 12: Scan All](../user-stories/US-12-scan_all.md)
+- [ ] #579 - [User Story 13: Parse Package Or File](../user-stories/US-13-parse_package_or_file.md)
 - [ ] #705 - [User Story 14: Parse Type Expr And Parse Transition](../user-stories/US-14-ParseTypeExprAndParseTransition.md)
-- [ ] #582 - [User Story 15: verify bijective ast roundtrip](../user-stories/US-15-verify_bijective_ast_roundtrip.md)
-- [ ] #583 - [User Story 16: ast orig to sysml](../user-stories/US-16-ast_orig_to_sysml.md)
+- [ ] #582 - [User Story 15: Verify Bijective Ast Roundtrip](../user-stories/US-15-verify_bijective_ast_roundtrip.md)
+- [ ] #583 - [User Story 16: Ast Orig To Sysml](../user-stories/US-16-ast_orig_to_sysml.md)
 - [ ] #706 - [User Story 17: Assert Ast Orig Equals Ast Reparsed](../user-stories/US-17-AssertAstOrigEqualsAstReparsed.md)
 
 ## Acceptance Criteria (BDD)

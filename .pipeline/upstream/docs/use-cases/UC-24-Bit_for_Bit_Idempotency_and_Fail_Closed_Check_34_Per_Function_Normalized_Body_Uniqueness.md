@@ -29,10 +29,10 @@ graph TD
 - `Compiler_CLI_CI_Pipeline`
 
 ## 2. Preconditions
-- Any Rust crate or Dart source directory enriched by `compile-sysml --inject-safety-docstrings <DIR>` bound to a full OMG SysML v2.0 + KerML 1.0 model (zero 16-construct caps), as well as a negative fixture containing duplicate normalized docstring bodies or missing tags.
+- Any Rust crate or Dart source directory enriched by `compile-sysml --inject-safety-docstrings <DIR>` bound under **Contract A (100% Normative OMG SysML v2.0 + KerML 1.0 Grammar Coverage -- Zero 16-Construct Caps)** to a full OMG SysML v2.0 + KerML 1.0 model, as well as a negative fixture containing duplicate normalized docstring bodies or missing tags.
 
 ## 3. Trigger
-- `compile-sysml --inject-safety-docstrings <DIR>` is executed a second time and followed by `./target/release/verify-baseline . --no-domain`.
+- Under **Contract B (Official Rust Compiler & `rust-analyzer` Crate Stack -- Zero Hand-Rolled Scanners)**, `compile-sysml --inject-safety-docstrings <DIR>` is executed a second time and followed by `./target/release/verify-baseline . --no-domain`.
 
 ## 4. Main Success Scenario
 1. `Compiler_CLI_CI_Pipeline` executes `RunCompileSysmlInjectSafetyDocstrings` (`compile-sysml --inject-safety-docstrings <DIR>`) a first time, where `SevenSectionDocstringGenerator` synthesizes `<= 4`-line Tier-B/C `[REQ-*]`/`[FLS: fls_*]` docstrings on internal declarations and explicit `[DOC-TIER: A]` 7-section docstrings on `pub` crate entrypoints and `unsafe`/`extern` blocks bound to `schema_context_in` via `ra_ap_syntax` (`ast::HasDocComments`, `ast::HasAttrs`), `ra_ap_text_edit`, `ra_ap_line_index`, `syn`, `quote`, and `prettyplease` with zero hand-rolled scanners.

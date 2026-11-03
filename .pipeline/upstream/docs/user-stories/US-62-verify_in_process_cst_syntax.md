@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #812 |
-| **Title** | User Story 62: verify in process cst syntax |
+| **Title** | User Story 62: Verify In Process Cst Syntax |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
 | **SysML Interaction** | `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 62: verify in process cst syntax
+# User Story 62: Verify In Process Cst Syntax
 
 ## User Story
 As a `MultiStageVerificationOrchestrator`, I want to invoke `verify_in_process_cst_syntax(module_path, max_exec_sloc)` on `IsolatedDylintMirAllocationGate` and `StableClippyTotalFunctionGate`, so that every formal verification submodule (`./crates/verify-baseline/src/formal_gates/`, `./crates/compile-sysml/src/kani_synth/`, `./crates/compile-sysml/src/frb_guard/`, and excluded `./lints/deap-dylint-mir/`) is parsed losslessly via `ra_ap_syntax` (`SourceFile::parse`, `Edition::Edition2024`) with zero syntax errors and bounded to `<= 380` executable SLOC (`C_VER_07`).

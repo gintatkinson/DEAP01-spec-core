@@ -29,10 +29,10 @@ graph TD
 - `Compiler_CLI_CI_Pipeline`
 
 ## 2. Preconditions
-- A multi-part OMG SysML v2.0 + KerML 1.0 `package` / `library package` / `standard library package` model (zero 16-construct caps) containing `PrimaryController` (`REQ-PC-001`, constraint `ThermalLimit`), a nested `part def` `NestedSubunit` (`REQ-NS-002`) inside `SecondaryMonitor.parts`, and an unmapped Rust struct `SecondaryMonitor` with method `pub fn primary_controller(&self)` and free function `pub fn unmapped_helper()`.
+- A multi-part OMG SysML v2.0 + KerML 1.0 `package` / `library package` / `standard library package` model under **Contract A (100% Normative OMG SysML v2.0 + KerML 1.0 Grammar Coverage -- Zero 16-Construct Caps)** containing `PrimaryController` (`REQ-PC-001`, constraint `ThermalLimit`), a nested `part def` `NestedSubunit` (`REQ-NS-002`) inside `SecondaryMonitor.parts`, and an unmapped Rust struct `SecondaryMonitor` with method `pub fn primary_controller(&self)` and free function `pub fn unmapped_helper()`.
 
 ## 3. Trigger
-- `resolve_schema_context` (`ResolveSchemaContextViaCollectAll`) is invoked during `compile-sysml --inject-safety-docstrings`.
+- `resolve_schema_context` (`ResolveSchemaContextViaCollectAll`) is invoked under **Contract B (Official Rust Compiler & `rust-analyzer` Crate Stack -- Zero Hand-Rolled Scanners)** during `compile-sysml --inject-safety-docstrings`.
 
 ## 4. Main Success Scenario
 1. `Compiler_CLI_CI_Pipeline` invokes `RunCompileSysmlInjectSafetyDocstrings` (`compile-sysml --inject-safety-docstrings`), transitioning `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_LifecycleState` to `ScopedSchemaContextResolver_State`.

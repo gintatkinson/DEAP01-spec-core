@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #817 |
-| **Title** | User Story 67: normalize line endings |
+| **Title** | User Story 67: Normalize Line Endings |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) |
 | **SysML Interaction** | `BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 67: normalize line endings
+# User Story 67: Normalize Line Endings
 
 ## User Story
 As a `TypedPolyglotIngestionFrontend`, I want to invoke `normalize_line_endings()` on `SalsaIncrementalCompilerDatabase`, so that `normalize_line_endings(raw)` deterministically normalizes `\r\n` (CRLF) to canonical `\n` (LF) across macOS, Linux, and Windows (`camino::Utf8Path`) prior to `logos` DFA lexing and `rowan::GreenNode` construction across 100% of normative OMG SysML v2.0 + KerML 1.0 grammar constructs.

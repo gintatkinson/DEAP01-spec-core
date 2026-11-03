@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #811 |
-| **Title** | User Story 61: evaluate stage2 dylint mir |
+| **Title** | User Story 61: Evaluate Stage2 Dylint Mir |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
 | **SysML Interaction** | `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 61: evaluate stage2 dylint mir
+# User Story 61: Evaluate Stage2 Dylint Mir
 
 ## User Story
 As a `MultiStageVerificationOrchestrator`, I want to invoke `evaluate_stage2_dylint_mir(input)` on `IsolatedDylintMirAllocationGate`, so that the standalone nightly Dylint MIR plugin at `./lints/deap-dylint-mir/` (excluded from the root stable `Cargo.toml`) proves zero transitive heap allocations or dynamic drop terminators (`C_VER_03: max_rt_heap_allocations == 0`) across `#rt_loop` control loops and verifies 100% of `outer realises("REQ-*")` / `/// Realises: [REQ-*]` bindings against active SysML `.digest.json` inventories before promoting to Stage 3.

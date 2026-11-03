@@ -49,13 +49,13 @@ All verification stages and code synthesis components operate strictly over the 
 - [ ] #780 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Verifies cross-platform runtime `PATH` driver discovery, `< 380`-SLOC submodule modularity via `ra_ap_syntax`, and `--require-formal-toolchains` fail-closed `DEAP-E0905` qualification)
 
 #### Associated User Stories
-- [ ] #809 - [User Story 59: probe formal toolchain](../user-stories/US-59-probe_formal_toolchain.md) (Probes cross-platform formal verification toolchains dynamically via runtime `PATH` and `std::env::consts` without hardcoded host paths)
-- [ ] #810 - [User Story 60: verify clippy policy](../user-stories/US-60-verify_clippy_policy.md) (Validates workspace `Cargo.toml` and `clippy.toml` total-function and threshold policies via `cargo_metadata` and `toml_edit`)
-- [ ] #811 - [User Story 61: evaluate stage2 dylint mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Evaluates Stage 2 excluded `./lints/deap-dylint-mir/` MIR basic-block zero-allocation and `REQ-*` digest bindings)
-- [ ] #812 - [User Story 62: verify in process cst syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Enforces lossless `ra_ap_syntax` CST parse integrity and `< 380` executable SLOC submodule ceilings with zero hand-rolled scanners)
-- [ ] #813 - [User Story 63: guard inbound frb f64](../user-stories/US-63-guard_inbound_frb_f64.md) (Enforces Stage 3 `flutter_rust_bridge` inbound IEEE 754 finiteness, closed `[min..max]` range, and FSM state precondition guards)
-- [ ] #814 - [User Story 64: validate kani harness spec](../user-stories/US-64-validate_kani_harness_spec.md) (Validates and synthesizes Stage 4 `outer kani::proof` and `outer kani::unwind(N)` harnesses via `syn` + `proc-macro2` + `quote` + `prettyplease`)
-- [ ] #815 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Orchestrates end-to-end multi-stage formal verification receipts with fail-closed short-circuiting and Stage 5 Ferrocene readiness)
+- [ ] #809 - [User Story 59: Probe Formal Toolchain](../user-stories/US-59-probe_formal_toolchain.md) (Probes cross-platform formal verification toolchains dynamically via runtime `PATH` and `std::env::consts` without hardcoded host paths)
+- [ ] #810 - [User Story 60: Verify Clippy Policy](../user-stories/US-60-verify_clippy_policy.md) (Validates workspace `Cargo.toml` and `clippy.toml` total-function and threshold policies via `cargo_metadata` and `toml_edit`)
+- [ ] #811 - [User Story 61: Evaluate Stage2 Dylint Mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Evaluates Stage 2 excluded `./lints/deap-dylint-mir/` MIR basic-block zero-allocation and `REQ-*` digest bindings)
+- [ ] #812 - [User Story 62: Verify In Process Cst Syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Enforces lossless `ra_ap_syntax` CST parse integrity and `< 380` executable SLOC submodule ceilings with zero hand-rolled scanners)
+- [ ] #813 - [User Story 63: Guard Inbound Frb F64](../user-stories/US-63-guard_inbound_frb_f64.md) (Enforces Stage 3 `flutter_rust_bridge` inbound IEEE 754 finiteness, closed `[min..max]` range, and FSM state precondition guards)
+- [ ] #814 - [User Story 64: Validate Kani Harness Spec](../user-stories/US-64-validate_kani_harness_spec.md) (Validates and synthesizes Stage 4 `outer kani::proof` and `outer kani::unwind(N)` harnesses via `syn` + `proc-macro2` + `quote` + `prettyplease`)
+- [ ] #815 - [User Story 65: Evaluate Four Stage Gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Orchestrates end-to-end multi-stage formal verification receipts with fail-closed short-circuiting and Stage 5 Ferrocene readiness)
 
 ## 3. Architecture
 

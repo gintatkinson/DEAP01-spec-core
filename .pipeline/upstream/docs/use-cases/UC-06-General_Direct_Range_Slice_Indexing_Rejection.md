@@ -55,7 +55,7 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#567** | User Story | [User Story 06: check compiler ast purity](../user-stories/US-06-check_compiler_ast_purity.md) |
+| **#567** | User Story | [User Story 06: Check Compiler Ast Purity](../user-stories/US-06-check_compiler_ast_purity.md) |
 | **#662** | Feature | [Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] AntiGamingTestBodyAuditor](../features/FEAT-06-AntiGamingTestBodyAuditor.md) |
 
 ## Source References

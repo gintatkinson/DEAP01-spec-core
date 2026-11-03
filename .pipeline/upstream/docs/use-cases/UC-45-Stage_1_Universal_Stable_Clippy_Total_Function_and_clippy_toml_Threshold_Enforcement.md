@@ -78,15 +78,15 @@ stateDiagram-v2
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#809** | User Story | [User Story 59: probe formal toolchain](../user-stories/US-59-probe_formal_toolchain.md) |
-| **#810** | User Story | [User Story 60: verify clippy policy](../user-stories/US-60-verify_clippy_policy.md) |
+| **#809** | User Story | [User Story 59: Probe Formal Toolchain](../user-stories/US-59-probe_formal_toolchain.md) |
+| **#810** | User Story | [User Story 60: Verify Clippy Policy](../user-stories/US-60-verify_clippy_policy.md) |
 | **#839** | Feature | [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) |
 | **#842** | Feature | [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) |
 | **#843** | Feature | [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) |
 
 ### Required User Stories
-- [ ] #809 - [User Story 59: probe formal toolchain](../user-stories/US-59-probe_formal_toolchain.md) (Discovers `cargo-clippy` dynamically via runtime `PATH` before Stage 1 policy evaluation)
-- [ ] #810 - [User Story 60: verify clippy policy](../user-stories/US-60-verify_clippy_policy.md) (Verifies all 14 total-function Clippy lint denials and `./clippy.toml` thresholds `C_VER_01` and `C_VER_02`)
+- [ ] #809 - [User Story 59: Probe Formal Toolchain](../user-stories/US-59-probe_formal_toolchain.md) (Discovers `cargo-clippy` dynamically via runtime `PATH` before Stage 1 policy evaluation)
+- [ ] #810 - [User Story 60: Verify Clippy Policy](../user-stories/US-60-verify_clippy_policy.md) (Verifies all 14 total-function Clippy lint denials and `./clippy.toml` thresholds `C_VER_01` and `C_VER_02`)
 
 ### Required Features
 - [ ] #839 - [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) (Coordinates subsystem invariant obligations `Invariant_REQ_0609_SC_01`..`Invariant_REQ_0609_SC_05`)

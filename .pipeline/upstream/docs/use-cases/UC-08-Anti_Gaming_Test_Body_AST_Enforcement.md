@@ -55,7 +55,7 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#570** | User Story | [User Story 08: contains direct range slice](../user-stories/US-08-contains_direct_range_slice.md) |
+| **#570** | User Story | [User Story 08: Contains Direct Range Slice](../user-stories/US-08-contains_direct_range_slice.md) |
 | **#662** | Feature | [Feature 06: [BP 02 Check 34 AST Purity Fail Closed IO and Anti Gaming Test Gate Blueprint] AntiGamingTestBodyAuditor](../features/FEAT-06-AntiGamingTestBodyAuditor.md) |
 
 ## Source References

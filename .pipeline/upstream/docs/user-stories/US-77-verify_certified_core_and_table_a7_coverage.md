@@ -1,7 +1,7 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #827 |
-| **Title** | User Story 77: verify certified core and table a7 coverage |
+| **Title** | User Story 77: Verify Certified Core And Table A7 Coverage |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-11-BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture](../epics/EPIC-11-BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture.md) |
 | **SysML Interaction** | `BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture_SequenceInteraction` |
@@ -9,7 +9,7 @@
 | **Generation Mode** | subagent |
 | **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
 
-# User Story 77: verify certified core and table a7 coverage
+# User Story 77: Verify Certified Core And Table A7 Coverage
 
 ## User Story
 As a `DualModeFerroceneToolchainGate`, I want to invoke `verify_certified_core_and_table_a7_coverage()` on `ThreeRingAssurancePartitionCompiler`, so that `verify_certified_core_and_table_a7_coverage(summary, certified_core_prefixes)` audits Ring-1 ELF/MIR `symbol-report` inventories against the certified `core` subset allowlist (`uncertified_core_symbol_count == 0`, `C_CERT_04`, rejecting `std`, `alloc`, and dynamic formatting symbols) and verifies `blanket` / `llvm-profdata` DO-178C Table A-7 `100%` Statement, Decision, and MC/DC coverage (`dal_a_mcdc_coverage_min_pct == 100`, `overcounted_span_count == 0`, `require_sysml_test_case_link == true`, `C_CERT_05`) via typed `serde_json` schemas with zero hand-rolled scanners.
