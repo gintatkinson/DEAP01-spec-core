@@ -3,7 +3,7 @@
 | **Issue ID** | #860 |
 | **Title** | Feature 57: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelLoweringEngineSpec |
 | **Type** | feature |
-| **Parent Epic** | [EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint](../epics/EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint.md) |
+| **Parent Epic** | [EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint](../epics/EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint.md) (#852) |
 | **Interface Type** | Physical / Structural / Internal Bus |
 | **Schema Containers** | `BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint::FourLevelLoweringEngineSpec` |
 | **Generation Mode** | subagent |
@@ -135,7 +135,7 @@ Classifier `FourLevelLoweringEngineSpec` binds external and behavioral interface
 - [ ] #763 - [Use Case 34: Metacircular Self Hosting Stage 1 to Stage 2 SHA 256 Fixed Point Identity](../use-cases/UC-34-Metacircular_Self_Hosting_Stage_1_to_Stage_2_SHA_256_Fixed_Point_Identity.md)
 
 #### Associated User Stories
-- [ ] #852 - [User Story 79: Execute Four Level Lowering Pipeline](../user-stories/US-79-ExecuteFourLevelLoweringPipeline.md)
+- [ ] #862 - [User Story 79: Execute Four Level Lowering Pipeline](../user-stories/US-79-ExecuteFourLevelLoweringPipeline.md)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `FourLevelLoweringEngineSpec` inputs satisfying `LoweringLevelsComplete` (`active_level_count == 4`) [Req `REQ-0607 (REQ_0607_BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint)`], When `FourLevelLoweringEngineSpec` evaluates invariant `LoweringLevelsComplete` during `ExecuteFourLevelLoweringPipeline`, Then the invariant holds and verified state is committed.

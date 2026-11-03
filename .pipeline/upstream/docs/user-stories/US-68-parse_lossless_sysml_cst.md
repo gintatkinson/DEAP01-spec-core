@@ -3,7 +3,7 @@
 | **Issue ID** | #818 |
 | **Title** | User Story 68: Parse Lossless Sysml Cst |
 | **Type** | user-story |
-| **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) |
+| **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) (#855) |
 | **SysML Interaction** | `BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine_SequenceInteraction` |
 | **SysML Test Case** | `Test_parse_lossless_sysml_cst` |
 | **Generation Mode** | subagent |

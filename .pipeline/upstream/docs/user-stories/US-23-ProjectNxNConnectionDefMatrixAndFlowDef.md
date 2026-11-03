@@ -3,7 +3,7 @@
 | **Issue ID** | #712 |
 | **Title** | User Story 23: Project Nx N Connection Def Matrix And Flow Def |
 | **Type** | user-story |
-| **Parent Epic** | [EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint](../epics/EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint.md) |
+| **Parent Epic** | [EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint](../epics/EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint.md) (#688) |
 | **SysML Interaction** | `BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_SequenceInteraction` |
 | **SysML Test Case** | `Test_ProjectNxNConnectionDefMatrixAndFlowDef` |
 | **Generation Mode** | subagent |

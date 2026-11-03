@@ -3,7 +3,7 @@
 | **Issue ID** | #716 |
 | **Title** | User Story 27: Parse CommonMark Tables With In Html |
 | **Type** | user-story |
-| **Parent Epic** | [EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint](../epics/EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint.md) |
+| **Parent Epic** | [EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint](../epics/EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint.md) (#688) |
 | **SysML Interaction** | `BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_SequenceInteraction` |
 | **SysML Test Case** | `Test_ParseCommonMarkTablesWithInHtml` |
 | **Generation Mode** | subagent |

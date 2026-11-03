@@ -3,7 +3,7 @@
 | **Issue ID** | #861 |
 | **Title** | Feature 58: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] ModularEmitterSuiteSpec |
 | **Type** | feature |
-| **Parent Epic** | [EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint](../epics/EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint.md) |
+| **Parent Epic** | [EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint](../epics/EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint.md) (#852) |
 | **Interface Type** | Physical / Structural / Internal Bus |
 | **Schema Containers** | `BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint::ModularEmitterSuiteSpec` |
 | **Generation Mode** | subagent |
@@ -132,7 +132,7 @@ Classifier `ModularEmitterSuiteSpec` binds external and behavioral interfaces ac
 - [ ] #765 - [Use Case 36: Zero String Concatenation Codegen DO 178 C Seven Section Docstring and Clippy Forbid Compliance](../use-cases/UC-36-Zero_String_Concatenation_Codegen_DO_178C_Seven_Section_Docstring_and_Clippy_Forbid_Compliance.md)
 
 #### Associated User Stories
-- [ ] #852 - [User Story 79: Execute Four Level Lowering Pipeline](../user-stories/US-79-ExecuteFourLevelLoweringPipeline.md)
+- [ ] #862 - [User Story 79: Execute Four Level Lowering Pipeline](../user-stories/US-79-ExecuteFourLevelLoweringPipeline.md)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `ModularEmitterSuiteSpec` inputs satisfying `FixedPointBootstrapParity` (`stage_mismatch_files == 0`) [Req `REQ-0607 (REQ_0607_BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint)`], When `ModularEmitterSuiteSpec` evaluates invariant `FixedPointBootstrapParity`, Then the invariant holds and verified state is committed.

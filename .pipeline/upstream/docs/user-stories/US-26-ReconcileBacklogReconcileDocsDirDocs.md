@@ -3,7 +3,7 @@
 | **Issue ID** | #715 |
 | **Title** | User Story 26: Reconcile Backlog Reconcile Docs Dir Docs |
 | **Type** | user-story |
-| **Parent Epic** | [EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint](../epics/EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint.md) |
+| **Parent Epic** | [EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint](../epics/EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint.md) (#688) |
 | **SysML Interaction** | `BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint_SequenceInteraction` |
 | **SysML Test Case** | `Test_ReconcileBacklogReconcileDocsDirDocs` |
 | **Generation Mode** | subagent |

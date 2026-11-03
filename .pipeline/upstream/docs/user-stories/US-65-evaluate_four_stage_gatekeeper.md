@@ -3,7 +3,7 @@
 | **Issue ID** | #815 |
 | **Title** | User Story 65: Evaluate Four Stage Gatekeeper |
 | **Type** | user-story |
-| **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
+| **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) (#854) |
 | **SysML Interaction** | `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction` |
 | **SysML Test Case** | `Test_evaluate_four_stage_gatekeeper` |
 | **Generation Mode** | subagent |

@@ -3,7 +3,7 @@
 | **Issue ID** | #703 |
 | **Title** | User Story 04: Run Scan Clippy Allow Tokens On |
 | **Type** | user-story |
-| **Parent Epic** | [EPIC-01-BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint](../epics/EPIC-01-BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint.md) |
+| **Parent Epic** | [EPIC-01-BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint](../epics/EPIC-01-BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint.md) (#685) |
 | **SysML Interaction** | `BP_01_Compiler_Enforced_Forbid_Lint_Gate_and_Zero_Suppression_AST_Architecture_Blueprint_SequenceInteraction` |
 | **SysML Test Case** | `Test_RunScanClippyAllowTokensOn` |
 | **Generation Mode** | subagent |

@@ -3,7 +3,7 @@
 | **Issue ID** | #640 |
 | **Title** | Use Case 17: Deterministic Logical ICD Matrix and Signal Dictionary Synthesis |
 | **Type** | use-case |
-| **Parent Epic** | [EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint](../epics/EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint.md) |
+| **Parent Epic** | [EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint](../epics/EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint.md) (#688) |
 | **Schema Containers** | `BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint::LogicalIcdMatrixCompiler` |
 | **Primary Actor** | Operator_Or_CI_Runner |
 | **Scope** | AgileSpecForwardProjector |

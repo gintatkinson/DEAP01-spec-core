@@ -3,7 +3,7 @@
 | **Issue ID** | #725 |
 | **Title** | User Story 36: Run Ingest Sysml Schema Blueprint05 |
 | **Type** | user-story |
-| **Parent Epic** | [EPIC-05-BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint](../epics/EPIC-05-BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint.md) |
+| **Parent Epic** | [EPIC-05-BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint](../epics/EPIC-05-BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint.md) (#689) |
 | **SysML Interaction** | `BP_05_Unified_AST_Safety_Docstring_Synthesizer_and_Check_36_Verification_Blueprint_SequenceInteraction` |
 | **SysML Test Case** | `Test_RunIngestSysmlSchemaBlueprint05` |
 | **Generation Mode** | subagent |

@@ -3,7 +3,7 @@
 | **Issue ID** | #639 |
 | **Title** | Use Case 16: Deterministic Multi Story Use Case and Con Ops Parent Epic Projection |
 | **Type** | use-case |
-| **Parent Epic** | [EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint](../epics/EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint.md) |
+| **Parent Epic** | [EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint](../epics/EPIC-04-BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint.md) (#688) |
 | **Schema Containers** | `BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint::AgileSpecForwardProjector` |
 | **Primary Actor** | Operator_Or_CI_Runner |
 | **Scope** | AgileSpecForwardProjector |

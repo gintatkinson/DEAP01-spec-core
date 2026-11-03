@@ -3,7 +3,7 @@
 | **Issue ID** | #814 |
 | **Title** | User Story 64: Validate Kani Harness Spec |
 | **Type** | user-story |
-| **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
+| **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) (#854) |
 | **SysML Interaction** | `BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper_SequenceInteraction` |
 | **SysML Test Case** | `Test_validate_kani_harness_spec` |
 | **Generation Mode** | subagent |
